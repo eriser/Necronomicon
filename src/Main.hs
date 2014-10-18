@@ -1,3 +1,4 @@
+{-
 module Main where
 
 import Sound.PortAudio.Base
@@ -99,7 +100,7 @@ withCustomSettings = do
 withBlockingIO :: IO (Either Error ())
 withBlockingIO = do
     let fincallback = Just $ streamFinished "Blocking IO Finished!"
-        iterations  = 500 :: Int
+        iterations  = 5000000000 :: Int
         numChannels = 2
     
     withDefaultStream 0 numChannels sampRate (Just framesPerBuffer) Nothing fincallback $ \strm -> do
@@ -130,3 +131,55 @@ main = do
     --withPortAudio (withBlockingIO >> withCustomSettings)
     --withPortAudio (withDefaults >> withCustomSettings)
     return ()
+
+-}
+
+module Main where
+
+import qualified Sound.JACK.Audio as Audio
+import qualified Sound.JACK as JACK
+
+import qualified Control.Monad.Exception.Synchronous as Sync
+import qualified Control.Monad.Trans.Class as Trans
+import qualified Foreign.C.Error as E
+
+import System.Environment (getProgName)
+
+import Data.Array.MArray (writeArray, )
+import Foreign.C.Types
+import GHC.Float
+
+import Prelude
+import qualified Necronomicon.UGen as U
+--U.myCoolSynth . U.Time
+
+main :: IO ()
+main = do
+    name <- getProgName
+    JACK.handleExceptions $
+        JACK.withClientDefault name $ \client ->
+        JACK.withPort client "output1" $ \output ->
+        JACK.withPort client "output2" $ \output2 ->
+        JACK.withProcess client (process client output output2) $ do
+        JACK.withActivation client $ do
+            JACK.connect client (name ++ ":output1") "system:playback_1"
+            JACK.connect client (name ++ ":output2") "system:playback_2"
+            Trans.lift $ do
+                putStrLn $ "started " ++ name ++ "..."
+                JACK.waitForBreak
+
+intFromNFrames :: JACK.NFrames -> Integer
+intFromNFrames (JACK.NFrames n) = fromIntegral n
+
+process :: JACK.Client -> Audio.Port JACK.Output -> Audio.Port JACK.Output -> JACK.NFrames -> Sync.ExceptionalT E.Errno IO ()
+process client output output2 nframes = Trans.lift $ do
+    outArr <- Audio.getBufferArray output nframes
+    outArr2 <- Audio.getBufferArray output2 nframes
+    frameTime <- JACK.lastFrameTime client
+    case JACK.nframesIndices nframes of
+        [] -> return ()
+        arr@(_:_) -> do
+            mapM_ (\i -> writeArray outArr i (processFunc frameTime i)) arr
+            mapM_ (\i -> writeArray outArr2 i (processFunc frameTime i)) arr
+            where
+                processFunc time frame = CFloat $ double2Float (U.myCoolSynth (U.Time . fromIntegral . (+(intFromNFrames frame)) $ intFromNFrames time))

@@ -19,30 +19,80 @@ default (Double)
 
 infixl 1 >>>
 
+(~>) :: a -> (a -> b) -> b
+(~>) a f = f a
+
+infixl 1 ~>
+
+
 calcUgens :: Time -> IO()
 calcUgens t = do
    print $ sin 440.0 t
-   print $ (sin [220.0, 440.0] >>> sin) t
-   print $ sin 440.0 >>> sin >>> (flip sin t)
+   print $ (sin [220.0, 440.0] ~> sin) t
+   print $ sin 440.0 ~> sin ~> (flip sin t)
    print $ sin [sin 440.0,sin [120.0, 330.0]] t
 
+{-
+-- THIS SOUNDS WRRRRRRRRRRRRROOOOOOOOONNNNNNNNNNNNGGGGGGGGGGGGGGG
 myCoolSynth :: Time -> Double
 myCoolSynth time = case s of
     UGenScalar d -> d
     UGenFunc _ -> 0.0
     UGenList _ -> 0.0
     where
-        s = (sin 6.0 >>> exprange 20 2000 >>> sin) time
+        s = (sin 0.3 ~> exprange 1 2 ~> sin) time
+-}
         
+{- THIS WORKS CORRECTLY!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! -}
+myCoolSynth :: Time -> Double
+myCoolSynth time = s'
+    where
+        s' = case s of
+            UGenScalar d -> d
+            UGenFunc _ -> 0.0
+            UGenList _ -> 0.0
+            where
+                s = sin freq time
+        freq = case s2 of
+            UGenScalar d -> d
+            UGenFunc _ -> 0.0
+            UGenList _ -> 0.0
+            where
+                s2 = (sin 0.3 time)
 
 instance Show (a -> UGen) where
-   show _ = "<<function>>"
+   show _ = "(a -> UGen)"
 
 newtype Time = Time Double
 
 data UGen = UGenFunc  (Time -> UGen)
          | UGenScalar Double
          | UGenList  [UGen] deriving (Show)
+
+--apply :: (a -> b -> c) -> a -> b -> c
+--apply f a b = f a b
+
+instance Num UGen where
+    (+) a b = a .+. b
+    (*) a b = a .*. b
+
+
+class UGenNum a where
+    (.+.) :: a -> a -> a
+    (.*.) :: a -> a -> a
+
+instance Num (Time -> UGen) where
+    (+) a b = \time -> (a time) .+. (b time)
+    (*) a b = \time -> (a time) .*. (b time)
+
+instance UGenNum UGen where
+    (.+.) (UGenScalar a) (UGenScalar b) = UGenScalar (a + b)
+    (.+.) (UGenFunc a) (UGenFunc b) = UGenFunc (\time -> (a time) .+. (b time))
+    (.*.) (UGenScalar a) (UGenScalar b) = UGenScalar (a * b)
+    (.*.) (UGenFunc a) (UGenFunc b) = UGenFunc (\time -> (a time) .*. (b time))
+
+madd :: UGenComponent a => a -> a -> a -> Time -> UGen
+madd mull add input time = ((calc0 (toUGen input) time) .*. (toUGen mull)) .+. (toUGen add)
 
 class UGenComponent a where
    toUGen :: a -> UGen
@@ -65,6 +115,12 @@ instance UGenComponent [(Time -> UGen)] where
 instance UGenComponent [UGen] where
    toUGen v = UGenList v
 
+calc0 :: UGen -> Time -> UGen
+calc0 (UGenFunc   ugenFunc)   time = ugenFunc time
+calc0 (UGenScalar ugenScalar) _    = UGenScalar ugenScalar
+calc0 (UGenList   ugenList)   time = UGenList    $ map (\u -> calc0 u time) ugenList
+
+
 calc :: (Double -> Double) -> UGen -> Time -> UGen
 calc func (UGenFunc   ugenFunc)   time = calc func (ugenFunc time) time
 calc func (UGenScalar ugenScalar) _    = UGenScalar  $ func ugenScalar
@@ -82,8 +138,11 @@ linexp :: Double -> Double -> Double -> Double -> Double -> Double
 linexp inMin inMax outMin outMax val
     | val <= inMin = outMin
     | val >= inMax = outMax
-    | otherwise = ((outMax / outMin) ** ((val - inMin) / (inMax - inMin))) * outMin
-
+    | otherwise = (outRatio ** (val * inRatio + minusLow)) * outMin
+        where
+            outRatio = outMax / outMin
+            inRatio = 1 / (inMax - inMin)
+            minusLow = inRatio * (-inMin)
 
 exprange :: UGenComponent a => Double -> Double -> a -> Time -> UGen
 exprange minRange maxRange input time = calc rangeFunc (toUGen input) time

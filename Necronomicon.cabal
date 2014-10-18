@@ -20,4 +20,7 @@ Executable Necronomicon
         stm          == 2.4.*,
         transformers == 0.3.*,
         containers,
-        vector
+        vector,
+        jack,
+        explicit-exception,
+        array
