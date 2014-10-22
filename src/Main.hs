@@ -134,6 +134,7 @@ main = do
 
 -}
 
+
 module Main where
 
 import qualified Sound.JACK.Audio as Audio
@@ -152,6 +153,8 @@ import GHC.Float
 import Prelude
 import qualified Necronomicon.UGen as U
 --U.myCoolSynth . U.Time
+
+import Control.DeepSeq
 
 main :: IO ()
 main = do
@@ -172,7 +175,7 @@ intFromNFrames :: JACK.NFrames -> Integer
 intFromNFrames (JACK.NFrames n) = fromIntegral n
 
 process :: JACK.Client -> Audio.Port JACK.Output -> Audio.Port JACK.Output -> JACK.NFrames -> Sync.ExceptionalT E.Errno IO ()
-process client output output2 nframes = Trans.lift $ do
+process !client !output !output2 !nframes = Trans.lift $ do
     outArr <- Audio.getBufferArray output nframes
     outArr2 <- Audio.getBufferArray output2 nframes
     frameTime <- JACK.lastFrameTime client
@@ -182,4 +185,19 @@ process client output output2 nframes = Trans.lift $ do
             mapM_ (\i -> writeArray outArr i (processFunc frameTime i)) arr
             mapM_ (\i -> writeArray outArr2 i (processFunc frameTime i)) arr
             where
-                processFunc time frame = CFloat $ double2Float (U.myCoolSynth (U.Time . fromIntegral . (+(intFromNFrames frame)) $ intFromNFrames time))
+                processFunc !time !frame = CFloat $ force $ realToFrac (U.myCoolSynth (U.Time . fromIntegral . (+(intFromNFrames frame)) $ intFromNFrames time))
+
+
+{-
+import qualified Necronomicon.UGen as U
+import Prelude
+import Sound.Pulse.Simple
+import Control.DeepSeq
+
+main=do
+    s<-simpleNew Nothing "example" Play Nothing "this is an example application" (SampleSpec (F32 LittleEndian) 44100 1) Nothing Nothing
+    simpleWrite s ([force $ fromRational . toRational $ U.myCoolSynth $ U.Time $ fromRational t |t<-[1..44100*60]] :: [Float])
+    simpleDrain s
+    simpleFree s
+
+-}
