@@ -162,7 +162,8 @@ sin !freq = UGenFunc $ f
   where
       f !t@(Time frameTime) = calc sinFunc (toUGen freq) t
           where
-              sinFunc !(fa,fo) = (csin (fo * twoPi * (frameTime / sampleRate) + fa) ,0)
+              sinFunc !(fa,fo) = (P.sin (fo * twoPi * (frameTime / sampleRate) + fa) ,0)
+              -- sinFunc !(fa,fo) = (csin (fo * twoPi * (frameTime / sampleRate) + fa) ,0)
               twoPi = 6.283185307179586
               sampleRate = 44100
 
