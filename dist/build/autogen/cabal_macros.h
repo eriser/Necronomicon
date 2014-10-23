@@ -21,6 +21,13 @@
   (major1) == 0 && (major2) <  5 || \
   (major1) == 0 && (major2) == 5 && (minor) <= 0)
 
+/* package deepseq-1.3.0.1 */
+#define VERSION_deepseq "1.3.0.1"
+#define MIN_VERSION_deepseq(major1,major2,minor) (\
+  (major1) <  1 || \
+  (major1) == 1 && (major2) <  3 || \
+  (major1) == 1 && (major2) == 3 && (minor) <= 0)
+
 /* package explicit-exception-0.1.7.3 */
 #define VERSION_explicit_exception "0.1.7.3"
 #define MIN_VERSION_explicit_exception(major1,major2,minor) (\
@@ -55,6 +62,13 @@
   (major1) <  1 || \
   (major1) == 1 && (major2) <  1 || \
   (major1) == 1 && (major2) == 1 && (minor) <= 1)
+
+/* package pulse-simple-0.1.14 */
+#define VERSION_pulse_simple "0.1.14"
+#define MIN_VERSION_pulse_simple(major1,major2,minor) (\
+  (major1) <  0 || \
+  (major1) == 0 && (major2) <  1 || \
+  (major1) == 0 && (major2) == 1 && (minor) <= 14)
 
 /* package stm-2.4.2 */
 #define VERSION_stm "2.4.2"
