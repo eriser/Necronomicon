@@ -64,10 +64,7 @@ UGen sinOsc(UGen freq)
 {
 	void* args = malloc(sizeof(UGen));
 	((UGen*) args)[0] = freq;
-	UGen ugen;
-	ugen.args = args;
-	ugen.calc = sinCalc;
-	ugen.numArgs = 1;
+	UGen ugen = { args, 1, sinCalc };
 	return ugen;
 }
 
@@ -81,10 +78,7 @@ UGen number(double number)
 	Signal signal = { 0, number };
 	void* args = malloc(sizeof(Signal));
 	((Signal*) args)[0] = signal;
-	UGen ugen;
-	ugen.args = args;
-	ugen.calc = numberCalc;
-	ugen.numArgs = 1;
+	UGen ugen = { args, 1, numberCalc };
 	return ugen;
 }
 
@@ -103,10 +97,7 @@ UGen add(UGen a, UGen b)
 	void* args = malloc(sizeof(UGen) * 2);
 	((UGen*) args)[0] = a;
 	((UGen*) args)[1] = b;
-	UGen ugen;
-	ugen.args = args;
-	ugen.calc = addCalc;
-	ugen.numArgs = 2;
+	UGen ugen = { args, 2, addCalc };
 	return ugen;
 }
 
@@ -125,10 +116,7 @@ UGen mul(UGen a, UGen b)
 	void* args = malloc(sizeof(UGen) * 2);
 	((UGen*) args)[0] = a;
 	((UGen*) args)[1] = b;
-	UGen ugen;
-	ugen.args = args;
-	ugen.calc = mulCalc;
-	ugen.numArgs = 2;
+	UGen ugen = { args, 2, mulCalc };
 	return ugen;
 }
 
