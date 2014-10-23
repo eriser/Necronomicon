@@ -178,8 +178,8 @@ sampleRate = 44100.0
 recpTableSize :: Double
 recpTableSize = 1.0 / (fromIntegral tableSize)
 
-rTable2Pi :: Double
-rTable2Pi = 2.0 * pi * recpTableSize
+rSample2Pi :: Double
+rSample2Pi = 2.0 * pi * recpSampleRate
 
 recpSampleRate :: Double
 recpSampleRate = 1.0 / sampleRate
@@ -192,7 +192,7 @@ sin !freq = UGenFunc $ f
   where
       f !t@(Time frameTime) = calc sinFunc (toUGen freq) t
           where
-              sinFunc !(fa,fo) = (P.sin (fo * frameTime * rTable2Pi + fa) ,0)
+              sinFunc !(fa,fo) = (P.sin (fo * frameTime * rSample2Pi + fa) ,0)
               -- sinFunc !(# fa,fo #) = (# csin (fo * twoPi * (frameTime / sampleRate) + fa) ,0 #)
               -- sinFunc !( fa,fo ) = ( sinTable V.! (fromIntegral (round (fo * dtableSize * recpSampleRate * frameTime + fa * dtableSize):: W.Word16) ::Int) ,0 )
               -- twoPi = 6.283185307179586
