@@ -11,6 +11,9 @@ Executable Necronomicon
     Main-is:            Main.hs
     hs-source-dirs:     src
     extensions: 		FlexibleInstances InstanceSigs RankNTypes MagicHash UnboxedTuples MultiParamTypeClasses TypeFamilies DeriveDataTypeable FunctionalDependencies RebindableSyntax
+    C-Sources:    c_lib/Necronomicon.c
+    Include-Dirs: c_lib
+    Install-Includes: Necronomicon.h
     Build-Depends:     
         base >= 3 && < 5,
         portaudio    == 0.2.*,

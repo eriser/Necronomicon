@@ -1,3 +1,5 @@
+{-# LANGUAGE ForeignFunctionInterface #-}
+
 {-
 module Main where
 
@@ -144,15 +146,23 @@ import qualified Control.Monad.Trans.Class as Trans
 import qualified Foreign.C.Error as E
 
 import System.Environment (getProgName)
+import Debug.Trace
 
 import Data.Array.MArray (writeArray, )
-import Foreign.C.Types
+import Foreign.C
 import GHC.Float
 
 import Prelude
 import qualified Necronomicon.UGen as U
 --U.myCoolSynth . U.Time
 
+foreign import ccall "startRuntime" startRuntime :: Double -> IO ()
+
+main :: IO ()
+main = do
+    startRuntime 44100
+
+{-
 main :: IO ()
 main = do
     name <- getProgName
@@ -167,6 +177,7 @@ main = do
             Trans.lift $ do
                 putStrLn $ "started " ++ name ++ "..."
                 JACK.waitForBreak
+-}
 
 intFromNFrames :: JACK.NFrames -> Integer
 intFromNFrames (JACK.NFrames n) = fromIntegral n
