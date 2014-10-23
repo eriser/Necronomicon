@@ -3,13 +3,16 @@ module Necronomicon.UGen where
 
 import GHC.Exts
 import Data.List
-import Control.DeepSeq
 import Debug.Trace
+--import Necronomicon.Math
+import qualified Control.Monad.State as S
+
+import Prelude hiding (fromRational,fromIntegral,sin)
+import qualified Prelude as P (fromRational, fromIntegral, sin, floor)
+
+import Control.DeepSeq
 import qualified Data.Vector as V
 import qualified Data.Word as W
-
-import Prelude hiding (fromRational,sin)
-import qualified Prelude as P (fromRational,fromIntegral,sin)
 
 import Foreign.C
 foreign import ccall unsafe "sin" c_sin :: CDouble -> CDouble
@@ -23,7 +26,174 @@ fromRational n = (P.fromRational n) :: Double
 
 default (Double)
 
+ifThenElse :: Bool -> a -> a -> a
+ifThenElse True t _ = t
+ifThenElse False _ f = f
+
+{-
+
+data TimeState a = TimeState { calc :: Double -> (a, Double) }
+
+instance Monad TimeState where
+    return x = TimeState (\s -> (x, s))
+    (TimeState t) >>= f = TimeState $ \s -> let (a, newState) = t s
+                                                (TimeState g) = f a
+                                                in g newState
+                                                   
+type UGen = TimeState Double
+
+getTime :: UGen
+getTime = TimeState (\t -> (t, t))
+-}
+
+{-
+
+type UGen = S.State Double Double
+
+
+sin :: Double -> UGen
+sin freq = S.state (\time -> (P.sin (freq * twoPi * (time / sampleRate)), time))
+    where
+        twoPi = 6.283185307179586
+        sampleRate = 44100.0
+
+linexp :: Double -> Double -> Double -> Double -> Double -> Double
+linexp inMin inMax outMin outMax val
+    | val <= inMin = outMin
+    | val >= inMax = outMax
+    | otherwise = (outRatio ** (val * inRatio + minusLow)) * outMin
+        where
+            outRatio = outMax / outMin
+            inRatio = 1 / (inMax - inMin)
+            minusLow = inRatio * (-inMin)
+
+exprange :: Double -> Double -> Double -> UGen
+exprange minRange maxRange input = return $ linexp (-1) 1 minRange maxRange input
+
+myCoolSynth :: UGen
+-- myCoolSynth = sin 0.3 >>= (exprange 20 20000) >>= sin
+-- myCoolSynth = sin 440
+-- myCoolSynth = (sin 440 + sin 660) * (return 0.5)
+-- myCoolSynth = (sin 0.3 * (return 0.5) + (return 0.5)) >>= sin
+myCoolSynth = sin 0.3 >>= exprange 20 2000 >>= sin
+
+instance Num UGen where
+    (+) a b = do
+        aVal <- a
+        bVal <- b
+        return (aVal + bVal)
+    (-) a b = do
+        aVal <- a
+        bVal <- b
+        return (aVal - bVal)
+    (*) a b = do
+        aVal <- a
+        bVal <- b
+        return (aVal * bVal)
+
+--monadicSin :: TimeState Double
+--monadicSin freq = TimeState $ \t -> (# (sinCalc (NumGen freq) t), t #)
+-}
+
+
+{-
+
 (>>>) :: a -> (a -> b) -> b
+(>>>) a f = f a
+infixl 1 >>>
+
+(~>) :: a -> (a -> b) -> b
+(~>) a f = f a
+infixl 1 ~>
+
+newtype Time = Time Double
+
+class UGenComponent a where
+    calc :: a -> Time -> Double
+
+instance UGenComponent Double where
+    calc d _ = d
+
+instance UGenComponent (Time -> Double) where
+    calc f t = f t
+
+sin :: UGenComponent a => a -> Time -> Double
+sin freq time@(Time t) = P.sin (f * twoPi * (t / sampleRate))
+    where
+        f = calc freq time
+        twoPi = 6.283185307179586
+        sampleRate = 44100.0
+
+saw :: UGenComponent a => a -> Time -> Double
+saw freq time@(Time t) = wrapRange (-1) 1 $ f * t / sampleRate
+    where
+        f = calc freq time
+        sampleRate = 44100.0
+
+
+myCoolSynth :: Time -> Double
+myCoolSynth (Time time) = wrapRange (-1) 1 $ freq * time / sampleRate
+    where
+        freq = wrapRange (-1) 1 $ 0.3 * time / sampleRate
+        sampleRate = 44100.0
+
+myCoolSynth4 :: Time -> Double
+myCoolSynth4 (Time time) = (P.sin (220 * twoPi * (time / sampleRate)) + P.sin (440 * twoPi * (time / sampleRate))) * 0.5
+    where
+        twoPi = 6.283185307179586
+        sampleRate = 44100.0
+
+myCoolSynth2 :: Time -> Double
+myCoolSynth2 time = sin (sin 0.3) time
+
+myCoolSynth3 :: Time -> Double
+myCoolSynth3 (Time time) = P.sin (s2 * twoPi * (time / sampleRate))
+    where
+        s2 = (P.sin (0.3 * twoPi * (time / sampleRate)))
+        twoPi = 6.283185307179586
+        sampleRate = 44100.0
+
+--myCoolSynth time = (sin (UGenScalar 440.0) * (sin (UGenScalar 3.0) * (UGenScalar 0.5) + (UGenScalar 0.5))) time
+
+instance Num (Time -> Double) where
+    (+) a b = (\time -> (a time) + (b time))
+    (-) a b = (\time -> (a time) - (b time))
+    (*) a b = (\time -> (a time) * (b time))
+
+
+wrapRange :: Double -> Double -> Double -> Double
+wrapRange lo hi value
+    | value >= hi = greater
+    | value < lo = lesser
+    | otherwise = value
+    where
+        range = hi - lo
+        greater = if value' < hi then value' else wrapped value'
+            where
+                value' = value - range
+                
+        lesser = if value' >= lo then value' else wrapped value'
+            where
+                value' = value + range
+
+        wrapped v = if hi == lo then lo else v - (range * fromInteger (P.floor ((v - lo) / range)))
+
+
+linexp :: Double -> Double -> Double -> Double -> Double -> Double
+linexp inMin inMax outMin outMax val
+    | val <= inMin = outMin
+    | val >= inMax = outMax
+    | otherwise = (outRatio ** (val * inRatio + minusLow)) * outMin
+        where
+            outRatio = outMax / outMin
+            inRatio = 1 / (inMax - inMin)
+            minusLow = inRatio * (-inMin)
+
+exprange :: UGenComponent a => Double -> Double -> a -> Time -> Double
+exprange minRange maxRange input time = linexp (-1) 1 minRange maxRange (calc input time)
+-}
+
+{-
 (>>>) !a !f = f a
 
 infixl 1 >>>
@@ -56,6 +226,20 @@ calcUgen !(UGenFunc u) !t = ugenToDouble $ u t
 calcUgen !u             _ = ugenToDouble u
 -- calcUgen f t = ugenToDouble $ f t
 
+
+-- THIS SOUNDS WRRRRRRRRRRRRROOOOOOOOONNNNNNNNNNNNGGGGGGGGGGGGGGG
+myCoolSynth :: Time -> Double
+myCoolSynth time = case s of
+    UGenScalar d -> d
+    UGenFunc _ -> 0.0
+    UGenList _ -> 0.0
+    where
+        s = sin 440.0 time
+
+        -}
+{- THIS WORKS CORRECTLY!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! -}
+
+{-
 myCoolSynth :: Time -> Double
 -- myCoolSynth (Time frameTime) = P.sin (440 * twoPi * (frameTime / sampleRate))
     -- where
@@ -67,6 +251,18 @@ myCoolSynth = calcUgen fmSynth
 fmSynth :: UGen
 fmSynth = sin (mod1 + mod2) ~> gain 0.5
     where
+        s' = case s of
+            UGenScalar d -> d
+            UGenFunc _ -> 0.0
+            UGenList _ -> 0.0
+            where
+                s = sin freq time
+        freq = case s2 of
+            UGenScalar d2 -> d2 * 440.0
+            UGenFunc _ -> 0.0
+            UGenList _ -> 0.0
+            where
+                s2 = (sin 0.3 time)
         -- mod1 = 44.0 .+. sin 10.3 ~> gain 100.0
         mod1 = sin 10.3 ~> range (-66.0) 144.0
         mod2 = 22.0 .+. sin (mod1 .+. 20.4 ~> gain 0.025 ) ~> gain 100.0
@@ -84,6 +280,7 @@ fmSynth = sin (mod1 + mod2) ~> gain 0.5
         -- s2 = (P.sin (0.3 * twoPi * (time / sampleRate))) * 100 
         -- twoPi = 6.283185307179586
         -- sampleRate = 44100.0
+
 
 instance Show (a -> UGen) where
    show _ = "(a -> UGen)"
@@ -141,6 +338,40 @@ instance UGenComponent [UGen] where
 
 sumAO :: ( Double,Double ) -> Double
 sumAO ( a,o ) = a+o
+
+sin :: UGenComponent a => a -> Time -> UGen
+sin freq t@(Time frameTime) = calc (sinFunc) (toUGen freq) t
+  where
+      sinFunc f = P.sin (f * twoPi * (frameTime / sampleRate))
+      twoPi = 6.283185307179586
+      sampleRate = 44100.0
+
+
+linexp :: Double -> Double -> Double -> Double -> Double -> Double
+linexp inMin inMax outMin outMax val
+    | val <= inMin = outMin
+    | val >= inMax = outMax
+    | otherwise = (outRatio ** (val * inRatio + minusLow)) * outMin
+        where
+            outRatio = outMax / outMin
+            inRatio = 1 / (inMax - inMin)
+            minusLow = inRatio * (-inMin)
+
+exprange :: UGenComponent a => Double -> Double -> a -> Time -> UGen
+exprange minRange maxRange input time = calc (rangeFunc) (toUGen input) time
+    where
+        rangeFunc v = linexp (-1) 1 minRange maxRange v
+
+--delay :: UGenComponent a => a -> a -> Time -> UGen
+--delay amount input time = calc input (time + (calc amount time)) 
+      
+-- gain :: UGenComponent a => a -> a -> Double -> UGen
+-- gain amount input frameTime = calc2 gainFunc (toUGen amount) (toUGen input) frameTime
+  -- where
+      -- gainFunc amount' input' = input' * amount'
+      -- twoPi = 6.283185307179586
+      -- sampleRate = 44100.0
+
 
 reduceUgen :: UGen -> Time -> ( Double,Double )
 reduceUgen !(UGenScalar u) _ = u
@@ -235,3 +466,4 @@ range !minr !maxr !input = UGenFunc $ f
 
 
 
+-}

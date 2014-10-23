@@ -1,3 +1,5 @@
+{-# LANGUAGE ForeignFunctionInterface #-}
+
 {-
 module Main where
 
@@ -145,9 +147,10 @@ import qualified Control.Monad.Trans.Class as Trans
 import qualified Foreign.C.Error as E
 
 import System.Environment (getProgName)
+import Debug.Trace
 
 import Data.Array.MArray (writeArray, )
-import Foreign.C.Types
+import Foreign.C
 import GHC.Float
 
 import Prelude
@@ -155,7 +158,16 @@ import qualified Necronomicon.UGen as U
 import qualified Necronomicon.UGenC as UC
 --U.myCoolSynth . U.Time
 
+foreign import ccall "startRuntime" startRuntime :: Double -> IO ()
+
+main :: IO ()
+main = do
+    startRuntime 44100
+
+{-
+
 import Control.DeepSeq
+
 
 main :: IO ()
 main = do
@@ -171,7 +183,9 @@ main = do
             Trans.lift $ do
                 putStrLn $ "started " ++ name ++ "..."
                 JACK.waitForBreak
+-}
 
+{-
 intFromNFrames :: JACK.NFrames -> Integer
 intFromNFrames (JACK.NFrames n) = fromIntegral n
 
@@ -187,7 +201,7 @@ process !client !output !output2 !nframes = Trans.lift $ do
             mapM_ (\i -> writeArray outArr2 i (processFunc frameTime i)) arr
             where
                 processFunc !time !frame = CFloat $ force $ realToFrac (U.myCoolSynth (U.Time . fromIntegral . (+(intFromNFrames frame)) $ intFromNFrames time))
-
+-}
 
 {-
 import qualified Necronomicon.UGen as U
