@@ -152,6 +152,7 @@ import GHC.Float
 
 import Prelude
 import qualified Necronomicon.UGen as U
+import qualified Necronomicon.UGenC as UC
 --U.myCoolSynth . U.Time
 
 import Control.DeepSeq

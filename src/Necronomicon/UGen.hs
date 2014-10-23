@@ -3,11 +3,12 @@ module Necronomicon.UGen where
 
 import GHC.Exts
 import Data.List
---import Necronomicon.Math
 import Control.DeepSeq
 import Debug.Trace
+import qualified Data.Vector as V
+import qualified Data.Word as W
 
-import Prelude hiding (fromRational,fromIntegral,sin)
+import Prelude hiding (fromRational,sin)
 import qualified Prelude as P (fromRational,fromIntegral,sin)
 
 import Foreign.C
@@ -17,7 +18,7 @@ foreign import ccall unsafe "sin" c_sin :: CDouble -> CDouble
 csin :: Double -> Double
 csin = realToFrac . c_sin . realToFrac
 
-fromIntegral n = (P.fromIntegral n) :: Double
+-- fromIntegral n = (P.fromIntegral n) :: Double
 fromRational n = (P.fromRational n) :: Double
 
 default (Double)
@@ -47,7 +48,7 @@ exchangeSin x = x * (a0 + x2 * (a1 + x2 * (a2 + x2
 
 
 ugenToDouble :: UGen -> Double
-ugenToDouble !(UGenScalar (# d,o #)) = d
+ugenToDouble !(UGenScalar ( d,o )) = d
 ugenToDouble _                   = 0
 
 calcUgen :: UGen -> Time -> Double
@@ -61,16 +62,20 @@ myCoolSynth :: Time -> Double
         -- twoPi = 6.283185307179586
         -- sampleRate = 48000.0
 -- myCoolSynth = calcUgen $ sin 440.0
--- myCoolSynth = calcUgen fmSynth
+myCoolSynth = calcUgen fmSynth
 
--- fmSynth :: UGen
--- fmSynth = sin (mod1 + mod2) ~> gain 0.5
-    -- where
+fmSynth :: UGen
+fmSynth = sin (mod1 + mod2) ~> gain 0.5
+    where
         -- mod1 = 44.0 .+. sin 10.3 ~> gain 100.0
-        -- mod1 = sin 10.3 ~> range (-66.0) 144.0
-        -- mod2 = 22.0 .+. sin (mod1 .+. 20.4 ~> gain 0.025 ) ~> gain 100.0
+        mod1 = sin 10.3 ~> range (-66.0) 144.0
+        mod2 = 22.0 .+. sin (mod1 .+. 20.4 ~> gain 0.025 ) ~> gain 100.0
 
-myCoolSynth = calcUgen $ sin 0.3 ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin
+--Test #1
+-- myCoolSynth = calcUgen $ sin 0.3 ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin
+
+--Test #2
+-- myCoolSynth = calcUgen $ (sin 1000.3 + sin 1000.3 + sin 1000.3 + sin 1000.3 + sin 0.3 + sin 0.3 + sin 0.3 + sin 0.3 + sin 0.3 + sin 0.3 + sin 0.3 + sin 0.3 + sin 0.3 + sin 0.3 + sin 0.3 + sin 0.3 + sin 0.3 + sin 0.3 + sin 0.3 + sin 0.3) .*. 0.1
 -- myCoolSynth = calcUgen $ sin 0.3 ~> exprange 200 400 ~> sin
 -- myCoolSynth = calcUgen $ sin 0.3 ~> exprange 100 200 ~> sin
 
@@ -86,7 +91,7 @@ instance Show (a -> UGen) where
 newtype Time = Time Double
 
 data UGen = UGenFunc   !(Time -> UGen)
-          | UGenScalar !(# Double,Double #)
+          | UGenScalar !( Double,Double )
           | UGenList   ![UGen]
           -- deriving (Show)
 
@@ -99,22 +104,22 @@ class UGenNum a b where
     (.*.) :: a -> b -> UGen
 
 instance UGenNum UGen UGen where
-    (.+.) !(UGenScalar (# aa,ao #)) !(UGenScalar (# ba,bo #)) = UGenScalar (# aa + ba,ao + bo #)
+    (.+.) !(UGenScalar ( aa,ao )) !(UGenScalar ( ba,bo )) = UGenScalar ( aa + ba,ao + bo )
     (.+.) !(UGenFunc a)   !(UGenFunc b)   = UGenFunc (\time -> (a time) .+. (b time))
-    (.*.) !(UGenScalar (# aa,ao #)) !(UGenScalar (# ba,bo #)) = UGenScalar (# aa * ba,ao * bo #)
+    (.*.) !(UGenScalar ( aa,ao )) !(UGenScalar ( ba,bo )) = UGenScalar ( aa * ba,ao * bo )
     (.*.) !(UGenFunc a)   !(UGenFunc b)   = UGenFunc (\time -> (a time) .*. (b time))
 
 instance UGenNum UGen Double where
-    (.+.) !(UGenScalar (# aa,ao #)) !n = UGenScalar (# aa,ao + n #)
-    (.+.) !(UGenFunc a)   !n = UGenFunc (\time -> (a time) .+. (UGenScalar (# 0,n #)))
-    (.*.) !(UGenScalar (# aa,ao #)) !n = UGenScalar (# aa * n,ao #)
-    (.*.) !(UGenFunc a)   !n = UGenFunc (\time -> (a time) .*. (UGenScalar (# n,0 #)))
+    (.+.) !(UGenScalar ( aa,ao )) !n = UGenScalar ( aa,ao + n )
+    (.+.) !(UGenFunc a)   !n = UGenFunc (\time -> (a time) .+. (UGenScalar ( 0,n )))
+    (.*.) !(UGenScalar ( aa,ao )) !n = UGenScalar ( aa * n,ao )
+    (.*.) !(UGenFunc a)   !n = UGenFunc (\time -> (a time) .*. (UGenScalar ( n,0 )))
 
 instance UGenNum Double UGen where
-    (.+.) !n !(UGenScalar (# aa,ao #)) = UGenScalar (# aa,ao + n #)
-    (.+.) !n !(UGenFunc a)   = UGenFunc (\time -> (a time) .+. (UGenScalar (# 0,n #)))
-    (.*.) !n !(UGenScalar (# aa,ao #)) = UGenScalar (# aa * n,ao #)
-    (.*.) !n !(UGenFunc a)   = UGenFunc (\time -> (a time) .*. (UGenScalar (# n,0 #)))
+    (.+.) !n !(UGenScalar ( aa,ao )) = UGenScalar ( aa,ao + n )
+    (.+.) !n !(UGenFunc a)   = UGenFunc (\time -> (a time) .+. (UGenScalar ( 0,n )))
+    (.*.) !n !(UGenScalar ( aa,ao )) = UGenScalar ( aa * n,ao )
+    (.*.) !n !(UGenFunc a)   = UGenFunc (\time -> (a time) .*. (UGenScalar ( n,0 )))
 
 infixl 6 .+.
 infixl 7 .*.
@@ -126,69 +131,91 @@ instance UGenComponent UGen where
    toUGen !v = v
 
 instance UGenComponent Double where
-   toUGen !v = UGenScalar (# 0,v #)
+   toUGen !v = UGenScalar ( 0,v )
 
 instance UGenComponent [Double] where
-   toUGen !v = UGenList $ map (\n -> UGenScalar (# 0,n #)) v
+   toUGen !v = UGenList $ map (\n -> UGenScalar ( 0,n )) v
 
 instance UGenComponent [UGen] where
    toUGen !v = UGenList v
 
-sumAO :: (# Double,Double #) -> Double
-sumAO (# a,o #) = a+o
+sumAO :: ( Double,Double ) -> Double
+sumAO ( a,o ) = a+o
 
--- reduceUgen :: UGen -> Time -> (# Double,Double #)
--- reduceUgen !(UGenScalar u) _ = u
--- reduceUgen !(UGenFunc   u) t = u'
-    -- where
-        -- !(UGenScalar u') = u t
+reduceUgen :: UGen -> Time -> ( Double,Double )
+reduceUgen !(UGenScalar u) _ = u
+reduceUgen !(UGenFunc   u) t = u'
+    where
+        !(UGenScalar u') = u t
 
 calc0 :: UGen -> Time -> UGen
 calc0 !(UGenFunc   ugenFunc)   !time = ugenFunc time
 calc0 !(UGenScalar ugenScalar) _     = UGenScalar ugenScalar
 calc0 !(UGenList   ugenList)   !time = UGenList    $ map (\u -> calc0 u time) ugenList
 
-calc :: ((# Double,Double #) -> (# Double,Double #)) -> UGen -> Time -> UGen
+calc :: (( Double,Double ) -> ( Double,Double )) -> UGen -> Time -> UGen
 calc !func !(UGenList   ugenList)   !time = UGenList   $ map (\u->calc func u time) ugenList
 calc !func !(UGenScalar u)          _     = UGenScalar (func u)
 calc !func !(UGenFunc   ugenFunc)   !time = UGenScalar (func u)
     where
         !(UGenScalar u) = ugenFunc time
 
--- calc2 :: ((# Double,Double #) -> (# Double,Double #) -> (# Double,Double #)) -> UGen -> UGen -> Time -> UGen
--- calc2 func !u1 !u2 t = UGenScalar $ func (reduceUgen u1 t) (reduceUgen u2 t)
+calc2 :: (( Double,Double ) -> ( Double,Double ) -> ( Double,Double )) -> UGen -> UGen -> Time -> UGen
+calc2 func !u1 !u2 t = UGenScalar $ func (reduceUgen u1 t) (reduceUgen u2 t)
 
--- calc3 :: ((# Double,Double #) -> (# Double,Double #) -> (# Double,Double #) -> (# Double,Double #)) -> UGen -> UGen -> UGen -> Time -> UGen
--- calc3 func !u1 !u2 !u3 t = UGenScalar $ func (reduceUgen u1 t) (reduceUgen u2 t) (reduceUgen u3 t)
+calc3 :: (( Double,Double ) -> ( Double,Double ) -> ( Double,Double ) -> ( Double,Double )) -> UGen -> UGen -> UGen -> Time -> UGen
+calc3 func !u1 !u2 !u3 t = UGenScalar $ func (reduceUgen u1 t) (reduceUgen u2 t) (reduceUgen u3 t)
+
+tableSize :: Int
+tableSize = (2::Int)^(16::Int)
+
+dtableSize :: Double
+dtableSize = fromIntegral tableSize
+
+sampleRate :: Double
+sampleRate = 44100.0
+
+recpTableSize :: Double
+recpTableSize = 1.0 / (fromIntegral tableSize)
+
+rTable2Pi :: Double
+rTable2Pi = 2.0 * pi * recpTableSize
+
+recpSampleRate :: Double
+recpSampleRate = 1.0 / sampleRate
+
+sinTable :: V.Vector Double
+sinTable = V.fromList $ map (P.sin . (*(2.0*pi)) . (/ (fromIntegral tableSize)) . fromIntegral) [0..tableSize]
 
 sin :: UGenComponent a => a -> UGen
 sin !freq = UGenFunc $ f
   where
       f !t@(Time frameTime) = calc sinFunc (toUGen freq) t
           where
-              -- sinFunc !(fa,fo) = (P.sin (fo * twoPi * (frameTime / sampleRate) + fa) ,0)
-              sinFunc !(# fa,fo #) = (# csin (fo * twoPi * (frameTime / sampleRate) + fa) ,0 #)
-              twoPi = 6.283185307179586
-              sampleRate = 44100
+              sinFunc !(fa,fo) = (P.sin (fo * frameTime * rTable2Pi + fa) ,0)
+              -- sinFunc !(# fa,fo #) = (# csin (fo * twoPi * (frameTime / sampleRate) + fa) ,0 #)
+              -- sinFunc !( fa,fo ) = ( sinTable V.! (fromIntegral (round (fo * dtableSize * recpSampleRate * frameTime + fa * dtableSize):: W.Word16) ::Int) ,0 )
+              -- twoPi = 6.283185307179586
+              
 
--- gain :: (UGenComponent a,UGenComponent b) => a -> b -> UGen
--- gain !amp !input = UGenFunc $ f
-    -- where
-        -- f t = calc2 gainFunc (toUGen amp) (toUGen input) t
-            -- where
-                -- gainFunc !(# ampa,ampo #) !(# inputa,inputo #) = (# (ampa+ampo)*inputa,inputo #)
+gain :: (UGenComponent a,UGenComponent b) => a -> b -> UGen
+gain !amp !input = UGenFunc $ f
+    where
+        f t = calc2 gainFunc (toUGen amp) (toUGen input) t
+            where
+                gainFunc !( ampa,ampo ) !( inputa,inputo ) = ( (ampa+ampo)*inputa,inputo )
 
--- range :: (UGenComponent a,UGenComponent b,UGenComponent c) => a -> b -> c -> UGen
--- range !minr !maxr !input = UGenFunc $ f
-    -- where
-        -- f t = calc3 rangeFunc (toUGen minr) (toUGen maxr) (toUGen input) t
-            -- where
-                -- rangeFunc !minr !maxr !input = (# val,rangeOffset #)
-                    -- where
-                        -- rng         = (sumAO maxr) - (sumAO minr)
-                        -- halfRange   = rng * 0.5
-                        -- rangeOffset = halfRange + (sumAO minr)
-                        -- val         = (((sumAO input) + 1) / 2) * rng
+range :: (UGenComponent a,UGenComponent b,UGenComponent c) => a -> b -> c -> UGen
+range !minr !maxr !input = UGenFunc $ f
+    where
+        f t = calc3 rangeFunc (toUGen minr) (toUGen maxr) (toUGen input) t
+            where
+                rangeFunc !minr !maxr !input = ( val,rangeOffset )
+                    where
+                        rng         = (sumAO maxr) - (sumAO minr)
+                        halfRange   = rng * 0.5
+                        rangeOffset = halfRange + (sumAO minr)
+                        val         = (((sumAO input) + 1) / 2) * rng
 
 
 -- linexp :: Double -> Double -> Double -> Double -> Double -> Double

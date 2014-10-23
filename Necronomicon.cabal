@@ -10,6 +10,10 @@ Cabal-Version:          >=1.2
 Executable Necronomicon
     Main-is:            Main.hs
     hs-source-dirs:     src
+    Include-dirs:       include
+    Includes:           necro.h
+    Install-includes:   necro.h
+    c-sources:          include/necro.c
     ghc-options:        -O3
     extensions: 		FlexibleInstances InstanceSigs RankNTypes MagicHash UnboxedTuples MultiParamTypeClasses TypeFamilies DeriveDataTypeable FunctionalDependencies RebindableSyntax BangPatterns ForeignFunctionInterface
     Build-Depends:     

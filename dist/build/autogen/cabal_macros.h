@@ -84,12 +84,12 @@
   (major1) == 0 && (major2) <  3 || \
   (major1) == 0 && (major2) == 3 && (minor) <= 0)
 
-/* package vector-0.10.11.0 */
-#define VERSION_vector "0.10.11.0"
+/* package vector-0.10.12.1 */
+#define VERSION_vector "0.10.12.1"
 #define MIN_VERSION_vector(major1,major2,minor) (\
   (major1) <  0 || \
   (major1) == 0 && (major2) <  10 || \
-  (major1) == 0 && (major2) == 10 && (minor) <= 11)
+  (major1) == 0 && (major2) == 10 && (minor) <= 12)
 
 /* tool alex-3.1.3 */
 #define TOOL_VERSION_alex "3.1.3"
