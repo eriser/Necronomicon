@@ -53,9 +53,8 @@ typedef struct
 
 Signal sinCalc(void* args, double time)
 {
-	UGen* freqUGen = &((UGen*) args)[0];
-	
-	Signal freq = freqUGen->calc(freqUGen->args, time);
+	UGen freqUGen = ((UGen*) args)[0];
+	Signal freq = freqUGen.calc(freqUGen.args, time);
 	double amplitude = sin(freq.offset * TWO_PI * time * RECIP_SAMPLE_RATE + freq.amplitude);
 	Signal signal = { amplitude, 0 };
 	return signal;
@@ -91,10 +90,10 @@ UGen number(double number)
 
 Signal addCalc(void* args, double time)
 {
-	UGen* a = &((UGen*) args)[0];
-	UGen* b = &((UGen*) args)[1];
-	Signal as = a->calc(a->args, time);
-	Signal bs = b->calc(b->args, time);
+	UGen a = ((UGen*) args)[0];
+	UGen b = ((UGen*) args)[1];
+	Signal as = a.calc(a.args, time);
+	Signal bs = b.calc(b.args, time);
 	Signal signal = { as.amplitude + bs.amplitude, as.offset + bs.offset };
 	return signal;
 }
@@ -113,10 +112,10 @@ UGen add(UGen a, UGen b)
 
 Signal mulCalc(void* args, double time)
 {
-	UGen* a = &((UGen*) args)[0];
-	UGen* b = &((UGen*) args)[1];
-	Signal as = a->calc(a->args, time);
-	Signal bs = b->calc(b->args, time);
+	UGen a = ((UGen*) args)[0];
+	UGen b = ((UGen*) args)[1];
+	Signal as = a.calc(a.args, time);
+	Signal bs = b.calc(b.args, time);
 	Signal signal = { (as.amplitude + as.offset) * bs.amplitude,  bs.offset };
 	return signal;
 }
