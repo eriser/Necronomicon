@@ -161,8 +161,7 @@ static void signal_handler(int sig)
  * JACK calls this shutdown_callback if the server ever shuts down or
  * decides to disconnect the client.
  */
-void
-jack_shutdown (void *arg)
+void jack_shutdown (void *arg)
 {
 	exit (1);
 }
