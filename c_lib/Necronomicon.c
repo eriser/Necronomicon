@@ -107,7 +107,18 @@ Signal mulCalc(void* args, double time)
 	UGen b = ((UGen*) args)[1];
 	Signal as = a.calc(a.args, time);
 	Signal bs = b.calc(b.args, time);
-	Signal signal = { (as.amplitude + as.offset) * bs.amplitude,  bs.offset };
+	/* Signal signal = { as.amplitude * bs.amplitude+bs.offset, as.offset*bs.offset }; */
+	Signal signal;
+	if(as.amplitude != 0)
+	{
+		signal.amplitude = (bs.amplitude+bs.offset)*as.amplitude;
+		signal.offset    = (bs.amplitude+bs.offset)*as.offset;
+	}
+	else
+	{
+		signal.amplitude = (as.amplitude+as.offset)*bs.amplitude;
+		signal.offset    = (as.amplitude+as.offset)*bs.offset;
+	}
 	return signal;
 }
 
@@ -120,9 +131,30 @@ UGen mul(UGen a, UGen b)
 	return ugen;
 }
 
+
+Signal gainCalc(void* args, double time)
+{
+	UGen a = ((UGen*) args)[0];
+	UGen b = ((UGen*) args)[1];
+	Signal as = a.calc(a.args, time);
+	Signal bs = b.calc(b.args, time);
+	Signal signal = { (as.amplitude + as.offset) * bs.amplitude, bs.offset };
+	return signal;
+}
+
+UGen gain(UGen a, UGen b)
+{
+	void* args = malloc(sizeof(UGen) * 2);
+	((UGen*) args)[0] = a;
+	((UGen*) args)[1] = b;
+	UGen ugen = { args, 2, gainCalc };
+	return ugen;
+}
+
+
 double myCoolSynth(double time)
 {
-	//UGen synthUGen = sinOsc(mul(add(mul(sinOsc(number(0.3)), number(0.5)), number(0.5)), number(440.0)));
+	/* UGen synthUGen = sinOsc(mul(add(mul(sinOsc(number(0.3)), number(0.5)), number(0.5)), number(440.0))); */
 	UGen synthUGen = sinOsc(number(440.0));
 	Signal signal = synthUGen.calc(synthUGen.args, time);
 	return signal.amplitude + signal.offset; // ?????????????
@@ -190,14 +222,21 @@ int process(jack_nframes_t nframes, void *arg)
 
 void startRuntime(double sampleRate)
 {
-	puts("Starting Necronomicon");
+	puts("Starting Necronomiconzz");
 
 	const char** ports;
 	const char* client_name = "Necronomicon";
 	const char* server_name = NULL;
 	jack_options_t options = JackNullOption;
 	jack_status_t status;
-	SynthData data = { sinOsc(mul(sinOsc(number(0.3)), number(440.0))) };
+	/* SynthData data = { sinOsc(add(mul(sinOsc(number(0.3)), number(100.0)),number(440.0))) }; */
+	
+	//gain vs mul test 
+	SynthData data = { sinOsc(add(number(1000.0),mul(sinOsc(number(0.3)),number(400.0)))) };
+
+//20 sins test
+	/* SynthData data = { sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(mul(sinOsc(number(0.3)), number(440.0)))))))))))))))))))))) }; */
+
 	int i;
 
 	/* open a client connection to the JACK server */
@@ -297,7 +336,8 @@ void startRuntime(double sampleRate)
 	#ifdef WIN32 
 		Sleep(1000);
 	#else
-		sleep (1);
+		/* sleep (1); */
+		sleep (10);
 	#endif
 	}
 
