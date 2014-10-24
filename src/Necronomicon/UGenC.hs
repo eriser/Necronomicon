@@ -81,7 +81,7 @@ range :: (UGenComponent a,UGenComponent b,UGenComponent c) => a -> b -> c -> UGe
 range minr maxr input = Range (toUGen minr) (toUGen maxr) (toUGen input)
 
 fmSynth :: UGen
-fmSynth = sin (mod1 + mod2) ~> gain 0.5 sin
+fmSynth = sin (mod1 + mod2) ~> gain 0.5
     where
         mod1 = sin 10.3 ~> range (-66.0) 144.0
         mod2 = 22.0 .+. sin (mod1 .+. 20.4 ~> gain 0.025 ) ~> gain 100.0

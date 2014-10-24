@@ -212,6 +212,8 @@ void startRuntime(double sampleRate)
 	jack_options_t options = JackNullOption;
 	jack_status_t status;
 	SynthData data = { sinOsc(mul(sinOsc(number(0.3)), number(440.0))) };
+	/* SynthData data = { sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(mul(sinOsc(number(0.3)), number(440.0)))))))))))))))))))))) }; */
+
 	int i;
 
 	/* open a client connection to the JACK server */
@@ -311,7 +313,8 @@ void startRuntime(double sampleRate)
 	#ifdef WIN32 
 		Sleep(1000);
 	#else
-		sleep (1);
+		/* sleep (1); */
+		sleep (10);
 	#endif
 	}
 
