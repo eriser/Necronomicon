@@ -53,9 +53,8 @@ typedef struct
 
 Signal sinCalc(void* args, double time)
 {
-	UGen* freqUGen = &((UGen*) args)[0];
-	
-	Signal freq = freqUGen->calc(freqUGen->args, time);
+	UGen freqUGen = ((UGen*) args)[0];
+	Signal freq = freqUGen.calc(freqUGen.args, time);
 	double amplitude = sin(freq.offset * TWO_PI * time * RECIP_SAMPLE_RATE + freq.amplitude);
 	Signal signal = { amplitude, 0 };
 	return signal;
@@ -65,10 +64,7 @@ UGen sinOsc(UGen freq)
 {
 	void* args = malloc(sizeof(UGen));
 	((UGen*) args)[0] = freq;
-	UGen ugen;
-	ugen.args = args;
-	ugen.calc = sinCalc;
-	ugen.numArgs = 1;
+	UGen ugen = { args, 1, sinCalc };
 	return ugen;
 }
 
@@ -82,19 +78,16 @@ UGen number(double number)
 	Signal signal = { 0, number };
 	void* args = malloc(sizeof(Signal));
 	((Signal*) args)[0] = signal;
-	UGen ugen;
-	ugen.args = args;
-	ugen.calc = numberCalc;
-	ugen.numArgs = 1;
+	UGen ugen = { args, 1, numberCalc };
 	return ugen;
 }
 
 Signal addCalc(void* args, double time)
 {
-	UGen* a = &((UGen*) args)[0];
-	UGen* b = &((UGen*) args)[1];
-	Signal as = a->calc(a->args, time);
-	Signal bs = b->calc(b->args, time);
+	UGen a = ((UGen*) args)[0];
+	UGen b = ((UGen*) args)[1];
+	Signal as = a.calc(a.args, time);
+	Signal bs = b.calc(b.args, time);
 	Signal signal = { as.amplitude + bs.amplitude, as.offset + bs.offset };
 	return signal;
 }
@@ -104,19 +97,16 @@ UGen add(UGen a, UGen b)
 	void* args = malloc(sizeof(UGen) * 2);
 	((UGen*) args)[0] = a;
 	((UGen*) args)[1] = b;
-	UGen ugen;
-	ugen.args = args;
-	ugen.calc = addCalc;
-	ugen.numArgs = 2;
+	UGen ugen = { args, 2, addCalc };
 	return ugen;
 }
 
 Signal mulCalc(void* args, double time)
 {
-	UGen* a = &((UGen*) args)[0];
-	UGen* b = &((UGen*) args)[1];
-	Signal as = a->calc(a->args, time);
-	Signal bs = b->calc(b->args, time);
+	UGen a = ((UGen*) args)[0];
+	UGen b = ((UGen*) args)[1];
+	Signal as = a.calc(a.args, time);
+	Signal bs = b.calc(b.args, time);
 	Signal signal = { (as.amplitude + as.offset) * bs.amplitude,  bs.offset };
 	return signal;
 }
@@ -126,10 +116,7 @@ UGen mul(UGen a, UGen b)
 	void* args = malloc(sizeof(UGen) * 2);
 	((UGen*) args)[0] = a;
 	((UGen*) args)[1] = b;
-	UGen ugen;
-	ugen.args = args;
-	ugen.calc = mulCalc;
-	ugen.numArgs = 2;
+	UGen ugen = { args, 2, mulCalc };
 	return ugen;
 }
 
@@ -204,7 +191,7 @@ int process(jack_nframes_t nframes, void *arg)
 
 void startRuntime(double sampleRate)
 {
-	puts("Starting Necronomicon");
+	puts("Starting Necronomiconzz");
 
 	const char** ports;
 	const char* client_name = "Necronomicon";
