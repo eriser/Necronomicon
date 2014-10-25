@@ -42,6 +42,11 @@ typedef struct
 	double offset;
 } Signal;
 
+inline double sigsum(Signal signal)
+{
+	return signal.amplitude + signal.offset;
+}
+
 typedef Signal Calc(void* args, double time);
 
 typedef struct
@@ -50,6 +55,23 @@ typedef struct
 	unsigned int numArgs;
 	Calc* calc;
 } UGen;
+
+Signal delayCalc(void* args, double time)
+{
+	UGen input = ((UGen*) args)[0];
+	UGen delayUGen = ((UGen*) args)[1];
+	double delayedTime = (sigsum(delayUGen.calc(delayUGen.args, time)) * SAMPLE_RATE) + time;
+	return input.calc(input.args, delayedTime);
+}
+
+UGen delay(UGen input, UGen amount)
+{
+	void* args = malloc(sizeof(UGen) * 2);
+	((UGen*) args)[0] = input;
+	((UGen*) args)[1] = amount;
+	UGen ugen = { args, 2, delayCalc };
+	return ugen;
+}
 
 Signal sinCalc(void* args, double time)
 {
@@ -229,10 +251,12 @@ void startRuntime(double sampleRate)
 	const char* server_name = NULL;
 	jack_options_t options = JackNullOption;
 	jack_status_t status;
-	/* SynthData data = { sinOsc(add(mul(sinOsc(number(0.3)), number(100.0)),number(440.0))) }; */
+	UGen sinUGen = sinOsc(add(mul(sinOsc(number(0.5)), number(100.0)),number(440.0)));
+	UGen delayTime = sinOsc(number(0.3));
+	SynthData data = { delay(sinUGen, delayTime) };
 	
 	//gain vs mul test 
-	SynthData data = { sinOsc(add(number(1000.0),mul(sinOsc(number(0.3)),number(400.0)))) };
+	// SynthData data = { sinOsc(add(number(1000.0),mul(sinOsc(number(0.3)),number(400.0)))) };
 
 //20 sins test
 	/* SynthData data = { sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(mul(sinOsc(number(0.3)), number(440.0)))))))))))))))))))))) }; */
