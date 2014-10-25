@@ -25,13 +25,17 @@
 #endif
 
 const double TWO_PI = M_PI * 2;
+const double RECIP_TWO_PI =  1.0 / (M_PI * 2);
 const double SAMPLE_RATE = 44100;
 const double RECIP_SAMPLE_RATE = 1.0 / 44100.0;
 
-#define TABLE_SIZE   (200)
-
+#define TABLE_SIZE   (65536)
+const double RECIP_TABLE_SIZE = 1.0 / (double)TABLE_SIZE;
 double constants[7] = { 0, 1, 2, 3, 4, 5, 6 };
+double sine_table[TABLE_SIZE];
 
+const double TABLE_MUL_RECIP_SAMPLE_RATE = TABLE_SIZE * (1.0 / 44100.0);
+const double TABLE_SIZE_MUL_RECIP_TWO_PI = TABLE_SIZE * (1.0 / (M_PI*2));
 //////////////
 // UGens
 //////////////
@@ -77,7 +81,14 @@ Signal sinCalc(void* args, double time)
 {
 	UGen freqUGen = ((UGen*) args)[0];
 	Signal freq = freqUGen.calc(freqUGen.args, time);
-	double amplitude = sin(freq.offset * TWO_PI * time * RECIP_SAMPLE_RATE + freq.amplitude);
+
+    //sin function version
+	/* double amplitude = sin(freq.offset * TWO_PI * time * RECIP_SAMPLE_RATE + freq.amplitude); */
+	
+	//look up table version
+	unsigned short index = freq.offset * TABLE_MUL_RECIP_SAMPLE_RATE * time + (freq.amplitude * TABLE_SIZE_MUL_RECIP_TWO_PI);
+	double amplitude = sine_table[index];
+	
 	Signal signal = { amplitude, 0 };
 	return signal;
 }
@@ -246,11 +257,19 @@ void startRuntime(double sampleRate)
 {
 	puts("Starting Necronomiconzz");
 
+	//
+	int si;
+	for(si = 0; si < TABLE_SIZE; si++)
+	{
+		sine_table[si] = sin(M_PI * (si - (TABLE_SIZE / 2)) / (TABLE_SIZE / 2));
+	}
+	
 	const char** ports;
 	const char* client_name = "Necronomicon";
 	const char* server_name = NULL;
 	jack_options_t options = JackNullOption;
 	jack_status_t status;
+
 	UGen sinUGen = sinOsc(add(mul(sinOsc(number(0.5)), number(100.0)),number(440.0)));
 	UGen delayTime = sinOsc(number(0.3));
 	SynthData data = { delay(sinUGen, delayTime) };
@@ -258,8 +277,14 @@ void startRuntime(double sampleRate)
 	//gain vs mul test 
 	// SynthData data = { sinOsc(add(number(1000.0),mul(sinOsc(number(0.3)),number(400.0)))) };
 
+	//pure sin test sound test for LUT
+	/* SynthData data = { sinOsc(number(400.0)) }; */
+	
+	//gain vs mul test 
+	/* SynthData data = { sinOsc(add(number(1000.0),mul(sinOsc(number(0.3)),number(400.0)))) }; */
+
 //20 sins test
-	/* SynthData data = { sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(mul(sinOsc(number(0.3)), number(440.0)))))))))))))))))))))) }; */
+			// SynthData data = { sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(mul(sinOsc(number(0.3)), number(440.0)))))))))))))))))))))) };
 
 	int i;
 
