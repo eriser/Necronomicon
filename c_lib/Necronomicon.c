@@ -254,10 +254,10 @@ void startRuntime(double sampleRate)
 	/* SynthData data = { sinOsc(number(400.0)) }; */
 	
 	//gain vs mul test 
-	/* SynthData data = { sinOsc(add(number(1000.0),mul(sinOsc(number(0.3)),number(400.0)))) }; */
+	SynthData data = { sinOsc(add(number(1000.0),mul(sinOsc(number(0.3)),number(400.0)))) };
 
 //20 sins test
-	SynthData data = { sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(mul(sinOsc(number(0.3)), number(440.0)))))))))))))))))))))) };
+	/* SynthData data = { sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(mul(sinOsc(number(0.3)), number(440.0)))))))))))))))))))))) }; */
 
 	int i;
 
