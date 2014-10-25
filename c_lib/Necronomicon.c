@@ -64,7 +64,8 @@ Signal delayCalc(void* args, double time)
 {
 	UGen input = ((UGen*) args)[0];
 	UGen delayUGen = ((UGen*) args)[1];
-	double delayedTime = (sigsum(delayUGen.calc(delayUGen.args, time)) * SAMPLE_RATE) + time;
+	Signal delayTimeSig = (delayUGen.calc(delayUGen.args, time));
+	double delayedTime = delayTimeSig.offset * SAMPLE_RATE + time + (delayTimeSig.amplitude * RECIP_TWO_PI * SAMPLE_RATE);
 	return input.calc(input.args, delayedTime);
 }
 
@@ -83,11 +84,11 @@ Signal sinCalc(void* args, double time)
 	Signal freq = freqUGen.calc(freqUGen.args, time);
 
     //sin function version
-	/* double amplitude = sin(freq.offset * TWO_PI * time * RECIP_SAMPLE_RATE + freq.amplitude); */
+	double amplitude = sin(freq.offset * TWO_PI * time * RECIP_SAMPLE_RATE + freq.amplitude);
 	
 	//look up table version
-	unsigned short index = freq.offset * TABLE_MUL_RECIP_SAMPLE_RATE * time + (freq.amplitude * TABLE_SIZE_MUL_RECIP_TWO_PI);
-	double amplitude = sine_table[index];
+	/* unsigned short index = freq.offset * TABLE_MUL_RECIP_SAMPLE_RATE * time + (freq.amplitude * TABLE_SIZE_MUL_RECIP_TWO_PI); */
+	/* double amplitude = sine_table[index]; */
 	
 	Signal signal = { amplitude, 0 };
 	return signal;
@@ -270,18 +271,18 @@ void startRuntime(double sampleRate)
 	jack_options_t options = JackNullOption;
 	jack_status_t status;
 
-	UGen sinUGen = sinOsc(add(mul(sinOsc(number(0.5)), number(100.0)),number(440.0)));
-	UGen delayTime = sinOsc(number(0.3));
-	SynthData data = { delay(sinUGen, delayTime) };
+	UGen sinUGen = sinOsc(add(mul(sinOsc(number(1.5)), number(100.0)),number(440.0)));
+	UGen delayTime = add(number(2),mul(number(1),sinOsc(number(0.5))));
+	SynthData data = { mul(number(0.75),delay(sinUGen, delayTime))};
 	
 	//gain vs mul test 
-	// SynthData data = { sinOsc(add(number(1000.0),mul(sinOsc(number(0.3)),number(400.0)))) };
+	/* SynthData data = { sinOsc(add(number(1000.0),mul(sinOsc(number(0.3)),number(400.0)))) }; */
 
 	//pure sin test sound test for LUT
 	/* SynthData data = { sinOsc(number(400.0)) }; */
 	
 	//gain vs mul test 
-	SynthData data = { sinOsc(add(number(1000.0),mul(sinOsc(number(0.3)),number(400.0)))) };
+	/* SynthData data = { sinOsc(add(number(1000.0),mul(sinOsc(number(0.3)),number(400.0)))) }; */
 
     //20 sins test
 	// SynthData data = { sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(mul(sinOsc(number(0.3)), number(440.0)))))))))))))))))))))) };
