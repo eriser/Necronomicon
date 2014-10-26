@@ -51,7 +51,7 @@ sin :: UGenComponent a => a -> UGen
 sin freq = UGenFunc sinCalc [toUGen freq]
 
 foreign import ccall unsafe "&delayCalc" delayCalc :: Calc
-delay :: UGenComponent a => a -> a -> UGen
+delay :: (UGenComponent a,UGenComponent b) => a -> b -> UGen
 delay amount input = UGenFunc delayCalc [toUGen amount, toUGen input]
 
 foreign import ccall unsafe "&addCalc" addCalc :: Calc
@@ -65,6 +65,11 @@ mul a b = UGenFunc mulCalc [toUGen a, toUGen b]
 foreign import ccall unsafe "&udivCalc" divCalc :: Calc
 udiv :: UGenComponent a => a -> a -> UGen
 udiv a b = UGenFunc divCalc [toUGen a, toUGen b]
+
+foreign import ccall unsafe "&timeWarpCalc" timeWarpCalc :: Calc
+timeWarp :: UGenComponent a => a -> a -> UGen
+timeWarp a b = UGenFunc timeWarpCalc [toUGen a, toUGen b]
+
 
 (/) :: UGenComponent a => a -> a -> UGen
 (/) = udiv
@@ -151,8 +156,15 @@ compileUGen (UGenNum d) = do
 -- compileUGen (UGenList ugens)
 
 myCoolSynth :: UGen
-myCoolSynth = sin 440.0 ~> sin
+myCoolSynth = t s .*. 0.5 ~> d
+    where
+        d = (\s -> s .+. delay 1.0 s)
+        t = timeWarp (sin 0.2 .*. 0.5 .+. 1.0)
+        s = (sin 0.3 .*. 0.5 .+. 0.5) .*. 440.0 ~> sin
+-- myCoolSynth = sin 0.3 ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin
+-- myCoolSynth = sin 440.0 ~> sin
 -- myCoolSynth = (sin 0.3 .*. 0.5 .+. 0.5) .*. 440.0 ~> sin
+
 
 {-
 
