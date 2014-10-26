@@ -29,7 +29,7 @@ const double RECIP_TWO_PI =  1.0 / (M_PI * 2);
 const double SAMPLE_RATE = 44100;
 const double RECIP_SAMPLE_RATE = 1.0 / 44100.0;
 
-#define TABLE_SIZE   (65536)
+#define TABLE_SIZE   (256)
 const double RECIP_TABLE_SIZE = 1.0 / (double)TABLE_SIZE;
 double constants[7] = { 0, 1, 2, 3, 4, 5, 6 };
 double sine_table[TABLE_SIZE];
@@ -102,11 +102,16 @@ Signal sinCalc(void* args, double time)
 	Signal freq = freqUGen.calc(freqUGen.args, time);
 
     //sin function version
-	double amplitude = sin(freq.offset * TWO_PI * time * RECIP_SAMPLE_RATE + freq.amplitude);
-	
+	/* double amplitude = sin(freq.offset * TWO_PI * time * RECIP_SAMPLE_RATE + freq.amplitude); */
+
 	//look up table version
-	/* unsigned short index = freq.offset * TABLE_MUL_RECIP_SAMPLE_RATE * time + (freq.amplitude * TABLE_SIZE_MUL_RECIP_TWO_PI); */
-	/* double amplitude = sine_table[index]; */
+	double rawIndex = freq.offset * TABLE_MUL_RECIP_SAMPLE_RATE * time + (freq.amplitude * TABLE_SIZE_MUL_RECIP_TWO_PI);
+	unsigned char index1 = rawIndex;
+	unsigned char index2 = index1+1;
+	double amp1 = sine_table[index1];
+	double amp2 = sine_table[index2];
+	double delta = rawIndex - ((long)rawIndex);
+	double amplitude = amp1 + delta * (amp2 - amp1);
 	
 	Signal signal = { amplitude, 0 };
 	return signal;
@@ -280,7 +285,7 @@ void startRuntime(double sampleRate)
 	int si;
 	for(si = 0; si < TABLE_SIZE; si++)
 	{
-		sine_table[si] = sin(M_PI * (si - (TABLE_SIZE / 2)) / (TABLE_SIZE / 2));
+		sine_table[si] = sin(TWO_PI * (((float)si) / ((float)TABLE_SIZE)));
 	}
 	
 	const char** ports;
@@ -293,9 +298,9 @@ void startRuntime(double sampleRate)
 	UGen delayTime = add(number(1),mul(number(1),sinOsc(number(0.25))));
 	/* SynthData data = { mul(number(0.75),delay(sinUGen, delayTime))}; */
 
-	SynthData data = { mul(number(0.75),timeWarp(sinUGen,delayTime))};
+	/* SynthData data = { mul(number(0.75),timeWarp(sinUGen,delayTime))}; */
 	
-	//gain vs mul test 
+	/* gain vs mul test  */
 	/* SynthData data = { sinOsc(add(number(1000.0),mul(sinOsc(number(0.3)),number(400.0)))) }; */
 
 	//pure sin test sound test for LUT
@@ -305,7 +310,7 @@ void startRuntime(double sampleRate)
 	/* SynthData data = { sinOsc(add(number(1000.0),mul(sinOsc(number(0.3)),number(400.0)))) }; */
 
     //20 sins test
-	// SynthData data = { sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(mul(sinOsc(number(0.3)), number(440.0)))))))))))))))))))))) };
+	SynthData data = { sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(mul(sinOsc(number(0.3)), number(440.0)))))))))))))))))))))) };
 
 	int i;
 
