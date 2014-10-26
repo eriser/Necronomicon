@@ -13,8 +13,8 @@ import Foreign.Storable
 import Control.Monad.Trans (liftIO)
 import Control.Applicative
 
-import Prelude hiding (fromRational,sin)
-import qualified Prelude as P (fromRational,fromIntegral,sin)
+import Prelude hiding (fromRational,sin,(+),(*))
+import qualified Prelude as P (fromRational,fromIntegral,sin,(+),(*))
 
 ifThenElse :: Bool -> a -> a -> a
 ifThenElse True a _ = a
@@ -74,49 +74,49 @@ timeWarp :: (UGenComponent a,UGenComponent b) => a -> b -> UGen
 timeWarp speed input = UGenFunc timeWarpCalc [toUGen speed, toUGen input]
 
 
-(/) :: UGenComponent a => a -> a -> UGen
-(/) = udiv
+-- (/) :: UGenComponent a => a -> a -> UGen
+-- (/) = udiv
 
 foreign import ccall unsafe "&uabsCalc" absCalc :: Calc
 foreign import ccall unsafe "&signumCalc" signumCalc :: Calc
 foreign import ccall unsafe "&negateCalc" negateCalc :: Calc
 
 instance Num UGen where
-    (+) = (.+.)
-    (*) = (.*.)
+    (+) = (+)
+    (*) = (*)
     abs u = UGenFunc absCalc [toUGen u]
     signum u = UGenFunc signumCalc [toUGen u]
     fromInteger i = UGenNum (fromIntegral i)
     negate u = UGenFunc negateCalc [toUGen u]
 
 class UGenNum a b where
-    (.+.) :: a -> b -> UGen
-    (.*.) :: a -> b -> UGen
-    (./.) :: a -> b -> UGen
+    (+) :: a -> b -> UGen
+    (*) :: a -> b -> UGen
+    (/) :: a -> b -> UGen
 
 instance UGenNum UGen UGen where
-    (.+.) u1 u2 = add u1 u2
-    (.*.) u1 u2 = mul u1 u2
-    (./.) u1 u2 = udiv u1 u2
+    (+) u1 u2 = add u1 u2
+    (*) u1 u2 = mul u1 u2
+    (/) u1 u2 = udiv u1 u2
 
 instance UGenNum UGen Double where
-    (.+.) u d = add u (UGenNum d)
-    (.*.) u d = mul u (UGenNum d)
-    (./.) u d = udiv u (UGenNum d)
+    (+) u d = add u (UGenNum d)
+    (*) u d = mul u (UGenNum d)
+    (/) u d = udiv u (UGenNum d)
 
 instance UGenNum Double UGen where
-    (.+.) d u = add (UGenNum d) u
-    (.*.) d u = mul (UGenNum d) u
-    (./.) d u = udiv (UGenNum d) u
+    (+) d u = add (UGenNum d) u
+    (*) d u = mul (UGenNum d) u
+    (/) d u = udiv (UGenNum d) u
 
-infixl 6 .+.
-infixl 7 .*.
-infixl 7 ./.
+infixl 6 +
+infixl 7 *
+infixl 7 /
 
 data Signal = Signal {-# UNPACK #-} !CDouble {-# UNPACK #-} !CDouble
 
 instance Storable Signal where
-    sizeOf _ = sizeOf (undefined :: CDouble) * 2
+    sizeOf _ = sizeOf (undefined :: CDouble) P.* 2
     alignment _ = alignment (undefined :: CDouble)
     peek ptr = do
         amp <- peekByteOff ptr 0 :: IO CDouble
@@ -131,7 +131,7 @@ type Calc = FunPtr (Ptr () -> CDouble -> Signal)
 data CUGen = CUGen {-# UNPACK #-} !Calc {-# UNPACK #-} !(Ptr ()) {-# UNPACK #-} !CUInt deriving (Show)
 
 instance Storable CUGen where
-    sizeOf _ = sizeOf (undefined :: CDouble) * 3
+    sizeOf _ = sizeOf (undefined :: CDouble) P.* 3
     alignment _ = alignment (undefined :: CDouble)
     peek ptr = do
         calc <- peekByteOff ptr 0 :: IO Calc
@@ -168,7 +168,7 @@ myCoolSynth :: UGen
 
 -- myCoolSynth = sin 0.3 ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin
 
-myCoolSynth = sin (mod1 + mod2) ~> gain 0.5
+myCoolSynth = sin (mod1 + mod2) * 0.5
     where
-        mod1 = sin 40.3 .*. 44.0 .+. 100.0
-        mod2 = 0.4 .+. sin (mod1.+. 20.4 ~> gain 0.025 ) ~> gain 50.0
+        mod1 = sin 40.3 * 44.0 + 100.0
+        mod2 = 0.4 + sin (mod1+ 20.4 ~> gain 0.025 ) ~> gain 50.0
