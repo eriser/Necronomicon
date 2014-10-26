@@ -140,22 +140,19 @@ foreign import ccall unsafe "&numberCalc" numberCalc :: Calc
 compileUGen :: UGen -> IO CUGen
 compileUGen (UGenFunc calc inputs) = do
     args <- mapM (compileUGen) inputs
-    print args
-    argsPtr <- (newArray args) :: IO (Ptr CUGen)
-    print argsPtr
-    args2 <- peekArray (length inputs) argsPtr
-    print args2
-    return $ CUGen calc ((castPtr argsPtr) :: Ptr ()) (CUInt . fromIntegral $ length inputs)
+    argsPtr <- newArray args
+    return (CUGen calc ((castPtr argsPtr) :: Ptr ()) (CUInt . fromIntegral $ length inputs))
     
 compileUGen (UGenNum d) = do
     signalPtr <- new (Signal 0 (CDouble d))
-    return $ CUGen numberCalc ((castPtr signalPtr) :: Ptr ()) 1
+    return (CUGen numberCalc ((castPtr signalPtr) :: Ptr ()) 1)
 
 -- No Multichannel expansion support yet!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
 -- compileUGen (UGenList ugens)
 
 myCoolSynth :: UGen
-myCoolSynth = (sin 0.3 .*. 0.5 .+. 0.5) .*. 440.0 ~> sin
+myCoolSynth = sin 440.0 ~> sin
+-- myCoolSynth = (sin 0.3 .*. 0.5 .+. 0.5) .*. 440.0 ~> sin
 
 {-
 
