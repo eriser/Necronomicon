@@ -31,14 +31,10 @@ const double RECIP_SAMPLE_RATE = 1.0 / 44100.0;
 
 #define TABLE_SIZE   (256)
 const double RECIP_TABLE_SIZE = 1.0 / (double)TABLE_SIZE;
-double constants[7] = { 0, 1, 2, 3, 4, 5, 6 };
 double sine_table[TABLE_SIZE];
 
 const double TABLE_MUL_RECIP_SAMPLE_RATE = TABLE_SIZE * (1.0 / 44100.0);
 const double TABLE_SIZE_MUL_RECIP_TWO_PI = TABLE_SIZE * (1.0 / (M_PI*2));
-//////////////
-// UGens
-//////////////
 
 typedef struct
 {
@@ -46,19 +42,29 @@ typedef struct
 	double offset;
 } Signal;
 
-inline double sigsum(Signal signal)
-{
-	return signal.amplitude + signal.offset;
-}
+int signalSize = sizeof(Signal);
+int signalAlignment = __alignof__(Signal);
 
 typedef Signal Calc(void* args, double time);
 
 typedef struct
 {
+	Calc* calc;
 	void* args;
 	unsigned int numArgs;
-	Calc* calc;
 } UGen;
+
+int ugenSize = sizeof(UGen);
+int ugenAlignment = __alignof__(UGen);
+
+////////////////////////////////////////////////////////////////////////////////////
+// UGens
+////////////////////////////////////////////////////////////////////////////////////
+
+inline double sigsum(Signal signal)
+{
+	return signal.amplitude + signal.offset;
+}
 
 Signal delayCalc(void* args, double time)
 {
@@ -74,7 +80,7 @@ UGen delay(UGen input, UGen amount)
 	void* args = malloc(sizeof(UGen) * 2);
 	((UGen*) args)[0] = input;
 	((UGen*) args)[1] = amount;
-	UGen ugen = { args, 2, delayCalc };
+	UGen ugen = { delayCalc, args, 2 };
 	return ugen;
 }
 
@@ -92,7 +98,7 @@ UGen timeWarp(UGen input, UGen amount)
 	void* args = malloc(sizeof(UGen) * 2);
 	((UGen*) args)[0] = input;
 	((UGen*) args)[1] = amount;
-	UGen ugen = { args, 2, timeWarpCalc };
+	UGen ugen = { timeWarpCalc, args, 2 };
 	return ugen;
 }
 
@@ -121,7 +127,7 @@ UGen sinOsc(UGen freq)
 {
 	void* args = malloc(sizeof(UGen));
 	((UGen*) args)[0] = freq;
-	UGen ugen = { args, 1, sinCalc };
+	UGen ugen = { sinCalc, args, 1 };
 	return ugen;
 }
 
@@ -135,7 +141,7 @@ UGen number(double number)
 	Signal signal = { 0, number };
 	void* args = malloc(sizeof(Signal));
 	((Signal*) args)[0] = signal;
-	UGen ugen = { args, 1, numberCalc };
+	UGen ugen = { numberCalc, args, 1 };
 	return ugen;
 }
 
@@ -154,7 +160,7 @@ UGen add(UGen a, UGen b)
 	void* args = malloc(sizeof(UGen) * 2);
 	((UGen*) args)[0] = a;
 	((UGen*) args)[1] = b;
-	UGen ugen = { args, 2, addCalc };
+	UGen ugen = { addCalc, args, 2 };
 	return ugen;
 }
 
@@ -184,7 +190,109 @@ UGen mul(UGen a, UGen b)
 	void* args = malloc(sizeof(UGen) * 2);
 	((UGen*) args)[0] = a;
 	((UGen*) args)[1] = b;
-	UGen ugen = { args, 2, mulCalc };
+	UGen ugen = { mulCalc, args, 2 };
+	return ugen;
+}
+
+Signal udivCalc(void* args, double time)
+{
+	UGen a = ((UGen*) args)[0];
+	UGen b = ((UGen*) args)[1];
+	Signal as = a.calc(a.args, time);
+	Signal bs = b.calc(b.args, time);
+	Signal signal;
+	if(as.amplitude != 0)
+	{
+		signal.amplitude = (bs.amplitude+bs.offset)/as.amplitude;
+		signal.offset    = (bs.amplitude+bs.offset)/as.offset;
+	}
+	else
+	{
+		signal.amplitude = (as.amplitude+as.offset)/bs.amplitude;
+		signal.offset    = (as.amplitude+as.offset)/bs.offset;
+	}
+	return signal;
+}
+
+UGen udiv(UGen a, UGen b)
+{
+	void* args = malloc(sizeof(UGen) * 2);
+	((UGen*) args)[0] = a;
+	((UGen*) args)[1] = b;
+	UGen ugen = { udivCalc, args, 2 };
+	return ugen;
+}
+
+Signal uabsCalc(void* args, double time)
+{
+	UGen input = *((UGen*) args);
+	Signal signal = input.calc(input.args, time);
+	signal.amplitude = abs(signal.amplitude);
+	signal.offset = abs(signal.offset);
+	return signal;
+}
+
+UGen uabs(UGen input)
+{
+	void* args = malloc(sizeof(UGen));
+	*((UGen*) args) = input;
+	UGen ugen = { uabsCalc, args, 1 };
+	return ugen;
+}
+
+Signal signumCalc(void* args, double time)
+{
+	UGen input = *((UGen*) args);
+	double signal = sigsum(input.calc(input.args, time));
+	Signal result = { 0, 0 };
+
+	if(signal > 0)
+	{
+		result.offset = 1;
+	}
+	
+	else if(signal < 0)
+	{
+		result.offset = -1;
+	}
+	
+	return result;
+}
+
+UGen signum(UGen input)
+{
+	void* args = malloc(sizeof(UGen));
+	*((UGen*) args) = input;
+	UGen ugen = { signumCalc, args, 1 };
+	return ugen;
+}
+
+Signal negateCalc(void* args, double time)
+{
+	UGen a = *((UGen*) args);
+	Signal as = a.calc(a.args, time);
+	Signal signal;
+
+	if(as.amplitude != 0)
+	{
+		signal.amplitude = -1 * as.amplitude;
+		signal.offset    = -1 * as.offset;
+	}
+
+	else
+	{
+		signal.amplitude = 0;
+		signal.offset    = (as.amplitude+as.offset) * -1;
+	}
+
+	return signal;
+}
+
+UGen negate(UGen input)
+{
+	void* args = malloc(sizeof(UGen));
+	*((UGen*) args) = input;
+	UGen ugen = { negateCalc, args, 1 };
 	return ugen;
 }
 
@@ -204,10 +312,9 @@ UGen gain(UGen a, UGen b)
 	void* args = malloc(sizeof(UGen) * 2);
 	((UGen*) args)[0] = a;
 	((UGen*) args)[1] = b;
-	UGen ugen = { args, 2, gainCalc };
+	UGen ugen = { gainCalc, args, 2 };
 	return ugen;
 }
-
 
 double myCoolSynth(double time)
 {
@@ -216,6 +323,23 @@ double myCoolSynth(double time)
 	Signal signal = synthUGen.calc(synthUGen.args, time);
 	return signal.amplitude + signal.offset; // ?????????????
 }
+
+UGen number2(void* args)
+{
+	UGen ugen = { numberCalc, args, 0 };
+}
+
+UGen add2(void* args)
+{
+	UGen ugen = { addCalc, args, 2 };
+	return ugen;
+}
+
+typedef UGen (*UGenFunc) (void* args);
+
+UGenFunc ugens[] = { number2, add2 };
+
+// void compileHaskellUGen( 
 
 //////////////
 // Runtime
@@ -230,14 +354,6 @@ typedef struct
 {
     UGen synth;
 } SynthData;
-
-typedef double NodeCallback(double time);
-
-typedef struct
-{
-	NodeCallback* calc;
-	// NodeList* next;
-} NodeList;
 
 static void signal_handler(int sig)
 {
@@ -277,11 +393,58 @@ int process(jack_nframes_t nframes, void *arg)
 	return 0;      
 }
 
-void startRuntime(double sampleRate)
+void printTabs(unsigned int depth)
 {
-	puts("Starting Necronomiconzz");
+	unsigned int i;
+	for(i = 0; i < depth; ++i)
+	{
+		printf("\t");
+	}
+}
 
-	//
+void printUGen(UGen* ugen, unsigned int depth)
+{
+	printTabs(depth);
+	puts("(UGen");
+	printTabs(depth + 1);
+	printf("(Calc %p)\n", ugen->calc);
+	printTabs(depth + 1);
+	printf("(Args\n");
+
+	if(ugen->calc != numberCalc)
+	{
+		unsigned int i;
+		for(i = 0; i < ugen->numArgs; ++i)
+		{
+			printUGen(&((UGen*) ugen->args)[i], depth + 2);
+		}
+	}
+
+	else
+	{
+		printTabs(depth + 2);
+		Signal signal = ((Signal*) ugen->args)[0];
+		printf("(Signal %f %f))\n", signal.amplitude, signal.offset);
+	}	
+
+	printTabs(depth + 1);
+	printf("(NumArgs %i))\n", ugen->numArgs);
+}
+
+void startRuntime(UGen* ugen)
+{
+	printf("UGen size: %i\n", ugenSize);
+	printf("UGen alignment: %i\n", ugenAlignment);
+	printf("Signal size: %i\n", signalSize);
+	printf("Signal alignment: %i\n", signalAlignment);
+	
+	printf("Delay calc: %p\n", delayCalc);
+	printf("Number calc: %p\n", numberCalc);
+	
+	puts("Starting Necronomicon");
+	printUGen(ugen, 0);
+	puts("\n");
+	
 	int si;
 	for(si = 0; si < TABLE_SIZE; si++)
 	{
@@ -294,11 +457,18 @@ void startRuntime(double sampleRate)
 	jack_options_t options = JackNullOption;
 	jack_status_t status;
 
-	UGen sinUGen = sinOsc(add(mul(sinOsc(number(1.5)), number(100.0)),number(440.0)));
-	UGen delayTime = add(number(1),mul(number(1),sinOsc(number(0.25))));
+
+	SynthData data = { *ugen };
+	
+	// UGen sinUGen = sinOsc(add(mul(sinOsc(number(1.5)), number(100.0)),number(440.0)));
+	// UGen delayTime = add(number(0.5),mul(number(0.5),sinOsc(mul(number(333), sinOsc(number(0.1))))));
+	// SynthData data = { mul(number(0.75), delay(sinUGen, delayTime)) };
+
+	// UGen sinUGen = sinOsc(add(mul(sinOsc(number(1.5)), number(100.0)),number(440.0)));
+	// UGen delayTime = add(number(1),mul(number(1),sinOsc(number(0.25))));
 	/* SynthData data = { mul(number(0.75),delay(sinUGen, delayTime))}; */
 
-	/* SynthData data = { mul(number(0.75),timeWarp(sinUGen,delayTime))}; */
+	// SynthData data = { mul(number(0.75),timeWarp(sinUGen,delayTime))};
 	
 	/* gain vs mul test  */
 	/* SynthData data = { sinOsc(add(number(1000.0),mul(sinOsc(number(0.3)),number(400.0)))) }; */
@@ -310,7 +480,7 @@ void startRuntime(double sampleRate)
 	/* SynthData data = { sinOsc(add(number(1000.0),mul(sinOsc(number(0.3)),number(400.0)))) }; */
 
     //20 sins test
-	SynthData data = { sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(mul(sinOsc(number(0.3)), number(440.0)))))))))))))))))))))) };
+	/* SynthData data = { sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(sinOsc(mul(sinOsc(number(0.3)), number(440.0)))))))))))))))))))))) }; */
 
 	int i;
 
