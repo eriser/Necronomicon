@@ -150,19 +150,25 @@ import System.Environment (getProgName)
 import Debug.Trace
 
 import Data.Array.MArray (writeArray, )
+import Foreign
 import Foreign.C
 import GHC.Float
 
 import Prelude
-import qualified Necronomicon.UGen as U
+--import qualified Necronomicon.UGen as U
 import qualified Necronomicon.UGenC as UC
 --U.myCoolSynth . U.Time
 
-foreign import ccall "startRuntime" startRuntime :: Double -> IO ()
+foreign import ccall "startRuntime" startRuntime :: Ptr UC.CUGen -> IO ()
 
 main :: IO ()
 main = do
-    startRuntime 44100
+    ugen <- UC.compileUGen UC.myCoolSynth
+    ugenPtr <- new ugen
+    startRuntime ugenPtr
+    -- return ()
+    --poke ptr ugen
+    --startRuntime ptr
 
 {-
 
