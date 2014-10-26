@@ -68,8 +68,8 @@ inline double sigsum(Signal signal)
 
 Signal delayCalc(void* args, double time)
 {
-	UGen input = ((UGen*) args)[0];
-	UGen delayUGen = ((UGen*) args)[1];
+	UGen delayUGen = ((UGen*) args)[0];
+	UGen input = ((UGen*) args)[1];
 	Signal delayTimeSig = (delayUGen.calc(delayUGen.args, time));
 	double delayedTime = delayTimeSig.offset * SAMPLE_RATE + time + (delayTimeSig.amplitude * RECIP_TWO_PI * SAMPLE_RATE);
 	return input.calc(input.args, delayedTime);
@@ -86,8 +86,8 @@ UGen delay(UGen input, UGen amount)
 
 Signal timeWarpCalc(void* args, double time)
 {
-	UGen input = ((UGen*) args)[0];
-	UGen timeUGen = ((UGen*) args)[1];
+	UGen timeUGen = ((UGen*) args)[0];
+	UGen input = ((UGen*) args)[1];
 	Signal modTimeSig = (timeUGen.calc(timeUGen.args, time));
 	double modedTime = modTimeSig.offset * time + (modTimeSig.amplitude * SAMPLE_RATE);
 	return input.calc(input.args, modedTime);

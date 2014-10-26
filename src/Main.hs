@@ -156,14 +156,14 @@ import GHC.Float
 
 import Prelude
 --import qualified Necronomicon.UGen as U
-import qualified Necronomicon.UGenC as UC
+import qualified Necronomicon.UGen as U
 --U.myCoolSynth . U.Time
 
-foreign import ccall "startRuntime" startRuntime :: Ptr UC.CUGen -> IO ()
+foreign import ccall "startRuntime" startRuntime :: Ptr U.CUGen -> IO ()
 
 main :: IO ()
 main = do
-    ugen <- UC.compileUGen UC.myCoolSynth
+    ugen <- U.compileUGen U.myCoolSynth
     ugenPtr <- new ugen
     startRuntime ugenPtr
     -- return ()

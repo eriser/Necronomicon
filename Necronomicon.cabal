@@ -13,7 +13,6 @@ Executable Necronomicon
     C-Sources:    		c_lib/Necronomicon.c
     Include-Dirs: 		c_lib
     Install-Includes:	Necronomicon.h
-    Include-dirs:       include
     ghc-options:        -O3
     extensions: 		FlexibleInstances InstanceSigs RankNTypes MagicHash UnboxedTuples MultiParamTypeClasses TypeFamilies DeriveDataTypeable FunctionalDependencies RebindableSyntax BangPatterns ForeignFunctionInterface
     Build-Depends:     
