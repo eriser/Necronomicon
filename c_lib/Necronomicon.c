@@ -84,6 +84,24 @@ UGen delay(UGen input, UGen amount)
 	return ugen;
 }
 
+Signal timeWarpCalc(void* args, double time)
+{
+	UGen input = ((UGen*) args)[0];
+	UGen timeUGen = ((UGen*) args)[1];
+	Signal modTimeSig = (timeUGen.calc(timeUGen.args, time));
+	double modedTime = modTimeSig.offset * time + (modTimeSig.amplitude * SAMPLE_RATE);
+	return input.calc(input.args, modedTime);
+}
+
+UGen timeWarp(UGen input, UGen amount)
+{
+	void* args = malloc(sizeof(UGen) * 2);
+	((UGen*) args)[0] = input;
+	((UGen*) args)[1] = amount;
+	UGen ugen = { timeWarpCalc, args, 2 };
+	return ugen;
+}
+
 Signal sinCalc(void* args, double time)
 {
 	UGen freqUGen = ((UGen*) args)[0];
@@ -147,7 +165,7 @@ Signal mulCalc(void* args, double time)
 	UGen b = ((UGen*) args)[1];
 	Signal as = a.calc(a.args, time);
 	Signal bs = b.calc(b.args, time);
-	/* Signal signal = { as.amplitude * bs.amplitude+bs.offset, as.offset*bs.offset }; */
+
 	Signal signal;
 	if(as.amplitude != 0)
 	{
@@ -434,11 +452,19 @@ void startRuntime(UGen* ugen)
 	jack_options_t options = JackNullOption;
 	jack_status_t status;
 
+
 	SynthData data = { *ugen };
 	
 	// UGen sinUGen = sinOsc(add(mul(sinOsc(number(1.5)), number(100.0)),number(440.0)));
 	// UGen delayTime = add(number(0.5),mul(number(0.5),sinOsc(mul(number(333), sinOsc(number(0.1))))));
 	// SynthData data = { mul(number(0.75), delay(sinUGen, delayTime)) };
+
+	// UGen sinUGen = sinOsc(add(mul(sinOsc(number(1.5)), number(100.0)),number(440.0)));
+	// UGen delayTime = add(number(1),mul(number(1),sinOsc(number(0.25))));
+	/* SynthData data = { mul(number(0.75),delay(sinUGen, delayTime))}; */
+
+	// SynthData data = { mul(number(0.75),timeWarp(sinUGen,delayTime))};
+
 	
 	//gain vs mul test 
 	/* SynthData data = { sinOsc(add(number(1000.0),mul(sinOsc(number(0.3)),number(400.0)))) }; */
