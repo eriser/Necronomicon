@@ -3,14 +3,12 @@ module Necronomicon.UGen where
                                 
 import GHC.Exts
 import Data.List
-import Control.DeepSeq
 import Debug.Trace
 import qualified Data.Vector as V
 import qualified Data.Word as W
 import Foreign
 import Foreign.C
 import Foreign.Storable
-import Control.Monad.Trans (liftIO)
 import Control.Applicative
 
 import Prelude hiding (fromRational,sin,(+),(*))
@@ -159,7 +157,6 @@ compileUGen (UGenNum d) = do
     signalPtr <- new (Signal 0 (CDouble d))
     return $ CUGen numberCalc ((castPtr signalPtr) :: Ptr ()) 1
 
-myCoolSynth :: UGen
 -- myCoolSynth = t s .*. 0.5 ~> d
     -- where
         -- d = \s -> s.+. delay 1.0 s
@@ -167,8 +164,8 @@ myCoolSynth :: UGen
         -- s = (sin 0.3 .*. 0.5 .+. 0.5) .*. 440.0 ~> sin
 
 -- myCoolSynth = sin 0.3 ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin
-
+myCoolSynth :: UGen
 myCoolSynth = sin (mod1 + mod2) * 0.5
     where
         mod1 = sin 40.3 * 44.0 + 100.0
-        mod2 = 0.4 + sin (mod1+ 20.4 ~> gain 0.025 ) ~> gain 50.0
+        mod2 = 0.4 + sin (mod1 + 20.4 ~> gain 0.025 ) ~> gain 50.0
