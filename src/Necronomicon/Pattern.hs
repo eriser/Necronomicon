@@ -13,6 +13,7 @@ import Data.Data
 import Data.Tree 
 
 -- modifiers???? How to do this in new layout DSL?
+-- Negative numbers....
 
 -- | The data structure used to represent patterns in Necronomicon
 data Pattern = DoublePattern Double
@@ -77,7 +78,7 @@ parseChordTuples :: Parser ParsecPattern
 parseChordTuples = do
     char '('
     spaces
-    x <- sepEndBy (many1 digit) (char ',')
+    x <- sepBy (many1 digit) (spaces >> char ',' >> spaces)
     char ')'
     return $ ChordParsecPattern (map read x)
 
