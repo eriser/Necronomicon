@@ -84,6 +84,8 @@ parsecPatternToQExpr (AtomParsecPattern a) = do
             Nothing -> mkName a
     return $ VarE name'
 
+parsecPatternToQExpr (ErrorParsecPattern e) = fail e
+
 getName :: String -> Q Name
 getName s = do
     name <- lookupTypeName s
