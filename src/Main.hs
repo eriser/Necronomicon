@@ -161,11 +161,14 @@ import Necronomicon.Pattern
 
 foreign import ccall "startRuntime" startRuntime :: Ptr U.CUGen -> IO ()
 
+test = DoublePattern 6666
+
 main :: IO ()
 main = do
     ugen <- U.compileUGen U.myCoolSynth
     ugenPtr <- new ugen
-    print $ [pseq| 0 _ 1 _ [2 _ [3 3 3 [6 6] 3] 5] 7 _ |]
+    -- print $ [pseq| 0 _ 1 _ 3 [2 2] [4 4] [5 6] |]
+    print [ps| 0 _ 1 _ 3 [ 3 [2 2] [4 4] ] 4 _ [test 6] |] 
     startRuntime ugenPtr
 
     -- return ()

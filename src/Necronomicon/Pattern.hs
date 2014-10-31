@@ -2,8 +2,11 @@ module Necronomicon.Pattern where
 
 import Prelude
 import qualified Language.Haskell.TH as TH
-import qualified Language.Haskell.TH.Syntax as THS
+import Language.Haskell.TH.Syntax
 import Language.Haskell.TH.Quote
+import Control.Monad
+import Text.ParserCombinators.Parsec
+import System.Environment
 
 import Data.Typeable
 import Data.Data
@@ -11,64 +14,80 @@ import Data.Tree
 
 data Pattern = DoublePattern Double
              | RestPattern
-             | TreePattern [Pattern]
              | ListPattern [Pattern]
              deriving (Show,Typeable,Data)
 
-data StringTree = EmptyStringList
-                | StringValue String
-                | StringList [String]
-                | StringTree [StringTree]
-                deriving (Show,Typeable,Data)
+data ParsecPattern = DoubleParsecPattern Double
+                   | RestParsecPattern
+                   | ListParsecPattern [ParsecPattern]
+                   | AtomParsecPattern String
+                   | ErrorParsecPattern String
+                   deriving (Show,Typeable,Data)
 
-pseq = QuasiQuoter{quoteExp = parsePattern}
+ps = QuasiQuoter{quoteExp = parsecPatternToQExpr . parseParsecPattern }
 
-parsePattern s = dataToExpQ (const Nothing) (p s)
-    where
-        p = stringTreeToPattern . toStringTree
+parseParsecPattern input =
+    case parse parseExpr "pattern" (('[':input)++[']']) of
+        Left  err -> ErrorParsecPattern $ show err
+        Right val -> val
 
-insertStringList :: StringTree -> StringTree -> StringTree
-insertStringList s (EmptyStringList) = s
-insertStringList (StringValue sv1) (StringValue sv2)    = StringValue $ sv2++sv1
-insertStringList sl@(StringTree _)   sv@(StringValue _) = StringTree $ sv:sl:[]
-insertStringList sv@(StringValue _)    (StringTree ss)  = StringTree $ init ss ++ [(insertStringList sv $ last ss)]
-insertStringList sl@(StringTree _)   (StringTree sl2)   = StringTree $ sl2++[sl]
+parseExpr :: Parser ParsecPattern
+parseExpr = parseArray
+        <|> parseRest
+        <|> parseNumber
+        <|> parseAtom
 
-toStringList :: StringTree -> StringTree
-toStringList (StringValue v)   = StringTree $ [StringValue v]
-toStringList (EmptyStringList) = StringTree []
-toStringList sl@(StringTree _) = sl
-
-toStringTree :: String -> StringTree
-toStringTree s = splitWords . fst $ go EmptyStringList s
-    where
-        go st []       = (st,[])
-        go st ('[':ss) = (StringTree [st,toStringList st',leftOverst],lo')
-            where
-                (st',leftOver)  = go EmptyStringList ss
-                (leftOverst,lo') = go EmptyStringList leftOver
-        go st (']':ss) = (st,ss)
-        go st (s:ss)   = go (insertStringList (StringValue $ s:[]) st) ss
-
-splitWords :: StringTree -> StringTree
-splitWords (EmptyStringList) = EmptyStringList
-splitWords (StringValue v)   = StringTree $ map StringValue $ words v
-splitWords (StringTree v)    = StringTree $ foldr collapseList [] v
-    where
-        collapseList (StringValue v) a = (map StringValue $ words v) ++ a
-        collapseList (StringTree  v) a = splitWords (StringTree v) : a
-        collapseList (EmptyStringList) a = a
-
-stringTreeToPattern :: StringTree -> Pattern
-stringTreeToPattern (EmptyStringList) = RestPattern
-stringTreeToPattern (StringValue v)   = stringToPattern v
-stringTreeToPattern (StringTree v)    = ListPattern $ map stringTreeToPattern v
-
-stringToPattern :: String -> Pattern 
-stringToPattern s =
-    case s of
-        ('_':[])   -> RestPattern
-        _          -> DoublePattern (read s ::Double)
-
-
+parseRest :: Parser ParsecPattern
+parseRest = do
+    s <- char '_'
+    return RestParsecPattern
         
+parseAtom :: Parser ParsecPattern
+parseAtom = do 
+    first <- letter
+    rest  <- many (letter <|> digit)
+    let atom = first:rest
+    return $ AtomParsecPattern atom
+
+parseNumber :: Parser ParsecPattern
+parseNumber = do
+    d <- many1 digit
+    return . DoubleParsecPattern $ read d
+
+parseArray :: Parser ParsecPattern
+parseArray = do
+    char '['
+    spaces
+    x <- sepEndBy parseExpr spaces
+    char ']'
+    return $ ListParsecPattern x
+
+parsecPatternToQExpr :: ParsecPattern -> Q Exp
+
+parsecPatternToQExpr (DoubleParsecPattern d) = do
+    name <- getName "DoublePattern"
+    return $ AppE (ConE name) (LitE . RationalL $ toRational d)
+
+parsecPatternToQExpr RestParsecPattern = do
+    name <- getName "RestPattern"
+    return $ ConE name
+
+parsecPatternToQExpr (ListParsecPattern ps) = do
+    name <- getName "ListPattern"
+    list <- sequence $ map parsecPatternToQExpr ps
+    return $ AppE (ConE name) (ListE list)
+
+parsecPatternToQExpr (AtomParsecPattern a) = do
+    name <- lookupValueName a
+    let name' = case name of
+            Just n  -> n
+            Nothing -> mkName a
+    return $ VarE name'
+
+getName :: String -> Q Name
+getName s = do
+    name <- lookupTypeName s
+    return $ case name of
+        Just n  -> n
+        Nothing -> mkName s
+

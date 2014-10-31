@@ -23,4 +23,5 @@ Executable Necronomicon
         vector,
         jack,
         array,
-        template-haskell == 2.9.*
+        template-haskell == 2.9.*,
+        parsec == 3.1.*
