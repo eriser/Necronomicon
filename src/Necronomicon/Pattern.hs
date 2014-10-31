@@ -12,31 +12,42 @@ import Data.Typeable
 import Data.Data
 import Data.Tree 
 
+-- modifiers???? How to do this in new layout DSL?
+
+-- | The data structure used to represent patterns in Necronomicon
 data Pattern = DoublePattern Double
              | RestPattern
+             | ChordPattern [Double]
              | ListPattern [Pattern]
              deriving (Show,Typeable,Data)
 
+-- | The data structure used for internal syntax parsing of patterns from quasi-quotations in layout form.
 data ParsecPattern = DoubleParsecPattern Double
                    | RestParsecPattern
+                   | ChordParsecPattern [Double]
                    | ListParsecPattern [ParsecPattern]
                    | AtomParsecPattern String
                    | ErrorParsecPattern String
                    deriving (Show,Typeable,Data)
 
+-- |The quasi-quoter used to generate patterns from quasi-quotations in layout form.
 ps = QuasiQuoter{quoteExp = parsecPatternToQExpr . parseParsecPattern }
 
+-- | Parses a string into a ParsecPattern structure
 parseParsecPattern input =
     case parse parseExpr "pattern" (('[':input)++[']']) of
         Left  err -> ErrorParsecPattern $ show err
         Right val -> val
 
+-- | The main paring combinator of the layout pattern DSL
 parseExpr :: Parser ParsecPattern
 parseExpr = parseArray
+        <|> parseChordTuples
         <|> parseRest
         <|> parseNumber
         <|> parseAtom
 
+-- | 
 parseRest :: Parser ParsecPattern
 parseRest = do
     s <- char '_'
@@ -62,6 +73,14 @@ parseArray = do
     char ']'
     return $ ListParsecPattern x
 
+parseChordTuples :: Parser ParsecPattern
+parseChordTuples = do
+    char '('
+    spaces
+    x <- sepEndBy (many1 digit) (char ',')
+    char ')'
+    return $ ChordParsecPattern (map read x)
+
 parsecPatternToQExpr :: ParsecPattern -> Q Exp
 
 parsecPatternToQExpr (DoubleParsecPattern d) = do
@@ -76,6 +95,10 @@ parsecPatternToQExpr (ListParsecPattern ps) = do
     name <- getName "ListPattern"
     list <- sequence $ map parsecPatternToQExpr ps
     return $ AppE (ConE name) (ListE list)
+
+parsecPatternToQExpr (ChordParsecPattern ds) = do
+    name <- getName "ChordPattern"
+    return $ AppE (ConE name) (ListE $ map (LitE . RationalL . toRational) ds)
 
 parsecPatternToQExpr (AtomParsecPattern a) = do
     name <- lookupValueName a
