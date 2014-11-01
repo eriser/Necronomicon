@@ -169,8 +169,8 @@ main = do
     ugenPtr <- new ugen
 
     print [ps| 0 0 [1 2] _
-               -3 1 [4 5] _
-               _ _ (7,8) _
+               3 1 [4 5] _
+               _ _ (7,8,9) _
                6 7 8 9      |]
         
     startRuntime ugenPtr

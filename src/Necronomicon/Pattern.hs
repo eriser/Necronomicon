@@ -5,6 +5,7 @@ import qualified Language.Haskell.TH as TH
 import Language.Haskell.TH.Syntax
 import Language.Haskell.TH.Quote
 import Control.Monad
+import Control.Applicative ((<*),(<*>),(*>),some,(<$>),liftA)
 import Text.ParserCombinators.Parsec
 import System.Environment
 
@@ -16,6 +17,10 @@ import Data.Tree
 -- Negative numbers....
 --combine beat patterns into same DSL?
 --plays at last value, 
+
+---------------
+-- Data types
+---------------
 
 -- | The data structure used to represent patterns in Necronomicon
 data Pattern = DoublePattern Double
@@ -32,6 +37,10 @@ data ParsecPattern = DoubleParsecPattern Double
                    | AtomParsecPattern String
                    | ErrorParsecPattern String
                    deriving (Show,Typeable,Data)
+
+----------------------------------
+-- Parsing with quasi-quotation
+----------------------------------
 
 -- |The quasi-quoter used to generate patterns from quasi-quotations in layout form.
 ps = QuasiQuoter{quoteExp = parsecPatternToQExpr . parseParsecPattern }
@@ -52,41 +61,36 @@ parseExpr = parseArray
 
 -- | 
 parseRest :: Parser ParsecPattern
-parseRest = do
-    s <- char '_'
-    return RestParsecPattern
+parseRest = return RestParsecPattern <* char '_'
         
 parseAtom :: Parser ParsecPattern
-parseAtom = do 
-    first <- letter
-    rest  <- many (letter <|> digit)
-    return . AtomParsecPattern $ first:rest
+parseAtom = AtomParsecPattern <$> ((:) <$> letter <*> many (letter <|> digit))
 
-parseNumber :: Parser ParsecPattern
-parseNumber = do
+parseRawNumber :: Parser Double
+parseRawNumber = do
     first <- optionMaybe $ (char '-')
     spaces
     d <- many1 digit
     case first of
-        Just f  -> return . DoubleParsecPattern . read $ f:d
-        Nothing -> return . DoubleParsecPattern . read $ d
+        Just f  -> return . read $ f:d
+        Nothing -> return . read $ d
+        
+parseNumber :: Parser ParsecPattern
+parseNumber = DoubleParsecPattern <$> parseRawNumber
 
 parseArray :: Parser ParsecPattern
-parseArray = do
-    char '['
-    spaces
-    x <- sepEndBy parseExpr spaces
-    char ']'
-    return $ ListParsecPattern x
+parseArray = ListParsecPattern <$> (char '[' *> spaces *> sepEndBy parseExpr spaces <* char ']')
 
 parseChordTuples :: Parser ParsecPattern
-parseChordTuples = do
-    char '('
-    spaces
-    x <- sepEndBy (many1 digit) (spaces >> char ',' >> spaces)
-    spaces
-    char ')'
-    return $ ChordParsecPattern (map read x)
+parseChordTuples = ChordParsecPattern <$> (char '(' *> spaces *> sepBy parseRawNumber (spaces <* char ',' <* spaces) <* (spaces <* char ')') )
+    -- where
+        -- parseElement     =  <* spaces <* char ',' <* spaces
+        -- parseLastElement = parseRawNumber <* spaces <* char ')'
+
+
+---------------------
+-- convert to QExpr
+--------------------
 
 parsecPatternToQExpr :: ParsecPattern -> Q Exp
 
