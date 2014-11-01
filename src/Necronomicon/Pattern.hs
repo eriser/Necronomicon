@@ -14,6 +14,8 @@ import Data.Tree
 
 -- modifiers???? How to do this in new layout DSL?
 -- Negative numbers....
+--combine beat patterns into same DSL?
+--plays at last value, 
 
 -- | The data structure used to represent patterns in Necronomicon
 data Pattern = DoublePattern Double
@@ -58,13 +60,16 @@ parseAtom :: Parser ParsecPattern
 parseAtom = do 
     first <- letter
     rest  <- many (letter <|> digit)
-    let atom = first:rest
-    return $ AtomParsecPattern atom
+    return . AtomParsecPattern $ first:rest
 
 parseNumber :: Parser ParsecPattern
 parseNumber = do
+    first <- optionMaybe $ (char '-')
+    spaces
     d <- many1 digit
-    return . DoubleParsecPattern $ read d
+    case first of
+        Just f  -> return . DoubleParsecPattern . read $ f:d
+        Nothing -> return . DoubleParsecPattern . read $ d
 
 parseArray :: Parser ParsecPattern
 parseArray = do
@@ -78,7 +83,8 @@ parseChordTuples :: Parser ParsecPattern
 parseChordTuples = do
     char '('
     spaces
-    x <- sepBy (many1 digit) (spaces >> char ',' >> spaces)
+    x <- sepEndBy (many1 digit) (spaces >> char ',' >> spaces)
+    spaces
     char ')'
     return $ ChordParsecPattern (map read x)
 

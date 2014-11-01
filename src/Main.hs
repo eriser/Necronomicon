@@ -167,8 +167,12 @@ main :: IO ()
 main = do
     ugen <- U.compileUGen U.myCoolSynth
     ugenPtr <- new ugen
-    -- print $ [pseq| 0 _ 1 _ 3 [2 2] [4 4] [5 6] |]
-    print [ps| 0 _ 1 _ 3 [4 5] (6 ,7) (7,8,9)|]
+
+    print [ps| 0 0 [1 2] _
+               -3 1 [4 5] _
+               _ _ (7,8) _
+               6 7 8 9      |]
+        
     startRuntime ugenPtr
 
     -- return ()

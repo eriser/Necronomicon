@@ -170,7 +170,7 @@ compileUGen (UGenNum d) = do
 
 -- myCoolSynth = sin 0.3 ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin
 myCoolSynth :: UGen
-myCoolSynth = sig + timeWarp 0.5 sig + timeWarp 0.333 sig ~> gain 0.025 ~> t ~> t ~> timeWarp 0.5 ~> del ~> dez
+myCoolSynth = sig + timeWarp 0.475 sig + timeWarp 0.3 sig ~> gain 0.05 ~> t ~> t ~> del ~> dez
     where
         del s = s + delay 1.5 s
         dez s = s + delay 1.0 s
