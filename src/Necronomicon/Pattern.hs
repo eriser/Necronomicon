@@ -82,11 +82,7 @@ parseArray :: Parser ParsecPattern
 parseArray = ListParsecPattern <$> (char '[' *> spaces *> sepEndBy parseExpr spaces <* char ']')
 
 parseChordTuples :: Parser ParsecPattern
-parseChordTuples = ChordParsecPattern <$> (char '(' *> spaces *> sepBy parseRawNumber (spaces <* char ',' <* spaces) <* (spaces <* char ')') )
-    -- where
-        -- parseElement     =  <* spaces <* char ',' <* spaces
-        -- parseLastElement = parseRawNumber <* spaces <* char ')'
-
+parseChordTuples = ChordParsecPattern <$> (between (char '(' *> spaces) (spaces *> char ')') . sepBy parseRawNumber $ try $ spaces *> char ',')
 
 ---------------------
 -- convert to QExpr
