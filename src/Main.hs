@@ -156,6 +156,7 @@ import GHC.Float
 import Prelude
 --import qualified Necronomicon.UGen as U
 import qualified Necronomicon.UGen as U
+import qualified Necronomicon.Patterns as PN
 import Necronomicon.Pattern
 --U.myCoolSynth . U.Time
 

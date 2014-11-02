@@ -56,6 +56,10 @@ foreign import ccall unsafe "&addCalc" addCalc :: Calc
 add :: (UGenComponent a,UGenComponent b) => a -> b -> UGen
 add a b = UGenFunc addCalc [toUGen a, toUGen b]
 
+foreign import ccall unsafe "&minusCalc" minusCalc :: Calc
+minus :: (UGenComponent a,UGenComponent b) => a -> b -> UGen
+minus a b = UGenFunc minusCalc [toUGen a, toUGen b]
+
 foreign import ccall unsafe "&mulCalc" mulCalc :: Calc
 mul :: (UGenComponent a,UGenComponent b) => a -> b -> UGen
 mul a b = UGenFunc mulCalc [toUGen a, toUGen b]
@@ -91,16 +95,19 @@ class UGenNum a b where
     (+) :: a -> b -> UGen
     (*) :: a -> b -> UGen
     (/) :: a -> b -> UGen
+    (-) :: a -> b -> UGen
 
 instance UGenNum UGen UGen where
     (+) u1 u2 = add u1 u2
     (*) u1 u2 = mul u1 u2
     (/) u1 u2 = udiv u1 u2
+    (-) u1 u2 = minus u1 u2
 
 instance UGenNum UGen Double where
     (+) u d = add u (UGenNum d)
     (*) u d = mul u (UGenNum d)
     (/) u d = udiv u (UGenNum d)
+    (-) u d = minus u (UGenNum d)
 
 instance UGenNum Double Double where
     (+) u d = UGenNum $ u P.+ d
@@ -111,6 +118,8 @@ instance UGenNum Double UGen where
     (+) d u = add (UGenNum d) u
     (*) d u = mul (UGenNum d) u
     (/) d u = udiv (UGenNum d) u
+    (-) d u = minus (UGenNum d) u
+    
 
 infixl 6 +
 infixl 7 *
@@ -151,11 +160,7 @@ foreign import ccall unsafe "&numberCalc" numberCalc :: Calc
 compileUGen :: UGen -> IO CUGen
 compileUGen (UGenFunc calc inputs) = do
     args <- mapM (compileUGen) inputs
-    print args
-    argsPtr <- (newArray args) :: IO (Ptr CUGen)
-    print argsPtr
-    args2 <- peekArray (length inputs) argsPtr
-    print args2
+    argsPtr <- newArray args
     return $ CUGen calc ((castPtr argsPtr) :: Ptr ()) (CUInt . fromIntegral $ length inputs)
     
 compileUGen (UGenNum d) = do
@@ -180,5 +185,6 @@ myCoolSynth = sig + timeWarp 0.475 sig + timeWarp 0.3 sig ~> gain 0.05 ~> t ~> t
         mod2  = 0.4 + sin (mod1 + 2.1 ~> gain 0.025 ) ~> gain 60.0
 
 --data mine the dsp compiling shit and all of the networking shit for background noise
+
 
 
