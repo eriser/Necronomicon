@@ -28,13 +28,13 @@ import Data.Tree
 data NotePattern = NotePatternValue  Double
                  | NoteRestPattern
                  | NoteChordPattern [Double]
-                 | NotePatternList  [NotePattern]
+                 | NotePatternList  [NotePattern] Int
                  deriving (Show)
 
 data SynthPattern = SynthPattern      String
                   | SynthRestPattern
                   | SynthChordPattern [String]
-                  | SynthPatternList  [SynthPattern]
+                  | SynthPatternList  [SynthPattern] Int
                   deriving (Show)
 
 -- Pattern
@@ -130,7 +130,7 @@ parsecPatternToQExpr NoteRestParsec = do
 parsecPatternToQExpr (ParsecPatternList ps) = do
     name <- getName "NotePatternList"
     list <- sequence $ map parsecPatternToQExpr ps
-    return $ AppE (ConE name) (ListE list)
+    return $ AppE (AppE (ConE name) (ListE list)) (LitE . IntegerL $ fromIntegral $ length ps)
 
 parsecPatternToQExpr (NoteChordParsec ds) = do
     name <- getName "NoteChordPattern"
