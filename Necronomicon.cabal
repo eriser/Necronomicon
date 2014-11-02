@@ -29,4 +29,5 @@ Executable Necronomicon
         explicit-exception,
         array,
         pulse-simple == 0.1.*,
-        deepseq == 1.3.0.*
+        deepseq == 1.3.0.*,
+        random

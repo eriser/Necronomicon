@@ -157,7 +157,7 @@ import GHC.Float
 import Prelude
 --import qualified Necronomicon.UGen as U
 import qualified Necronomicon.UGen as U
---U.myCoolSynth . U.Time
+import qualified Necronomicon.Patterns as PN
 
 foreign import ccall "startRuntime" startRuntime :: Ptr U.CUGen -> IO ()
 

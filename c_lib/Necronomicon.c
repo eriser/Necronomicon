@@ -120,6 +120,16 @@ Signal addCalc(void* args, double time)
 	return signal;
 }
 
+Signal minusCalc(void* args, double time)
+{
+	UGen a = ((UGen*) args)[0];
+	UGen b = ((UGen*) args)[1];
+	Signal as = a.calc(a.args, time);
+	Signal bs = b.calc(b.args, time);
+	Signal signal = { as.amplitude - bs.amplitude, as.offset - bs.offset };
+	return signal;
+}
+
 Signal mulCalc(void* args, double time)
 {
 	UGen a = ((UGen*) args)[0];
@@ -209,6 +219,18 @@ Signal negateCalc(void* args, double time)
 
 	return signal;
 }
+
+//////////////
+// Scheduler
+//////////////
+
+typedef void SchedulerCallback(double time);
+
+typedef struct SchedulerNode
+{
+	struct Scheduler* next;
+	SchedulerCallback* callback;
+} SchedulerNode;
 
 //////////////
 // Runtime
