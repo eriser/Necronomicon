@@ -157,12 +157,10 @@ import Prelude
 --import qualified Necronomicon.UGen as U
 import qualified Necronomicon.UGen as U
 import qualified Necronomicon.Patterns as PN
-import Necronomicon.Pattern
+import Necronomicon.Language.Layout
 --U.myCoolSynth . U.Time
 
 foreign import ccall "startRuntime" startRuntime :: Ptr U.CUGen -> IO ()
-
-test = DoublePattern 6666
 
 main :: IO ()
 main = do

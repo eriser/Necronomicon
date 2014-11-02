@@ -1,4 +1,6 @@
-module Necronomicon.Pattern where
+module Necronomicon.Language.Layout
+       (Pattern(DoublePattern,RestPattern,ChordPattern,ListPattern,SynthPattern),ps)
+       where
 
 import Prelude
 import qualified Language.Haskell.TH as TH
@@ -27,7 +29,6 @@ data Pattern = DoublePattern Double
              | RestPattern
              | ChordPattern [Double]
              | SynthPattern String
-             | SynthDoublePattern String Double
              | ListPattern [Pattern]
              deriving (Show)
 
@@ -36,7 +37,6 @@ data ParsecPattern = DoubleParsecPattern Double
                    | RestParsecPattern
                    | ChordParsecPattern [Double]
                    | SynthParsecPattern String
-                   | SynthDoubleParsecPattern String Double
                    | ListParsecPattern [ParsecPattern]
                    | AtomParsecPattern String
                    | ErrorParsecPattern String
