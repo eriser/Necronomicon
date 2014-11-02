@@ -43,7 +43,7 @@ data ParsecPattern = DoubleParsecPattern Double
 ----------------------------------
 
 -- |The quasi-quoter used to generate patterns from quasi-quotations in layout form.
-ps = QuasiQuoter{quoteExp = parsecPatternToQExpr . parseParsecPattern }
+ps = QuasiQuoter { quoteExp = parsecPatternToQExpr . parseParsecPattern }
 
 -- | Parses a string into a ParsecPattern structure
 parseParsecPattern input =

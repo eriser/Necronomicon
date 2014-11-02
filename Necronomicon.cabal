@@ -13,7 +13,7 @@ Executable Necronomicon
     C-Sources:    		c_lib/Necronomicon.c
     Include-Dirs: 		c_lib
     Install-Includes:	Necronomicon.h
-    ghc-options:        -O3 -Wall
+    ghc-options:        -threaded -O3 -Wall
     extensions: 		FlexibleInstances MultiParamTypeClasses RebindableSyntax ForeignFunctionInterface QuasiQuotes TemplateHaskell DeriveDataTypeable
     Build-Depends:     
         base >= 3 && < 5,
