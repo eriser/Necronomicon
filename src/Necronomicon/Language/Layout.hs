@@ -1,5 +1,5 @@
 module Necronomicon.Language.Layout
-       (Pattern(DoublePattern,RestPattern,ChordPattern,ListPattern,SynthPattern),ps)
+       (NotePattern(NotePatternValue,NoteRestPattern,NoteChordPattern,NotePatternList),l)
        where
 
 import Prelude
@@ -25,34 +25,49 @@ import Data.Tree
 ---------------
 
 -- | The data structure used to represent patterns in Necronomicon
-data Pattern = DoublePattern Double
-             | RestPattern
-             | ChordPattern [Double]
-             | SynthPattern String
-             | ListPattern [Pattern]
-             deriving (Show)
+data NotePattern = NotePatternValue  Double
+                 | NoteRestPattern
+                 | NoteChordPattern [Double]
+                 | NotePatternList  [NotePattern]
+                 deriving (Show)
+
+data SynthPattern = SynthPattern      String
+                  | SynthRestPattern
+                  | SynthChordPattern [String]
+                  | SynthPatternList  [SynthPattern]
+                  deriving (Show)
+
+-- Pattern
 
 -- | The data structure used for internal syntax parsing of patterns from quasi-quotations in layout form.
-data ParsecPattern = DoubleParsecPattern Double
-                   | RestParsecPattern
-                   | ChordParsecPattern [Double]
-                   | SynthParsecPattern String
-                   | ListParsecPattern [ParsecPattern]
-                   | AtomParsecPattern String
-                   | ErrorParsecPattern String
+data ParsecPattern = NoteParsec        Double
+                   | NoteRestParsec
+                   | NoteChordParsec  [Double]
+                     
+                   | SynthParsec       String
+                   | SynthRestParsec
+                   | SynthChordParsec [String]
+
+                   | ParsecPatternList [ParsecPattern]
+
+                   | ErrorParsec String
                    deriving (Show)
+
+
+                   -- | AtomParsecPattern String
+
 
 ----------------------------------
 -- Parsing with quasi-quotation
 ----------------------------------
 
 -- |The quasi-quoter used to generate patterns from quasi-quotations in layout form.
-ps = QuasiQuoter{quoteExp = parsecPatternToQExpr . parseParsecPattern }
+l = QuasiQuoter{quoteExp = parsecPatternToQExpr . parseParsecPattern }
 
 -- | Parses a string into a ParsecPattern structure
 parseParsecPattern input =
     case parse parseExpr "pattern" (('[':input)++[']']) of
-        Left  err -> ErrorParsecPattern $ show err
+        Left  err -> ErrorParsec $ show err
         Right val -> val
 
 -- | The main paring combinator of the layout pattern DSL
@@ -65,7 +80,7 @@ parseExpr = parseArray
 
 -- | 
 parseRest :: Parser ParsecPattern
-parseRest = return RestParsecPattern <* char '_'
+parseRest = return NoteRestParsec <* char '_'
 
 parseRawAtom :: Parser String
 parseRawAtom = (:) <$> letter <*> many (letter <|> digit)
@@ -83,19 +98,19 @@ parseRawNumber = do
         Nothing -> return . read $ d
         
 parseNumber :: Parser ParsecPattern
-parseNumber = DoubleParsecPattern <$> parseRawNumber
+parseNumber = NoteParsec <$> parseRawNumber
 
 parseArray :: Parser ParsecPattern
-parseArray = ListParsecPattern <$> (char '[' *> spaces *> sepEndBy parseExpr spaces <* char ']')
+parseArray = ParsecPatternList <$> (char '[' *> spaces *> sepEndBy parseExpr spaces <* char ']')
 
 parseChordTuples :: Parser ParsecPattern
-parseChordTuples = ChordParsecPattern <$> (between (char '(' *> spaces) (spaces *> char ')') . sepBy parseRawNumber $ try $ spaces *> char ',')
+parseChordTuples = NoteChordParsec <$> (between (char '(' *> spaces) (spaces *> char ')') . sepBy parseRawNumber $ try $ spaces *> char ',')
 
 parseSynthPattern :: Parser ParsecPattern
 parseSynthPattern = try withoutParens <|> withParens
     where
-        withoutParens = SynthParsecPattern <$> parseRawAtom
-        withParens    = SynthParsecPattern <$> (between (char '(' *> spaces) (spaces *> char ')') parseRawAtom)
+        withoutParens = SynthParsec <$> parseRawAtom
+        withParens    = SynthParsec <$> (between (char '(' *> spaces) (spaces *> char ')') parseRawAtom)
         
 
 ---------------------
@@ -104,35 +119,35 @@ parseSynthPattern = try withoutParens <|> withParens
 
 parsecPatternToQExpr :: ParsecPattern -> Q Exp
 
-parsecPatternToQExpr (DoubleParsecPattern d) = do
-    name <- getName "DoublePattern"
+parsecPatternToQExpr (NoteParsec d) = do
+    name <- getName "NotePatternValue"
     return $ AppE (ConE name) (LitE . RationalL $ toRational d)
 
-parsecPatternToQExpr RestParsecPattern = do
-    name <- getName "RestPattern"
+parsecPatternToQExpr NoteRestParsec = do
+    name <- getName "NoteRestPattern"
     return $ ConE name
 
-parsecPatternToQExpr (ListParsecPattern ps) = do
-    name <- getName "ListPattern"
+parsecPatternToQExpr (ParsecPatternList ps) = do
+    name <- getName "NotePatternList"
     list <- sequence $ map parsecPatternToQExpr ps
     return $ AppE (ConE name) (ListE list)
 
-parsecPatternToQExpr (ChordParsecPattern ds) = do
-    name <- getName "ChordPattern"
+parsecPatternToQExpr (NoteChordParsec ds) = do
+    name <- getName "NoteChordPattern"
     return $ AppE (ConE name) (ListE $ map (LitE . RationalL . toRational) ds)
 
-parsecPatternToQExpr (SynthParsecPattern s) = do
+parsecPatternToQExpr (SynthParsec s) = do
     name <- getName "SynthPattern"
     return $ AppE (ConE name) (LitE $ StringL s)
 
-parsecPatternToQExpr (AtomParsecPattern a) = do
-    name <- lookupValueName a
-    let name' = case name of
-            Just n  -> n
-            Nothing -> mkName a
-    return $ VarE name'
+-- parsecPatternToQExpr (AtomParsecPattern a) = do
+    -- name <- lookupValueName a
+    -- let name' = case name of
+            -- Just n  -> n
+            -- Nothing -> mkName a
+    -- return $ VarE name'
 
-parsecPatternToQExpr (ErrorParsecPattern e) = fail e
+parsecPatternToQExpr (ErrorParsec e) = fail e
 
 getName :: String -> Q Name
 getName s = do

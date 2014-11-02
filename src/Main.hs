@@ -166,22 +166,18 @@ main :: IO ()
 main = do
     ugen <- U.compileUGen U.myCoolSynth
     ugenPtr <- new ugen
-
-    print [ps| 0 0 [1 2] _
-               3 1 [4 5] _
-               _ _ (7,8,9) _
-               b 7 8 9      |]
-        
+    -- print beat
+    print melo
+    -- print mix
     startRuntime ugenPtr
 
     -- return ()
     --poke ptr ugen
     --startRuntime ptr
 
-beat = [ps| 0 0 [1 2] _
-            s s _     s
-            _ _ (7,8) _
-            b 7 8 9    |]
+-- beat = [l| b [s s] b _ |]
+melo = [l| 0 (1,2) 3 _ |]
+-- mix  = [l| b (1,2) s _ |]
     
 
 {-
