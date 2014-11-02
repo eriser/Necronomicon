@@ -18,9 +18,7 @@ import Data.Data
 import Data.Tree 
 
 -- modifiers???? How to do this in new layout DSL?
--- Negative numbers....
---combine beat patterns into same DSL?
---plays at last value, 
+--list syntactic sugar?
 
 ---------------
 -- Data types
@@ -39,8 +37,6 @@ data SynthPattern = SynthPatternValue  String
                   | SynthPatternList  [SynthPattern] Int
                   deriving (Show)
 
--- Pattern
-
 -- | The data structure used for internal syntax parsing of patterns from quasi-quotations in layout form.
 data ParsecPattern = NoteParsec        Double
                    | NoteRestParsec
@@ -52,12 +48,8 @@ data ParsecPattern = NoteParsec        Double
                    | SynthChordParsec [String]
                    | SynthParsecList [ParsecPattern]
 
-
                    | ErrorParsec String
                    deriving (Show)
-
-
-                   -- | AtomParsecPattern String
 
 
 ----------------------------------
@@ -83,7 +75,6 @@ synthPattern = parseSynthArray <|> parseSynthChordTuples <|> parseSynthRest <|> 
 notePattern :: Parser ParsecPattern
 notePattern = parseArray <|> parseChordTuples <|> parseRest <|> parseNumber <|> synthPattern
 
--- <|> parseAtom
 
 -- | 
 parseRest :: Parser ParsecPattern
@@ -92,9 +83,6 @@ parseRest = return NoteRestParsec <* char '_'
 parseRawAtom :: Parser String
 parseRawAtom = (:) <$> letter <*> many (letter <|> digit)
             
--- parseAtom :: Parser ParsecPattern
--- parseAtom = AtomParsecPattern <$> parseRawAtom
-
 parseRawNumber :: Parser Double
 parseRawNumber = do
     first <- optionMaybe $ (char '-')
@@ -151,7 +139,6 @@ parsecPatternToQExpr (NoteParsecList ps) = do
 parsecPatternToQExpr (NoteChordParsec ds) = do
     name <- getName "NoteChordPattern"
     return $ AppE (ConE name) (ListE $ map (LitE . RationalL . toRational) ds)
-
 
 
 parsecPatternToQExpr (SynthParsec s) = do
