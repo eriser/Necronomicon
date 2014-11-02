@@ -26,6 +26,8 @@ import Data.Tree
 data Pattern = DoublePattern Double
              | RestPattern
              | ChordPattern [Double]
+             | SynthPattern String
+             | SynthDoublePattern String Double
              | ListPattern [Pattern]
              deriving (Show,Typeable,Data)
 
@@ -33,6 +35,8 @@ data Pattern = DoublePattern Double
 data ParsecPattern = DoubleParsecPattern Double
                    | RestParsecPattern
                    | ChordParsecPattern [Double]
+                   | SynthParsecPattern String
+                   | SynthDoubleParsecPattern String Double
                    | ListParsecPattern [ParsecPattern]
                    | AtomParsecPattern String
                    | ErrorParsecPattern String
@@ -54,17 +58,20 @@ parseParsecPattern input =
 -- | The main paring combinator of the layout pattern DSL
 parseExpr :: Parser ParsecPattern
 parseExpr = parseArray
-        <|> parseChordTuples
+        <|> (try parseSynthPattern <|> parseChordTuples)
         <|> parseRest
         <|> parseNumber
-        <|> parseAtom
+        -- <|> parseAtom
 
 -- | 
 parseRest :: Parser ParsecPattern
 parseRest = return RestParsecPattern <* char '_'
-        
-parseAtom :: Parser ParsecPattern
-parseAtom = AtomParsecPattern <$> ((:) <$> letter <*> many (letter <|> digit))
+
+parseRawAtom :: Parser String
+parseRawAtom = (:) <$> letter <*> many (letter <|> digit)
+            
+-- parseAtom :: Parser ParsecPattern
+-- parseAtom = AtomParsecPattern <$> parseRawAtom
 
 parseRawNumber :: Parser Double
 parseRawNumber = do
@@ -83,6 +90,13 @@ parseArray = ListParsecPattern <$> (char '[' *> spaces *> sepEndBy parseExpr spa
 
 parseChordTuples :: Parser ParsecPattern
 parseChordTuples = ChordParsecPattern <$> (between (char '(' *> spaces) (spaces *> char ')') . sepBy parseRawNumber $ try $ spaces *> char ',')
+
+parseSynthPattern :: Parser ParsecPattern
+parseSynthPattern = try withoutParens <|> withParens
+    where
+        withoutParens = SynthParsecPattern <$> parseRawAtom
+        withParens    = SynthParsecPattern <$> (between (char '(' *> spaces) (spaces *> char ')') parseRawAtom)
+        
 
 ---------------------
 -- convert to QExpr
@@ -106,6 +120,10 @@ parsecPatternToQExpr (ListParsecPattern ps) = do
 parsecPatternToQExpr (ChordParsecPattern ds) = do
     name <- getName "ChordPattern"
     return $ AppE (ConE name) (ListE $ map (LitE . RationalL . toRational) ds)
+
+parsecPatternToQExpr (SynthParsecPattern s) = do
+    name <- getName "SynthPattern"
+    return $ AppE (ConE name) (LitE $ StringL s)
 
 parsecPatternToQExpr (AtomParsecPattern a) = do
     name <- lookupValueName a
