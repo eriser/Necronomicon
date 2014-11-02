@@ -12,12 +12,13 @@ import qualified Data.Fixed as F
 
 type Time = Double
 
-data Pattern = PGen (Time -> Pattern) | PNum Double | PNothing
+data Pattern = PGen (Time -> Pattern) | PNum Double | PSeq Pattern Int | PNothing
 
 instance Show Pattern where
-    show (PGen _) = "(\\Time -> Double)"
+    show (PGen _) = "PGen (Time -> Double)"
     show (PNum d) = show d
     show (PNothing) = "PNothing"
+    show (PSeq p n) = "Pseq (" ++ (show p) ++ ") " ++ (show n)
 
 ifThenElse :: Bool -> a -> a -> a
 ifThenElse True a _ = a
@@ -26,9 +27,17 @@ ifThenElse False _ b = b
 stdGen :: StdGen
 stdGen = mkStdGen 1
 
+inf :: Double
+inf = 1 / 0
+
 runPattern :: Int -> Pattern -> IO ()
+runPattern n (PSeq p _) = mapM_ (print . collapse p . fromIntegral) [0..(n - 1)]
 runPattern n (PGen p) = mapM_ (print . p . fromIntegral) [0..(n - 1)]
 runPattern n p = mapM_ (\_ -> print p) [0..(n - 1)]
+
+------------------------
+-- PatternComponent
+------------------------
 
 class PatternComponent a where
     toPattern :: a -> Pattern
@@ -36,9 +45,10 @@ class PatternComponent a where
 
 instance PatternComponent Pattern where
     toPattern p = p
-    collapse (PGen f) n = f n
+    collapse (PGen f) t = f t
     collapse d@(PNum _) _ = d
     collapse PNothing _ = PNothing
+    collapse (PSeq p _) t = collapse p t
 
 instance PatternComponent Double where
     toPattern d = PNum d
@@ -47,6 +57,10 @@ instance PatternComponent Double where
 instance PatternComponent Int where
     toPattern i = PNum (fromIntegral i)
     collapse i _ = toPattern i
+
+------------------------
+-- PatternList
+------------------------
 
 class PatternList a where
     toList :: a -> [Pattern]
@@ -63,64 +77,75 @@ instance PatternList Int where
 instance (PatternComponent a) => PatternList [a] where
     toList ps = map (toPattern) ps
 
-inf :: Double
-inf = 1 / 0
+------------------------
+-- Pattern Functions
+------------------------
+
+-- pbind :: ([Double] -> Time -> Double) -> [Pattern] -> Pattern -> IO ()
+-- pbind func args rhythm = print PNothing
+
+-- startPbind :: Pbind -> IO ()
+-- startPbind p = print "oij"
+
+data Pbind = Pbind ([Double] -> Time -> Double) [(Time -> Pattern)] Pattern
 
 wrapResize :: [a] -> [b] -> [a]
 wrapResize [] _ = []
 wrapResize _ [] = []
 wrapResize xs ys = foldl (\acc i -> acc ++ [xs !! (mod i (length xs))]) [] [0..(length ys - 1)] 
 
-ploop :: (PatternList a, PatternList b) => a -> b -> Pattern
-ploop iterations patterns = ploop' iterationsList patternsList 
+pforever :: (PatternList a) => a -> Pattern
+pforever patterns = pseq' patternsList
     where
-        iterationsList = wrapResize (toList iterations) patternsList
         patternsList = (toList patterns)
-        ploop' [PNothing] _ = PNothing
-        ploop' _ [PNothing] = PNothing
-        ploop' iterations' patterns' = PGen timeSeq
+        pseq' [PNothing] = PNothing
+        pseq' patterns' = PSeq (PGen timeSeq) (floor inf) -- We really need an Integer Infinity here. 
             where
-                timeSeq t = collapse currentPattern (iterationNum - beginningBeat)
-                    where
-                        (beginningBeat, currentPattern) = case ps of
-                            [] -> (0, PNothing)
-                            _  -> last $ ps
-                            where
-                                ps = filter (\(b,_) -> t >= b) (zip beatTimes patterns')
-                        iterationNum = if totalIterations == inf then t else F.mod' t totalIterations
-                        beatTimes = foldl (\acc r -> acc ++ [(last acc) + r]) [0] iterationAmounts
-                        iterationAmounts = map (findIterations) iterations'
-                        totalIterations = sum iterationAmounts
-                        findIterations i = case (collapse i t) of 
-                            (PGen f) -> findIterations (f t)
-                            (PNum n) -> n
-                            PNothing -> 0
+                timeSeq t = (collapse (patterns' !! (floor t)) t)
 
-pseq :: (PatternList a, PatternList b) => a -> b -> Pattern
-pseq iterations patterns = pseq' iterationsList patternsList 
+ploop :: (PatternList a) => a -> Pattern
+ploop patterns = pseq' patternsList
     where
-        iterationsList = wrapResize (toList iterations) patternsList
         patternsList = (toList patterns)
-        pseq' [PNothing] _ = PNothing
-        pseq' _ [PNothing] = PNothing
-        pseq' iterations' patterns' = PGen timeSeq
+        pseq' [PNothing] = PNothing
+        pseq' patterns' = PSeq (PGen timeSeq) (floor totalRepeats)
             where
-                timeSeq t = if t >= totalIterations
-                            then PNothing
-                            else collapse currentPattern (t - beginningBeat)
+                (_, repeatedTimes, repeatedPatterns) = foldl (expandReps) (0,[],[]) (zip repeatAmounts patterns')
+                expandReps (t, racc, pacc) (r, p) = (r + t, racc ++ (take (floor r) $ cycle [t]), pacc ++ (take (floor r) $ cycle [p]))
+                repeatAmounts = map (findRepeats) patterns'
+                totalRepeats = sum $ repeatAmounts
+                findRepeats :: Pattern -> Double
+                findRepeats p = case p of
+                    (PSeq _ n) -> fromIntegral n
+                    _ -> 1.0
+                timeSeq t = (collapse currentPattern currentTime)
                     where
-                        (beginningBeat, currentPattern) = case ps of
-                            [] -> (0, PNothing)
-                            _  -> last $ ps
-                            where
-                                ps = filter (\(b,_) -> t >= b) (zip beatTimes patterns')
-                        beatTimes = foldl (\acc r -> acc ++ [(last acc) + r]) [0] iterationAmounts
-                        iterationAmounts = map (findIterations) iterations'
-                        totalIterations = sum iterationAmounts
-                        findIterations i = case (collapse i t) of 
-                            (PGen f) -> findIterations (f t)
-                            (PNum n) -> n
-                            PNothing -> 0        
+                        currentPattern = (cycle repeatedPatterns) !! (floor t)
+                        currentTime = fromIntegral $ mod (floor (t - ((cycle repeatedTimes) !! (floor t)))) ((floor totalRepeats) :: Int)
+
+
+pseq :: (PatternList a) => Int -> a -> Pattern
+pseq iterations patterns = pseq' patternsList
+    where
+        patternsList = (toList patterns)
+        pseq' [PNothing] = PNothing
+        pseq' patterns' = PSeq (PGen timeSeq) totalBeats
+            where
+                totalBeats = iterations * (floor totalRepeats)
+                (_, repeatedTimes, repeatedPatterns) = foldl (expandReps) (0,[],[]) (zip repeatAmounts patterns')
+                expandReps (t, racc, pacc) (r, p) = (r + t, racc ++ (take (floor r) $ cycle [t]), pacc ++ (take (floor r) $ cycle [p]))
+                repeatAmounts = map (findRepeats) patterns'
+                totalRepeats = sum $ repeatAmounts
+                findRepeats :: Pattern -> Double
+                findRepeats p = case p of
+                    (PSeq _ n) -> fromIntegral n
+                    _ -> 1.0
+                timeSeq t = if t >= (fromIntegral totalBeats)
+                            then PNothing
+                            else (collapse currentPattern currentTime)
+                    where
+                        currentPattern = (cycle repeatedPatterns) !! (floor t)
+                        currentTime = fromIntegral $ mod (floor (t - ((cycle repeatedTimes) !! (floor t)))) ((floor totalRepeats) :: Int)
 
 wrapRange :: Double -> Double -> Double -> Double
 wrapRange lo hi value
@@ -201,6 +226,8 @@ pwhite low high = white (toPattern low) (toPattern high)
     where
         white PNothing _ = PNothing
         white _ PNothing = PNothing
+        white (PSeq l _) h = PGen (\t -> collapse (white (collapse l t) h) t)
+        white l (PSeq h _) = PGen (\t -> collapse (white l (collapse h t)) t)
         white (PGen l) h = PGen (\t -> collapse (white (l t) h) t)
         white l (PGen h) = PGen (\t -> collapse (white l (h t)) t)
         white (PNum l) (PNum h) = PGen (\t -> PNum ((randomRs (l, h) stdGen) !! (floor t)))
@@ -211,10 +238,15 @@ pstutter num pattern = stutter (toPattern num) (toPattern pattern)
         stutter PNothing _ = PNothing
         stutter (PGen f) p = PGen (\t -> collapse (stutter (f t) p) t)
         stutter (PNum n) p = PGen (\t -> collapse p (fromIntegral ((floor $ t / n) :: Integer)))
+        stutter (PSeq s _) p = PGen (\t -> collapse (stutter (collapse s t) p) t)
 
 pwrap :: (PatternComponent a, PatternComponent b, PatternComponent c) => a -> b -> c -> Pattern
 pwrap low high pattern = wrap (toPattern low) (toPattern high) (toPattern pattern)
     where
+        wrap PNothing _ _ = PNothing
+        wrap _ PNothing _ = PNothing
+        wrap (PSeq l _) h p = PGen (\t -> collapse (wrap (collapse l t) h p) t)
+        wrap l (PSeq h _) p = PGen (\t -> collapse (wrap l (collapse h t) p) t)
         wrap (PGen l) h p = PGen (\t -> collapse (wrap (l t) h p) t)
         wrap l (PGen h) p = PGen (\t -> collapse (wrap l (h t) p) t)
         wrap (PNum l) (PNum h) p = PGen wrapR
@@ -223,6 +255,7 @@ pwrap low high pattern = wrap (toPattern low) (toPattern high) (toPattern patter
                     PNothing -> PNothing
                     (PGen _) -> pwrap low high p'
                     (PNum d) -> PNum (wrapRange l h d)
+                    (PSeq _ _) -> pwrap low high p'
                     where
                         p' = (collapse p t)
 
@@ -231,6 +264,8 @@ pseries start step = series (toPattern start) (toPattern step)
     where
         series PNothing _ = PNothing
         series _ PNothing = PNothing
+        series (PSeq start' _) step' = PGen (\t -> collapse (series (collapse start' t) step') t)
+        series start' (PSeq step' _) = PGen (\t -> collapse (series start' (collapse step' t)) t)
         series (PGen start') step' = PGen (\t -> collapse (series (start' t) step') t)
         series start' (PGen step') = PGen (\t -> collapse (series start' (step' t)) t)
         series (PNum start') (PNum step') = PGen (\t -> PNum $ start' + (t * step'))
@@ -240,6 +275,8 @@ pgeom start grow = geom (toPattern start) (toPattern grow)
     where
         geom PNothing _ = PNothing
         geom _ PNothing = PNothing
+        geom (PSeq start' _) grow' = PGen (\t -> collapse (geom (collapse start' t) grow') t)
+        geom start' (PSeq grow' _) = PGen (\t -> collapse (geom start' (collapse grow' t)) t)
         geom (PGen start') grow' = PGen (\t -> collapse (geom (start' t) grow') t)
         geom start' (PGen grow') = PGen (\t -> collapse (geom start' (grow' t)) t)
         geom (PNum start') (PNum grow') = PGen (\t -> PNum $ start' * (grow' ** t))
@@ -251,6 +288,7 @@ pwarp :: (PatternComponent a, PatternComponent b) => a -> b -> Pattern
 pwarp timeRatio pattern = warp (toPattern timeRatio) (toPattern pattern)
     where
         warp PNothing _ = PNothing
+        warp (PSeq s _) p = PGen (\t -> collapse (warp (collapse s t) p) t)
         warp (PGen f) p = PGen (\t -> collapse (warp (f t) p) t)
         warp (PNum n) p = PGen (\t -> collapse p (n * t))
 
@@ -258,5 +296,6 @@ pdelay :: (PatternComponent a, PatternComponent b) => a -> b -> Pattern
 pdelay amount pattern = delay (toPattern amount) (toPattern pattern)
     where
         delay PNothing _ = PNothing
+        delay (PSeq s _) p = PGen (\t -> collapse (delay (collapse s t) p) t)
         delay (PGen f) p = PGen (\t -> collapse (delay (f t) p) t)
         delay (PNum n) p = PGen (\t -> collapse p (t + n))
