@@ -142,7 +142,6 @@ module Main where
 import qualified Sound.JACK.Audio as Audio
 import qualified Sound.JACK as JACK
 
-import qualified Control.Monad.Exception.Synchronous as Sync
 import qualified Control.Monad.Trans.Class as Trans
 import qualified Foreign.C.Error as E
 
@@ -158,14 +157,25 @@ import Prelude
 --import qualified Necronomicon.UGen as U
 import qualified Necronomicon.UGen as U
 import qualified Necronomicon.Patterns as PN
+import Necronomicon.Pattern
+--U.myCoolSynth . U.Time
 
 foreign import ccall "startRuntime" startRuntime :: Ptr U.CUGen -> IO ()
+
+test = DoublePattern 6666
 
 main :: IO ()
 main = do
     ugen <- U.compileUGen U.myCoolSynth
     ugenPtr <- new ugen
+
+    print [ps| 0 0 [1 2] _
+               3 1 [4 5] _
+               _ _ (7,8,9) _
+               6 7 8 9      |]
+        
     startRuntime ugenPtr
+
     -- return ()
     --poke ptr ugen
     --startRuntime ptr

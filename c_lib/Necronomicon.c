@@ -319,17 +319,17 @@ void printUGen(UGen* ugen, unsigned int depth)
 
 void startRuntime(UGen* ugen)
 {
-	printf("UGen size: %i\n", ugenSize);
-	printf("UGen alignment: %i\n", ugenAlignment);
-	printf("Signal size: %i\n", signalSize);
-	printf("Signal alignment: %i\n", signalAlignment);
+	/* printf("UGen size: %i\n", ugenSize); */
+	/* printf("UGen alignment: %i\n", ugenAlignment); */
+	/* printf("Signal size: %i\n", signalSize); */
+	/* printf("Signal alignment: %i\n", signalAlignment); */
 	
-	printf("Delay calc: %p\n", delayCalc);
-	printf("Number calc: %p\n", numberCalc);
+	/* printf("Delay calc: %p\n", delayCalc); */
+	/* printf("Number calc: %p\n", numberCalc); */
 	
 	puts("Starting Necronomicon");
-	printUGen(ugen, 0);
-	puts("\n");
+	/* printUGen(ugen, 0); */
+	/* puts("\n"); */
 	
 	int si;
 	for(si = 0; si < TABLE_SIZE; si++)

@@ -3,18 +3,16 @@ module Necronomicon.UGen where
                                 
 import GHC.Exts
 import Data.List
-import Control.DeepSeq
 import Debug.Trace
 import qualified Data.Vector as V
 import qualified Data.Word as W
 import Foreign
 import Foreign.C
 import Foreign.Storable
-import Control.Monad.Trans (liftIO)
 import Control.Applicative
 
-import Prelude hiding (fromRational,sin,(+),(*))
-import qualified Prelude as P (fromRational,fromIntegral,sin,(+),(*))
+import Prelude hiding (fromRational,sin,(+),(*),(/))
+import qualified Prelude as P (fromRational,fromIntegral,sin,(+),(*),(/))
 
 ifThenElse :: Bool -> a -> a -> a
 ifThenElse True a _ = a
@@ -111,6 +109,11 @@ instance UGenNum UGen Double where
     (/) u d = udiv u (UGenNum d)
     (-) u d = minus u (UGenNum d)
 
+instance UGenNum Double Double where
+    (+) u d = UGenNum $ u P.+ d
+    (*) u d = UGenNum $ u P.* d
+    (/) u d = UGenNum $ u P./ d
+
 instance UGenNum Double UGen where
     (+) d u = add (UGenNum d) u
     (*) d u = mul (UGenNum d) u
@@ -164,7 +167,6 @@ compileUGen (UGenNum d) = do
     signalPtr <- new (Signal 0 (CDouble d))
     return $ CUGen numberCalc ((castPtr signalPtr) :: Ptr ()) 1
 
-myCoolSynth :: UGen
 -- myCoolSynth = t s .*. 0.5 ~> d
     -- where
         -- d = \s -> s.+. delay 1.0 s
@@ -172,8 +174,17 @@ myCoolSynth :: UGen
         -- s = (sin 0.3 .*. 0.5 .+. 0.5) .*. 440.0 ~> sin
 
 -- myCoolSynth = sin 0.3 ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin ~> sin
-
-myCoolSynth = sin (mod1 + mod2) * 0.5
+myCoolSynth :: UGen
+myCoolSynth = sig + timeWarp 0.475 sig + timeWarp 0.3 sig ~> gain 0.05 ~> t ~> t ~> del ~> dez
     where
-        mod1 = sin 40.3 * 44.0 + 100.0
-        mod2 = 0.4 + sin (mod1 + 20.4 ~> gain 0.025 ) ~> gain 50.0
+        del s = s + delay 1.5 s
+        dez s = s + delay 1.0 s
+        t s   = s + timeWarp 0.9 s
+        sig   = sin (mod1 + mod2) * 0.5
+        mod1  = sin 40.3 * 44.0 + 5.0
+        mod2  = 0.4 + sin (mod1 + 2.1 ~> gain 0.025 ) ~> gain 60.0
+
+--data mine the dsp compiling shit and all of the networking shit for background noise
+
+
+

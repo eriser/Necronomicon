@@ -13,21 +13,18 @@ Executable Necronomicon
     C-Sources:    		c_lib/Necronomicon.c
     Include-Dirs: 		c_lib
     Install-Includes:	Necronomicon.h
-    ghc-options:        -O3
-    extensions: 		FlexibleInstances InstanceSigs RankNTypes MagicHash UnboxedTuples MultiParamTypeClasses TypeFamilies DeriveDataTypeable FunctionalDependencies RebindableSyntax BangPatterns ForeignFunctionInterface
+    ghc-options:        -O3 -Wall
+    extensions: 		FlexibleInstances MultiParamTypeClasses RebindableSyntax ForeignFunctionInterface QuasiQuotes TemplateHaskell DeriveDataTypeable
     Build-Depends:     
         base >= 3 && < 5,
-        portaudio    == 0.2.*,
-        base          < 5,
-        mtl          == 2.1.*,
-        pretty       == 1.1.*,
         stm          == 2.4.*,
         transformers == 0.3.*,
         containers,
         vector,
         jack,
-        explicit-exception,
         array,
         pulse-simple == 0.1.*,
         deepseq == 1.3.0.*,
-        random
+        random,
+        template-haskell == 2.8.*,
+        parsec == 3.1.*
