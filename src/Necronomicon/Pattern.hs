@@ -29,7 +29,7 @@ data Pattern = DoublePattern Double
              | SynthPattern String
              | SynthDoublePattern String Double
              | ListPattern [Pattern]
-             deriving (Show,Typeable,Data)
+             deriving (Show)
 
 -- | The data structure used for internal syntax parsing of patterns from quasi-quotations in layout form.
 data ParsecPattern = DoubleParsecPattern Double
@@ -40,7 +40,7 @@ data ParsecPattern = DoubleParsecPattern Double
                    | ListParsecPattern [ParsecPattern]
                    | AtomParsecPattern String
                    | ErrorParsecPattern String
-                   deriving (Show,Typeable,Data)
+                   deriving (Show)
 
 ----------------------------------
 -- Parsing with quasi-quotation
