@@ -1,6 +1,7 @@
 module Necronomicon.Language.Layout
        (NotePattern(NotePatternValue,NoteRestPattern,NoteChordPattern,NotePatternList),
         SynthPattern(SynthPatternValue,SynthRestPattern,SynthChordPattern,SynthPatternList),
+        FunctionPattern(FunctionPatternValue,FunctionChordPattern,FunctionPatternList),
         l)
        where
 
@@ -37,6 +38,14 @@ data SynthPattern = SynthPatternValue  String
                   | SynthPatternList  [SynthPattern] Int
                   deriving (Show)
 
+data FunctionPattern = FunctionPatternValue  (Double -> Double)
+                     | FunctionChordPattern [(Double -> Double)]
+                     | FunctionPatternList  [FunctionPattern] Int
+                     deriving (Show)
+
+instance Show (NotePattern -> NotePattern) where
+    show _ = "(NotePattern -> NotePattern)"
+
 -- | The data structure used for internal syntax parsing of patterns from quasi-quotations in layout form.
 data ParsecPattern = NoteParsec        Double
                    | NoteRestParsec
@@ -47,10 +56,16 @@ data ParsecPattern = NoteParsec        Double
                    | SynthRestParsec
                    | SynthChordParsec [String]
                    | SynthParsecList [ParsecPattern]
+                     
+                   | FunctionParsec       Exp
+                   | FunctionChordParsec [Exp]
+                   | FunctionParsecList  [ParsecPattern]
 
                    | ErrorParsec String
                    deriving (Show)
 
+instance Show (Double -> Double) where
+    show _ = "(Double -> Double)"
 
 ----------------------------------
 -- Parsing with quasi-quotation
@@ -67,16 +82,21 @@ parseParsecPattern input =
 
 -- | The main paring combinator of the layout pattern DSL
 parseExpr :: Parser ParsecPattern
-parseExpr = try synthPattern <|> notePattern
+parseExpr = try synthPattern <|> try functionPattern <|> notePattern
 
 synthPattern :: Parser ParsecPattern
 synthPattern = parseSynthArray <|> parseSynthChordTuples <|> parseSynthRest <|> parseSynthPattern
 
+functionPattern :: Parser ParsecPattern
+functionPattern = parseFunctionArray <|> (try parseFunctionPattern <|> parseFunctionChordTuples) <|> parseFunctionRest <|> notePattern
+
 notePattern :: Parser ParsecPattern
 notePattern = parseArray <|> parseChordTuples <|> parseRest <|> parseNumber <|> synthPattern
 
+------------------------
+-- NotePattern parsing
+------------------------
 
--- | 
 parseRest :: Parser ParsecPattern
 parseRest = return NoteRestParsec <* char '_'
 
@@ -101,8 +121,9 @@ parseArray = NoteParsecList <$> (char '[' *> spaces *> sepEndBy notePattern spac
 parseChordTuples :: Parser ParsecPattern
 parseChordTuples = NoteChordParsec <$> (between (char '(' *> spaces) (spaces *> char ')') . sepBy parseRawNumber $ try $ spaces *> char ',')
 
-
------------------
+------------------------
+-- SynthPattern parsing
+------------------------
 
 parseSynthArray :: Parser ParsecPattern
 parseSynthArray = SynthParsecList <$> (char '[' *> spaces *> sepEndBy synthPattern spaces <* char ']')
@@ -116,6 +137,44 @@ parseSynthChordTuples = SynthChordParsec <$> (between (char '(' *> spaces) (spac
 parseSynthPattern :: Parser ParsecPattern
 parseSynthPattern = SynthParsec <$> parseRawAtom
         
+
+---------------------------
+-- FunctionPattern parsing
+---------------------------
+
+parseFunctionArray :: Parser ParsecPattern
+parseFunctionArray = FunctionParsecList <$> (char '[' *> spaces *> sepEndBy functionPattern spaces <* char ']')
+
+parseFunctionRest :: Parser ParsecPattern
+parseFunctionRest = return (FunctionParsec (VarE (mkName "Prelude.id"))) <* char '_'
+
+parseFunctionChordTuples :: Parser ParsecPattern
+parseFunctionChordTuples = FunctionChordParsec <$> (between (char '(' *> spaces) (spaces *> char ')') . sepBy parseRawFunction $ try $ spaces *> char ',')
+
+parseFunctionPattern :: Parser ParsecPattern
+parseFunctionPattern = FunctionParsec <$> parseRawFunction
+
+parseRawFunction :: Parser Exp
+parseRawFunction = between (char '(' *> spaces) (spaces *> char ')') (try leftSection <|> rightSection)
+    where
+        leftSection  = do
+            f <- oneOf "+-*/"
+            spaces
+            v <- parseRawNumber
+            return $ case f of
+                '+' -> InfixE Nothing (VarE (mkName "Prelude.+")) (Just (LitE (RationalL $ toRational v)))
+                '-' -> AppE (VarE (mkName "Prelude.subtract")) (LitE (RationalL $ toRational v))
+                '*' -> InfixE Nothing (VarE (mkName "Prelude.*")) (Just (LitE (RationalL $ toRational v)))
+                '/' -> InfixE Nothing (VarE (mkName "Prelude./")) (Just (LitE (RationalL $ toRational v)))
+        rightSection  = do
+            v <- parseRawNumber
+            spaces
+            f <- oneOf "+-*/"
+            return $ case f of
+                '+' -> InfixE (Just (LitE (RationalL $ toRational v))) (VarE (mkName "Prelude.+")) Nothing
+                '-' -> InfixE (Just (LitE (RationalL $ toRational v))) (VarE (mkName "Prelude.-")) Nothing
+                '*' -> InfixE (Just (LitE (RationalL $ toRational v))) (VarE (mkName "Prelude.*")) Nothing
+                '/' -> InfixE (Just (LitE (RationalL $ toRational v))) (VarE (mkName "Prelude./")) Nothing
 
 ---------------------
 -- convert to QExpr
@@ -140,7 +199,6 @@ parsecPatternToQExpr (NoteChordParsec ds) = do
     name <- getName "NoteChordPattern"
     return $ AppE (ConE name) (ListE $ map (LitE . RationalL . toRational) ds)
 
-
 parsecPatternToQExpr (SynthParsec s) = do
     name <- getName "SynthPatternValue"
     return $ AppE (ConE name) (LitE $ StringL s)
@@ -157,6 +215,19 @@ parsecPatternToQExpr (SynthParsecList ps) = do
 parsecPatternToQExpr (SynthChordParsec ds) = do
     name <- getName "SynthChordPattern"
     return $ AppE (ConE name) (ListE $ map (LitE . StringL) ds)
+
+parsecPatternToQExpr (FunctionParsec s) = do
+    name <- getName "FunctionPatternValue"
+    return $ AppE (ConE name) s
+
+parsecPatternToQExpr (FunctionParsecList ps) = do
+    name <- getName "FunctionPatternList"
+    list <- sequence $ map parsecPatternToQExpr ps
+    return $ AppE (AppE (ConE name) (ListE list)) (LitE . IntegerL $ fromIntegral $ length ps)
+
+parsecPatternToQExpr (FunctionChordParsec fs) = do
+    name <- getName "FunctionChordPattern"
+    return $ AppE (ConE name) (ListE fs)
 
 -- parsecPatternToQExpr (AtomParsecPattern a) = do
     -- name <- lookupValueName a
