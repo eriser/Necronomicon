@@ -116,23 +116,23 @@ parseNumber :: Parser ParsecPattern
 parseNumber = NoteParsec <$> parseRawNumber
 
 parseArray :: Parser ParsecPattern
-parseArray = NoteParsecList <$> (char '[' *> spaces *> sepEndBy notePattern spaces <* char ']')
+parseArray = NoteParsecList <$> (char '[' *> spaces *> sepEndBy1 notePattern spaces <* char ']')
 
 parseChordTuples :: Parser ParsecPattern
-parseChordTuples = NoteChordParsec <$> (between (char '(' *> spaces) (spaces *> char ')') . sepBy parseRawNumber $ try $ spaces *> char ',')
+parseChordTuples = NoteChordParsec <$> (between (char '(' *> spaces) (spaces *> char ')') . sepBy1 parseRawNumber $ try $ spaces *> char ',')
 
 ------------------------
 -- SynthPattern parsing
 ------------------------
 
 parseSynthArray :: Parser ParsecPattern
-parseSynthArray = SynthParsecList <$> (char '[' *> spaces *> sepEndBy synthPattern spaces <* char ']')
+parseSynthArray = SynthParsecList <$> (char '[' *> spaces *> sepEndBy1 synthPattern spaces <* char ']')
 
 parseSynthRest :: Parser ParsecPattern
 parseSynthRest = return SynthRestParsec <* char '_'
 
 parseSynthChordTuples :: Parser ParsecPattern
-parseSynthChordTuples = SynthChordParsec <$> (between (char '(' *> spaces) (spaces *> char ')') . sepBy parseRawAtom $ try $ spaces *> char ',')
+parseSynthChordTuples = SynthChordParsec <$> (between (char '(' *> spaces) (spaces *> char ')') . sepBy1 parseRawAtom $ try $ spaces *> char ',')
 
 parseSynthPattern :: Parser ParsecPattern
 parseSynthPattern = SynthParsec <$> parseRawAtom
@@ -143,13 +143,13 @@ parseSynthPattern = SynthParsec <$> parseRawAtom
 ---------------------------
 
 parseFunctionArray :: Parser ParsecPattern
-parseFunctionArray = FunctionParsecList <$> (char '[' *> spaces *> sepEndBy functionPattern spaces <* char ']')
+parseFunctionArray = FunctionParsecList <$> (char '[' *> spaces *> sepEndBy1 functionPattern spaces <* char ']')
 
 parseFunctionRest :: Parser ParsecPattern
 parseFunctionRest = return (FunctionParsec (VarE (mkName "Prelude.id"))) <* char '_'
 
 parseFunctionChordTuples :: Parser ParsecPattern
-parseFunctionChordTuples = FunctionChordParsec <$> (between (char '(' *> spaces) (spaces *> char ')') . sepBy parseRawFunction $ try $ spaces *> char ',')
+parseFunctionChordTuples = FunctionChordParsec <$> (between (char '(' *> spaces) (spaces *> char ')') . sepBy1 parseRawFunction $ try $ spaces *> char ',')
 
 parseFunctionPattern :: Parser ParsecPattern
 parseFunctionPattern = FunctionParsec <$> parseRawFunction
@@ -163,7 +163,7 @@ parseRawFunction = between (char '(' *> spaces) (spaces *> char ')') (try leftSe
             v <- parseRawNumber
             return $ case f of
                 '+' -> InfixE Nothing (VarE (mkName "Prelude.+")) (Just (LitE (RationalL $ toRational v)))
-                '-' -> AppE (VarE (mkName "Prelude.subtract")) (LitE (RationalL $ toRational v))
+                -- '-' -> AppE (VarE (mkName "Prelude.subtract")) (LitE (RationalL $ toRational v))
                 '*' -> InfixE Nothing (VarE (mkName "Prelude.*")) (Just (LitE (RationalL $ toRational v)))
                 '/' -> InfixE Nothing (VarE (mkName "Prelude./")) (Just (LitE (RationalL $ toRational v)))
         rightSection  = do
