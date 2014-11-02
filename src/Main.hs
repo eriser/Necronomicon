@@ -157,28 +157,27 @@ import Prelude
 --import qualified Necronomicon.UGen as U
 import qualified Necronomicon.UGen as U
 import qualified Necronomicon.Patterns as PN
-import Necronomicon.Pattern
+import Necronomicon.Language.Layout
 --U.myCoolSynth . U.Time
 
 foreign import ccall "startRuntime" startRuntime :: Ptr U.CUGen -> IO ()
-
-test = DoublePattern 6666
 
 main :: IO ()
 main = do
     ugen <- U.compileUGen U.myCoolSynth
     ugenPtr <- new ugen
-
-    print [ps| 0 0 [1 2] _
-               3 1 [4 5] _
-               _ _ (7,8,9) _
-               6 7 8 9      |]
-        
+    print beat
+    print melo
     startRuntime ugenPtr
 
     -- return ()
     --poke ptr ugen
     --startRuntime ptr
+
+beat = [l| b (s,s) [b b] _ |]
+melo = [l| 0 (1,2) [3 3] _ |]
+-- mix  = [l| 1 2 s _ |]
+    
 
 {-
 
