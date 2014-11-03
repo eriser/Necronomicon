@@ -175,9 +175,9 @@ main = do
     --poke ptr ugen
     --startRuntime ptr
 
-beat = [l| b (s) [b b] _ |]
-melo = [l| 0 (1,2) [3 3] _ |]
-funcs= [l| (+1) ((*2),(+2),(3/)) _ [(/2) (+2)] |]
+beat = [lich| b (s) [b b] _ |]
+melo = [lich| 0 (1,2) [3 3] _ |]
+funcs= [lich| (+1) ((*2),(+2),(3/)) _ [(/2) (+2)] |]
 -- mix  = [l| 1 2 s _ |]
     
 
