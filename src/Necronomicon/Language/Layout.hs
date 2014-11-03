@@ -29,14 +29,14 @@ data Pattern a = PatternValue a
                | PatternChord [a]
                | PatternList [Pattern a] Int
                deriving (Show)
-                        
+
 -- | The data structure used for internal syntax parsing of patterns from quasi-quotations in layout form.
 data ParsecPattern a = ParsecValue a
-                      | ParsecRest
-                      | ParsecChord [a]
-                      | ParsecList [ParsecPattern a]
-                      | ErrorParsec String
-                      deriving (Show)
+                     | ParsecRest
+                     | ParsecChord [a]
+                     | ParsecList [ParsecPattern a]
+                     | ErrorParsec String
+                     deriving (Show)
 
 instance Show (a -> a) where
     show _ = "(a -> a)"
@@ -132,7 +132,7 @@ parseRawFunction :: Parser Exp
 parseRawFunction = between (char '(' *> spaces) (spaces *> char ')') (try leftSection <|> rightSection)
     where
         leftSection  = do
-            f <- oneOf "+-*/"
+            f <- oneOf "+*/"
             spaces
             v <- parseRawNumber
             return $ case f of
