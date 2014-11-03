@@ -14,6 +14,9 @@ import Control.Monad
 import System.CPUTime
 import qualified Data.Fixed as F
 
+(~>) :: a -> (a -> b) -> b
+(~>) a f = f a
+
 type Time = Double
 
 data Pattern a = PGen (Time -> Pattern a) | PSeq (Pattern a) Int | PVal a | PNothing
@@ -28,7 +31,7 @@ instance Functor Pattern where
     fmap _ PNothing = PNothing 
     fmap f (PVal x) = PVal (f x)
     fmap f (PGen x) = PGen (\t -> fmap f (x t))
-    fmap f (PSeq p _) = PGen (\t -> fmap f (collapse p t))
+    fmap f (PSeq p _) = fmap f p
 
 instance Applicative Pattern where
     pure = PVal
