@@ -22,11 +22,11 @@ type Time = Double
 
 data Pattern a = PGen (Time -> Pattern a)
                | PSeq (Pattern a) Int
-               | PTree [Pattern a] Int
                | PVal a
-               | PNothing deriving (Show)
+               | PNothing
 
 type PNum = Pattern Double
+type PList a = Pattern [a]
 -- type PList a = Pattern [a]
 
 collapse :: Pattern a -> Time -> Pattern a
@@ -34,23 +34,6 @@ collapse (PGen f) t   = (f t)
 collapse (PSeq p _) t = collapse p t
 collapse PNothing _   = PNothing
 collapse v@(PVal _) _ = v
-collapse (PTree ps l) t = collapse' $ ps !! index
-    where
-        modTime                   = F.mod' t (fromIntegral l)
-        index                     = floor modTime
-        newTime                   = modTime - (fromIntegral index)
-        collapse' pt@(PTree _ l') = collapse pt $ newTime * (fromIntegral l')
-
-        --This is the naive version that returns the last possible value:
-        -- collapse' p               = collapse p newTime
-
-        --This is the exact matching version that requires that time matches exactly.
-        collapse' p               = if (fromIntegral index) == modTime
-                                        then collapse p newTime
-                                        else PNothing
-
-instance Show (Time -> Pattern a) where
-    show _ = "(Time -> Pattern a)"
 
 instance Functor Pattern where
     fmap _ PNothing = PNothing 
@@ -73,6 +56,12 @@ instance Monad Pattern where
     PSeq p _ >>= f = p >>= f
     fail _ = PNothing
 
+instance (Show a) => Show (Pattern a) where
+    show (PGen _) = "PGen (Time -> Pattern)"
+    show (PSeq p n) = "Pseq (" ++ (show p) ++ ") " ++ (show n)
+    show (PVal a) = show a
+    show PNothing = "PNothing"
+
 ------------------------
 -- Pattern Functions
 ------------------------
@@ -93,7 +82,7 @@ runPattern n (PGen p) = mapM_ (print . p . fromIntegral) [0..(n - 1)]
 runPattern n p = mapM_ (\_ -> print p) [0..(n - 1)]
 
 runPatternDivions :: (Show a) => Int -> Int -> Pattern a -> IO()
-runPatternDivions n d p = mapM_ (\n-> putStrLn $ "Time: " ++ (show n) ++ ", value: " ++ (show $ collapse p n)) $ map ((/ (fromIntegral d)) . fromIntegral) [0..(n*d - 1)]
+runPatternDivions n d p = mapM_ (\t -> putStrLn $ "Time: " ++ (show t) ++ ", value: " ++ (show $ collapse p t)) $ map ((/ (fromIntegral d)) . fromIntegral) [0..(n*d - 1)]
 
 -- runPattern
 
@@ -120,6 +109,35 @@ wrapResize :: [a] -> [b] -> [a]
 wrapResize [] _ = []
 wrapResize _ [] = []
 wrapResize xs ys = foldl (\acc i -> acc ++ [xs !! (mod i (length xs))]) [] [0..(length ys - 1)] 
+
+data Tree a = Node [Tree a] Int | Leaf a
+type PTree a = Pattern (Tree a)
+
+instance (Show a) => Show (Tree a) where
+    show (Node tr l) = "(Node " ++ (show tr) ++ " " ++ (show l) ++ ")"
+    show (Leaf v) = "(Leaf " ++ (show v) ++ ")"
+
+ptree :: PTree a -> PTree a
+ptree PNothing = PNothing
+ptree (PGen f) = PGen (\t -> collapse (ptree (f t)) t)
+ptree (PSeq s _) = PGen (\t -> collapse (ptree (collapse s t)) t)
+ptree tree = PGen (collapseTree tree)
+    where
+        collapseTree PNothing _ = PNothing
+        collapseTree (PGen p) t = p t
+        collapseTree (PSeq p _) t = collapse p t
+        collapseTree v@(PVal (Leaf _)) _ = v
+        collapseTree (PVal (Node ps l)) t = collapseTree' $ ps !! index
+            where
+                modTime                      = F.mod' t (fromIntegral l)
+                index                        = floor modTime
+                newTime                      = modTime - (fromIntegral index)
+                collapseTree' pt@(Node _ l') = collapseTree (PVal pt) (newTime * (fromIntegral l'))
+                collapseTree' v@(Leaf _)     = PVal v --This is the naive version that returns the last possible value
+                --This is the exact matching version that requires that time matches exactly.
+                -- collapseTree' v@(Leaf _)  = if (fromIntegral index) == modTime
+                --                                then PVal v
+                --                                else PNothing
 
 pforever :: [Pattern a] -> Pattern a
 pforever [PNothing] = PNothing
@@ -458,3 +476,10 @@ pFromEnum _ = fromEnum (0 :: Integer)
 instance (Monoid a) => Monoid (Pattern a) where
     mempty = PNothing
     mappend a b = (mappend) <$> a <*> b
+
+
+mreseq :: PNum -> PNum
+mreseq p = p >>= (\v -> return v * 100)
+
+monadicPattern :: PNum
+monadicPattern = pseq 5 [1..9] >>= mreseq

@@ -158,7 +158,9 @@ import Prelude
 import qualified Necronomicon.UGen as U
 import qualified Necronomicon.Patterns as PN
 import Necronomicon.Language.Layout
+import Control.Applicative
 --U.myCoolSynth . U.Time
+import Data.Monoid
 
 foreign import ccall "startRuntime" startRuntime :: Ptr U.CUGen -> IO ()
 
@@ -176,7 +178,16 @@ main = do
     --poke ptr ugen
     --startRuntime ptr
 
-beat = toNecroPattern $ [lich| b s [b d] s |]
+beat = PN.ptree . PN.PVal . toTree $ [lich| b s [b d] s |]
+
+{-
+beat = do
+    n <- (PN.ptree . PN.PVal . toTree $ [lich| b s [b d] s |])
+    return (PN.shuffle PN.stdGen $ show n)
+-}
+
+    
+
 -- melo = [lich| 0 [1 2 [3 [4 5] [6 [7 8] ] 9] 10 11] 12 [13 14] _ |]
 -- melo = [lich| 0 [1 2] 3 [4 [5 6]] |]
 -- funcs= [lich| (+1) ((*2),(+2),(3/)) _ [(/2) (+2)] |]

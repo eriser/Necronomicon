@@ -1,6 +1,6 @@
 module Necronomicon.Language.Layout
        (Pattern(PatternValue,PatternRest,PatternChord,PatternList),
-        lich,toNecroPattern)
+        lich, toTree)
        where
 
 import Prelude
@@ -39,6 +39,14 @@ data ParsecPattern a = ParsecValue a
                      | ParsecList [ParsecPattern a]
                      | ErrorParsec String
                      deriving (Show)
+
+
+data Notation a = Note a | Rest | Chord [a]
+
+instance (Show a) => Show (Notation a) where
+    show (Note a) = "(Note " ++ (show a) ++ ")"
+    show Rest = "Rest"
+    show (Chord as) = "(Chord " ++ (show as) ++ ")"
 
 instance Show (a -> a) where
     show _ = "(a -> a)"
@@ -231,7 +239,8 @@ getName s = do
         Just n  -> n
         Nothing -> mkName s
 
-toNecroPattern :: Pattern a -> NP.Pattern a
-toNecroPattern (PatternValue v)   = NP.PVal v
-toNecroPattern (PatternList ps l) = NP.PTree (map toNecroPattern ps) l
-toNecroPattern _                  = NP.PNothing
+toTree :: Pattern a -> NP.Tree (Notation a)
+toTree (PatternValue v)   = NP.Leaf (Note v)
+toTree (PatternList ps l) = NP.Node (map toTree ps) l
+toTree PatternRest = NP.Leaf Rest
+toTree (PatternChord ps) = NP.Leaf (Chord ps)
