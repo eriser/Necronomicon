@@ -156,7 +156,7 @@ import GHC.Float
 import Prelude
 --import qualified Necronomicon.UGen as U
 import qualified Necronomicon.UGen as U
-import qualified Necronomicon.Patterns as PN
+import Necronomicon.Patterns
 import Necronomicon.Language.Layout
 import Control.Applicative
 --U.myCoolSynth . U.Time
@@ -168,17 +168,17 @@ main :: IO ()
 main = do
     -- ugen <- U.compileUGen U.myCoolSynth
     -- ugenPtr <- new ugen
-    print beat
+    -- print beat
     -- print melo
     -- print funcs
-    PN.runPatternDivions 4 2 beat
+    runPatternDivions 4 2 [lich| b s [b d] s |]
     -- startRuntime ugenPtr
 
     -- return ()
     --poke ptr ugen
     --startRuntime ptr
 
-beat = PN.ptree . PN.PVal . toTree $ [lich| b s [b d] s |]
+-- beat = 
 
 {-
 beat = do

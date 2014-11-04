@@ -1,6 +1,6 @@
 module Necronomicon.Language.Layout
-       (Pattern(PatternValue,PatternRest,PatternChord,PatternList),
-        lich, toTree)
+       -- (Pattern(PatternValue,PatternRest,PatternChord,PatternList),
+        (lich,Notation(Note,Rest,Chord),evenMoreTypesBecauseWhyNot)
        where
 
 import Prelude
@@ -26,11 +26,11 @@ import qualified Necronomicon.Patterns as NP
 ---------------
 
 -- | Generic pattern container type
-data Pattern a = PatternValue a
-               | PatternRest
-               | PatternChord [a]
-               | PatternList [Pattern a] Int
-               deriving (Show)
+-- data Pattern a = PatternValue a
+               -- | PatternRest
+               -- | PatternChord [a]
+               -- | PatternList [Pattern a] Int
+               -- deriving (Show)
 
 -- | The data structure used for internal syntax parsing of patterns from quasi-quotations in layout form.
 data ParsecPattern a = ParsecValue a
@@ -62,7 +62,10 @@ lich = QuasiQuoter{quoteExp =  parseParsecPattern }
 parseParsecPattern input =
     case parse parseExpr "pattern" (('[':input)++[']']) of
         Left  err -> fail $ show err
-        Right val -> val
+        Right val -> do
+            name <- getValueName "evenMoreTypesBecauseWhyNot"
+            v <- val
+            return $ AppE (VarE name) v
 
 -- | The main paring combinator of the layout pattern DSL
 parseExpr :: Parser (Q Exp)
@@ -169,59 +172,70 @@ class ParsecPatternExpression a where
 
 instance ParsecPatternExpression (ParsecPattern Double) where
     parsecPatternToQExpr (ParsecValue d) = do
-        name <- getName "PatternValue"
-        return $ AppE (ConE name) (LitE . RationalL $ toRational d)
+        name <- getName "Note"
+        name' <- getName "Necronomicon.Patterns.Leaf" 
+        return $ AppE (ConE name') $ AppE (ConE name) (LitE . RationalL $ toRational d)
 
     parsecPatternToQExpr ParsecRest = do
-        name <- getName "PatternRest"
-        return $ ConE name
+        name <- getName "Rest"
+        name' <- getName "Necronomicon.Patterns.Leaf" 
+        return $ AppE (ConE name') $ ConE name
 
     parsecPatternToQExpr (ParsecList ps) = do
-        name <- getName "PatternList"
+        name <- getName "Necronomicon.Patterns.Node"
         list <- sequence $ map parsecPatternToQExpr ps
         return $ AppE (AppE (ConE name) (ListE list)) (LitE . IntegerL $ fromIntegral $ length ps)
 
     parsecPatternToQExpr (ParsecChord ds) = do
-        name <- getName "PatternChord"
+        name <- getName "Chord"
+        name' <- getName "Necronomicon.Patterns.Leaf" 
         return $ AppE (ConE name) (ListE $ map (LitE . RationalL . toRational) ds)
 
     parsecPatternToQExpr (ErrorParsec e) = fail e
 
 instance ParsecPatternExpression (ParsecPattern String) where
     parsecPatternToQExpr (ParsecValue s) = do
-        name <- getName "PatternValue"
-        return $ AppE (ConE name) (LitE $ StringL s)
+        name <- getName "Note"
+        name' <- getName "Necronomicon.Patterns.Leaf" 
+        return $ AppE (ConE name') $ AppE (ConE name) (LitE $ StringL s)
 
     parsecPatternToQExpr ParsecRest = do
-        name <- getName "PatternRest"
-        return $ ConE name
+        name <- getName "Rest"
+        name' <- getName "Necronomicon.Patterns.Leaf" 
+        return $ AppE (ConE name') $ ConE name
 
     parsecPatternToQExpr (ParsecList ps) = do
-        name <- getName "PatternList"
+        name <- getName "Necronomicon.Patterns.Node"
         list <- sequence $ map parsecPatternToQExpr ps
         return $ AppE (AppE (ConE name) (ListE list)) (LitE . IntegerL $ fromIntegral $ length ps)
 
     parsecPatternToQExpr (ParsecChord ds) = do
-        name <- getName "PatternChord"
-        return $ AppE (ConE name) (ListE $ map (LitE . StringL) ds)
+        name <- getName "Chord"
+        name' <- getName "Necronomicon.Patterns.Leaf" 
+        return $ AppE (ConE name') $ AppE (ConE name) (ListE $ map (LitE . StringL) ds)
 
     parsecPatternToQExpr (ErrorParsec e) = fail e
 
 instance ParsecPatternExpression (ParsecPattern Exp) where
     parsecPatternToQExpr (ParsecValue s) = do
-        name <- getName "PatternValue"
-        return $ AppE (ConE name) s
+        name <- getName "Note"
+        name' <- getName "Necronomicon.Patterns.Leaf" 
+        return $ AppE (ConE name') $ AppE (ConE name) s
 
     parsecPatternToQExpr (ParsecList ps) = do
-        name <- getName "PatternList"
+        name <- getName "Necronomicon.Patterns.Node"
         list <- sequence $ map parsecPatternToQExpr ps
         return $ AppE (AppE (ConE name) (ListE list)) (LitE . IntegerL $ fromIntegral $ length ps)
 
     parsecPatternToQExpr (ParsecChord fs) = do
-        name <- getName "PatternChord"
-        return $ AppE (ConE name) (ListE fs)
+        name <- getName "Chord"
+        name' <- getName "Necronomicon.Patterns.Leaf" 
+        return $ AppE (ConE name') $ AppE (ConE name) (ListE fs)
 
     parsecPatternToQExpr (ErrorParsec e) = fail e
+
+-- evenMoreTypesBecauseWhyNot :: NP.Pattern (NP.Tree a) -> NP.Pattern (NP.Tree a)
+evenMoreTypesBecauseWhyNot = NP.ptree . NP.PVal
 
 
 -- parsecPatternToQExpr (AtomParsecPattern a) = do
@@ -239,8 +253,16 @@ getName s = do
         Just n  -> n
         Nothing -> mkName s
 
-toTree :: Pattern a -> NP.Tree (Notation a)
-toTree (PatternValue v)   = NP.Leaf (Note v)
-toTree (PatternList ps l) = NP.Node (map toTree ps) l
-toTree PatternRest = NP.Leaf Rest
-toTree (PatternChord ps) = NP.Leaf (Chord ps)
+getValueName :: String -> Q Name
+getValueName s = do
+    name <- lookupValueName s
+    return $ case name of
+        Just n  -> n
+        Nothing -> mkName s
+
+
+-- toTree :: Pattern a -> NP.Tree (Notation a)
+-- toTree (PatternValue v)   = NP.Leaf (Note v)
+-- toTree (PatternList ps l) = NP.Node (map toTree ps) l
+-- toTree PatternRest        = NP.Leaf Rest
+-- toTree (PatternChord ps)  = NP.Leaf (Chord ps)
