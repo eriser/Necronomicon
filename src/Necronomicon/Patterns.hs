@@ -117,23 +117,23 @@ instance (Show a) => Show (Tree a) where
     show (Node tr l) = "(Node " ++ (show tr) ++ " " ++ (show l) ++ ")"
     show (Leaf v) = "(Leaf " ++ (show v) ++ ")"
 
-ptree :: PTree a -> PTree a
+ptree :: Pattern (Tree a) -> Pattern a
 ptree PNothing = PNothing
 ptree (PGen f) = PGen (\t -> collapse (ptree (f t)) t)
 ptree (PSeq s _) = PGen (\t -> collapse (ptree (collapse s t)) t)
-ptree tree = PGen (collapseTree tree)
+ptree (PVal tree) = PGen (collapseTree tree)
     where
-        collapseTree PNothing _ = PNothing
-        collapseTree (PGen p) t = p t
-        collapseTree (PSeq p _) t = collapse p t
-        collapseTree v@(PVal (Leaf _)) _ = v
-        collapseTree (PVal (Node ps l)) t = collapseTree' $ ps !! index
+        collapseTree :: Tree a -> Time -> Pattern a
+        collapseTree (Leaf v) _ = PVal v
+        collapseTree (Node [] _) _ = PNothing
+        collapseTree (Node ps l) t = collapseTree' (ps !! index)
             where
-                modTime                      = F.mod' t (fromIntegral l)
-                index                        = floor modTime
-                newTime                      = modTime - (fromIntegral index)
-                collapseTree' pt@(Node _ l') = collapseTree (PVal pt) (newTime * (fromIntegral l'))
-                collapseTree' v@(Leaf _)     = PVal v --This is the naive version that returns the last possible value
+                collapseTree' (Leaf v) = PVal v
+                collapseTree' (Node [] _) = PNothing
+                collapseTree' pt@(Node _ l') = collapseTree pt (newTime * (fromIntegral l'))
+                modTime = F.mod' t (fromIntegral l)
+                index = floor modTime
+                newTime = modTime - (fromIntegral index)
                 --This is the exact matching version that requires that time matches exactly.
                 -- collapseTree' v@(Leaf _)  = if (fromIntegral index) == modTime
                 --                                then PVal v
