@@ -121,7 +121,8 @@ ptree :: PTree a -> Pattern a
 ptree PNothing = PNothing
 ptree (PGen f) = PGen (\t -> collapse (ptree (f t)) t)
 ptree (PSeq s _) = PGen (\t -> collapse (ptree (collapse s t)) t)
-ptree (PVal tree) = PGen (collapseTree tree)
+ptree (PVal (Leaf v)) = PVal v
+ptree (PVal tree@(Node _ tlength)) = PSeq (PGen (collapseTree tree)) tlength
     where
         collapseTree :: Tree a -> Time -> Pattern a
         collapseTree (Leaf v) _ = PVal v
