@@ -9,8 +9,13 @@ import Prelude
 import System.Random
 import Debug.Trace
 import Control.Concurrent
+import Control.Applicative
+import Control.Monad
 import System.CPUTime
 import qualified Data.Fixed as F
+
+(~>) :: a -> (a -> b) -> b
+(~>) a f = f a
 
 type Time = Double
 
@@ -46,56 +51,26 @@ collapse (PTree ps l) t = collapse' $ ps !! index
 instance Show (Time -> Pattern a) where
     show _ = "(Time -> Pattern a)"
 
--- instance (Show a) => Show (Pattern a) where
-    -- show (PGen _) = "PGen (Time -> Double)"
-    -- show (PSeq p n) = "Pseq (" ++ (show p) ++ ") " ++ (show n)
-    -- show (PVal a) = show a
-    -- show PNothing = "PNothing"
+instance Functor Pattern where
+    fmap _ PNothing = PNothing 
+    fmap f (PVal x) = PVal (f x)
+    fmap f (PGen x) = PGen (\t -> fmap f (x t))
+    fmap f (PSeq p _) = fmap f p
 
-{-
+instance Applicative Pattern where
+    pure = PVal
+    PNothing <*> _ = PNothing
+    PVal x <*> y = fmap x y
+    PGen x <*> y = PGen (\t -> (x t) <*> y)
+    PSeq p _ <*> f = p <*> f
 
-------------------------
--- PatternComponent
-------------------------
-
-class PatternComponent a where
-    toPattern :: a -> Pattern a
-
-instance PatternComponent (Pattern a) where
-    toPattern g@(PGen _) = g
-    toPattern s@(PSeq _ _) = s
-    toPattern v@(PVal _) = v
-    toPattern PNothing = PNothing
-
-instance PatternComponent Double where
-    toPattern d = PVal d
-
-instance PatternComponent Int where
-    toPattern i = PVal i
-
--}
-
-{-
-
-------------------------
--- PatternList
-------------------------
-
-class PatternList a where
-    toList :: a -> [Pattern a]
-
-instance PatternList (Pattern a) where
-    toList p = [PVal p]
-
-instance PatternList Double where
-    toList d = [PVal d]
-
-instance PatternList Int where
-    toList i = [PVal i]
-
-instance (PatternComponent a) => PatternList [a] where
-    toList ps = PList ps
--}
+instance Monad Pattern where
+    return x = PVal x
+    PNothing >>= _ = PNothing
+    PVal x >>= f = f x
+    PGen x >>= f = PGen (\t -> x t >>= f)
+    PSeq p _ >>= f = p >>= f
+    fail _ = PNothing
 
 ------------------------
 -- Pattern Functions
@@ -206,15 +181,15 @@ wrapRange lo hi value
 
 place :: [Pattern a] -> Pattern a
 place list = PGen lace
-	where
-            listLength = fromIntegral $ length list
-            recipLength = 1 / listLength
-            wrapIndex x = wrapRange 0.0 listLength $ (fromIntegral ((floor x) :: Integer))
-            lace time = collapse item index
-                where
-                    wrappedTime = wrapIndex time
-                    item = list !! (floor wrappedTime)
-                    index = ((time - wrappedTime) * recipLength)
+    where
+        listLength = fromIntegral $ length list
+        recipLength = 1 / listLength
+        wrapIndex x = wrapRange 0.0 listLength $ (fromIntegral ((floor x) :: Integer))
+        lace time = collapse item index
+            where
+                wrappedTime = wrapIndex time
+                item = list !! (floor wrappedTime)
+                index = ((time - wrappedTime) * recipLength)
 
 prand :: [Pattern a] -> Pattern a
 prand [] = PNothing
@@ -266,11 +241,13 @@ pwhite (PGen l) h = PGen (\t -> collapse (pwhite (l t) h) t)
 pwhite l (PGen h) = PGen (\t -> collapse (pwhite l (h t)) t)
 pwhite (PVal l) (PVal h) = PGen (\t -> PVal ((randomRs (l, h) stdGen) !! (floor t)))
 
+
 pstutter :: PNum -> Pattern a -> Pattern a
 pstutter PNothing _ = PNothing
 pstutter (PGen f) p = PGen (\t -> collapse (pstutter (f t) p) t)
 pstutter (PVal n) p = PGen (\t -> collapse p (fromIntegral ((floor $ t / n) :: Integer)))
 pstutter (PSeq s _) p = PGen (\t -> collapse (pstutter (collapse s t) p) t)
+
 
 pwrap :: PNum -> PNum -> PNum -> PNum
 pwrap PNothing _ _ = PNothing
@@ -321,3 +298,158 @@ pdelay PNothing _ = PNothing
 pdelay (PSeq s _) p = PGen (\t -> collapse (pdelay (collapse s t) p) t)
 pdelay (PGen f) p = PGen (\t -> collapse (pdelay (f t) p) t)
 pdelay (PVal n) p = PGen (\t -> collapse p (t + n))
+
+
+instance Num a => Num (Pattern a) where
+    (+) = padd
+    (*) = pmul
+    (-) = pminus
+    negate = pnegate 
+    abs = pabs
+    signum = psignum
+    fromInteger = pfromInteger
+
+instance Fractional a => Fractional (Pattern a) where
+    (/) = pdiv
+    fromRational = pfromRational
+
+instance Floating a => Floating (Pattern a) where
+    pi = PVal pi
+    (**) = ppow
+    exp = pexp
+    log = plog
+    sin = pnsin
+    cos = pncos
+    asin = pnasin
+    acos = pnacos
+    atan = pnatan
+    logBase = plogBase
+    sqrt = psqrt
+    tan = ptan
+    tanh = ptanh
+    sinh = psinh
+    cosh = pcosh
+    asinh = pasinh
+    atanh = patanh
+    acosh = pacosh
+
+instance (Eq a) => Eq (Pattern a) where
+    (==) = pequal
+    (/=) = pnotequal
+
+instance (Eq a, Ord a) => Ord (Pattern a) where
+    compare = pcompare
+    max = pmax
+    min = pmin
+
+instance (Enum a) => Enum (Pattern a) where
+    succ a = succ <$> a
+    pred a = pred <$> a
+    toEnum a = PVal (toEnum a)
+    fromEnum = pFromEnum
+
+padd :: (Num a) => Pattern a -> Pattern a -> Pattern a
+padd a b = (+) <$> a <*> b
+
+pminus :: (Num a) => Pattern a -> Pattern a -> Pattern a
+pminus a b = (-) <$> a <*> b
+
+pmul :: (Num a) => Pattern a -> Pattern a -> Pattern a
+pmul a b = (*) <$> a <*> b
+
+pdiv :: (Fractional a) => Pattern a -> Pattern a -> Pattern a
+pdiv a b = (/) <$> a <*> b
+
+ppow :: (Floating a) => Pattern a -> Pattern a -> Pattern a
+ppow a b = (**) <$> a <*> b
+
+pmod :: (Real a) => Pattern a -> Pattern a -> Pattern a
+pmod a b = (F.mod') <$> a <*> b
+
+pnegate :: (Num a) => Pattern a -> Pattern a
+pnegate p = negate <$> p
+
+pabs :: (Num a) => Pattern a -> Pattern a
+pabs p = abs <$> p
+
+psignum :: (Num a) => Pattern a -> Pattern a
+psignum p = signum <$> p
+
+pfromInteger :: (Num a) => Integer -> Pattern a
+pfromInteger i = PVal (fromIntegral i)
+
+pfromRational :: Fractional a => Rational -> Pattern a
+pfromRational a = PVal (fromRational a)
+
+pexp :: (Floating a) => Pattern a -> Pattern a
+pexp a = (exp) <$> a
+
+plog :: (Floating a) => Pattern a -> Pattern a
+plog a = (log) <$> a
+
+pnsin :: (Floating a) => Pattern a -> Pattern a
+pnsin a = (sin) <$> a
+
+pncos :: (Floating a) => Pattern a -> Pattern a
+pncos a = (cos) <$> a
+
+pnasin :: (Floating a) => Pattern a -> Pattern a
+pnasin a = (asin) <$> a
+
+pnacos :: (Floating a) => Pattern a -> Pattern a
+pnacos a = (acos) <$> a
+
+pnatan :: (Floating a) => Pattern a -> Pattern a
+pnatan a = (atan) <$> a
+
+plogBase :: (Floating a) => Pattern a -> Pattern a -> Pattern a
+plogBase a b = (logBase) <$> a <*> b
+
+psqrt :: (Floating a) => Pattern a -> Pattern a
+psqrt a = (sqrt) <$> a
+
+ptan :: (Floating a) => Pattern a -> Pattern a
+ptan a = (tan) <$> a
+
+ptanh :: (Floating a) => Pattern a -> Pattern a
+ptanh a = (tanh) <$> a
+
+psinh :: (Floating a) => Pattern a -> Pattern a
+psinh a = (sinh) <$> a
+
+pcosh :: (Floating a) => Pattern a -> Pattern a
+pcosh a = (cosh) <$> a
+
+pasinh :: (Floating a) => Pattern a -> Pattern a
+pasinh a = (asinh) <$> a
+
+patanh :: (Floating a) => Pattern a -> Pattern a
+patanh a = (atanh) <$> a
+
+pacosh :: (Floating a) => Pattern a -> Pattern a
+pacosh a = (acosh) <$> a
+
+pequal :: (Eq a) => Pattern a -> Pattern a -> Bool
+pequal a b = case (==) <$> a <*> b of
+    PVal x -> x
+    _ -> False
+
+pnotequal :: (Eq a) => Pattern a -> Pattern a -> Bool
+pnotequal a b = case (/=) <$> a <*> b of
+    PVal x -> x
+    _ -> True
+
+pcompare :: (Ord a) => Pattern a -> Pattern a -> Ordering
+pcompare a b = case (compare) <$> a <*> b of
+    PVal x -> x
+    _ -> EQ
+    
+pmax :: (Ord a) => Pattern a -> Pattern a -> Pattern a
+pmax a b = (max) <$> a <*> b
+
+pmin :: (Ord a) => Pattern a -> Pattern a -> Pattern a
+pmin a b = (min) <$> a <*> b
+
+pFromEnum :: (Enum a) => Pattern a -> Int
+pFromEnum (PVal a) = fromEnum a
+pFromEnum _ = fromEnum (0 :: Integer)
