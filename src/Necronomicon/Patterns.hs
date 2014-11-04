@@ -117,7 +117,7 @@ instance (Show a) => Show (Tree a) where
     show (Node tr l) = "(Node " ++ (show tr) ++ " " ++ (show l) ++ ")"
     show (Leaf v) = "(Leaf " ++ (show v) ++ ")"
 
-ptree :: Pattern (Tree a) -> Pattern a
+ptree :: PTree a -> Pattern a
 ptree PNothing = PNothing
 ptree (PGen f) = PGen (\t -> collapse (ptree (f t)) t)
 ptree (PSeq s _) = PGen (\t -> collapse (ptree (collapse s t)) t)
