@@ -11,6 +11,7 @@ import Debug.Trace
 import Control.Concurrent
 import Control.Applicative
 import Control.Monad
+import Data.Monoid
 import System.CPUTime
 import qualified Data.Fixed as F
 
@@ -432,3 +433,7 @@ pmin a b = (min) <$> a <*> b
 pFromEnum :: (Enum a) => Pattern a -> Int
 pFromEnum (PVal a) = fromEnum a
 pFromEnum _ = fromEnum (0 :: Integer)
+
+instance (Monoid a) => Monoid (Pattern a) where
+    mempty = PNothing
+    mappend a b = (mappend) <$> a <*> b
