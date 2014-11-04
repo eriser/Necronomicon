@@ -234,7 +234,6 @@ instance ParsecPatternExpression (ParsecPattern Exp) where
 
     parsecPatternToQExpr (ErrorParsec e) = fail e
 
--- evenMoreTypesBecauseWhyNot :: NP.Pattern (NP.Tree a) -> NP.Pattern (NP.Tree a)
 evenMoreTypesBecauseWhyNot = NP.ptree . NP.PVal
 
 
