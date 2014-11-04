@@ -1,6 +1,6 @@
 module Necronomicon.Language.Layout
        (Pattern(PatternValue,PatternRest,PatternChord,PatternList),
-        lich)
+        lich,toNecroPattern)
        where
 
 import Prelude
@@ -15,6 +15,8 @@ import System.Environment
 import Data.Typeable
 import Data.Data
 import Data.Tree 
+
+import qualified Necronomicon.Patterns as NP
 
 -- modifiers???? How to do this in new layout DSL?
 --list syntactic sugar?
@@ -229,3 +231,7 @@ getName s = do
         Just n  -> n
         Nothing -> mkName s
 
+toNecroPattern :: Pattern a -> NP.Pattern a
+toNecroPattern (PatternValue v)   = NP.PVal v
+toNecroPattern (PatternList ps l) = NP.PTree (map toNecroPattern ps) l
+toNecroPattern _                  = NP.PNothing

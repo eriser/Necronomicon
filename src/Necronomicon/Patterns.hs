@@ -20,13 +20,37 @@ import qualified Data.Fixed as F
 
 type Time = Double
 
-data Pattern a = PGen (Time -> Pattern a) | PSeq (Pattern a) Int | PVal a | PNothing
+data Pattern a = PGen (Time -> Pattern a)
+               | PSeq (Pattern a) Int
+               | PTree [Pattern a] Int
+               | PVal a
+               | PNothing deriving (Show)
 
-instance (Show a) => Show (Pattern a) where
-    show (PGen _) = "PGen (Time -> Double)"
-    show (PSeq p n) = "Pseq (" ++ (show p) ++ ") " ++ (show n)
-    show (PVal a) = show a
-    show PNothing = "PNothing"
+type PNum = Pattern Double
+-- type PList a = Pattern [a]
+
+collapse :: Pattern a -> Time -> Pattern a
+collapse (PGen f) t   = (f t)
+collapse (PSeq p _) t = collapse p t
+collapse PNothing _   = PNothing
+collapse v@(PVal _) _ = v
+collapse (PTree ps l) t = collapse' $ ps !! index
+    where
+        modTime                   = F.mod' t (fromIntegral l)
+        index                     = floor modTime
+        newTime                   = modTime - (fromIntegral index)
+        collapse' pt@(PTree _ l') = collapse pt $ newTime * (fromIntegral l')
+
+        --This is the naive version that returns the last possible value:
+        -- collapse' p               = collapse p newTime
+
+        --This is the exact matching version that requires that time matches exactly.
+        collapse' p               = if (fromIntegral index) == modTime
+                                        then collapse p newTime
+                                        else PNothing
+
+instance Show (Time -> Pattern a) where
+    show _ = "(Time -> Pattern a)"
 
 instance Functor Pattern where
     fmap _ PNothing = PNothing 
@@ -49,14 +73,6 @@ instance Monad Pattern where
     PSeq p _ >>= f = p >>= f
     fail _ = PNothing
 
-type PNum = Pattern Double
-
-collapse :: Pattern a -> Time -> Pattern a
-collapse (PGen f) t = (f t)
-collapse (PSeq p _) t = collapse p t
-collapse PNothing _ = PNothing
-collapse v@(PVal _) _ = v
-
 ------------------------
 -- Pattern Functions
 ------------------------
@@ -75,6 +91,11 @@ runPattern :: (Show a) => Int -> Pattern a -> IO ()
 runPattern n (PSeq p _) = mapM_ (print . collapse p . fromIntegral) [0..(n - 1)]
 runPattern n (PGen p) = mapM_ (print . p . fromIntegral) [0..(n - 1)]
 runPattern n p = mapM_ (\_ -> print p) [0..(n - 1)]
+
+runPatternDivions :: (Show a) => Int -> Int -> Pattern a -> IO()
+runPatternDivions n d p = mapM_ (\n-> putStrLn $ "Time: " ++ (show n) ++ ", value: " ++ (show $ collapse p n)) $ map ((/ (fromIntegral d)) . fromIntegral) [0..(n*d - 1)]
+
+-- runPattern
 
 -- pbind :: ([Double] -> Time -> Double) -> [Pattern] -> Pattern -> IO ()
 -- pbind func args rhythm = print PNothing

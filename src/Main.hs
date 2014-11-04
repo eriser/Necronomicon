@@ -164,20 +164,22 @@ foreign import ccall "startRuntime" startRuntime :: Ptr U.CUGen -> IO ()
 
 main :: IO ()
 main = do
-    ugen <- U.compileUGen U.myCoolSynth
-    ugenPtr <- new ugen
+    -- ugen <- U.compileUGen U.myCoolSynth
+    -- ugenPtr <- new ugen
     print beat
-    print melo
-    print funcs
-    startRuntime ugenPtr
+    -- print melo
+    -- print funcs
+    PN.runPatternDivions 4 2 beat
+    -- startRuntime ugenPtr
 
     -- return ()
     --poke ptr ugen
     --startRuntime ptr
 
-beat = [lich| b s [b b] _ |]
-melo = [lich| 0 (1,2) [3 3] _ |]
-funcs= [lich| (+1) ((*2),(+2),(3/)) _ [(/2) (+2)] |]
+beat = toNecroPattern $ [lich| b s [b d] s |]
+-- melo = [lich| 0 [1 2 [3 [4 5] [6 [7 8] ] 9] 10 11] 12 [13 14] _ |]
+-- melo = [lich| 0 [1 2] 3 [4 [5 6]] |]
+-- funcs= [lich| (+1) ((*2),(+2),(3/)) _ [(/2) (+2)] |]
 -- mix  = [l| 1 2 s _ |]
     
 
