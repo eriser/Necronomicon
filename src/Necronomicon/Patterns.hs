@@ -81,8 +81,8 @@ runPattern n (PSeq p _) = mapM_ (print . collapse p . fromIntegral) [0..(n - 1)]
 runPattern n (PGen p) = mapM_ (print . p . fromIntegral) [0..(n - 1)]
 runPattern n p = mapM_ (\_ -> print p) [0..(n - 1)]
 
-runPatternDivions :: (Show a) => Int -> Int -> Pattern a -> IO()
-runPatternDivions n d p = mapM_ (\t -> putStrLn $ "Time: " ++ (show t) ++ ", value: " ++ (show $ collapse p t)) $ map ((/ (fromIntegral d)) . fromIntegral) [0..(n*d - 1)]
+runPatternDivisions :: (Show a) => Int -> Int -> Pattern a -> IO()
+runPatternDivisions n d p = mapM_ (\t -> putStrLn $ "Time: " ++ (show t) ++ ", value: " ++ (show $ collapse p t)) $ map ((/ (fromIntegral d)) . fromIntegral) [0..(n*d - 1)]
 
 -- runPattern
 
@@ -161,7 +161,7 @@ ploop patterns = PSeq (PGen timeSeq) (floor totalRepeats)
         timeSeq t = (collapse currentPattern currentTime)
             where
                 currentPattern = (cycle repeatedPatterns) !! (floor t)
-                currentTime = fromIntegral $ mod (floor (t - ((cycle repeatedTimes) !! (floor t)))) ((floor totalRepeats) :: Int)
+                currentTime = F.mod' (t - ((cycle repeatedTimes) !! (floor t))) totalRepeats
 
 
 pseq :: Int -> [Pattern a] -> Pattern a
@@ -182,7 +182,7 @@ pseq iterations patterns = PSeq (PGen timeSeq) totalBeats
                     else (collapse currentPattern currentTime)
             where
                 currentPattern = (cycle repeatedPatterns) !! (floor t)
-                currentTime = fromIntegral $ mod (floor (t - ((cycle repeatedTimes) !! (floor t)))) ((floor totalRepeats) :: Int)
+                currentTime = F.mod' (t - ((cycle repeatedTimes) !! (floor t))) totalRepeats
 
 wrapRange :: Double -> Double -> Double -> Double
 wrapRange lo hi value
