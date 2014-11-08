@@ -42,7 +42,7 @@ data ParsecPattern a = ParsecValue a
 
 
 type Time = Double
-data Notation a = Note a | Rest | Chord [a] | TimedNote (Notation a) Time
+data Notation a = Note a | Rest | Chord [(Notation a)] | TimedNote (Notation a) Time
 
 instance (Show a) => Show (Notation a) where
     show (Note a) = "(Note " ++ (show a) ++ ")"
