@@ -172,10 +172,10 @@ main = do
     -- print melo
     -- print funcs
     runPatternDivions 30 2 (pseq 2 [p, p2, p3])
-        where
-            p = [lich| b s [b d] s |]
-            p2 = [lich| q [k l] _ [_ m] |]
-            p3 = [lich| n n _ _ _ _ [n o n o] |]
+    where
+        p  = [lich| b s [b d] s |]
+        p2 = [lich| q [k l] _ [_ m] |]
+        p3 = [lich| n n _ _ _ _ [n o n o] |]
 
         
     -- startRuntime ugenPtr
