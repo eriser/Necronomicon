@@ -249,12 +249,11 @@ parseRawFunction = between (char '(' *> spaces) (spaces *> char ')') (try leftSe
 toValueDuration :: ParsecPattern a -> NP.PList (NP.Pattern a,Double,Time)
 toValueDuration (ParsecValue a) = NP.PVal [(NP.PVal a,1,0)]
 toValueDuration  ParsecRest     = NP.PVal [(NP.PNothing,1,0)]
-toValueDuration (ParsecList as) = NP.PVal $ map (\(v,d,t) -> (v,d,totalTime - t)) $ foldr countTime [] withoutTime 
+toValueDuration (ParsecList as) = NP.PVal $ reverse $ foldl countTime [] withoutTime 
     where
-        totalTime   = foldr (\(_,d) d2 -> d + d2) 0 withoutTime
         withoutTime = foldr (go 1) [] as
-        countTime (v1,d1) []               = (v1,d1,d1) : []
-        countTime (v1,d1) ((v2,d2,t) : vs) = (v1,d1,(d2+t)) : (v2,d2,t) : vs 
+        countTime [] (v,d) = (v,d,0) : []
+        countTime ((v1,d1,t1) : vs) (v2,d2) = (v2,d2,d1+t1) : (v1,d1,t1) : vs
         go d (ParsecValue a) vs = (NP.PVal a,d)   : vs
         go d  ParsecRest     vs = (NP.PNothing,d) : vs
         go d (ParsecList as) vs = foldr (go (d / (fromIntegral $ length as))) vs as
