@@ -169,14 +169,14 @@ main = do
     -- ugen <- U.compileUGen U.myCoolSynth
     -- ugenPtr <- new ugen
     -- print beat
-    -- print melo
+    print melo
     -- print funcs
-    runPatternDivisions 30 4 (pstutter 2 $ pseq 2 [p, p2, p3])
-        where
-            p = [lich| b s [b d] s |]
-            p2 = [lich| q [k l] _ [_ m] |]
-            p3 = [lich| n n _ _ _ _ [n o n o] |]
 
+    -- runPatternDivisions 30 4 (pstutter 2 $ pseq 2 [p, p2, p3])
+        -- where
+            -- p = [lich| b s [b d] s |]
+            -- p2 = [lich| q [k l] _ [_ m] |]
+            -- p3 = [lich| n n _ _ _ _ [n o n o] |]
         
     -- startRuntime ugenPtr
 
@@ -195,7 +195,7 @@ beat = do
     
 
 -- melo = [lich| 0 [1 2 [3 [4 5] [6 [7 8] ] 9] 10 11] 12 [13 14] _ |]
--- melo = [lich| 0 [1 2] 3 [4 [5 6]] |]
+melo = [lich| 0 [1 2] _ [3 [4 5]] 6 |]
 -- funcs= [lich| (+1) ((*2),(+2),(3/)) _ [(/2) (+2)] |]
 -- mix  = [l| 1 2 s _ |]
     
