@@ -13,6 +13,8 @@ import Text.ParserCombinators.Parsec
 import System.Environment
 import qualified Data.Vector as V
 
+import Debug.Trace
+
 import Data.Typeable
 import Data.Data
 import Data.Tree 
@@ -246,7 +248,6 @@ parseRawFunction = between (char '(' *> spaces) (spaces *> char ')') (try leftSe
             -- Nothing -> mkName a
     -- return $ VarE name'
 
-
 layoutToPattern :: ParsecPattern a -> NP.Pattern (NP.Pattern a,Double)
 layoutToPattern (ParsecValue a) = NP.PVal (NP.PVal a,1)
 layoutToPattern  ParsecRest     = NP.PVal (NP.PNothing,1)
@@ -263,20 +264,21 @@ layoutToPattern (ParsecList as) = NP.PSeq (NP.PGen (NP.PVal . pvector withTimes)
 
 
 pvector :: V.Vector(NP.Pattern a,Double,Time) -> Time -> (NP.Pattern a,Double)
-pvector vec time = go time $ div vecLength 2
+pvector vec time = go time 0 vecLength
     where
         vecLength = V.length vec
-        go time index
+        go time imin imax
             | index < 0                         = (\(v,d,t) -> (v,d)) $ vec V.! 0
             | index > vecLength - 1             = (NP.PNothing,1)
             | time == curTime                   = (curValue,curDur)
             | time == prevTime                  = (prevValue,prevDur)
             | time == nextTime                  = (nextValue,nextDur)
-            | time < prevTime                   = go time $ div index 2
-            | time > nextTime                   = go time $ index + div index 2
+            | time < prevTime                   = go time imin $ index - 1
+            | time > nextTime                   = go time (index + 1) imax
             | time < curTime && time > prevTime = (prevValue,prevDur)
             | otherwise                         = (curValue ,curDur)
             where
+                index                        = imin + floor (fromIntegral (imax - imin) / 2)
                 (prevValue,prevDur,prevTime) = vec V.! max (index-1) 0
                 (curValue ,curDur ,curTime)  = vec V.! index
                 (nextValue,nextDur,nextTime) = vec V.! min (index+1) (vecLength -1)
