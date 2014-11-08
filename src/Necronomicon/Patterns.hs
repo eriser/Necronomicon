@@ -261,13 +261,11 @@ pwhite (PGen l) h = PGen (\t -> collapse (pwhite (l t) h) t)
 pwhite l (PGen h) = PGen (\t -> collapse (pwhite l (h t)) t)
 pwhite (PVal l) (PVal h) = PGen (\t -> PVal ((randomRs (l, h) stdGen) !! (floor t)))
 
-
 pstutter :: PNum -> Pattern a -> Pattern a
 pstutter PNothing _ = PNothing
 pstutter (PGen f) p = PGen (\t -> collapse (pstutter (f t) p) t)
-pstutter (PVal n) p = PGen (\t -> collapse p (fromIntegral ((floor $ t / n) :: Integer)))
 pstutter (PSeq s _) p = PGen (\t -> collapse (pstutter (collapse s t) p) t)
-
+pstutter (PVal n) p = PGen (\t -> collapse p (t / n))
 
 pwrap :: PNum -> PNum -> PNum -> PNum
 pwrap PNothing _ _ = PNothing

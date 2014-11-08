@@ -171,7 +171,7 @@ main = do
     -- print beat
     -- print melo
     -- print funcs
-    runPatternDivisions 30 4 (pseq 2 [p, p2, p3])
+    runPatternDivisions 30 4 (pstutter 2 $ pseq 2 [p, p2, p3])
         where
             p = [lich| b s [b d] s |]
             p2 = [lich| q [k l] _ [_ m] |]
