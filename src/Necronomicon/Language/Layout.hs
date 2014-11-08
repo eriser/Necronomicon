@@ -1,6 +1,6 @@
 module Necronomicon.Language.Layout
        -- (Pattern(PatternValue,PatternRest,PatternChord,PatternList),
-        (lich,Notation(Note,Rest,Chord),evenMoreTypesBecauseWhyNot)
+        (lich,Notation(Note,Rest,Chord),toPTree)
        where
 
 import Prelude
@@ -41,7 +41,8 @@ data ParsecPattern a = ParsecValue a
                      deriving (Show)
 
 
-data Notation a = Note a | Rest | Chord [a]
+type Time = Double
+data Notation a = Note a | Rest | Chord [a] | TimedNote (Notation a) Time
 
 instance (Show a) => Show (Notation a) where
     show (Note a) = "(Note " ++ (show a) ++ ")"
@@ -63,7 +64,7 @@ parseParsecPattern input =
     case parse parseExpr "pattern" (('[':input)++[']']) of
         Left  err -> fail $ show err
         Right val -> do
-            name <- getValueName "evenMoreTypesBecauseWhyNot"
+            name <- getValueName "toPTree"
             v <- val
             return $ AppE (VarE name) v
 
@@ -234,7 +235,7 @@ instance ParsecPatternExpression (ParsecPattern Exp) where
 
     parsecPatternToQExpr (ErrorParsec e) = fail e
 
-evenMoreTypesBecauseWhyNot = NP.ptree . NP.PVal
+toPTree = NP.ptree . NP.PVal
 
 
 -- parsecPatternToQExpr (AtomParsecPattern a) = do

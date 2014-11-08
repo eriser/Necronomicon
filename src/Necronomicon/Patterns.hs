@@ -81,8 +81,8 @@ runPattern n (PSeq p _) = mapM_ (print . collapse p . fromIntegral) [0..(n - 1)]
 runPattern n (PGen p) = mapM_ (print . p . fromIntegral) [0..(n - 1)]
 runPattern n p = mapM_ (\_ -> print p) [0..(n - 1)]
 
-runPatternDivions :: (Show a) => Int -> Int -> Pattern a -> IO()
-runPatternDivions n d p = mapM_ (\t -> putStrLn $ "Time: " ++ (show t) ++ ", value: " ++ (show $ collapse p t)) $ map ((/ (fromIntegral d)) . fromIntegral) [0..(n*d - 1)]
+runPatternDivisions :: (Show a) => Int -> Int -> Pattern a -> IO()
+runPatternDivisions n d p = mapM_ (\t -> putStrLn $ "Time: " ++ (show t) ++ ", value: " ++ (show $ collapse p t)) $ map ((/ (fromIntegral d)) . fromIntegral) [0..(n*d - 1)]
 
 -- runPattern
 
@@ -161,7 +161,7 @@ ploop patterns = PSeq (PGen timeSeq) (floor totalRepeats)
         timeSeq t = (collapse currentPattern currentTime)
             where
                 currentPattern = (cycle repeatedPatterns) !! (floor t)
-                currentTime = fromIntegral $ mod (floor (t - ((cycle repeatedTimes) !! (floor t)))) ((floor totalRepeats) :: Int)
+                currentTime = F.mod' (t - ((cycle repeatedTimes) !! (floor t))) totalRepeats
 
 
 pseq :: Int -> [Pattern a] -> Pattern a
@@ -182,7 +182,7 @@ pseq iterations patterns = PSeq (PGen timeSeq) totalBeats
                     else (collapse currentPattern currentTime)
             where
                 currentPattern = (cycle repeatedPatterns) !! (floor t)
-                currentTime = fromIntegral $ mod (floor (t - ((cycle repeatedTimes) !! (floor t)))) ((floor totalRepeats) :: Int)
+                currentTime = F.mod' (t - ((cycle repeatedTimes) !! (floor t))) totalRepeats
 
 wrapRange :: Double -> Double -> Double -> Double
 wrapRange lo hi value
@@ -261,13 +261,11 @@ pwhite (PGen l) h = PGen (\t -> collapse (pwhite (l t) h) t)
 pwhite l (PGen h) = PGen (\t -> collapse (pwhite l (h t)) t)
 pwhite (PVal l) (PVal h) = PGen (\t -> PVal ((randomRs (l, h) stdGen) !! (floor t)))
 
-
 pstutter :: PNum -> Pattern a -> Pattern a
 pstutter PNothing _ = PNothing
 pstutter (PGen f) p = PGen (\t -> collapse (pstutter (f t) p) t)
-pstutter (PVal n) p = PGen (\t -> collapse p (fromIntegral ((floor $ t / n) :: Integer)))
 pstutter (PSeq s _) p = PGen (\t -> collapse (pstutter (collapse s t) p) t)
-
+pstutter (PVal n) p = PGen (\t -> collapse p (t / n))
 
 pwrap :: PNum -> PNum -> PNum -> PNum
 pwrap PNothing _ _ = PNothing
