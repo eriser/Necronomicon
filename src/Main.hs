@@ -169,8 +169,16 @@ main = do
     -- ugen <- U.compileUGen U.myCoolSynth
     -- ugenPtr <- new ugen
     -- print beat
+
     print melo
+    -- print $ pvector 0 melo
+    -- print $ pvector 1 melo
+    -- print $ pvector 2 melo
+    -- print $ pvector 3 melo
+    -- print $ pvector 4 melo
     -- print funcs
+
+    runPatternDivisions 30 4 melo
 
     -- runPatternDivisions 30 4 (pstutter 2 $ pseq 2 [p, p2, p3])
         -- where

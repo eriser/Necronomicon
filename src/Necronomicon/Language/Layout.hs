@@ -1,6 +1,6 @@
 module Necronomicon.Language.Layout
        -- (Pattern(PatternValue,PatternRest,PatternChord,PatternList),
-        (lich,toValueDuration)
+        (lich,layoutToPattern,pvector)
        where
 
 import Prelude
@@ -11,6 +11,7 @@ import Control.Monad
 import Control.Applicative ((<*),(<*>),(*>),some,(<$>),liftA)
 import Text.ParserCombinators.Parsec
 import System.Environment
+import qualified Data.Vector as V
 
 import Data.Typeable
 import Data.Data
@@ -63,7 +64,7 @@ parseParsecPattern input =
     case parse parseExpr "pattern" (('[':input)++[']']) of
         Left  err -> fail $ show err
         Right val -> do
-            name <- getValueName "toValueDuration"
+            name <- getValueName "layoutToPattern"
             v <- val
             return $ AppE (VarE name) v
 
@@ -246,18 +247,39 @@ parseRawFunction = between (char '(' *> spaces) (spaces *> char ')') (try leftSe
     -- return $ VarE name'
 
 
-toValueDuration :: ParsecPattern a -> NP.PList (NP.Pattern a,Double,Time)
-toValueDuration (ParsecValue a) = NP.PVal [(NP.PVal a,1,0)]
-toValueDuration  ParsecRest     = NP.PVal [(NP.PNothing,1,0)]
-toValueDuration (ParsecList as) = NP.PVal $ reverse $ foldl countTime [] withoutTime 
+layoutToPattern :: ParsecPattern a -> NP.Pattern (NP.Pattern a,Double)
+layoutToPattern (ParsecValue a) = NP.PVal (NP.PVal a,1)
+layoutToPattern  ParsecRest     = NP.PVal (NP.PNothing,1)
+layoutToPattern (ParsecList as) = NP.PSeq (NP.PGen (NP.PVal . pvector withTimes)) $ floor timeLength
     where
-        withoutTime = foldr (go 1) [] as
-        countTime [] (v,d) = (v,d,0) : []
+        (_,_,timeLength)        = withTimes V.! (V.length withTimes - 1)
+        withTimes               = V.fromList . reverse $ foldl countTime [] withoutTimes
+        withoutTimes            = foldr (go 1) [] as
+        countTime [] (v,d)      = (v,d,0) : []
         countTime ((v1,d1,t1) : vs) (v2,d2) = (v2,d2,d1+t1) : (v1,d1,t1) : vs
         go d (ParsecValue a) vs = (NP.PVal a,d)   : vs
         go d  ParsecRest     vs = (NP.PNothing,d) : vs
         go d (ParsecList as) vs = foldr (go (d / (fromIntegral $ length as))) vs as
 
+
+pvector :: V.Vector(NP.Pattern a,Double,Time) -> Time -> (NP.Pattern a,Double)
+pvector vec time = go time $ div vecLength 2
+    where
+        vecLength = V.length vec
+        go time index
+            | index < 0                         = (\(v,d,t) -> (v,d)) $ vec V.! 0
+            | index > vecLength - 1             = (NP.PNothing,1)
+            | time == curTime                   = (curValue,curDur)
+            | time == prevTime                  = (prevValue,prevDur)
+            | time == nextTime                  = (nextValue,nextDur)
+            | time < prevTime                   = go time $ div index 2
+            | time > nextTime                   = go time $ index + div index 2
+            | time < curTime && time > prevTime = (prevValue,prevDur)
+            | otherwise                         = (curValue ,curDur)
+            where
+                (prevValue,prevDur,prevTime) = vec V.! max (index-1) 0
+                (curValue ,curDur ,curTime)  = vec V.! index
+                (nextValue,nextDur,nextTime) = vec V.! min (index+1) (vecLength -1)
 
 getName :: String -> Q Name
 getName s = do
