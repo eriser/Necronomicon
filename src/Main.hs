@@ -178,7 +178,10 @@ main = do
     -- print $ pvector 4 melo
     -- print funcs
 
-    runPatternDivisions 30 4 melo
+    threadId <- imp melo
+    input <- getLine
+    return ()
+    --runPatternDivisions 30 4 melo
 
     -- runPatternDivisions 30 4 (pstutter 2 $ pseq 2 [p, p2, p3])
         -- where

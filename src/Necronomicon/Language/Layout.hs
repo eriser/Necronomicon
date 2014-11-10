@@ -44,6 +44,8 @@ data ParsecPattern a = ParsecValue a
 
 
 type Time = Double
+
+{-
 data Notation a = Note a | Rest | Chord [(Notation a)] | TimedNote (Notation a) Time
 
 instance (Show a) => Show (Notation a) where
@@ -51,8 +53,9 @@ instance (Show a) => Show (Notation a) where
     show Rest = "Rest"
     show (Chord as) = "(Chord " ++ (show as) ++ ")"
 
-instance Show (a -> a) where
+instance (Show a) => Show (a -> a) where
     show _ = "(a -> a)"
+-}
 
 ----------------------------------
 -- Parsing with quasi-quotation
