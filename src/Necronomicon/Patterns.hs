@@ -10,7 +10,7 @@ import System.Random
 import Debug.Trace
 import Control.Concurrent
 import Control.Applicative
-import Control.Monad
+import Control.Arrow
 import Data.Monoid
 import System.CPUTime
 import qualified Data.Fixed as F
@@ -62,6 +62,17 @@ instance (Show a) => Show (Pattern a) where
     show (PVal a) = show a
     show PNothing = "PNothing"
 
+{-
+data PArr b c = PArr (b -> (c, PArr b c))
+
+instance Arrow PArr where
+    arr f = PArr f
+    first (PArr f) = PArr (mapFst f)
+        where mapFst g (a, b) = (g a, b)
+    second (PArr g) = PArr (mapSnd g)
+        where mapSnd g (a, b) = (a, g b)
+-}
+
 ------------------------
 -- Pattern Functions
 ------------------------
@@ -75,6 +86,8 @@ stdGen = mkStdGen 1
 
 inf :: Double
 inf = 1 / 0
+
+type TimedValue a = (a, Time)
 
 runPattern :: (Show a) => Int -> Pattern a -> IO ()
 runPattern n (PSeq p _) = mapM_ (print . collapse p . fromIntegral) [0..(n - 1)]
@@ -91,7 +104,30 @@ runPatternDivisions n d p = mapM_ (\t -> putStrLn $ "Time: " ++ (show t) ++ ", v
 
 -- data Pbind = Pbind ([Double] -> Time -> Double) [(Time -> Pattern)] Pattern
 
-pschedule ::(Show a) => Pattern a -> Double -> IO ()
+tempo :: Double
+tempo = 280
+
+tempoSeconds :: Double
+tempoSeconds = 60 / tempo
+
+tempoMillis :: Double
+tempoMillis = tempoSeconds * 1000
+
+tempoMicros :: Double
+tempoMicros = tempoSeconds * 1000000
+
+lookAhead :: Double
+lookAhead = 10000 -- 10 milliseconds
+
+scheduleAhead :: Double
+scheduleAhead = 150000
+
+spawnScheduler :: (Show a) => Pattern (TimedValue a) -> IO (ThreadId)
+spawnScheduler p = do
+    tId <-forkIO (pschedule p 0)
+    return tId
+
+pschedule :: (Show a) => Pattern a -> Double -> IO ()
 pschedule p t = do
     threadDelay 250000
     _ <- getCPUTime
@@ -104,6 +140,12 @@ summon :: (Show a) => Pattern a -> IO (ThreadId)
 summon p = do
     tId <- forkIO (pschedule p 0)
     return tId
+
+imp :: (Show a) => Pattern a -> (Time -> Double)
+imp p = (\t -> 0)
+
+daemon :: (Show a) => Pattern a -> Pattern a -> (Time -> Double)
+daemon s p = (\t -> 0)
 
 wrapResize :: [a] -> [b] -> [a]
 wrapResize [] _ = []
