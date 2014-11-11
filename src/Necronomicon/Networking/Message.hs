@@ -9,9 +9,12 @@ import qualified Data.ByteString.Char8 as C
 type ASCII = C.ByteString
 
 toOSCString :: String -> Datum
-toOSCString = ASCII_String . C.pack
+toOSCString = d_put . C.pack --ASCII_String . C.pack
 
 datumToString :: Datum -> Maybe String
-datumToString (ASCII_String s) = Just $ C.unpack s
-datumToString _                = Nothing
+datumToString d = case d_get d of
+    Just s  -> Just $ C.unpack s
+    Nothing -> Nothing
+-- datumToString (ASCII_String s) = Just $ C.unpack s
+-- datumToString _                = Nothing
 
