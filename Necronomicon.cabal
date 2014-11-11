@@ -6,15 +6,28 @@ License-file:           LICENSE
 Author:                 Chad McKinney and Curtis McKinney
 Maintainer:             chad@chadmckinneyaudio.com
 Build-Type:             Simple
-Cabal-Version:          >=1.2
-Executable Necronomicon
-    Main-is:            Main.hs
+Cabal-Version:          >=1.8
+
+library
     hs-source-dirs:     src
     C-Sources:    		c_lib/Necronomicon.c
     Include-Dirs: 		c_lib
     Install-Includes:	Necronomicon.h
     ghc-options:        -threaded -O3 -Wall
-    extensions: 		FlexibleInstances MultiParamTypeClasses RebindableSyntax ForeignFunctionInterface QuasiQuotes TemplateHaskell DeriveDataTypeable
+    default-extensions: FlexibleInstances MultiParamTypeClasses RebindableSyntax ForeignFunctionInterface QuasiQuotes TemplateHaskell DeriveDataTypeable
+
+    exposed-modules: Necronomicon
+    other-modules:
+        Necronomicon.Language.Layout
+        Necronomicon.Math
+        Necronomicon.Networking
+        Necronomicon.Networking.Client
+        Necronomicon.Networking.Server
+        Necronomicon.Networking.SyncObject
+        Necronomicon.Networking.Message
+        Necronomicon.Networking.User
+        Necronomicon.Patterns
+        Necronomicon.UGen
     Build-Depends:     
         base >= 3 && < 5,
         stm          == 2.4.*,
@@ -25,4 +38,29 @@ Executable Necronomicon
         array,
         random,
         template-haskell >= 2.8.0,
-        parsec == 3.1.*
+        parsec == 3.1.*,
+        network == 2.6.0.*,
+        bytestring == 0.10.*,
+        hosc >= 0.14,
+        stm == 2.4.*
+
+executable PatternTest
+    main-is:          Main.hs
+    default-language: Haskell2010
+    ghc-options:      -threaded -Wall
+    hs-source-dirs:   PatternTest
+    default-extensions: QuasiQuotes TemplateHaskell 
+    build-depends:
+        base             == 4.*,
+        Necronomicon
+
+executable NecroNet
+    main-is:          Main.hs
+    default-language: Haskell2010
+    ghc-options:      -threaded -Wall
+    hs-source-dirs:   NecroNet
+    default-extensions:
+    build-depends:
+        base             == 4.*,
+        Necronomicon
+
