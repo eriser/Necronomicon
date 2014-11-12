@@ -90,7 +90,7 @@ sendQuitOnExit :: String -> Socket -> SomeException -> IO()
 sendQuitOnExit name csock e = do
     let x = show (e :: SomeException)
     putStrLn $ "\nAborted: " ++ x
-    Prelude.catch (send csock $ encodeMessage $ Message "clientLogout" [toOSCString name]) (\e -> print (e :: IOException) >> return 0)
+    Control.Exception.catch (send csock $ encodeMessage $ Message "clientLogout" [toOSCString name]) (\e -> print (e :: IOException) >> return 0)
     exitSuccess
 
 sender :: String -> TChan Message -> Socket -> IO()
@@ -100,7 +100,7 @@ sender name outgoingMesssages sock = do
     case con of
         False -> sender name outgoingMesssages sock
         True  -> do
-            Prelude.catch (send sock $ encodeMessage msg) (\e -> print (e :: IOException) >> return 0)
+            Control.Exception.catch (send sock $ encodeMessage msg) (\e -> print (e :: IOException) >> return 0)
             sender name outgoingMesssages sock
 
 aliveLoop :: String -> TChan Message -> IO ()
@@ -116,7 +116,7 @@ listener incomingMessages sock = do
     case con of
         False -> threadDelay 1000000 >> listener incomingMessages sock
         True  -> do
-            (msg,d) <- Prelude.catch (recvFrom sock 4096) (\e -> print (e :: IOException) >> return (C.pack "",SockAddrUnix "127.0.0.1"))
+            (msg,d) <- Control.Exception.catch (recvFrom sock 4096) (\e -> print (e :: IOException) >> return (C.pack "",SockAddrUnix "127.0.0.1"))
             print "Message size: "
             print $ B.length msg
             case decodeMessage msg of
