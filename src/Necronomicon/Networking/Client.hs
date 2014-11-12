@@ -38,12 +38,6 @@ data Client = Client {
 
 --Merge client states with server states?
 
--- main :: IO ()
--- main = withSocketsDo $ getArgs >>= start
-    -- where
-        -- start ("server":[]) = startServer
-        -- start (name:[])     = startClient name
-
 startClient :: String -> String -> IO()
 startClient name serverIPAddress = print "Starting a client." >> (withSocketsDo $ bracket getSocket sClose $ handler)
     where
@@ -96,14 +90,18 @@ sendQuitOnExit :: String -> Socket -> SomeException -> IO()
 sendQuitOnExit name csock e = do
     let x = show (e :: SomeException)
     putStrLn $ "\nAborted: " ++ x
-    send csock $ encodeMessage $ Message "clientLogout" [toOSCString name]
+    catch (send csock $ encodeMessage $ Message "clientLogout" [toOSCString name]) (\e -> print (e :: IOException) >> return 0)
     exitSuccess
 
 sender :: String -> TChan Message -> Socket -> IO()
 sender name outgoingMesssages sock = do
     msg <- atomically $ readTChan outgoingMesssages
-    send sock $ encodeMessage msg
-    sender name outgoingMesssages sock
+    con <- isConnected sock
+    case con of
+        False -> return ()
+        True  -> do
+            catch (send sock $ encodeMessage msg) (\e -> print (e :: IOException) >> return 0)
+            sender name outgoingMesssages sock
 
 aliveLoop :: String -> TChan Message -> IO ()
 aliveLoop name outgoingMesssages = do
@@ -114,7 +112,7 @@ aliveLoop name outgoingMesssages = do
 
 listener :: TChan Message -> Socket -> IO()
 listener incomingMessages csock = do
-    (msg,d) <- recvFrom csock 4096
+    (msg,d) <- catch (recvFrom csock 4096) (\e -> print (e :: IOException) >> return (C.pack "",SockAddrUnix "127.0.0.1"))
     -- print "Message size: "
     -- print $ B.length msg
     case decodeMessage msg of

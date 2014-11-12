@@ -216,11 +216,21 @@ clientLogout _ _ _ _ server = print "Mismatched arguments in clientLogout messag
 
 
 clientAlive :: [Datum] -> SockAddr -> TChan Message -> TChan (SockAddr,Message) -> Server -> IO Server
-clientAlive (ASCII_String n : Double clientTime : []) sockAddr bm sm server = do
-    -- print $ C.unpack n ++ " is alive."
-    t <- time
-    sendUserMessage (C.unpack n) (Message "clientAliveReply" [Double t,Double clientTime]) sm server
-    return server
+clientAlive (ASCII_String n : Double clientTime : []) sockAddr bm sm server
+        | Map.notMember userName (users server) = do
+            sendUserMessage userName (Message "clientLoginReply" [Int32 1]) sm server'
+            print $ users server'
+            print $ "User logged in: " ++ name user
+            sendUserList bm server'
+            return server'
+        | otherwise = do
+            t <- time
+            sendUserMessage (C.unpack n) (Message "clientAliveReply" [Double t,Double clientTime]) sm server
+            return server
+    where
+        userName = (C.unpack n)
+        user = User userName sockAddr
+        server' = addUser user server
 clientAlive _ _ _ _ server = print "Mismatched arguments in clientAlive message." >> return server
 
 addSyncObject :: [Datum] -> SockAddr -> TChan Message -> TChan (SockAddr,Message) -> Server -> IO Server
