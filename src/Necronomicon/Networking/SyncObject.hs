@@ -6,7 +6,7 @@ import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Char8 as C
 import Sound.OSC.Core
 import Necronomicon.Networking.Message
-import qualified Data.Map.Strict as Map
+import qualified Data.Map as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Foldable as F (toList)
 
