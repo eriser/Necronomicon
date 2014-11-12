@@ -11,7 +11,7 @@ import Network.Socket hiding (send,recv,recvFrom,sendTo)
 import Network.Socket.ByteString
 import Control.Exception
 import Control.Monad (unless,join)
-import qualified Data.Map.Strict as Map
+import qualified Data.Map as Map
 
 import Necronomicon.Networking.User
 import Necronomicon.Networking.Message

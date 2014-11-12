@@ -12,7 +12,7 @@ import Network.Socket.ByteString
 import Control.Exception
 import Control.Monad (unless)
 import System.CPUTime
-import Data.Map.Strict (insert,lookup,empty,Map,member,delete)
+import Data.Map (insert,lookup,empty,Map,member,delete)
 import qualified Data.Sequence as Seq
 
 import Necronomicon.Networking.SyncObject
@@ -72,7 +72,7 @@ startClient name serverIPAddress = print "Starting a client." >> (withSocketsDo 
             insert "sync"             sync             $
             insert "setSyncArg"       setSyncArg       $
             insert "receiveChat"      receiveChat      $
-            Data.Map.Strict.empty
+            Data.Map.empty
 
 testNetworking :: String -> TChan Message -> IO ()
 testNetworking name outgoingMesssages = do
@@ -125,7 +125,7 @@ listener incomingMessages sock = do
                     atomically $ writeTChan incomingMessages m
                     listener incomingMessages sock
 
-messageProcessor :: TVar Client -> TChan Message -> Data.Map.Strict.Map String ([Datum] -> Client -> IO Client) -> IO()
+messageProcessor :: TVar Client -> TChan Message -> Data.Map.Map String ([Datum] -> Client -> IO Client) -> IO()
 messageProcessor client incomingMessages oscFunctions = do
     m <- atomically $ readTChan incomingMessages
     c <- atomically $ readTVar client
@@ -134,9 +134,9 @@ messageProcessor client incomingMessages oscFunctions = do
     atomically $ writeTVar client c'
     messageProcessor client incomingMessages oscFunctions
                     
-processOscMessage :: Message -> Data.Map.Strict.Map String ([Datum] -> Client -> IO Client) -> Client -> IO Client
+processOscMessage :: Message -> Data.Map.Map String ([Datum] -> Client -> IO Client) -> Client -> IO Client
 processOscMessage  (Message address datum) oscFunctions client =
-    case Data.Map.Strict.lookup address oscFunctions of
+    case Data.Map.lookup address oscFunctions of
         Just f  -> f datum client
         Nothing -> print ("No oscFunction found with the address pattern: " ++ address)  >> return client
 
@@ -213,13 +213,13 @@ sync m client = return $ Client (userName client) (users client) (shouldQuit cli
 
 --Remember the locally set no latency for originator trick!
 setSyncArg :: [Datum] -> Client -> IO Client
-setSyncArg (Int32 id : Int32 index : v : []) client = case Data.Map.Strict.lookup (fromIntegral id) (syncObjects client) of
+setSyncArg (Int32 id : Int32 index : v : []) client = case Data.Map.lookup (fromIntegral id) (syncObjects client) of
     Nothing -> return client
     Just so -> do
         print "Set SyncArg: "
         return $ Client (userName client) (users client) (shouldQuit client) newSyncObjects
         where
-            newSyncObjects = Data.Map.Strict.insert (fromIntegral id) (setArg (fromIntegral index) (datumToArg v) so) $ syncObjects client
+            newSyncObjects = Data.Map.insert (fromIntegral id) (setArg (fromIntegral index) (datumToArg v) so) $ syncObjects client
 setSyncArg _ client = return client
 
 receiveChat :: [Datum] -> Client -> IO Client
