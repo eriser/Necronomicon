@@ -44,13 +44,13 @@ data Client = Client {
         -- start ("server":[]) = startServer
         -- start (name:[])     = startClient name
 
-startClient :: String -> IO()
-startClient name = print "Starting a client." >> (withSocketsDo $ bracket getSocket sClose $ handler)
+startClient :: String -> String -> IO()
+startClient name serverIPAddress = print "Starting a client." >> (withSocketsDo $ bracket getSocket sClose $ handler)
     where
         hints = Just $ defaultHints {addrSocketType = Datagram}
 
         getSocket = do
-            (serveraddr:_) <- getAddrInfo hints (Just "127.0.0.1") (Just serverPort)
+            (serveraddr:_) <- getAddrInfo hints (Just serverIPAddress) (Just serverPort)
             sock <- socket (addrFamily serveraddr) Datagram defaultProtocol
             connect sock (addrAddress serveraddr) >> return sock
 
