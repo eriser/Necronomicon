@@ -116,7 +116,7 @@ listener incomingMessages sock = do
     case con of
         False -> threadDelay 1000000 >> listener incomingMessages sock
         True  -> do
-            (msg,d) <- catch (recvFrom sock 4096) (\e -> print (e :: IOException) >> return (C.pack "",SockAddrUnix "127.0.0.1"))
+            (msg,d) <- Prelude.catch (recvFrom sock 4096) (\e -> print (e :: IOException) >> return (C.pack "",SockAddrUnix "127.0.0.1"))
             print "Message size: "
             print $ B.length msg
             case decodeMessage msg of
