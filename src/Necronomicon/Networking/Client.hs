@@ -90,7 +90,7 @@ sendQuitOnExit :: String -> Socket -> SomeException -> IO()
 sendQuitOnExit name csock e = do
     let x = show (e :: SomeException)
     putStrLn $ "\nAborted: " ++ x
-    catch (send csock $ encodeMessage $ Message "clientLogout" [toOSCString name]) (\e -> print (e :: IOException) >> return 0)
+    Prelude.catch (send csock $ encodeMessage $ Message "clientLogout" [toOSCString name]) (\e -> print (e :: IOException) >> return 0)
     exitSuccess
 
 sender :: String -> TChan Message -> Socket -> IO()
@@ -100,7 +100,7 @@ sender name outgoingMesssages sock = do
     case con of
         False -> sender name outgoingMesssages sock
         True  -> do
-            catch (send sock $ encodeMessage msg) (\e -> print (e :: IOException) >> return 0)
+            Prelude.catch (send sock $ encodeMessage msg) (\e -> print (e :: IOException) >> return 0)
             sender name outgoingMesssages sock
 
 aliveLoop :: String -> TChan Message -> IO ()
