@@ -39,7 +39,7 @@ data Client = Client {
 --Merge client states with server states?
 
 startClient :: String -> String -> IO()
-startClient name serverIPAddress = print "Starting a client." >> (withSocketsDo $ bracket getSocket sClose $ handler)
+startClient name serverIPAddress = print "Starting a client." >> (withSocketsDo $ bracket getSocket sClose handler)
     where
         hints = Just $ defaultHints {addrSocketType = Datagram}
 
@@ -98,7 +98,7 @@ sender name outgoingMesssages sock = do
     msg <- atomically $ readTChan outgoingMesssages
     con <- isConnected sock
     case con of
-        False -> return ()
+        False -> sender name outgoingMesssages sock
         True  -> do
             catch (send sock $ encodeMessage msg) (\e -> print (e :: IOException) >> return 0)
             sender name outgoingMesssages sock
@@ -111,15 +111,19 @@ aliveLoop name outgoingMesssages = do
     aliveLoop name outgoingMesssages
 
 listener :: TChan Message -> Socket -> IO()
-listener incomingMessages csock = do
-    (msg,d) <- catch (recvFrom csock 4096) (\e -> print (e :: IOException) >> return (C.pack "",SockAddrUnix "127.0.0.1"))
-    -- print "Message size: "
-    -- print $ B.length msg
-    case decodeMessage msg of
-        Nothing   -> listener incomingMessages csock
-        Just m    -> do
-            atomically $ writeTChan incomingMessages m
-            listener incomingMessages csock
+listener incomingMessages sock = do
+    con <- isReadable sock
+    case con of
+        False -> threadDelay 1000000 >> listener incomingMessages sock
+        True  -> do
+            (msg,d) <- catch (recvFrom sock 4096) (\e -> print (e :: IOException) >> return (C.pack "",SockAddrUnix "127.0.0.1"))
+            print "Message size: "
+            print $ B.length msg
+            case decodeMessage msg of
+                Nothing   -> listener incomingMessages sock
+                Just m    -> do
+                    atomically $ writeTChan incomingMessages m
+                    listener incomingMessages sock
 
 messageProcessor :: TVar Client -> TChan Message -> Data.Map.Strict.Map String ([Datum] -> Client -> IO Client) -> IO()
 messageProcessor client incomingMessages oscFunctions = do
