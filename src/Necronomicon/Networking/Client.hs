@@ -112,7 +112,7 @@ aliveLoop name outgoingMesssages = do
 
 listener :: TChan Message -> Socket -> IO()
 listener incomingMessages sock = do
-    con <- isReadable sock
+    con <- isConnected sock
     case con of
         False -> threadDelay 1000000 >> listener incomingMessages sock
         True  -> do
