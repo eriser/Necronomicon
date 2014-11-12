@@ -14,7 +14,7 @@ Executable Necronomicon
     Include-Dirs: 		c_lib
     Install-Includes:	Necronomicon.h
     ghc-options:        -threaded -O3 -Wall
-    extensions: 		FlexibleInstances MultiParamTypeClasses RebindableSyntax ForeignFunctionInterface QuasiQuotes TemplateHaskell DeriveDataTypeable
+    extensions: 		FlexibleInstances MultiParamTypeClasses RebindableSyntax ForeignFunctionInterface QuasiQuotes TemplateHaskell DeriveDataTypeable BangPatterns
     Build-Depends:     
         base >= 3 && < 5,
         stm          == 2.4.*,
@@ -25,4 +25,5 @@ Executable Necronomicon
         array,
         random,
         template-haskell >= 2.8.0,
-        parsec == 3.1.*
+        parsec == 3.1.*,
+        time

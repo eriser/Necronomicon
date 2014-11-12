@@ -124,18 +124,18 @@ tempoPicos :: Double
 tempoPicos = beatsToSecondsRatio * picosecondsInSecond
 
 picosecondsInSecond :: Double
-picosecondsInSecond = 10e10
+picosecondsInSecond = 10e11
 
 secondsToPicosecondsRatio :: Double
 secondsToPicosecondsRatio = 10e-12
 
 -- Microseconds
-lookAhead :: Int 
-lookAhead = 1000
+lookAhead :: Int
+lookAhead = 10000 -- 1 millisecond
 
 -- Picoseconds
 scheduleAhead :: Integer 
-scheduleAhead = 5000000000
+scheduleAhead = 50000000000 -- 10 milliseconds
 
 -- Beats
 cpuToBeats :: Integer -> Double
@@ -143,31 +143,38 @@ cpuToBeats t = (fromIntegral t) * (secondsToPicosecondsRatio * secondsToBeatsRat
 
 -- Picoseconds
 beatsToCPU :: Double -> Integer
-beatsToCPU s = floor (s * (picosecondsInSecond * beatsToSecondsRatio))
+beatsToCPU b = floor (b * (picosecondsInSecond * beatsToSecondsRatio))
 
-pschedule :: (Show a) => Pattern (Pattern a, Double) -> Integer -> Integer -> Double -> IO ()
-pschedule p startTime time beat = do
+pschedule :: (Show a) => Pattern (Pattern a, Double) -> Integer -> Double -> IO ()
+pschedule !p !time !beat = do
     t <- getCPUTime
     checkTime (fromIntegral t)
     where
-        checkTime t
+        checkTime !t
+            | t > time = do
+                print ("LATE: " ++ (show t) ++ " scheduled time: " ++ (show time) ++ " Late by: " ++ (show (t - time)))
+                dur <- getRes
+                scheduleNext dur
             | t >= (time - scheduleAhead) = do
+                print ("Current time: " ++ (show t))
                 dur <- getRes
                 scheduleNext dur
             | otherwise = do
+                --print ("Thread Delay: " ++ (show lookAhead) ++ " Current Time: " ++ (show t))
                 threadDelay lookAhead
-                pschedule p startTime time beat
+                pschedule p time beat
         getRes = case collapse p beat of
             PVal (pattern, dur) -> do
                 print ("Beat: " ++ (show beat) ++ " Value: " ++ show (collapse pattern beat))
+                print ("Time: " ++ (show time) ++ " (Time - ScheduleAhead): " ++ (show (time - scheduleAhead)))
                 return $ Just dur
             p' -> do
                 print p'
                 return $ Nothing
-        scheduleNext dur = case dur of
+        scheduleNext !dur = case dur of
             Just d -> do
-                threadDelay lookAhead
-                pschedule p startTime (time + beatsToCPU d) (beat + d)
+                print ("Duration: " ++ (show (beatsToCPU d)))
+                pschedule p (time + beatsToCPU d) (beat + d)
             Nothing -> do
                 print "Finished."
                 return ()
@@ -175,7 +182,7 @@ pschedule p startTime time beat = do
 imp :: (Show a) => Pattern (Pattern a, Double) -> IO (ThreadId)
 imp p = do
     t <- getCPUTime
-    tId <- forkIO (pschedule p t t 0) -- This needs to schedule for a down beat, but this is just placeholder for the moment
+    tId <- forkIO (pschedule p (t + (beatsToCPU 1)) 0) -- This needs to schedule for a down beat, but this is just placeholder for the moment
     return tId
 
 daemon :: (Show a) => Pattern a -> Pattern a -> (Time -> Double)
