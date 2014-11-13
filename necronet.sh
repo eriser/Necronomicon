@@ -9,7 +9,7 @@
 # Description:       Enable service provided by daemon.
 ### END INIT INFO
 
-dir="~/Necronomicon"
+dir="./"
 user="lag"
 cmd="NecroNet server"
 
