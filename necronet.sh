@@ -10,7 +10,7 @@
 ### END INIT INFO
 
 dir="./"
-user="lag"
+user=$USER
 cmd="NecroNet server"
 
 name=`basename $0`
