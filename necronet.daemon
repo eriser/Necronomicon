@@ -1,0 +1,3 @@
+necronet {
+    exec = "NecroNet server"
+}
