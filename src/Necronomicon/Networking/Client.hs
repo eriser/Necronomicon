@@ -12,7 +12,7 @@ import Network.Socket.ByteString
 import Control.Exception
 import Control.Monad (unless)
 import System.CPUTime
-import Data.Map.Strict (insert,lookup,empty,Map,member,delete)
+import Data.Map (insert,lookup,empty,Map,member,delete)
 import qualified Data.Sequence as Seq
 
 import Necronomicon.Networking.SyncObject
@@ -39,7 +39,7 @@ data Client = Client {
 --Merge client states with server states?
 
 startClient :: String -> String -> IO()
-startClient name serverIPAddress = print "Starting a client." >> (withSocketsDo $ bracket getSocket sClose $ handler)
+startClient name serverIPAddress = print "Starting a client." >> (withSocketsDo $ bracket getSocket sClose handler)
     where
         hints = Just $ defaultHints {addrSocketType = Datagram}
 
@@ -72,7 +72,7 @@ startClient name serverIPAddress = print "Starting a client." >> (withSocketsDo 
             insert "sync"             sync             $
             insert "setSyncArg"       setSyncArg       $
             insert "receiveChat"      receiveChat      $
-            Data.Map.Strict.empty
+            Data.Map.empty
 
 testNetworking :: String -> TChan Message -> IO ()
 testNetworking name outgoingMesssages = do
@@ -90,7 +90,7 @@ sendQuitOnExit :: String -> Socket -> SomeException -> IO()
 sendQuitOnExit name csock e = do
     let x = show (e :: SomeException)
     putStrLn $ "\nAborted: " ++ x
-    catch (send csock $ encodeMessage $ Message "clientLogout" [toOSCString name]) (\e -> print (e :: IOException) >> return 0)
+    Control.Exception.catch (send csock $ encodeMessage $ Message "clientLogout" [toOSCString name]) (\e -> print (e :: IOException) >> return 0)
     exitSuccess
 
 sender :: String -> TChan Message -> Socket -> IO()
@@ -98,9 +98,9 @@ sender name outgoingMesssages sock = do
     msg <- atomically $ readTChan outgoingMesssages
     con <- isConnected sock
     case con of
-        False -> return ()
+        False -> sender name outgoingMesssages sock
         True  -> do
-            catch (send sock $ encodeMessage msg) (\e -> print (e :: IOException) >> return 0)
+            Control.Exception.catch (send sock $ encodeMessage msg) (\e -> print (e :: IOException) >> return 0)
             sender name outgoingMesssages sock
 
 aliveLoop :: String -> TChan Message -> IO ()
@@ -111,17 +111,21 @@ aliveLoop name outgoingMesssages = do
     aliveLoop name outgoingMesssages
 
 listener :: TChan Message -> Socket -> IO()
-listener incomingMessages csock = do
-    (msg,d) <- catch (recvFrom csock 4096) (\e -> print (e :: IOException) >> return (C.pack "",SockAddrUnix "127.0.0.1"))
-    -- print "Message size: "
-    -- print $ B.length msg
-    case decodeMessage msg of
-        Nothing   -> listener incomingMessages csock
-        Just m    -> do
-            atomically $ writeTChan incomingMessages m
-            listener incomingMessages csock
+listener incomingMessages sock = do
+    con <- isConnected sock
+    case con of
+        False -> threadDelay 1000000 >> listener incomingMessages sock
+        True  -> do
+            (msg,d) <- Control.Exception.catch (recvFrom sock 4096) (\e -> print (e :: IOException) >> return (C.pack "",SockAddrUnix "127.0.0.1"))
+            -- print "Message size: "
+            -- print $ B.length msg
+            case decodeMessage msg of
+                Nothing   -> listener incomingMessages sock
+                Just m    -> do
+                    atomically $ writeTChan incomingMessages m
+                    listener incomingMessages sock
 
-messageProcessor :: TVar Client -> TChan Message -> Data.Map.Strict.Map String ([Datum] -> Client -> IO Client) -> IO()
+messageProcessor :: TVar Client -> TChan Message -> Data.Map.Map String ([Datum] -> Client -> IO Client) -> IO()
 messageProcessor client incomingMessages oscFunctions = do
     m <- atomically $ readTChan incomingMessages
     c <- atomically $ readTVar client
@@ -130,9 +134,9 @@ messageProcessor client incomingMessages oscFunctions = do
     atomically $ writeTVar client c'
     messageProcessor client incomingMessages oscFunctions
                     
-processOscMessage :: Message -> Data.Map.Strict.Map String ([Datum] -> Client -> IO Client) -> Client -> IO Client
+processOscMessage :: Message -> Data.Map.Map String ([Datum] -> Client -> IO Client) -> Client -> IO Client
 processOscMessage  (Message address datum) oscFunctions client =
-    case Data.Map.Strict.lookup address oscFunctions of
+    case Data.Map.lookup address oscFunctions of
         Just f  -> f datum client
         Nothing -> print ("No oscFunction found with the address pattern: " ++ address)  >> return client
 
@@ -209,13 +213,13 @@ sync m client = return $ Client (userName client) (users client) (shouldQuit cli
 
 --Remember the locally set no latency for originator trick!
 setSyncArg :: [Datum] -> Client -> IO Client
-setSyncArg (Int32 id : Int32 index : v : []) client = case Data.Map.Strict.lookup (fromIntegral id) (syncObjects client) of
+setSyncArg (Int32 id : Int32 index : v : []) client = case Data.Map.lookup (fromIntegral id) (syncObjects client) of
     Nothing -> return client
     Just so -> do
         print "Set SyncArg: "
         return $ Client (userName client) (users client) (shouldQuit client) newSyncObjects
         where
-            newSyncObjects = Data.Map.Strict.insert (fromIntegral id) (setArg (fromIntegral index) (datumToArg v) so) $ syncObjects client
+            newSyncObjects = Data.Map.insert (fromIntegral id) (setArg (fromIntegral index) (datumToArg v) so) $ syncObjects client
 setSyncArg _ client = return client
 
 receiveChat :: [Datum] -> Client -> IO Client
