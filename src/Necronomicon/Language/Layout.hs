@@ -254,7 +254,7 @@ parseRawFunction = between (char '(' *> spaces) (spaces *> char ')') (try leftSe
 layoutToPattern :: ParsecPattern a -> NP.Pattern (NP.Pattern a,Double)
 layoutToPattern (ParsecValue a) = NP.PVal (NP.PVal a,1)
 layoutToPattern  ParsecRest     = NP.PVal (NP.PNothing,1)
-layoutToPattern (ParsecList as) = NP.PSeq (NP.PGen (NP.PVal . pvector withTimes)) $ floor timeLength
+layoutToPattern (ParsecList as) = NP.PSeq (NP.PGen $ pvector withTimes) $ floor timeLength
     where
         (_,_,timeLength)        = withTimes V.! (V.length withTimes - 1)
         withTimes               = V.fromList . reverse $ foldl countTime [] withoutTimes
@@ -266,20 +266,20 @@ layoutToPattern (ParsecList as) = NP.PSeq (NP.PGen (NP.PVal . pvector withTimes)
         go d (ParsecList as) vs = foldr (go (d / (fromIntegral $ length as))) vs as
 
 
-pvector :: V.Vector(NP.Pattern a,Double,Time) -> Time -> (NP.Pattern a,Double)
+pvector :: V.Vector(NP.Pattern a,Double,Time) -> Time -> NP.Pattern (NP.Pattern a,Double)
 pvector vec time = go time 0 vecLength
     where
         vecLength = V.length vec
         go time imin imax
-            | index < 0                         = (\(v,d,t) -> (v,d)) $ vec V.! 0
-            | index > vecLength - 1             = (NP.PNothing,1)
-            | time == curTime                   = (curValue,curDur)
-            | time == prevTime                  = (prevValue,prevDur)
-            | time == nextTime                  = (nextValue,nextDur)
+            | index < 0                         = NP.PVal $ (\(v,d,t) -> (v,d)) $ vec V.! 0
+            | index > vecLength - 1             = NP.PNothing
+            | time == curTime                   = NP.PVal (curValue,curDur)
+            | time == prevTime                  = NP.PVal (prevValue,prevDur)
+            | time == nextTime                  = NP.PVal (nextValue,nextDur)
             | time < prevTime                   = go time imin $ index - 1
             | time > nextTime                   = go time (index + 1) imax
-            | time < curTime && time > prevTime = (prevValue,prevDur)
-            | otherwise                         = (curValue ,curDur)
+            | time < curTime && time > prevTime = NP.PVal (prevValue,prevDur)
+            | otherwise                         = NP.PVal (curValue ,curDur)
             where
                 index                        = imin + floor (fromIntegral (imax - imin) / 2)
                 (prevValue,prevDur,prevTime) = vec V.! max (index-1) 0

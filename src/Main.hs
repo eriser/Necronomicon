@@ -162,6 +162,8 @@ import Control.Applicative
 --U.myCoolSynth . U.Time
 import Data.Monoid
 
+import Necronomicon.Networking.Client
+
 foreign import ccall "startRuntime" startRuntime :: Ptr U.CUGen -> IO ()
 
 main :: IO ()
