@@ -1,5 +1,5 @@
 module Necronomicon.FRP.Signal (
-    Signal(step),
+    Signal,
     effectful,
     effectful1,
     every,
@@ -7,6 +7,8 @@ module Necronomicon.FRP.Signal (
     second,
     minute,
     hour,
+    updateLoop,
+    foldp,
     module Control.Applicative
     ) where
 
@@ -26,10 +28,10 @@ ifThenElse :: Bool -> a -> a -> a
 ifThenElse True a _ = a
 ifThenElse False _ b = b
 
--- (Time -> Signal (IO a))
--- | SignalValue (IO a)
+updateLoop :: Signal a -> IO (Time -> IO a)
+updateLoop (SignalGenerator s) = s
 
-data Signal a = SignalGenerator {step :: Time -> IO a} deriving (Show)
+data Signal a = SignalGenerator (IO (Time -> IO a)) deriving (Show)
 
 instance Functor Signal where
     fmap = liftM
@@ -39,30 +41,42 @@ instance Applicative Signal where
     (<*>) = ap
 
 instance Monad Signal where
-    return x                = SignalGenerator $ \_ -> return x
-    SignalGenerator g >>= f = SignalGenerator $ \t -> g t >>= \x -> step (f x) t
+    return x                = SignalGenerator $ return $ \_ -> return x
+    SignalGenerator g >>= f = SignalGenerator $ do
+        gFunc    <- g
+        return $ \t -> do
+            gResult  <- gFunc t
+            let (SignalGenerator fResult) = f gResult
+            fResult' <- fResult
+            fResult' t
 
-instance Show (Time -> IO a) where
-    show _ = "(Time -> IO a)"
+instance Show (IO a) where
+    show _ = "IO a"
 
 effectful :: IO a -> Signal a
-effectful action = SignalGenerator $ \_ -> action
+effectful action = SignalGenerator $ return $ \_ -> action
 
 effectful1 :: (t -> IO a) -> Signal t -> Signal a
-effectful1 f (SignalGenerator g) = SignalGenerator $ \t -> g t >>= f
+effectful1 f (SignalGenerator g) = SignalGenerator $ do
+    gFunc <- g
+    return $ \t -> do
+        gResult <- gFunc t
+        f gResult
 
-
-
+foldp :: (a -> b -> b) -> b -> Signal a -> Signal b
+foldp f b (SignalGenerator sigA) = SignalGenerator $ do
+    ref <- newIORef b
+    return $ \t -> do
+        aFunc <- sigA
+        a     <- aFunc t
+        rb    <- readIORef ref
+        let b' = f a rb
+        b' `seq` writeIORef ref b'
+        return b'
+    
 ---------------------------------------------
 -- Time
 ---------------------------------------------
-
--- runTime :: Signal Time
--- runTime = effectful $
-    -- getTime >>= \t ->
-    -- case t of
-        -- Just time -> return time
-        -- Nothing   -> return 0
 
 millisecond :: Time
 millisecond = 0.001
@@ -86,5 +100,6 @@ toHours :: Time -> Time
 toHours t = t / 3600
 
 every :: Time -> Signal Time
-every count = SignalGenerator $ \time -> return $ count * (fromIntegral $ floor $ time / count)
-            
+every count = SignalGenerator $ return $ \time -> return $ count * (fromIntegral $ floor $ time / count)
+
+
