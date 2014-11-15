@@ -28,12 +28,6 @@ import qualified Necronomicon.Patterns as NP
 -- Data types
 ---------------
 
--- | Generic pattern container type
--- data Pattern a = PatternValue a
-               -- | PatternRest
-               -- | PatternChord [a]
-               -- | PatternList [Pattern a] Int
-               -- deriving (Show)
 
 -- | The data structure used for internal syntax parsing of patterns from quasi-quotations in layout form.
 data ParsecPattern a = ParsecValue a
@@ -300,9 +294,3 @@ getValueName s = do
         Just n  -> n
         Nothing -> mkName s
 
-
--- toTree :: Pattern a -> NP.Tree (Notation a)
--- toTree (PatternValue v)   = NP.Leaf (Note v)
--- toTree (PatternList ps l) = NP.Node (map toTree ps) l
--- toTree PatternRest        = NP.Leaf Rest
--- toTree (PatternChord ps)  = NP.Leaf (Chord ps)
