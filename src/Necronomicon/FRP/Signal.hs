@@ -38,7 +38,13 @@ instance Functor Signal where
 
 instance Applicative Signal where
     pure  = return
-    (<*>) = ap
+    SignalGenerator g <*> SignalGenerator y = SignalGenerator $ do
+        gFunc  <- g
+        yFunc  <- y
+        return $ \t -> do
+            gResult <- gFunc t
+            yResult <- yFunc t
+            return $ gResult yResult
 
 instance Monad Signal where
     return x                = SignalGenerator $ return $ \_ -> return x
@@ -73,7 +79,7 @@ foldp f b (SignalGenerator sigA) = SignalGenerator $ do
         let b' = f a rb
         b' `seq` writeIORef ref b'
         return b'
-    
+
 ---------------------------------------------
 -- Time
 ---------------------------------------------
@@ -101,5 +107,4 @@ toHours t = t / 3600
 
 every :: Time -> Signal Time
 every count = SignalGenerator $ return $ \time -> return $ count * (fromIntegral $ floor $ time / count)
-
 

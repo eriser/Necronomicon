@@ -13,8 +13,11 @@ main = do
     return ()
 
 lichMain :: Signal ()
-lichMain = lichPrint $ every $ 3 * second
--- lichMain = lichPrint $ foldp (+) 0 (pure 1)
+-- lichMain = lichPrint $ every $ 3 * second
+lichMain = lichPrint doubler
+    where
+        result  = foldp (+) 0 (pure 1)
+        doubler = (+) <$> result <*> result
 
 lichPrint :: (Show a) => Signal a -> Signal ()
 lichPrint = effectful1 print
