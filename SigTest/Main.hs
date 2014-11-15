@@ -5,16 +5,19 @@ import Control.Monad (join)
 
 main :: IO ()
 main = do
-    loop <- updateLoop lichMain
-    loop 0
-    loop 1
-    loop 2
-    loop 3
+    loop <- updateLoop doubles
+    mapM_ (lichLoop loop) [0..20]
     return ()
+    where
+        lichLoop loop n = do
+            result <- loop n
+            print result
 
-lichMain :: Signal ()
--- lichMain = lichPrint $ every $ 3 * second
-lichMain = lichPrint doubler
+everyThree :: Signal Double
+everyThree = every $ 3 * second
+
+doubles :: Signal Int
+doubles = doubler
     where
         result  = foldp (+) 0 (pure 1)
         doubler = (+) <$> result <*> result
