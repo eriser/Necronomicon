@@ -20,7 +20,7 @@ doubles :: Signal Int
 doubles = doubler
     where
         result  = foldp (+) 0 (pure 1)
-        doubler = (+) <$> result <*> result
+        doubler = (+) <~ result ~~ result
 
 lichPrint :: (Show a) => Signal a -> Signal ()
 lichPrint = effectful1 print
