@@ -24,7 +24,6 @@ import Necronomicon
 
 -- import Necronomicon.Networking.Client
 
-
 main :: IO ()
 main = do
     -- ugen <- U.compileUGen U.myCoolSynth

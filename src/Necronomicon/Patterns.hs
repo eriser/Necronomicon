@@ -13,6 +13,7 @@ import Control.Applicative
 import Control.Arrow
 import Data.Monoid
 import System.CPUTime
+import Sound.OSC.Time
 import qualified Data.Fixed as F
 
 (~>) :: a -> (a -> b) -> b
@@ -108,6 +109,8 @@ newtype Seconds = Seconds Double
 newtype Picoseconds = Picoseconds Integer
 newtype Microseconds = Microseconds Integer
 
+type Beat = Double
+
 tempo :: Double
 tempo = 120
 
@@ -124,18 +127,22 @@ tempoPicos :: Double
 tempoPicos = beatsToSecondsRatio * picosecondsInSecond
 
 picosecondsInSecond :: Double
-picosecondsInSecond = 10e10
+picosecondsInSecond = 10e11
 
 secondsToPicosecondsRatio :: Double
 secondsToPicosecondsRatio = 10e-12
 
 -- Microseconds
-lookAhead :: Int 
-lookAhead = 1000
+lookAhead :: Int
+lookAhead = 5000 -- 10 milliseconds
 
 -- Picoseconds
-scheduleAhead :: Integer 
-scheduleAhead = 5000000000
+-- scheduleAhead :: Integer 
+-- scheduleAhead = 50000000000 -- 10 milliseconds
+
+-- Seconds
+scheduleAhead :: Time
+scheduleAhead = 0.04
 
 -- Beats
 cpuToBeats :: Integer -> Double
@@ -143,39 +150,37 @@ cpuToBeats t = (fromIntegral t) * (secondsToPicosecondsRatio * secondsToBeatsRat
 
 -- Picoseconds
 beatsToCPU :: Double -> Integer
-beatsToCPU s = floor (s * (picosecondsInSecond * beatsToSecondsRatio))
+beatsToCPU b = floor (b * (picosecondsInSecond * beatsToSecondsRatio))
 
-pschedule :: (Show a) => Pattern (Pattern a, Double) -> Integer -> Integer -> Double -> IO ()
-pschedule p startTime time beat = do
-    t <- getCPUTime
-    checkTime (fromIntegral t)
+beatsToTime :: Beat -> Time
+beatsToTime b = b * beatsToSecondsRatio
+
+beatsToMicro :: Double -> Int
+beatsToMicro b = floor (b * tempoMicros)
+
+pschedule :: (Show a) => Pattern (Pattern a, Double) -> Time -> Beat -> IO ()
+pschedule !p !scheduledTime !beat = do
+    t <- time
+    checkTime t
     where
-        checkTime t
-            | t >= (time - scheduleAhead) = do
-                dur <- getRes
-                scheduleNext dur
+        checkTime !t
+            | t >= (scheduledTime - scheduleAhead) = case collapse p beat of
+                PVal (pattern, dur) -> do
+                    print ("Beat: " ++ (show beat) ++ " Value: " ++ show (collapse pattern beat))
+                    pschedule p (scheduledTime + beatsToTime dur) (beat + dur)
+                p' -> do
+                    print p'
+                    print "Finished."
+                    return ()
             | otherwise = do
-                threadDelay lookAhead
-                pschedule p startTime time beat
-        getRes = case collapse p beat of
-            PVal (pattern, dur) -> do
-                print ("Beat: " ++ (show beat) ++ " Value: " ++ show (collapse pattern beat))
-                return $ Just dur
-            p' -> do
-                print p'
-                return $ Nothing
-        scheduleNext dur = case dur of
-            Just d -> do
-                threadDelay lookAhead
-                pschedule p startTime (time + beatsToCPU d) (beat + d)
-            Nothing -> do
-                print "Finished."
-                return ()
+                threadDelay (floor $ (scheduledTime - t) * 100000) -- (scheduledTime - currentTime) / 10 for sleep time
+                pschedule p scheduledTime beat
 
 imp :: (Show a) => Pattern (Pattern a, Double) -> IO (ThreadId)
 imp p = do
-    t <- getCPUTime
-    tId <- forkIO (pschedule p t t 0) -- This needs to schedule for a down beat, but this is just placeholder for the moment
+    t <- time
+    tId <- forkIO (pschedule p (t + (beatsToTime 1)) 0) -- This needs to schedule for a down beat, but this is just placeholder for the moment
+    -- mapM_ (\_ -> forkIO (pschedule p (t + (beatsToTime 1)) 0)) [1..100]
     return tId
 
 daemon :: (Show a) => Pattern a -> Pattern a -> (Time -> Double)
