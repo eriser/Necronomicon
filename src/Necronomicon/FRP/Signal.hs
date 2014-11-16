@@ -7,11 +7,16 @@ module Necronomicon.FRP.Signal (
     second,
     minute,
     hour,
-    updateLoop,
     foldp,
     fps,
     (<~),
     (~~),
+    runSignal,
+    Key,
+    isDown,
+    mousePos,
+    wasd,
+    dimensions,
     module Control.Applicative
     ) where
 
@@ -21,9 +26,6 @@ import Prelude hiding (until)
 import Control.Monad
 import qualified Graphics.UI.GLFW as GLFW
 import qualified Data.Fixed as F
-
-(~>) :: a -> (a -> b) -> b
-(~>) a f = f a
 
 (<~) :: Functor f => (a -> b) -> f a -> f b
 (<~) = fmap
@@ -39,47 +41,44 @@ ifThenElse :: Bool -> a -> a -> a
 ifThenElse True a _ = a
 ifThenElse False _ b = b
 
-updateLoop :: Signal a -> IO (Time -> IO a)
-updateLoop (SignalGenerator s) = s
-
-data Signal a = SignalGenerator (IO (Time -> IO a)) deriving (Show)
+data Signal a = SignalGenerator (IO (Time -> GLFW.Window -> IO a)) deriving (Show)
 
 instance Functor Signal where
     fmap f (SignalGenerator g) = SignalGenerator $ do
         gFunc  <- g
-        return $ \t -> do
-            gResult <- gFunc t
+        return $ \t w -> do
+            gResult <- gFunc t w
             return $ f gResult
 
 instance Applicative Signal where
-    pure  x = SignalGenerator $ return $ \_ -> return x
+    pure  x = SignalGenerator $ return $ \_ _ -> return x
     SignalGenerator g <*> SignalGenerator y = SignalGenerator $ do
         gFunc  <- g
         yFunc  <- y
-        return $ \t -> do
-            gResult <- gFunc t
-            yResult <- yFunc t
+        return $ \t w -> do
+            gResult <- gFunc t w
+            yResult <- yFunc t w
             return $ gResult yResult
 
 instance Show (IO a) where
     show _ = "IO a"
 
 effectful :: IO a -> Signal a
-effectful action = SignalGenerator $ return $ \_ -> action
+effectful action = SignalGenerator $ return $ \_ _-> action
 
 effectful1 :: (t -> IO a) -> Signal t -> Signal a
 effectful1 f (SignalGenerator g) = SignalGenerator $ do
     gFunc <- g
-    return $ \t -> do
-        gResult <- gFunc t
+    return $ \t w -> do
+        gResult <- gFunc t w
         f gResult
 
 foldp :: (a -> b -> b) -> b -> Signal a -> Signal b
 foldp f b (SignalGenerator g) = SignalGenerator $ do
     gFunc <- g
     ref <- newIORef b
-    return $ \t -> do
-        gResult <- gFunc t
+    return $ \t w -> do
+        gResult <- gFunc t w
         rb      <- readIORef ref
         let b'   = f gResult rb
         writeIORef ref b'
@@ -89,17 +88,15 @@ delay :: a -> Signal a -> Signal a
 delay init (SignalGenerator g) = SignalGenerator $ do
     gFunc <- g
     ref <- newIORef init
-    return $ \t -> do
-        gResult <- gFunc t
+    return $ \t w -> do
+        gResult <- gFunc t w
         prev    <- readIORef ref
         writeIORef ref gResult
         return prev
 
--- change :: Signal a -> Signal Bool
--- change (SignalGenerator g) = SignalGenerator $ do
-    -- gFunc <- g
-    -- return $ \t -> do
-        -- gResult <- gFunc t
+lift  = liftA
+-- lift2 = liftA2
+-- lift3 = liftA3
 
 ---------------------------------------------
 -- Time
@@ -127,13 +124,13 @@ toHours :: Time -> Time
 toHours t = t / 3600
 
 every :: Time -> Signal Time
-every count = SignalGenerator $ return $ \time -> return $ count * (fromIntegral $ floor $ time / count)
+every count = SignalGenerator $ return $ \time _ -> return $ count * (fromIntegral $ floor $ time / count)
 
 --Not quite right
 fps :: Double -> Signal Time
 fps number = SignalGenerator $ do
     ref <- newIORef 0
-    return $ \time -> do
+    return $ \time _ -> do
         previousTime <- readIORef ref
         let delta = time - previousTime
         writeIORef ref time
@@ -143,27 +140,120 @@ fps number = SignalGenerator $ do
 -- Input
 ---------------------------------------------
 
-isKeyDown :: GLFW.Window -> GLFW.Key -> Signal Bool
-isKeyDown w k = effectful $ GLFW.getKey w k >>= return . (== GLFW.KeyState'Pressed)
+type Key  = GLFW.Key
+keyW = GLFW.Key'W
+keyA = GLFW.Key'A
+keyS = GLFW.Key'S
+keyD = GLFW.Key'D
 
--- wasd :: Window -> SignalGen(Signal Vector2)
--- wasd win = effectful <|
-    -- getKey win Key'W >>= \w ->
-    -- getKey win Key'A >>= \a ->
-    -- getKey win Key'S >>= \s ->
-    -- getKey win Key'D >>= \d ->
-    -- return <| Vector2
-        -- ((if d==KeyState'Pressed then 1 else 0) + (if a==KeyState'Pressed then (-1) else 0))
-        -- ((if w==KeyState'Pressed then 1 else 0) + (if s==KeyState'Pressed then (-1) else 0))
+isDown :: Key -> Signal Bool
+isDown k = SignalGenerator $ return $ \_ w -> do
+    d <- GLFW.getKey w k
+    return $ d == GLFW.KeyState'Pressed
 
--- cursorPos :: Window -> SignalGen(Signal Vector2)
--- cursorPos win = effectful <|
-    -- getCursorPos win       >>= \(x,y) ->
-    -- getFramebufferSize win >>= \(w,h) ->
-    -- return <| Vector2 (x - 0.5 * (fromIntegral w)) (y - 0.5 * (fromIntegral h))
-      
+wasd :: Signal (Double,Double)
+wasd = SignalGenerator $ return $ \_ w -> do
+    wd <- GLFW.getKey w keyW
+    ad <- GLFW.getKey w keyA
+    sd <- GLFW.getKey w keyS
+    dd <- GLFW.getKey w keyD
+    return $ (((if dd==GLFW.KeyState'Pressed then 1 else 0) + (if ad==GLFW.KeyState'Pressed then (-1) else 0)),
+              ((if wd==GLFW.KeyState'Pressed then 1 else 0) + (if sd==GLFW.KeyState'Pressed then (-1) else 0)))
 
--- dimensions :: Window -> SignalGen(Signal Vector2)
--- dimensions w = effectful <| getFramebufferSize w >>= \(wi,hi) -> return <| Vector2 (fromIntegral wi) (fromIntegral hi)
+mousePos :: Signal (Double,Double)
+mousePos = SignalGenerator $ return $ \_ w -> do
+    (x,y) <- GLFW.getCursorPos w
+    (w,h) <- GLFW.getFramebufferSize w
+    return $ ((x - 0.5 * fromIntegral w),(y - 0.5 * fromIntegral h))
+
+dimensions :: Signal (Int,Int)
+dimensions = SignalGenerator $ return $ \_ w -> do
+    (wi,hi) <- GLFW.getFramebufferSize w
+    return $ (fromIntegral wi,fromIntegral hi)
+
+
+---------------------------------------------
+-- Instances
+---------------------------------------------
+
+instance Num a => Num (Signal a) where
+    (+)         = liftA2 (+)
+    (*)         = liftA2 (*)
+    (-)         = liftA2 (-)
+    negate      = lift negate
+    abs         = lift abs
+    signum      = lift signum
+    fromInteger = pure . fromInteger
+
+instance Fractional a => Fractional (Signal a) where
+    (/) = liftA2 (/)
+    fromRational = pure . fromRational
+
+instance Floating a => Floating (Signal a) where
+    pi      = pure pi
+    (**)    = liftA2 (**)
+    exp     = lift exp
+    log     = lift log
+    sin     = lift sin
+    cos     = lift cos
+    asin    = lift asin
+    acos    = lift acos
+    atan    = lift atan
+    logBase = liftA2 logBase
+    sqrt    = lift sqrt
+    tan     = lift tan
+    tanh    = lift tanh
+    sinh    = lift sinh
+    cosh    = lift cosh
+    asinh   = lift asinh
+    atanh   = lift atanh
+    acosh   = lift acosh
+
+-- instance (Eq a) => Eq (Signal a) where
+    -- (==) = liftA2 (==)
+    -- (/=) = liftA2 (/=)
+
+-- instance (Eq a, Ord a) => Ord (Signal a) where
+    -- compare = liftA2 compare
+    -- max     = liftA2 max
+    -- min     = liftA2 min
+
+instance (Enum a) => Enum (Signal a) where
+    succ     = lift succ
+    pred     = lift pred
+    -- toEnum   = lift toEnum
+    -- fromEnum = pure
+
+---------------------------------------------
+-- Loop
+---------------------------------------------
+
+initWindow :: IO(Maybe GLFW.Window)
+initWindow = GLFW.init >>= \initSuccessful -> if initSuccessful then window else return Nothing
+    where
+        mkWindow = GLFW.createWindow 960 640 "Necronomicon" Nothing Nothing
+        window   = mkWindow >>= \w -> GLFW.makeContextCurrent w >> return w
+
+runSignal :: (Show a) => Signal a -> IO()
+runSignal (SignalGenerator signal) = do
+    mw <- initWindow
+    case mw of
+        Nothing -> print "Error starting GLFW." >> return ()
+        Just w  -> do
+            signalLoop <- signal
+            render False signalLoop w
+    where
+        render quit signalLoop window
+            | quit      = print "Qutting" >> return ()
+            | otherwise = do
+                GLFW.pollEvents
+                q      <- liftA (== GLFW.KeyState'Pressed) (GLFW.getKey window GLFW.Key'Q)
+                t      <- GLFW.getTime
+                let time = case t of
+                        Nothing -> 0
+                        Just t' -> t'
+                result <- signalLoop time window
+                print result
+                render q signalLoop window
 
 

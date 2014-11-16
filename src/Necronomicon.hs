@@ -17,6 +17,6 @@ import Foreign
 import Foreign.C
 import GHC.Float
 
-foreign import ccall "startRuntime" startRuntime :: Ptr CUGen -> IO ()
 
+foreign import ccall "startRuntime" startRuntime :: Ptr CUGen -> IO ()
 

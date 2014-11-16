@@ -1,26 +1,26 @@
 module Main where
 
 import Necronomicon.FRP
-import Control.Monad (join)
 
 main :: IO ()
-main = do
-    loop <- updateLoop doubles
-    mapM_ (lichLoop loop) [0..20]
-    return ()
-    where
-        lichLoop loop n = do
-            result <- loop n
-            print result
+main = runSignal mousePos
 
-everyThree :: Signal Double
-everyThree = every $ 3 * second
+everySecond :: Signal Double
+everySecond = every second
+
+sampleCount :: Signal Int
+sampleCount = foldp (+) 0 (pure 1)
 
 doubles :: Signal Int
-doubles = doubler
-    where
-        result  = foldp (+) 0 (pure 1)
-        doubler = (+) <~ result ~~ result
+doubles = sampleCount + sampleCount
+
+negativeCount :: Signal Int
+negativeCount = negate sampleCount
+
+squaredCount :: Signal Int
+squaredCount = sampleCount * sampleCount
 
 lichPrint :: (Show a) => Signal a -> Signal ()
 lichPrint = effectful1 print
+
+
