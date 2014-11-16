@@ -25,8 +25,11 @@ import Necronomicon
 -- import Necronomicon.Networking.Client
 
 
+foreign import ccall "test_list" testList :: IO ()
+
 main :: IO ()
 main = do
+    testList
     -- ugen <- U.compileUGen U.myCoolSynth
     -- ugenPtr <- new ugen
     -- print beat

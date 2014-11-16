@@ -148,7 +148,7 @@ import qualified Foreign.C.Error as E
 import System.Environment (getProgName)
 import Debug.Trace
 
-import Data.Array.MArray (writeArray, )
+import Data.Array.MArray (writeArray)
 import Foreign
 import Foreign.C
 import GHC.Float

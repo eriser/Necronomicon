@@ -221,18 +221,6 @@ Signal negateCalc(void* args, double time)
 }
 
 //////////////
-// Scheduler
-//////////////
-
-typedef void SchedulerCallback(double time);
-
-typedef struct SchedulerNode
-{
-	struct Scheduler* next;
-	SchedulerCallback* callback;
-} SchedulerNode;
-
-//////////////
 // Runtime
 //////////////
 
@@ -450,4 +438,249 @@ void startRuntime(UGen* ugen)
 	jack_client_close (client);
 
 	puts("Necronomicon shutting down...");
+}
+
+
+////////////////////////////////////////////////////////////////////////////////////
+// Scheduler
+////////////////////////////////////////////////////////////////////////////////////
+
+typedef enum { false, true } bool;
+unsigned int max_nodes = 2048;
+unsigned int size_mask = 2047;
+
+typedef struct
+{
+	double time;
+	UGen* ugen;
+} ugen_node;
+
+void node_free(ugen_node node)
+{
+	if(node.ugen)
+		free(node.ugen);
+}
+
+//////////////
+// Node FIFO
+//////////////
+
+// Lock Free FIFO Queue (Ring Buffer)
+typedef ugen_node* node_fifo;
+unsigned int node_size = sizeof(ugen_node);
+unsigned int fifo_read_index = 0;
+unsigned int fifo_write_index = 0;
+
+#define FIFO_PUSH(fifo, node) fifo[fifo_write_index & size_mask] = node; fifo_write_index++;
+#define FIFO_POP(fifo) fifo[fifo_read_index++ & size_mask]
+
+// Allocate and null initialize a node list to be used as a node_fifo or node_list
+ugen_node* new_node_list()
+{
+	ugen_node* list = (ugen_node*) malloc(node_size * max_nodes);
+	memset(list, 0, node_size * max_nodes);
+	return list;
+}
+
+// Free all remaining nodes in the fifo and then free the fifo itself
+void fifo_free(node_fifo fifo)
+{
+	bool freeing = true;
+	if(fifo_read_index == fifo_write_index)
+	{
+		freeing = false;
+	}
+
+	while(freeing)
+	{
+		if(fifo_read_index != fifo_write_index)
+		{
+			ugen_node node = FIFO_POP(fifo);
+			node_free(node);
+		}
+
+		else
+		{
+			freeing = false;
+		}		
+	}
+	
+	free(fifo);
+	fifo_read_index = 0;
+	fifo_write_index = 0;
+}
+
+//////////////
+// Node List
+//////////////
+
+// An ordered list of ugen nodes
+typedef ugen_node* node_list;
+unsigned int list_read_index = 0;
+unsigned int list_write_index = 0;
+
+// Increment list_write_index after assignment to maintain intended ordering: Assignment -> Increment
+#define LIST_PUSH(list, node) list[list_write_index & size_mask] = node; list_write_index++;
+#define LIST_POP(list) list[list_read_index++ & size_mask]
+#define LIST_PEEK(list) list[list_read_index & size_mask]
+#define LIST_PEEK_TIME(list) list[list_read_index & size_mask].time
+
+// Free all remaining nodes in the list and then free the list itself
+void list_free(node_list list)
+{
+	bool freeing = true;
+	if(list_read_index == list_write_index)
+	{
+		freeing = false;
+	}
+
+	while(freeing)
+	{
+		if(list_read_index != list_write_index)
+		{
+			ugen_node node = LIST_POP(list);
+			node_free(node);
+		}
+
+		else
+		{
+			freeing = false;
+		}		
+	}
+	
+	free(list);
+	list_read_index = 0;
+	list_write_index = 0;
+}
+
+// Simple insertion sort. Accounts for ring buffer array wrapping using bit masking and integer overflow
+void list_sort(node_list list)
+{
+	// Make sure our indexes are within bounds
+	list_read_index = list_read_index & size_mask; 
+	list_write_index = list_write_index & size_mask;
+	unsigned int i, j, k;
+	ugen_node x;
+	double xTime, yTime;
+	
+	for(i = (list_read_index + 1) & size_mask; i != list_write_index; i = (++i) & size_mask)
+	{
+		x = list[i];
+		xTime = x.time;
+		j = i;
+		
+		while(j != list_read_index)
+		{
+			k = (j - 1) & size_mask;
+			yTime = list[k].time;
+			if(yTime < xTime)
+				break;
+
+			list[j] = list[k];
+			j = (j - 1) & size_mask;
+		}
+
+		list[j] = x;
+	}
+}
+
+// Copy nodes from the node_fifo into the internal node_list using atomic read/write operations.
+void copy_nodes_from_fifo(node_fifo fifo, node_list list)
+{
+	bool copying = true;
+	if(fifo_read_index == fifo_write_index)
+	{
+		copying = false;
+	}
+
+	while(copying)
+	{
+		if(fifo_read_index != fifo_write_index)
+		{
+			LIST_PUSH(list, FIFO_POP(fifo));
+		}
+
+		else
+		{
+			list_sort(list);
+			copying = false;
+		}
+	}
+}
+
+void print_node(ugen_node node)
+{
+	printf("ugen_node { %f, %p }\n", node.time, node.ugen);
+}
+
+void print_list(node_list list)
+{
+	printf("list_read_index: %i, list_write_index: %i\n", list_read_index, list_write_index);
+	unsigned int i = list_read_index & size_mask;
+	list_write_index = list_write_index & size_mask;
+	for(; i != list_write_index; i = (++i) & size_mask)
+	{
+		print_node(list[i]);
+	}
+}
+
+void randomize_and_print_list(node_list list)
+{
+	puts("\n//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////");
+	puts("// RANDOMIZE LIST");
+	puts("//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////\n");
+	
+	unsigned int i = 0;
+	for(; i < 1000; ++i)
+	{
+		unsigned int num_pop = random() / (double) RAND_MAX * 100;
+	    while((num_pop > 0) && ((list_read_index & size_mask) != ((list_write_index - 1) & size_mask)))
+		{
+			LIST_POP(list);
+			--num_pop;
+		}
+		
+		unsigned int num_push = random() / (double) RAND_MAX * 100;
+		while((num_push > 0) && ((list_read_index & size_mask) != (list_write_index & size_mask)))
+		{
+			ugen_node node = { (random() / (double) RAND_MAX) * 1000.0, 0 };
+			LIST_PUSH(list, node);
+			--num_push;
+		}
+	}
+
+	list_read_index = list_read_index & size_mask;
+	list_write_index = list_write_index & size_mask;
+	print_list(list);
+}
+
+void sort_and_print_list(node_list list)
+{
+	puts("\n//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////");
+	puts("// SORT LIST");
+	puts("//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////\n");
+
+	list_sort(list);
+	print_list(list);
+}
+
+void test_list()
+{
+	node_list list = new_node_list();
+	while(list_write_index < (max_nodes * 0.75))
+	{
+		ugen_node node = { (random() / (double) RAND_MAX) * 1000.0, 0 };
+		LIST_PUSH(list, node);
+	}
+
+	print_list(list);
+
+	unsigned int i = 0;
+	for(; i < 100; ++i)
+	{
+		sort_and_print_list(list);
+		randomize_and_print_list(list);
+	}
+
+	sort_and_print_list(list);
 }
