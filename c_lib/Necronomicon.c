@@ -455,6 +455,8 @@ typedef struct
 	UGen* ugen;
 } ugen_node;
 
+unsigned int node_size = sizeof(ugen_node);
+
 void node_free(ugen_node node)
 {
 	if(node.ugen)
@@ -467,12 +469,12 @@ void node_free(ugen_node node)
 
 // Lock Free FIFO Queue (Ring Buffer)
 typedef ugen_node* node_fifo;
-unsigned int node_size = sizeof(ugen_node);
 unsigned int fifo_read_index = 0;
 unsigned int fifo_write_index = 0;
 
+// Increment fifo_write_index and fifo_read_index after assignment to maintain intended ordering: Assignment/Lookup -> Increment
 #define FIFO_PUSH(fifo, node) fifo[fifo_write_index & size_mask] = node; fifo_write_index++;
-#define FIFO_POP(fifo) fifo[fifo_read_index++ & size_mask]
+#define FIFO_POP(fifo) fifo[fifo_read_index & size_mask]; fifo_read_index++;
 
 // Allocate and null initialize a node list to be used as a node_fifo or node_list
 ugen_node* new_node_list()
@@ -485,24 +487,10 @@ ugen_node* new_node_list()
 // Free all remaining nodes in the fifo and then free the fifo itself
 void fifo_free(node_fifo fifo)
 {
-	bool freeing = true;
-	if(fifo_read_index == fifo_write_index)
+	while(fifo_read_index != fifo_write_index)
 	{
-		freeing = false;
-	}
-
-	while(freeing)
-	{
-		if(fifo_read_index != fifo_write_index)
-		{
-			ugen_node node = FIFO_POP(fifo);
-			node_free(node);
-		}
-
-		else
-		{
-			freeing = false;
-		}		
+		ugen_node node = FIFO_POP(fifo);
+		node_free(node);		
 	}
 	
 	free(fifo);
@@ -519,33 +507,19 @@ typedef ugen_node* node_list;
 unsigned int list_read_index = 0;
 unsigned int list_write_index = 0;
 
-// Increment list_write_index after assignment to maintain intended ordering: Assignment -> Increment
+// Increment list_write_index and list_read_index after assignment to maintain intended ordering: Assignment/Lookup -> Increment
 #define LIST_PUSH(list, node) list[list_write_index & size_mask] = node; list_write_index++;
-#define LIST_POP(list) list[list_read_index++ & size_mask]
+#define LIST_POP(list) list[list_read_index & size_mask]; list_read_index++;
 #define LIST_PEEK(list) list[list_read_index & size_mask]
 #define LIST_PEEK_TIME(list) list[list_read_index & size_mask].time
 
 // Free all remaining nodes in the list and then free the list itself
 void list_free(node_list list)
 {
-	bool freeing = true;
-	if(list_read_index == list_write_index)
+	while(list_read_index != list_write_index)
 	{
-		freeing = false;
-	}
-
-	while(freeing)
-	{
-		if(list_read_index != list_write_index)
-		{
-			ugen_node node = LIST_POP(list);
-			node_free(node);
-		}
-
-		else
-		{
-			freeing = false;
-		}		
+		ugen_node node = LIST_POP(list);
+		node_free(node);		
 	}
 	
 	free(list);
@@ -587,26 +561,23 @@ void list_sort(node_list list)
 // Copy nodes from the node_fifo into the internal node_list using atomic read/write operations.
 void copy_nodes_from_fifo(node_fifo fifo, node_list list)
 {
-	bool copying = true;
 	if(fifo_read_index == fifo_write_index)
 	{
-		copying = false;
+		return;
 	}
 
-	while(copying)
+	while(fifo_read_index != fifo_write_index)
 	{
-		if(fifo_read_index != fifo_write_index)
-		{
-			LIST_PUSH(list, FIFO_POP(fifo));
-		}
-
-		else
-		{
-			list_sort(list);
-			copying = false;
-		}
+		ugen_node node = FIFO_POP(fifo);
+		LIST_PUSH(list, node);
 	}
+
+	list_sort(list);
 }
+
+////////////////////////////////////////////////////////////////////////////////////
+// Tests
+////////////////////////////////////////////////////////////////////////////////////
 
 void print_node(ugen_node node)
 {
@@ -683,4 +654,5 @@ void test_list()
 	}
 
 	sort_and_print_list(list);
+	list_free(list);
 }
