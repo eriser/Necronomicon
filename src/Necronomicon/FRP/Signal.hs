@@ -291,26 +291,24 @@ bodyOf (Change   a) = a
 
 --Need pure constructor
 --Need separate queues for each input type
-data Signal a = Signal (IO (a,TQueue a,IO(TQueue InputEvent) -> IO (TQueue InputEvent)))
+data Signal a = Signal (IO (a,TQueue a,IO InputQueues -> IO InputQueues))
+
+data InputQueues = InputQueues {
+    mouseQueue :: TQueue (Double,Double)
+    }
 
 mousePos :: Signal (Double,Double)
 mousePos = Signal $ do
     outBox <- atomically newTQueue
-    let thread eventNotify = eventNotify >>= \en -> forkIO (inputLoop (MousePosition (0,0)) en outBox) >> eventNotify
+    let thread eventNotify = eventNotify >>= \en -> forkIO (inputLoop (mouseQueue en) outBox) >> eventNotify
     return ((0,0),outBox,thread)
-    where
-        inputLoop inputType eventNotify outBox = do
-            e <- atomically $ readTQueue eventNotify
-            case e of
-                (MousePosition v) -> atomically (writeTQueue outBox v) >> inputLoop inputType eventNotify outBox
-                _                 -> inputLoop inputType eventNotify outBox
-
+        
 instance Functor Signal where
     fmap f (Signal g) = Signal $ do
         (childEvent,inBox,gThread) <- g
         outBox                     <- atomically newTQueue
         let defaultValue            = f childEvent
-        let thread eventNotify      = eventNotify >>= \en -> forkIO (signalLoop f defaultValue en inBox outBox) >> eventNotify
+        let thread eventNotify      = forkIO (signalLoop f defaultValue inBox outBox) >> eventNotify
         return (defaultValue,outBox,thread . gThread)
 
 instance Applicative Signal where
@@ -330,15 +328,21 @@ instance Applicative Signal where
         (gEvent,inBox,gThread) <- g
         outBox <- atomically newTQueue 
         let defaultValue = fEvent gEvent
-        let thread eventNotify = eventNotify >>= \en -> forkIO (signalLoop fEvent defaultValue en inBox outBox) >> eventNotify
+        let thread eventNotify = forkIO (signalLoop fEvent defaultValue inBox outBox) >> eventNotify
         return (defaultValue,outBox,thread . gThread)
 
-signalLoop :: (a -> b) -> b -> TQueue InputEvent -> TQueue a -> TQueue b -> IO()
-signalLoop f !prev eventNotify inBox outBox = do
+signalLoop :: (a -> b) -> b -> TQueue a -> TQueue b -> IO()
+signalLoop f !prev inBox outBox = do
     e <- atomically $ readTQueue inBox
     let newValue = f e
     atomically $ writeTQueue outBox newValue
-    signalLoop f newValue eventNotify inBox outBox
+    signalLoop f newValue inBox outBox
+
+inputLoop :: TQueue a -> TQueue a -> IO()
+inputLoop eventNotify outBox = do
+    e <- atomically $ readTQueue eventNotify
+    atomically (writeTQueue outBox e)
+    inputLoop eventNotify outBox
 
 initWindow :: IO(Maybe GLFW.Window)
 initWindow = GLFW.init >>= \initSuccessful -> if initSuccessful then window else return Nothing
@@ -353,11 +357,12 @@ runSignal (Signal s) = do
         Nothing -> print "Error starting GLFW." >> return ()
         Just w  -> do
             (defaultValue,inBox,signalThread) <- s
-            eventNotify <- atomically newTQueue
+            mouseEvents <- atomically newTQueue
+            let inputQueues = InputQueues mouseEvents
             print "Starting signal run time"
             forkIO $ forceLoop inBox defaultValue
-            signalThread $ return eventNotify
-            GLFW.setCursorPosCallback w $ Just $ mousePosEvent eventNotify
+            signalThread $ return inputQueues
+            GLFW.setCursorPosCallback w $ Just $ mousePosEvent mouseEvents
             render False w
     where
         forceLoop inBox !prev = do
@@ -365,7 +370,7 @@ runSignal (Signal s) = do
             print v
             forceLoop inBox v
             
-        mousePosEvent eventNotify window x y = atomically $ writeTQueue eventNotify $ MousePosition (x,y)
+        mousePosEvent eventNotify window x y = atomically $ writeTQueue eventNotify (x,y)
         render quit window
             | quit      = print "Qutting" >> return ()
             | otherwise = do

@@ -3,7 +3,13 @@ module Main where
 import Necronomicon.FRP
 
 main :: IO()
-main = runSignal $ fmap (+ 5) <~ mousePos
+main = runSignal $ tupleProduct <~ mousePos
+
+tupleSum :: (Double,Double) -> Double
+tupleSum (x,y) = x + y
+
+tupleProduct :: (Double,Double) -> Double
+tupleProduct (x,y) = x * y
 
 -- main :: IO ()
 -- main = runSignal $ everySecond * pi
