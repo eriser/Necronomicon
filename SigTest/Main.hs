@@ -2,25 +2,28 @@ module Main where
 
 import Necronomicon.FRP
 
-main :: IO ()
-main = runSignal mousePos
+main :: IO()
+main = runSignal $ fmap (+ 5) <~ mousePos
 
-everySecond :: Signal Double
-everySecond = every second
+-- main :: IO ()
+-- main = runSignal $ everySecond * pi
 
-sampleCount :: Signal Int
-sampleCount = foldp (+) 0 (pure 1)
+-- everySecond :: Signal Double
+-- everySecond = every second
 
-doubles :: Signal Int
-doubles = sampleCount + sampleCount
+-- sampleCount :: Signal Int
+-- sampleCount = foldp (+) 0 (pure 1)
 
-negativeCount :: Signal Int
-negativeCount = negate sampleCount
+-- doubles :: Signal Int
+-- doubles = sampleCount + sampleCount
 
-squaredCount :: Signal Int
-squaredCount = sampleCount * sampleCount
+-- negativeCount :: Signal Int
+-- negativeCount = negate sampleCount
 
-lichPrint :: (Show a) => Signal a -> Signal ()
-lichPrint = effectful1 print
+-- squaredCount :: Signal Int
+-- squaredCount = sampleCount * sampleCount
+
+-- lichPrint :: Show a => Signal a -> Signal ()
+-- lichPrint = effectful1 print
 
 

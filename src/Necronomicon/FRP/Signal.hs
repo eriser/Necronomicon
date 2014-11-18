@@ -1,22 +1,22 @@
 module Necronomicon.FRP.Signal (
     Signal,
-    effectful,
-    effectful1,
-    every,
-    millisecond,
-    second,
-    minute,
-    hour,
-    foldp,
-    fps,
+    -- every,
+    -- millisecond,
+    -- second,
+    -- minute,
+    -- hour,
+    -- foldp,
+    -- fps,
     (<~),
     (~~),
-    runSignal,
-    Key,
-    isDown,
+    -- Key,
+    -- isDown,
+    -- mousePos,
+    -- wasd,
+    -- dimensions,
+    Signal,
     mousePos,
-    wasd,
-    dimensions,
+    runSignal,
     module Control.Applicative
     ) where
 
@@ -26,6 +26,10 @@ import Prelude hiding (until)
 import Control.Monad
 import qualified Graphics.UI.GLFW as GLFW
 import qualified Data.Fixed as F
+import Data.Monoid
+import Control.Concurrent
+import Control.Concurrent.STM
+import Data.Either
 
 (<~) :: Functor f => (a -> b) -> f a -> f b
 (<~) = fmap
@@ -41,6 +45,7 @@ ifThenElse :: Bool -> a -> a -> a
 ifThenElse True a _ = a
 ifThenElse False _ b = b
 
+{-
 data Signal a = SignalGenerator (IO (Time -> GLFW.Window -> IO a)) deriving (Show)
 
 instance Functor Signal where
@@ -255,5 +260,129 @@ runSignal (SignalGenerator signal) = do
                 result <- signalLoop time window
                 print result
                 render q signalLoop window
+
+-}
+---------------------------------------------
+-- Signals 2.0
+---------------------------------------------
+
+type Key  = GLFW.Key
+keyW = GLFW.Key'W
+keyA = GLFW.Key'A
+keyS = GLFW.Key'S
+keyD = GLFW.Key'D
+
+data InputEvent = MousePosition (Double,Double)
+                | KeyDown Key
+                | KeyUp   Key
+                deriving (Show)
+
+data Event a = NoChange a
+             | Change a
+             deriving (Show)
+
+instance Functor Event where
+    fmap f (NoChange a) = NoChange $ f a
+    fmap f (Change   a) = Change $ f a
+
+bodyOf :: Event a -> a
+bodyOf (NoChange a) = a
+bodyOf (Change   a) = a
+
+--Need pure constructor
+--Need separate queues for each input type
+data Signal a = Signal (IO (a,TQueue a,IO(TQueue InputEvent) -> IO (TQueue InputEvent)))
+
+mousePos :: Signal (Double,Double)
+mousePos = Signal $ do
+    outBox <- atomically newTQueue
+    let thread eventNotify = eventNotify >>= \en -> forkIO (inputLoop (MousePosition (0,0)) en outBox) >> eventNotify
+    return ((0,0),outBox,thread)
+    where
+        inputLoop inputType eventNotify outBox = do
+            e <- atomically $ readTQueue eventNotify
+            case e of
+                (MousePosition v) -> atomically (writeTQueue outBox v) >> inputLoop inputType eventNotify outBox
+                _                 -> inputLoop inputType eventNotify outBox
+
+instance Functor Signal where
+    fmap f (Signal g) = Signal $ do
+        (childEvent,inBox,gThread) <- g
+        outBox                     <- atomically newTQueue
+        let defaultValue            = f childEvent
+        let thread eventNotify      = eventNotify >>= \en -> forkIO (signalLoop f defaultValue en inBox outBox) >> eventNotify
+        return (defaultValue,outBox,thread . gThread)
+
+instance Applicative Signal where
+    pure a = Signal $ do
+        outBox <- atomically newTQueue
+        let defaultValue = a
+        -- let thread eventNotify = eventNotify >>= \en -> forkIO (signalLoop defaultValue en outBox) >> eventNotify
+        return (a,outBox,id)
+        -- where
+            -- signalLoop prev eventNotify outBox = do
+                -- _ <- atomically $ readTQueue eventNotify
+                -- atomically (writeTQueue outBox prev)
+                -- signalLoop prev eventNotify outBox
+
+    Signal f <*> Signal g = Signal $ do
+        (fEvent,_,_) <- f
+        (gEvent,inBox,gThread) <- g
+        outBox <- atomically newTQueue 
+        let defaultValue = fEvent gEvent
+        let thread eventNotify = eventNotify >>= \en -> forkIO (signalLoop fEvent defaultValue en inBox outBox) >> eventNotify
+        return (defaultValue,outBox,thread . gThread)
+
+signalLoop :: (a -> b) -> b -> TQueue InputEvent -> TQueue a -> TQueue b -> IO()
+signalLoop f !prev eventNotify inBox outBox = do
+    e <- atomically $ readTQueue inBox
+    let newValue = f e
+    atomically $ writeTQueue outBox newValue
+    signalLoop f newValue eventNotify inBox outBox
+
+initWindow :: IO(Maybe GLFW.Window)
+initWindow = GLFW.init >>= \initSuccessful -> if initSuccessful then window else return Nothing
+    where
+        mkWindow = GLFW.createWindow 960 640 "Necronomicon" Nothing Nothing
+        window   = mkWindow >>= \w -> GLFW.makeContextCurrent w >> return w
+
+runSignal :: (Show a) => Signal a -> IO()
+runSignal (Signal s) = do
+    mw <- initWindow
+    case mw of
+        Nothing -> print "Error starting GLFW." >> return ()
+        Just w  -> do
+            (defaultValue,inBox,signalThread) <- s
+            eventNotify <- atomically newTQueue
+            print "Starting signal run time"
+            forkIO $ forceLoop inBox defaultValue
+            signalThread $ return eventNotify
+            GLFW.setCursorPosCallback w $ Just $ mousePosEvent eventNotify
+            render False w
+    where
+        forceLoop inBox !prev = do
+            v <- atomically $ readTQueue inBox
+            print v
+            forceLoop inBox v
+            
+        mousePosEvent eventNotify window x y = atomically $ writeTQueue eventNotify $ MousePosition (x,y)
+        render quit window
+            | quit      = print "Qutting" >> return ()
+            | otherwise = do
+                GLFW.pollEvents
+                q      <- liftA (== GLFW.KeyState'Pressed) (GLFW.getKey window GLFW.Key'Q)
+                threadDelay 10000
+                render q window
+
+-- 1. Input arrives
+-- 2. Event notify sent to network
+-- 3. Each Lift and Input signal reads from the eventNotify channel
+-- 4. Lift signals block waiting to receive messages in their mailbox from all of their arguments
+-- 5. Input signals pattern match and check if they are that input event
+-- 6. If the input event matches the input sends an event of type (Change v) otherwise they send (NoChange v)
+-- 7. Lift signals collect all of their inputs, if there are any Change events they recompute then send a Change event, otherwise a NoChange event
+-- 8. This continues until a Change event percolates to the top node.
+
+
 
 
