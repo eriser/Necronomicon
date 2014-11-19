@@ -2,25 +2,37 @@ module Main where
 
 import Necronomicon.FRP
 
-main :: IO ()
-main = runSignal mousePos
+main :: IO()
+main = runSignal $ sumTuples <~ mouseClicks ~~ mousePos
 
-everySecond :: Signal Double
-everySecond = every second
+sumTuples :: () -> (Double,Double) -> (Double,Double,Double,Double)
+sumTuples _ (x,y) = (x,x,y,y)
 
-sampleCount :: Signal Int
-sampleCount = foldp (+) 0 (pure 1)
+tupleSum :: (Double,Double) -> Double
+tupleSum (x,y) = x + y
 
-doubles :: Signal Int
-doubles = sampleCount + sampleCount
+tupleProduct :: (Double,Double) -> Double
+tupleProduct (x,y) = x * y
 
-negativeCount :: Signal Int
-negativeCount = negate sampleCount
+-- main :: IO ()
+-- main = runSignal $ everySecond * pi
 
-squaredCount :: Signal Int
-squaredCount = sampleCount * sampleCount
+-- everySecond :: Signal Double
+-- everySecond = every second
 
-lichPrint :: (Show a) => Signal a -> Signal ()
-lichPrint = effectful1 print
+-- sampleCount :: Signal Int
+-- sampleCount = foldp (+) 0 (pure 1)
+
+-- doubles :: Signal Int
+-- doubles = sampleCount + sampleCount
+
+-- negativeCount :: Signal Int
+-- negativeCount = negate sampleCount
+
+-- squaredCount :: Signal Int
+-- squaredCount = sampleCount * sampleCount
+
+-- lichPrint :: Show a => Signal a -> Signal ()
+-- lichPrint = effectful1 print
 
 
