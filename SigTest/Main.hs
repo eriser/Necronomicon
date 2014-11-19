@@ -3,7 +3,10 @@ module Main where
 import Necronomicon.FRP
 
 main :: IO()
-main = runSignal $ tupleProduct <~ mousePos
+main = runSignal $ sumTuples <~ mouseClicks ~~ mousePos
+
+sumTuples :: () -> (Double,Double) -> (Double,Double,Double,Double)
+sumTuples _ (x,y) = (x,x,y,y)
 
 tupleSum :: (Double,Double) -> Double
 tupleSum (x,y) = x + y

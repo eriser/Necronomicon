@@ -348,13 +348,30 @@ instance Applicative Signal where
         return (defaultValue,outBox,thread : fThreads)
     Signal f <*> Signal g = Signal $ do
         print "Signal <*> Signal"
-        (fEvent,_,_)                    <- f
-        (gEvent,broadcastInbox,gThread) <- g
-        inBox                           <- atomically $ dupTChan broadcastInbox
-        outBox                          <- atomically newBroadcastTChan 
-        let defaultValue                 = fEvent gEvent
-        let thread eventNotify           = forkIO $ fmapLoop fEvent inBox outBox
-        return (defaultValue,outBox,thread : gThread)
+        (fEvent,fBroadcastInbox,fThread) <- f
+        (gEvent,gBroadcastInbox,gThread) <- g
+        fInBox                           <- atomically $ dupTChan fBroadcastInbox
+        gInBox                           <- atomically $ dupTChan gBroadcastInbox
+        outBox                           <- atomically newBroadcastTChan 
+        appBox                           <- atomically newTQueue 
+        let thread eventNotify            = do
+                forkIO $ applicativeLeftLoop  gEvent fInBox appBox
+                forkIO $ applicativeRightLoop fEvent gInBox appBox
+                forkIO $ applicativeLoop      fEvent gEvent appBox outBox
+        return (fEvent gEvent,outBox,thread : fThread ++ gThread)
+
+applicativeLeftLoop :: a -> TChan (a -> b) -> TQueue (Either (a -> b) a) -> IO()
+applicativeLeftLoop g fInBox outBox = forever $ atomically (readTChan fInBox) >>= \f -> atomically $ writeTQueue outBox (Left f)
+
+applicativeRightLoop :: (a -> b) -> TChan a -> TQueue (Either (a -> b) a) -> IO()
+applicativeRightLoop f gInBox outBox = forever $ atomically (readTChan gInBox) >>= \g -> atomically $ writeTQueue outBox (Right g)
+
+applicativeLoop :: (a -> b) -> a -> TQueue (Either (a -> b) a) -> TChan b -> IO()
+applicativeLoop f g inBox outBox = do
+    e <- atomically $ readTQueue inBox
+    case e of
+        Left  f' -> atomically (writeTChan outBox $ f' g) >> applicativeLoop f' g inBox outBox
+        Right g' -> atomically (writeTChan outBox $ f g') >> applicativeLoop f g' inBox outBox
 
 fmapeeLoop :: a -> TChan (a -> b) -> TChan b -> IO()
 fmapeeLoop val inBox outBox = forever $ atomically (readTChan inBox) >>= \e -> atomically $ writeTChan outBox $ e val
@@ -385,12 +402,12 @@ runSignal (Signal s) = initWindow >>= \mw ->
             GLFW.setMouseButtonCallback w $ Just $ mousePressEvent mouseClicks
             render False w
     where
-        forceLoop inBox = forever $ atomically (readTChan inBox) >>= \v -> print v
         --event callbacks
-        mousePosEvent   eventNotify window x y     = atomically $ writeTChan eventNotify (x,y)
+        mousePosEvent   eventNotify window x y                                   = atomically $ writeTChan eventNotify (x,y)
         mousePressEvent eventNotify window mb GLFW.MouseButtonState'Released mod = atomically $ writeTChan eventNotify ()
         mousePressEvent eventNotify window mb GLFW.MouseButtonState'Pressed  mod = return ()
 
+        forceLoop inBox = forever $ atomically (readTChan inBox) >>= \v -> print v
         render quit window
             | quit      = print "Qutting" >> return ()
             | otherwise = do
@@ -398,6 +415,8 @@ runSignal (Signal s) = initWindow >>= \mw ->
                 q <- liftA (== GLFW.KeyState'Pressed) (GLFW.getKey window GLFW.Key'Q)
                 threadDelay 16667
                 render q window
+
+--Alternative instance
 
 -- 1. Input arrives
 -- 2. Event notify sent to network
