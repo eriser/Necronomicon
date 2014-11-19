@@ -586,7 +586,7 @@ void copy_nodes_from_fifo(node_fifo fifo, node_list list)
 	When the RT thread frees the synths they send them back (again via a FIFO queue) which is then recollected in the memory pool.
 	Node IDs begin as a long list [0..80191], with ids taken from the front. These ID's are stored in the UGen memory points as they
 	are created and before sending off. When they come back for de-allocation, we keep the ID association for new UGens, which allows
-	Recycling without keeping track of the current list explcitly. If he re-allocation pool becomes too large we can actually free some
+	Recycling without keeping track of the current list explcitly. If the re-allocation pool becomes too large we can actually free some
 	Elements (not too many, we want to re-use as much as possible) and at this point we could reclaim the node id in the large node id pool.
 	This method would allow the node lookup table in the synth RT thread to simply be a flat array.
 	Because we're naturally compressing the node ids and thus densely front loading this array naturally because of node id re-use,
