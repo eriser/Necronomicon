@@ -3,10 +3,11 @@ module Main where
 import Necronomicon.FRP
 
 main :: IO()
-main = runSignal $ sumTuples <~ mouseClicks ~~ mousePos
+-- main = runSignal $ sumTuples <~ mousePos ~~ mousePos ~~ mousePos ~~ mousePos ~~ mousePos ~~ mousePos ~~ mousePos ~~ mousePos ~~ mousePos ~~ mousePos
+main = runSyncSignal $ sumTuples <~ mousePosSync ~~ mousePosSync ~~ mousePosSync ~~ mousePosSync ~~ mousePosSync ~~ mousePosSync ~~ mousePosSync ~~ mousePosSync ~~ mousePosSync ~~ mousePosSync
 
-sumTuples :: () -> (Double,Double) -> (Double,Double,Double,Double)
-sumTuples _ (x,y) = (x,x,y,y)
+sumTuples :: (Double,Double) -> (Double,Double) -> (Double,Double) -> (Double,Double) -> (Double,Double) -> (Double,Double) -> (Double,Double) -> (Double,Double) -> (Double,Double) -> (Double,Double) -> (Double,Double,Double,Double)
+sumTuples (x,y) _ _ _ _ _ _ _ _ _= (x,x,y,y)
 
 tupleSum :: (Double,Double) -> Double
 tupleSum (x,y) = x + y

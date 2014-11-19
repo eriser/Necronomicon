@@ -18,6 +18,10 @@ module Necronomicon.FRP.Signal (
     mousePos,
     runSignal,
     mouseClicks,
+    SignalSync,
+    runSyncSignal,
+    mousePosSync,
+    mouseClicksSync,
     module Control.Applicative
     ) where
 
@@ -273,18 +277,23 @@ keyA = GLFW.Key'A
 keyS = GLFW.Key'S
 keyD = GLFW.Key'D
 
-data InputEvent = MousePosition (Double,Double)
-                | KeyDown Key
-                | KeyUp   Key
-                deriving (Show)
+data InputEvent = MousePosition
+                | MouseClick
+                | KeyDown
+                | KeyUp
+                deriving (Show,Eq)
 
 data Event a = NoChange a
-             | Change a
+             | Change   a
              deriving (Show)
 
 instance Functor Event where
     fmap f (NoChange a) = NoChange $ f a
     fmap f (Change   a) = Change $ f a
+
+-- instance Applicative Event where
+    -- pure a = NoChange a
+    -- NoChange f <*> NoChange b = NoChange f g
 
 bodyOf :: Event a -> a
 bodyOf (NoChange a) = a
@@ -297,7 +306,8 @@ data Signal a = Signal (IO (a,TChan a,[InputChannels -> IO ThreadId]))
 
 data InputChannels = InputChannels {
     mouseChannel      :: TChan (Double,Double),
-    mouseClickChannel :: TChan ()
+    mouseClickChannel :: TChan (),
+    eventNotify       :: TChan InputEvent
     }
 
 input :: (InputChannels -> TChan a) -> a -> Signal a
@@ -326,6 +336,7 @@ instance Functor Signal where
 
     fmap f (Pure a) = Pure $ f a
 
+--Event notify?
 instance Applicative Signal where
     pure   a              = Pure a
 
@@ -395,7 +406,8 @@ runSignal (Signal s) = initWindow >>= \mw ->
             inBox       <- atomically $ dupTChan broadcastInbox
             mouseEvents <- atomically newBroadcastTChan
             mouseClicks <- atomically newBroadcastTChan
-            let inputQueues = InputChannels mouseEvents mouseClicks
+            eventNotify <- atomically newBroadcastTChan
+            let inputQueues = InputChannels mouseEvents mouseClicks eventNotify
             forkIO $ forceLoop inBox
             mapM_ (\x -> x inputQueues) signalThread
             GLFW.setCursorPosCallback   w $ Just $ mousePosEvent mouseEvents
@@ -406,6 +418,145 @@ runSignal (Signal s) = initWindow >>= \mw ->
         mousePosEvent   eventNotify window x y                                   = atomically $ writeTChan eventNotify (x,y)
         mousePressEvent eventNotify window mb GLFW.MouseButtonState'Released mod = atomically $ writeTChan eventNotify ()
         mousePressEvent eventNotify window mb GLFW.MouseButtonState'Pressed  mod = return ()
+
+        forceLoop inBox = forever $ atomically (readTChan inBox) >>= \v -> print v
+        render quit window
+            | quit      = print "Qutting" >> return ()
+            | otherwise = do
+                GLFW.pollEvents
+                q <- liftA (== GLFW.KeyState'Pressed) (GLFW.getKey window GLFW.Key'Q)
+                threadDelay 16667
+                render q window
+
+--Sync Signals
+data SignalSync a = SignalSync (IO (a,TChan (Event a),[InputChannels -> IO ThreadId]))
+                  | PureSync a
+
+inputSync :: InputEvent -> (InputChannels -> TChan a) -> a -> SignalSync a
+inputSync inputEvent inputType defaultValue = SignalSync $ (atomically newBroadcastTChan) >>= \outBox -> return (defaultValue,outBox,[thread outBox])
+    where
+        thread outBox inputChannels = do
+             inBox  <- atomically (dupTChan $ inputType inputChannels)
+             eInBox <- atomically (dupTChan $ eventNotify inputChannels)
+             forkIO $ inputLoop defaultValue eInBox inBox outBox
+        inputLoop prev eInBox inBox outBox = do
+            event <- atomically $ readTChan eInBox
+            case event == inputEvent of
+                False -> atomically (writeTChan outBox $ NoChange prev) >> inputLoop prev eInBox inBox outBox
+                True  -> atomically (readTChan inBox) >>= \v -> atomically (writeTChan outBox $ Change v) >> inputLoop v eInBox inBox outBox
+            
+
+mousePosSync :: SignalSync (Double,Double)
+mousePosSync = inputSync MousePosition mouseChannel (0,0)
+
+mouseClicksSync :: SignalSync ()
+mouseClicksSync = inputSync MouseClick mouseClickChannel ()
+
+instance Functor SignalSync where
+    fmap f (SignalSync g) = SignalSync $ do
+        print "fmap f Signal"
+        (childEvent,broadcastInbox,gThread) <- g
+        inBox                               <- atomically $ dupTChan broadcastInbox
+        outBox                              <- atomically newBroadcastTChan
+        let defaultValue                     = f childEvent
+        let thread eventNotify               = forkIO $ fmapLoopSync defaultValue f inBox outBox
+        return (defaultValue,outBox,thread : gThread)
+
+    fmap f (PureSync a) = PureSync $ f a
+
+instance Applicative SignalSync where
+    pure   a              = PureSync a
+    PureSync   f <*> PureSync   g = PureSync $ f g
+    PureSync   f <*> SignalSync g = SignalSync $ do
+        print "Pure <*> Signal"
+        (gEvent,broadcastInbox,gThread) <- g
+        inBox                           <- atomically $ dupTChan broadcastInbox
+        outBox                          <- atomically newBroadcastTChan 
+        let defaultValue                 = f gEvent
+        let thread eventNotify           = forkIO $ fmapLoopSync defaultValue f inBox outBox
+        return (defaultValue,outBox,thread : gThread)
+    SignalSync f <*> PureSync g   = SignalSync $ do
+        print "Signal <*> Pure"
+        (fEvent,broadcastInbox,fThreads) <- f
+        inBox                            <- atomically $ dupTChan broadcastInbox
+        outBox                           <- atomically newBroadcastTChan
+        let defaultValue                 = fEvent g
+        let thread eventNotify           = forkIO $ fmapeeLoopSync defaultValue g inBox outBox
+        return (defaultValue,outBox,thread : fThreads)
+    SignalSync f <*> SignalSync g = SignalSync $ do
+        print "Signal <*> Signal"
+        (fEvent,fBroadcastInbox,fThread) <- f
+        (gEvent,gBroadcastInbox,gThread) <- g
+        fInBox                           <- atomically $ dupTChan fBroadcastInbox
+        gInBox                           <- atomically $ dupTChan gBroadcastInbox
+        outBox                           <- atomically newBroadcastTChan
+        let defaultValue                  = fEvent gEvent
+        let thread eventNotify            = forkIO $ applicativeLoopSync fEvent gEvent defaultValue fInBox gInBox outBox
+        return (defaultValue,outBox,thread : fThread ++ gThread)
+
+applicativeLoopSync :: (a -> b) -> a -> b -> TChan (Event (a -> b)) -> TChan (Event a) -> TChan (Event b) -> IO()
+applicativeLoopSync prevF prevG prev fInBox gInBox outBox = do
+    f <- atomically (readTChan fInBox)
+    g <- atomically (readTChan gInBox)
+    case f of
+        NoChange _ -> case g of
+            NoChange _  -> atomically (writeTChan outBox $ NoChange prev) >> applicativeLoopSync prevF prevG prev fInBox gInBox outBox
+            Change   g' -> do
+                let new = prevF g'
+                atomically (writeTChan outBox $ Change new)
+                applicativeLoopSync prevF g' new fInBox gInBox outBox
+        Change f' -> case g of
+            NoChange _  -> do
+                let new = f' prevG
+                atomically (writeTChan outBox $ Change new)
+                applicativeLoopSync f' prevG new fInBox gInBox outBox
+            Change   g' -> do
+                let new = f' g'
+                atomically (writeTChan outBox $ Change new)
+                applicativeLoopSync f' g' new fInBox gInBox outBox
+
+fmapeeLoopSync :: b -> a -> TChan (Event (a -> b)) -> TChan (Event b) -> IO()
+fmapeeLoopSync prev val inBox outBox = do
+    e <- atomically (readTChan inBox)
+    case e of
+        NoChange _ -> atomically (writeTChan outBox $ NoChange prev) >> fmapeeLoopSync prev val inBox outBox
+        Change   v -> do
+            let new = v val
+            atomically (writeTChan outBox $ Change new)
+            fmapeeLoopSync new val inBox outBox
+
+fmapLoopSync :: b -> (a -> b) -> TChan (Event a)-> TChan (Event b) -> IO()
+fmapLoopSync prev f inBox outBox = do
+    e <- atomically (readTChan inBox)
+    case e of
+        NoChange _ -> atomically (writeTChan outBox $ NoChange prev) >> fmapLoopSync prev f inBox outBox
+        Change   v -> do
+            let new = f v
+            atomically (writeTChan outBox $ Change new)
+            fmapLoopSync new f inBox outBox
+
+runSyncSignal :: (Show a) => SignalSync a -> IO()
+runSyncSignal (SignalSync s) = initWindow >>= \mw ->
+    case mw of
+        Nothing -> print "Error starting GLFW." >> return ()
+        Just w  -> do
+            print "Starting signal run time"
+            (defaultValue,broadcastInbox,signalThread) <- s
+            inBox       <- atomically $ dupTChan broadcastInbox
+            mouseEvents <- atomically newBroadcastTChan
+            mouseClicks <- atomically newBroadcastTChan
+            eventNotify <- atomically newBroadcastTChan
+            let inputQueues = InputChannels mouseEvents mouseClicks eventNotify
+            forkIO $ forceLoop inBox
+            mapM_ (\x -> x inputQueues) signalThread
+            GLFW.setCursorPosCallback   w $ Just $ mousePosEvent eventNotify mouseEvents
+            GLFW.setMouseButtonCallback w $ Just $ mousePressEvent eventNotify mouseClicks
+            render False w
+    where
+        --event callbacks
+        mousePosEvent   eventNotify input window x y                                   = atomically (writeTChan input (x,y)) >> atomically (writeTChan eventNotify MousePosition)
+        mousePressEvent eventNotify input window mb GLFW.MouseButtonState'Released mod = atomically (writeTChan input ())    >> atomically (writeTChan eventNotify MouseClick)
+        mousePressEvent eventNotify input window mb GLFW.MouseButtonState'Pressed  mod = return ()
 
         forceLoop inBox = forever $ atomically (readTChan inBox) >>= \v -> print v
         render quit window
@@ -427,4 +578,3 @@ runSignal (Signal s) = initWindow >>= \mw ->
 -- 7. Lift signals collect all of their inputs, if there are any Change events they recompute then send a Change event, otherwise a NoChange event
 -- 8. This continues until a Change event percolates to the top node.
 
---Need to change channels to be multicasting instead of not
