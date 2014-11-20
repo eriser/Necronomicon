@@ -71,7 +71,7 @@ executable NecroNet
 executable SigTest
     main-is:          Main.hs
     default-language: Haskell2010
-    ghc-options:      -threaded -Wall
+    ghc-options:      -threaded -O3 -Wall
     hs-source-dirs:   SigTest
     default-extensions:
     build-depends:

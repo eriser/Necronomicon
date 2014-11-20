@@ -3,16 +3,21 @@ module Main where
 import Necronomicon.FRP
 
 main :: IO()
-main = runSignal $ sumTuples <~ mousePos ~~ mousePos ~~ mousePos ~~ mousePos ~~ mousePos ~~ mousePos ~~ mousePos ~~ mousePos ~~ mousePos ~~ mousePos
+main = runSignal oneThousandMousePositions
 
-sumTuples :: (Double,Double) -> (Double,Double) -> (Double,Double) -> (Double,Double) -> (Double,Double) -> (Double,Double) -> (Double,Double) -> (Double,Double) -> (Double,Double) -> (Double,Double) -> (Double,Double,Double,Double)
-sumTuples (x,y) _ _ _ _ _ _ _ _ _= (x,x,y,y)
+oneThousandMousePositions :: Signal (Double,Double)
+oneThousandMousePositions = thousandTest
+    where
+        tupleTest (x,y) (xx,yy) = (x,y)
+        test                    = tupleTest <~ mousePos
+        tenTests                = test ~~ (test ~~ (test ~~ (test ~~ (test ~~ (test ~~ (test ~~ (test ~~ (test ~~ mousePos))))))))
+        test2                   = tupleTest <~ tenTests
+        hundredTests            = test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ mousePos)))))))))
+        test3                   = tupleTest <~ hundredTests
+        thousandTest            = test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ mousePos)))))))))
 
-tupleSum :: (Double,Double) -> Double
-tupleSum (x,y) = x + y
-
-tupleProduct :: (Double,Double) -> Double
-tupleProduct (x,y) = x * y
+-- tupleProduct :: (Double,Double) -> Double
+-- tupleProduct (x,y) = x * y
 
 -- main :: IO ()
 -- main = runSignal $ everySecond * pi
