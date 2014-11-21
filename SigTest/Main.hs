@@ -10,7 +10,8 @@ main :: IO()
 -- main = runSignal $ keepWhen ((\(x,_) -> x > 400) <~ mousePos) mousePos
 -- main = runSignal $ every $ 2 * second
 -- main = runSignal $ dropWhen ((\(x,_) -> x > 400) <~ mousePos) mousePos
-main = runSignal $ sampleOn mouseClicks doubleMouse <|> mousePos
+-- main = runSignal $ sampleOn mouseClicks doubleMouse <|> mousePos
+main = runSignal $ every second <|> every (0.75 * second)
 
 doubleMouse :: Signal (Double,Double)
 doubleMouse = (\(x,y) -> (x*2,y*y)) <~ mousePos

@@ -157,7 +157,7 @@ data InputEvent = MousePosition (Double,Double)
                 | MouseClick
                 | KeyDown       Key
                 | KeyUp         Key
-                | TimeEvent     Time
+                | TimeEvent     Int Time
                 deriving (Show,Eq)
 
 data Signal a = Signal (IO (a,TChan (Maybe a),[(TChan InputEvent -> TQueue InputEvent -> IO ThreadId)]))
@@ -194,6 +194,7 @@ mouseClicks = Signal $ (atomically newBroadcastTChan) >>= \outBox -> return ((),
 every :: Time -> Signal Time
 every delta = Signal $ (atomically newBroadcastTChan) >>= \outBox -> return (0,outBox,[thread outBox])
     where
+        millisecondDelta = floor $ delta * 1000000
         thread outBox broadcastInbox globalDispatch = do
              inBox  <- atomically $ dupTChan broadcastInbox
              forkIO $ timeLoop globalDispatch
@@ -201,15 +202,15 @@ every delta = Signal $ (atomically newBroadcastTChan) >>= \outBox -> return (0,o
         inputLoop inBox outBox = forever $ do
             event <- atomically $ readTChan inBox
             case event of
-                TimeEvent t -> atomically (writeTChan outBox $ Just t)
-                _           -> atomically (writeTChan outBox Nothing)
+                TimeEvent d t -> atomically (writeTChan outBox $ if d == millisecondDelta then Just t else Nothing)
+                _             -> atomically (writeTChan outBox Nothing)
         timeLoop outBox = forever $ do
             t <- GLFW.getTime
             case t of
-                Nothing    -> threadDelay $ floor delta * 1000000
+                Nothing    -> threadDelay millisecondDelta
                 Just time  -> do
-                    atomically $ writeTQueue outBox $ TimeEvent time
-                    threadDelay $ floor delta * 1000000
+                    atomically $ writeTQueue outBox $ TimeEvent millisecondDelta time
+                    threadDelay millisecondDelta
 
 ---------------------------------------------
 -- Main Machinery
@@ -356,7 +357,7 @@ globalEventDispatch inBox outBox = forever $ do
 ---------------------------------------------
 
 instance Alternative Signal where
-    empty = Pure undefined
+    empty = Pure undefined 
     Pure   a <|> Pure   b = Pure a
     Pure   a <|> Signal b = Signal $ b >>= \(_,broadcastInbox,bThread) -> return (a,broadcastInbox,bThread)
     Signal f <|> Pure g   = Signal f
