@@ -3,41 +3,26 @@ module Main where
 import Necronomicon.FRP
 
 main :: IO()
-main = runSignal oneThousandMousePositions
+-- main = runSignal oneThousandMousePositions
+-- main = runSignal $ dropIf (\(x,y) -> x > 400) (0,0) mousePos
+-- main = runSignal $ keepIf (\(x,y) -> x > 400) (0,0) mousePos
+-- main = runSignal $ sampleOn mouseClicks mousePos
+-- main = runSignal $ keepWhen ((\(x,_) -> x > 400) <~ mousePos) mousePos
+-- main = runSignal $ every $ 2 * second
+main = runSignal $ dropWhen ((\(x,_) -> x > 400) <~ mousePos) mousePos
 
 oneThousandMousePositions :: Signal (Double,Double)
-oneThousandMousePositions = thousandTest
+oneThousandMousePositions = tenThousandTest
     where
-        tupleTest (x,y) (xx,yy) = (x,y)
+        tupleTest (x,y) (xx,yy) = (x-xx,y-yy)
+        tupleTime               = (\x -> (x,x)) <~ every second
         test                    = tupleTest <~ mousePos
         tenTests                = test ~~ (test ~~ (test ~~ (test ~~ (test ~~ (test ~~ (test ~~ (test ~~ (test ~~ mousePos))))))))
         test2                   = tupleTest <~ tenTests
         hundredTests            = test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ mousePos)))))))))
         test3                   = tupleTest <~ hundredTests
         thousandTest            = test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ mousePos)))))))))
-
--- tupleProduct :: (Double,Double) -> Double
--- tupleProduct (x,y) = x * y
-
--- main :: IO ()
--- main = runSignal $ everySecond * pi
-
--- everySecond :: Signal Double
--- everySecond = every second
-
--- sampleCount :: Signal Int
--- sampleCount = foldp (+) 0 (pure 1)
-
--- doubles :: Signal Int
--- doubles = sampleCount + sampleCount
-
--- negativeCount :: Signal Int
--- negativeCount = negate sampleCount
-
--- squaredCount :: Signal Int
--- squaredCount = sampleCount * sampleCount
-
--- lichPrint :: Show a => Signal a -> Signal ()
--- lichPrint = effectful1 print
+        test4                   = tupleTest <~ thousandTest
+        tenThousandTest         = test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ mousePos)))
 
 
