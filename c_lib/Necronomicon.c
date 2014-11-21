@@ -450,18 +450,40 @@ typedef enum { false, true } bool;
 unsigned int max_nodes = 2048;
 unsigned int size_mask = 2047;
 
-typedef struct
+typedef struct ugen_node
 {
 	double time;
 	UGen* ugen;
+	struct ugen_node* previous;
+	struct ugen_node* next;
 } ugen_node;
 
 unsigned int node_size = sizeof(ugen_node);
+unsigned int node_pointer_size = sizeof(ugen_node*);
 
-void node_free(ugen_node node)
+ugen_node* new_ugen_node(double time, UGen* ugen)
 {
-	if(node.ugen)
-		free(node.ugen);
+	ugen_node* node = (ugen_node*) malloc(node_size);
+
+	if(node == NULL)
+		return node;
+	
+	node->time = time;
+	node->ugen = ugen;
+	node->previous = 0;
+	node->next = 0;
+	return node;
+}
+
+void node_free(ugen_node* node)
+{
+	if(node)
+	{
+		if(node->ugen)
+			free(node->ugen);
+
+		free(node);
+	}
 }
 
 //////////////
@@ -469,7 +491,7 @@ void node_free(ugen_node node)
 //////////////
 
 // Lock Free FIFO Queue (Ring Buffer)
-typedef ugen_node* node_fifo;
+typedef ugen_node** node_fifo;
 unsigned int fifo_read_index = 0;
 unsigned int fifo_write_index = 0;
 
@@ -478,10 +500,11 @@ unsigned int fifo_write_index = 0;
 #define FIFO_POP(fifo) fifo[fifo_read_index & size_mask]; fifo_read_index++;
 
 // Allocate and null initialize a node list to be used as a node_fifo or node_list
-ugen_node* new_node_list()
+ugen_node** new_node_list()
 {
-	ugen_node* list = (ugen_node*) malloc(node_size * max_nodes);
-	memset(list, 0, node_size * max_nodes);
+	unsigned int size = node_pointer_size * max_nodes;
+	ugen_node** list = (ugen_node**) malloc(size);
+	memset(list, 0, size);
 	return list;
 }
 
@@ -490,7 +513,7 @@ void fifo_free(node_fifo fifo)
 {
 	while(fifo_read_index != fifo_write_index)
 	{
-		ugen_node node = FIFO_POP(fifo);
+		ugen_node* node = FIFO_POP(fifo);
 		node_free(node);		
 	}
 	
@@ -504,7 +527,7 @@ void fifo_free(node_fifo fifo)
 //////////////
 
 // An ordered list of ugen nodes
-typedef ugen_node* node_list;
+typedef ugen_node** node_list;
 unsigned int list_read_index = 0;
 unsigned int list_write_index = 0;
 
@@ -519,7 +542,7 @@ void list_free(node_list list)
 {
 	while(list_read_index != list_write_index)
 	{
-		ugen_node node = LIST_POP(list);
+		ugen_node* node = LIST_POP(list);
 		node_free(node);		
 	}
 	
@@ -535,19 +558,19 @@ void list_sort(node_list list)
 	list_read_index = list_read_index & size_mask; 
 	list_write_index = list_write_index & size_mask;
 	unsigned int i, j, k;
-	ugen_node x;
+	ugen_node* x;
 	double xTime, yTime;
 	
 	for(i = (list_read_index + 1) & size_mask; i != list_write_index; i = (i + 1) & size_mask)
 	{
 		x = list[i];
-		xTime = x.time;
+		xTime = x->time;
 		j = i;
 		
 		while(j != list_read_index)
 		{
 			k = (j - 1) & size_mask;
-			yTime = list[k].time;
+			yTime = list[k]->time;
 			if(yTime < xTime)
 				break;
 
@@ -569,7 +592,7 @@ void copy_nodes_from_fifo(node_fifo fifo, node_list list)
 
 	while(fifo_read_index != fifo_write_index)
 	{
-		ugen_node node = FIFO_POP(fifo);
+		ugen_node* node = FIFO_POP(fifo);
 		LIST_PUSH(list, node);
 	}
 
@@ -699,13 +722,71 @@ hash_node* hash_table_lookup(hash_table table, unsigned int key)
 	return 0;
 }
 
+///////////////////////////
+// Doubly Linked List
+///////////////////////////
+
+typedef ugen_node* doubly_linked_list;
+doubly_linked_list synth_list = NULL;
+
+// Pushes nodes to the front of the list, returning the new list head
+doubly_linked_list doubly_linked_list_push(doubly_linked_list list, ugen_node* node)
+{
+	if(node == NULL)
+		return list;
+
+	node->previous = NULL;
+	node->next = list;
+
+	if(list)
+		list->previous = node;
+
+	return node;
+}
+
+// removes nodes from the doubly linked list, returning the new list head
+doubly_linked_list doubly_linked_list_remove(doubly_linked_list list, ugen_node* node)
+{
+	if(node == NULL)
+		return list;
+
+	ugen_node* previous = node->previous;
+	ugen_node* next = node->next;
+
+	if(previous)
+		previous->next = next;
+
+	if(node == list) // If the node was the head of the list, return the next node as the head of the list
+	{
+		return next;
+	}
+	
+	if(next)
+		next->previous = previous;
+
+	return list; // Otherwise just return the current head of the list
+}
+
+void doubly_linked_list_free(doubly_linked_list list)
+{
+	while(list)
+	{
+		ugen_node* next = list->next;
+		node_free(list);
+		list = next;
+	}
+}
+
+
 ////////////////////////////////////////////////////////////////////////////////////
 // Tests
 ////////////////////////////////////////////////////////////////////////////////////
 
-void print_node(ugen_node node)
+//// Test FIFO
+
+void print_node(ugen_node* node)
 {
-	printf("ugen_node { %f, %p }\n", node.time, node.ugen);
+	printf("ugen_node { time: %f, ugen: %p, previous: %p, next: %p }\n", node->time, node->ugen, node->previous, node->next);
 }
 
 void print_list(node_list list)
@@ -738,7 +819,7 @@ void randomize_and_print_list(node_list list)
 		unsigned int num_push = random() / (double) RAND_MAX * 100;
 		while((num_push > 0) && ((list_read_index & size_mask) != (list_write_index & size_mask)))
 		{
-			ugen_node node = { (random() / (double) RAND_MAX) * 1000.0, 0 };
+			ugen_node* node = new_ugen_node((random() / (double) RAND_MAX) * 1000.0, NULL);
 			LIST_PUSH(list, node);
 			--num_push;
 		}
@@ -764,7 +845,7 @@ void test_list()
 	node_list list = new_node_list();
 	while(list_write_index < (max_nodes * 0.75))
 	{
-		ugen_node node = { (random() / (double) RAND_MAX) * 1000.0, 0 };
+		ugen_node* node = new_ugen_node((random() / (double) RAND_MAX) * 1000.0, NULL);
 		LIST_PUSH(list, node);
 	}
 
@@ -780,6 +861,8 @@ void test_list()
 	sort_and_print_list(list);
 	list_free(list);
 }
+
+//// Test Hash Table
 
 // Assuming string values for this print function
 void print_hash_node(hash_node* node)
@@ -873,9 +956,105 @@ void test_hash_table()
 
 	for(i = 0; i < 3000; ++i)
 	{
-		assert(hash_table_lookup(table, i) == 0);
+		assert(hash_table_lookup(table, i) == NULL);
 	}
 	
 	print_hash_table(table);
     hash_table_free(table);
+}
+
+//// Test Doubly Linked List
+
+void doubly_linked_list_print(doubly_linked_list list)
+{
+	ugen_node* node = list;
+	while(node)
+	{
+		print_node(node);
+		node = node->next;
+	}
+}
+
+typedef bool node_filter_func(ugen_node* node);
+doubly_linked_list doubly_linked_list_filter(doubly_linked_list list, node_filter_func func)
+{
+	ugen_node* node = list;
+	while(node)
+	{
+		ugen_node* next = node->next;
+		
+		if(!func(node))
+		{
+			puts("Filtered out node:");
+			print_node(node);
+			list = doubly_linked_list_remove(list, node);
+			node_free(node);
+		}
+
+		node = next;
+	}
+
+	return list;
+}
+
+bool is_odd(ugen_node* node)
+{
+	if(node == NULL)
+		return false;
+
+	return (unsigned int) node->time % 2 == 1;
+}
+
+void test_doubly_linked_list()
+{
+	int i;
+	for(i = 50; i >= 0; --i)
+	{
+		ugen_node* node = new_ugen_node(i, NULL);
+		synth_list = doubly_linked_list_push(synth_list, node);
+	}
+
+	puts("\n\n//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////");
+	puts("// LIST");
+	puts("//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////\n");
+
+	doubly_linked_list_print(synth_list);
+
+	ugen_node* node = synth_list;
+	while(node)
+	{
+		ugen_node* next = node->next;
+
+		if(next)
+		{
+			printf("(next: %f) - (node: %f) = %f\n", next->time, node->time, next->time - node->time);
+			assert((next->time - node->time) == 1);
+		}
+
+		node = next;
+	}
+
+	synth_list = doubly_linked_list_filter(synth_list, is_odd);
+
+	puts("\n\n//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////");
+	puts("// LIST");
+	puts("//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////\n");
+
+	doubly_linked_list_print(synth_list);
+
+	node = synth_list;
+	while(node)
+	{
+		ugen_node* next = node->next;
+
+		if(next)
+		{
+			printf("(next: %f) - (node: %f) = %f\n", next->time, node->time, next->time - node->time);
+			assert((next->time - node->time) == 2);
+		}
+
+		node = next;
+	}
+
+	doubly_linked_list_free(synth_list);
 }
