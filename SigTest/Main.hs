@@ -3,7 +3,7 @@ module Main where
 import Necronomicon.FRP
 
 main :: IO()
--- main = runSignal oneThousandMousePositions'
+main = runSignal oneThousandMousePositions'
 -- main = runSignal $ dropIf (\(x,y) -> x > 400) (0,0) mousePos
 -- main = runSignal $ keepIf (\(x,y) -> x > 400) (0,0) mousePos
 -- main = runSignal $ sampleOn mouseClicks mousePos
@@ -11,7 +11,7 @@ main :: IO()
 -- main = runSignal $ every $ 2 * second
 -- main = runSignal $ dropWhen ((\(x,_) -> x > 400) <~ mousePos) mousePos
 -- main = runSignal $ sampleOn mouseClicks doubleMouse <|> mousePos
-main = runSignal $ every second <|> every (0.75 * second)
+-- main = runSignal $ every second <|> every (0.75 * second)
 
 doubleMouse :: Signal (Double,Double)
 doubleMouse = (\(x,y) -> (x*2,y*y)) <~ mousePos

@@ -38,6 +38,7 @@ import Data.Monoid
 import Control.Concurrent
 import Control.Concurrent.STM
 import Data.Either
+import qualified Data.Map as Map
 
 (<~) :: Functor f => (a -> b) -> f a -> f b
 (<~) = fmap
@@ -160,7 +161,7 @@ data InputEvent = MousePosition (Double,Double)
                 | TimeEvent     Int Time
                 deriving (Show,Eq)
 
-data Signal a = Signal (IO (a,TChan (Maybe a),[(TChan InputEvent -> TQueue InputEvent -> IO ThreadId)]))
+data Signal a = Signal (IO (a,TChan (Maybe a),[(TChan InputEvent -> TQueue InputEvent -> IO (Maybe Int))]))
               | Pure a
 
 ---------------------------------------------
@@ -173,6 +174,7 @@ mousePos = Signal $ (atomically newBroadcastTChan) >>= \outBox -> return ((0,0),
         thread outBox broadcastInbox _ = do
            inBox  <- atomically $ dupTChan broadcastInbox
            forkIO $ inputLoop inBox outBox
+           return Nothing
         inputLoop inBox outBox = forever $ do
             event <- atomically $ readTChan inBox
             case event of
@@ -185,6 +187,7 @@ mouseClicks = Signal $ (atomically newBroadcastTChan) >>= \outBox -> return ((),
         thread outBox broadcastInbox _ = do
              inBox  <- atomically $ dupTChan broadcastInbox
              forkIO $ inputLoop inBox outBox
+             return Nothing
         inputLoop inBox outBox = forever $ do
             event <- atomically $ readTChan inBox
             case event of
@@ -197,20 +200,14 @@ every delta = Signal $ (atomically newBroadcastTChan) >>= \outBox -> return (0,o
         millisecondDelta = floor $ delta * 1000000
         thread outBox broadcastInbox globalDispatch = do
              inBox  <- atomically $ dupTChan broadcastInbox
-             forkIO $ timeLoop globalDispatch
+             -- forkIO $ timeLoop globalDispatch
              forkIO $ inputLoop inBox outBox
+             return $ Just millisecondDelta
         inputLoop inBox outBox = forever $ do
             event <- atomically $ readTChan inBox
             case event of
                 TimeEvent d t -> atomically (writeTChan outBox $ if d == millisecondDelta then Just t else Nothing)
                 _             -> atomically (writeTChan outBox Nothing)
-        timeLoop outBox = forever $ do
-            t <- GLFW.getTime
-            case t of
-                Nothing    -> threadDelay millisecondDelta
-                Just time  -> do
-                    atomically $ writeTQueue outBox $ TimeEvent millisecondDelta time
-                    threadDelay millisecondDelta
 
 ---------------------------------------------
 -- Main Machinery
@@ -222,7 +219,7 @@ instance Functor Signal where
         inBox                               <- atomically $ dupTChan broadcastInbox
         outBox                              <- atomically newBroadcastTChan
         let defaultValue                     = f childEvent
-        let thread _ _                       = forkIO (fmapLoop f inBox outBox)
+        let thread _ _                       = forkIO (fmapLoop f inBox outBox) >> return Nothing
         return (defaultValue,outBox,thread : gThread)
 
     fmap f (Pure a) = Pure $ f a
@@ -235,14 +232,14 @@ instance Applicative Signal where
         inBox                           <- atomically $ dupTChan broadcastInbox
         outBox                          <- atomically newBroadcastTChan 
         let defaultValue                 = f gEvent
-        let thread _  _                  = forkIO (fmapLoop f inBox outBox)
+        let thread _  _                  = forkIO (fmapLoop f inBox outBox) >> return Nothing
         return (defaultValue,outBox,thread : gThread)
     Signal f <*> Pure g   = Signal $ do
         (fEvent,broadcastInbox,fThreads) <- f
         inBox                            <- atomically $ dupTChan broadcastInbox
         outBox                           <- atomically newBroadcastTChan
         let defaultValue                 = fEvent g
-        let thread _  _                  = forkIO (fmapeeLoop g inBox outBox)
+        let thread _  _                  = forkIO (fmapeeLoop g inBox outBox) >> return Nothing
         return (defaultValue,outBox,thread : fThreads)
     Signal f <*> Signal g = Signal $ do
         (fEvent,fBroadcastInbox,fThread) <- f
@@ -251,7 +248,7 @@ instance Applicative Signal where
         gInBox                           <- atomically $ dupTChan gBroadcastInbox
         outBox                           <- atomically newBroadcastTChan
         let defaultValue                  = fEvent gEvent
-        let thread _  _                   = forkIO (applicativeLoop fEvent gEvent fInBox gInBox outBox)
+        let thread _  _                   = forkIO (applicativeLoop fEvent gEvent fInBox gInBox outBox) >> return Nothing
         return (defaultValue,outBox,thread : fThread ++ gThread)
 
 applicativeLoop :: (a -> b) -> a -> TChan (Maybe (a -> b)) -> TChan (Maybe a) -> TChan (Maybe b) -> IO()
@@ -316,10 +313,13 @@ runSignal (Signal s) = initWindow >>= \mw ->
             inBox <- atomically $ dupTChan broadcastInbox
             forkIO $ forceLoop inBox
 
+            --Start global Dispatch
             eventNotify <- atomically newBroadcastTChan
             globalDispatch <- atomically newTQueue
-            mapM_ (\x -> x eventNotify globalDispatch) signalThreads
+            maybeTimers <- mapM (\x -> x eventNotify globalDispatch) signalThreads
             forkIO $ globalEventDispatch globalDispatch eventNotify
+
+            mapM_ (\(t,_) -> forkIO $ timeLoop globalDispatch t) $ Map.toList $ foldr collectTimers Map.empty maybeTimers
             
             GLFW.setCursorPosCallback   w $ Just $ mousePosEvent globalDispatch
             GLFW.setMouseButtonCallback w $ Just $ mousePressEvent globalDispatch
@@ -330,6 +330,9 @@ runSignal (Signal s) = initWindow >>= \mw ->
         mousePosEvent   eventNotify window x y                                   = atomically (writeTQueue eventNotify $ MousePosition (x,y))
         mousePressEvent eventNotify window mb GLFW.MouseButtonState'Released mod = atomically (writeTQueue eventNotify $ MouseClick)
         mousePressEvent _           _      _  GLFW.MouseButtonState'Pressed  _   = return ()
+
+        collectTimers Nothing     timers = timers
+        collectTimers (Just time) timers = Map.insert time time timers
 
         forceLoop inBox = forever $ do
             v <- atomically (readTChan inBox)
@@ -367,7 +370,7 @@ instance Alternative Signal where
         fInBox                           <- atomically $ dupTChan fBroadcastInbox
         gInBox                           <- atomically $ dupTChan gBroadcastInbox
         outBox                           <- atomically newBroadcastTChan
-        let thread _  _                   = forkIO (alternativeLoop fInBox gInBox outBox)
+        let thread _  _                   = forkIO (alternativeLoop fInBox gInBox outBox) >> return Nothing
         return (fEvent,outBox,thread : fThread ++ gThread)
         where
             alternativeLoop aInBox bInBox outBox = forever $ do
@@ -457,6 +460,16 @@ toMinutes t = t / 60
 toHours :: Time -> Time
 toHours t = t / 3600
 
+timeLoop :: TQueue InputEvent -> Int -> IO()
+timeLoop outBox millisecondDelta = forever $ do
+    t <- GLFW.getTime
+    case t of
+        Nothing    -> threadDelay millisecondDelta
+        Just time  -> do
+            atomically $ writeTQueue outBox $ TimeEvent millisecondDelta time
+            threadDelay millisecondDelta
+
+
 ---------------------------------------------
 -- Filters
 ---------------------------------------------
@@ -467,7 +480,7 @@ keepIf predicate init (Signal s) = Signal $ do
     inBox  <- atomically $ dupTChan sBroadcast
     outBox <- atomically newBroadcastTChan
     let defaultValue = if predicate sVal then sVal else init
-    let thread _ _ = forkIO $ loop inBox outBox
+    let thread _ _ = forkIO (loop inBox outBox) >> return Nothing
     return (defaultValue,outBox,thread : sThreads)
     where
         loop inBox outBox = forever $ do
@@ -483,7 +496,7 @@ dropIf predicate init (Signal s) = Signal $ do
     inBox  <- atomically $ dupTChan sBroadcast
     outBox <- atomically newBroadcastTChan
     let defaultValue = if predicate sVal then init else sVal
-    let thread _ _ = forkIO $ loop inBox outBox
+    let thread _ _ = forkIO (loop inBox outBox) >> return Nothing
     return (defaultValue,outBox,thread : sThreads)
     where
         loop inBox outBox = forever $ do
@@ -500,7 +513,7 @@ sampleOn (Signal sampler) (Signal value) = Signal $ do
     sInBox  <- atomically $ dupTChan sBroadcast
     vInBox  <- atomically $ dupTChan vBroadcast
     outBox <- atomically newBroadcastTChan
-    let thread _ _ = forkIO $ loop vVal sInBox vInBox outBox
+    let thread _ _ = forkIO (loop vVal sInBox vInBox outBox) >> return Nothing
     return (vVal,outBox,thread : (sThreads ++ vThreads))
     where
         loop prev sInBox vInBox outBox = do
@@ -521,7 +534,7 @@ keepWhen (Signal predicate) (Signal value) = Signal $ do
     pInBox  <- atomically $ dupTChan pBroadcast
     vInBox  <- atomically $ dupTChan vBroadcast
     outBox  <- atomically newBroadcastTChan
-    let thread _ _ = forkIO $ loop pVal vVal pInBox vInBox outBox
+    let thread _ _ = forkIO (loop pVal vVal pInBox vInBox outBox) >> return Nothing
     return (vVal,outBox,thread : (pThreads ++ vThreads))
     where
         loop prevP prevVal pInBox vInBox outBox = do
@@ -542,7 +555,7 @@ dropWhen (Signal predicate) (Signal value) = Signal $ do
     pInBox  <- atomically $ dupTChan pBroadcast
     vInBox  <- atomically $ dupTChan vBroadcast
     outBox  <- atomically newBroadcastTChan
-    let thread _ _ = forkIO $ loop pVal vVal pInBox vInBox outBox
+    let thread _ _ = forkIO (loop pVal vVal pInBox vInBox outBox) >> return Nothing
     return (vVal,outBox,thread : (pThreads ++ vThreads))
     where
         loop prevP prevVal pInBox vInBox outBox = do
