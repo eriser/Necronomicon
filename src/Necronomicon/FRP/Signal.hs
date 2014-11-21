@@ -1,10 +1,5 @@
 module Necronomicon.FRP.Signal (
     Signal,
-    -- every,
-    millisecond,
-    second,
-    minute,
-    hour,
     -- foldp,
     -- fps,
     (<~),
@@ -19,7 +14,11 @@ module Necronomicon.FRP.Signal (
     runSignal,
     mouseClicks,
     every,
+    fps,
     second,
+    millisecond,
+    minute,
+    hour,
     keepIf,
     dropIf,
     sampleOn,
@@ -200,7 +199,6 @@ every delta = Signal $ (atomically newBroadcastTChan) >>= \outBox -> return (0,o
         millisecondDelta = floor $ delta * 1000000
         thread outBox broadcastInbox globalDispatch = do
              inBox  <- atomically $ dupTChan broadcastInbox
-             -- forkIO $ timeLoop globalDispatch
              forkIO $ inputLoop inBox outBox
              return $ Just millisecondDelta
         inputLoop inBox outBox = forever $ do
@@ -208,6 +206,22 @@ every delta = Signal $ (atomically newBroadcastTChan) >>= \outBox -> return (0,o
             case event of
                 TimeEvent d t -> atomically (writeTChan outBox $ if d == millisecondDelta then Just t else Nothing)
                 _             -> atomically (writeTChan outBox Nothing)
+
+fps :: Time -> Signal Time
+fps delta = Signal $ (atomically newBroadcastTChan) >>= \outBox -> return (0,outBox,[thread outBox])
+    where
+        millisecondDelta = floor $ (1.0 / delta) * 1000000
+        thread outBox broadcastInbox globalDispatch = do
+             inBox  <- atomically $ dupTChan broadcastInbox
+             forkIO $ inputLoop 0 inBox outBox
+             return $ Just millisecondDelta
+        inputLoop prev inBox outBox = do
+            event <- atomically $ readTChan inBox
+            case event of
+                TimeEvent d t -> if d == millisecondDelta
+                                     then atomically (writeTChan outBox $ Just $ t - prev) >> inputLoop t inBox outBox
+                                     else atomically (writeTChan outBox $ Nothing)         >> inputLoop prev inBox outBox
+                _             -> atomically (writeTChan outBox Nothing) >> inputLoop prev inBox outBox
 
 ---------------------------------------------
 -- Main Machinery
