@@ -362,6 +362,11 @@ runSignal (Signal s) = initWindow >>= \mw ->
                 threadDelay $ 16667 * 2
                 render q window
 
+--Take global event dispatch further???
+--Everything has an id.
+--Each actor listens to an inbox, and has an array of ids.
+--When things change, or don't, broadcasts that information and it's id to global event dispatch
+
 --Alternative instance
 globalEventDispatch :: TQueue InputEvent -> TChan InputEvent -> IO()
 globalEventDispatch inBox outBox = forever $ do
@@ -483,7 +488,6 @@ timeLoop outBox millisecondDelta = forever $ do
             atomically $ writeTQueue outBox $ TimeEvent millisecondDelta time
             threadDelay millisecondDelta
 
-
 ---------------------------------------------
 -- Filters
 ---------------------------------------------
@@ -582,3 +586,39 @@ dropWhen (Signal predicate) (Signal value) = Signal $ do
                 Just p' -> case v of
                     Nothing -> atomically (writeTChan outBox $ if not p'    then Just prevVal else Nothing) >> loop p'    prevVal pInBox vInBox outBox
                     Just v' -> atomically (writeTChan outBox $ if not p'    then Just v'      else Nothing) >> loop p'    v'      pInBox vInBox outBox
+
+
+---------------------------------------------
+-- Pattern support
+---------------------------------------------
+{-
+sampleOn :: Signal Bool -> Signal Bool -> Signal ()
+sampleOn (Signal player) (Signal stopper) = Signal $ do
+    (pVal,pBroadcast,pThreads) <- player
+    (sVal,sBroadcast,sThreads) <- stopper
+    pInBox  <- atomically $ dupTChan pBroadcast
+    sInBox  <- atomically $ dupTChan sBroadcast
+    outBox <- atomically newBroadcastTChan
+    let thread _ _ = forkIO (loop (pval && not sVal) sVal pVal pInBox sInBox outBox) >> return Nothing
+    return ((),outBox,thread : (vThreads ++ sThreads))
+    where
+        loop isPlaying pInBox sInBox outBox = do
+            p <- atomically (readTChan sInBox)
+            s <- atomically (readTChan vInBox)
+            case p of
+                Nothing -> case s of
+                    Nothing -> atomically (writeTChan outBox Nothing) >> loop isPlaying pInBox sInBox outBox
+                    Just s' -> do
+                        atomically (writeTChan outBox ())
+                        if not s' && isPlaying then print "Stop playing" else return ()
+                        loop False pInBox sInBox outBox
+                Just p'  -> case v of
+                    Nothing -> do 
+                        atomically (writeTChan outBox $ Just prev)
+                        if p' && not isPlaying then print "Start playing" else return ()
+                        loop (p' && not isPlaying) pInBox sInBox outBox
+                    Just s' -> do
+                        atomically (writeTChan outBox $ Just v'  )
+                        if p' && not isPlaying then print "Start playing" else return ()
+                        loop False pInBox sInBox outBox
+-}
