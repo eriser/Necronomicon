@@ -341,7 +341,7 @@ runSignal (Signal s) = initWindow >>= \mw ->
             | otherwise = do
                 GLFW.pollEvents
                 q <- liftA (== GLFW.KeyState'Pressed) (GLFW.getKey window GLFW.Key'Q)
-                threadDelay 16667
+                threadDelay $ 16667 * 2
                 render q window
 
 --Alternative instance
@@ -354,6 +354,29 @@ globalEventDispatch inBox outBox = forever $ do
 ---------------------------------------------
 -- Instances
 ---------------------------------------------
+
+instance Alternative Signal where
+    empty = Pure undefined
+    Pure   a <|> Pure   b = Pure a
+    Pure   a <|> Signal b = Signal $ b >>= \(_,broadcastInbox,bThread) -> return (a,broadcastInbox,bThread)
+    Signal f <|> Pure g   = Signal f
+    Signal f <|> Signal g = Signal $ do
+        (fEvent,fBroadcastInbox,fThread) <- f
+        (gEvent,gBroadcastInbox,gThread) <- g
+        fInBox                           <- atomically $ dupTChan fBroadcastInbox
+        gInBox                           <- atomically $ dupTChan gBroadcastInbox
+        outBox                           <- atomically newBroadcastTChan
+        let thread _  _                   = forkIO (alternativeLoop fInBox gInBox outBox)
+        return (fEvent,outBox,thread : fThread ++ gThread)
+        where
+            alternativeLoop aInBox bInBox outBox = forever $ do
+                b <- atomically $ readTChan bInBox
+                a <- atomically $ readTChan aInBox
+                case a of
+                    Just a' -> atomically $ writeTChan outBox $ Just a'
+                    Nothing -> case b of
+                        Just b' -> atomically $ writeTChan outBox $ Just b'
+                        Nothing -> atomically $ writeTChan outBox Nothing
 
 instance Num a => Num (Signal a) where
     (+)         = liftA2 (+)
