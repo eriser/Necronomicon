@@ -20,7 +20,8 @@ library
     exposed-modules:
         Necronomicon
         Necronomicon.FRP
-
+        Necronomicon.UGen
+		
     other-modules:
         Necronomicon.Language.Layout
         Necronomicon.Math
@@ -31,7 +32,6 @@ library
         Necronomicon.Networking.Message
         Necronomicon.Networking.User
         Necronomicon.Patterns
-        Necronomicon.UGen
         Necronomicon.FRP.Signal
     Build-Depends:     
         base             >= 3 && < 5,

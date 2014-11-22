@@ -53,10 +53,43 @@ typedef struct
 	Calc* calc;
 	void* args;
 	unsigned int numArgs;
+	
 } UGen;
 
 int ugenSize = sizeof(UGen);
 int ugenAlignment = __alignof__(UGen);
+
+Signal numberCalc(void* args, double time)
+{
+	return ((Signal*) args)[0];
+}
+
+void pr_free_ugen(UGen* ugen)
+{
+	if(ugen == NULL)
+		return;
+
+	if(ugen->calc != numberCalc)
+	{
+		unsigned int i;
+		for(i = 0; i < ugen->numArgs; ++i)
+		{
+			pr_free_ugen(&(((UGen*) ugen->args)[i]));
+		}
+	}
+
+	if(ugen->args)
+		free(ugen->args);
+}
+
+void free_ugen(UGen* ugen)
+{
+	if(ugen == NULL)
+		return;
+	
+	pr_free_ugen(ugen);
+	free(ugen);	
+}
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // UGens
@@ -104,11 +137,6 @@ Signal sinCalc(void* args, double time)
 	
 	Signal signal = { amplitude, 0 };
 	return signal;
-}
-
-Signal numberCalc(void* args, double time)
-{
-	return ((Signal*) args)[0];
 }
 
 Signal addCalc(void* args, double time)
@@ -273,7 +301,7 @@ void printTabs(unsigned int depth)
 	unsigned int i;
 	for(i = 0; i < depth; ++i)
 	{
-		printf("\t");
+		printf(" ");
 	}
 }
 
@@ -447,12 +475,12 @@ void startRuntime(UGen* ugen)
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 typedef enum { false, true } bool;
-unsigned int max_fifo_messages = 2048;
-unsigned int fifo_size_mask = 2047;
+const unsigned int max_fifo_messages = 2048;
+const unsigned int fifo_size_mask = 2047;
 
 typedef struct ugen_node
 {
-	double time;
+	unsigned int time;
 	UGen* ugen;
 	struct ugen_node* previous;
 	struct ugen_node* next;
@@ -460,10 +488,10 @@ typedef struct ugen_node
 	unsigned int hash;
 } ugen_node;
 
-unsigned int node_size = sizeof(ugen_node);
-unsigned int node_pointer_size = sizeof(ugen_node*);
+const unsigned int node_size = sizeof(ugen_node);
+const unsigned int node_pointer_size = sizeof(ugen_node*);
 
-ugen_node* new_ugen_node(double time, UGen* ugen)
+ugen_node* new_ugen_node(unsigned int time, UGen* ugen)
 {
 	ugen_node* node = (ugen_node*) malloc(node_size);
 	assert(node);
@@ -482,7 +510,7 @@ void node_free(ugen_node* node)
 	if(node)
 	{
 		if(node->ugen)
-			free(node->ugen);
+			free_ugen(node->ugen);
 
 		free(node);
 	}
@@ -536,6 +564,7 @@ void nrt_fifo_free()
 	}
 	
 	free(nrt_fifo);
+	nrt_fifo = NULL;
 	nrt_fifo_read_index = 0;
 	nrt_fifo_write_index = 0;
 }
@@ -550,6 +579,7 @@ void rt_fifo_free()
 	}
 	
 	free(rt_fifo);
+	rt_fifo = NULL;
 	rt_fifo_read_index = 0;
 	rt_fifo_write_index = 0;
 }
@@ -581,6 +611,7 @@ void scheduled_list_free()
 	}
 	
 	free(scheduled_node_list);
+	scheduled_node_list = NULL;
 	scheduled_list_read_index = 0;
 	scheduled_list_write_index = 0;
 }
@@ -623,8 +654,8 @@ void scheduled_list_sort()
 // Fixed memory hash table using open Addressing with linear probing
 // This is not thread safe.
 
-unsigned int max_synths = 8192;
-unsigned int hash_table_size_mask = 8191;
+const unsigned int max_synths = 8192;
+const unsigned int hash_table_size_mask = 8191;
 unsigned int num_synths = 0;
 
 typedef union
@@ -832,11 +863,11 @@ void remove_synth(unsigned int id)
 }
 
 // Iterate over the scheduled list and add synths if they are ready. Stop as soon as we find a synth that isn't ready.
-void add_scheduled_synths(double current_time)
+void add_scheduled_synths()
 {
 	while(scheduled_list_read_index != scheduled_list_write_index)
 	{
-		if(SCHEDULED_LIST_PEEK_TIME() == current_time)
+		if(SCHEDULED_LIST_PEEK_TIME() == absolute_time)
 		{
 			ugen_node* node = SCHEDULED_LIST_POP();
 			add_synth(node);
@@ -871,7 +902,8 @@ void schedule_nodes_from_rt_fifo()
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 doubly_linked_list nrt_free_node_list = NULL;
-unsigned int max_node_pool_count = 500;
+const unsigned int max_node_pool_count = 500;
+const unsigned int initial_node_count = 250;
 unsigned int node_pool_count = 0;
 
 void init_nrt_thread()
@@ -879,6 +911,13 @@ void init_nrt_thread()
 	assert(nrt_fifo == NULL);
 	nrt_fifo = new_node_list();
 	node_pool_count = 0;
+
+	// Pre-allocate some ugen nodes for runtime
+	while(node_pool_count < initial_node_count)
+	{
+		nrt_free_node_list = doubly_linked_list_push(nrt_free_node_list, new_ugen_node(0, NULL));
+		++node_pool_count;
+	}
 }
 
 void shutdown_nrt_thread()
@@ -897,7 +936,7 @@ void nrt_free_node(ugen_node* node)
 {
 	if(node)
 	{
-		free(node->ugen);
+		free_ugen(node->ugen);
 
 		if(node_pool_count < max_node_pool_count)
 		{
@@ -965,7 +1004,7 @@ void send_synth_to_rt_thread(UGen* synth, double time)
 void print_node(ugen_node* node)
 {	
 	if(node)
-		printf("ugen_node { time: %f, ugen: %p, previous: %p, next: %p, hash: %u, key %u }", node->time, node->ugen, node->previous, node->next, node->hash, node->key);
+		printf("ugen_node { time: %u, ugen: %p, previous: %p, next: %p, hash: %u, key %u }", node->time, node->ugen, node->previous, node->next, node->hash, node->key);
 	else
 		printf("0");
 }
@@ -1001,7 +1040,7 @@ void randomize_and_print_list(node_list list)
 		unsigned int num_push = random() / (double) RAND_MAX * 100;
 		while((num_push > 0) && ((scheduled_list_read_index & fifo_size_mask) != (scheduled_list_write_index & fifo_size_mask)))
 		{
-			ugen_node* node = new_ugen_node((random() / (double) RAND_MAX) * 1000.0, NULL);
+			ugen_node* node = new_ugen_node((random() / (double) RAND_MAX) * 10000.0, NULL);
 			SCHEDULED_LIST_PUSH(node);
 			--num_push;
 		}
@@ -1027,7 +1066,7 @@ void test_list()
 	scheduled_node_list = new_node_list();
 	while(scheduled_list_write_index < (max_fifo_messages * 0.75))
 	{
-		ugen_node* node = new_ugen_node((random() / (double) RAND_MAX) * 1000.0, NULL);
+		ugen_node* node = new_ugen_node((random() / (double) RAND_MAX) * 10000.0, NULL);
 		SCHEDULED_LIST_PUSH(node);
 	}
 
@@ -1066,7 +1105,7 @@ void print_hash_table(hash_table table)
 }
 
 unsigned int num_values = 5000;
-double times[5000];
+unsigned int times[5000];
 
 void test_hash_table()
 {
@@ -1080,7 +1119,7 @@ void test_hash_table()
 
 	for(i = 0; i < num_values; ++i)
 	{
-		times[i] = (random() / (double) RAND_MAX) * 1000.0;
+		times[i] = (random() / (double) RAND_MAX) * 10000.0;
 		ugen_node* node = new_ugen_node(times[i], NULL);
 		node->key = i;
 		hash_table_insert(table, node);
@@ -1185,7 +1224,7 @@ void test_doubly_linked_list()
 
 		if(next)
 		{
-			printf("(next: %f) - (node: %f) = %f\n", next->time, node->time, next->time - node->time);
+			printf("(next: %u) - (node: %u) = %u\n", next->time, node->time, next->time - node->time);
 			assert((next->time - node->time) == 1);
 		}
 
@@ -1207,7 +1246,7 @@ void test_doubly_linked_list()
 
 		if(next)
 		{
-			printf("(next: %f) - (node: %f) = %f\n", next->time, node->time, next->time - node->time);
+			printf("(next: %u) - (node: %u) = %u\n", next->time, node->time, next->time - node->time);
 			assert((next->time - node->time) == 2);
 		}
 
