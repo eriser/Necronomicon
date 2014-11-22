@@ -58,9 +58,9 @@ typedef struct
 int ugenSize = sizeof(UGen);
 int ugenAlignment = __alignof__(UGen);
 
-////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // UGens
-////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 inline double sigsum(Signal signal)
 {
@@ -442,9 +442,9 @@ void startRuntime(UGen* ugen)
 }
 
 
-////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Scheduler
-////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 typedef enum { false, true } bool;
 unsigned int max_nodes = 2048;
@@ -456,6 +456,8 @@ typedef struct ugen_node
 	UGen* ugen;
 	struct ugen_node* previous;
 	struct ugen_node* next;
+	unsigned int key;
+	unsigned int hash;
 } ugen_node;
 
 unsigned int node_size = sizeof(ugen_node);
@@ -464,14 +466,14 @@ unsigned int node_pointer_size = sizeof(ugen_node*);
 ugen_node* new_ugen_node(double time, UGen* ugen)
 {
 	ugen_node* node = (ugen_node*) malloc(node_size);
-
-	if(node == NULL)
-		return node;
+	assert(node);
 	
 	node->time = time;
 	node->ugen = ugen;
-	node->previous = 0;
-	node->next = 0;
+	node->previous = NULL;
+	node->next = NULL;
+	node->key = 0;
+	node->hash = 0;
 	return node;
 }
 
@@ -502,9 +504,11 @@ unsigned int fifo_write_index = 0;
 // Allocate and null initialize a node list to be used as a node_fifo or node_list
 ugen_node** new_node_list()
 {
-	unsigned int size = node_pointer_size * max_nodes;
-	ugen_node** list = (ugen_node**) malloc(size);
-	memset(list, 0, size);
+	unsigned int byte_size = node_pointer_size * max_nodes;
+	ugen_node** list = (ugen_node**) malloc(byte_size);
+	assert(list);
+	memset(list, 0, byte_size);
+	
 	return list;
 }
 
@@ -603,21 +607,6 @@ void copy_nodes_from_fifo(node_fifo fifo, node_list list)
 // Hash Table
 ///////////////////////////
 
-/*
-    Make NRT C thread keep a collection of 100 pre-allocated synth memory chunks by default
-	When a new synth request is made we use these pre-allocated memory chunks, then send them on to the RT thread via a FIFO queue
-	When the RT thread frees the synths they send them back (again via a FIFO queue) which is then recollected in the memory pool.
-	Node IDs begin as a long list [0..80191], with ids taken from the front. These ID's are stored in the UGen memory points as they
-	are created and before sending off. When they come back for de-allocation, we keep the ID association for new UGens, which allows
-	Recycling without keeping track of the current list explcitly. If the re-allocation pool becomes too large we can actually free some
-	Elements (not too many, we want to re-use as much as possible) and at this point we could reclaim the node id in the large node id pool.
-	This method would allow the node lookup table in the synth RT thread to simply be a flat array.
-	Because we're naturally compressing the node ids and thus densely front loading this array naturally because of node id re-use,
-	Would it be faster just to loop over a subset of this array (up to say a sentinel END node). There would be gaps but we could order the
-	THe reuse pool in the NRT thread so that lower IDs would get reused first. In general this will make the NRT slightly slower but would
-	allow the RT thread to do very little to maintain the synth collection and be able to go very fast.
-*/
-
 // Fixed memory hash table using open Addressing with linear probing
 // This is not thread safe.
 
@@ -631,20 +620,15 @@ typedef union
 	unsigned int word;
 } four_bytes;
 
-typedef struct
-{
-	void* value;
-	unsigned int key;
-	unsigned int hash;
-} hash_node;
-
-typedef hash_node** hash_table;
+typedef ugen_node** hash_table;
 
 hash_table hash_table_new()
 {
-	unsigned int byte_size = sizeof(hash_node) * max_synths;
+	unsigned int byte_size = node_pointer_size * max_synths;
 	hash_table table = (hash_table) malloc(byte_size);
+	assert(table);
 	memset(table, 0, byte_size);
+	
 	return table;
 }
 
@@ -653,9 +637,8 @@ void hash_table_free(hash_table table)
 	unsigned int i = 0;
 	for(; i < max_synths; ++i)
 	{
-		hash_node* node = table[i];
-		if(node)
-			free(node);
+		ugen_node* node = table[i];
+		node_free(node);
 	}
 
 	free(table);
@@ -669,7 +652,7 @@ const unsigned int seed = 0x811C9DC5; // 2166136261
 #define HASH_KEY_PRIV(key) (FNV1A(key.bytes[3], FNV1A(key.bytes[2], FNV1A(key.bytes[1], FNV1A(key.bytes[0], seed)))))
 #define HASH_KEY(key) ((unsigned int) HASH_KEY_PRIV(((four_bytes) key)))
 
-void hash_table_insert(hash_table table, hash_node* node)
+void hash_table_insert(hash_table table, ugen_node* node)
 {
 	assert(num_synths < max_synths);
 	node->hash = HASH_KEY(node->key);
@@ -677,49 +660,57 @@ void hash_table_insert(hash_table table, hash_node* node)
 
 	while(table[slot])
 		slot = (slot + 1) & hash_table_size_mask;
-
+	
 	table[slot] = node;
 	++num_synths;
 }
 
-hash_node* hash_table_remove(hash_table table, unsigned int key)
+ugen_node* hash_table_remove(hash_table table, unsigned int key)
 {
+	assert(num_synths > 0);
 	unsigned int hash = HASH_KEY(key);
 	unsigned int slot = hash & hash_table_size_mask;
-
-	while(table[slot])
+	unsigned int i = 0;
+	
+	while(i < max_synths)
 	{
-		if(table[slot]->key == key)
+		if(table[slot])
 		{
-			hash_node* node = table[slot];
-			table[slot] = 0;
-			--num_synths;
-			return node;
+			if(table[slot]->key == key)
+			{
+				ugen_node* node = table[slot];
+				table[slot] = NULL;
+				--num_synths;
+				return node;
+			}
 		}
 
-		else
-		{
-			++slot;
-		}
+		++i;
+		slot = (slot + 1) & hash_table_size_mask;
 	}
 
-	return 0;
+	return NULL;
 }
 
-hash_node* hash_table_lookup(hash_table table, unsigned int key)
+ugen_node* hash_table_lookup(hash_table table, unsigned int key)
 {
 	unsigned int hash = HASH_KEY(key);
 	unsigned int slot = hash & hash_table_size_mask;
-
-	while(table[slot])
+	unsigned int i = 0;
+	
+	while(i < max_synths)
 	{
-		if(table[slot]->key == key)
-			return table[slot];
-		else
-			++slot;
+		if(table[slot])
+		{
+			if(table[slot]->key == key)
+				return table[slot];
+		}
+
+		++i;
+		slot = (slot + 1) & hash_table_size_mask;
 	}
 
-	return 0;
+	return NULL;
 }
 
 ///////////////////////////
@@ -777,16 +768,28 @@ void doubly_linked_list_free(doubly_linked_list list)
 	}
 }
 
+///////////////////////////
+// Synth Node Handling
+///////////////////////////
 
-////////////////////////////////////////////////////////////////////////////////////
+void synth_add(ugen_node* node, unsigned int id)
+{
+	synth_list = doubly_linked_list_push(synth_list, node);
+	
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Tests
-////////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 //// Test FIFO
 
 void print_node(ugen_node* node)
-{
-	printf("ugen_node { time: %f, ugen: %p, previous: %p, next: %p }\n", node->time, node->ugen, node->previous, node->next);
+{	
+	if(node)
+		printf("ugen_node { time: %f, ugen: %p, previous: %p, next: %p, hash: %u, key %u }", node->time, node->ugen, node->previous, node->next, node->hash, node->key);
+	else
+		printf("0");
 }
 
 void print_list(node_list list)
@@ -797,6 +800,7 @@ void print_list(node_list list)
 	for(; i != list_write_index; i = (i + 1) & size_mask)
 	{
 		print_node(list[i]);
+		printf("\n");
 	}
 }
 
@@ -864,60 +868,27 @@ void test_list()
 
 //// Test Hash Table
 
-// Assuming string values for this print function
-void print_hash_node(hash_node* node)
-{
-	if(node)
-		printf("hash_node { hash: %u, key %u, value: %s }", node->hash, node->key, (char*) node->value);
-	else
-		printf("0");
-}
-
 void print_hash_table(hash_table table)
 {
+	puts("\n\n//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////");
+	puts("// Hash Table");
+	puts("//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////\n");
+	
 	printf("hash_table [");
 	
 	unsigned int i;
 	for(i = 0; i < max_synths; ++i)
 	{
-		print_hash_node(table[i]);
+		print_node(table[i]);
 		if(i < (max_synths - 1))
 			printf(", ");
 	}
 
-	printf("]");
+	printf("]\n\n");
 }
 
-typedef struct
-{
-	char* string;
-	unsigned int key;
-} key_value;
-
-unsigned int num_values = 21;
-key_value values[] = {
-	{ "Zero",      0  },
-	{ "One",       1  },
-	{ "Two",       2  },
-	{ "Three",     3  },
-	{ "Four",      4  },
-	{ "Five",      5  },
-	{ "Six",       6  },
-	{ "Seven",     7  },
-	{ "Eight",     8  },
-	{ "Nine",      9  },
-	{ "Ten",       10 },
-	{ "Eleven",    11 },
-	{ "Twelve",    12 },
-	{ "Thirteen",  13 },
-	{ "Fourteen",  14 },
-	{ "Fifteen",   15 },
-	{ "Sixteen",   16 },
-	{ "Seventeen", 17 },
-	{ "Eighteen",  18 },
-	{ "Nineteen",  19 },
-	{ "Twenty",    20 }
-};
+unsigned int num_values = 5000;
+double times[5000];
 
 void test_hash_table()
 {
@@ -931,35 +902,44 @@ void test_hash_table()
 
 	for(i = 0; i < num_values; ++i)
 	{
-		hash_node* node = (hash_node*) malloc(sizeof(hash_node));
-		node->value = values[i].string;
-		node->key = values[i].key;
+		times[i] = (random() / (double) RAND_MAX) * 1000.0;
+		ugen_node* node = new_ugen_node(times[i], NULL);
+		node->key = i;
 		hash_table_insert(table, node);
+		assert(node == hash_table_lookup(table, i));
 	}
-
+	
 	print_hash_table(table);
+
+	puts("Asserting table values...\n\n");
 	
 	for(i = 0; i < num_values; ++i)
 	{
-		hash_node* node = hash_table_lookup(table, i);
+		ugen_node* node = hash_table_lookup(table, i);
 		assert(node);
-		assert(node->value == values[i].string);
-		assert(node->key == values[i].key);
+		assert(node->time == times[i]);
+		assert(node->key == i);
 	}
 
+	puts("Removing table values...\n\n");
+	
 	for(i = 0; i < num_values; ++i)
 	{
-		hash_node* node = hash_table_remove(table, i);
+		ugen_node* node = hash_table_remove(table, i);
 		assert(node);
-		free(node);
+		node_free(node);
 	}
 
-	for(i = 0; i < 3000; ++i)
+	puts("Asserting NULL values...\n\n");
+
+	for(i = 0; i < max_synths; ++i)
 	{
 		assert(hash_table_lookup(table, i) == NULL);
 	}
 	
 	print_hash_table(table);
+
+	puts("Freeing table...\n\n");
     hash_table_free(table);
 }
 
