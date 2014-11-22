@@ -65,16 +65,16 @@ Signal numberCalc(void* args, double time)
 
 void pr_free_ugen(UGen* ugen)
 {
-	if(ugen == NULL)
+	if (ugen == NULL)
 		return;
 
-	if(ugen->args == NULL)
+	if (ugen->args == NULL)
 		return;
 	
-	if(ugen->calc != numberCalc)
+	if (ugen->calc != numberCalc)
 	{
 		unsigned int i;
-		for(i = 0; i < ugen->numArgs; ++i)
+		for (i = 0; i < ugen->numArgs; ++i)
 		{
 			pr_free_ugen(&(((UGen*) ugen->args)[i]));
 		}
@@ -86,7 +86,7 @@ void pr_free_ugen(UGen* ugen)
 
 void free_ugen(UGen* ugen)
 {
-	if(ugen == NULL)
+	if (ugen == NULL)
 		return;
 	
 	pr_free_ugen(ugen);
@@ -167,18 +167,20 @@ Signal mulCalc(void* args, double time)
 	UGen b = ((UGen*) args)[1];
 	Signal as = a.calc(a.args, time);
 	Signal bs = b.calc(b.args, time);
-
 	Signal signal;
-	if(as.amplitude != 0)
+
+	if (as.amplitude != 0)
 	{
 		signal.amplitude = (bs.amplitude+bs.offset)*as.amplitude;
 		signal.offset    = (bs.amplitude+bs.offset)*as.offset;
 	}
+
 	else
 	{
 		signal.amplitude = (as.amplitude+as.offset)*bs.amplitude;
 		signal.offset    = (as.amplitude+as.offset)*bs.offset;
 	}
+
 	return signal;
 }
 
@@ -189,16 +191,19 @@ Signal udivCalc(void* args, double time)
 	Signal as = a.calc(a.args, time);
 	Signal bs = b.calc(b.args, time);
 	Signal signal;
-	if(as.amplitude != 0)
+
+	if (as.amplitude != 0)
 	{
 		signal.amplitude = (bs.amplitude+bs.offset)/as.amplitude;
 		signal.offset    = (bs.amplitude+bs.offset)/as.offset;
 	}
+
 	else
 	{
 		signal.amplitude = (as.amplitude+as.offset)/bs.amplitude;
 		signal.offset    = (as.amplitude+as.offset)/bs.offset;
 	}
+
 	return signal;
 }
 
@@ -217,12 +222,12 @@ Signal signumCalc(void* args, double time)
 	double signal = sigsum(input.calc(input.args, time));
 	Signal result = { 0, 0 };
 
-	if(signal > 0)
+	if (signal > 0)
 	{
 		result.offset = 1;
 	}
 	
-	else if(signal < 0)
+	else if (signal < 0)
 	{
 		result.offset = -1;
 	}
@@ -236,7 +241,7 @@ Signal negateCalc(void* args, double time)
 	Signal as = a.calc(a.args, time);
 	Signal signal;
 
-	if(as.amplitude != 0)
+	if (as.amplitude != 0)
 	{
 		signal.amplitude = -1 * as.amplitude;
 		signal.offset    = -1 * as.offset;
@@ -251,57 +256,10 @@ Signal negateCalc(void* args, double time)
 	return signal;
 }
 
-//////////////
-// Runtime
-//////////////
-
-unsigned int absolute_time = 0;
-jack_port_t* output_port1;
-jack_port_t* output_port2;
-jack_client_t* client;
-
-static void signal_handler(int sig)
-{
-	jack_client_close(client);
-	fprintf(stderr, "signal received, exiting ...\n");
-	exit(0);
-}
-
-/*
- * JACK calls this shutdown_callback if the server ever shuts down or
- * decides to disconnect the client.
- */
-void jack_shutdown (void *arg)
-{
-	exit (1);
-}
-
-int process(jack_nframes_t nframes, void *arg)
-{
-	jack_default_audio_sample_t *out1, *out2;
-	UGen* ugen = (UGen*) arg;
-	
-	int i;
-
-	out1 = (jack_default_audio_sample_t*) jack_port_get_buffer(output_port1, nframes);
-	out2 = (jack_default_audio_sample_t*) jack_port_get_buffer(output_port2, nframes);
-
-	for(i = 0; i < nframes; i++)
-    {
-		Signal signal = ugen->calc(ugen->args, absolute_time);
-		double sample = signal.amplitude + signal.offset;
-        out1[i] = sample;
-        out2[i] = sample;
-        absolute_time++;
-    }
-    
-	return 0;      
-}
-
 void printTabs(unsigned int depth)
 {
 	unsigned int i;
-	for(i = 0; i < depth; ++i)
+	for (i = 0; i < depth; ++i)
 	{
 		printf(" ");
 	}
@@ -316,10 +274,10 @@ void printUGen(UGen* ugen, unsigned int depth)
 	printTabs(depth + 1);
 	printf("(Args\n");
 
-	if(ugen->calc != numberCalc)
+	if (ugen->calc != numberCalc)
 	{
 		unsigned int i;
-		for(i = 0; i < ugen->numArgs; ++i)
+		for (i = 0; i < ugen->numArgs; ++i)
 		{
 			printUGen(&((UGen*) ugen->args)[i], depth + 2);
 		}
@@ -335,142 +293,6 @@ void printUGen(UGen* ugen, unsigned int depth)
 	printTabs(depth + 1);
 	printf("(NumArgs %i))\n", ugen->numArgs);
 }
-
-void startRuntime(UGen* ugen)
-{
-	/* printf("UGen size: %i\n", ugenSize); */
-	/* printf("UGen alignment: %i\n", ugenAlignment); */
-	/* printf("Signal size: %i\n", signalSize); */
-	/* printf("Signal alignment: %i\n", signalAlignment); */
-	
-	/* printf("Delay calc: %p\n", delayCalc); */
-	/* printf("Number calc: %p\n", numberCalc); */
-	
-	puts("Starting Necronomicon");
-	/* printUGen(ugen, 0); */
-	/* puts("\n"); */
-	
-	int si;
-	for(si = 0; si < TABLE_SIZE; si++)
-	{
-		sine_table[si] = sin(TWO_PI * (((float)si) / ((float)TABLE_SIZE)));
-	}
-	
-	const char** ports;
-	const char* client_name = "Necronomicon";
-	const char* server_name = NULL;
-	jack_options_t options = JackNullOption;
-	jack_status_t status;
-
-	int i;
-
-	/* open a client connection to the JACK server */
-
-	client = jack_client_open (client_name, options, &status, server_name);
-	if (client == NULL) {
-		fprintf (stderr, "jack_client_open() failed, "
-				 "status = 0x%2.0x\n", status);
-		if (status & JackServerFailed) {
-			fprintf (stderr, "Unable to connect to JACK server\n");
-		}
-		exit (1);
-	}
-	if (status & JackServerStarted) {
-		fprintf (stderr, "JACK server started\n");
-	}
-	if (status & JackNameNotUnique) {
-		client_name = jack_get_client_name(client);
-		fprintf (stderr, "unique name `%s' assigned\n", client_name);
-	}
-
-	/* tell the JACK server to call `process()' whenever
-	   there is work to be done.
-	*/
-
-	jack_set_process_callback (client, process, ugen);
-
-	/* tell the JACK server to call `jack_shutdown()' if
-	   it ever shuts down, either entirely, or if it
-	   just decides to stop calling us.
-	*/
-
-	jack_on_shutdown (client, jack_shutdown, 0);
-
-	/* create two ports */
-
-	output_port1 = jack_port_register (client, "output1",
-									   JACK_DEFAULT_AUDIO_TYPE,
-									   JackPortIsOutput, 0);
-
-	output_port2 = jack_port_register (client, "output2",
-									   JACK_DEFAULT_AUDIO_TYPE,
-									   JackPortIsOutput, 0);
-
-	if ((output_port1 == NULL) || (output_port2 == NULL)) {
-		fprintf(stderr, "no more JACK ports available\n");
-		exit (1);
-	}
-
-	/* Tell the JACK server that we are ready to roll.  Our
-	 * process() callback will start running now. */
-
-	if (jack_activate (client)) {
-		fprintf (stderr, "cannot activate client");
-		exit (1);
-	}
-
-	/* Connect the ports.  You can't do this before the client is
-	 * activated, because we can't make connections to clients
-	 * that aren't running.  Note the confusing (but necessary)
-	 * orientation of the driver backend ports: playback ports are
-	 * "input" to the backend, and capture ports are "output" from
-	 * it.
-	 */
- 	
-	ports = jack_get_ports (client, NULL, NULL, JackPortIsPhysical | JackPortIsInput);
-	if (ports == NULL) {
-		fprintf(stderr, "no physical playback ports\n");
-		exit (1);
-	}
-
-	if (jack_connect (client, jack_port_name (output_port1), ports[0])) {
-		fprintf (stderr, "cannot connect output ports\n");
-	}
-
-	if (jack_connect (client, jack_port_name (output_port2), ports[1])) {
-		fprintf (stderr, "cannot connect output ports\n");
-	}
-
-	jack_free (ports);
-    
-    /* install a signal handler to properly quits jack client */
-#ifdef WIN32
-	signal(SIGINT, signal_handler);
-    signal(SIGABRT, signal_handler);
-	signal(SIGTERM, signal_handler);
-#else
-	signal(SIGQUIT, signal_handler);
-	signal(SIGTERM, signal_handler);
-	signal(SIGHUP, signal_handler);
-	signal(SIGINT, signal_handler);
-#endif
-
-	/* keep running until the Ctrl+C */
-
-	while (1) {
-#ifdef WIN32 
-		Sleep(1000);
-#else
-		/* sleep (1); */
-		sleep (10);
-#endif
-	}
-
-	jack_client_close (client);
-
-	puts("Necronomicon shutting down...");
-}
-
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Scheduler
@@ -509,9 +331,9 @@ ugen_node* new_ugen_node(unsigned int time, UGen* ugen)
 
 void node_free(ugen_node* node)
 {
-	if(node)
+	if (node)
 	{
-		if(node->ugen)
+		if (node->ugen)
 			free_ugen(node->ugen);
 
 		free(node);
@@ -559,7 +381,7 @@ ugen_node** new_node_list()
 // Free all remaining nodes in the nrt_fifo and then free the nrt_fifo itself
 void nrt_fifo_free()
 {
-	while(nrt_fifo_read_index != nrt_fifo_write_index)
+	while (nrt_fifo_read_index != nrt_fifo_write_index)
 	{
 		ugen_node* node = NRT_FIFO_POP();
 		node_free(node);		
@@ -574,7 +396,7 @@ void nrt_fifo_free()
 // Free all remaining nodes in the nrt_fifo and then free the nrt_fifo itself
 void rt_fifo_free()
 {
-	while(rt_fifo_read_index != rt_fifo_write_index)
+	while (rt_fifo_read_index != rt_fifo_write_index)
 	{
 		ugen_node* node = RT_FIFO_POP();
 		node_free(node);		
@@ -605,7 +427,7 @@ unsigned int scheduled_list_write_index = 0;
 // Free all remaining nodes in the list and then free the list itself
 void scheduled_list_free()
 {
-	while(scheduled_list_read_index != scheduled_list_write_index)
+	while (scheduled_list_read_index != scheduled_list_write_index)
 	{
 		ugen_node* node = SCHEDULED_LIST_POP();
 		node_free(node);		
@@ -627,17 +449,17 @@ void scheduled_list_sort()
 	ugen_node* x;
 	double xTime, yTime;
 	
-	for(i = (scheduled_list_read_index + 1) & fifo_size_mask; i != scheduled_list_write_index; i = (i + 1) & fifo_size_mask)
+	for (i = (scheduled_list_read_index + 1) & fifo_size_mask; i != scheduled_list_write_index; i = (i + 1) & fifo_size_mask)
 	{
 		x = scheduled_node_list[i];
 		xTime = x->time;
 		j = i;
 		
-		while(j != scheduled_list_read_index)
+		while (j != scheduled_list_read_index)
 		{
 			k = (j - 1) & fifo_size_mask;
 			yTime = scheduled_node_list[k]->time;
-			if(yTime < xTime)
+			if (yTime < xTime)
 				break;
 
 			scheduled_node_list[j] = scheduled_node_list[k];
@@ -680,8 +502,8 @@ hash_table hash_table_new()
 
 void hash_table_free(hash_table table)
 {
-	unsigned int i = 0;
-	for(; i < max_synths; ++i)
+	unsigned int i;
+	for (i = 0; i < max_synths; ++i)
 	{
 		ugen_node* node = table[i];
 		node_free(node);
@@ -704,7 +526,7 @@ void hash_table_insert(hash_table table, ugen_node* node)
 	node->hash = HASH_KEY(node->key);
 	unsigned int slot = node->hash & hash_table_size_mask;
 
-	while(table[slot])
+	while (table[slot])
 		slot = (slot + 1) & hash_table_size_mask;
 	
 	table[slot] = node;
@@ -718,11 +540,11 @@ ugen_node* hash_table_remove(hash_table table, unsigned int key)
 	unsigned int slot = hash & hash_table_size_mask;
 	unsigned int i = 0;
 	
-	while(i < max_synths)
+	while (i < max_synths)
 	{
-		if(table[slot])
+		if (table[slot])
 		{
-			if(table[slot]->key == key)
+			if (table[slot]->key == key)
 			{
 				ugen_node* node = table[slot];
 				table[slot] = NULL;
@@ -744,11 +566,11 @@ ugen_node* hash_table_lookup(hash_table table, unsigned int key)
 	unsigned int slot = hash & hash_table_size_mask;
 	unsigned int i = 0;
 	
-	while(i < max_synths)
+	while (i < max_synths)
 	{
-		if(table[slot])
+		if (table[slot])
 		{
-			if(table[slot]->key == key)
+			if (table[slot]->key == key)
 				return table[slot];
 		}
 
@@ -769,13 +591,13 @@ doubly_linked_list synth_list = NULL;
 // Pushes nodes to the front of the list, returning the new list head
 doubly_linked_list doubly_linked_list_push(doubly_linked_list list, ugen_node* node)
 {
-	if(node == NULL)
+	if (node == NULL)
 		return list;
 
 	node->previous = NULL;
 	node->next = list;
 
-	if(list)
+	if (list)
 		list->previous = node;
 
 	return node;
@@ -784,21 +606,21 @@ doubly_linked_list doubly_linked_list_push(doubly_linked_list list, ugen_node* n
 // removes nodes from the doubly linked list, returning the new list head
 doubly_linked_list doubly_linked_list_remove(doubly_linked_list list, ugen_node* node)
 {
-	if(node == NULL)
+	if (node == NULL)
 		return list;
 
 	ugen_node* previous = node->previous;
 	ugen_node* next = node->next;
 
-	if(previous)
+	if (previous)
 		previous->next = next;
 
-	if(node == list) // If the node was the head of the list, return the next node as the head of the list
+	if (node == list) // If the node was the head of the list, return the next node as the head of the list
 	{
 		return next;
 	}
 	
-	if(next)
+	if (next)
 		next->previous = previous;
 
 	return list; // Otherwise just return the current head of the list
@@ -806,7 +628,7 @@ doubly_linked_list doubly_linked_list_remove(doubly_linked_list list, ugen_node*
 
 void doubly_linked_list_free(doubly_linked_list list)
 {
-	while(list)
+	while (list)
 	{
 		ugen_node* next = list->next;
 		node_free(list);
@@ -818,15 +640,19 @@ void doubly_linked_list_free(doubly_linked_list list)
 // RT thread Synth Node Handling
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+unsigned int absolute_time = 0;
+
 void init_rt_thread()
 {
 	assert(synth_table == NULL);
 	assert(rt_fifo == NULL);
 	assert(scheduled_node_list == NULL);
+	assert(synth_list == NULL);
 	
 	synth_table = hash_table_new();
 	rt_fifo = new_node_list();
 	scheduled_node_list = new_node_list();
+	absolute_time = 0;
 }
 
 void shutdown_rt_thread()
@@ -856,7 +682,7 @@ void remove_synth(unsigned int id)
 {
 	ugen_node* node = hash_table_remove(synth_table, id);
 
-	if(node)
+	if (node)
 	{
 		synth_list = doubly_linked_list_remove(synth_list, node);
 		NRT_FIFO_PUSH(node); // Send ugen to NRT thread for free/reuse
@@ -866,9 +692,9 @@ void remove_synth(unsigned int id)
 // Iterate over the scheduled list and add synths if they are ready. Stop as soon as we find a synth that isn't ready.
 void add_scheduled_synths()
 {
-	while(scheduled_list_read_index != scheduled_list_write_index)
+	while (scheduled_list_read_index != scheduled_list_write_index)
 	{
-		if(SCHEDULED_LIST_PEEK_TIME() == absolute_time)
+		if (SCHEDULED_LIST_PEEK_TIME() == absolute_time)
 		{
 			ugen_node* node = SCHEDULED_LIST_POP();
 			add_synth(node);
@@ -884,12 +710,12 @@ void add_scheduled_synths()
 // Copy nodes from the rt_node_fifo into the scheduled_node_list using atomic read/write operations.
 void schedule_nodes_from_rt_fifo()
 {
-	if(rt_fifo_read_index == rt_fifo_write_index)
+	if (rt_fifo_read_index == rt_fifo_write_index)
 	{
 		return;
 	}
 
-	while(rt_fifo_read_index != rt_fifo_write_index)
+	while (rt_fifo_read_index != rt_fifo_write_index)
 	{
 		ugen_node* node = RT_FIFO_POP();
 		SCHEDULED_LIST_PUSH(node);
@@ -914,7 +740,7 @@ void init_nrt_thread()
 	node_pool_count = 0;
 
 	// Pre-allocate some ugen nodes for runtime
-	while(node_pool_count < initial_node_count)
+	while (node_pool_count < initial_node_count)
 	{
 		nrt_free_node_list = doubly_linked_list_push(nrt_free_node_list, new_ugen_node(0, NULL));
 		++node_pool_count;
@@ -935,11 +761,11 @@ void shutdown_nrt_thread()
 
 void nrt_free_node(ugen_node* node)
 {
-	if(node)
+	if (node)
 	{
 		free_ugen(node->ugen);
 
-		if(node_pool_count < max_node_pool_count)
+		if (node_pool_count < max_node_pool_count)
 		{
 			node->time = 0;
 			node->ugen = NULL;
@@ -962,7 +788,7 @@ void nrt_free_node(ugen_node* node)
 // Copy nodes from the nrt_node_fifo into the nrt_free_node_list using atomic read/write operations.
 void free_nodes_from_nrt_fifo()
 {
-	while(nrt_fifo_read_index != nrt_fifo_write_index)
+	while (nrt_fifo_read_index != nrt_fifo_write_index)
 	{
 		ugen_node* node = NRT_FIFO_POP();
 		nrt_free_node(node);
@@ -971,11 +797,11 @@ void free_nodes_from_nrt_fifo()
 
 ugen_node* nrt_alloc_node(UGen* ugen, double time)
 {
-	if(node_pool_count)
+	if (node_pool_count)
 	{
 		ugen_node* node = nrt_free_node_list;
 
-		if(node)
+		if (node)
 		{
 			nrt_free_node_list = node->next;
 			node->time = time;
@@ -997,6 +823,183 @@ void send_synth_to_rt_thread(UGen* synth, double time)
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// RT Runtime
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+jack_port_t* output_port1;
+jack_port_t* output_port2;
+jack_client_t* client;
+
+static void signal_handler(int sig)
+{
+	jack_client_close(client);
+	fprintf(stderr, "signal received, exiting ...\n");
+	exit(0);
+}
+
+/*
+ * JACK calls this shutdown_callback if the server ever shuts down or
+ * decides to disconnect the client.
+ */
+void jack_shutdown(void *arg)
+{
+	exit(1);
+}
+
+int process(jack_nframes_t nframes, void* arg)
+{
+	jack_default_audio_sample_t *out1, *out2;
+	out1 = (jack_default_audio_sample_t*) jack_port_get_buffer(output_port1, nframes);
+	out2 = (jack_default_audio_sample_t*) jack_port_get_buffer(output_port2, nframes);
+
+	unsigned int i;
+	for (i = 0; i < nframes; ++i)
+    {
+		out1[i] = 0; // Clear out from last process callback
+		out2[i] = 0;
+			
+		ugen_node* node = synth_list;
+		while (node)
+		{
+			Signal signal = node->ugen->calc(node->ugen->args, absolute_time);
+			double sample = signal.amplitude + signal.offset;
+			out1[i] += sample;
+			out2[i] += sample;
+
+			node = node->next;
+		}
+		
+        absolute_time++;
+    }
+    
+	return 0;      
+}
+
+void startRuntime()
+{
+	puts("Starting Necronomicon");
+	
+	int si;
+	for (si = 0; si < TABLE_SIZE; si++)
+	{
+		sine_table[si] = sin(TWO_PI * (((float)si) / ((float)TABLE_SIZE)));
+	}
+	
+	const char** ports;
+	const char* client_name = "Necronomicon";
+	const char* server_name = NULL;
+	jack_options_t options = JackNullOption;
+	jack_status_t status;
+
+	int i;
+
+	/* open a client connection to the JACK server */
+
+	client = jack_client_open(client_name, options, &status, server_name);
+	if (client == NULL)
+	{
+		fprintf(stderr, "jack_client_open() failed, status = 0x%2.0x\n", status);
+
+		if (status & JackServerFailed)
+			fprintf(stderr, "Unable to connect to JACK server\n");
+		
+		exit (1);
+	}
+	
+	if (status & JackServerStarted)
+		fprintf (stderr, "JACK server started\n");
+	
+	if (status & JackNameNotUnique)
+	{
+		client_name = jack_get_client_name(client);
+		fprintf (stderr, "unique name `%s' assigned\n", client_name);
+	}
+
+	/* tell the JACK server to call `process()' whenever
+	   there is work to be done.
+	*/
+
+	jack_set_process_callback(client, process, 0);
+
+	/* tell the JACK server to call `jack_shutdown()' if
+	   it ever shuts down, either entirely, or if it
+	   just decides to stop calling us.
+	*/
+
+	jack_on_shutdown(client, jack_shutdown, 0);
+
+	/* create two ports */
+
+	output_port1 = jack_port_register(client, "output1", JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
+	output_port2 = jack_port_register(client, "output2", JACK_DEFAULT_AUDIO_TYPE, JackPortIsOutput, 0);
+
+	if ((output_port1 == NULL) || (output_port2 == NULL))
+	{
+		fprintf(stderr, "no more JACK ports available\n");
+		exit (1);
+	}
+
+	/* Tell the JACK server that we are ready to roll.  Our
+	 * process() callback will start running now. */
+
+	if (jack_activate (client))
+	{
+		fprintf (stderr, "cannot activate client");
+		exit (1);
+	}
+
+	/* Connect the ports.  You can't do this before the client is
+	 * activated, because we can't make connections to clients
+	 * that aren't running.  Note the confusing (but necessary)
+	 * orientation of the driver backend ports: playback ports are
+	 * "input" to the backend, and capture ports are "output" from
+	 * it.
+	 */
+ 	
+	ports = jack_get_ports (client, NULL, NULL, JackPortIsPhysical | JackPortIsInput);
+	if (ports == NULL)
+	{
+		fprintf(stderr, "no physical playback ports\n");
+		exit (1);
+	}
+
+	if (jack_connect (client, jack_port_name (output_port1), ports[0]))
+		fprintf (stderr, "cannot connect output ports\n");
+
+	if (jack_connect (client, jack_port_name (output_port2), ports[1]))
+		fprintf (stderr, "cannot connect output ports\n");
+
+	jack_free (ports);
+    
+    /* install a signal handler to properly quits jack client */
+#ifdef WIN32
+	signal(SIGINT, signal_handler);
+    signal(SIGABRT, signal_handler);
+	signal(SIGTERM, signal_handler);
+#else
+	signal(SIGQUIT, signal_handler);
+	signal(SIGTERM, signal_handler);
+	signal(SIGHUP, signal_handler);
+	signal(SIGINT, signal_handler);
+#endif
+
+	/* keep running until the Ctrl+C */
+
+	while (1)
+	{
+#ifdef WIN32 
+		Sleep(1000);
+#else
+		/* sleep (1); */
+		sleep (10);
+#endif
+	}
+
+	jack_client_close (client);
+	puts("Necronomicon shutting down...");
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Tests
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1004,7 +1007,7 @@ void send_synth_to_rt_thread(UGen* synth, double time)
 
 void print_node(ugen_node* node)
 {	
-	if(node)
+	if (node)
 		printf("ugen_node { time: %u, ugen: %p, previous: %p, next: %p, hash: %u, key %u }", node->time, node->ugen, node->previous, node->next, node->hash, node->key);
 	else
 		printf("0");
@@ -1015,7 +1018,8 @@ void print_list(node_list list)
 	printf("scheduled_list_read_index: %i, scheduled_list_write_index: %i\n", scheduled_list_read_index, scheduled_list_write_index);
 	unsigned int i = scheduled_list_read_index & fifo_size_mask;
 	scheduled_list_write_index = scheduled_list_write_index & fifo_size_mask;
-	for(; i != scheduled_list_write_index; i = (i + 1) & fifo_size_mask)
+
+	for (; i != scheduled_list_write_index; i = (i + 1) & fifo_size_mask)
 	{
 		print_node(list[i]);
 		printf("\n");
@@ -1028,18 +1032,18 @@ void randomize_and_print_list(node_list list)
 	puts("// RANDOMIZE LIST");
 	puts("//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////\n");
 	
-	unsigned int i = 0;
-	for(; i < 1000; ++i)
+	unsigned int i;
+	for (i = 0; i < 1000; ++i)
 	{
 		unsigned int num_pop = random() / (double) RAND_MAX * 100;
-	    while((num_pop > 0) && ((scheduled_list_read_index & fifo_size_mask) != ((scheduled_list_write_index - 1) & fifo_size_mask)))
+	    while ((num_pop > 0) && ((scheduled_list_read_index & fifo_size_mask) != ((scheduled_list_write_index - 1) & fifo_size_mask)))
 		{
 			SCHEDULED_LIST_POP();
 			--num_pop;
 		}
 		
 		unsigned int num_push = random() / (double) RAND_MAX * 100;
-		while((num_push > 0) && ((scheduled_list_read_index & fifo_size_mask) != (scheduled_list_write_index & fifo_size_mask)))
+		while ((num_push > 0) && ((scheduled_list_read_index & fifo_size_mask) != (scheduled_list_write_index & fifo_size_mask)))
 		{
 			ugen_node* node = new_ugen_node((random() / (double) RAND_MAX) * 10000.0, NULL);
 			SCHEDULED_LIST_PUSH(node);
@@ -1065,7 +1069,7 @@ void sort_and_print_list(node_list list)
 void test_list()
 {
 	scheduled_node_list = new_node_list();
-	while(scheduled_list_write_index < (max_fifo_messages * 0.75))
+	while (scheduled_list_write_index < (max_fifo_messages * 0.75))
 	{
 		ugen_node* node = new_ugen_node((random() / (double) RAND_MAX) * 10000.0, NULL);
 		SCHEDULED_LIST_PUSH(node);
@@ -1074,7 +1078,7 @@ void test_list()
 	print_list(scheduled_node_list);
 
 	unsigned int i = 0;
-	for(; i < 100; ++i)
+	for (; i < 100; ++i)
 	{
 		sort_and_print_list(scheduled_node_list);
 		randomize_and_print_list(scheduled_node_list);
@@ -1095,10 +1099,10 @@ void print_hash_table(hash_table table)
 	printf("hash_table [");
 	
 	unsigned int i;
-	for(i = 0; i < max_synths; ++i)
+	for (i = 0; i < max_synths; ++i)
 	{
 		print_node(table[i]);
-		if(i < (max_synths - 1))
+		if (i < (max_synths - 1))
 			printf(", ");
 	}
 
@@ -1111,14 +1115,14 @@ unsigned int times[5000];
 void test_hash_table()
 {
 	unsigned int i = 0;
-	for(i = 0; i < 1000; ++i)
+	for (i = 0; i < 1000; ++i)
 	{
 		printf("key: %u, hash: %u, slot %u\n", i, HASH_KEY(i), HASH_KEY(i) & hash_table_size_mask);
 	}
 
     hash_table table = hash_table_new();
 
-	for(i = 0; i < num_values; ++i)
+	for (i = 0; i < num_values; ++i)
 	{
 		times[i] = (random() / (double) RAND_MAX) * 10000.0;
 		ugen_node* node = new_ugen_node(times[i], NULL);
@@ -1128,10 +1132,9 @@ void test_hash_table()
 	}
 	
 	print_hash_table(table);
-
 	puts("Asserting table values...\n\n");
 	
-	for(i = 0; i < num_values; ++i)
+	for (i = 0; i < num_values; ++i)
 	{
 		ugen_node* node = hash_table_lookup(table, i);
 		assert(node);
@@ -1141,7 +1144,7 @@ void test_hash_table()
 
 	puts("Removing table values...\n\n");
 	
-	for(i = 0; i < num_values; ++i)
+	for (i = 0; i < num_values; ++i)
 	{
 		ugen_node* node = hash_table_remove(table, i);
 		assert(node);
@@ -1150,13 +1153,12 @@ void test_hash_table()
 
 	puts("Asserting NULL values...\n\n");
 
-	for(i = 0; i < max_synths; ++i)
+	for (i = 0; i < max_synths; ++i)
 	{
 		assert(hash_table_lookup(table, i) == NULL);
 	}
 	
 	print_hash_table(table);
-
 	puts("Freeing table...\n\n");
     hash_table_free(table);
 }
@@ -1166,7 +1168,7 @@ void test_hash_table()
 void doubly_linked_list_print(doubly_linked_list list)
 {
 	ugen_node* node = list;
-	while(node)
+	while (node)
 	{
 		print_node(node);
 		node = node->next;
@@ -1177,11 +1179,11 @@ typedef bool node_filter_func(ugen_node* node);
 doubly_linked_list doubly_linked_list_filter(doubly_linked_list list, node_filter_func func)
 {
 	ugen_node* node = list;
-	while(node)
+	while (node)
 	{
 		ugen_node* next = node->next;
 		
-		if(!func(node))
+		if (!func(node))
 		{
 			puts("Filtered out node:");
 			print_node(node);
@@ -1197,7 +1199,7 @@ doubly_linked_list doubly_linked_list_filter(doubly_linked_list list, node_filte
 
 bool is_odd(ugen_node* node)
 {
-	if(node == NULL)
+	if (node == NULL)
 		return false;
 
 	return (unsigned int) node->time % 2 == 1;
@@ -1205,8 +1207,8 @@ bool is_odd(ugen_node* node)
 
 void test_doubly_linked_list()
 {
-	int i;
-	for(i = 50; i >= 0; --i)
+	int i; // Don't make this unsigned, we'll go infinite!
+	for (i = 50; i >= 0; --i)
 	{
 		ugen_node* node = new_ugen_node(i, NULL);
 		synth_list = doubly_linked_list_push(synth_list, node);
@@ -1219,11 +1221,11 @@ void test_doubly_linked_list()
 	doubly_linked_list_print(synth_list);
 
 	ugen_node* node = synth_list;
-	while(node)
+	while (node)
 	{
 		ugen_node* next = node->next;
 
-		if(next)
+		if (next)
 		{
 			printf("(next: %u) - (node: %u) = %u\n", next->time, node->time, next->time - node->time);
 			assert((next->time - node->time) == 1);
@@ -1241,11 +1243,11 @@ void test_doubly_linked_list()
 	doubly_linked_list_print(synth_list);
 
 	node = synth_list;
-	while(node)
+	while (node)
 	{
 		ugen_node* next = node->next;
 
-		if(next)
+		if (next)
 		{
 			printf("(next: %u) - (node: %u) = %u\n", next->time, node->time, next->time - node->time);
 			assert((next->time - node->time) == 2);
