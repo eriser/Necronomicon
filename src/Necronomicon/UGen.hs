@@ -188,3 +188,17 @@ myCoolSynth = sig + timeWarp 0.475 sig + timeWarp 0.3 sig ~> gain 0.05 ~> t ~> t
 
 
 
+{-  -------------------------------------------------------------------------------------------------------------
+    Idea for optimising synth compilation and runtime.
+    During compilation UGens are cached in a hash map. When a variable is referenced multiple times,
+    first the compiler looks in the cached map for a previously compiled version, if found it uses it,
+    if not we compile the ugen per normal and then store it in the hash map. This saves us memory by not
+    recreating the same ugen chains multiple times for each reference. During runtime every time a ugen
+    is asked for a value it stores that value in a memoization variable attached to the UGen* struct,
+    it also updates a time variable in the same struct. The next time the ugen is requested for a value
+    first it checks the last time stamp that was requested, if the last time is the same as the current time
+    it simply returns the memoized value instead of recalculating the results. This will save CPU because
+    we won't recalculate ugen branches multiple times each frame.
+    !! This will require changes ugen args from being arrays of UGens to arrays of UGen pointers.
+    -------------------------------------------------------------------------------------------------------------
+-}

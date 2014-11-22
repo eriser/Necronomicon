@@ -53,7 +53,6 @@ typedef struct
 	Calc* calc;
 	void* args;
 	unsigned int numArgs;
-	
 } UGen;
 
 int ugenSize = sizeof(UGen);
@@ -69,6 +68,9 @@ void pr_free_ugen(UGen* ugen)
 	if(ugen == NULL)
 		return;
 
+	if(ugen->args == NULL)
+		return;
+	
 	if(ugen->calc != numberCalc)
 	{
 		unsigned int i;
@@ -78,8 +80,8 @@ void pr_free_ugen(UGen* ugen)
 		}
 	}
 
-	if(ugen->args)
-		free(ugen->args);
+	free(ugen->args);
+	ugen->args = NULL;
 }
 
 void free_ugen(UGen* ugen)
@@ -531,9 +533,9 @@ node_fifo rt_fifo = NULL;
 unsigned int rt_fifo_read_index = 0;
 unsigned int rt_fifo_write_index = 0;
 
-// Increment fifo_write_index and fifo_read_index after assignment to maintain intended ordering: Assignment/Lookup -> Increment
-#define FIFO_PUSH(fifo, write_index, node) fifo[write_index & fifo_size_mask] = node; write_index++;
-#define FIFO_POP(fifo, read_index) fifo[read_index & fifo_size_mask]; read_index++;
+// Increment fifo_write_index and fifo_read_index after assignment to maintain intended ordering (using a memory barrier): Assignment/Lookup -> Increment
+#define FIFO_PUSH(fifo, write_index, node) fifo[write_index & fifo_size_mask] = node; __sync_synchronize(); write_index++;
+#define FIFO_POP(fifo, read_index) fifo[read_index & fifo_size_mask]; __sync_synchronize(); read_index++;
 
 // Non-realtime thread FIFO push/pop
 #define NRT_FIFO_PUSH(node) FIFO_PUSH(nrt_fifo, nrt_fifo_write_index, node)
@@ -595,7 +597,6 @@ node_list scheduled_node_list = NULL;
 unsigned int scheduled_list_read_index = 0;
 unsigned int scheduled_list_write_index = 0;
 
-// Increment scheduled_list_write_index and scheduled_list_read_index after assignment to maintain intended ordering: Assignment/Lookup -> Increment
 #define SCHEDULED_LIST_PUSH(node) FIFO_PUSH(scheduled_node_list, scheduled_list_write_index, node)
 #define SCHEDULED_LIST_POP() FIFO_POP(scheduled_node_list, scheduled_list_read_index)
 #define SCHEDULED_LIST_PEEK() (scheduled_node_list[scheduled_list_read_index & fifo_size_mask])
