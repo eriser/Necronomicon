@@ -160,7 +160,7 @@ data InputEvent = MousePosition (Double,Double)
                 | TimeEvent     Int Time
                 deriving (Show,Eq)
 
-data Signal a = Signal (IO (a,TChan (Maybe a),[(TChan InputEvent -> TQueue InputEvent -> IO (Maybe Int))]))
+data Signal a = Signal (IORef Int -> IO(a,TChan (Maybe a),Map.Map Int (TChan InputEvent -> TQueue InputEvent -> IO (Maybe Int))))
               | Pure a
 
 ---------------------------------------------
@@ -168,7 +168,12 @@ data Signal a = Signal (IO (a,TChan (Maybe a),[(TChan InputEvent -> TQueue Input
 ---------------------------------------------
 
 mousePos :: Signal (Double,Double)
-mousePos = Signal $ (atomically newBroadcastTChan) >>= \outBox -> return ((0,0),outBox,[thread outBox])
+mousePos = Signal $ \counter -> do
+    id' <- readIORef counter
+    let id = id' + 1
+    writeIORef counter id
+    outBox <- atomically newBroadcastTChan
+    return ((0,0),outBox,Map.insert id (thread outBox) Map.empty)
     where
         thread outBox broadcastInbox _ = do
            inBox  <- atomically $ dupTChan broadcastInbox
@@ -181,7 +186,12 @@ mousePos = Signal $ (atomically newBroadcastTChan) >>= \outBox -> return ((0,0),
                 _               -> atomically (writeTChan outBox Nothing)
 
 mouseClicks :: Signal ()
-mouseClicks = Signal $ (atomically newBroadcastTChan) >>= \outBox -> return ((),outBox,[thread outBox])
+mouseClicks = Signal $ \counter -> do
+    id' <- readIORef counter
+    let id = id' + 1
+    writeIORef counter id
+    outBox <- atomically newBroadcastTChan
+    return ((),outBox,Map.insert id (thread outBox) Map.empty)
     where
         thread outBox broadcastInbox _ = do
              inBox  <- atomically $ dupTChan broadcastInbox
@@ -194,7 +204,12 @@ mouseClicks = Signal $ (atomically newBroadcastTChan) >>= \outBox -> return ((),
                 _          -> atomically (writeTChan outBox Nothing)
 
 every :: Time -> Signal Time
-every delta = Signal $ (atomically newBroadcastTChan) >>= \outBox -> return (0,outBox,[thread outBox])
+every delta = Signal $ \counter -> do
+    id' <- readIORef counter
+    let id = id' + 1
+    writeIORef counter id
+    outBox <- atomically newBroadcastTChan
+    return (0,outBox,Map.insert id (thread outBox) Map.empty)
     where
         millisecondDelta = floor $ delta * 1000000
         thread outBox broadcastInbox globalDispatch = do
@@ -208,7 +223,12 @@ every delta = Signal $ (atomically newBroadcastTChan) >>= \outBox -> return (0,o
                 _             -> atomically (writeTChan outBox Nothing)
 
 fps :: Time -> Signal Time
-fps delta = Signal $ (atomically newBroadcastTChan) >>= \outBox -> return (0,outBox,[thread outBox])
+fps delta = Signal $ \counter -> do
+    id' <- readIORef counter
+    let id = id' + 1
+    writeIORef counter id
+    outBox <- atomically newBroadcastTChan
+    return (0,outBox,Map.insert id (thread outBox) Map.empty)
     where
         millisecondDelta = floor $ (1.0 / delta) * 1000000
         thread outBox broadcastInbox globalDispatch = do
@@ -228,42 +248,54 @@ fps delta = Signal $ (atomically newBroadcastTChan) >>= \outBox -> return (0,out
 ---------------------------------------------
 
 instance Functor Signal where
-    fmap f (Signal g) = Signal $ do
-        (childEvent,broadcastInbox,gThread) <- g
+    fmap f (Signal g) = Signal $ \counter -> do
+        id' <- readIORef counter
+        let id = id' + 1
+        writeIORef counter id
+        (childEvent,broadcastInbox,gThread) <- g counter
         inBox                               <- atomically $ dupTChan broadcastInbox
         outBox                              <- atomically newBroadcastTChan
         let defaultValue                     = f childEvent
         let thread _ _                       = forkIO (fmapLoop f inBox outBox) >> return Nothing
-        return (defaultValue,outBox,thread : gThread)
+        return (defaultValue,outBox,Map.insert id thread gThread)
 
     fmap f (Pure a) = Pure $ f a
 
 instance Applicative Signal where
     pure   a              = Pure a
     Pure   f <*> Pure   g = Pure $ f g
-    Pure   f <*> Signal g = Signal $ do
-        (gEvent,broadcastInbox,gThread) <- g
+    Pure   f <*> Signal g = Signal $ \counter -> do
+        id' <- readIORef counter
+        let id = id' + 1
+        writeIORef counter id
+        (gEvent,broadcastInbox,gThread) <- g counter
         inBox                           <- atomically $ dupTChan broadcastInbox
         outBox                          <- atomically newBroadcastTChan 
         let defaultValue                 = f gEvent
         let thread _  _                  = forkIO (fmapLoop f inBox outBox) >> return Nothing
-        return (defaultValue,outBox,thread : gThread)
-    Signal f <*> Pure g   = Signal $ do
-        (fEvent,broadcastInbox,fThreads) <- f
+        return (defaultValue,outBox,Map.insert id thread gThread)
+    Signal f <*> Pure g   = Signal $ \counter -> do
+        id' <- readIORef counter
+        let id = id' + 1
+        writeIORef counter id
+        (fEvent,broadcastInbox,fThreads) <- f counter
         inBox                            <- atomically $ dupTChan broadcastInbox
         outBox                           <- atomically newBroadcastTChan
         let defaultValue                 = fEvent g
         let thread _  _                  = forkIO (fmapeeLoop g inBox outBox) >> return Nothing
-        return (defaultValue,outBox,thread : fThreads)
-    Signal f <*> Signal g = Signal $ do
-        (fEvent,fBroadcastInbox,fThread) <- f
-        (gEvent,gBroadcastInbox,gThread) <- g
+        return (defaultValue,outBox,Map.insert id thread fThreads)
+    Signal f <*> Signal g = Signal $ \counter -> do
+        id' <- readIORef counter
+        let id = id' + 1
+        writeIORef counter id
+        (fEvent,fBroadcastInbox,fThread) <- f counter
+        (gEvent,gBroadcastInbox,gThread) <- g counter
         fInBox                           <- atomically $ dupTChan fBroadcastInbox
         gInBox                           <- atomically $ dupTChan gBroadcastInbox
         outBox                           <- atomically newBroadcastTChan
         let defaultValue                  = fEvent gEvent
         let thread _  _                   = forkIO (applicativeLoop fEvent gEvent fInBox gInBox outBox) >> return Nothing
-        return (defaultValue,outBox,thread : fThread ++ gThread)
+        return (defaultValue,outBox,Map.insert id thread $ Map.union fThread gThread)
 
 applicativeLoop :: (a -> b) -> a -> TChan (Maybe (a -> b)) -> TChan (Maybe a) -> TChan (Maybe b) -> IO()
 applicativeLoop prevF prevG fInBox gInBox outBox = do
@@ -322,15 +354,18 @@ runSignal (Signal s) = initWindow >>= \mw ->
         Nothing -> print "Error starting GLFW." >> return ()
         Just w  -> do
             print "Starting signal run time"
-            (defaultValue,broadcastInbox,signalThreads) <- s
+            counter <- newIORef 0
+            (defaultValue,broadcastInbox,signalThreads) <- s counter
 
+            print $ length $ Map.toList signalThreads
+            
             inBox <- atomically $ dupTChan broadcastInbox
             forkIO $ forceLoop inBox
 
             --Start global Dispatch
             eventNotify <- atomically newBroadcastTChan
             globalDispatch <- atomically newTQueue
-            maybeTimers <- mapM (\x -> x eventNotify globalDispatch) signalThreads
+            maybeTimers <- mapM (\(_,x) -> x eventNotify globalDispatch) $ Map.toList signalThreads
             forkIO $ globalEventDispatch globalDispatch eventNotify
 
             mapM_ (\(t,_) -> forkIO $ timeLoop globalDispatch t) $ Map.toList $ foldr collectTimers Map.empty maybeTimers
@@ -381,16 +416,18 @@ globalEventDispatch inBox outBox = forever $ do
 instance Alternative Signal where
     empty = Pure undefined 
     Pure   a <|> Pure   b = Pure a
-    Pure   a <|> Signal b = Signal $ b >>= \(_,broadcastInbox,bThread) -> return (a,broadcastInbox,bThread)
+    Pure   a <|> Signal b = Signal $ \counter -> b counter >>= \(_,broadcastInbox,bThread) -> return (a,broadcastInbox,bThread)
     Signal f <|> Pure g   = Signal f
-    Signal f <|> Signal g = Signal $ do
-        (fEvent,fBroadcastInbox,fThread) <- f
-        (gEvent,gBroadcastInbox,gThread) <- g
+    Signal f <|> Signal g = Signal $ \counter -> do
+        id <- readIORef counter
+        writeIORef counter id
+        (fEvent,fBroadcastInbox,fThread) <- f counter
+        (gEvent,gBroadcastInbox,gThread) <- g counter
         fInBox                           <- atomically $ dupTChan fBroadcastInbox
         gInBox                           <- atomically $ dupTChan gBroadcastInbox
         outBox                           <- atomically newBroadcastTChan
         let thread _  _                   = forkIO (alternativeLoop fInBox gInBox outBox) >> return Nothing
-        return (fEvent,outBox,thread : fThread ++ gThread)
+        return (fEvent,outBox,Map.insert id thread $ Map.union fThread gThread)
         where
             alternativeLoop aInBox bInBox outBox = forever $ do
                 b <- atomically $ readTChan bInBox
@@ -493,13 +530,16 @@ timeLoop outBox millisecondDelta = forever $ do
 ---------------------------------------------
 
 keepIf :: (a -> Bool) -> a -> Signal a -> Signal a
-keepIf predicate init (Signal s) = Signal $ do
-    (sVal,sBroadcast,sThreads) <- s
+keepIf predicate init (Signal s) = Signal $ \counter -> do
+    id' <- readIORef counter
+    let id = id' + 1
+    writeIORef counter id
+    (sVal,sBroadcast,sThreads) <- s counter
     inBox  <- atomically $ dupTChan sBroadcast
     outBox <- atomically newBroadcastTChan
     let defaultValue = if predicate sVal then sVal else init
     let thread _ _ = forkIO (loop inBox outBox) >> return Nothing
-    return (defaultValue,outBox,thread : sThreads)
+    return (defaultValue,outBox,Map.insert id thread sThreads)
     where
         loop inBox outBox = forever $ do
             event <- atomically $ readTChan inBox
@@ -509,13 +549,16 @@ keepIf predicate init (Signal s) = Signal $ do
 keepIf predicate init (Pure p) = if predicate p then Pure p else Pure init
 
 dropIf :: (a -> Bool) -> a -> Signal a -> Signal a
-dropIf predicate init (Signal s) = Signal $ do
-    (sVal,sBroadcast,sThreads) <- s
+dropIf predicate init (Signal s) = Signal $ \counter -> do
+    id' <- readIORef counter
+    let id = id' + 1
+    writeIORef counter id
+    (sVal,sBroadcast,sThreads) <- s counter
     inBox  <- atomically $ dupTChan sBroadcast
     outBox <- atomically newBroadcastTChan
     let defaultValue = if predicate sVal then init else sVal
     let thread _ _ = forkIO (loop inBox outBox) >> return Nothing
-    return (defaultValue,outBox,thread : sThreads)
+    return (defaultValue,outBox,Map.insert id thread sThreads)
     where
         loop inBox outBox = forever $ do
             event <- atomically $ readTChan inBox
@@ -525,14 +568,17 @@ dropIf predicate init (Signal s) = Signal $ do
 dropIf predicate init (Pure p) = if predicate p then Pure init else Pure p
 
 sampleOn :: Signal a -> Signal b -> Signal b
-sampleOn (Signal sampler) (Signal value) = Signal $ do
-    (sVal,sBroadcast,sThreads) <- sampler
-    (vVal,vBroadcast,vThreads) <- value
+sampleOn (Signal sampler) (Signal value) = Signal $ \counter -> do
+    id' <- readIORef counter
+    let id = id' + 1
+    writeIORef counter id
+    (sVal,sBroadcast,sThreads) <- sampler counter
+    (vVal,vBroadcast,vThreads) <- value counter
     sInBox  <- atomically $ dupTChan sBroadcast
     vInBox  <- atomically $ dupTChan vBroadcast
     outBox <- atomically newBroadcastTChan
     let thread _ _ = forkIO (loop vVal sInBox vInBox outBox) >> return Nothing
-    return (vVal,outBox,thread : (sThreads ++ vThreads))
+    return (vVal,outBox,Map.insert id thread $ Map.union sThreads vThreads)
     where
         loop prev sInBox vInBox outBox = do
             s <- atomically (readTChan sInBox)
@@ -546,14 +592,17 @@ sampleOn (Signal sampler) (Signal value) = Signal $ do
                     Just v' -> atomically (writeTChan outBox $ Just v'  ) >> loop v'   sInBox vInBox outBox
 
 keepWhen :: Signal Bool -> Signal a -> Signal a
-keepWhen (Signal predicate) (Signal value) = Signal $ do
-    (pVal,pBroadcast,pThreads) <- predicate
-    (vVal,vBroadcast,vThreads) <- value
+keepWhen (Signal predicate) (Signal value) = Signal $ \counter -> do
+    id' <- readIORef counter
+    let id = id' + 1
+    writeIORef counter id
+    (pVal,pBroadcast,pThreads) <- predicate counter
+    (vVal,vBroadcast,vThreads) <- value counter
     pInBox  <- atomically $ dupTChan pBroadcast
     vInBox  <- atomically $ dupTChan vBroadcast
     outBox  <- atomically newBroadcastTChan
     let thread _ _ = forkIO (loop pVal vVal pInBox vInBox outBox) >> return Nothing
-    return (vVal,outBox,thread : (pThreads ++ vThreads))
+    return (vVal,outBox,Map.insert id thread $ Map.union pThreads vThreads)
     where
         loop prevP prevVal pInBox vInBox outBox = do
             p <- atomically (readTChan pInBox)
@@ -567,14 +616,17 @@ keepWhen (Signal predicate) (Signal value) = Signal $ do
                     Just v' -> atomically (writeTChan outBox $ if p'    then Just v'      else Nothing) >> loop p'    v'      pInBox vInBox outBox
 
 dropWhen :: Signal Bool -> Signal a -> Signal a
-dropWhen (Signal predicate) (Signal value) = Signal $ do
-    (pVal,pBroadcast,pThreads) <- predicate
-    (vVal,vBroadcast,vThreads) <- value
+dropWhen (Signal predicate) (Signal value) = Signal $ \counter -> do
+    id' <- readIORef counter
+    let id = id' + 1
+    writeIORef counter id
+    (pVal,pBroadcast,pThreads) <- predicate counter
+    (vVal,vBroadcast,vThreads) <- value counter
     pInBox  <- atomically $ dupTChan pBroadcast
     vInBox  <- atomically $ dupTChan vBroadcast
     outBox  <- atomically newBroadcastTChan
     let thread _ _ = forkIO (loop pVal vVal pInBox vInBox outBox) >> return Nothing
-    return (vVal,outBox,thread : (pThreads ++ vThreads))
+    return (vVal,outBox,Map.insert id thread $ Map.union pThreads vThreads)
     where
         loop prevP prevVal pInBox vInBox outBox = do
             p <- atomically (readTChan pInBox)
