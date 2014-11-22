@@ -447,8 +447,8 @@ void startRuntime(UGen* ugen)
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 typedef enum { false, true } bool;
-unsigned int max_nodes = 2048;
-unsigned int size_mask = 2047;
+unsigned int max_fifo_messages = 2048;
+unsigned int fifo_size_mask = 2047;
 
 typedef struct ugen_node
 {
@@ -494,17 +494,31 @@ void node_free(ugen_node* node)
 
 // Lock Free FIFO Queue (Ring Buffer)
 typedef ugen_node** node_fifo;
-unsigned int fifo_read_index = 0;
-unsigned int fifo_write_index = 0;
+
+node_fifo nrt_fifo = NULL;
+unsigned int nrt_fifo_read_index = 0;
+unsigned int nrt_fifo_write_index = 0;
+
+node_fifo rt_fifo = NULL;
+unsigned int rt_fifo_read_index = 0;
+unsigned int rt_fifo_write_index = 0;
 
 // Increment fifo_write_index and fifo_read_index after assignment to maintain intended ordering: Assignment/Lookup -> Increment
-#define FIFO_PUSH(fifo, node) fifo[fifo_write_index & size_mask] = node; fifo_write_index++;
-#define FIFO_POP(fifo) fifo[fifo_read_index & size_mask]; fifo_read_index++;
+#define FIFO_PUSH(fifo, write_index, node) fifo[write_index & fifo_size_mask] = node; write_index++;
+#define FIFO_POP(fifo, read_index) fifo[read_index & fifo_size_mask]; read_index++;
+
+// Non-realtime thread FIFO push/pop
+#define NRT_FIFO_PUSH(node) FIFO_PUSH(nrt_fifo, nrt_fifo_write_index, node)
+#define NRT_FIFO_POP() FIFO_POP(nrt_fifo, nrt_fifo_read_index)
+
+// Realtime thread FIFO push/pop
+#define RT_FIFO_PUSH(node) FIFO_PUSH(rt_fifo, rt_fifo_write_index, node)
+#define RT_FIFO_POP() FIFO_POP(rt_fifo, rt_fifo_read_index)
 
 // Allocate and null initialize a node list to be used as a node_fifo or node_list
 ugen_node** new_node_list()
 {
-	unsigned int byte_size = node_pointer_size * max_nodes;
+	unsigned int byte_size = node_pointer_size * max_fifo_messages;
 	ugen_node** list = (ugen_node**) malloc(byte_size);
 	assert(list);
 	memset(list, 0, byte_size);
@@ -512,95 +526,94 @@ ugen_node** new_node_list()
 	return list;
 }
 
-// Free all remaining nodes in the fifo and then free the fifo itself
-void fifo_free(node_fifo fifo)
+// Free all remaining nodes in the nrt_fifo and then free the nrt_fifo itself
+void nrt_fifo_free()
 {
-	while(fifo_read_index != fifo_write_index)
+	while(nrt_fifo_read_index != nrt_fifo_write_index)
 	{
-		ugen_node* node = FIFO_POP(fifo);
+		ugen_node* node = NRT_FIFO_POP();
 		node_free(node);		
 	}
 	
-	free(fifo);
-	fifo_read_index = 0;
-	fifo_write_index = 0;
+	free(nrt_fifo);
+	nrt_fifo_read_index = 0;
+	nrt_fifo_write_index = 0;
 }
 
-//////////////
-// Node List
-//////////////
+// Free all remaining nodes in the nrt_fifo and then free the nrt_fifo itself
+void rt_fifo_free()
+{
+	while(rt_fifo_read_index != rt_fifo_write_index)
+	{
+		ugen_node* node = RT_FIFO_POP();
+		node_free(node);		
+	}
+	
+	free(rt_fifo);
+	rt_fifo_read_index = 0;
+	rt_fifo_write_index = 0;
+}
+
+///////////////////////
+// Scheduled Node List
+///////////////////////
 
 // An ordered list of ugen nodes
 typedef ugen_node** node_list;
-unsigned int list_read_index = 0;
-unsigned int list_write_index = 0;
 
-// Increment list_write_index and list_read_index after assignment to maintain intended ordering: Assignment/Lookup -> Increment
-#define LIST_PUSH(list, node) list[list_write_index & size_mask] = node; list_write_index++;
-#define LIST_POP(list) list[list_read_index & size_mask]; list_read_index++;
-#define LIST_PEEK(list) list[list_read_index & size_mask]
-#define LIST_PEEK_TIME(list) list[list_read_index & size_mask].time
+node_list scheduled_node_list = NULL;
+unsigned int scheduled_list_read_index = 0;
+unsigned int scheduled_list_write_index = 0;
+
+// Increment scheduled_list_write_index and scheduled_list_read_index after assignment to maintain intended ordering: Assignment/Lookup -> Increment
+#define SCHEDULED_LIST_PUSH(node) FIFO_PUSH(scheduled_node_list, scheduled_list_write_index, node)
+#define SCHEDULED_LIST_POP() FIFO_POP(scheduled_node_list, scheduled_list_read_index)
+#define SCHEDULED_LIST_PEEK() (scheduled_node_list[scheduled_list_read_index & fifo_size_mask])
+#define SCHEDULED_LIST_PEEK_TIME() ((scheduled_node_list[scheduled_list_read_index & fifo_size_mask])->time)
 
 // Free all remaining nodes in the list and then free the list itself
-void list_free(node_list list)
+void scheduled_list_free()
 {
-	while(list_read_index != list_write_index)
+	while(scheduled_list_read_index != scheduled_list_write_index)
 	{
-		ugen_node* node = LIST_POP(list);
+		ugen_node* node = SCHEDULED_LIST_POP();
 		node_free(node);		
 	}
 	
-	free(list);
-	list_read_index = 0;
-	list_write_index = 0;
+	free(scheduled_node_list);
+	scheduled_list_read_index = 0;
+	scheduled_list_write_index = 0;
 }
 
 // Simple insertion sort. Accounts for ring buffer array wrapping using bit masking and integer overflow
-void list_sort(node_list list)
+void scheduled_list_sort()
 {
 	// Make sure our indexes are within bounds
-	list_read_index = list_read_index & size_mask; 
-	list_write_index = list_write_index & size_mask;
+	scheduled_list_read_index = scheduled_list_read_index & fifo_size_mask; 
+	scheduled_list_write_index = scheduled_list_write_index & fifo_size_mask;
 	unsigned int i, j, k;
 	ugen_node* x;
 	double xTime, yTime;
 	
-	for(i = (list_read_index + 1) & size_mask; i != list_write_index; i = (i + 1) & size_mask)
+	for(i = (scheduled_list_read_index + 1) & fifo_size_mask; i != scheduled_list_write_index; i = (i + 1) & fifo_size_mask)
 	{
-		x = list[i];
+		x = scheduled_node_list[i];
 		xTime = x->time;
 		j = i;
 		
-		while(j != list_read_index)
+		while(j != scheduled_list_read_index)
 		{
-			k = (j - 1) & size_mask;
-			yTime = list[k]->time;
+			k = (j - 1) & fifo_size_mask;
+			yTime = scheduled_node_list[k]->time;
 			if(yTime < xTime)
 				break;
 
-			list[j] = list[k];
-			j = (j - 1) & size_mask;
+			scheduled_node_list[j] = scheduled_node_list[k];
+			j = (j - 1) & fifo_size_mask;
 		}
 
-		list[j] = x;
+		scheduled_node_list[j] = x;
 	}
-}
-
-// Copy nodes from the node_fifo into the internal node_list using atomic read/write operations.
-void copy_nodes_from_fifo(node_fifo fifo, node_list list)
-{
-	if(fifo_read_index == fifo_write_index)
-	{
-		return;
-	}
-
-	while(fifo_read_index != fifo_write_index)
-	{
-		ugen_node* node = FIFO_POP(fifo);
-		LIST_PUSH(list, node);
-	}
-
-	list_sort(list);
 }
 
 ///////////////////////////
@@ -621,6 +634,7 @@ typedef union
 } four_bytes;
 
 typedef ugen_node** hash_table;
+hash_table synth_table = NULL;
 
 hash_table hash_table_new()
 {
@@ -768,14 +782,178 @@ void doubly_linked_list_free(doubly_linked_list list)
 	}
 }
 
-///////////////////////////
-// Synth Node Handling
-///////////////////////////
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// RT thread Synth Node Handling
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-void synth_add(ugen_node* node, unsigned int id)
+void init_rt_thread()
 {
-	synth_list = doubly_linked_list_push(synth_list, node);
+	assert(synth_table == NULL);
+	assert(rt_fifo == NULL);
+	assert(scheduled_node_list == NULL);
 	
+	synth_table = hash_table_new();
+	rt_fifo = new_node_list();
+	scheduled_node_list = new_node_list();
+}
+
+void shutdown_rt_thread()
+{
+	assert(synth_table != NULL);
+	assert(rt_fifo != NULL);
+	assert(scheduled_node_list != NULL);
+
+	hash_table_free(synth_table);
+	rt_fifo_free();
+	scheduled_list_free();
+	doubly_linked_list_free(synth_list);
+
+	synth_table = NULL;
+	rt_fifo = NULL;
+	scheduled_node_list = NULL;
+	synth_list = NULL;
+}
+
+void add_synth(ugen_node* node)
+{
+	hash_table_insert(synth_table, node);
+	synth_list = doubly_linked_list_push(synth_list, node);
+}
+
+void remove_synth(unsigned int id)
+{
+	ugen_node* node = hash_table_remove(synth_table, id);
+
+	if(node)
+	{
+		synth_list = doubly_linked_list_remove(synth_list, node);
+		NRT_FIFO_PUSH(node); // Send ugen to NRT thread for free/reuse
+	}
+}
+
+// Iterate over the scheduled list and add synths if they are ready. Stop as soon as we find a synth that isn't ready.
+void add_scheduled_synths(double current_time)
+{
+	while(scheduled_list_read_index != scheduled_list_write_index)
+	{
+		if(SCHEDULED_LIST_PEEK_TIME() == current_time)
+		{
+			ugen_node* node = SCHEDULED_LIST_POP();
+			add_synth(node);
+		}
+
+		else
+		{
+			return;
+		}
+	}
+}
+
+// Copy nodes from the rt_node_fifo into the scheduled_node_list using atomic read/write operations.
+void schedule_nodes_from_rt_fifo()
+{
+	if(rt_fifo_read_index == rt_fifo_write_index)
+	{
+		return;
+	}
+
+	while(rt_fifo_read_index != rt_fifo_write_index)
+	{
+		ugen_node* node = RT_FIFO_POP();
+		SCHEDULED_LIST_PUSH(node);
+	}
+
+	scheduled_list_sort();
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// NRT thread Synth Node Handling
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+doubly_linked_list nrt_free_node_list = NULL;
+unsigned int max_node_pool_count = 500;
+unsigned int node_pool_count = 0;
+
+void init_nrt_thread()
+{
+	assert(nrt_fifo == NULL);
+	nrt_fifo = new_node_list();
+	node_pool_count = 0;
+}
+
+void shutdown_nrt_thread()
+{
+	assert(nrt_fifo != NULL);
+
+	nrt_fifo_free();
+	doubly_linked_list_free(nrt_free_node_list);
+
+	nrt_fifo = NULL;
+	nrt_free_node_list = NULL;
+	node_pool_count = 0;
+}
+
+void nrt_free_node(ugen_node* node)
+{
+	if(node)
+	{
+		free(node->ugen);
+
+		if(node_pool_count < max_node_pool_count)
+		{
+			node->time = 0;
+			node->ugen = NULL;
+			node->previous = NULL;
+			node->next = NULL;
+			node->key = 0;
+			node->hash = 0;
+			
+			++node_pool_count;
+			nrt_free_node_list = doubly_linked_list_push(nrt_free_node_list, node);
+		}
+
+		else
+		{
+			free(node);
+		}
+	}
+}
+
+// Copy nodes from the nrt_node_fifo into the nrt_free_node_list using atomic read/write operations.
+void free_nodes_from_nrt_fifo()
+{
+	while(nrt_fifo_read_index != nrt_fifo_write_index)
+	{
+		ugen_node* node = NRT_FIFO_POP();
+		nrt_free_node(node);
+	}
+}
+
+ugen_node* nrt_alloc_node(UGen* ugen, double time)
+{
+	if(node_pool_count)
+	{
+		ugen_node* node = nrt_free_node_list;
+
+		if(node)
+		{
+			nrt_free_node_list = node->next;
+			node->time = time;
+			node->ugen = ugen;
+			node->previous = NULL;
+			node->next = NULL;
+
+			--node_pool_count;
+			return  node;
+		}
+	}
+
+	return new_ugen_node(time, ugen);
+}
+
+void send_synth_to_rt_thread(UGen* synth, double time)
+{
+	RT_FIFO_PUSH(nrt_alloc_node(synth, time));
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -794,10 +972,10 @@ void print_node(ugen_node* node)
 
 void print_list(node_list list)
 {
-	printf("list_read_index: %i, list_write_index: %i\n", list_read_index, list_write_index);
-	unsigned int i = list_read_index & size_mask;
-	list_write_index = list_write_index & size_mask;
-	for(; i != list_write_index; i = (i + 1) & size_mask)
+	printf("scheduled_list_read_index: %i, scheduled_list_write_index: %i\n", scheduled_list_read_index, scheduled_list_write_index);
+	unsigned int i = scheduled_list_read_index & fifo_size_mask;
+	scheduled_list_write_index = scheduled_list_write_index & fifo_size_mask;
+	for(; i != scheduled_list_write_index; i = (i + 1) & fifo_size_mask)
 	{
 		print_node(list[i]);
 		printf("\n");
@@ -814,23 +992,23 @@ void randomize_and_print_list(node_list list)
 	for(; i < 1000; ++i)
 	{
 		unsigned int num_pop = random() / (double) RAND_MAX * 100;
-	    while((num_pop > 0) && ((list_read_index & size_mask) != ((list_write_index - 1) & size_mask)))
+	    while((num_pop > 0) && ((scheduled_list_read_index & fifo_size_mask) != ((scheduled_list_write_index - 1) & fifo_size_mask)))
 		{
-			LIST_POP(list);
+			SCHEDULED_LIST_POP();
 			--num_pop;
 		}
 		
 		unsigned int num_push = random() / (double) RAND_MAX * 100;
-		while((num_push > 0) && ((list_read_index & size_mask) != (list_write_index & size_mask)))
+		while((num_push > 0) && ((scheduled_list_read_index & fifo_size_mask) != (scheduled_list_write_index & fifo_size_mask)))
 		{
 			ugen_node* node = new_ugen_node((random() / (double) RAND_MAX) * 1000.0, NULL);
-			LIST_PUSH(list, node);
+			SCHEDULED_LIST_PUSH(node);
 			--num_push;
 		}
 	}
 
-	list_read_index = list_read_index & size_mask;
-	list_write_index = list_write_index & size_mask;
+	scheduled_list_read_index = scheduled_list_read_index & fifo_size_mask;
+	scheduled_list_write_index = scheduled_list_write_index & fifo_size_mask;
 	print_list(list);
 }
 
@@ -840,30 +1018,30 @@ void sort_and_print_list(node_list list)
 	puts("// SORT LIST");
 	puts("//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////\n");
 
-	list_sort(list);
+	scheduled_list_sort();
 	print_list(list);
 }
 
 void test_list()
 {
-	node_list list = new_node_list();
-	while(list_write_index < (max_nodes * 0.75))
+	scheduled_node_list = new_node_list();
+	while(scheduled_list_write_index < (max_fifo_messages * 0.75))
 	{
 		ugen_node* node = new_ugen_node((random() / (double) RAND_MAX) * 1000.0, NULL);
-		LIST_PUSH(list, node);
+		SCHEDULED_LIST_PUSH(node);
 	}
 
-	print_list(list);
+	print_list(scheduled_node_list);
 
 	unsigned int i = 0;
 	for(; i < 100; ++i)
 	{
-		sort_and_print_list(list);
-		randomize_and_print_list(list);
+		sort_and_print_list(scheduled_node_list);
+		randomize_and_print_list(scheduled_node_list);
 	}
 
-	sort_and_print_list(list);
-	list_free(list);
+	sort_and_print_list(scheduled_node_list);
+	scheduled_list_free();
 }
 
 //// Test Hash Table
