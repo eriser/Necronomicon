@@ -2,7 +2,7 @@ import Prelude
 import Necronomicon.FRP
 
 main :: IO()
-main = runSignal tonsOfMouseAndTime
+-- main = runSignal tonsOfMouseAndTime
 -- main = runSignal $ dropIf (\(x,y) -> x > 400) (0,0) mousePos
 -- main = runSignal $ keepIf (\(x,y) -> x > 400) (0,0) mousePos
 -- main = runSignal $ sampleOn mouseClicks mousePos
@@ -11,6 +11,7 @@ main = runSignal tonsOfMouseAndTime
 -- main = runSignal $ dropWhen ((\(x,_) -> x > 400) <~ mousePos) mousePos
 -- main = runSignal $ sampleOn mouseClicks doubleMouse <|> mousePos
 -- main = runSignal $ every second <|> fps 4.5
+main = runSignal $ playOn (isDown keyP) (isDown keyS)
 
 doubleMouse :: Signal (Double,Double)
 doubleMouse = (\(x,y) -> (x*2,y*y)) <~ mousePos

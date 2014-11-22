@@ -24,6 +24,34 @@ module Necronomicon.FRP.Signal (
     sampleOn,
     keepWhen,
     dropWhen,
+    isDown,
+    playOn,
+    keyA,
+    keyB,
+    keyC,
+    keyD,
+    keyE,
+    keyF,
+    keyG,
+    keyH,
+    keyI,
+    keyJ,
+    keyK,
+    keyL,
+    keyM,
+    keyN,
+    keyO,
+    keyP,
+    keyQ,
+    keyR,
+    keyS,
+    keyT,
+    keyU,
+    keyV,
+    keyW,
+    keyX,
+    keyY,
+    keyZ,
     module Control.Applicative
     ) where
 
@@ -148,10 +176,32 @@ dimensions = SignalGenerator $ return $ \_ w -> do
 ---------------------------------------------
 
 type Key  = GLFW.Key
-keyW = GLFW.Key'W
 keyA = GLFW.Key'A
-keyS = GLFW.Key'S
+keyB = GLFW.Key'B
+keyC = GLFW.Key'C
 keyD = GLFW.Key'D
+keyE = GLFW.Key'E
+keyF = GLFW.Key'F
+keyG = GLFW.Key'G
+keyH = GLFW.Key'H
+keyI = GLFW.Key'I
+keyJ = GLFW.Key'J
+keyK = GLFW.Key'K
+keyL = GLFW.Key'L
+keyM = GLFW.Key'M
+keyN = GLFW.Key'N
+keyO = GLFW.Key'O
+keyP = GLFW.Key'P
+keyQ = GLFW.Key'Q
+keyR = GLFW.Key'R
+keyS = GLFW.Key'S
+keyT = GLFW.Key'T
+keyU = GLFW.Key'U
+keyV = GLFW.Key'V
+keyW = GLFW.Key'W
+keyX = GLFW.Key'X
+keyY = GLFW.Key'Y
+keyZ = GLFW.Key'Z
 
 data InputEvent = MousePosition (Double,Double)
                 | MouseClick
@@ -242,6 +292,25 @@ fps delta = Signal $ \counter -> do
                                      then atomically (writeTChan outBox $ Just $ t - prev) >> inputLoop t inBox outBox
                                      else atomically (writeTChan outBox $ Nothing)         >> inputLoop prev inBox outBox
                 _             -> atomically (writeTChan outBox Nothing) >> inputLoop prev inBox outBox
+
+isDown :: Key -> Signal Bool
+isDown k = Signal $ \counter -> do
+    id' <- readIORef counter
+    let id = id' + 1
+    writeIORef counter id
+    outBox <- atomically newBroadcastTChan
+    return (False,outBox,Map.insert id (thread outBox) Map.empty)
+    where
+        thread outBox broadcastInbox _ = do
+             inBox  <- atomically $ dupTChan broadcastInbox
+             forkIO $ inputLoop inBox outBox
+             return Nothing
+        inputLoop inBox outBox = forever $ do
+            event <- atomically $ readTChan inBox
+            case event of
+                KeyDown k' -> if k' == k then atomically (writeTChan outBox $ Just True)  else atomically (writeTChan outBox $ Nothing)
+                KeyUp   k' -> if k' == k then atomically (writeTChan outBox $ Just False) else atomically (writeTChan outBox $ Nothing)
+                _          -> atomically (writeTChan outBox Nothing)
 
 ---------------------------------------------
 -- Main Machinery
@@ -370,15 +439,19 @@ runSignal (Signal s) = initWindow >>= \mw ->
 
             mapM_ (\(t,_) -> forkIO $ timeLoop globalDispatch t) $ Map.toList $ foldr collectTimers Map.empty maybeTimers
             
-            GLFW.setCursorPosCallback   w $ Just $ mousePosEvent globalDispatch
+            GLFW.setCursorPosCallback   w $ Just $ mousePosEvent   globalDispatch
             GLFW.setMouseButtonCallback w $ Just $ mousePressEvent globalDispatch
+            GLFW.setKeyCallback         w $ Just $ keyPressEvent   globalDispatch
 
             render False w
     where
         --event callbacks
-        mousePosEvent   eventNotify window x y                                   = atomically (writeTQueue eventNotify $ MousePosition (x,y))
-        mousePressEvent eventNotify window mb GLFW.MouseButtonState'Released mod = atomically (writeTQueue eventNotify $ MouseClick)
-        mousePressEvent _           _      _  GLFW.MouseButtonState'Pressed  _   = return ()
+        mousePosEvent   eventNotify _ x y                                = atomically (writeTQueue eventNotify $ MousePosition (x,y))
+        mousePressEvent eventNotify _ _ GLFW.MouseButtonState'Released _ = atomically (writeTQueue eventNotify $ MouseClick)
+        mousePressEvent _           _ _ GLFW.MouseButtonState'Pressed  _ = return ()
+        keyPressEvent   eventNotify _ k _ GLFW.KeyState'Pressed  _       = atomically (writeTQueue eventNotify $ KeyDown k)
+        keyPressEvent   eventNotify _ k _ GLFW.KeyState'Released _       = atomically (writeTQueue eventNotify $ KeyUp   k)
+        keyPressEvent   eventNotify _ k _ _ _                            = return ()
 
         collectTimers Nothing     timers = timers
         collectTimers (Just time) timers = Map.insert time time timers
@@ -415,9 +488,9 @@ globalEventDispatch inBox outBox = forever $ do
 
 instance Alternative Signal where
     empty = Pure undefined 
-    Pure   a <|> Pure   b = Pure a
+    Pure   a <|> Pure _   = Pure a
     Pure   a <|> Signal b = Signal $ \counter -> b counter >>= \(_,broadcastInbox,bThread) -> return (a,broadcastInbox,bThread)
-    Signal f <|> Pure g   = Signal f
+    Signal f <|> Pure _   = Signal f
     Signal f <|> Signal g = Signal $ \counter -> do
         id <- readIORef counter
         writeIORef counter id
@@ -643,34 +716,42 @@ dropWhen (Signal predicate) (Signal value) = Signal $ \counter -> do
 ---------------------------------------------
 -- Pattern support
 ---------------------------------------------
-{-
-sampleOn :: Signal Bool -> Signal Bool -> Signal ()
-sampleOn (Signal player) (Signal stopper) = Signal $ do
-    (pVal,pBroadcast,pThreads) <- player
-    (sVal,sBroadcast,sThreads) <- stopper
+
+playOn :: Signal Bool -> Signal Bool -> Signal ()
+playOn (Signal player) (Signal stopper) = Signal $ \counter -> do
+    id' <- readIORef counter
+    let id = id' + 1
+    writeIORef counter id
+    (pVal,pBroadcast,pThreads) <- player counter
+    (sVal,sBroadcast,sThreads) <- stopper counter
     pInBox  <- atomically $ dupTChan pBroadcast
     sInBox  <- atomically $ dupTChan sBroadcast
     outBox <- atomically newBroadcastTChan
-    let thread _ _ = forkIO (loop (pval && not sVal) sVal pVal pInBox sInBox outBox) >> return Nothing
-    return ((),outBox,thread : (vThreads ++ sThreads))
+    let thread _ _ = forkIO (loop (pVal && not sVal) pInBox sInBox outBox) >> return Nothing
+    return ((),outBox,Map.insert id thread $ Map.union pThreads sThreads)
     where
         loop isPlaying pInBox sInBox outBox = do
-            p <- atomically (readTChan sInBox)
-            s <- atomically (readTChan vInBox)
+            p <- atomically (readTChan pInBox)
+            s <- atomically (readTChan sInBox)
             case p of
                 Nothing -> case s of
                     Nothing -> atomically (writeTChan outBox Nothing) >> loop isPlaying pInBox sInBox outBox
                     Just s' -> do
-                        atomically (writeTChan outBox ())
-                        if not s' && isPlaying then print "Stop playing" else return ()
-                        loop False pInBox sInBox outBox
-                Just p'  -> case v of
+                        atomically (writeTChan outBox $ Just ())
+                        if s' && isPlaying
+                            then print "Stop playing" >> loop False pInBox sInBox outBox
+                            else loop isPlaying pInBox sInBox outBox
+                        
+                Just p'  -> case s of
                     Nothing -> do 
-                        atomically (writeTChan outBox $ Just prev)
-                        if p' && not isPlaying then print "Start playing" else return ()
-                        loop (p' && not isPlaying) pInBox sInBox outBox
+                        atomically (writeTChan outBox $ Just ())
+                        if p' && not isPlaying
+                            then print "Start playing" >> loop True pInBox sInBox outBox
+                            else loop isPlaying pInBox sInBox outBox
+                        
                     Just s' -> do
-                        atomically (writeTChan outBox $ Just v'  )
-                        if p' && not isPlaying then print "Start playing" else return ()
-                        loop False pInBox sInBox outBox
--}
+                        atomically (writeTChan outBox $ Just ())
+                        if p' && not isPlaying
+                            then print "Start playing" >> loop True pInBox sInBox outBox
+                            else loop isPlaying pInBox sInBox outBox
+                        
