@@ -12,15 +12,15 @@ main :: IO()
 -- main = runSignal $ sampleOn mouseClicks doubleMouse <|> mousePos
 -- main = runSignal $ every second <|> fps 9.5
 -- main = runSignal multiPlay
-main = runSignal wasd
-
+-- main = runSignal wasd
+main = runSignal dimensions
 
 multiPlay :: Signal ()
 multiPlay = playOn beat (isDown keyP) (isDown keyS)
-   <|> playOn beat (isDown keyA) (isDown keyS)
-   <|> playOn beat (isDown keyB) (isDown keyS)
-   <|> playOn beat (isDown keyC) (isDown keyS)
-   <|> playOn beat (isDown keyD) (isDown keyS)
+        <|> playOn beat (isDown keyA) (isDown keyS)
+        <|> playOn beat (isDown keyB) (isDown keyS)
+        <|> playOn beat (isDown keyC) (isDown keyS)
+        <|> playOn beat (isDown keyD) (isDown keyS)
     where
         beat = 0
 
@@ -29,8 +29,8 @@ tonsOfMouseAndTime = tenThousandTest
     where
         tupleTest x _   = x
         tupleTime       = (\x ->  (x,x)) <~ every second
-        test            = tupleTest <~ mousePos
-        tenTests        = test ~~ (test ~~ (test ~~ (test ~~ (test ~~ (test ~~ (test ~~ (test ~~ (test ~~ (test ~~ mousePos)))))))))
+        test1           = tupleTest <~ mousePos
+        tenTests        = test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ mousePos)))))))))
         test2           = tupleTest <~ tenTests
         hundredTests    = test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ mousePos)))))))))
         test3           = tupleTest <~ hundredTests

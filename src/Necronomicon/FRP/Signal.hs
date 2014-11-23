@@ -4,7 +4,7 @@ module Necronomicon.FRP.Signal (
     (<~),
     (~~),
     wasd,
-    -- dimensions,
+    dimensions,
     Signal,
     mousePos,
     runSignal,
@@ -186,6 +186,7 @@ data InputEvent = MousePosition (Double,Double)
                 | MouseClick
                 | KeyDown       Key
                 | KeyUp         Key
+                | Dimensions    (Int,Int)
                 | TimeEvent     Int Time
                 deriving (Show,Eq)
 
@@ -270,6 +271,15 @@ wasd = input (0,0) (inputLoop False False False False) Set.empty
                     | key == keyD = atomically (writeTChan outBox (buildwasd w a s keyDown)) >> inputLoop w a s keyDown inBox outBox
                     | otherwise   = atomically (writeTChan outBox Nothing                  ) >> inputLoop w a s d inBox outBox
                 buildwasd w a s d = Just(((if d then 1 else 0) + (if a then (-1) else 0)),((if w then 1 else 0) + (if s then (-1) else 0)))
+
+dimensions :: Signal (Int,Int)
+dimensions = input (0,0) inputLoop Set.empty
+    where
+        inputLoop inBox outBox = forever $ do
+            event <- atomically $ readTChan inBox
+            case event of
+                Dimensions v -> atomically (writeTChan outBox $ Just v)
+                _            -> atomically (writeTChan outBox Nothing)
 
 ---------------------------------------------
 -- Main Machinery
@@ -380,8 +390,12 @@ runSignal (Signal s) = initWindow >>= \mw ->
             GLFW.setCursorPosCallback   w $ Just $ mousePosEvent   globalDispatch
             GLFW.setMouseButtonCallback w $ Just $ mousePressEvent globalDispatch
             GLFW.setKeyCallback         w $ Just $ keyPressEvent   globalDispatch
+            GLFW.setWindowSizeCallback  w $ Just $ dimensionsEvent globalDispatch
 
             forkIO $ globalEventDispatch globalDispatch eventNotify
+
+            (ww,wh) <- GLFW.getWindowSize w
+            dimensionsEvent globalDispatch w ww wh
 
             render False w
     where
@@ -392,6 +406,7 @@ runSignal (Signal s) = initWindow >>= \mw ->
         keyPressEvent   eventNotify _ k _ GLFW.KeyState'Pressed  _       = atomically (writeTQueue eventNotify $ KeyDown k)
         keyPressEvent   eventNotify _ k _ GLFW.KeyState'Released _       = atomically (writeTQueue eventNotify $ KeyUp   k)
         keyPressEvent   eventNotify _ k _ _ _                            = return ()
+        dimensionsEvent eventNotify _ x y                                = atomically $ writeTQueue eventNotify $ Dimensions (x,y)
 
         forceLoop inBox = forever $ do
             v <- atomically (readTChan inBox)
