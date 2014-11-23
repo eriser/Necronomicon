@@ -24,6 +24,9 @@ module Necronomicon.FRP.Signal (
     dropWhen,
     isDown,
     playOn,
+    combine,
+    merge,
+    merges,
     keyA,
     keyB,
     keyC,
@@ -600,6 +603,42 @@ dropWhen (Signal predicate) (Signal value) = Signal $ \broadcastInbox -> do
                 Just p' -> case v of
                     Nothing -> atomically (writeTChan outBox $ if not p'    then Just prevVal else Nothing) >> loop p'    prevVal pInBox vInBox outBox
                     Just v' -> atomically (writeTChan outBox $ if not p'    then Just v'      else Nothing) >> loop p'    v'      pInBox vInBox outBox
+
+merge :: Signal a -> Signal a -> Signal a
+merge = (<|>)
+
+merges :: [Signal a] -> Signal a
+merges ls = foldr (<|>) empty ls
+
+combine :: [Signal a] -> Signal [a]
+combine signals = Signal $ \broadcastInbox -> do
+    tuples <- mapM (app broadcastInbox) signals
+    let values  = map (\(v,_,_) -> v) tuples
+    inBoxes    <- mapM (\(_,i,_) -> maybeDup i) tuples
+    let timers  = foldr (\(_,_,s) ss -> Set.union s ss) Set.empty tuples
+    outBox <- atomically $ newBroadcastTChan
+    forkIO $ loop values inBoxes outBox
+    return (values,outBox,timers)
+    where
+        maybeDup (Just inBox) = do
+            i <- atomically $ dupTChan inBox
+            return $ Just i
+        maybeDup Nothing      = return Nothing
+        app broadcastInbox (Signal s) = do
+            (v,outBox,timers) <- s broadcastInbox
+            return (v,Just outBox,timers)
+        app _ (Pure p)              = return (p,Nothing,Set.empty)
+        maybeRead (Just inBox,prev) = atomically $ readTChan inBox
+        maybeRead (Nothing   ,prev) = return $ Just prev
+
+        maybePrev (Just  v,prev) = v
+        maybePrev (Nothing,prev) = prev
+        
+        loop prev inBoxes outBox = do
+            new <- mapM maybeRead $ zip inBoxes prev
+            let new' = map maybePrev $ zip new prev
+            atomically $ writeTChan outBox $ Just new'
+            loop new' inBoxes outBox
 
 -------------------
 --Executing IO with events could definitely be pandoras box. Disallowing until it is deemed somehow useful and not super dangerous.
