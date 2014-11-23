@@ -3,8 +3,10 @@ module Necronomicon.FRP.Signal (
     -- foldp,
     (<~),
     (~~),
+    -- (=<~),
+    -- execute,
     wasd,
-    -- dimensions,
+    dimensions,
     Signal,
     mousePos,
     runSignal,
@@ -85,71 +87,6 @@ ifThenElse :: Bool -> a -> a -> a
 ifThenElse True a _ = a
 ifThenElse False _ b = b
 
-{- 
-data Signal a = SignalGenerator (IO (Time -> GLFW.Window -> IO a)) deriving (Show)
-
-instance Functor Signal where
-    fmap f (SignalGenerator g) = SignalGenerator $ do
-        gFunc  <- g
-        return $ \t w -> do
-            gResult <- gFunc t w
-            return $ f gResult
-
-instance Applicative Signal where
-    pure  x = SignalGenerator $ return $ \_ _ -> return x
-    SignalGenerator g <*> SignalGenerator y = SignalGenerator $ do
-        gFunc  <- g
-        yFunc  <- y
-        return $ \t w -> do
-            gResult <- gFunc t w
-            yResult <- yFunc t w
-            return $ gResult yResult
-
-instance Show (IO a) where
-    show _ = "IO a"
-
-effectful :: IO a -> Signal a
-effectful action = SignalGenerator $ return $ \_ _-> action
-
-effectful1 :: (t -> IO a) -> Signal t -> Signal a
-effectful1 f (SignalGenerator g) = SignalGenerator $ do
-    gFunc <- g
-    return $ \t w -> do
-        gResult <- gFunc t w
-        f gResult
-
-foldp :: (a -> b -> b) -> b -> Signal a -> Signal b
-foldp f b (SignalGenerator g) = SignalGenerator $ do
-    gFunc <- g
-    ref <- newIORef b
-    return $ \t w -> do
-        gResult <- gFunc t w
-        rb      <- readIORef ref
-        let b'   = f gResult rb
-        writeIORef ref b'
-        return b'
-
-delay :: a -> Signal a -> Signal a
-delay init (SignalGenerator g) = SignalGenerator $ do
-    gFunc <- g
-    ref <- newIORef init
-    return $ \t w -> do
-        gResult <- gFunc t w
-        prev    <- readIORef ref
-        writeIORef ref gResult
-        return prev
-
----------------------------------------------
--- Input
----------------------------------------------
-
-
-dimensions :: Signal (Int,Int)
-dimensions = SignalGenerator $ return $ \_ w -> do
-    (wi,hi) <- GLFW.getFramebufferSize w
-    return $ (fromIntegral wi,fromIntegral hi)
--}
-
 ---------------------------------------------
 -- Signals 2.0
 ---------------------------------------------
@@ -186,6 +123,7 @@ data InputEvent = MousePosition (Double,Double)
                 | MouseClick
                 | KeyDown       Key
                 | KeyUp         Key
+                | Dimensions    (Int,Int)
                 | TimeEvent     Int Time
                 deriving (Show,Eq)
 
@@ -271,10 +209,19 @@ wasd = input (0,0) (inputLoop False False False False) Set.empty
                     | otherwise   = atomically (writeTChan outBox Nothing                  ) >> inputLoop w a s d inBox outBox
                 buildwasd w a s d = Just(((if d then 1 else 0) + (if a then (-1) else 0)),((if w then 1 else 0) + (if s then (-1) else 0)))
 
+dimensions :: Signal (Int,Int)
+dimensions = input (0,0) inputLoop Set.empty
+    where
+        inputLoop inBox outBox = forever $ do
+            event <- atomically $ readTChan inBox
+            case event of
+                Dimensions v -> atomically (writeTChan outBox $ Just v)
+                _            -> atomically (writeTChan outBox Nothing)
+
 ---------------------------------------------
 -- Main Machinery
 ---------------------------------------------
-
+    
 instance Functor Signal where
     fmap f (Signal g) = Signal $ \broadcastInbox -> do
         (childEvent,broadcastInbox,gTimers) <- g broadcastInbox
@@ -296,8 +243,8 @@ instance Applicative Signal where
         return (f gEvent,outBox,gTimers)
     Signal f <*> Pure g   = Signal $ \broadcastInbox -> do
         (fEvent,broadcastInbox,fTimers) <- f broadcastInbox
-        inBox                            <- atomically $ dupTChan broadcastInbox
-        outBox                           <- atomically newBroadcastTChan
+        inBox                           <- atomically $ dupTChan broadcastInbox
+        outBox                          <- atomically newBroadcastTChan
         forkIO $ fmapeeLoop g inBox outBox
         return (fEvent g,outBox,fTimers)
     Signal f <*> Signal g = Signal $ \broadcastInbox -> do
@@ -380,8 +327,12 @@ runSignal (Signal s) = initWindow >>= \mw ->
             GLFW.setCursorPosCallback   w $ Just $ mousePosEvent   globalDispatch
             GLFW.setMouseButtonCallback w $ Just $ mousePressEvent globalDispatch
             GLFW.setKeyCallback         w $ Just $ keyPressEvent   globalDispatch
+            GLFW.setWindowSizeCallback  w $ Just $ dimensionsEvent globalDispatch
 
             forkIO $ globalEventDispatch globalDispatch eventNotify
+
+            (ww,wh) <- GLFW.getWindowSize w
+            dimensionsEvent globalDispatch w ww wh
 
             render False w
     where
@@ -392,6 +343,7 @@ runSignal (Signal s) = initWindow >>= \mw ->
         keyPressEvent   eventNotify _ k _ GLFW.KeyState'Pressed  _       = atomically (writeTQueue eventNotify $ KeyDown k)
         keyPressEvent   eventNotify _ k _ GLFW.KeyState'Released _       = atomically (writeTQueue eventNotify $ KeyUp   k)
         keyPressEvent   eventNotify _ k _ _ _                            = return ()
+        dimensionsEvent eventNotify _ x y                                = atomically $ writeTQueue eventNotify $ Dimensions (x,y)
 
         forceLoop inBox = forever $ do
             v <- atomically (readTChan inBox)
@@ -553,7 +505,7 @@ timeLoop outBox millisecondDelta = forever $ do
             threadDelay millisecondDelta
 
 ---------------------------------------------
--- Filters
+-- Combinators
 ---------------------------------------------
 
 keepIf :: (a -> Bool) -> a -> Signal a -> Signal a
@@ -649,6 +601,43 @@ dropWhen (Signal predicate) (Signal value) = Signal $ \broadcastInbox -> do
                     Nothing -> atomically (writeTChan outBox $ if not p'    then Just prevVal else Nothing) >> loop p'    prevVal pInBox vInBox outBox
                     Just v' -> atomically (writeTChan outBox $ if not p'    then Just v'      else Nothing) >> loop p'    v'      pInBox vInBox outBox
 
+-------------------
+--Executing IO with events could definitely be pandoras box. Disallowing until it is deemed somehow useful and not super dangerous.
+------------------
+-- execute0 :: IO a -> Signal a
+-- execute0 a = Signal $ \broadcastInbox -> do
+    -- (childEvent,broadcastInbox,gTimers) <- g broadcastInbox
+    -- inBox                               <- atomically $ dupTChan broadcastInbox
+    -- outBox                              <- atomically newBroadcastTChan
+    -- forkIO $ iofmapLoop f inBox outBox
+    -- v <- f childEvent
+    -- return (v,outBox,gTimers)
+
+-- execute :: (a -> IO b) -> Signal a -> Signal b
+-- execute f (Signal g) = Signal $ \broadcastInbox -> do
+    -- (childEvent,broadcastInbox,gTimers) <- g broadcastInbox
+    -- inBox                               <- atomically $ dupTChan broadcastInbox
+    -- outBox                              <- atomically newBroadcastTChan
+    -- forkIO $ iofmapLoop f inBox outBox
+    -- v <- f childEvent
+    -- return (v,outBox,gTimers)
+-- execute f (Pure a) = Signal $ \_ -> do
+    -- outBox <- atomically newBroadcastTChan
+    -- v <- f a
+    -- return (v,outBox,Set.empty)
+
+-- (=<~) = execute
+
+-- iofmapLoop :: (a -> IO b) -> TChan (Maybe a)-> TChan (Maybe b) -> IO()
+-- iofmapLoop f inBox outBox = do
+    -- e <- atomically (readTChan inBox)
+    -- case e of
+        -- Nothing -> atomically (writeTChan outBox Nothing) >> iofmapLoop f inBox outBox
+        -- Just  v -> do
+            -- iov <- f v
+            -- let new = Just iov
+            -- atomically (writeTChan outBox new)
+            -- iofmapLoop f inBox outBox
 
 ---------------------------------------------
 -- Pattern support
