@@ -1,13 +1,9 @@
 module Necronomicon.FRP.Signal (
     Signal,
     -- foldp,
-    -- fps,
     (<~),
     (~~),
-    -- Key,
-    -- isDown,
-    -- mousePos,
-    -- wasd,
+    wasd,
     -- dimensions,
     Signal,
     mousePos,
@@ -52,6 +48,14 @@ module Necronomicon.FRP.Signal (
     keyX,
     keyY,
     keyZ,
+    lift,
+    lift2,
+    lift3,
+    lift4,
+    lift5,
+    lift6,
+    lift7,
+    lift8,
     module Control.Applicative
     ) where
 
@@ -139,25 +143,6 @@ delay init (SignalGenerator g) = SignalGenerator $ do
 -- Input
 ---------------------------------------------
 
-type Key  = GLFW.Key
-keyW = GLFW.Key'W
-keyA = GLFW.Key'A
-keyS = GLFW.Key'S
-keyD = GLFW.Key'D
-
-isDown :: Key -> Signal Bool
-isDown k = SignalGenerator $ return $ \_ w -> do
-    d <- GLFW.getKey w k
-    return $ d == GLFW.KeyState'Pressed
-
-wasd :: Signal (Double,Double)
-wasd = SignalGenerator $ return $ \_ w -> do
-    wd <- GLFW.getKey w keyW
-    ad <- GLFW.getKey w keyA
-    sd <- GLFW.getKey w keyS
-    dd <- GLFW.getKey w keyD
-    return $ (((if dd==GLFW.KeyState'Pressed then 1 else 0) + (if ad==GLFW.KeyState'Pressed then (-1) else 0)),
-              ((if wd==GLFW.KeyState'Pressed then 1 else 0) + (if sd==GLFW.KeyState'Pressed then (-1) else 0)))
 
 dimensions :: Signal (Int,Int)
 dimensions = SignalGenerator $ return $ \_ w -> do
@@ -267,6 +252,24 @@ isDown k = input False inputLoop Set.empty
                 KeyDown k' -> if k' == k then atomically (writeTChan outBox $ Just True)  else atomically (writeTChan outBox $ Nothing)
                 KeyUp   k' -> if k' == k then atomically (writeTChan outBox $ Just False) else atomically (writeTChan outBox $ Nothing)
                 _          -> atomically (writeTChan outBox Nothing)
+
+wasd :: Signal (Double,Double)
+wasd = input (0,0) (inputLoop False False False False) Set.empty
+    where
+        inputLoop w a s d inBox outBox = do
+            event <- atomically $ readTChan inBox
+            case event of
+                KeyUp   k' -> sendwasd k' False
+                KeyDown k' -> sendwasd k' True
+                _          -> atomically (writeTChan outBox Nothing) >> inputLoop w a s d inBox outBox
+            where
+                sendwasd key keyDown
+                    | key == keyW = atomically (writeTChan outBox (buildwasd keyDown a s d)) >> inputLoop keyDown a s d inBox outBox
+                    | key == keyA = atomically (writeTChan outBox (buildwasd w keyDown s d)) >> inputLoop w keyDown s d inBox outBox
+                    | key == keyS = atomically (writeTChan outBox (buildwasd w a keyDown d)) >> inputLoop w a keyDown d inBox outBox
+                    | key == keyD = atomically (writeTChan outBox (buildwasd w a s keyDown)) >> inputLoop w a s keyDown inBox outBox
+                    | otherwise   = atomically (writeTChan outBox Nothing                  ) >> inputLoop w a s d inBox outBox
+                buildwasd w a s d = Just(((if d then 1 else 0) + (if a then (-1) else 0)),((if w then 1 else 0) + (if s then (-1) else 0)))
 
 ---------------------------------------------
 -- Main Machinery
@@ -491,10 +494,29 @@ instance (Enum a) => Enum (Signal a) where
     -- toEnum   = lift toEnum
     -- fromEnum = pure
                 
-
+lift :: (a -> b) -> Signal a -> Signal b
 lift  = liftA
--- lift2 = liftA2
--- lift3 = liftA3
+
+lift2 :: (a -> b -> c) -> Signal a -> Signal b -> Signal c
+lift2 = liftA2
+
+lift3 :: (a -> b -> c -> d) -> Signal a -> Signal b -> Signal c -> Signal d
+lift3 = liftA3
+
+lift4 :: (a -> b -> c -> d -> e) -> Signal a -> Signal b -> Signal c -> Signal d -> Signal e
+lift4 f a b c d = f <~ a ~~ b ~~ c ~~ d
+
+lift5 :: (a -> b -> c -> d -> e -> f) -> Signal a -> Signal b -> Signal c -> Signal d -> Signal e -> Signal f
+lift5 f a b c d e = f <~ a ~~ b ~~ c ~~ d ~~ e
+
+lift6 :: (a -> b -> c -> d -> e -> f -> g) -> Signal a -> Signal b -> Signal c -> Signal d -> Signal e -> Signal f -> Signal g
+lift6 f a b c d e f' = f <~ a ~~ b ~~ c ~~ d ~~ e ~~ f'
+
+lift7 :: (a -> b -> c -> d -> e -> f -> g -> h) -> Signal a -> Signal b -> Signal c -> Signal d -> Signal e -> Signal f -> Signal g -> Signal h
+lift7 f a b c d e f' g = f <~ a ~~ b ~~ c ~~ d ~~ e ~~ f' ~~ g
+
+lift8 :: (a -> b -> c -> d -> e -> f -> g -> h -> i) -> Signal a -> Signal b -> Signal c -> Signal d -> Signal e -> Signal f -> Signal g -> Signal h -> Signal i
+lift8 f a b c d e f' g h = f <~ a ~~ b ~~ c ~~ d ~~ e ~~ f' ~~ g ~~ h
 
 ---------------------------------------------
 -- Time

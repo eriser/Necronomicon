@@ -2,7 +2,7 @@ import Prelude
 import Necronomicon.FRP
 
 main :: IO()
-main = runSignal tonsOfMouseAndTime
+-- main = runSignal tonsOfMouseAndTime
 -- main = runSignal $ dropIf (\(x,y) -> x > 400) (0,0) mousePos
 -- main = runSignal $ keepIf (\(x,y) -> x > 400) (0,0) mousePos
 -- main = runSignal $ sampleOn mouseClicks mousePos
@@ -10,15 +10,19 @@ main = runSignal tonsOfMouseAndTime
 -- main = runSignal $ every $ 2 * second
 -- main = runSignal $ dropWhen ((\(x,_) -> x > 400) <~ mousePos) mousePos
 -- main = runSignal $ sampleOn mouseClicks doubleMouse <|> mousePos
--- main = runSignal $ every second <|> fps 4.5
--- main = runSignal $
-       -- playOn beat (isDown keyP) (isDown keyS)
-   -- <|> playOn beat (isDown keyA) (isDown keyS)
-   -- <|> playOn beat (isDown keyB) (isDown keyS)
-   -- <|> playOn beat (isDown keyC) (isDown keyS)
-   -- <|> playOn beat (isDown keyD) (isDown keyS)
-    -- where
-        -- beat = 0
+-- main = runSignal $ every second <|> fps 9.5
+-- main = runSignal multiPlay
+main = runSignal wasd
+
+
+multiPlay :: Signal ()
+multiPlay = playOn beat (isDown keyP) (isDown keyS)
+   <|> playOn beat (isDown keyA) (isDown keyS)
+   <|> playOn beat (isDown keyB) (isDown keyS)
+   <|> playOn beat (isDown keyC) (isDown keyS)
+   <|> playOn beat (isDown keyD) (isDown keyS)
+    where
+        beat = 0
 
 tonsOfMouseAndTime :: Signal (Double,Double)
 tonsOfMouseAndTime = tenThousandTest
