@@ -909,7 +909,7 @@ int process(jack_nframes_t nframes, void* arg)
 	return 0;
 }
 
-void startRuntime()
+void start_rt_runtime()
 {
 	puts("Necronomicon audio engine booting...");
 	init_rt_thread();
