@@ -52,7 +52,7 @@ executable PatternTest
     main-is:          Main.hs
     default-language: Haskell2010
     ghc-options:      -threaded -Wall
-    hs-source-dirs:   PatternTest
+    hs-source-dirs:   Tests/PatternTest
     default-extensions: QuasiQuotes TemplateHaskell 
     build-depends:
         base             == 4.*,
@@ -72,7 +72,7 @@ executable SigTest
     main-is:          Main.hs
     default-language: Haskell2010
     ghc-options:      -threaded -O3 -Wall
-    hs-source-dirs:   SigTest
+    hs-source-dirs:   Tests/SigTest
     default-extensions:
     build-depends:
         base             == 4.*,
@@ -82,7 +82,7 @@ executable CTest
     main-is:          Main.hs
     default-language: Haskell2010
     ghc-options:      -threaded -Wall
-    hs-source-dirs:   CTest
+    hs-source-dirs:   Tests/CTest
     default-extensions:
     build-depends:
         base             == 4.*,
