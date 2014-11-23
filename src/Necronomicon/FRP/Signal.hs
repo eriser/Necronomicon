@@ -3,6 +3,8 @@ module Necronomicon.FRP.Signal (
     -- foldp,
     (<~),
     (~~),
+    -- (=<~),
+    -- execute,
     wasd,
     dimensions,
     Signal,
@@ -84,71 +86,6 @@ type Time = Double
 ifThenElse :: Bool -> a -> a -> a
 ifThenElse True a _ = a
 ifThenElse False _ b = b
-
-{- 
-data Signal a = SignalGenerator (IO (Time -> GLFW.Window -> IO a)) deriving (Show)
-
-instance Functor Signal where
-    fmap f (SignalGenerator g) = SignalGenerator $ do
-        gFunc  <- g
-        return $ \t w -> do
-            gResult <- gFunc t w
-            return $ f gResult
-
-instance Applicative Signal where
-    pure  x = SignalGenerator $ return $ \_ _ -> return x
-    SignalGenerator g <*> SignalGenerator y = SignalGenerator $ do
-        gFunc  <- g
-        yFunc  <- y
-        return $ \t w -> do
-            gResult <- gFunc t w
-            yResult <- yFunc t w
-            return $ gResult yResult
-
-instance Show (IO a) where
-    show _ = "IO a"
-
-effectful :: IO a -> Signal a
-effectful action = SignalGenerator $ return $ \_ _-> action
-
-effectful1 :: (t -> IO a) -> Signal t -> Signal a
-effectful1 f (SignalGenerator g) = SignalGenerator $ do
-    gFunc <- g
-    return $ \t w -> do
-        gResult <- gFunc t w
-        f gResult
-
-foldp :: (a -> b -> b) -> b -> Signal a -> Signal b
-foldp f b (SignalGenerator g) = SignalGenerator $ do
-    gFunc <- g
-    ref <- newIORef b
-    return $ \t w -> do
-        gResult <- gFunc t w
-        rb      <- readIORef ref
-        let b'   = f gResult rb
-        writeIORef ref b'
-        return b'
-
-delay :: a -> Signal a -> Signal a
-delay init (SignalGenerator g) = SignalGenerator $ do
-    gFunc <- g
-    ref <- newIORef init
-    return $ \t w -> do
-        gResult <- gFunc t w
-        prev    <- readIORef ref
-        writeIORef ref gResult
-        return prev
-
----------------------------------------------
--- Input
----------------------------------------------
-
-
-dimensions :: Signal (Int,Int)
-dimensions = SignalGenerator $ return $ \_ w -> do
-    (wi,hi) <- GLFW.getFramebufferSize w
-    return $ (fromIntegral wi,fromIntegral hi)
--}
 
 ---------------------------------------------
 -- Signals 2.0
@@ -284,7 +221,7 @@ dimensions = input (0,0) inputLoop Set.empty
 ---------------------------------------------
 -- Main Machinery
 ---------------------------------------------
-
+    
 instance Functor Signal where
     fmap f (Signal g) = Signal $ \broadcastInbox -> do
         (childEvent,broadcastInbox,gTimers) <- g broadcastInbox
@@ -306,8 +243,8 @@ instance Applicative Signal where
         return (f gEvent,outBox,gTimers)
     Signal f <*> Pure g   = Signal $ \broadcastInbox -> do
         (fEvent,broadcastInbox,fTimers) <- f broadcastInbox
-        inBox                            <- atomically $ dupTChan broadcastInbox
-        outBox                           <- atomically newBroadcastTChan
+        inBox                           <- atomically $ dupTChan broadcastInbox
+        outBox                          <- atomically newBroadcastTChan
         forkIO $ fmapeeLoop g inBox outBox
         return (fEvent g,outBox,fTimers)
     Signal f <*> Signal g = Signal $ \broadcastInbox -> do
@@ -568,7 +505,7 @@ timeLoop outBox millisecondDelta = forever $ do
             threadDelay millisecondDelta
 
 ---------------------------------------------
--- Filters
+-- Combinators
 ---------------------------------------------
 
 keepIf :: (a -> Bool) -> a -> Signal a -> Signal a
@@ -664,6 +601,43 @@ dropWhen (Signal predicate) (Signal value) = Signal $ \broadcastInbox -> do
                     Nothing -> atomically (writeTChan outBox $ if not p'    then Just prevVal else Nothing) >> loop p'    prevVal pInBox vInBox outBox
                     Just v' -> atomically (writeTChan outBox $ if not p'    then Just v'      else Nothing) >> loop p'    v'      pInBox vInBox outBox
 
+-------------------
+--Executing IO with events could definitely be pandoras box. Disallowing until it is deemed somehow useful and not super dangerous.
+------------------
+-- execute0 :: IO a -> Signal a
+-- execute0 a = Signal $ \broadcastInbox -> do
+    -- (childEvent,broadcastInbox,gTimers) <- g broadcastInbox
+    -- inBox                               <- atomically $ dupTChan broadcastInbox
+    -- outBox                              <- atomically newBroadcastTChan
+    -- forkIO $ iofmapLoop f inBox outBox
+    -- v <- f childEvent
+    -- return (v,outBox,gTimers)
+
+-- execute :: (a -> IO b) -> Signal a -> Signal b
+-- execute f (Signal g) = Signal $ \broadcastInbox -> do
+    -- (childEvent,broadcastInbox,gTimers) <- g broadcastInbox
+    -- inBox                               <- atomically $ dupTChan broadcastInbox
+    -- outBox                              <- atomically newBroadcastTChan
+    -- forkIO $ iofmapLoop f inBox outBox
+    -- v <- f childEvent
+    -- return (v,outBox,gTimers)
+-- execute f (Pure a) = Signal $ \_ -> do
+    -- outBox <- atomically newBroadcastTChan
+    -- v <- f a
+    -- return (v,outBox,Set.empty)
+
+-- (=<~) = execute
+
+-- iofmapLoop :: (a -> IO b) -> TChan (Maybe a)-> TChan (Maybe b) -> IO()
+-- iofmapLoop f inBox outBox = do
+    -- e <- atomically (readTChan inBox)
+    -- case e of
+        -- Nothing -> atomically (writeTChan outBox Nothing) >> iofmapLoop f inBox outBox
+        -- Just  v -> do
+            -- iov <- f v
+            -- let new = Just iov
+            -- atomically (writeTChan outBox new)
+            -- iofmapLoop f inBox outBox
 
 ---------------------------------------------
 -- Pattern support

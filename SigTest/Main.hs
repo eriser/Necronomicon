@@ -12,8 +12,7 @@ main :: IO()
 -- main = runSignal $ sampleOn mouseClicks doubleMouse <|> mousePos
 -- main = runSignal $ every second <|> fps 9.5
 -- main = runSignal multiPlay
--- main = runSignal wasd
-main = runSignal dimensions
+main = runSignal wasd
 
 multiPlay :: Signal ()
 multiPlay = playOn beat (isDown keyP) (isDown keyS)
