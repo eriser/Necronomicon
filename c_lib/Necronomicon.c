@@ -22,7 +22,7 @@
 //////////////
 
 #ifndef M_PI
-#define M_PI 3.1415926535897932384626433832795028841971693993751058209749445923078164062
+#define M_PI 3.1415926535897932384626433832795028841971693993751058209749445923078164062L
 #endif
 
 const double TWO_PI = M_PI * 2;
@@ -31,7 +31,7 @@ const double SAMPLE_RATE = 44100;
 const double RECIP_SAMPLE_RATE = 1.0 / 44100.0;
 
 #define TABLE_SIZE   (256)
-const double RECIP_TABLE_SIZE = 1.0 / (double)TABLE_SIZE;
+const double RECIP_TABLE_SIZE = 1.0 / (double) TABLE_SIZE;
 double sine_table[TABLE_SIZE];
 
 const double TABLE_MUL_RECIP_SAMPLE_RATE = TABLE_SIZE * (1.0 / 44100.0);
@@ -46,7 +46,7 @@ typedef struct
 int signalSize = sizeof(Signal);
 int signalAlignment = __alignof__(Signal);
 
-typedef Signal Calc(void* args, int time);
+typedef Signal Calc(void* args, double time);
 
 typedef struct
 {
@@ -58,7 +58,7 @@ typedef struct
 int ugenSize = sizeof(UGen);
 int ugenAlignment = __alignof__(UGen);
 
-Signal numberCalc(void* args, int time)
+Signal numberCalc(void* args, double time)
 {
 	return ((Signal*) args)[0];
 }
@@ -111,16 +111,16 @@ inline double sigsum(Signal signal)
 	return signal.amplitude + signal.offset;
 }
 
-Signal delayCalc(void* args, int time)
+Signal delayCalc(void* args, double time)
 {
 	UGen delayUGen = ((UGen*) args)[0];
 	UGen input = ((UGen*) args)[1];
 	Signal delayTimeSig = (delayUGen.calc(delayUGen.args, time));
-	int delayedTime = delayTimeSig.offset * SAMPLE_RATE + time + (delayTimeSig.amplitude * RECIP_TWO_PI * (double) SAMPLE_RATE);
+	int delayedTime = delayTimeSig.offset * (double) SAMPLE_RATE + time + (delayTimeSig.amplitude * RECIP_TWO_PI * (double) SAMPLE_RATE);
 	return input.calc(input.args, delayedTime);
 }
 
-Signal timeWarpCalc(void* args, int time)
+Signal timeWarpCalc(void* args, double time)
 {
 	UGen timeUGen = ((UGen*) args)[0];
 	UGen input = ((UGen*) args)[1];
@@ -129,7 +129,7 @@ Signal timeWarpCalc(void* args, int time)
 	return input.calc(input.args, modedTime);
 }
 
-Signal sinCalc(void* args, int time)
+Signal sinCalc(void* args, double time)
 {
 	UGen freqUGen = ((UGen*) args)[0];
 	Signal freq = freqUGen.calc(freqUGen.args, time);
@@ -138,19 +138,19 @@ Signal sinCalc(void* args, int time)
 	/* double amplitude = sin(freq.offset * TWO_PI * time * RECIP_SAMPLE_RATE + freq.amplitude); */
 
 	//look up table version
-	double rawIndex = freq.offset * TABLE_MUL_RECIP_SAMPLE_RATE * (double) time + (freq.amplitude * TABLE_SIZE_MUL_RECIP_TWO_PI);
+	double rawIndex = freq.offset * TABLE_MUL_RECIP_SAMPLE_RATE * time + (freq.amplitude * TABLE_SIZE_MUL_RECIP_TWO_PI);
 	unsigned char index1 = rawIndex;
 	unsigned char index2 = index1+1;
 	double amp1 = sine_table[index1];
 	double amp2 = sine_table[index2];
-	double delta = rawIndex - ((long)rawIndex);
+	double delta = rawIndex - ((long) rawIndex);
 	double amplitude = amp1 + delta * (amp2 - amp1);
 	
 	Signal signal = { amplitude, 0 };
 	return signal;
 }
 
-Signal addCalc(void* args, int time)
+Signal addCalc(void* args, double time)
 {
 	UGen a = ((UGen*) args)[0];
 	UGen b = ((UGen*) args)[1];
@@ -160,7 +160,7 @@ Signal addCalc(void* args, int time)
 	return signal;
 }
 
-Signal minusCalc(void* args, int time)
+Signal minusCalc(void* args, double time)
 {
 	UGen a = ((UGen*) args)[0];
 	UGen b = ((UGen*) args)[1];
@@ -170,7 +170,7 @@ Signal minusCalc(void* args, int time)
 	return signal;
 }
 
-Signal mulCalc(void* args, int time)
+Signal mulCalc(void* args, double time)
 {
 	UGen a = ((UGen*) args)[0];
 	UGen b = ((UGen*) args)[1];
@@ -193,7 +193,7 @@ Signal mulCalc(void* args, int time)
 	return signal;
 }
 
-Signal udivCalc(void* args, int time)
+Signal udivCalc(void* args, double time)
 {
 	UGen a = ((UGen*) args)[0];
 	UGen b = ((UGen*) args)[1];
@@ -216,7 +216,7 @@ Signal udivCalc(void* args, int time)
 	return signal;
 }
 
-Signal uabsCalc(void* args, int time)
+Signal uabsCalc(void* args, double time)
 {
 	UGen input = *((UGen*) args);
 	Signal signal = input.calc(input.args, time);
@@ -225,7 +225,7 @@ Signal uabsCalc(void* args, int time)
 	return signal;
 }
 
-Signal signumCalc(void* args, int time)
+Signal signumCalc(void* args, double time)
 {
 	UGen input = *((UGen*) args);
 	double signal = sigsum(input.calc(input.args, time));
@@ -244,7 +244,7 @@ Signal signumCalc(void* args, int time)
 	return result;
 }
 
-Signal negateCalc(void* args, int time)
+Signal negateCalc(void* args, double time)
 {
 	UGen a = *((UGen*) args);
 	Signal as = a.calc(a.args, time);
@@ -313,7 +313,7 @@ const unsigned int fifo_size_mask = 2047;
 
 typedef struct ugen_node
 {
-	int time;
+	double time;
 	UGen* ugen;
 	struct ugen_node* previous;
 	struct ugen_node* next;
@@ -324,7 +324,7 @@ typedef struct ugen_node
 const unsigned int node_size = sizeof(ugen_node);
 const unsigned int node_pointer_size = sizeof(ugen_node*);
 
-ugen_node* new_ugen_node(int time, UGen* ugen)
+ugen_node* new_ugen_node(double time, UGen* ugen)
 {
 	ugen_node* node = (ugen_node*) malloc(node_size);
 	assert(node);
@@ -456,7 +456,7 @@ void scheduled_list_sort()
 	scheduled_list_write_index = scheduled_list_write_index & fifo_size_mask;
 	unsigned int i, j, k;
 	ugen_node* x;
-	int xTime, yTime;
+	double xTime, yTime;
 	
 	for (i = (scheduled_list_read_index + 1) & fifo_size_mask; i != scheduled_list_write_index; i = (i + 1) & fifo_size_mask)
 	{
@@ -609,7 +609,7 @@ doubly_linked_list doubly_linked_list_push(doubly_linked_list list, ugen_node* n
 
 	if (list)
 		list->previous = node;
-
+	
 	return node;
 }
 
@@ -737,6 +737,8 @@ void remove_scheduled_synths()
 		remove_synth(node);
 		node = next;
 	}
+
+	synth_removal_list = NULL;
 }
 
 // Copy nodes from the rt_node_fifo into the scheduled_node_list
@@ -764,6 +766,7 @@ doubly_linked_list nrt_free_node_list = NULL;
 const unsigned int max_node_pool_count = 500;
 const unsigned int initial_node_count = 250;
 unsigned int node_pool_count = 0;
+ugen_node default_node = { 0, NULL, NULL, NULL, 0, 0 };
 
 void init_nrt_thread()
 {
@@ -801,13 +804,7 @@ void nrt_free_node(ugen_node* node)
 
 		if (node_pool_count < max_node_pool_count)
 		{
-			node->time = 0;
-			node->ugen = NULL;
-			node->previous = NULL;
-			node->next = NULL;
-			node->key = 0;
-			node->hash = 0;
-			
+			memcpy(node, &default_node, node_size);
 			++node_pool_count;
 			nrt_free_node_list = doubly_linked_list_push(nrt_free_node_list, node);
 		}
@@ -829,7 +826,7 @@ void free_nodes_from_nrt_fifo()
 	}
 }
 
-ugen_node* nrt_alloc_node(UGen* ugen, int time)
+ugen_node* nrt_alloc_node(UGen* ugen, double time)
 {
 	if (node_pool_count)
 	{
@@ -851,7 +848,7 @@ ugen_node* nrt_alloc_node(UGen* ugen, int time)
 	return new_ugen_node(time, ugen);
 }
 
-void send_synth_to_rt_thread(UGen* synth, int time)
+void send_synth_to_rt_thread(UGen* synth, double time)
 {
 	RT_FIFO_PUSH(nrt_alloc_node(synth, time));
 }
@@ -1042,7 +1039,7 @@ void startRuntime()
 void print_node(ugen_node* node)
 {	
 	if (node)
-		printf("ugen_node { time: %i, ugen: %p, previous: %p, next: %p, hash: %i, key %i }", node->time, node->ugen, node->previous, node->next, node->hash, node->key);
+		printf("ugen_node { time: %f, ugen: %p, previous: %p, next: %p, hash: %i, key %i }", node->time, node->ugen, node->previous, node->next, node->hash, node->key);
 	else
 		printf("0");
 }
@@ -1144,7 +1141,7 @@ void print_hash_table(hash_table table)
 }
 
 unsigned int num_values = 5000;
-int times[5000];
+double times[5000];
 
 void test_hash_table()
 {
@@ -1236,7 +1233,7 @@ bool is_odd(ugen_node* node)
 	if (node == NULL)
 		return false;
 
-	return node->time % 2 == 1;
+	return (int) node->time % 2 == 1;
 }
 
 void test_doubly_linked_list()
@@ -1261,7 +1258,7 @@ void test_doubly_linked_list()
 
 		if (next)
 		{
-			printf("(next: %i) - (node: %i) = %i\n", next->time, node->time, next->time - node->time);
+			printf("(next: %f) - (node: %f) = %f\n", next->time, node->time, next->time - node->time);
 			assert((next->time - node->time) == 1);
 		}
 
@@ -1283,7 +1280,7 @@ void test_doubly_linked_list()
 
 		if (next)
 		{
-			printf("(next: %i) - (node: %i) = %i\n", next->time, node->time, next->time - node->time);
+			printf("(next: %f) - (node: %f) = %f\n", next->time, node->time, next->time - node->time);
 			assert((next->time - node->time) == 2);
 		}
 
