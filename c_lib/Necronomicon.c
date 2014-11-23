@@ -349,18 +349,44 @@ void node_free(ugen_node* node)
 	}
 }
 
-//////////////
-// Node FIFO
-//////////////
+/////////////////
+// Message FIFO
+/////////////////
+
+typedef union
+{
+	ugen_node* node;
+	unsigned int node_id;
+	const char* string;
+} message_arg;
+
+typedef enum
+{
+	IGNORE,
+	START_SYNTH,
+	STOP_SYNTH,
+	SET_SYNTH,
+	FREE_SYNTH, // Free synth memory
+	SHUTDOWN,
+	PRINT
+} message_type;
+
+typedef struct 
+{
+	message_arg arg;
+	message_type type;
+} message;
+
+unsigned int message_size = sizeof(message);
 
 // Lock Free FIFO Queue (Ring Buffer)
-typedef ugen_node** node_fifo;
+typedef message* message_fifo;
 
-node_fifo nrt_fifo = NULL;
+message_fifo nrt_fifo = NULL;
 unsigned int nrt_fifo_read_index = 0;
 unsigned int nrt_fifo_write_index = 0;
 
-node_fifo rt_fifo = NULL;
+message_fifo rt_fifo = NULL;
 unsigned int rt_fifo_read_index = 0;
 unsigned int rt_fifo_write_index = 0;
 
@@ -377,14 +403,26 @@ unsigned int rt_fifo_write_index = 0;
 #define RT_FIFO_POP() FIFO_POP(rt_fifo, rt_fifo_read_index)
 
 // Allocate and null initialize a node list to be used as a node_fifo or node_list
-ugen_node** new_node_list()
+message* new_message_fifo()
 {
-	unsigned int byte_size = node_pointer_size * max_fifo_messages;
-	ugen_node** list = (ugen_node**) malloc(byte_size);
-	assert(list);
-	memset(list, 0, byte_size);
+	unsigned int byte_size = message_size * max_fifo_messages;
+	message_fifo fifo = (message_fifo) malloc(byte_size);
+	assert(fifo);
+	memset(fifo, 0, byte_size);
 	
-	return list;
+	return fifo;
+}
+
+void free_message_contents(message msg)
+{
+	switch (msg.type)
+	{
+	case START_SYNTH:
+		node_free(msg.arg.node);
+		break;
+	default:
+		break;
+	}
 }
 
 // Free all remaining nodes in the nrt_fifo and then free the nrt_fifo itself
@@ -392,8 +430,8 @@ void nrt_fifo_free()
 {
 	while (nrt_fifo_read_index != nrt_fifo_write_index)
 	{
-		ugen_node* node = NRT_FIFO_POP();
-		node_free(node);		
+		message msg = NRT_FIFO_POP();
+		free_message_contents(msg);		
 	}
 	
 	free(nrt_fifo);
@@ -407,8 +445,8 @@ void rt_fifo_free()
 {
 	while (rt_fifo_read_index != rt_fifo_write_index)
 	{
-		ugen_node* node = RT_FIFO_POP();
-		node_free(node);		
+		message msg = RT_FIFO_POP();
+		free_message_contents(msg);
 	}
 	
 	free(rt_fifo);
@@ -432,6 +470,17 @@ unsigned int scheduled_list_write_index = 0;
 #define SCHEDULED_LIST_POP() FIFO_POP(scheduled_node_list, scheduled_list_read_index)
 #define SCHEDULED_LIST_PEEK() (scheduled_node_list[scheduled_list_read_index & fifo_size_mask])
 #define SCHEDULED_LIST_PEEK_TIME() ((scheduled_node_list[scheduled_list_read_index & fifo_size_mask])->time)
+
+// Allocate and null initialize a node list to be used as a node_list
+node_list new_node_list()
+{
+	unsigned int byte_size = node_pointer_size * max_fifo_messages;
+	node_list list = (node_list) malloc(byte_size);
+	assert(list);
+	memset(list, 0, byte_size);
+	
+	return list;
+}
 
 // Free all remaining nodes in the list and then free the list itself
 void scheduled_list_free()
@@ -651,10 +700,12 @@ void doubly_linked_list_free(doubly_linked_list list)
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 unsigned int absolute_time = 0;
+bool necronomicon_running = false;
 
 void init_rt_thread()
 {
 	puts("Initializing real-time thread...");
+	assert(necronomicon_running == false);
 	assert(synth_table == NULL);
 	assert(rt_fifo == NULL);
 	assert(scheduled_node_list == NULL);
@@ -662,9 +713,10 @@ void init_rt_thread()
 	assert(synth_removal_list == NULL);
 	
 	synth_table = hash_table_new();
-	rt_fifo = new_node_list();
+	rt_fifo = new_message_fifo();
 	scheduled_node_list = new_node_list();
 	absolute_time = 0;
+	necronomicon_running = true;
 }
 
 void shutdown_rt_thread()
@@ -685,6 +737,7 @@ void shutdown_rt_thread()
 	scheduled_node_list = NULL;
 	synth_list = NULL;
 	synth_removal_list = NULL;
+	necronomicon_running = false;
 }
 
 void add_synth(ugen_node* node)
@@ -698,7 +751,8 @@ void remove_synth(ugen_node* node)
 	if (node)
 	{
 		synth_list = doubly_linked_list_remove(synth_list, node);
-		NRT_FIFO_PUSH(node); // Send ugen to NRT thread for free/reuse
+		message msg = { node, FREE_SYNTH };
+		NRT_FIFO_PUSH(msg); // Send ugen to NRT thread for free/reuse
 	}
 }
 
@@ -741,8 +795,30 @@ void remove_scheduled_synths()
 	synth_removal_list = NULL;
 }
 
+void shutdown_rt_runtime(); // Forward declaration
+
+void handle_rt_message(message msg)
+{
+	switch(msg.type)
+	{
+	case START_SYNTH:
+		SCHEDULED_LIST_PUSH(msg.arg.node);
+		break;
+	case STOP_SYNTH:
+		remove_synth_by_id(msg.arg.node_id);
+		break;
+	case SET_SYNTH:
+		break;
+	case SHUTDOWN:
+		shutdown_rt_runtime();
+		break;
+	default:
+		break;
+	}
+}
+
 // Copy nodes from the rt_node_fifo into the scheduled_node_list
-void schedule_nodes_from_rt_fifo()
+void handle_messages_in_rt_fifo()
 {
 	if (rt_fifo_read_index == rt_fifo_write_index)
 	{
@@ -751,8 +827,8 @@ void schedule_nodes_from_rt_fifo()
 
 	while (rt_fifo_read_index != rt_fifo_write_index)
 	{
-		ugen_node* node = RT_FIFO_POP();
-		SCHEDULED_LIST_PUSH(node);
+		message msg = RT_FIFO_POP();
+		handle_rt_message(msg);
 	}
 
 	scheduled_list_sort();
@@ -772,7 +848,7 @@ void init_nrt_thread()
 {
 	puts("Initializing non-real-time thread...");
 	assert(nrt_fifo == NULL);
-	nrt_fifo = new_node_list();
+	nrt_fifo = new_message_fifo();
 	node_pool_count = 0;
 
 	// Pre-allocate some ugen nodes for runtime
@@ -816,13 +892,28 @@ void nrt_free_node(ugen_node* node)
 	}
 }
 
-// Copy nodes from the nrt_node_fifo into the nrt_free_node_list using atomic read/write operations.
-void free_nodes_from_nrt_fifo()
+void handle_nrt_message(message msg)
+{
+	switch(msg.type)
+	{
+	case FREE_SYNTH:
+		nrt_free_node(msg.arg.node);
+		break;
+	case PRINT:
+		puts(msg.arg.string);
+		break;
+	default:
+		break;
+	}
+}
+
+// Handle messages in the NRT fifo queue, including freeing memory and printing messages originating from the RT thread.
+void handle_messages_in_nrt_fifo()
 {
 	while (nrt_fifo_read_index != nrt_fifo_write_index)
 	{
-		ugen_node* node = NRT_FIFO_POP();
-		nrt_free_node(node);
+		message msg = NRT_FIFO_POP();
+		handle_nrt_message(msg);
 	}
 }
 
@@ -850,7 +941,8 @@ ugen_node* nrt_alloc_node(UGen* ugen, double time)
 
 void send_synth_to_rt_thread(UGen* synth, double time)
 {
-	RT_FIFO_PUSH(nrt_alloc_node(synth, time));
+	message msg = { nrt_alloc_node(synth, time), START_SYNTH }; 
+	RT_FIFO_PUSH(msg);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -861,9 +953,17 @@ jack_port_t* output_port1;
 jack_port_t* output_port2;
 jack_client_t* client;
 
+void shutdown_rt_runtime()
+{
+	puts("Necronomicon audio engine shutting down...");
+	shutdown_rt_thread();
+	jack_client_close(client);
+	puts("Necronomicon audio engine shut down.");
+}
+
 static void signal_handler(int sig)
 {
-	jack_client_close(client);
+	shutdown_rt_runtime();
 	fprintf(stderr, "signal received, exiting ...\n");
 	exit(0);
 }
@@ -881,7 +981,7 @@ int process(jack_nframes_t nframes, void* arg)
 {
 	jack_default_audio_sample_t* out1 = (jack_default_audio_sample_t*) jack_port_get_buffer(output_port1, nframes);
 	jack_default_audio_sample_t* out2 = (jack_default_audio_sample_t*) jack_port_get_buffer(output_port2, nframes);
-	schedule_nodes_from_rt_fifo(); // Move nodes from the RT FIFO queue into the scheduled_synth_list
+	handle_messages_in_rt_fifo(); // Handles messages including moving uge_nodes from the RT FIFO queue into the scheduled_synth_list
 	
 	unsigned int i;
 	for (i = 0; i < nframes; ++i)
@@ -998,36 +1098,22 @@ void start_rt_runtime()
 		fprintf (stderr, "cannot connect output ports\n");
 
 	jack_free(ports);
-    
-    /* install a signal handler to properly quits jack client */
-#ifdef WIN32
-	signal(SIGINT, signal_handler);
-    signal(SIGABRT, signal_handler);
-	signal(SIGTERM, signal_handler);
-#else
-	signal(SIGQUIT, signal_handler);
-	signal(SIGTERM, signal_handler);
-	signal(SIGHUP, signal_handler);
-	signal(SIGINT, signal_handler);
-#endif
-
 	puts("Necronomicon audio engine booted.");
-	
-    /* keep running until the Ctrl+C */
-	while (1)
-	{
-#ifdef WIN32 
-		Sleep(1000);
-#else
-		/* sleep (1); */
-		sleep (10);
-#endif
-	}
+}
 
-	puts("Necronomicon audio engine shutting down...");
-	jack_client_close(client);
-	shutdown_rt_thread();
-	puts("Necronomicon audio engine shut down.");
+void shutdown_necronomicon()
+{
+	message msg = { NULL, SHUTDOWN };
+	RT_FIFO_PUSH(msg);
+
+	// Wait for RT thread to finish.
+	while(necronomicon_running == true)
+	{	
+		sleep(100);
+	}
+	
+	shutdown_nrt_thread();
+	puts("Necronomicon shut down.");
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
