@@ -403,7 +403,7 @@ unsigned int rt_fifo_write_index = 0;
 #define RT_FIFO_POP() FIFO_POP(rt_fifo, rt_fifo_read_index)
 
 // Allocate and null initialize a node list to be used as a node_fifo or node_list
-message* new_message_fifo()
+message_fifo new_message_fifo()
 {
 	unsigned int byte_size = message_size * max_fifo_messages;
 	message_fifo fifo = (message_fifo) malloc(byte_size);
@@ -799,7 +799,7 @@ void shutdown_rt_runtime(); // Forward declaration
 
 void handle_rt_message(message msg)
 {
-	switch(msg.type)
+	switch (msg.type)
 	{
 	case START_SYNTH:
 		SCHEDULED_LIST_PUSH(msg.arg.node);
@@ -974,6 +974,7 @@ static void signal_handler(int sig)
  */
 void jack_shutdown(void *arg)
 {
+	shutdown_rt_runtime();
 	exit(1);
 }
 
