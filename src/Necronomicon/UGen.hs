@@ -34,29 +34,25 @@ default (Double)
 infixl 1 ~>
 
 data UGen = UGenFunc Calc [UGen] | UGenNum Double | UGenList [UGen]
-data SynthDef = SynthDef (Ptr CUGen) (ForeignPtr CUGen)
 
-compileSynthDef :: UGen -> IO SynthDef
-compileSynthDef synth = do
+compileSynthDef :: Necronomicon -> UGen -> IO SynthDef
+compileSynthDef (Necronomicon _ mailBox _ _) synth = do
     ugen <- compileUGen synth
-    ugenPtr <- new ugen
-    ugenForeignPtr <- newForeignPtr freeUGenPtr ugenPtr
-    return (SynthDef ugenPtr ugenForeignPtr)
+    synthDef <- new ugen
+    atomically (writeTChan mailBox (CollectSynthDef synthDef))
+    return synthDef
 
 printSynthDef :: SynthDef -> IO ()
-printSynthDef (SynthDef _ fPtr) = withForeignPtr fPtr (\uPtr -> printUGen uPtr 0)
+printSynthDef synthDef = printUGen synthDef 0
 
 playSynth :: Necronomicon -> SynthDef -> CDouble -> IO NodeID
-playSynth necro@(Necronomicon _ mailBox _ _) (SynthDef _ fPtr) time = do
+playSynth necro@(Necronomicon _ mailBox _ _) synthDef time = do
     id <- atomically (incrementNodeId necro)
-    atomically (writeTChan mailBox (StartSynth fPtr time id))
+    atomically (writeTChan mailBox (StartSynth synthDef time id))
     return id
 
 stopSynth :: Necronomicon -> NodeID -> IO ()
 stopSynth (Necronomicon _ mailBox _ _) id = atomically (writeTChan mailBox (StopSynth id))
-
-touchSynth :: SynthDef -> IO()
-touchSynth (SynthDef _ fPtr) = touchForeignPtr fPtr
 
 class UGenComponent a where
     toUGen :: a -> UGen

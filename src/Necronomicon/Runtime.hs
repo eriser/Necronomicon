@@ -8,7 +8,10 @@ import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Monad
 
-data RuntimeMessage = StartSynth (ForeignPtr (CUGen)) CDouble NodeID | StopSynth NodeID | CollectSynthDef (ForeignPtr CUGen) | ShutdownNrt
+type SynthDef = Ptr CUGen
+type NodeID = CUInt
+
+data RuntimeMessage = StartSynth SynthDef CDouble NodeID | StopSynth NodeID | CollectSynthDef SynthDef | ShutdownNrt
 type RunTimeMailbox = TChan RuntimeMessage
 
 data Necronomicon = Necronomicon { necroNrtThreadId :: ThreadId, necroMailbox :: RunTimeMailbox, necroNextNodeId :: TVar NodeID, necroRunning :: TVar Bool }
@@ -43,25 +46,23 @@ collectMailbox mailBox = collectWorker mailBox []
                     message <- readTChan mailBox
                     collectWorker mailBox (message:messages)
 
-defaultMessageReturn :: ([ForeignPtr (CUGen)], Bool)
+defaultMessageReturn :: ([SynthDef], Bool)
 defaultMessageReturn = ([], True)
 
-processMessages :: [RuntimeMessage] -> IO (([ForeignPtr (CUGen)], Bool))
+processMessages :: [RuntimeMessage] -> IO (([SynthDef], Bool))
 processMessages messages = foldM (foldMessages) ([], True) messages
     where
-        foldMessages (acc, running) m = do
-            (synthDefs, stillRunning) <- processMessage m
-            return ((acc ++ synthDefs), (running && stillRunning)) 
+        foldMessages (acc, _) m = do
+            (synthDefs, running) <- processMessage m
+            return ((acc ++ synthDefs), running) 
         processMessage m = case m of
             StartSynth synthDef time id -> do
-                sendSynthToRtRuntime synthDef time id
+                playSynthInRtRuntime synthDef time id
                 return defaultMessageReturn
             StopSynth id -> do
                 stopSynthInRtRuntime id
                 return defaultMessageReturn
-            CollectSynthDef synthDef -> do
-                touchForeignPtr synthDef
-                return ([synthDef], True)
+            CollectSynthDef synthDef -> return ([synthDef], True)
             ShutdownNrt -> return ([], False)
 
 startNrtRuntime :: RunTimeMailbox -> TVar Bool -> IO (ThreadId)
@@ -69,16 +70,21 @@ startNrtRuntime mailBox necroRunning = do
     initNrtThread
     forkIO (nrtThread [])
     where
-        nrtThread :: [ForeignPtr (CUGen)] -> IO ()
+        nrtThread :: [SynthDef] -> IO ()
         nrtThread !synthDefs = do
             messages <- (atomically (collectMailbox mailBox))
             (newSynthDefs, running) <- processMessages messages
+            let synthDefs' = synthDefs ++ newSynthDefs
             case running of
                 True -> do
                     handleNrtMessage
                     threadDelay 10000
-                    nrtThread (synthDefs ++ newSynthDefs)
-                False -> atomically (writeTVar necroRunning False)
+                    nrtThread synthDefs'
+                False -> do
+                    print "SHUTTING DOWN NRT!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+                    print (synthDefs')
+                    mapM_ (freeUGen) synthDefs'
+                    atomically (writeTVar necroRunning False)
 
 incrementNodeId :: Necronomicon -> STM NodeID
 incrementNodeId (Necronomicon _ _ nextNodeId _) = do
@@ -120,10 +126,6 @@ foreign import ccall "start_rt_runtime" startRtRuntime :: IO ()
 foreign import ccall "init_nrt_thread" initNrtThread :: IO ()
 foreign import ccall "handle_messages_in_nrt_fifo" handleNrtMessage :: IO ()
 foreign import ccall "shutdown_necronomicon" shutdownNecronomiconRuntime :: IO ()
-foreign import ccall "play_synth" playSynthInCRuntime :: Ptr (CUGen) -> CDouble -> CUInt -> IO ()
+foreign import ccall "play_synth" playSynthInRtRuntime :: SynthDef -> CDouble -> CUInt -> IO ()
 foreign import ccall "stop_synth" stopSynthInRtRuntime :: NodeID -> IO ()
-
-type NodeID = CUInt
-
-sendSynthToRtRuntime :: ForeignPtr (CUGen) -> CDouble -> NodeID -> IO ()
-sendSynthToRtRuntime fPtr time id = withForeignPtr fPtr (\uPtr -> playSynthInCRuntime uPtr time id)
+foreign import ccall "free_ugen" freeUGen :: SynthDef -> IO ()
