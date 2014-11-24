@@ -4,23 +4,21 @@ import Prelude
 import Foreign
 import Foreign.C
 import qualified Necronomicon.UGen as U
+import Necronomicon.Runtime
 
-foreign import ccall "printUGen" printUGen :: Ptr (U.CUGen) -> CUInt -> IO ()
-foreign import ccall "free_ugen" freeUGen :: Ptr (U.CUGen) -> IO ()
-foreign import ccall "start_rt_runtime" startRtRuntime :: IO ()
-foreign import ccall "init_nrt_thread" initNrtThread :: IO ()
-foreign import ccall "shutdown_necronomicon" shutdownNecronomicon :: IO ()
+foreign import ccall "printUGen" printUGen :: Ptr (CUGen) -> CUInt -> IO ()
+foreign import ccall "free_ugen" freeUGen :: Ptr (CUGen) -> IO ()
 
-testUGenMemory :: IO ()
-testUGenMemory = do
-    ugen <- U.compileUGen U.myCoolSynth
-    ugenPtr <- new ugen
-    printUGen ugenPtr 0
-    freeUGen ugenPtr
-    
+-- NEED TO HAVE THREAD HANDLE NRT MESSAGES!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+
 main :: IO ()
 main = do
-       startRtRuntime
-       initNrtThread
+       necronomicon <- startNecronomicon
+       -- synthDef <- U.compileSynthDef ((U.sin (U.UGenNum 440.0)) * (U.UGenNum 0.3))
+       synthDef <- U.compileSynthDef U.myCoolSynth
+       nodeId <- U.playSynth necronomicon synthDef 0
        _ <- getLine
-       shutdownNecronomicon
+       U.stopSynth necronomicon nodeId
+       _ <- getLine
+       U.touchSynth synthDef
+       shutdownNecronomicon necronomicon

@@ -86,6 +86,7 @@ void pr_free_ugen(UGen* ugen)
 
 void free_ugen(UGen* ugen)
 {
+	puts("FREE UGEN!");
 	if (ugen == NULL)
 		return;
 	
@@ -311,22 +312,22 @@ typedef enum { false, true } bool;
 const unsigned int max_fifo_messages = 2048;
 const unsigned int fifo_size_mask = 2047;
 
-typedef struct ugen_node
+typedef struct synth_node
 {
 	double time;
 	UGen* ugen;
-	struct ugen_node* previous;
-	struct ugen_node* next;
+	struct synth_node* previous;
+	struct synth_node* next;
 	unsigned int key;
 	unsigned int hash;
-} ugen_node;
+} synth_node;
 
-const unsigned int node_size = sizeof(ugen_node);
-const unsigned int node_pointer_size = sizeof(ugen_node*);
+const unsigned int node_size = sizeof(synth_node);
+const unsigned int node_pointer_size = sizeof(synth_node*);
 
-ugen_node* new_ugen_node(double time, UGen* ugen)
+synth_node* new_synth_node(double time, UGen* ugen)
 {
-	ugen_node* node = (ugen_node*) malloc(node_size);
+	synth_node* node = (synth_node*) malloc(node_size);
 	assert(node);
 	
 	node->time = time;
@@ -338,15 +339,10 @@ ugen_node* new_ugen_node(double time, UGen* ugen)
 	return node;
 }
 
-void node_free(ugen_node* node)
+void node_free(synth_node* node)
 {
 	if (node)
-	{
-		if (node->ugen)
-			free_ugen(node->ugen);
-
 		free(node);
-	}
 }
 
 /////////////////
@@ -355,7 +351,7 @@ void node_free(ugen_node* node)
 
 typedef union
 {
-	ugen_node* node;
+	synth_node* node;
 	unsigned int node_id;
 	const char* string;
 } message_arg;
@@ -431,7 +427,7 @@ void nrt_fifo_free()
 	while (nrt_fifo_read_index != nrt_fifo_write_index)
 	{
 		message msg = NRT_FIFO_POP();
-		free_message_contents(msg);		
+		free_message_contents(msg);
 	}
 	
 	free(nrt_fifo);
@@ -460,7 +456,7 @@ void rt_fifo_free()
 ///////////////////////
 
 // An ordered list of ugen nodes
-typedef ugen_node** node_list;
+typedef synth_node** node_list;
 
 node_list scheduled_node_list = NULL;
 unsigned int scheduled_list_read_index = 0;
@@ -487,7 +483,7 @@ void scheduled_list_free()
 {
 	while (scheduled_list_read_index != scheduled_list_write_index)
 	{
-		ugen_node* node = SCHEDULED_LIST_POP();
+		synth_node* node = SCHEDULED_LIST_POP();
 		node_free(node);		
 	}
 	
@@ -503,8 +499,12 @@ void scheduled_list_sort()
 	// Make sure our indexes are within bounds
 	scheduled_list_read_index = scheduled_list_read_index & fifo_size_mask; 
 	scheduled_list_write_index = scheduled_list_write_index & fifo_size_mask;
+
+	if (scheduled_list_read_index == scheduled_list_write_index)
+		return;
+		
 	unsigned int i, j, k;
-	ugen_node* x;
+	synth_node* x;
 	double xTime, yTime;
 	
 	for (i = (scheduled_list_read_index + 1) & fifo_size_mask; i != scheduled_list_write_index; i = (i + 1) & fifo_size_mask)
@@ -545,7 +545,7 @@ typedef union
 	unsigned int word;
 } four_bytes;
 
-typedef ugen_node** hash_table;
+typedef synth_node** hash_table;
 hash_table synth_table = NULL;
 
 hash_table hash_table_new()
@@ -563,7 +563,7 @@ void hash_table_free(hash_table table)
 	unsigned int i;
 	for (i = 0; i < max_synths; ++i)
 	{
-		ugen_node* node = table[i];
+		synth_node* node = table[i];
 		node_free(node);
 	}
 
@@ -578,7 +578,7 @@ const unsigned int seed = 0x811C9DC5; // 2166136261
 #define HASH_KEY_PRIV(key) (FNV1A(key.bytes[3], FNV1A(key.bytes[2], FNV1A(key.bytes[1], FNV1A(key.bytes[0], seed)))))
 #define HASH_KEY(key) ((unsigned int) HASH_KEY_PRIV(((four_bytes) key)))
 
-void hash_table_insert(hash_table table, ugen_node* node)
+void hash_table_insert(hash_table table, synth_node* node)
 {
 	assert(num_synths < max_synths);
 	node->hash = HASH_KEY(node->key);
@@ -591,7 +591,7 @@ void hash_table_insert(hash_table table, ugen_node* node)
 	++num_synths;
 }
 
-ugen_node* hash_table_remove(hash_table table, unsigned int key)
+synth_node* hash_table_remove(hash_table table, unsigned int key)
 {
 	assert(num_synths > 0);
 	unsigned int hash = HASH_KEY(key);
@@ -604,7 +604,7 @@ ugen_node* hash_table_remove(hash_table table, unsigned int key)
 		{
 			if (table[slot]->key == key)
 			{
-				ugen_node* node = table[slot];
+				synth_node* node = table[slot];
 				table[slot] = NULL;
 				--num_synths;
 				return node;
@@ -618,7 +618,7 @@ ugen_node* hash_table_remove(hash_table table, unsigned int key)
 	return NULL;
 }
 
-ugen_node* hash_table_lookup(hash_table table, unsigned int key)
+synth_node* hash_table_lookup(hash_table table, unsigned int key)
 {
 	unsigned int hash = HASH_KEY(key);
 	unsigned int slot = hash & hash_table_size_mask;
@@ -643,12 +643,12 @@ ugen_node* hash_table_lookup(hash_table table, unsigned int key)
 // Doubly Linked List
 ///////////////////////////
 
-typedef ugen_node* doubly_linked_list;
+typedef synth_node* doubly_linked_list;
 doubly_linked_list synth_list = NULL;
 doubly_linked_list synth_removal_list = NULL;
 
 // Pushes nodes to the front of the list, returning the new list head
-doubly_linked_list doubly_linked_list_push(doubly_linked_list list, ugen_node* node)
+doubly_linked_list doubly_linked_list_push(doubly_linked_list list, synth_node* node)
 {
 	if (node == NULL)
 		return list;
@@ -663,13 +663,13 @@ doubly_linked_list doubly_linked_list_push(doubly_linked_list list, ugen_node* n
 }
 
 // removes nodes from the doubly linked list, returning the new list head
-doubly_linked_list doubly_linked_list_remove(doubly_linked_list list, ugen_node* node)
+doubly_linked_list doubly_linked_list_remove(doubly_linked_list list, synth_node* node)
 {
 	if (node == NULL)
 		return list;
 
-	ugen_node* previous = node->previous;
-	ugen_node* next = node->next;
+	synth_node* previous = node->previous;
+	synth_node* next = node->next;
 
 	if (previous)
 		previous->next = next;
@@ -689,7 +689,7 @@ void doubly_linked_list_free(doubly_linked_list list)
 {
 	while (list)
 	{
-		ugen_node* next = list->next;
+		synth_node* next = list->next;
 		node_free(list);
 		list = next;
 	}
@@ -716,6 +716,8 @@ void init_rt_thread()
 	rt_fifo = new_message_fifo();
 	scheduled_node_list = new_node_list();
 	absolute_time = 0;
+
+	initialize_wave_tables();
 	necronomicon_running = true;
 }
 
@@ -740,13 +742,13 @@ void shutdown_rt_thread()
 	necronomicon_running = false;
 }
 
-void add_synth(ugen_node* node)
+void add_synth(synth_node* node)
 {
 	hash_table_insert(synth_table, node);
 	synth_list = doubly_linked_list_push(synth_list, node);
 }
 
-void remove_synth(ugen_node* node)
+void remove_synth(synth_node* node)
 {
 	if (node)
 	{
@@ -758,7 +760,7 @@ void remove_synth(ugen_node* node)
 
 void remove_synth_by_id(unsigned int id)
 {
-	ugen_node* node = hash_table_remove(synth_table, id);
+	synth_node* node = hash_table_remove(synth_table, id);
 	remove_synth(node);
 }
 
@@ -769,7 +771,7 @@ void add_scheduled_synths()
 	{
 		if (SCHEDULED_LIST_PEEK_TIME() <= absolute_time)
 		{
-			ugen_node* node = SCHEDULED_LIST_POP();
+			synth_node* node = SCHEDULED_LIST_POP();
 			add_synth(node);
 		}
 
@@ -783,11 +785,11 @@ void add_scheduled_synths()
 // Iterate over the removal list and remove all synths in it.
 void remove_scheduled_synths()
 {
-	ugen_node* node = synth_removal_list;
+	synth_node* node = synth_removal_list;
 	while (node)
 	{
 		hash_table_remove(synth_table, node->key);
-		ugen_node* next = node->next;
+		synth_node* next = node->next;
 		remove_synth(node);
 		node = next;
 	}
@@ -842,7 +844,8 @@ doubly_linked_list nrt_free_node_list = NULL;
 const unsigned int max_node_pool_count = 500;
 const unsigned int initial_node_count = 250;
 unsigned int node_pool_count = 0;
-ugen_node default_node = { 0, NULL, NULL, NULL, 0, 0 };
+synth_node default_node = { 0, NULL, NULL, NULL, 0, 0 };
+unsigned int next_node_id = 1000;
 
 void init_nrt_thread()
 {
@@ -850,11 +853,12 @@ void init_nrt_thread()
 	assert(nrt_fifo == NULL);
 	nrt_fifo = new_message_fifo();
 	node_pool_count = 0;
-
+	next_node_id = 1000;
+	
 	// Pre-allocate some ugen nodes for runtime
 	while (node_pool_count < initial_node_count)
 	{
-		nrt_free_node_list = doubly_linked_list_push(nrt_free_node_list, new_ugen_node(0, NULL));
+		nrt_free_node_list = doubly_linked_list_push(nrt_free_node_list, new_synth_node(0, NULL));
 		++node_pool_count;
 	}
 }
@@ -872,12 +876,10 @@ void shutdown_nrt_thread()
 	node_pool_count = 0;
 }
 
-void nrt_free_node(ugen_node* node)
+void nrt_free_node(synth_node* node)
 {
 	if (node)
 	{
-		free_ugen(node->ugen);
-
 		if (node_pool_count < max_node_pool_count)
 		{
 			memcpy(node, &default_node, node_size);
@@ -917,11 +919,12 @@ void handle_messages_in_nrt_fifo()
 	}
 }
 
-ugen_node* nrt_alloc_node(UGen* ugen, double time)
+synth_node* nrt_alloc_node(UGen* ugen, double time, unsigned int node_id)
 {
+	synth_node* node = NULL;
 	if (node_pool_count)
 	{
-		ugen_node* node = nrt_free_node_list;
+		node = nrt_free_node_list;
 
 		if (node)
 		{
@@ -930,18 +933,28 @@ ugen_node* nrt_alloc_node(UGen* ugen, double time)
 			node->ugen = ugen;
 			node->previous = NULL;
 			node->next = NULL;
-
+			node->key = node_id;
+			
 			--node_pool_count;
 			return  node;
 		}
 	}
 
-	return new_ugen_node(time, ugen);
+	node = new_synth_node(time, ugen);
+	node->key = node_id;
+	return node;
 }
 
-void send_synth_to_rt_thread(UGen* synth, double time)
+void play_synth(UGen* synth, double time, unsigned int node_id)
 {
-	message msg = { nrt_alloc_node(synth, time), START_SYNTH }; 
+	message msg = { nrt_alloc_node(synth, time, node_id), START_SYNTH }; 
+	RT_FIFO_PUSH(msg);
+}
+
+void stop_synth(unsigned int id)
+{
+	message msg = { NULL, STOP_SYNTH };
+	msg.arg.node_id = id;
 	RT_FIFO_PUSH(msg);
 }
 
@@ -992,7 +1005,7 @@ int process(jack_nframes_t nframes, void* arg)
 		add_scheduled_synths(); // Add any synths that need to start this frame into the current synth_list
 
 		// Iterate through the synth_list calling calc on each synth and mixing in the result to the out buffers.
-		ugen_node* node = synth_list;
+		synth_node* node = synth_list;
 		while (node)
 		{
 			Signal signal = node->ugen->calc(node->ugen->args, absolute_time);
@@ -1014,7 +1027,6 @@ void start_rt_runtime()
 {
 	puts("Necronomicon audio engine booting...");
 	init_rt_thread();
-	initialize_wave_tables();
 	
 	const char** ports;
 	const char* client_name = "Necronomicon";
@@ -1123,10 +1135,10 @@ void shutdown_necronomicon()
 
 //// Test FIFO
 
-void print_node(ugen_node* node)
+void print_node(synth_node* node)
 {	
 	if (node)
-		printf("ugen_node { time: %f, ugen: %p, previous: %p, next: %p, hash: %i, key %i }", node->time, node->ugen, node->previous, node->next, node->hash, node->key);
+		printf("synth_node { time: %f, ugen: %p, previous: %p, next: %p, hash: %i, key %i }", node->time, node->ugen, node->previous, node->next, node->hash, node->key);
 	else
 		printf("0");
 }
@@ -1163,7 +1175,7 @@ void randomize_and_print_list(node_list list)
 		unsigned int num_push = random() / (double) RAND_MAX * 100;
 		while ((num_push > 0) && ((scheduled_list_read_index & fifo_size_mask) != (scheduled_list_write_index & fifo_size_mask)))
 		{
-			ugen_node* node = new_ugen_node((random() / (double) RAND_MAX) * 10000.0, NULL);
+			synth_node* node = new_synth_node((random() / (double) RAND_MAX) * 10000.0, NULL);
 			SCHEDULED_LIST_PUSH(node);
 			--num_push;
 		}
@@ -1189,7 +1201,7 @@ void test_list()
 	scheduled_node_list = new_node_list();
 	while (scheduled_list_write_index < (max_fifo_messages * 0.75))
 	{
-		ugen_node* node = new_ugen_node((random() / (double) RAND_MAX) * 10000.0, NULL);
+		synth_node* node = new_synth_node((random() / (double) RAND_MAX) * 10000.0, NULL);
 		SCHEDULED_LIST_PUSH(node);
 	}
 
@@ -1243,7 +1255,7 @@ void test_hash_table()
 	for (i = 0; i < num_values; ++i)
 	{
 		times[i] = (random() / (double) RAND_MAX) * 10000.0;
-		ugen_node* node = new_ugen_node(times[i], NULL);
+		synth_node* node = new_synth_node(times[i], NULL);
 		node->key = i;
 		hash_table_insert(table, node);
 		assert(node == hash_table_lookup(table, i));
@@ -1254,7 +1266,7 @@ void test_hash_table()
 	
 	for (i = 0; i < num_values; ++i)
 	{
-		ugen_node* node = hash_table_lookup(table, i);
+		synth_node* node = hash_table_lookup(table, i);
 		assert(node);
 		assert(node->time == times[i]);
 		assert(node->key == i);
@@ -1264,7 +1276,7 @@ void test_hash_table()
 	
 	for (i = 0; i < num_values; ++i)
 	{
-		ugen_node* node = hash_table_remove(table, i);
+		synth_node* node = hash_table_remove(table, i);
 		assert(node);
 		node_free(node);
 	}
@@ -1285,7 +1297,7 @@ void test_hash_table()
 
 void doubly_linked_list_print(doubly_linked_list list)
 {
-	ugen_node* node = list;
+	synth_node* node = list;
 	while (node)
 	{
 		print_node(node);
@@ -1293,13 +1305,13 @@ void doubly_linked_list_print(doubly_linked_list list)
 	}
 }
 
-typedef bool node_filter_func(ugen_node* node);
+typedef bool node_filter_func(synth_node* node);
 doubly_linked_list doubly_linked_list_filter(doubly_linked_list list, node_filter_func func)
 {
-	ugen_node* node = list;
+	synth_node* node = list;
 	while (node)
 	{
-		ugen_node* next = node->next;
+		synth_node* next = node->next;
 		
 		if (!func(node))
 		{
@@ -1315,7 +1327,7 @@ doubly_linked_list doubly_linked_list_filter(doubly_linked_list list, node_filte
 	return list;
 }
 
-bool is_odd(ugen_node* node)
+bool is_odd(synth_node* node)
 {
 	if (node == NULL)
 		return false;
@@ -1328,7 +1340,7 @@ void test_doubly_linked_list()
 	int i; // Don't make this unsigned, we'll go infinite!
 	for (i = 50; i >= 0; --i)
 	{
-		ugen_node* node = new_ugen_node(i, NULL);
+		synth_node* node = new_synth_node(i, NULL);
 		synth_list = doubly_linked_list_push(synth_list, node);
 	}
 
@@ -1338,10 +1350,10 @@ void test_doubly_linked_list()
 
 	doubly_linked_list_print(synth_list);
 
-	ugen_node* node = synth_list;
+	synth_node* node = synth_list;
 	while (node)
 	{
-		ugen_node* next = node->next;
+		synth_node* next = node->next;
 
 		if (next)
 		{
@@ -1363,7 +1375,7 @@ void test_doubly_linked_list()
 	node = synth_list;
 	while (node)
 	{
-		ugen_node* next = node->next;
+		synth_node* next = node->next;
 
 		if (next)
 		{

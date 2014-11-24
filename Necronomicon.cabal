@@ -21,6 +21,7 @@ library
         Necronomicon
         Necronomicon.FRP
         Necronomicon.UGen
+        Necronomicon.Runtime
 		
     other-modules:
         Necronomicon.Language.Layout
