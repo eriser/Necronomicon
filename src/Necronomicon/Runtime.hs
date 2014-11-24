@@ -50,9 +50,9 @@ defaultMessageReturn = ([], True)
 processMessages :: [RuntimeMessage] -> IO (([SynthDef], Bool))
 processMessages messages = foldM (foldMessages) ([], True) messages
     where
-        foldMessages (acc, _) m = do
-            (synthDefs, running) <- processMessage m
-            return ((acc ++ synthDefs), running) 
+        foldMessages (acc, running) m = do
+            (synthDefs, running') <- processMessage m
+            return ((acc ++ synthDefs), running && running') 
         processMessage m = case m of
             StartSynth synthDef time id -> do
                 playSynthInRtRuntime synthDef time id
