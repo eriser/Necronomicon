@@ -26,25 +26,23 @@ startNecronomicon = do
     running <- atomically $ newTVar True
     nrtThreadId <- startNrtRuntime mailBox running
     nextNodeId <- atomically $ newTVar 1000
-    threadDelay 1000
+    threadDelay 1000 -- NEED TO CHECK RUNNING STATUS OF RT THREAD AND NRT THREAD
     return (Necronomicon nrtThreadId mailBox nextNodeId running)
 
 shutdownNecronomicon :: Necronomicon -> IO ()
 shutdownNecronomicon (Necronomicon nrtThread mailBox nextNodeId _) = do
     atomically $ writeTChan mailBox ShutdownNrt
-    threadDelay 1000
+    threadDelay 1000 -- NEED TO CHECK RUNNING STATUS OF RT THREAD AND NRT THREAD
     shutdownNecronomiconRuntime
     
 collectMailbox :: RunTimeMailbox -> STM ([RuntimeMessage])
-collectMailbox mailBox = collectWorker mailBox []
+collectMailbox mailBox = collectWorker []
     where
-        collectWorker mailBox messages = do
-            isEmpty <- isEmptyTChan mailBox
-            case isEmpty of
-                True -> return messages
-                False -> do
-                    message <- readTChan mailBox
-                    collectWorker mailBox (message:messages)
+        collectWorker messages = do
+            maybeMessage <- tryReadTChan mailBox
+            case maybeMessage of
+                Nothing -> return messages
+                Just message -> collectWorker (message:messages)
 
 defaultMessageReturn :: ([SynthDef], Bool)
 defaultMessageReturn = ([], True)
