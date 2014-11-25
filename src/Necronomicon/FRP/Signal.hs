@@ -61,12 +61,12 @@ module Necronomicon.FRP.Signal (
     lift6,
     lift7,
     lift8,
+    runCTest,
     module Control.Applicative
     ) where
 
 import Control.Applicative
-import Data.IORef
-import Prelude hiding (until)
+import Prelude
 import Control.Monad
 import qualified Graphics.UI.GLFW as GLFW
 import qualified Data.Fixed as F
@@ -75,6 +75,12 @@ import Control.Concurrent
 import Control.Concurrent.STM
 import Data.Either
 import qualified Data.Set as Set
+import Debug.Trace
+import qualified Data.IntMap as IntMap
+import qualified Control.Monad.State.Class as MonadState
+import qualified Control.Monad.State.Lazy as State
+import Data.Dynamic
+import qualified Unsafe.Coerce as Unsafe
 
 (<~) :: Functor f => (a -> b) -> f a -> f b
 (<~) = fmap
@@ -232,7 +238,6 @@ instance Functor Signal where
         outBox                              <- atomically newBroadcastTChan
         forkIO $ fmapLoop f inBox outBox
         return (f childEvent,outBox,gTimers)
-
     fmap f (Pure a) = Pure $ f a
 
 instance Applicative Signal where
@@ -261,44 +266,48 @@ instance Applicative Signal where
 
 applicativeLoop :: (a -> b) -> a -> TChan (Maybe (a -> b)) -> TChan (Maybe a) -> TChan (Maybe b) -> IO()
 applicativeLoop prevF prevG fInBox gInBox outBox = do
-    g <- atomically (readTChan gInBox)
-    f <- atomically (readTChan fInBox)
+    !g <- atomically $ readTChan gInBox
+    !f <- atomically $ readTChan fInBox
     case f of
-        Nothing -> case g of
-            Nothing  -> atomically (writeTChan outBox Nothing) >> applicativeLoop prevF prevG fInBox gInBox outBox
-            Just   g' -> do
-                let new = Just $ prevF g'
-                atomically (writeTChan outBox new)
-                applicativeLoop prevF g' fInBox gInBox outBox
         Just f' -> case g of
-            Nothing  -> do
-                let new = Just $ f' prevG
-                atomically (writeTChan outBox new)
-                applicativeLoop f' prevG fInBox gInBox outBox
             Just   g' -> do
                 let new = Just $ f' g'
                 atomically (writeTChan outBox new)
                 applicativeLoop f' g' fInBox gInBox outBox
+            _         -> do
+                let new = Just $ f' prevG
+                atomically (writeTChan outBox new)
+                applicativeLoop f' prevG fInBox gInBox outBox
 
+        _      -> case g of
+            Just   g' -> do
+                let new = Just $ prevF g'
+                atomically (writeTChan outBox new)
+                applicativeLoop prevF g' fInBox gInBox outBox
+            _         -> do
+                atomically (writeTChan outBox Nothing)
+                applicativeLoop prevF prevG fInBox gInBox outBox
+            
+        
 fmapeeLoop :: a -> TChan (Maybe (a -> b)) -> TChan (Maybe b) -> IO()
 fmapeeLoop val inBox outBox = do
-    e <- atomically (readTChan inBox)
+    !e <- atomically (readTChan inBox)
     case e of
-        Nothing -> atomically (writeTChan outBox Nothing) >> fmapeeLoop val inBox outBox
         Just  v -> do
             let new = Just $ v val
             atomically (writeTChan outBox new)
             fmapeeLoop val inBox outBox
+        _       -> atomically (writeTChan outBox Nothing) >> fmapeeLoop val inBox outBox
+
 
 fmapLoop :: (a -> b) -> TChan (Maybe a)-> TChan (Maybe b) -> IO()
-fmapLoop f inBox outBox = do
-    e <- atomically (readTChan inBox)
+fmapLoop f inBox outBox = forever $ do
+    !e <- atomically (readTChan inBox)
     case e of
-        Nothing -> atomically (writeTChan outBox Nothing) >> fmapLoop f inBox outBox
         Just  v -> do
             let new = Just $ f v
             atomically (writeTChan outBox new)
-            fmapLoop f inBox outBox
+        _       -> atomically (writeTChan outBox Nothing)
 
 ---------------------------------------------
 -- Runtime Environment
@@ -324,7 +333,7 @@ runSignal (Signal s) = initWindow >>= \mw ->
             forkIO $ forceLoop inBox
 
             --Start global Dispatch
-            globalDispatch <- atomically newTQueue
+            globalDispatch <- atomically $ newTBQueue 10
             mapM_ (forkIO . timeLoop globalDispatch) $ Set.toList timers
             
             GLFW.setCursorPosCallback   w $ Just $ mousePosEvent   globalDispatch
@@ -340,16 +349,16 @@ runSignal (Signal s) = initWindow >>= \mw ->
             render False w
     where
         --event callbacks
-        mousePosEvent   eventNotify _ x y                                = atomically (writeTQueue eventNotify $ MousePosition (x,y))
-        mousePressEvent eventNotify _ _ GLFW.MouseButtonState'Released _ = atomically (writeTQueue eventNotify $ MouseClick)
+        mousePosEvent   eventNotify _ x y                                = atomically ((writeTBQueue eventNotify $ MousePosition (x,y)) `orElse` return ())
+        mousePressEvent eventNotify _ _ GLFW.MouseButtonState'Released _ = atomically (writeTBQueue eventNotify $ MouseClick)
         mousePressEvent _           _ _ GLFW.MouseButtonState'Pressed  _ = return ()
-        keyPressEvent   eventNotify _ k _ GLFW.KeyState'Pressed  _       = atomically (writeTQueue eventNotify $ KeyDown k)
-        keyPressEvent   eventNotify _ k _ GLFW.KeyState'Released _       = atomically (writeTQueue eventNotify $ KeyUp   k)
+        keyPressEvent   eventNotify _ k _ GLFW.KeyState'Pressed  _       = atomically (writeTBQueue eventNotify $ KeyDown k)
+        keyPressEvent   eventNotify _ k _ GLFW.KeyState'Released _       = atomically (writeTBQueue eventNotify $ KeyUp   k)
         keyPressEvent   eventNotify _ k _ _ _                            = return ()
-        dimensionsEvent eventNotify _ x y                                = atomically $ writeTQueue eventNotify $ Dimensions (x,y)
+        dimensionsEvent eventNotify _ x y                                = atomically $ writeTBQueue eventNotify $ Dimensions (x,y)
 
         forceLoop inBox = forever $ do
-            v <- atomically (readTChan inBox)
+            v <- atomically $ readTChan inBox
             case v of
                 Nothing    -> return ()
                 Just value -> print value
@@ -368,11 +377,10 @@ runSignal (Signal s) = initWindow >>= \mw ->
 --When things change, or don't, broadcasts that information and it's id to global event dispatch
 
 --Alternative instance
-globalEventDispatch :: TQueue InputEvent -> TChan InputEvent -> IO()
+globalEventDispatch :: TBQueue InputEvent -> TChan InputEvent -> IO()
 globalEventDispatch inBox outBox = forever $ do
-    e <- atomically $ readTQueue inBox
+    e <- atomically $ readTBQueue inBox
     atomically $ writeTChan outBox e
-
 
 ---------------------------------------------
 -- Instances
@@ -498,13 +506,13 @@ toMinutes t = t / 60
 toHours :: Time -> Time
 toHours t = t / 3600
 
-timeLoop :: TQueue InputEvent -> Int -> IO()
+timeLoop :: TBQueue InputEvent -> Int -> IO()
 timeLoop outBox millisecondDelta = forever $ do
     t <- GLFW.getTime
     case t of
         Nothing    -> threadDelay millisecondDelta
         Just time  -> do
-            atomically $ writeTQueue outBox $ TimeEvent millisecondDelta time
+            atomically $ writeTBQueue outBox $ TimeEvent millisecondDelta time
             threadDelay millisecondDelta
 
 ---------------------------------------------
@@ -612,13 +620,13 @@ merges ls = foldr (<|>) empty ls
 
 combine :: [Signal a] -> Signal [a]
 combine signals = Signal $ \broadcastInbox -> do
-    tuples <- mapM (app broadcastInbox) signals
+    tuples     <- mapM (app broadcastInbox) signals
     let values  = map (\(v,_,_) -> v) tuples
     inBoxes    <- mapM (\(_,i,_) -> maybeDup i) tuples
     let timers  = foldr (\(_,_,s) ss -> Set.union s ss) Set.empty tuples
-    outBox <- atomically $ newBroadcastTChan
-    forkIO $ loop values inBoxes outBox
-    return (values,outBox,timers)
+    outBox     <- atomically $ newBroadcastTChan
+    forkIO      $ loop values inBoxes outBox
+    return       (values,outBox,timers)
     where
         maybeDup (Just inBox) = do
             i <- atomically $ dupTChan inBox
@@ -706,16 +714,223 @@ playOn _ (Signal player) (Signal stopper) = Signal $ \broadcastInbox -> do
                         if s' && isPlaying
                             then print "Stop playing" >> loop False pInBox sInBox outBox
                             else loop isPlaying pInBox sInBox outBox
-                        
+
                 Just p'  -> case s of
                     Nothing -> do 
                         atomically (writeTChan outBox $ Just ())
                         if p' && not isPlaying
                             then print "Start playing" >> loop True pInBox sInBox outBox
                             else loop isPlaying pInBox sInBox outBox
-                        
+
                     Just s' -> do
                         atomically (writeTChan outBox $ Just ())
                         if p' && not isPlaying
                             then print "Start playing" >> loop True pInBox sInBox outBox
                             else loop isPlaying pInBox sInBox outBox
+
+---------------------------------------------
+-- Continuation Signals????
+---------------------------------------------
+data SignalBase m a = SignalBase (m (Maybe a))
+type StateIO        = State.StateT EventF IO
+type SignalC        = SignalBase StateIO
+type EventID        = Int
+data Event          = Event EventID Dynamic
+
+data EventF = forall a b . EventF {
+    eventHandlers :: IntMap.IntMap EventF,
+    currentEvent  :: Maybe Event,
+    eventValues   :: IntMap.IntMap Dynamic,
+    xcomp         :: SignalC a,
+    fcomp         :: [a -> SignalC b]
+    }
+
+event0 = EventF IntMap.empty Nothing IntMap.empty (empty) [const $ empty]
+
+instance MonadState.MonadState EventF SignalC where
+    get   = SignalBase $ State.get >>= return . Just
+    put x = SignalBase $ State.put x >> return (Just ())
+
+instance  Functor SignalC where
+  fmap f x = SignalBase $ fmap (fmap f) $ runSignalC x
+
+instance Applicative SignalC where
+  pure a  = SignalBase . return $ Just a
+  SignalBase f <*> SignalBase g = SignalBase $ do
+      k <- f
+      x <- g
+      return $ k <*> x
+
+instance Alternative SignalC where
+  empty = SignalBase $ return Nothing
+  SignalBase f <|> SignalBase g = SignalBase $ do
+       x <- f
+       y <- g
+       return $ x <|> y
+
+runSignalC :: SignalC a -> State.StateT EventF IO (Maybe a)
+runSignalC (SignalBase mx) = mx
+
+setEventCont ::   (SignalC a) -> (a -> SignalC b) -> StateIO EventF
+setEventCont x f = do
+   st@(EventF es c vs x' fs) <- State.get
+   State.put $ EventF es c vs  x ( f : Unsafe.unsafeCoerce fs) -- st{xcomp=  x, fcomp=  f: unsafeCoerce fs}
+   return st
+ 
+resetEventCont cont =do
+      st <- State.get
+      State.put cont {eventHandlers = eventHandlers st, eventValues = eventValues st, currentEvent = currentEvent st}
+
+getCont ::(MonadState.MonadState EventF  m) => m EventF
+getCont = State.get
+
+runCont :: EventF -> StateIO ()
+runCont (EventF _ _ _ x fs) = do
+    runIt x (Unsafe.unsafeCoerce fs)
+    return ()
+   where
+      runIt x fs     = runSignalC $ x >>= compose fs
+      compose []     = const empty
+      compose (f:fs) = \x -> f x >>= compose fs
+
+eventLoop :: [Event] -> StateIO ()
+eventLoop []= return()
+eventLoop (ev@(Event name _):evs)= do
+   (State.modify $ \st -> st{currentEvent= Just ev ,eventValues= IntMap.delete name $ eventValues st})  !> ("inject event:" ++ show name)
+   ths <- State.gets eventHandlers
+   case IntMap.lookup name ths of
+      Just st -> runCont st  !> ("execute event handler for: "++ show name) 
+      Nothing -> return ()   !> "no handler for the event"
+   eventLoop evs
+
+runEvent :: Event -> StateIO()
+runEvent (ev@(Event uid _)) = do
+   (State.modify $ \st -> st{currentEvent = Just ev ,eventValues = IntMap.delete uid $ eventValues st})  !> ("inject event:" ++ show uid)
+   ths <- State.gets eventHandlers
+   case IntMap.lookup uid ths of
+      Just st -> runCont st  !> ("execute event handler for: "++ show uid) 
+      Nothing -> return ()   !> "no handler for the event"
+
+instance Monad SignalC where
+    return x = SignalBase $ return $ Just x
+    x >>= f = SignalBase $ do
+        cont <- setEventCont x f
+        mk   <- runSignalC x
+        resetEventCont cont
+        case mk of
+            Just k  -> runSignalC $ f k
+            Nothing -> return Nothing
+
+instance State.MonadTrans (SignalBase) where
+    lift mx = SignalBase $ mx >>= return . Just
+
+instance State.MonadIO (SignalBase StateIO) where
+    liftIO = State.lift . State.liftIO 
+
+(!>) = const . id
+-- (!>)= flip trace
+
+currentEventValue :: Typeable a => Int -> SignalC a
+currentEventValue id =  do
+  st <- State.get !> "currValue"
+  let vals = eventValues st
+  case IntMap.lookup id vals of
+      Nothing -> waitEvent id
+      Just v  -> return $ fromDyn v (error "currentEventValue: type error") 
+
+waitEvent :: Typeable a => Int -> SignalC a
+waitEvent id = SignalBase $ do
+  st <- State.get !> "waitEvent"
+  let evs = eventHandlers  st 
+
+  case IntMap.lookup id evs of
+    Nothing ->  do
+       State.put st{ eventHandlers =  IntMap.insert id st evs} !> ("created event handler for: "++ show id)
+       return Nothing 
+    Just _ ->  do
+       State.put st{ eventHandlers =  IntMap.insert id st evs} !> ("upadated event handler for: "++ show id)
+       eventValue id
+
+eventValue id =  do
+    st <- State.get
+    let me = currentEvent st
+    case me of
+        Nothing -> return Nothing !> "NO current EVENT"
+        Just (Event id' r) -> do
+            if id /= id' then return Nothing else do
+                case fromDynamic r of
+                    Nothing -> return Nothing 
+                    Just x -> do
+                        -- State.liftIO $ putStrLn $ "read event: " ++ show id
+                        State.put st{eventValues = IntMap.insert id (toDyn x) $ eventValues st}
+                        return $ Just x
+
+runCTest = runSignalTestC tonsTest
+mousPosC = getSignal 0
+
+tonsTest :: SignalC (Double,Double)
+tonsTest = thousandsTests
+    where
+        tupleTest x _   = x
+        test1           = tupleTest <~ mousPosC
+        tenTests        = test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ mousPosC)))))))))
+        test2           = tupleTest <~ tenTests
+        hundredTests    = test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ mousPosC)))))))))
+        test3           = tupleTest <~ hundredTests
+        thousandsTests  = test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ mousPosC)))))))))
+        test4           = tupleTest <~ thousandsTests
+        tenThousandTest = test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ mousPosC)))))))))
+
+runSignalTestC :: (Typeable a, Show a) => SignalC a -> IO()
+runSignalTestC s = initWindow >>= \mw ->
+    case mw of
+        Nothing -> print "Error starting GLFW." >> return ()
+        Just w  -> do
+            print "Starting signal run time"
+
+            globalDispatch <- atomically $ newTBQueue 1000
+            GLFW.setCursorPosCallback   w $ Just $ mousePosEvent   globalDispatch
+            -- GLFW.setMouseButtonCallback w $ Just $ mousePressEvent globalDispatch
+            -- GLFW.setKeyCallback         w $ Just $ keyPressEvent   globalDispatch
+            -- GLFW.setWindowSizeCallback  w $ Just $ dimensionsEvent globalDispatch
+    
+            forkIO $ globalEventDispatch' globalDispatch s
+
+            -- (ww,wh) <- GLFW.getWindowSize w
+            -- dimensionsEvent globalDispatch w ww wh
+            render False w
+    where
+        --event callbacks
+        mousePosEvent   eventNotify _ x y                                = atomically ((writeTBQueue eventNotify $ MousePosition (x,y)) `orElse` return ())
+        mousePressEvent eventNotify _ _ GLFW.MouseButtonState'Released _ = atomically (writeTBQueue eventNotify $ MouseClick)
+        mousePressEvent _           _ _ GLFW.MouseButtonState'Pressed  _ = return ()
+        keyPressEvent   eventNotify _ k _ GLFW.KeyState'Pressed  _       = atomically (writeTBQueue eventNotify $ KeyDown k)
+        keyPressEvent   eventNotify _ k _ GLFW.KeyState'Released _       = atomically (writeTBQueue eventNotify $ KeyUp   k)
+        keyPressEvent   eventNotify _ k _ _ _                            = return ()
+        dimensionsEvent eventNotify _ x y                                = atomically $ writeTBQueue eventNotify $ Dimensions (x,y)
+
+        render quit window
+            | quit      = print "Qutting" >> return ()
+            | otherwise = do
+                GLFW.pollEvents
+                q <- liftA (== GLFW.KeyState'Pressed) (GLFW.getKey window GLFW.Key'Q)
+                threadDelay $ 16667 * 2
+                render q window
+
+--Event quantityID $ int2Dyn
+globalEventDispatch' :: (Show a) => TBQueue InputEvent -> SignalC a -> IO()
+globalEventDispatch' inBox signal = do
+    (flip State.runStateT) event0 $ forever $ do
+        (MousePosition (x,y)) <- State.liftIO $ atomically $ readTBQueue inBox
+        runSignalC $ do
+            s <- signal
+            State.liftIO $ print s
+            return ()
+        runEvent $ Event 0 $ int2Dyn (x,y)
+    return ()
+    where
+        int2Dyn :: (Double,Double) -> Dynamic
+        int2Dyn = toDyn
+  
+getSignal = currentEventValue
+

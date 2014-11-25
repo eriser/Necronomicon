@@ -1,7 +1,9 @@
 import Prelude
 import Necronomicon.FRP
+import Debug.Trace
 
 main :: IO()
+main = runCTest >> return ()
 -- main = runSignal tonsOfMouseAndTime
 -- main = runSignal $ dropIf (\(x,y) -> x > 400) (0,0) mousePos
 -- main = runSignal $ keepIf (\(x,y) -> x > 400) (0,0) mousePos
@@ -13,7 +15,7 @@ main :: IO()
 -- main = runSignal $ every second <|> fps 9.5
 -- main = runSignal multiPlay
 -- main = runSignal wasd
-main = runSignal $ combine [pure (666,-666),mousePos,mousePos]
+-- main = runSignal $ combine [pure (666,-666),mousePos,mousePos]
 
 multiPlay :: Signal ()
 multiPlay = playOn beat (isDown keyP) (isDown keyS)
@@ -37,3 +39,4 @@ tonsOfMouseAndTime = tenThousandTest
         thousandsTests  = test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ mousePos)))))))))
         test4           = tupleTest <~ thousandsTests
         tenThousandTest = test4 ~~ (test4 ~~ mousePos)
+
