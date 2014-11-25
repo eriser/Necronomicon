@@ -3,20 +3,13 @@ module Necronomicon (module Necronomicon.Language.Layout,
                      module Necronomicon.Math,
                      module Necronomicon.UGen,
                      module Necronomicon.Patterns,
-                     module FRP) where
+                     module FRP,
+                     module Necronomicon.Runtime) where
 
 import Necronomicon.Networking
 import Necronomicon.Language.Layout
 import Necronomicon.Math
 import Necronomicon.UGen hiding ((~>),ifThenElse)
 import Necronomicon.Patterns
+import Necronomicon.Runtime
 import qualified Necronomicon.FRP.Signal as FRP
-
-import Prelude
-import Foreign
-import Foreign.C
-import GHC.Float
-
-
-foreign import ccall "startRuntime" startRuntime :: Ptr CUGen -> IO ()
-

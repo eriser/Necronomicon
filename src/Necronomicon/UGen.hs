@@ -10,6 +10,9 @@ import Foreign
 import Foreign.C
 import Foreign.Storable
 import Control.Applicative
+import Control.Concurrent
+import Control.Concurrent.STM
+import Necronomicon.Runtime
 
 import Prelude hiding (fromRational,sin,(+),(*),(/))
 import qualified Prelude as P (fromRational,fromIntegral,sin,(+),(*),(/))
@@ -32,6 +35,25 @@ infixl 1 ~>
 
 data UGen = UGenFunc Calc [UGen] | UGenNum Double | UGenList [UGen]
 
+compileSynthDef :: Necronomicon -> UGen -> IO SynthDef
+compileSynthDef (Necronomicon _ mailBox _ _) synth = do
+    ugen <- compileUGen synth
+    synthDef <- new ugen
+    atomically (writeTChan mailBox (CollectSynthDef synthDef))
+    return synthDef
+
+printSynthDef :: SynthDef -> IO ()
+printSynthDef synthDef = printUGen synthDef 0
+
+playSynth :: Necronomicon -> SynthDef -> CDouble -> IO NodeID
+playSynth necro@(Necronomicon _ mailBox _ _) synthDef time = do
+    id <- atomically (incrementNodeId necro)
+    atomically (writeTChan mailBox (StartSynth synthDef time id))
+    return id
+
+stopSynth :: Necronomicon -> NodeID -> IO ()
+stopSynth (Necronomicon _ mailBox _ _) id = atomically (writeTChan mailBox (StopSynth id))
+
 class UGenComponent a where
     toUGen :: a -> UGen
 
@@ -44,34 +66,34 @@ instance UGenComponent Double where
 instance UGenComponent [UGen] where
     toUGen ul = UGenList ul
 
-foreign import ccall unsafe "&sinCalc" sinCalc :: Calc
+foreign import ccall "&sinCalc" sinCalc :: Calc
 sin :: UGenComponent a => a -> UGen
 sin freq = UGenFunc sinCalc [toUGen freq]
 
-foreign import ccall unsafe "&delayCalc" delayCalc :: Calc
+foreign import ccall "&delayCalc" delayCalc :: Calc
 delay :: (UGenComponent a,UGenComponent b) => a -> b -> UGen
 delay amount input = UGenFunc delayCalc [toUGen amount, toUGen input]
 
-foreign import ccall unsafe "&addCalc" addCalc :: Calc
+foreign import ccall "&addCalc" addCalc :: Calc
 add :: (UGenComponent a,UGenComponent b) => a -> b -> UGen
 add a b = UGenFunc addCalc [toUGen a, toUGen b]
 
-foreign import ccall unsafe "&minusCalc" minusCalc :: Calc
+foreign import ccall "&minusCalc" minusCalc :: Calc
 minus :: (UGenComponent a,UGenComponent b) => a -> b -> UGen
 minus a b = UGenFunc minusCalc [toUGen a, toUGen b]
 
-foreign import ccall unsafe "&mulCalc" mulCalc :: Calc
+foreign import ccall "&mulCalc" mulCalc :: Calc
 mul :: (UGenComponent a,UGenComponent b) => a -> b -> UGen
 mul a b = UGenFunc mulCalc [toUGen a, toUGen b]
 
 gain :: (UGenComponent a,UGenComponent b) => a -> b -> UGen
 gain = mul
 
-foreign import ccall unsafe "&udivCalc" divCalc :: Calc
+foreign import ccall "&udivCalc" divCalc :: Calc
 udiv :: (UGenComponent a,UGenComponent b) => a -> b -> UGen
 udiv a b = UGenFunc divCalc [toUGen a, toUGen b]
 
-foreign import ccall unsafe "&timeWarpCalc" timeWarpCalc :: Calc
+foreign import ccall "&timeWarpCalc" timeWarpCalc :: Calc
 timeWarp :: (UGenComponent a,UGenComponent b) => a -> b -> UGen
 timeWarp speed input = UGenFunc timeWarpCalc [toUGen speed, toUGen input]
 
@@ -79,9 +101,9 @@ timeWarp speed input = UGenFunc timeWarpCalc [toUGen speed, toUGen input]
 -- (/) :: UGenComponent a => a -> a -> UGen
 -- (/) = udiv
 
-foreign import ccall unsafe "&uabsCalc" absCalc :: Calc
-foreign import ccall unsafe "&signumCalc" signumCalc :: Calc
-foreign import ccall unsafe "&negateCalc" negateCalc :: Calc
+foreign import ccall "&uabsCalc" absCalc :: Calc
+foreign import ccall "&signumCalc" signumCalc :: Calc
+foreign import ccall "&negateCalc" negateCalc :: Calc
 
 instance Num UGen where
     (+) = (+)
@@ -125,37 +147,7 @@ infixl 6 +
 infixl 7 *
 infixl 7 /
 
-data Signal = Signal {-# UNPACK #-} !CDouble {-# UNPACK #-} !CDouble
-
-instance Storable Signal where
-    sizeOf _ = sizeOf (undefined :: CDouble) P.* 2
-    alignment _ = alignment (undefined :: CDouble)
-    peek ptr = do
-        amp <- peekByteOff ptr 0 :: IO CDouble
-        off <- peekByteOff ptr 8 :: IO CDouble
-        return (Signal amp off) 
-    poke ptr (Signal amp off) = do
-        pokeByteOff ptr 0 amp
-        pokeByteOff ptr 8 off
-        
-type Calc = FunPtr (Ptr () -> CDouble -> Signal)
-
-data CUGen = CUGen {-# UNPACK #-} !Calc {-# UNPACK #-} !(Ptr ()) {-# UNPACK #-} !CUInt deriving (Show)
-
-instance Storable CUGen where
-    sizeOf _ = sizeOf (undefined :: CDouble) P.* 3
-    alignment _ = alignment (undefined :: CDouble)
-    peek ptr = do
-        calc <- peekByteOff ptr 0 :: IO Calc
-        args <- peekByteOff ptr 8 :: IO (Ptr ())
-        numArgs <- peekByteOff ptr 16 :: IO CUInt
-        return (CUGen calc args numArgs)
-    poke ptr (CUGen calc args numArgs) = do
-        pokeByteOff ptr 0 calc
-        pokeByteOff ptr 8 args
-        pokeByteOff ptr 16 numArgs
-
-foreign import ccall unsafe "&numberCalc" numberCalc :: Calc
+foreign import ccall "&numberCalc" numberCalc :: Calc
 
 compileUGen :: UGen -> IO CUGen
 compileUGen (UGenFunc calc inputs) = do
@@ -166,6 +158,10 @@ compileUGen (UGenFunc calc inputs) = do
 compileUGen (UGenNum d) = do
     signalPtr <- new (Signal 0 (CDouble d))
     return $ CUGen numberCalc ((castPtr signalPtr) :: Ptr ()) 1
+
+
+foreign import ccall "&free_ugen" freeUGenPtr :: FinalizerPtr CUGen
+foreign import ccall "printUGen" printUGen :: Ptr (CUGen) -> CUInt -> IO ()
 
 -- myCoolSynth = t s .*. 0.5 ~> d
     -- where
@@ -188,7 +184,8 @@ myCoolSynth = sig + timeWarp 0.475 sig + timeWarp 0.3 sig ~> gain 0.05 ~> t ~> t
 
 
 
-{-  -------------------------------------------------------------------------------------------------------------
+{-
+    -------------------------------------------------------------------------------------------------------------
     Idea for optimising synth compilation and runtime.
     During compilation UGens are cached in a hash map. When a variable is referenced multiple times,
     first the compiler looks in the cached map for a previously compiled version, if found it uses it,
@@ -200,5 +197,15 @@ myCoolSynth = sig + timeWarp 0.475 sig + timeWarp 0.3 sig ~> gain 0.05 ~> t ~> t
     it simply returns the memoized value instead of recalculating the results. This will save CPU because
     we won't recalculate ugen branches multiple times each frame.
     !! This will require changes ugen args from being arrays of UGens to arrays of UGen pointers.
+
+    Re-use synths (UGen*)? Store them in the NRT thread and don't recollect them after being finished. This might require
+    passing synth ids or maybe the whole node pointer as an argument in addition to time to each ugen. When a synth
+    is freed the synth_node struct is sent back to the RT thread but the UGen* is not freed, this survives the duration
+    of the program. This still allows envelopes and similar ugens to have a way to free specific synths while being reused
+    during execution. This might require checking ids for the memoization optimization.
+
+    free_ugen no longer part of node_free. Need to make UGens (synths) handled globally and only freed on shutdown.
+
+    Also, need a way to handle top level arguments and synth setting. How to support synth reuse with arguments??
     -------------------------------------------------------------------------------------------------------------
 -}

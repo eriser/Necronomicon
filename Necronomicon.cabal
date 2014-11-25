@@ -21,6 +21,7 @@ library
         Necronomicon
         Necronomicon.FRP
         Necronomicon.UGen
+        Necronomicon.Runtime
 		
     other-modules:
         Necronomicon.Language.Layout
@@ -88,3 +89,14 @@ executable CTest
     build-depends:
         base             == 4.*,
         Necronomicon
+
+executable AudioEngineTest
+    main-is:          Main.hs
+    default-language: Haskell2010
+    ghc-options:      -threaded -Wall
+    hs-source-dirs:   Tests/AudioEngineTest
+    default-extensions:
+    build-depends:
+        base             == 4.*,
+        Necronomicon
+		
