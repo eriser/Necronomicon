@@ -16,8 +16,14 @@ type RunTimeMailbox = TChan RuntimeMessage
 
 data Necronomicon = Necronomicon { necroNrtThreadId :: ThreadId, necroMailbox :: RunTimeMailbox, necroNextNodeId :: TVar NodeID, necroRunning :: TVar Bool }
 
--- CHANGE THREAD DELAYS TO CHECK RUNNING TVARS !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
--- CHECK FOR RUNNING FLAG FROM RT THREAD BEFORE SETTING NECRO RUNNING!
+waitForReadyStatus :: TVar Bool -> Bool -> IO ()
+waitForReadyStatus running status = do
+    isReady <- atomically $ readTVar running
+    case isReady of
+        status -> return ()
+        _    -> do
+            threadDelay 1000
+            waitForReadyStatus running status
 
 startNecronomicon :: IO Necronomicon
 startNecronomicon = do
@@ -26,20 +32,20 @@ startNecronomicon = do
     running <- atomically $ newTVar True
     nrtThreadId <- startNrtRuntime mailBox running
     nextNodeId <- atomically $ newTVar 1000
-    threadDelay 1000 -- NEED TO CHECK RUNNING STATUS OF RT THREAD AND NRT THREAD
+    waitForReadyStatus running True
     return (Necronomicon nrtThreadId mailBox nextNodeId running)
 
 shutdownNecronomicon :: Necronomicon -> IO ()
-shutdownNecronomicon (Necronomicon nrtThread mailBox nextNodeId _) = do
+shutdownNecronomicon (Necronomicon nrtThread mailBox nextNodeId running) = do
     atomically $ writeTChan mailBox ShutdownNrt
-    threadDelay 1000 -- NEED TO CHECK RUNNING STATUS OF RT THREAD AND NRT THREAD
+    waitForReadyStatus running False
     shutdownNecronomiconRuntime
     
-collectMailbox :: RunTimeMailbox -> STM ([RuntimeMessage])
+collectMailbox :: RunTimeMailbox -> IO [RuntimeMessage]
 collectMailbox mailBox = collectWorker []
     where
         collectWorker messages = do
-            maybeMessage <- tryReadTChan mailBox
+            maybeMessage <- atomically $ tryReadTChan mailBox
             case maybeMessage of
                 Nothing -> return messages
                 Just message -> collectWorker (message:messages)
@@ -47,7 +53,7 @@ collectMailbox mailBox = collectWorker []
 defaultMessageReturn :: ([SynthDef], Bool)
 defaultMessageReturn = ([], True)
 
-processMessages :: [RuntimeMessage] -> IO (([SynthDef], Bool))
+processMessages :: [RuntimeMessage] -> IO ([SynthDef], Bool)
 processMessages messages = foldM (foldMessages) ([], True) messages
     where
         foldMessages (acc, running) m = do
@@ -70,7 +76,7 @@ startNrtRuntime mailBox necroRunning = do
     where
         nrtThread :: [SynthDef] -> IO ()
         nrtThread !synthDefs = do
-            messages <- (atomically (collectMailbox mailBox))
+            messages <- collectMailbox mailBox
             (newSynthDefs, running) <- processMessages messages
             let synthDefs' = synthDefs ++ newSynthDefs
             case running of
