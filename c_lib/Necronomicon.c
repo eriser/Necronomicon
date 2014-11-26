@@ -387,16 +387,16 @@ unsigned int rt_fifo_read_index = 0;
 unsigned int rt_fifo_write_index = 0;
 
 // Increment fifo_write_index and fifo_read_index after assignment to maintain intended ordering (using a memory barrier): Assignment/Lookup -> Increment
-#define FIFO_PUSH(fifo, write_index, node) fifo[write_index & fifo_size_mask] = node; __sync_synchronize(); write_index++;
-#define FIFO_POP(fifo, read_index) fifo[read_index & fifo_size_mask]; __sync_synchronize(); read_index++;
+#define FIFO_PUSH(fifo, write_index, node, size_mask) fifo[write_index & size_mask] = node; __sync_synchronize(); write_index++;
+#define FIFO_POP(fifo, read_index, size_mask) fifo[read_index & size_mask]; __sync_synchronize(); read_index++;
 
 // Non-realtime thread FIFO push/pop
-#define NRT_FIFO_PUSH(node) FIFO_PUSH(nrt_fifo, nrt_fifo_write_index, node)
-#define NRT_FIFO_POP() FIFO_POP(nrt_fifo, nrt_fifo_read_index)
+#define NRT_FIFO_PUSH(node) FIFO_PUSH(nrt_fifo, nrt_fifo_write_index, node, fifo_size_mask)
+#define NRT_FIFO_POP() FIFO_POP(nrt_fifo, nrt_fifo_read_index, fifo_size_mask)
 
 // Realtime thread FIFO push/pop
-#define RT_FIFO_PUSH(node) FIFO_PUSH(rt_fifo, rt_fifo_write_index, node)
-#define RT_FIFO_POP() FIFO_POP(rt_fifo, rt_fifo_read_index)
+#define RT_FIFO_PUSH(node) FIFO_PUSH(rt_fifo, rt_fifo_write_index, node, fifo_size_mask)
+#define RT_FIFO_POP() FIFO_POP(rt_fifo, rt_fifo_read_index, fifo_size_mask)
 
 // Allocate and null initialize a node list to be used as a node_fifo or node_list
 message_fifo new_message_fifo()
@@ -462,8 +462,8 @@ node_list scheduled_node_list = NULL;
 unsigned int scheduled_list_read_index = 0;
 unsigned int scheduled_list_write_index = 0;
 
-#define SCHEDULED_LIST_PUSH(node) FIFO_PUSH(scheduled_node_list, scheduled_list_write_index, node)
-#define SCHEDULED_LIST_POP() FIFO_POP(scheduled_node_list, scheduled_list_read_index)
+#define SCHEDULED_LIST_PUSH(node) FIFO_PUSH(scheduled_node_list, scheduled_list_write_index, node, fifo_size_mask)
+#define SCHEDULED_LIST_POP() FIFO_POP(scheduled_node_list, scheduled_list_read_index, fifo_size_mask)
 #define SCHEDULED_LIST_PEEK() (scheduled_node_list[scheduled_list_read_index & fifo_size_mask])
 #define SCHEDULED_LIST_PEEK_TIME() ((scheduled_node_list[scheduled_list_read_index & fifo_size_mask])->time)
 
@@ -526,6 +526,49 @@ void scheduled_list_sort()
 
 		scheduled_node_list[j] = x;
 	}
+}
+
+///////////////////////
+// Removal FIFO
+///////////////////////
+
+// List used by ugens to queue for removal during RT runtime
+
+
+unsigned int max_removal_ids = 256; // Max number of ids able to be scheduled for removal *per sample frame*
+unsigned int removal_fifo_size_mask = 255;
+
+typedef unsigned int* node_id_fifo;
+
+node_id_fifo removal_fifo = NULL;
+unsigned int removal_fifo_read_index = 0;
+unsigned int removal_fifo_write_index = 0;
+int removal_fifo_size = 0;
+
+#define REMOVAL_FIFO_PUSH(id) FIFO_PUSH(removal_fifo, removal_fifo_write_index, id, removal_fifo_size_mask)
+#define REMOVAL_FIFO_POP() FIFO_POP(removal_fifo, removal_fifo_read_index, removal_fifo_size_mask)
+
+// Allocate and null initialize a node list to be used as a node_list
+node_id_fifo new_removal_fifo()
+{
+	unsigned int byte_size = sizeof(unsigned int) * max_removal_ids;
+	node_id_fifo fifo = (node_id_fifo) malloc(byte_size);
+	assert(fifo);
+	memset(fifo, 0, byte_size);
+	removal_fifo_size = 0;
+	
+	return fifo;
+}
+
+void removal_fifo_free()
+{
+	assert(removal_fifo);
+	free(removal_fifo);
+	removal_fifo = NULL;
+	removal_fifo_size = 0;
+	
+	removal_fifo_read_index = 0;
+	removal_fifo_write_index = 0;
 }
 
 ///////////////////////////
@@ -645,7 +688,6 @@ synth_node* hash_table_lookup(hash_table table, unsigned int key)
 
 typedef synth_node* doubly_linked_list;
 doubly_linked_list synth_list = NULL;
-doubly_linked_list synth_removal_list = NULL;
 
 // Pushes nodes to the front of the list, returning the new list head
 doubly_linked_list doubly_linked_list_push(doubly_linked_list list, synth_node* node)
@@ -710,11 +752,12 @@ void init_rt_thread()
 	assert(rt_fifo == NULL);
 	assert(scheduled_node_list == NULL);
 	assert(synth_list == NULL);
-	assert(synth_removal_list == NULL);
+	assert(removal_fifo == NULL);
 	
 	synth_table = hash_table_new();
 	rt_fifo = new_message_fifo();
 	scheduled_node_list = new_node_list();
+	removal_fifo = new_removal_fifo();
 	absolute_time = 0;
 
 	initialize_wave_tables();
@@ -727,18 +770,19 @@ void shutdown_rt_thread()
 	assert(synth_table != NULL);
 	assert(rt_fifo != NULL);
 	assert(scheduled_node_list != NULL);
+	assert(removal_fifo != NULL);
 
 	hash_table_free(synth_table);
 	rt_fifo_free();
 	scheduled_list_free();
 	doubly_linked_list_free(synth_list);
-	doubly_linked_list_free(synth_removal_list);
+	removal_fifo_free();
 	
 	synth_table = NULL;
 	rt_fifo = NULL;
 	scheduled_node_list = NULL;
 	synth_list = NULL;
-	synth_removal_list = NULL;
+	removal_fifo = NULL;
 	necronomicon_running = false;
 }
 
@@ -782,19 +826,28 @@ void add_scheduled_synths()
 	}
 }
 
-// Iterate over the removal list and remove all synths in it.
+// Iterate over the removal fifo and remove all synths in it.
 void remove_scheduled_synths()
 {
-	synth_node* node = synth_removal_list;
-	while (node)
+	removal_fifo_read_index = removal_fifo_read_index & removal_fifo_size_mask;
+	removal_fifo_write_index = removal_fifo_write_index & removal_fifo_size_mask;
+	
+	while (removal_fifo_read_index != removal_fifo_write_index)
 	{
-		hash_table_remove(synth_table, node->key);
-		synth_node* next = node->next;
+		unsigned int id = REMOVAL_FIFO_POP();
+		--removal_fifo_size;
+		synth_node* node = hash_table_remove(synth_table, id);
 		remove_synth(node);
-		node = next;
 	}
+}
 
-	synth_removal_list = NULL;
+void try_schedule_synth_for_removal(unsigned int id)
+{
+	if(removal_fifo_size < removal_fifo_size_mask)
+	{
+		++removal_fifo_size;
+		REMOVAL_FIFO_PUSH(id);
+	}
 }
 
 void shutdown_rt_runtime(); // Forward declaration
