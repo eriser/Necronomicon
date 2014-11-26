@@ -21,7 +21,7 @@ waitForReadyStatus running status = do
     isReady <- atomically $ readTVar running
     case isReady of
         status -> return ()
-        _    -> do
+        _      -> do
             threadDelay 1000
             waitForReadyStatus running status
 
@@ -50,15 +50,18 @@ collectMailbox mailBox = collectWorker []
                 Nothing -> return messages
                 Just message -> collectWorker (message:messages)
 
-defaultMessageReturn :: ([SynthDef], Bool)
-defaultMessageReturn = ([], True)
+defaultMessageReturn :: (Maybe SynthDef, Bool)
+defaultMessageReturn = (Nothing, True)
 
 processMessages :: [RuntimeMessage] -> IO ([SynthDef], Bool)
 processMessages messages = foldM (foldMessages) ([], True) messages
     where
         foldMessages (acc, running) m = do
-            (synthDefs, running') <- processMessage m
-            return ((acc ++ synthDefs), running && running') 
+            (maybeSynthDef, running') <- processMessage m
+            let combinedRunning = running && running'
+            case maybeSynthDef of
+                Just synthDef -> return (synthDef : acc, combinedRunning)
+                Nothing -> return (acc, combinedRunning)
         processMessage m = case m of
             StartSynth synthDef time id -> do
                 playSynthInRtRuntime synthDef time id
@@ -66,8 +69,8 @@ processMessages messages = foldM (foldMessages) ([], True) messages
             StopSynth id -> do
                 stopSynthInRtRuntime id
                 return defaultMessageReturn
-            CollectSynthDef synthDef -> return ([synthDef], True)
-            ShutdownNrt -> return ([], False)
+            CollectSynthDef synthDef -> return (Just synthDef, True)
+            ShutdownNrt -> return (Nothing, False)
 
 startNrtRuntime :: RunTimeMailbox -> TVar Bool -> IO (ThreadId)
 startNrtRuntime mailBox necroRunning = do
