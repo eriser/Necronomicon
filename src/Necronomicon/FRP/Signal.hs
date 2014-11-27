@@ -11,22 +11,22 @@ module Necronomicon.FRP.Signal (
     mousePos,
     runSignal,
     mouseClicks,
-    every,
-    fps,
+    -- every,
+    -- fps,
     second,
     millisecond,
     minute,
     hour,
-    keepIf,
-    dropIf,
-    sampleOn,
-    keepWhen,
-    dropWhen,
+    -- keepIf,
+    -- dropIf,
+    -- sampleOn,
+    -- keepWhen,
+    -- dropWhen,
     isDown,
-    playOn,
-    combine,
-    merge,
-    merges,
+    -- playOn,
+    -- combine,
+    -- merge,
+    -- merges,
     keyA,
     keyB,
     keyC,
@@ -61,7 +61,7 @@ module Necronomicon.FRP.Signal (
     lift6,
     lift7,
     lift8,
-    runCTest,
+    -- runCTest,
     module Control.Applicative
     ) where
 
@@ -76,7 +76,7 @@ import Control.Concurrent.STM
 import Data.Either
 import qualified Data.Set as Set
 import Debug.Trace
-import qualified Data.IntMap as IntMap
+import qualified Data.IntMap.Strict as IntMap
 import qualified Control.Monad.State.Class as MonadState
 import qualified Control.Monad.State.Lazy as State
 import Data.Dynamic
@@ -100,34 +100,8 @@ ifThenElse False _ b = b
 -- Signals 2.0
 ---------------------------------------------
 
-type Key  = GLFW.Key
-keyA = GLFW.Key'A
-keyB = GLFW.Key'B
-keyC = GLFW.Key'C
-keyD = GLFW.Key'D
-keyE = GLFW.Key'E
-keyF = GLFW.Key'F
-keyG = GLFW.Key'G
-keyH = GLFW.Key'H
-keyI = GLFW.Key'I
-keyJ = GLFW.Key'J
-keyK = GLFW.Key'K
-keyL = GLFW.Key'L
-keyM = GLFW.Key'M
-keyN = GLFW.Key'N
-keyO = GLFW.Key'O
-keyP = GLFW.Key'P
-keyQ = GLFW.Key'Q
-keyR = GLFW.Key'R
-keyS = GLFW.Key'S
-keyT = GLFW.Key'T
-keyU = GLFW.Key'U
-keyV = GLFW.Key'V
-keyW = GLFW.Key'W
-keyX = GLFW.Key'X
-keyY = GLFW.Key'Y
-keyZ = GLFW.Key'Z
 
+{-
 data InputEvent = MousePosition (Double,Double)
                 | MouseClick
                 | KeyDown       Key
@@ -313,12 +287,6 @@ fmapLoop f inBox outBox = forever $ do
 -- Runtime Environment
 ---------------------------------------------
 
-initWindow :: IO(Maybe GLFW.Window)
-initWindow = GLFW.init >>= \initSuccessful -> if initSuccessful then window else return Nothing
-    where
-        mkWindow = GLFW.createWindow 960 640 "Necronomicon" Nothing Nothing
-        window   = mkWindow >>= \w -> GLFW.makeContextCurrent w >> return w
-
 runSignal :: (Show a) => Signal a -> IO()
 runSignal (Signal s) = initWindow >>= \mw ->
     case mw of
@@ -409,111 +377,6 @@ instance Alternative Signal where
                         Just b' -> atomically $ writeTChan outBox $ Just b'
                         Nothing -> atomically $ writeTChan outBox Nothing
 
-instance Num a => Num (Signal a) where
-    (+)         = liftA2 (+)
-    (*)         = liftA2 (*)
-    (-)         = liftA2 (-)
-    negate      = lift negate
-    abs         = lift abs
-    signum      = lift signum
-    fromInteger = pure . fromInteger
-
-instance Fractional a => Fractional (Signal a) where
-    (/) = liftA2 (/)
-    fromRational = pure . fromRational
-
-instance Floating a => Floating (Signal a) where
-    pi      = pure pi
-    (**)    = liftA2 (**)
-    exp     = lift exp
-    log     = lift log
-    sin     = lift sin
-    cos     = lift cos
-    asin    = lift asin
-    acos    = lift acos
-    atan    = lift atan
-    logBase = liftA2 logBase
-    sqrt    = lift sqrt
-    tan     = lift tan
-    tanh    = lift tanh
-    sinh    = lift sinh
-    cosh    = lift cosh
-    asinh   = lift asinh
-    atanh   = lift atanh
-    acosh   = lift acosh
-
--- instance (Eq a) => Eq (Signal a) where
-    -- (==) = liftA2 (==)
-    -- (/=) = liftA2 (/=)
-
--- instance (Eq a, Ord a) => Ord (Signal a) where
-    -- compare = liftA2 compare
-    -- max     = liftA2 max
-    -- min     = liftA2 min
-
-instance (Enum a) => Enum (Signal a) where
-    succ     = lift succ
-    pred     = lift pred
-    -- toEnum   = lift toEnum
-    -- fromEnum = pure
-                
-lift :: (a -> b) -> Signal a -> Signal b
-lift  = liftA
-
-lift2 :: (a -> b -> c) -> Signal a -> Signal b -> Signal c
-lift2 = liftA2
-
-lift3 :: (a -> b -> c -> d) -> Signal a -> Signal b -> Signal c -> Signal d
-lift3 = liftA3
-
-lift4 :: (a -> b -> c -> d -> e) -> Signal a -> Signal b -> Signal c -> Signal d -> Signal e
-lift4 f a b c d = f <~ a ~~ b ~~ c ~~ d
-
-lift5 :: (a -> b -> c -> d -> e -> f) -> Signal a -> Signal b -> Signal c -> Signal d -> Signal e -> Signal f
-lift5 f a b c d e = f <~ a ~~ b ~~ c ~~ d ~~ e
-
-lift6 :: (a -> b -> c -> d -> e -> f -> g) -> Signal a -> Signal b -> Signal c -> Signal d -> Signal e -> Signal f -> Signal g
-lift6 f a b c d e f' = f <~ a ~~ b ~~ c ~~ d ~~ e ~~ f'
-
-lift7 :: (a -> b -> c -> d -> e -> f -> g -> h) -> Signal a -> Signal b -> Signal c -> Signal d -> Signal e -> Signal f -> Signal g -> Signal h
-lift7 f a b c d e f' g = f <~ a ~~ b ~~ c ~~ d ~~ e ~~ f' ~~ g
-
-lift8 :: (a -> b -> c -> d -> e -> f -> g -> h -> i) -> Signal a -> Signal b -> Signal c -> Signal d -> Signal e -> Signal f -> Signal g -> Signal h -> Signal i
-lift8 f a b c d e f' g h = f <~ a ~~ b ~~ c ~~ d ~~ e ~~ f' ~~ g ~~ h
-
----------------------------------------------
--- Time
----------------------------------------------
-
-millisecond :: Time
-millisecond = 0.001
-
-second :: Time
-second = 1
-
-minute :: Time
-minute = 60
-
-hour :: Time
-hour = 3600
-
-toMilliseconds :: Time -> Time
-toMilliseconds t = t / 0.001
-
-toMinutes :: Time -> Time
-toMinutes t = t / 60
-
-toHours :: Time -> Time
-toHours t = t / 3600
-
-timeLoop :: TBQueue InputEvent -> Int -> IO()
-timeLoop outBox millisecondDelta = forever $ do
-    t <- GLFW.getTime
-    case t of
-        Nothing    -> threadDelay millisecondDelta
-        Just time  -> do
-            atomically $ writeTBQueue outBox $ TimeEvent millisecondDelta time
-            threadDelay millisecondDelta
 
 ---------------------------------------------
 -- Combinators
@@ -727,162 +590,140 @@ playOn _ (Signal player) (Signal stopper) = Signal $ \broadcastInbox -> do
                         if p' && not isPlaying
                             then print "Start playing" >> loop True pInBox sInBox outBox
                             else loop isPlaying pInBox sInBox outBox
-
+-}
 ---------------------------------------------
 -- Continuation Signals????
 ---------------------------------------------
-data SignalBase m a = SignalBase (m (Maybe a))
-type StateIO        = State.StateT EventF IO
-type SignalC        = SignalBase StateIO
-type EventID        = Int
-data Event          = Event EventID Dynamic
 
-data EventF = forall a b . EventF {
+data    Event    = Event Int Dynamic
+newtype Signal a = Signal {runSignalState :: (State.State EventF (Maybe a))}
+
+instance Monad Signal where
+    return x = Signal . return $ Just x
+    x >>= f = Signal $ do
+        cont <- setEventCont x f
+        mk   <- runSignalState x
+        resetEventCont cont
+        case mk of
+            Just k  -> runSignalState $ f k
+            Nothing -> return Nothing
+               
+instance  Functor Signal where
+    fmap f x = Signal $ fmap (fmap f) $ runSignalState x
+
+instance Applicative Signal where
+    pure  = return
+    f <*> g = Signal $ do
+        k <- runSignalState f
+        x <- runSignalState g
+        return $ k <*> x
+
+instance Alternative Signal where
+    empty = Signal $ return Nothing
+    f <|> g = Signal $ do
+        x <- runSignalState f
+        y <- runSignalState g
+        return $ x <|> y
+
+data EventF = forall a b. EventF {
     eventHandlers :: IntMap.IntMap EventF,
     currentEvent  :: Maybe Event,
     eventValues   :: IntMap.IntMap Dynamic,
-    xcomp         :: SignalC a,
-    fcomp         :: [a -> SignalC b]
+    xcomp         :: Signal a,
+    fcomp         :: [a -> Signal b]
     }
 
-event0 = EventF IntMap.empty Nothing IntMap.empty (empty) [const $ empty]
+currentEventValue :: Typeable a => Int -> Signal a
+currentEventValue uid = Signal $ do
+  st <- State.get -- !> "currValue"
+  case IntMap.lookup uid (eventValues st) of
+      Nothing -> waitEvent uid
+      -- Just v  -> return $ fromDyn v (error "currentEventValue: type error") 
+      Just v  -> return $ fromDynamic v
 
-instance MonadState.MonadState EventF SignalC where
-    get   = SignalBase $ State.get >>= return . Just
-    put x = SignalBase $ State.put x >> return (Just ())
+waitEvent :: Typeable a => Int -> State.State EventF (Maybe a)
+waitEvent uid = do
+    st <- State.get -- !> "waitEvent"
+    let evs = eventHandlers st 
+    case IntMap.lookup uid evs of
+        Nothing ->  do
+            State.put st{ eventHandlers = IntMap.insert uid st evs} -- !> ("created event handler for: "++ show id)
+            return Nothing 
+        Just _ ->  do
+            State.put st{ eventHandlers = IntMap.insert uid st evs} -- !> ("upadated event handler for: "++ show id)
+            eventValue uid
 
-instance  Functor SignalC where
-  fmap f x = SignalBase $ fmap (fmap f) $ runSignalC x
+eventValue :: Typeable a => Int -> State.State EventF (Maybe a)
+eventValue uid =  do
+    st <- State.get
+    let me = currentEvent st
+    case me of
+        Nothing -> return Nothing -- !> "NO current EVENT"
+        Just (Event uid r) -> do
+            if uid /= uid then return Nothing else do
+                case fromDynamic r of
+                    Nothing -> return Nothing 
+                    Just x -> do
+                        State.put st{eventValues = IntMap.insert uid r $ eventValues st}
+                        return $ Just x
 
-instance Applicative SignalC where
-  pure a  = SignalBase . return $ Just a
-  SignalBase f <*> SignalBase g = SignalBase $ do
-      k <- f
-      x <- g
-      return $ k <*> x
-
-instance Alternative SignalC where
-  empty = SignalBase $ return Nothing
-  SignalBase f <|> SignalBase g = SignalBase $ do
-       x <- f
-       y <- g
-       return $ x <|> y
-
-runSignalC :: SignalC a -> State.StateT EventF IO (Maybe a)
-runSignalC (SignalBase mx) = mx
-
-setEventCont ::   (SignalC a) -> (a -> SignalC b) -> StateIO EventF
+setEventCont :: (Signal a) -> (a -> Signal b) -> State.State EventF EventF
 setEventCont x f = do
    st@(EventF es c vs x' fs) <- State.get
    State.put $ EventF es c vs  x ( f : Unsafe.unsafeCoerce fs) -- st{xcomp=  x, fcomp=  f: unsafeCoerce fs}
    return st
- 
-resetEventCont cont =do
+
+resetEventCont :: EventF -> State.State EventF ()
+resetEventCont cont = do
       st <- State.get
-      State.put cont {eventHandlers = eventHandlers st, eventValues = eventValues st, currentEvent = currentEvent st}
+      State.put cont{eventHandlers = eventHandlers st, eventValues = eventValues st, currentEvent = currentEvent st}
 
-getCont ::(MonadState.MonadState EventF  m) => m EventF
-getCont = State.get
-
-runCont :: EventF -> StateIO ()
+runCont :: EventF -> State.State EventF ()
 runCont (EventF _ _ _ x fs) = do
-    runIt x (Unsafe.unsafeCoerce fs)
+    run x (Unsafe.unsafeCoerce fs)
     return ()
    where
-      runIt x fs     = runSignalC $ x >>= compose fs
+      run      x fs  = runSignalState $ x >>= compose fs
       compose []     = const empty
       compose (f:fs) = \x -> f x >>= compose fs
 
-eventLoop :: [Event] -> StateIO ()
-eventLoop []= return()
-eventLoop (ev@(Event name _):evs)= do
-   (State.modify $ \st -> st{currentEvent= Just ev ,eventValues= IntMap.delete name $ eventValues st})  !> ("inject event:" ++ show name)
-   ths <- State.gets eventHandlers
-   case IntMap.lookup name ths of
-      Just st -> runCont st  !> ("execute event handler for: "++ show name) 
-      Nothing -> return ()   !> "no handler for the event"
-   eventLoop evs
+accuracyTest :: Signal (Double,Double)
+accuracyTest = subtract <~ mousePos ~~ (liftA (\(x,y) -> (x* (-1),y)) mousePos)
+    where
+        subtract = (\(x,y) (xx,yy) -> (x - xx,y))
+        test     = subtract <~ mousePos
+        test2    = subtract <~ (test ~~ mousePos) ~~ mousePos
 
-runEvent :: Event -> StateIO()
+runEvent :: Event -> State.State EventF ()
 runEvent (ev@(Event uid _)) = do
-   (State.modify $ \st -> st{currentEvent = Just ev ,eventValues = IntMap.delete uid $ eventValues st})  !> ("inject event:" ++ show uid)
+   (State.modify $ \st -> st{currentEvent = Just ev ,eventValues = IntMap.delete uid $ eventValues st}) -- !> ("inject event:" ++ show uid)
    ths <- State.gets eventHandlers
    case IntMap.lookup uid ths of
-      Just st -> runCont st  !> ("execute event handler for: "++ show uid) 
-      Nothing -> return ()   !> "no handler for the event"
+      Just st -> runCont st  -- !> ("execute event handler for: "++ show uid) 
+      Nothing -> return ()   -- !> "no handler for the event"
 
-instance Monad SignalC where
-    return x = SignalBase $ return $ Just x
-    x >>= f = SignalBase $ do
-        cont <- setEventCont x f
-        mk   <- runSignalC x
-        resetEventCont cont
-        case mk of
-            Just k  -> runSignalC $ f k
-            Nothing -> return Nothing
+event0 :: EventF
+event0 = EventF IntMap.empty Nothing IntMap.empty (empty) [const $ empty]
 
-instance State.MonadTrans (SignalBase) where
-    lift mx = SignalBase $ mx >>= return . Just
+globalEventDispatch :: (Typeable a, Show a) => TBQueue Event -> Signal a -> EventF-> IO()
+globalEventDispatch inBox signal eventf = do
+    e <- atomically $ readTBQueue inBox
+    let (a,eventf') = State.runState (runEvent e >> runSignalState signal) eventf
+    print a
+    globalEventDispatch inBox signal eventf'
 
-instance State.MonadIO (SignalBase StateIO) where
-    liftIO = State.lift . State.liftIO 
+--------------------------------------
+-- RunTime
+--------------------------------------
 
-(!>) = const . id
--- (!>)= flip trace
-
-currentEventValue :: Typeable a => Int -> SignalC a
-currentEventValue id =  do
-  st <- State.get !> "currValue"
-  let vals = eventValues st
-  case IntMap.lookup id vals of
-      Nothing -> waitEvent id
-      Just v  -> return $ fromDyn v (error "currentEventValue: type error") 
-
-waitEvent :: Typeable a => Int -> SignalC a
-waitEvent id = SignalBase $ do
-  st <- State.get !> "waitEvent"
-  let evs = eventHandlers  st 
-
-  case IntMap.lookup id evs of
-    Nothing ->  do
-       State.put st{ eventHandlers =  IntMap.insert id st evs} !> ("created event handler for: "++ show id)
-       return Nothing 
-    Just _ ->  do
-       State.put st{ eventHandlers =  IntMap.insert id st evs} !> ("upadated event handler for: "++ show id)
-       eventValue id
-
-eventValue id =  do
-    st <- State.get
-    let me = currentEvent st
-    case me of
-        Nothing -> return Nothing !> "NO current EVENT"
-        Just (Event id' r) -> do
-            if id /= id' then return Nothing else do
-                case fromDynamic r of
-                    Nothing -> return Nothing 
-                    Just x -> do
-                        -- State.liftIO $ putStrLn $ "read event: " ++ show id
-                        State.put st{eventValues = IntMap.insert id (toDyn x) $ eventValues st}
-                        return $ Just x
-
-runCTest = runSignalTestC tonsTest
-mousPosC = getSignal 0
-
-tonsTest :: SignalC (Double,Double)
-tonsTest = thousandsTests
+initWindow :: IO(Maybe GLFW.Window)
+initWindow = GLFW.init >>= \initSuccessful -> if initSuccessful then window else return Nothing
     where
-        tupleTest x _   = x
-        test1           = tupleTest <~ mousPosC
-        tenTests        = test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ mousPosC)))))))))
-        test2           = tupleTest <~ tenTests
-        hundredTests    = test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ mousPosC)))))))))
-        test3           = tupleTest <~ hundredTests
-        thousandsTests  = test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ mousPosC)))))))))
-        test4           = tupleTest <~ thousandsTests
-        tenThousandTest = test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ mousPosC)))))))))
+        mkWindow = GLFW.createWindow 960 640 "Necronomicon" Nothing Nothing
+        window   = mkWindow >>= \w -> GLFW.makeContextCurrent w >> return w
 
-runSignalTestC :: (Typeable a, Show a) => SignalC a -> IO()
-runSignalTestC s = initWindow >>= \mw ->
+runSignal :: (Typeable a, Show a) => Signal a -> IO()
+runSignal s = initWindow >>= \mw ->
     case mw of
         Nothing -> print "Error starting GLFW." >> return ()
         Just w  -> do
@@ -890,47 +731,218 @@ runSignalTestC s = initWindow >>= \mw ->
 
             globalDispatch <- atomically $ newTBQueue 1000
             GLFW.setCursorPosCallback   w $ Just $ mousePosEvent   globalDispatch
-            -- GLFW.setMouseButtonCallback w $ Just $ mousePressEvent globalDispatch
-            -- GLFW.setKeyCallback         w $ Just $ keyPressEvent   globalDispatch
-            -- GLFW.setWindowSizeCallback  w $ Just $ dimensionsEvent globalDispatch
-    
-            forkIO $ globalEventDispatch' globalDispatch s
+            GLFW.setMouseButtonCallback w $ Just $ mousePressEvent globalDispatch
+            GLFW.setKeyCallback         w $ Just $ keyPressEvent   globalDispatch
+            GLFW.setWindowSizeCallback  w $ Just $ dimensionsEvent globalDispatch
 
-            -- (ww,wh) <- GLFW.getWindowSize w
-            -- dimensionsEvent globalDispatch w ww wh
+            forkIO $ globalEventDispatch globalDispatch s event0
+
+            (ww,wh) <- GLFW.getWindowSize w
+            dimensionsEvent globalDispatch w ww wh
             render False w
     where
         --event callbacks
-        mousePosEvent   eventNotify _ x y                                = atomically ((writeTBQueue eventNotify $ MousePosition (x,y)) `orElse` return ())
-        mousePressEvent eventNotify _ _ GLFW.MouseButtonState'Released _ = atomically (writeTBQueue eventNotify $ MouseClick)
+        mousePosEvent   eventNotify _ x y                                = atomically $ (writeTBQueue eventNotify $ Event 0 $ toDyn (x,y)) `orElse` return ()
+        mousePressEvent eventNotify _ _ GLFW.MouseButtonState'Released _ = atomically $ (writeTBQueue eventNotify $ Event 1 $ toDyn ()) `orElse` return ()
         mousePressEvent _           _ _ GLFW.MouseButtonState'Pressed  _ = return ()
-        keyPressEvent   eventNotify _ k _ GLFW.KeyState'Pressed  _       = atomically (writeTBQueue eventNotify $ KeyDown k)
-        keyPressEvent   eventNotify _ k _ GLFW.KeyState'Released _       = atomically (writeTBQueue eventNotify $ KeyUp   k)
+        keyPressEvent   eventNotify _ k _ GLFW.KeyState'Pressed  _       = atomically (writeTBQueue eventNotify $ Event (glfwKeyToEventKey k) $ toDyn True)
+        keyPressEvent   eventNotify _ k _ GLFW.KeyState'Released _       = atomically (writeTBQueue eventNotify $ Event (glfwKeyToEventKey k) $ toDyn False)
         keyPressEvent   eventNotify _ k _ _ _                            = return ()
-        dimensionsEvent eventNotify _ x y                                = atomically $ writeTBQueue eventNotify $ Dimensions (x,y)
+        dimensionsEvent eventNotify _ x y                                = atomically $ writeTBQueue eventNotify $ Event 2 $ toDyn (x,y)
 
         render quit window
             | quit      = print "Qutting" >> return ()
             | otherwise = do
                 GLFW.pollEvents
                 q <- liftA (== GLFW.KeyState'Pressed) (GLFW.getKey window GLFW.Key'Q)
-                threadDelay $ 16667 * 2
+                threadDelay $ 16667
                 render q window
 
---Event quantityID $ int2Dyn
-globalEventDispatch' :: (Show a) => TBQueue InputEvent -> SignalC a -> IO()
-globalEventDispatch' inBox signal = do
-    (flip State.runStateT) event0 $ forever $ do
-        (MousePosition (x,y)) <- State.liftIO $ atomically $ readTBQueue inBox
-        runSignalC $ do
-            s <- signal
-            State.liftIO $ print s
-            return ()
-        runEvent $ Event 0 $ int2Dyn (x,y)
-    return ()
-    where
-        int2Dyn :: (Double,Double) -> Dynamic
-        int2Dyn = toDyn
-  
+instance Num a => Num (Signal a) where
+    (+)         = liftA2 (+)
+    (*)         = liftA2 (*)
+    (-)         = liftA2 (-)
+    negate      = lift negate
+    abs         = lift abs
+    signum      = lift signum
+    fromInteger = pure . fromInteger
+
+instance Fractional a => Fractional (Signal a) where
+    (/) = liftA2 (/)
+    fromRational = pure . fromRational
+
+instance Floating a => Floating (Signal a) where
+    pi      = pure pi
+    (**)    = liftA2 (**)
+    exp     = lift exp
+    log     = lift log
+    sin     = lift sin
+    cos     = lift cos
+    asin    = lift asin
+    acos    = lift acos
+    atan    = lift atan
+    logBase = liftA2 logBase
+    sqrt    = lift sqrt
+    tan     = lift tan
+    tanh    = lift tanh
+    sinh    = lift sinh
+    cosh    = lift cosh
+    asinh   = lift asinh
+    atanh   = lift atanh
+    acosh   = lift acosh
+
+-- instance (Eq a) => Eq (Signal a) where
+    -- (==) = liftA2 (==)
+    -- (/=) = liftA2 (/=)
+
+-- instance (Eq a, Ord a) => Ord (Signal a) where
+    -- compare = liftA2 compare
+    -- max     = liftA2 max
+    -- min     = liftA2 min
+
+instance (Enum a) => Enum (Signal a) where
+    succ     = lift succ
+    pred     = lift pred
+    -- toEnum   = lift toEnum
+    -- fromEnum = pure
+                
+lift :: (a -> b) -> Signal a -> Signal b
+lift  = liftA
+
+lift2 :: (a -> b -> c) -> Signal a -> Signal b -> Signal c
+lift2 = liftA2
+
+lift3 :: (a -> b -> c -> d) -> Signal a -> Signal b -> Signal c -> Signal d
+lift3 = liftA3
+
+lift4 :: (a -> b -> c -> d -> e) -> Signal a -> Signal b -> Signal c -> Signal d -> Signal e
+lift4 f a b c d = f <~ a ~~ b ~~ c ~~ d
+
+lift5 :: (a -> b -> c -> d -> e -> f) -> Signal a -> Signal b -> Signal c -> Signal d -> Signal e -> Signal f
+lift5 f a b c d e = f <~ a ~~ b ~~ c ~~ d ~~ e
+
+lift6 :: (a -> b -> c -> d -> e -> f -> g) -> Signal a -> Signal b -> Signal c -> Signal d -> Signal e -> Signal f -> Signal g
+lift6 f a b c d e f' = f <~ a ~~ b ~~ c ~~ d ~~ e ~~ f'
+
+lift7 :: (a -> b -> c -> d -> e -> f -> g -> h) -> Signal a -> Signal b -> Signal c -> Signal d -> Signal e -> Signal f -> Signal g -> Signal h
+lift7 f a b c d e f' g = f <~ a ~~ b ~~ c ~~ d ~~ e ~~ f' ~~ g
+
+lift8 :: (a -> b -> c -> d -> e -> f -> g -> h -> i) -> Signal a -> Signal b -> Signal c -> Signal d -> Signal e -> Signal f -> Signal g -> Signal h -> Signal i
+lift8 f a b c d e f' g h = f <~ a ~~ b ~~ c ~~ d ~~ e ~~ f' ~~ g ~~ h
+
+---------------------------------------------
+-- Time
+---------------------------------------------
+
+millisecond :: Time
+millisecond = 0.001
+
+second :: Time
+second = 1
+
+minute :: Time
+minute = 60
+
+hour :: Time
+hour = 3600
+
+toMilliseconds :: Time -> Time
+toMilliseconds t = t / 0.001
+
+toMinutes :: Time -> Time
+toMinutes t = t / 60
+
+toHours :: Time -> Time
+toHours t = t / 3600
+
+-- timeLoop :: TBQueue InputEvent -> Int -> IO()
+-- timeLoop outBox millisecondDelta = forever $ do
+    -- t <- GLFW.getTime
+    -- case t of
+        -- Nothing    -> threadDelay millisecondDelta
+        -- Just time  -> do
+            -- atomically $ writeTBQueue outBox $ TimeEvent millisecondDelta time
+            -- threadDelay millisecondDelta
+
+---------------------------------------------
+-- Input
+---------------------------------------------
+
+--eventlist: 
+type Key  = GLFW.Key
+keyA = GLFW.Key'A
+keyB = GLFW.Key'B
+keyC = GLFW.Key'C
+keyD = GLFW.Key'D
+keyE = GLFW.Key'E
+keyF = GLFW.Key'F
+keyG = GLFW.Key'G
+keyH = GLFW.Key'H
+keyI = GLFW.Key'I
+keyJ = GLFW.Key'J
+keyK = GLFW.Key'K
+keyL = GLFW.Key'L
+keyM = GLFW.Key'M
+keyN = GLFW.Key'N
+keyO = GLFW.Key'O
+keyP = GLFW.Key'P
+keyQ = GLFW.Key'Q
+keyR = GLFW.Key'R
+keyS = GLFW.Key'S
+keyT = GLFW.Key'T
+keyU = GLFW.Key'U
+keyV = GLFW.Key'V
+keyW = GLFW.Key'W
+keyX = GLFW.Key'X
+keyY = GLFW.Key'Y
+keyZ = GLFW.Key'Z
+
+glfwKeyToEventKey :: GLFW.Key -> Int
+glfwKeyToEventKey k
+    | k == keyA = 100
+    | k == keyB = 101
+    | k == keyC = 102
+    | k == keyD = 103
+    | k == keyE = 104
+    | k == keyF = 105
+    | k == keyG = 106
+    | k == keyH = 107
+    | k == keyI = 108
+    | k == keyJ = 109
+    | k == keyK = 110
+    | k == keyL = 111
+    | k == keyM = 112
+    | k == keyN = 113
+    | k == keyO = 114
+    | k == keyP = 115
+    | k == keyQ = 116
+    | k == keyR = 117
+    | k == keyS = 118
+    | k == keyT = 119
+    | k == keyU = 120
+    | k == keyV = 121
+    | k == keyW = 122
+    | k == keyX = 123
+    | k == keyY = 124
+    | k == keyZ = 125
+
+getSignal :: Typeable a => Int -> Signal a
 getSignal = currentEventValue
+
+mousePos :: Signal (Double,Double)
+mousePos = getSignal 0
+
+mouseClicks :: Signal ()
+mouseClicks = getSignal 1
+
+dimensions :: Signal (Int,Int)
+dimensions = getSignal 2
+
+isDown :: Key -> Signal Bool
+isDown = getSignal . glfwKeyToEventKey
+
+wasd :: Signal (Double,Double)
+wasd = go <~ isDown keyW ~~ isDown keyA ~~ isDown keyS ~~ isDown keyD
+    where
+        go w a s d = (((if d then 1 else 0) + (if a then (-1) else 0)),((if w then 1 else 0) + (if s then (-1) else 0)))
 

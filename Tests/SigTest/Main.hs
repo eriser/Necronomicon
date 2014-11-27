@@ -3,7 +3,9 @@ import Necronomicon.FRP
 import Debug.Trace
 
 main :: IO()
-main = runCTest >> return ()
+-- main = runSignal $ isDown keyW
+-- main = runSignal $ (fst <~ mousePos) + (snd <~ mousePos)
+-- main = runSignal mouseClicks
 -- main = runSignal tonsOfMouseAndTime
 -- main = runSignal $ dropIf (\(x,y) -> x > 400) (0,0) mousePos
 -- main = runSignal $ keepIf (\(x,y) -> x > 400) (0,0) mousePos
@@ -14,23 +16,23 @@ main = runCTest >> return ()
 -- main = runSignal $ sampleOn mouseClicks doubleMouse <|> mousePos
 -- main = runSignal $ every second <|> fps 9.5
 -- main = runSignal multiPlay
--- main = runSignal wasd
+main = runSignal wasd
 -- main = runSignal $ combine [pure (666,-666),mousePos,mousePos]
 
-multiPlay :: Signal ()
-multiPlay = playOn beat (isDown keyP) (isDown keyS)
-        <|> playOn beat (isDown keyA) (isDown keyS)
-        <|> playOn beat (isDown keyB) (isDown keyS)
-        <|> playOn beat (isDown keyC) (isDown keyS)
-        <|> playOn beat (isDown keyD) (isDown keyS)
-    where
-        beat = 0
+-- multiPlay :: Signal ()
+-- multiPlay = playOn beat (isDown keyP) (isDown keyS)
+        -- <|> playOn beat (isDown keyA) (isDown keyS)
+        -- <|> playOn beat (isDown keyB) (isDown keyS)
+        -- <|> playOn beat (isDown keyC) (isDown keyS)
+        -- <|> playOn beat (isDown keyD) (isDown keyS)
+    -- where
+        -- beat = 0
 
 tonsOfMouseAndTime :: Signal (Double,Double)
 tonsOfMouseAndTime = tenThousandTest
     where
         tupleTest x _   = x
-        tupleTime       = (\x ->  (x,x)) <~ every second
+        tupleTime       = (\x ->  (x,x)) <~ mousePos
         test1           = tupleTest <~ mousePos
         tenTests        = test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ mousePos)))))))))
         test2           = tupleTest <~ tenTests
@@ -38,5 +40,5 @@ tonsOfMouseAndTime = tenThousandTest
         test3           = tupleTest <~ hundredTests
         thousandsTests  = test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ mousePos)))))))))
         test4           = tupleTest <~ thousandsTests
-        tenThousandTest = test4 ~~ (test4 ~~ mousePos)
+        tenThousandTest = test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ mousePos)))))))))
 
