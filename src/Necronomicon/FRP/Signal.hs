@@ -1,6 +1,6 @@
 module Necronomicon.FRP.Signal (
     Signal,
-    -- foldp,
+    foldp,
     (<~),
     (~~),
     -- (=<~),
@@ -596,50 +596,44 @@ playOn _ (Signal player) (Signal stopper) = Signal $ \broadcastInbox -> do
 ---------------------------------------------
 
 data    Event    = Event Int Dynamic
-newtype Signal a = Signal {runSignalState :: (State.State EventF (Maybe a))}
+newtype Signal a = Signal {unwrapState :: (State.State EventF (Maybe a))}
 
 instance Monad Signal where
     return x = Signal . return $ Just x
     x >>= f = Signal $ do
         cont <- setEventCont x f
-        mk   <- runSignalState x
+        mk   <- unwrapState x
         resetEventCont cont
         case mk of
-            Just k  -> runSignalState $ f k
+            Just k  -> unwrapState $ f k
             Nothing -> return Nothing
                
 instance  Functor Signal where
-    fmap f x = Signal $ fmap (fmap f) $ runSignalState x
+    fmap f x = Signal $ fmap (fmap f) $ unwrapState x
 
 instance Applicative Signal where
     pure  = return
     f <*> g = Signal $ do
-        k <- runSignalState f
-        x <- runSignalState g
+        k <- unwrapState f
+        x <- unwrapState g
         return $ k <*> x
 
-instance Alternative Signal where
-    empty = Signal $ return Nothing
-    f <|> g = Signal $ do
-        x <- runSignalState f
-        y <- runSignalState g
-        return $ x <|> y
-
 data EventF = forall a b. EventF {
-    eventHandlers :: IntMap.IntMap EventF,
-    currentEvent  :: Maybe Event,
-    eventValues   :: IntMap.IntMap Dynamic,
-    xcomp         :: Signal a,
-    fcomp         :: [a -> Signal b]
+    eventHandlers  :: IntMap.IntMap EventF,
+    currentEvent   :: Maybe Event,
+    eventValues    :: IntMap.IntMap Dynamic,
+    xcomp          :: Signal a,
+    fcomp          :: [a -> Signal b],
+    prevState      :: Maybe Dynamic
     }
 
 currentEventValue :: Typeable a => Int -> Signal a
 currentEventValue uid = Signal $ do
-  st <- State.get -- !> "currValue"
-  case IntMap.lookup uid (eventValues st) of
-      Nothing -> waitEvent uid
-      -- Just v  -> return $ fromDyn v (error "currentEventValue: type error") 
-      Just v  -> return $ fromDynamic v
+    st <- State.get -- !> "currValue"
+    case IntMap.lookup uid (eventValues st) of
+        Nothing -> waitEvent uid
+        -- Just v  -> return $ fromDyn v (error "currentEventValue: type error") 
+        Just v  -> return $ fromDynamic v
 
 waitEvent :: Typeable a => Int -> State.State EventF (Maybe a)
 waitEvent uid = do
@@ -669,23 +663,23 @@ eventValue uid =  do
 
 setEventCont :: (Signal a) -> (a -> Signal b) -> State.State EventF EventF
 setEventCont x f = do
-   st@(EventF es c vs x' fs) <- State.get
-   State.put $ EventF es c vs  x ( f : Unsafe.unsafeCoerce fs) -- st{xcomp=  x, fcomp=  f: unsafeCoerce fs}
-   return st
+    st@(EventF es c vs x' fs prev) <- State.get
+    State.put $ EventF es c vs  x ( f : Unsafe.unsafeCoerce fs) (Unsafe.unsafeCoerce prev) -- st{xcomp=  x, fcomp=  f: unsafeCoerce fs}
+    return st
 
 resetEventCont :: EventF -> State.State EventF ()
 resetEventCont cont = do
-      st <- State.get
-      State.put cont{eventHandlers = eventHandlers st, eventValues = eventValues st, currentEvent = currentEvent st}
+    st <- State.get
+    State.put cont{eventHandlers = eventHandlers st, eventValues = eventValues st, currentEvent = currentEvent st}
 
 runCont :: EventF -> State.State EventF ()
-runCont (EventF _ _ _ x fs) = do
+runCont (EventF _ _ _ x fs _) = do
     run x (Unsafe.unsafeCoerce fs)
     return ()
-   where
-      run      x fs  = runSignalState $ x >>= compose fs
-      compose []     = const empty
-      compose (f:fs) = \x -> f x >>= compose fs
+    where
+        run      x fs  = unwrapState $ x >>= compose fs
+        compose []     = const (Signal $ return Nothing)
+        compose (f:fs) = \x -> f x >>= compose fs
 
 accuracyTest :: Signal (Double,Double)
 accuracyTest = subtract <~ mousePos ~~ (liftA (\(x,y) -> (x* (-1),y)) mousePos)
@@ -696,21 +690,65 @@ accuracyTest = subtract <~ mousePos ~~ (liftA (\(x,y) -> (x* (-1),y)) mousePos)
 
 runEvent :: Event -> State.State EventF ()
 runEvent (ev@(Event uid _)) = do
-   (State.modify $ \st -> st{currentEvent = Just ev ,eventValues = IntMap.delete uid $ eventValues st}) -- !> ("inject event:" ++ show uid)
-   ths <- State.gets eventHandlers
-   case IntMap.lookup uid ths of
-      Just st -> runCont st  -- !> ("execute event handler for: "++ show uid) 
-      Nothing -> return ()   -- !> "no handler for the event"
-
-event0 :: EventF
-event0 = EventF IntMap.empty Nothing IntMap.empty (empty) [const $ empty]
+    (State.modify $ \st -> st{currentEvent = Just ev ,eventValues = IntMap.delete uid $ eventValues st}) -- !> ("inject event:" ++ show uid)
+    ths <- State.gets eventHandlers
+    case IntMap.lookup uid ths of
+        Just st -> runCont st  -- !> ("execute event handler for: "++ show uid) 
+        Nothing -> return ()   -- !> "no handler for the event"
 
 globalEventDispatch :: (Typeable a, Show a) => TBQueue Event -> Signal a -> EventF-> IO()
 globalEventDispatch inBox signal eventf = do
     e <- atomically $ readTBQueue inBox
-    let (a,eventf') = State.runState (runEvent e >> runSignalState signal) eventf
+    let (a,eventf') = State.runState (runEvent e >> unwrapState signal) eventf
     print a
     globalEventDispatch inBox signal eventf'
+
+--------------------------------------
+-- Alternative Instance
+--------------------------------------
+
+--Would prefer this to act like Elm merge behavior
+-- instance Alternative Signal where
+    -- empty = Signal $ return Nothing
+    -- f <|> g = Signal $ do
+        -- x <- runSignalState f
+        -- y <- runSignalState g
+        -- return $ x <|> y
+
+-- currentEventValueAlt :: Typeable a => Int -> Signal a
+-- currentEventValueAlt uid = Signal $ do
+    -- waitEvent uid
+    -- st <- State.get -- !> "currValue"
+    -- case IntMap.lookup uid (eventValues st) of
+        -- Nothing -> waitEvent uid
+        -- Just v  -> return $ fromDyn v (error "currentEventValue: type error") 
+        -- Just v  -> return $ fromDynamic v
+
+-- waitEventAlt :: Typeable a => Int -> State.State EventF (Maybe a)
+-- waitEventAlt uid = do
+    -- st <- State.get -- !> "waitEvent"
+    -- let evs = eventHandlers st 
+    -- case IntMap.lookup uid evs of
+        -- Nothing ->  do
+            -- State.put st{eventHandlers = IntMap.insert uid st evs} -- !> ("created event handler for: "++ show id)
+            -- return Nothing 
+        -- Just _ ->  do
+            -- State.put st{eventHandlers = IntMap.insert uid st evs} -- !> ("upadated event handler for: "++ show id)
+            -- eventValue uid
+
+-- eventValueAlt :: Typeable a => Int -> State.State EventF (Maybe a)
+-- eventValueAlt uid =  do
+    -- st <- State.get
+    -- let me = currentEvent st
+    -- case me of
+        -- Nothing -> return Nothing -- !> "NO current EVENT"
+        -- Just (Event uid r) -> do
+            -- if uid /= uid then return Nothing else do
+                -- case fromDynamic r of
+                    -- Nothing -> return Nothing 
+                    -- Just x -> do
+                        -- State.put st{eventValues = IntMap.insert uid r $ eventValues st}
+                        -- return $ Just x
 
 --------------------------------------
 -- RunTime
@@ -834,26 +872,21 @@ lift8 f a b c d e f' g h = f <~ a ~~ b ~~ c ~~ d ~~ e ~~ f' ~~ g ~~ h
 -- Time
 ---------------------------------------------
 
-millisecond :: Time
-millisecond = 0.001
-
-second :: Time
-second = 1
-
-minute :: Time
-minute = 60
-
-hour :: Time
-hour = 3600
-
+millisecond    :: Time
+second         :: Time
+minute         :: Time
+hour           :: Time
 toMilliseconds :: Time -> Time
+toMinutes      :: Time -> Time
+toHours        :: Time -> Time
+
+millisecond      = 0.001
+second           = 1
+minute           = 60
+hour             = 3600
 toMilliseconds t = t / 0.001
-
-toMinutes :: Time -> Time
-toMinutes t = t / 60
-
-toHours :: Time -> Time
-toHours t = t / 3600
+toMinutes      t = t / 60
+toHours        t = t / 3600
 
 -- timeLoop :: TBQueue InputEvent -> Int -> IO()
 -- timeLoop outBox millisecondDelta = forever $ do
@@ -867,6 +900,9 @@ toHours t = t / 3600
 ---------------------------------------------
 -- Input
 ---------------------------------------------
+
+event0 :: EventF
+event0 = EventF IntMap.empty Nothing IntMap.empty (Signal $ return Nothing) [const $ Signal $ return Nothing] Nothing
 
 --eventlist: 
 type Key  = GLFW.Key
@@ -925,24 +961,38 @@ glfwKeyToEventKey k
     | k == keyX = 123
     | k == keyY = 124
     | k == keyZ = 125
+    | otherwise = -1
 
 getSignal :: Typeable a => Int -> Signal a
 getSignal = currentEventValue
 
-mousePos :: Signal (Double,Double)
-mousePos = getSignal 0
-
+mousePos    :: Signal (Double,Double)
 mouseClicks :: Signal ()
+dimensions  :: Signal (Int,Int)
+isDown      :: Key -> Signal Bool
+wasd        :: Signal (Double,Double)
+
+mousePos    = getSignal 0
 mouseClicks = getSignal 1
-
-dimensions :: Signal (Int,Int)
-dimensions = getSignal 2
-
-isDown :: Key -> Signal Bool
-isDown = getSignal . glfwKeyToEventKey
-
-wasd :: Signal (Double,Double)
-wasd = go <~ isDown keyW ~~ isDown keyA ~~ isDown keyS ~~ isDown keyD
+dimensions  = getSignal 2
+isDown      = getSignal . glfwKeyToEventKey
+wasd        = go <~ isDown keyW ~~ isDown keyA ~~ isDown keyS ~~ isDown keyD
     where
         go w a s d = (((if d then 1 else 0) + (if a then (-1) else 0)),((if w then 1 else 0) + (if s then (-1) else 0)))
 
+foldp :: (Typeable b,Show b) => (a -> b -> b) -> b -> Signal a -> Signal b
+foldp f bInit a = Signal $ do
+    (EventF _ _ _ _ _ prev) <- State.get
+    a' <- unwrapState a
+    let result = fmap ((flip f ) (getB prev)) a'
+    (State.modify $ \(EventF es c vs x fs _) -> EventF es c vs x fs (Just $ toDyn $ result' result))
+    return result
+    where
+        result' r = case r of
+            Nothing -> bInit
+            Just r' -> r'
+        getB Nothing  = traceShow "bInit" $ bInit
+        getB (Just b) = case fromDynamic b of
+            Nothing -> traceShow "foldp type error" $ bInit
+            Just b' -> traceShow ("just b': " ++ show b') $ b'
+    
