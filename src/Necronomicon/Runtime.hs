@@ -52,7 +52,7 @@ collectMailbox mailBox = collectWorker []
             maybeMessage <- atomically $ tryReadTChan mailBox
             case maybeMessage of
                 Nothing -> return messages
-                Just message -> collectWorker (message:messages)
+                Just message -> collectWorker (message : messages)
 
 processMessages :: Necronomicon -> [RuntimeMessage] -> IO ()
 processMessages n@(Necronomicon threadId mailBox nextNodeId synthDefs running) messages =  mapM_ (processMessage) messages
@@ -65,7 +65,7 @@ processMessages n@(Necronomicon threadId mailBox nextNodeId synthDefs running) m
 
 startNrtRuntime :: Necronomicon -> IO ()
 startNrtRuntime n@(Necronomicon threadId mailBox nextNodeId synthDefs running) = do
-    initNrtThread
+    waitForRTStarted
     atomically (writeTVar running True)
     nrtThreadId <- forkIO nrtThread
     atomically (writeTVar threadId nrtThreadId)
@@ -95,18 +95,31 @@ addSynthDef (Necronomicon _ _ _ synthDefs _) synthDef = do
 necronomiconEndSequence :: Necronomicon -> IO ()
 necronomiconEndSequence (Necronomicon _ _ _ synthDefs running) = do
     shutdownNecronomiconCRuntime
-    waitForRTShutdown
+    waitForRtFinished
     synthDefs' <- atomically (readTVar synthDefs)
     mapM_ (freeUGen) synthDefs'
     atomically (writeTVar running False)
-    where
-        waitForRTShutdown = do
-            rtRunning <- getRtRunning
-            case rtRunning > 0 of
-                True -> do
-                    threadDelay 1000
-                    waitForRTShutdown
-                False -> return ()
+
+rtFinishedStatus :: Int
+rtFinishedStatus = 0
+
+rtStartedStatus :: Int
+rtStartedStatus = 1
+
+waitForRTStatus :: Int -> IO ()
+waitForRTStatus status = do
+    rtRunning <- getRtRunning
+    case rtRunning == status of
+        False -> do
+            threadDelay 1000
+            waitForRTStatus status
+        _ -> return ()
+
+waitForRTStarted :: IO ()
+waitForRTStarted = waitForRTStatus rtStartedStatus
+
+waitForRtFinished :: IO ()
+waitForRtFinished = waitForRTStatus rtFinishedStatus
 
 data Signal = Signal {-# UNPACK #-} !CDouble {-# UNPACK #-} !CDouble
 
@@ -139,7 +152,6 @@ instance Storable CUGen where
         pokeByteOff ptr 16 numArgs
 
 foreign import ccall "start_rt_runtime" startRtRuntime :: IO ()
-foreign import ccall "init_nrt_thread" initNrtThread :: IO ()
 foreign import ccall "handle_messages_in_nrt_fifo" handleNrtMessages :: IO ()
 foreign import ccall "shutdown_necronomicon" shutdownNecronomiconCRuntime :: IO ()
 foreign import ccall "play_synth" playSynthInRtRuntime :: SynthDef -> CDouble -> CUInt -> IO ()

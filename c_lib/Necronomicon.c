@@ -767,6 +767,12 @@ void doubly_linked_list_free(doubly_linked_list list)
 
 unsigned int absolute_time = 0;
 bool necronomicon_running = false;
+doubly_linked_list nrt_free_node_list = NULL;
+const unsigned int max_node_pool_count = 500;
+const unsigned int initial_node_count = 250;
+unsigned int node_pool_count = 0;
+synth_node default_node = { 0, NULL, NULL, NULL, 0, 0 };
+unsigned int next_node_id = 1000;
 
 void init_rt_thread()
 {
@@ -786,11 +792,35 @@ void init_rt_thread()
 
 	initialize_wave_tables();
 	current_node = NULL;
+	
+	puts("Initializing non-real-time thread...");
+	assert(nrt_fifo == NULL);
+	nrt_fifo = new_message_fifo();
+	node_pool_count = 0;
+	next_node_id = 1000;
+	
+	// Pre-allocate some ugen nodes for runtime
+	while (node_pool_count < initial_node_count)
+	{
+		nrt_free_node_list = doubly_linked_list_push(nrt_free_node_list, new_synth_node(0, NULL));
+		++node_pool_count;
+	}
+
 	necronomicon_running = true;
 }
 
 void shutdown_rt_thread()
 {
+	puts("shutting down non-real-time thread...");
+	assert(nrt_fifo != NULL);
+
+	nrt_fifo_free();
+	doubly_linked_list_free(nrt_free_node_list);
+
+	nrt_fifo = NULL;
+	nrt_free_node_list = NULL;
+	node_pool_count = 0;
+	
 	puts("Shutting down real-time thread...");
 	assert(synth_table != NULL);
 	assert(rt_fifo != NULL);
@@ -923,42 +953,6 @@ void handle_messages_in_rt_fifo()
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // NRT thread Synth Node Handling
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-doubly_linked_list nrt_free_node_list = NULL;
-const unsigned int max_node_pool_count = 500;
-const unsigned int initial_node_count = 250;
-unsigned int node_pool_count = 0;
-synth_node default_node = { 0, NULL, NULL, NULL, 0, 0 };
-unsigned int next_node_id = 1000;
-
-void init_nrt_thread()
-{
-	puts("Initializing non-real-time thread...");
-	assert(nrt_fifo == NULL);
-	nrt_fifo = new_message_fifo();
-	node_pool_count = 0;
-	next_node_id = 1000;
-	
-	// Pre-allocate some ugen nodes for runtime
-	while (node_pool_count < initial_node_count)
-	{
-		nrt_free_node_list = doubly_linked_list_push(nrt_free_node_list, new_synth_node(0, NULL));
-		++node_pool_count;
-	}
-}
-
-void shutdown_nrt_thread()
-{
-	puts("shutting down non-real-time thread...");
-	assert(nrt_fifo != NULL);
-
-	nrt_fifo_free();
-	doubly_linked_list_free(nrt_free_node_list);
-
-	nrt_fifo = NULL;
-	nrt_free_node_list = NULL;
-	node_pool_count = 0;
-}
 
 void nrt_free_node(synth_node* node)
 {
@@ -1204,7 +1198,6 @@ void shutdown_necronomicon()
 {
 	message msg = { NULL, SHUTDOWN };
 	RT_FIFO_PUSH(msg);
-	shutdown_nrt_thread();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
