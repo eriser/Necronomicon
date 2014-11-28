@@ -814,7 +814,6 @@ void shutdown_rt_thread()
 
 int get_running()
 {
-	printf("get_running() -> %i\n", (necronomicon_running == true));
 	return (necronomicon_running == true);
 }
 
@@ -1205,15 +1204,7 @@ void shutdown_necronomicon()
 {
 	message msg = { NULL, SHUTDOWN };
 	RT_FIFO_PUSH(msg);
-
-	// Wait for RT thread to finish.
-	while(necronomicon_running == true)
-	{	
-		sleep(100);
-	}
-	
 	shutdown_nrt_thread();
-	puts("Necronomicon shut down.");
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

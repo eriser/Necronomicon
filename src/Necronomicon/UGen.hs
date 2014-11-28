@@ -36,7 +36,7 @@ infixl 1 ~>
 data UGen = UGenFunc Calc [UGen] | UGenNum Double | UGenList [UGen]
 
 compileSynthDef :: Necronomicon -> UGen -> IO SynthDef
-compileSynthDef (Necronomicon _ mailBox _ _) synth = do
+compileSynthDef (Necronomicon _ mailBox _ _ _) synth = do
     ugen <- compileUGen synth
     synthDef <- new ugen
     atomically (writeTChan mailBox (CollectSynthDef synthDef))
@@ -46,13 +46,13 @@ printSynthDef :: SynthDef -> IO ()
 printSynthDef synthDef = printUGen synthDef 0
 
 playSynth :: Necronomicon -> SynthDef -> CDouble -> IO NodeID
-playSynth !necro@(Necronomicon _ mailBox _ _) !synthDef !time = do
+playSynth !necro@(Necronomicon _ mailBox _ _ _) !synthDef !time = do
     id <- atomically (incrementNodeId necro)
     atomically (writeTChan mailBox (StartSynth synthDef time id))
     return id
 
 stopSynth :: Necronomicon -> NodeID -> IO ()
-stopSynth (Necronomicon _ mailBox _ _) id = atomically (writeTChan mailBox (StopSynth id))
+stopSynth (Necronomicon _ mailBox _ _ _) id = atomically (writeTChan mailBox (StopSynth id))
 
 class UGenComponent a where
     toUGen :: a -> UGen
