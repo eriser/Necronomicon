@@ -16,8 +16,12 @@ playSynths necronomicon synthDef i
 main :: IO ()
 main = do
        necronomicon <- startNecronomicon
-       synthDef <- U.compileSynthDef necronomicon U.lineSynth
-       playSynths necronomicon synthDef 20
-       U.printSynthDef synthDef
+       lineSynthDef <- U.compileSynthDef necronomicon U.lineSynth
+       playSynths necronomicon lineSynthDef 20
+       U.printSynthDef lineSynthDef
        threadDelay 5000000
+       myCoolSynthDef <- U.compileSynthDef necronomicon U.myCoolSynth
+       nodeID <- U.playSynth necronomicon myCoolSynthDef 0
+       print "Waiting for user input..."
+       _ <- getLine
        shutdownNecronomicon necronomicon

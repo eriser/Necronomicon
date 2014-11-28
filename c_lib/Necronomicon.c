@@ -741,6 +741,9 @@ doubly_linked_list doubly_linked_list_remove(doubly_linked_list list, synth_node
 
 	if (next)
 		next->previous = previous;
+
+	node->previous = NULL;
+	node->next = NULL;
 	
 	if (node == list) // If the node was the head of the list, return the next node as the head of the list
 		return next;
@@ -782,6 +785,7 @@ void init_rt_thread()
 	absolute_time = 0;
 
 	initialize_wave_tables();
+	current_node = NULL;
 	necronomicon_running = true;
 }
 
@@ -801,10 +805,17 @@ void shutdown_rt_thread()
 	
 	synth_table = NULL;
 	rt_fifo = NULL;
+	current_node = NULL;
 	scheduled_node_list = NULL;
 	synth_list = NULL;
 	removal_fifo = NULL;
 	necronomicon_running = false;
+}
+
+int get_running()
+{
+	printf("get_running() -> %i\n", (necronomicon_running == true));
+	return (necronomicon_running == true);
 }
 
 void add_synth(synth_node* node)

@@ -16,14 +16,14 @@ type RunTimeMailbox = TChan RuntimeMessage
 
 data Necronomicon = Necronomicon { necroNrtThreadId :: ThreadId, necroMailbox :: RunTimeMailbox, necroNextNodeId :: TVar NodeID, necroRunning :: TVar Bool }
 
-waitForReadyStatus :: TVar Bool -> Bool -> IO ()
-waitForReadyStatus running status = do
+waitForRunningStatus :: TVar Bool -> Bool -> IO ()
+waitForRunningStatus running status = do
     isReady <- atomically $ readTVar running
     case isReady of
         status -> return ()
         _      -> do
             threadDelay 1000
-            waitForReadyStatus running status
+            waitForRunningStatus running status
 
 startNecronomicon :: IO Necronomicon
 startNecronomicon = do
@@ -32,14 +32,14 @@ startNecronomicon = do
     running <- atomically $ newTVar True
     nrtThreadId <- startNrtRuntime mailBox running
     nextNodeId <- atomically $ newTVar 1000
-    waitForReadyStatus running True
+    waitForRunningStatus running True
     return (Necronomicon nrtThreadId mailBox nextNodeId running)
 
 shutdownNecronomicon :: Necronomicon -> IO ()
 shutdownNecronomicon (Necronomicon nrtThread mailBox nextNodeId running) = do
+    shutdownNecronomiconRtRuntime
     atomically $ writeTChan mailBox ShutdownNrt
-    waitForReadyStatus running False
-    shutdownNecronomiconRuntime
+    waitForRunningStatus running False
     
 collectMailbox :: RunTimeMailbox -> IO [RuntimeMessage]
 collectMailbox mailBox = collectWorker []
@@ -88,10 +88,19 @@ startNrtRuntime mailBox necroRunning = do
                     threadDelay 10000
                     nrtThread synthDefs'
                 False -> do
+                    waitForRTShutdown
                     print "SHUTTING DOWN NRT!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
                     print (synthDefs')
                     mapM_ (freeUGen) synthDefs'
                     atomically (writeTVar necroRunning False)
+                    where
+                        waitForRTShutdown = do
+                            rtRunning <- getRtRunning
+                            case rtRunning > 0 of
+                                True -> do
+                                    threadDelay 1000
+                                    waitForRTShutdown
+                                False -> return ()
 
 incrementNodeId :: Necronomicon -> STM NodeID
 incrementNodeId (Necronomicon _ _ nextNodeId _) = do
@@ -132,7 +141,8 @@ instance Storable CUGen where
 foreign import ccall "start_rt_runtime" startRtRuntime :: IO ()
 foreign import ccall "init_nrt_thread" initNrtThread :: IO ()
 foreign import ccall "handle_messages_in_nrt_fifo" handleNrtMessage :: IO ()
-foreign import ccall "shutdown_necronomicon" shutdownNecronomiconRuntime :: IO ()
+foreign import ccall "shutdown_necronomicon" shutdownNecronomiconRtRuntime :: IO ()
 foreign import ccall "play_synth" playSynthInRtRuntime :: SynthDef -> CDouble -> CUInt -> IO ()
 foreign import ccall "stop_synth" stopSynthInRtRuntime :: NodeID -> IO ()
 foreign import ccall "free_ugen" freeUGen :: SynthDef -> IO ()
+foreign import ccall "get_running" getRtRunning :: IO Int
