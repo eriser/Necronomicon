@@ -99,5 +99,6 @@ executable AudioEngineTest
     build-depends:
         base             == 4.*,
         hosc             >= 0.14,
+        mtl              >= 2.1.3.0,
         Necronomicon
 		

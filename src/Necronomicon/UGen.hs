@@ -13,13 +13,10 @@ import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.STM
 import Necronomicon.Runtime
+import Control.Monad.Trans
 
 import Prelude hiding (fromRational,sin,(+),(*),(/))
 import qualified Prelude as P (fromRational,fromIntegral,sin,(+),(*),(/))
-
-ifThenElse :: Bool -> a -> a -> a
-ifThenElse True a _ = a
-ifThenElse False _ b = b
 
 -- foreign import ccall "sin" c_sin :: CDouble -> CDouble
 
@@ -35,24 +32,24 @@ infixl 1 ~>
 
 data UGen = UGenFunc Calc [UGen] | UGenNum Double | UGenList [UGen]
 
-compileSynthDef :: Necronomicon -> UGen -> IO SynthDef
-compileSynthDef (Necronomicon _ mailBox _ _ _) synth = do
-    ugen <- compileUGen synth
-    synthDef <- new ugen
-    atomically (writeTChan mailBox (CollectSynthDef synthDef))
+compileSynthDef :: UGen -> Necronomicon SynthDef
+compileSynthDef synth = do
+    ugen <- liftIO $ compileUGen synth
+    synthDef <- liftIO $ new ugen
+    sendMessage (CollectSynthDef synthDef)
     return synthDef
 
-printSynthDef :: SynthDef -> IO ()
-printSynthDef synthDef = printUGen synthDef 0
+printSynthDef :: SynthDef -> Necronomicon ()
+printSynthDef synthDef = liftIO $ printUGen synthDef 0
 
-playSynth :: Necronomicon -> SynthDef -> CDouble -> IO NodeID
-playSynth !necro@(Necronomicon _ mailBox _ _ _) !synthDef !time = do
-    id <- atomically (incrementNodeId necro)
-    atomically (writeTChan mailBox (StartSynth synthDef time id))
+playSynth :: SynthDef -> CDouble -> Necronomicon NodeID
+playSynth synthDef time = do
+    id <- incrementNodeID
+    sendMessage (StartSynth synthDef time id)
     return id
 
-stopSynth :: Necronomicon -> NodeID -> IO ()
-stopSynth (Necronomicon _ mailBox _ _ _) id = atomically (writeTChan mailBox (StopSynth id))
+stopSynth :: NodeID -> Necronomicon ()
+stopSynth id = sendMessage (StopSynth id)
 
 class UGenComponent a where
     toUGen :: a -> UGen
@@ -71,30 +68,30 @@ sin :: UGenComponent a => a -> UGen
 sin freq = UGenFunc sinCalc [toUGen freq]
 
 foreign import ccall "&delayCalc" delayCalc :: Calc
-delay :: (UGenComponent a,UGenComponent b) => a -> b -> UGen
+delay :: (UGenComponent a, UGenComponent b) => a -> b -> UGen
 delay amount input = UGenFunc delayCalc [toUGen amount, toUGen input]
 
 foreign import ccall "&addCalc" addCalc :: Calc
-add :: (UGenComponent a,UGenComponent b) => a -> b -> UGen
+add :: (UGenComponent a, UGenComponent b) => a -> b -> UGen
 add a b = UGenFunc addCalc [toUGen a, toUGen b]
 
 foreign import ccall "&minusCalc" minusCalc :: Calc
-minus :: (UGenComponent a,UGenComponent b) => a -> b -> UGen
+minus :: (UGenComponent a, UGenComponent b) => a -> b -> UGen
 minus a b = UGenFunc minusCalc [toUGen a, toUGen b]
 
 foreign import ccall "&mulCalc" mulCalc :: Calc
-mul :: (UGenComponent a,UGenComponent b) => a -> b -> UGen
+mul :: (UGenComponent a, UGenComponent b) => a -> b -> UGen
 mul a b = UGenFunc mulCalc [toUGen a, toUGen b]
 
-gain :: (UGenComponent a,UGenComponent b) => a -> b -> UGen
+gain :: (UGenComponent a, UGenComponent b) => a -> b -> UGen
 gain = mul
 
 foreign import ccall "&udivCalc" divCalc :: Calc
-udiv :: (UGenComponent a,UGenComponent b) => a -> b -> UGen
+udiv :: (UGenComponent a, UGenComponent b) => a -> b -> UGen
 udiv a b = UGenFunc divCalc [toUGen a, toUGen b]
 
 foreign import ccall "&timeWarpCalc" timeWarpCalc :: Calc
-timeWarp :: (UGenComponent a,UGenComponent b) => a -> b -> UGen
+timeWarp :: (UGenComponent a, UGenComponent b) => a -> b -> UGen
 timeWarp speed input = UGenFunc timeWarpCalc [toUGen speed, toUGen input]
 
 foreign import ccall "&line_calc" lineCalc :: Calc

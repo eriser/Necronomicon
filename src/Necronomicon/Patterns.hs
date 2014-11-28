@@ -15,6 +15,7 @@ import Data.Monoid
 import System.CPUTime
 import Sound.OSC.Time
 import qualified Data.Fixed as F
+import Necronomicon.Runtime
 
 (~>) :: a -> (a -> b) -> b
 (~>) a f = f a
@@ -77,10 +78,6 @@ instance Arrow PArr where
 ------------------------
 -- Pattern Functions
 ------------------------
-
-ifThenElse :: Bool -> a -> a -> a
-ifThenElse True a _ = a
-ifThenElse False _ b = b
 
 stdGen :: StdGen
 stdGen = mkStdGen 1

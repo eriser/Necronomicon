@@ -5,23 +5,26 @@ import Control.Concurrent
 import Sound.OSC.Time
 import qualified Necronomicon.UGen as U
 import Necronomicon.Runtime
+import Control.Monad.Trans
 
-playSynths :: Necronomicon -> SynthDef -> Int -> IO ()
-playSynths necronomicon synthDef i
+playSynths :: SynthDef -> Int -> Necronomicon ()
+playSynths synthDef i
     | i <= 0 = return ()
     | otherwise = do
-        nodeId <- U.playSynth necronomicon synthDef (fromIntegral i * 44100.0 * 0.2)
-        playSynths necronomicon synthDef (i - 1)
+        nodeId <- U.playSynth synthDef (fromIntegral i * 44100.0 * 0.2)
+        playSynths synthDef (i - 1)
+
+engineTest :: Necronomicon ()
+engineTest = do
+    lineSynthDef <- U.compileSynthDef U.lineSynth
+    playSynths lineSynthDef 20
+    U.printSynthDef lineSynthDef
+    nThreadDelay 5000000
+    myCoolSynthDef <- U.compileSynthDef U.myCoolSynth
+    nodeID <- U.playSynth myCoolSynthDef 0
+    nPrint "Waiting for user input..."
+    _ <- liftIO $ getLine
+    return ()
         
 main :: IO ()
-main = do
-       necronomicon <- startNecronomicon
-       lineSynthDef <- U.compileSynthDef necronomicon U.lineSynth
-       playSynths necronomicon lineSynthDef 20
-       U.printSynthDef lineSynthDef
-       threadDelay 5000000
-       myCoolSynthDef <- U.compileSynthDef necronomicon U.myCoolSynth
-       nodeID <- U.playSynth necronomicon myCoolSynthDef 0
-       print "Waiting for user input..."
-       _ <- getLine
-       shutdownNecronomicon necronomicon
+main = runNecronomicon engineTest
