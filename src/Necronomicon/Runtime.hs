@@ -165,13 +165,13 @@ startNrtRuntime = do
                     setRunning NecroRunning
                     necroNrtThreadFunc
                 necroNrtThreadFunc = do
-                    running' <- getRunning
-                    case running' of
+                    running <- getRunning
+                    case running of
                         NecroRunning -> do
                             messages <- collectMailbox
                             processMessages messages
                             liftIO $ handleNrtMessages
-                            nThreadDelay 10000
+                            nThreadDelay 5000
                             necroNrtThreadFunc
                         _ -> return ()
 
