@@ -98,5 +98,6 @@ executable AudioEngineTest
     default-extensions:
     build-depends:
         base             == 4.*,
+        hosc             >= 0.14,
         Necronomicon
 		

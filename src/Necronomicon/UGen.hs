@@ -46,7 +46,7 @@ printSynthDef :: SynthDef -> IO ()
 printSynthDef synthDef = printUGen synthDef 0
 
 playSynth :: Necronomicon -> SynthDef -> CDouble -> IO NodeID
-playSynth necro@(Necronomicon _ mailBox _ _) synthDef time = do
+playSynth !necro@(Necronomicon _ mailBox _ _) !synthDef !time = do
     id <- atomically (incrementNodeId necro)
     atomically (writeTChan mailBox (StartSynth synthDef time id))
     return id
@@ -97,6 +97,9 @@ foreign import ccall "&timeWarpCalc" timeWarpCalc :: Calc
 timeWarp :: (UGenComponent a,UGenComponent b) => a -> b -> UGen
 timeWarp speed input = UGenFunc timeWarpCalc [toUGen speed, toUGen input]
 
+foreign import ccall "&line_calc" lineCalc :: Calc
+line :: (UGenComponent a) => a -> UGen
+line length = UGenFunc lineCalc [toUGen length]
 
 -- (/) :: UGenComponent a => a -> a -> UGen
 -- (/) = udiv
@@ -179,6 +182,10 @@ myCoolSynth = sig + timeWarp 0.475 sig + timeWarp 0.3 sig ~> gain 0.05 ~> t ~> t
         sig   = sin (mod1 + mod2) * 0.5
         mod1  = sin 40.3 * 44.0 + 5.0
         mod2  = 0.4 + sin (mod1 + 2.1 ~> gain 0.025 ) ~> gain 60.0
+
+
+lineSynth :: UGen
+lineSynth = sin 440.0 * line 0.5 * 0.3
 
 --data mine the dsp compiling shit and all of the networking shit for background noise
 
