@@ -15,7 +15,7 @@ library
     Include-Dirs: 		c_lib
     Install-Includes:	Necronomicon.h
     ghc-options:        -threaded -O3 -Wall
-    default-extensions: FlexibleInstances MultiParamTypeClasses RebindableSyntax ForeignFunctionInterface QuasiQuotes TemplateHaskell DeriveDataTypeable BangPatterns ExistentialQuantification FlexibleContexts
+    default-extensions: FlexibleInstances MultiParamTypeClasses RebindableSyntax ForeignFunctionInterface QuasiQuotes TemplateHaskell DeriveDataTypeable BangPatterns ExistentialQuantification FlexibleContexts Rank2Types
 
     exposed-modules:
         Necronomicon

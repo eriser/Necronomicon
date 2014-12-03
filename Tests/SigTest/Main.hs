@@ -16,11 +16,13 @@ main :: IO()
 -- main = runSignal $ sampleOn mouseClicks doubleMouse <|> mousePos
 -- main = runSignal $ every second <|> fps 9.5
 -- main = runSignal multiPlay
--- main = runSignal wasd
+-- main = runSignal mousePos'
 -- main = runSignal $ combine [pure (666,-666),mousePos,mousePos]
-main = runSignal $ p - p
+main = runSignal $ p1 -- $ (p2 + lift snd p') - (p1 + lift fst p')
     where
-        p = foldp (+) 0 $ lift fst mousePos
+        -- p' = foldp (\(x,y) (w,z) -> (x+w,y+z)) (0,0) mousePos
+        p1 = foldp' (\(x,y) (z,w) -> (x+w,z-y)) (0,0) mousePos'
+        -- p2 = foldp (+) 0 $ lift snd mousePos
 
 -- multiPlay :: Signal ()
 -- multiPlay = playOn beat (isDown keyP) (isDown keyS)
@@ -34,7 +36,7 @@ main = runSignal $ p - p
 tonsOfMouseAndTime :: Signal (Double,Double)
 tonsOfMouseAndTime = tenThousandTest
     where
-        tupleTest x _   = x
+        tupleTest (x,y) (z,w) = (x+w,z-y)
         tupleTime       = (\x ->  (x,x)) <~ mousePos
         test1           = tupleTest <~ mousePos
         tenTests        = test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ mousePos)))))))))
