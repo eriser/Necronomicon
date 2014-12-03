@@ -58,6 +58,19 @@ typedef struct
 int ugenSize = sizeof(UGen);
 int ugenAlignment = __alignof__(UGen);
 
+typedef struct synth_node
+{
+	double time; // Start time
+	UGen* ugen; // Synth Definition
+	struct synth_node* previous; // Previous node, used in synth_list for the scheduler
+	struct synth_node* next; // Next node, used in the synth_list for the scheduler
+	unsigned int key; // Node ID, used to look up synths in the synth hash table
+	unsigned int hash; // Cached hash of the node id for the synth hash table
+} synth_node;
+
+synth_node* current_node = NULL; // Global pointer to the currently playing synth_node
+void try_schedule_current_synth_for_removal(); // Forward declaration
+
 Signal numberCalc(void* args, double time)
 {
 	return ((Signal*) args)[0];
@@ -266,6 +279,27 @@ Signal negateCalc(void* args, double time)
 	return signal;
 }
 
+// To do: Give this range parameters
+Signal line_calc(void* args, double time)
+{
+	UGen* input = (UGen*) args;
+	double signal = sigsum(input->calc(input->args, time));
+	double line_time = signal * (double) SAMPLE_RATE;
+	Signal result = { 0, 0 };
+
+	if ((line_time - time) <= 0)
+	{
+		try_schedule_current_synth_for_removal();
+	}
+
+	else
+	{
+		result.amplitude = 1 - (time/line_time);
+	}
+
+	return result;
+}
+
 void printTabs(unsigned int depth)
 {
 	unsigned int i;
@@ -311,16 +345,6 @@ void printUGen(UGen* ugen, unsigned int depth)
 typedef enum { false, true } bool;
 const unsigned int max_fifo_messages = 2048;
 const unsigned int fifo_size_mask = 2047;
-
-typedef struct synth_node
-{
-	double time;
-	UGen* ugen;
-	struct synth_node* previous;
-	struct synth_node* next;
-	unsigned int key;
-	unsigned int hash;
-} synth_node;
 
 const unsigned int node_size = sizeof(synth_node);
 const unsigned int node_pointer_size = sizeof(synth_node*);
@@ -636,7 +660,6 @@ void hash_table_insert(hash_table table, synth_node* node)
 
 synth_node* hash_table_remove(hash_table table, unsigned int key)
 {
-	assert(num_synths > 0);
 	unsigned int hash = HASH_KEY(key);
 	unsigned int slot = hash & hash_table_size_mask;
 	unsigned int i = 0;
@@ -716,15 +739,16 @@ doubly_linked_list doubly_linked_list_remove(doubly_linked_list list, synth_node
 	if (previous)
 		previous->next = next;
 
-	if (node == list) // If the node was the head of the list, return the next node as the head of the list
-	{
-		return next;
-	}
-	
 	if (next)
 		next->previous = previous;
 
-	return list; // Otherwise just return the current head of the list
+	node->previous = NULL;
+	node->next = NULL;
+	
+	if (node == list) // If the node was the head of the list, return the next node as the head of the list
+		return next;
+	else
+		return list; // Otherwise just return the current head of the list
 }
 
 void doubly_linked_list_free(doubly_linked_list list)
@@ -743,6 +767,12 @@ void doubly_linked_list_free(doubly_linked_list list)
 
 unsigned int absolute_time = 0;
 bool necronomicon_running = false;
+doubly_linked_list nrt_free_node_list = NULL;
+const unsigned int max_node_pool_count = 500;
+const unsigned int initial_node_count = 250;
+unsigned int node_pool_count = 0;
+synth_node default_node = { 0, NULL, NULL, NULL, 0, 0 };
+unsigned int next_node_id = 1000;
 
 void init_rt_thread()
 {
@@ -761,11 +791,36 @@ void init_rt_thread()
 	absolute_time = 0;
 
 	initialize_wave_tables();
+	current_node = NULL;
+	
+	puts("Initializing non-real-time thread...");
+	assert(nrt_fifo == NULL);
+	nrt_fifo = new_message_fifo();
+	node_pool_count = 0;
+	next_node_id = 1000;
+	
+	// Pre-allocate some ugen nodes for runtime
+	while (node_pool_count < initial_node_count)
+	{
+		nrt_free_node_list = doubly_linked_list_push(nrt_free_node_list, new_synth_node(0, NULL));
+		++node_pool_count;
+	}
+
 	necronomicon_running = true;
 }
 
 void shutdown_rt_thread()
 {
+	puts("shutting down non-real-time thread...");
+	assert(nrt_fifo != NULL);
+
+	nrt_fifo_free();
+	doubly_linked_list_free(nrt_free_node_list);
+
+	nrt_fifo = NULL;
+	nrt_free_node_list = NULL;
+	node_pool_count = 0;
+	
 	puts("Shutting down real-time thread...");
 	assert(synth_table != NULL);
 	assert(rt_fifo != NULL);
@@ -780,10 +835,16 @@ void shutdown_rt_thread()
 	
 	synth_table = NULL;
 	rt_fifo = NULL;
+	current_node = NULL;
 	scheduled_node_list = NULL;
 	synth_list = NULL;
 	removal_fifo = NULL;
 	necronomicon_running = false;
+}
+
+int get_running()
+{
+	return (necronomicon_running == true);
 }
 
 void add_synth(synth_node* node)
@@ -841,12 +902,12 @@ void remove_scheduled_synths()
 	}
 }
 
-void try_schedule_synth_for_removal(unsigned int id)
+void try_schedule_current_synth_for_removal()
 {
-	if(removal_fifo_size < removal_fifo_size_mask)
+	if (current_node && (removal_fifo_size < removal_fifo_size_mask))
 	{
 		++removal_fifo_size;
-		REMOVAL_FIFO_PUSH(id);
+		REMOVAL_FIFO_PUSH(current_node->key);
 	}
 }
 
@@ -892,42 +953,6 @@ void handle_messages_in_rt_fifo()
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // NRT thread Synth Node Handling
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-doubly_linked_list nrt_free_node_list = NULL;
-const unsigned int max_node_pool_count = 500;
-const unsigned int initial_node_count = 250;
-unsigned int node_pool_count = 0;
-synth_node default_node = { 0, NULL, NULL, NULL, 0, 0 };
-unsigned int next_node_id = 1000;
-
-void init_nrt_thread()
-{
-	puts("Initializing non-real-time thread...");
-	assert(nrt_fifo == NULL);
-	nrt_fifo = new_message_fifo();
-	node_pool_count = 0;
-	next_node_id = 1000;
-	
-	// Pre-allocate some ugen nodes for runtime
-	while (node_pool_count < initial_node_count)
-	{
-		nrt_free_node_list = doubly_linked_list_push(nrt_free_node_list, new_synth_node(0, NULL));
-		++node_pool_count;
-	}
-}
-
-void shutdown_nrt_thread()
-{
-	puts("shutting down non-real-time thread...");
-	assert(nrt_fifo != NULL);
-
-	nrt_fifo_free();
-	doubly_linked_list_free(nrt_free_node_list);
-
-	nrt_fifo = NULL;
-	nrt_free_node_list = NULL;
-	node_pool_count = 0;
-}
 
 void nrt_free_node(synth_node* node)
 {
@@ -1049,7 +1074,8 @@ int process(jack_nframes_t nframes, void* arg)
 	jack_default_audio_sample_t* out1 = (jack_default_audio_sample_t*) jack_port_get_buffer(output_port1, nframes);
 	jack_default_audio_sample_t* out2 = (jack_default_audio_sample_t*) jack_port_get_buffer(output_port2, nframes);
 	handle_messages_in_rt_fifo(); // Handles messages including moving uge_nodes from the RT FIFO queue into the scheduled_synth_list
-	
+
+	int time = 0;
 	unsigned int i;
 	for (i = 0; i < nframes; ++i)
     {
@@ -1058,15 +1084,16 @@ int process(jack_nframes_t nframes, void* arg)
 		add_scheduled_synths(); // Add any synths that need to start this frame into the current synth_list
 
 		// Iterate through the synth_list calling calc on each synth and mixing in the result to the out buffers.
-		synth_node* node = synth_list;
-		while (node)
+		current_node = synth_list;
+		while (current_node)
 		{
-			Signal signal = node->ugen->calc(node->ugen->args, absolute_time);
+			time = current_node->time;
+			Signal signal = current_node->ugen->calc(current_node->ugen->args, absolute_time - time);
 			double sample = signal.amplitude + signal.offset;
 			out1[i] += sample;
 			out2[i] += sample;
 
-			node = node->next;
+			current_node = current_node->next;
 		}
 
 		remove_scheduled_synths(); // Remove any synths that are scheduled for removal and send them to the NRT thread FIFO queue for freeing.
@@ -1171,15 +1198,6 @@ void shutdown_necronomicon()
 {
 	message msg = { NULL, SHUTDOWN };
 	RT_FIFO_PUSH(msg);
-
-	// Wait for RT thread to finish.
-	while(necronomicon_running == true)
-	{	
-		sleep(100);
-	}
-	
-	shutdown_nrt_thread();
-	puts("Necronomicon shut down.");
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////

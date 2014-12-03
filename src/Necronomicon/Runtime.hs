@@ -7,97 +7,235 @@ import GHC.Float
 import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Monad
+import Control.Monad.Trans
 
 type SynthDef = Ptr CUGen
 type NodeID = CUInt
-
+data RunState = NecroOffline | NecroBooting | NecroQuitting | NecroRunning deriving (Show, Eq)
 data RuntimeMessage = StartSynth SynthDef CDouble NodeID | StopSynth NodeID | CollectSynthDef SynthDef | ShutdownNrt
 type RunTimeMailbox = TChan RuntimeMessage
 
-data Necronomicon = Necronomicon { necroNrtThreadId :: ThreadId, necroMailbox :: RunTimeMailbox, necroNextNodeId :: TVar NodeID, necroRunning :: TVar Bool }
+data NecroVars = NecroVars {
+    necroNrtThreadID :: TVar ThreadId,
+    necroMailbox :: RunTimeMailbox,
+    necroNextNodeID :: TVar NodeID,
+    necroSynthDefs :: TVar [SynthDef],
+    necroRunning :: TVar RunState
+}
 
-waitForReadyStatus :: TVar Bool -> Bool -> IO ()
-waitForReadyStatus running status = do
-    isReady <- atomically $ readTVar running
-    case isReady of
-        status -> return ()
-        _      -> do
-            threadDelay 1000
-            waitForReadyStatus running status
+data Necronomicon a = Necronomicon { runNecroState :: NecroVars -> IO (a, NecroVars) }
 
-startNecronomicon :: IO Necronomicon
-startNecronomicon = do
-    startRtRuntime
-    mailBox <- atomically $ newTChan
-    running <- atomically $ newTVar True
-    nrtThreadId <- startNrtRuntime mailBox running
-    nextNodeId <- atomically $ newTVar 1000
-    waitForReadyStatus running True
-    return (Necronomicon nrtThreadId mailBox nextNodeId running)
+instance Monad Necronomicon where
+    return x = Necronomicon (\n -> return (x, n))
+    (Necronomicon h) >>= f = Necronomicon $ \n -> do
+        (a, n') <- h n
+        let (Necronomicon g) = f a
+        (g n')
 
-shutdownNecronomicon :: Necronomicon -> IO ()
-shutdownNecronomicon (Necronomicon nrtThread mailBox nextNodeId running) = do
-    atomically $ writeTChan mailBox ShutdownNrt
-    waitForReadyStatus running False
-    shutdownNecronomiconRuntime
+instance MonadIO Necronomicon where
+    liftIO f = Necronomicon $ \n -> do
+        result <- f
+        return (result, n)
+
+getVars :: Necronomicon NecroVars
+getVars = Necronomicon (\n -> return (n, n))
+
+prGetTVar :: (NecroVars -> TVar a) -> Necronomicon (TVar a)
+prGetTVar getter = Necronomicon (\n -> return (getter n, n))
+
+prGet :: (NecroVars -> TVar a) -> Necronomicon a
+prGet getter = do
+    tvar <- prGetTVar getter
+    nAtomically (readTVar tvar)
     
-collectMailbox :: RunTimeMailbox -> IO [RuntimeMessage]
-collectMailbox mailBox = collectWorker []
+getNrtThreadID :: Necronomicon ThreadId
+getNrtThreadID = prGet necroNrtThreadID
+
+getNrtThreadIDTVar :: Necronomicon (TVar ThreadId)
+getNrtThreadIDTVar = prGetTVar necroNrtThreadID
+
+setNrtThreadID :: ThreadId -> Necronomicon ()
+setNrtThreadID threadID = do
+    nrtThreadIDTVar <- getNrtThreadIDTVar
+    nAtomically (writeTVar nrtThreadIDTVar threadID)
+
+getMailBox :: Necronomicon RunTimeMailbox
+getMailBox = Necronomicon (\n -> return (necroMailbox n, n))
+
+getNextNodeID :: Necronomicon NodeID
+getNextNodeID = prGet necroNextNodeID
+
+getNextNodeIDTVar :: Necronomicon (TVar NodeID)
+getNextNodeIDTVar = prGetTVar necroNextNodeID
+
+getSynthDefs :: Necronomicon [SynthDef]
+getSynthDefs = prGet necroSynthDefs
+
+getSynthDefsTVar :: Necronomicon (TVar [SynthDef])
+getSynthDefsTVar = prGetTVar necroSynthDefs
+
+getRunning :: Necronomicon RunState
+getRunning = prGet necroRunning
+
+getRunningTVar :: Necronomicon (TVar RunState)
+getRunningTVar = prGetTVar necroRunning
+
+setRunning :: RunState -> Necronomicon ()
+setRunning running = do
+    runningTVar <- getRunningTVar
+    nAtomically (writeTVar runningTVar running)
+
+mkNecroVars :: IO NecroVars
+mkNecroVars = do
+    threadId <- myThreadId
+    threadIdTVar <- atomically $ newTVar threadId
+    mailBox <- atomically $ newTChan
+    nextNodeId <- atomically $ newTVar 1000
+    synthDefList <- atomically $ newTVar []
+    running <- atomically $ newTVar NecroOffline
+    return (NecroVars threadIdTVar mailBox nextNodeId synthDefList running)
+
+runNecronomicon :: Necronomicon a -> IO a
+runNecronomicon func = do
+    necroVars <- mkNecroVars
+    (result, _) <- runNecroState runSequence necroVars
+    return result
     where
-        collectWorker messages = do
+        runSequence = do
+            startNecronomicon
+            result <- func
+            shutdownNecronomicon
+            return result
+
+startNecronomicon :: Necronomicon ()
+startNecronomicon = do
+    setRunning NecroBooting
+    liftIO startRtRuntime
+    startNrtRuntime
+    waitForRunningStatus NecroRunning
+
+shutdownNecronomicon :: Necronomicon ()
+shutdownNecronomicon = do
+    sendMessage ShutdownNrt
+    waitForRunningStatus NecroOffline
+    nPrint "Necronomicon shut down."
+
+sendMessage :: RuntimeMessage -> Necronomicon ()
+sendMessage message = do
+    mailBox <- getMailBox
+    nAtomically $ writeTChan mailBox message
+    
+collectMailbox :: Necronomicon [RuntimeMessage]
+collectMailbox = do
+    mailBox <- getMailBox
+    liftIO $ collectWorker mailBox []
+    where
+        collectWorker mailBox messages = do
             maybeMessage <- atomically $ tryReadTChan mailBox
             case maybeMessage of
                 Nothing -> return messages
-                Just message -> collectWorker (message:messages)
+                Just message -> collectWorker mailBox (message : messages)
 
-defaultMessageReturn :: (Maybe SynthDef, Bool)
-defaultMessageReturn = (Nothing, True)
-
-processMessages :: [RuntimeMessage] -> IO ([SynthDef], Bool)
-processMessages messages = foldM (foldMessages) ([], True) messages
+processMessages :: [RuntimeMessage] -> Necronomicon ()
+processMessages messages =  mapM_ (processMessage) messages
     where
-        foldMessages (acc, running) m = do
-            (maybeSynthDef, running') <- processMessage m
-            let combinedRunning = running && running'
-            case maybeSynthDef of
-                Just synthDef -> return (synthDef : acc, combinedRunning)
-                Nothing -> return (acc, combinedRunning)
-        processMessage m = case m of
-            StartSynth synthDef time id -> do
-                playSynthInRtRuntime synthDef time id
-                return defaultMessageReturn
-            StopSynth id -> do
-                stopSynthInRtRuntime id
-                return defaultMessageReturn
-            CollectSynthDef synthDef -> return (Just synthDef, True)
-            ShutdownNrt -> return (Nothing, False)
+        processMessage m = do
+            running <- getRunning
+            if (running /= NecroRunning)
+               then return ()
+               else process m
+        process m = case m of
+            StartSynth synthDef time id -> liftIO $ playSynthInRtRuntime synthDef time id
+            StopSynth id -> liftIO $ stopSynthInRtRuntime id
+            CollectSynthDef synthDef -> addSynthDef synthDef
+            ShutdownNrt -> necronomiconEndSequence
 
-startNrtRuntime :: RunTimeMailbox -> TVar Bool -> IO (ThreadId)
-startNrtRuntime mailBox necroRunning = do
-    initNrtThread
-    forkIO (nrtThread [])
+startNrtRuntime :: Necronomicon ()
+startNrtRuntime = do
+    liftIO waitForRTStarted
+    vars <- getVars
+    nrtThreadID <- (liftIO $ forkIO (nrtThread vars))
+    setNrtThreadID nrtThreadID
     where
-        nrtThread :: [SynthDef] -> IO ()
-        nrtThread !synthDefs = do
-            messages <- collectMailbox mailBox
-            (newSynthDefs, running) <- processMessages messages
-            let synthDefs' = synthDefs ++ newSynthDefs
-            case running of
-                True -> do
-                    handleNrtMessage
-                    threadDelay 10000
-                    nrtThread synthDefs'
-                False -> do
-                    print "SHUTTING DOWN NRT!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
-                    print (synthDefs')
-                    mapM_ (freeUGen) synthDefs'
-                    atomically (writeTVar necroRunning False)
+        nrtThread vars = do
+            runNecroState necroWork vars
+            return ()
+            where
+                necroWork = do
+                    setRunning NecroRunning
+                    necroNrtThreadFunc
+                necroNrtThreadFunc = do
+                    running <- getRunning
+                    case running of
+                        NecroRunning -> do
+                            messages <- collectMailbox
+                            processMessages messages
+                            liftIO $ handleNrtMessages
+                            nThreadDelay 5000
+                            necroNrtThreadFunc
+                        _ -> return ()
 
-incrementNodeId :: Necronomicon -> STM NodeID
-incrementNodeId (Necronomicon _ _ nextNodeId _) = do
-    id <- readTVar nextNodeId
-    writeTVar nextNodeId (id + 1)
-    return id
+incrementNodeID :: Necronomicon NodeID
+incrementNodeID = do
+    idTVar <- getNextNodeIDTVar
+    nAtomically (increment idTVar)
+    where
+        increment idTVar = do
+            nodeID <- readTVar idTVar
+            writeTVar idTVar (nodeID + 1)
+            return nodeID
+
+addSynthDef :: SynthDef -> Necronomicon ()
+addSynthDef synthDef = do
+    synthDefsTVar <- getSynthDefsTVar
+    nAtomically (addSynth synthDefsTVar)
+    where
+        addSynth synthDefsTVar = do
+            synthDefs <- readTVar synthDefsTVar
+            writeTVar synthDefsTVar (synthDef : synthDefs)
+
+necronomiconEndSequence :: Necronomicon ()
+necronomiconEndSequence = do
+    setRunning NecroQuitting
+    liftIO shutdownNecronomiconCRuntime
+    liftIO waitForRtFinished
+    freeUGens
+    setRunning NecroOffline
+
+waitForRunningStatus :: RunState -> Necronomicon ()
+waitForRunningStatus status = do
+    currentStatus <- getRunning
+    if currentStatus == status
+        then return ()
+        else do
+            nThreadDelay 1000
+            waitForRunningStatus status
+
+rtFinishedStatus :: Int
+rtFinishedStatus = 0
+
+rtStartedStatus :: Int
+rtStartedStatus = 1
+
+waitForRTStatus :: Int -> IO ()
+waitForRTStatus status = do
+    rtRunning <- getRtRunning
+    if rtRunning == status
+        then return ()
+        else do
+            threadDelay 1000
+            waitForRTStatus status
+
+waitForRTStarted :: IO ()
+waitForRTStarted = waitForRTStatus rtStartedStatus
+
+waitForRtFinished :: IO ()
+waitForRtFinished = waitForRTStatus rtFinishedStatus
+
+freeUGens :: Necronomicon ()
+freeUGens = do
+    synthDefs <- getSynthDefs
+    mapM_ (liftIO . freeUGen) synthDefs
 
 data Signal = Signal {-# UNPACK #-} !CDouble {-# UNPACK #-} !CDouble
 
@@ -130,9 +268,22 @@ instance Storable CUGen where
         pokeByteOff ptr 16 numArgs
 
 foreign import ccall "start_rt_runtime" startRtRuntime :: IO ()
-foreign import ccall "init_nrt_thread" initNrtThread :: IO ()
-foreign import ccall "handle_messages_in_nrt_fifo" handleNrtMessage :: IO ()
-foreign import ccall "shutdown_necronomicon" shutdownNecronomiconRuntime :: IO ()
+foreign import ccall "handle_messages_in_nrt_fifo" handleNrtMessages :: IO ()
+foreign import ccall "shutdown_necronomicon" shutdownNecronomiconCRuntime :: IO ()
 foreign import ccall "play_synth" playSynthInRtRuntime :: SynthDef -> CDouble -> CUInt -> IO ()
 foreign import ccall "stop_synth" stopSynthInRtRuntime :: NodeID -> IO ()
 foreign import ccall "free_ugen" freeUGen :: SynthDef -> IO ()
+foreign import ccall "get_running" getRtRunning :: IO Int
+
+ifThenElse :: Bool -> a -> a -> a
+ifThenElse True a _ = a
+ifThenElse False _ b = b
+
+nPrint :: (Show a) => a -> Necronomicon ()
+nPrint = liftIO . print
+
+nAtomically :: (STM a) -> Necronomicon a
+nAtomically = liftIO . atomically
+
+nThreadDelay :: Int -> Necronomicon ()
+nThreadDelay = liftIO . threadDelay
