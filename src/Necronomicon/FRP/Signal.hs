@@ -628,25 +628,34 @@ modifySignalState f = SignalState $ \k s -> k (f s) ()
 instance State.MonadTrans (SignalState s) where
     lift act = SignalState (\k s -> act >>= \a -> k s a)
 
-instance Monad Signal' where
-    return x = Signal' . return $ Just x
-    x >>= f = Signal' $ do
-        cont <- setEventCont' x f
-        mk   <- unwrapSignal x
-        resetEventCont' cont
-        case mk of
-            Just k  -> unwrapSignal $ f k
-            Nothing -> return Nothing
+-- instance State.MonadIO Signal' where
+    -- liftIO act = Signal' $ do
+        -- a <- State.lift act
+        -- return $ Just a
+        -- act >>= \a -> State.lift . State.liftIO $ unwrapSignal
+
+-- instance Monad Signal' where
+    -- return x = Signal' . return $ Just x
+    -- x >>= f = Signal' $ do
+        -- cont <- setEventCont' x f
+        -- mk   <- unwrapSignal x
+        -- resetEventCont' cont
+        -- case mk of
+            -- Just k  -> unwrapSignal $ f k
+            -- Nothing -> return Nothing
 
 instance  Functor Signal' where
     fmap f x = Signal' $ fmap (fmap f) $ unwrapSignal x
-
+    
 instance Applicative Signal' where
-    pure  = return
+    pure = Signal' . return . Just
     f <*> g = Signal' $ do
         k <- unwrapSignal f
         x <- unwrapSignal g
         return $ k <*> x
+
+-- instance State.MonadTrans (SignalState s) where
+    -- lift act = SignalState (\k s -> act >>= \a -> k s a)
 
 data NetworkState = forall a b. NetworkState {
     eventHandlers'  :: IntMap.IntMap NetworkState,
@@ -656,11 +665,22 @@ data NetworkState = forall a b. NetworkState {
     fcomp'          :: [a -> Signal' b]
     }
 
+instance Show NetworkState where
+    show (NetworkState eh ce ev x f) = "NetworkState {" ++ show eh ++ "," ++ show ce ++ "," ++ show ev ++ "," ++ show x ++ "," ++ show f
+
+instance Show (Signal' a) where
+    show _ = "Signal a"
+
+instance Show (a -> Signal' b) where
+    show _ = "(a -> Signal' b)"
+
+
 currentEventValue' :: Typeable a => Int -> Signal' a
 currentEventValue' uid = Signal' $ do
     st <- getSignalState -- !> "currValue"
     case IntMap.lookup uid (eventValues' st) of
-        Nothing -> waitEvent' uid
+        -- Nothing -> waitEvent' uid
+        Nothing -> eventValue' uid
         -- Just v  -> return $ fromDyn v (trace "currentEventValue: type error" Nothing) 
         Just v  -> case fromDynamic v of
             Nothing -> trace "currentEventValue: type error" $ return $ Nothing
@@ -672,9 +692,11 @@ waitEvent' uid = do
     let evs = eventHandlers' st 
     case IntMap.lookup uid evs of
         Nothing ->  do
+            State.lift $ print "waitEvent Nothing"
             putSignalState st{eventHandlers' = IntMap.insert uid st evs} -- !> ("created event handler for: "++ show id)
             return Nothing 
         Just _ ->  do
+            State.lift $ print "waitEvent Just"
             putSignalState st{eventHandlers' = IntMap.insert uid st evs} -- !> ("upadated event handler for: "++ show id)
             eventValue' uid
 
@@ -685,18 +707,21 @@ eventValue' uid =  do
     case me of
         Nothing -> return Nothing -- !> "NO current EVENT"
         Just (Event uid' r) -> do
-            if uid' /= uid then return Nothing else do
+            if uid /= uid' then return Nothing else do
                 case fromDynamic r of
-                    Nothing -> return Nothing 
+                    Nothing -> do
+                        State.lift $ print "eventValue type error"
+                        return Nothing 
                     Just x -> do
-                        putSignalState st{eventValues' = IntMap.insert uid r $ eventValues' st}
+                        State.lift $ print "Updated event value"
+                        putSignalState st{eventValues' = IntMap.insert uid (toDyn x) $ eventValues' st}
                         return $ Just x
 
 setEventCont' :: (Signal' a) -> (a -> Signal' b) -> SignalStateIO NetworkState
 setEventCont' x f = do
     st@(NetworkState es c vs x' fs) <- getSignalState
-    putSignalState $ NetworkState es c vs  x ( f : Unsafe.unsafeCoerce fs) -- st{xcomp=  x, fcomp=  f: unsafeCoerce fs}
-    -- trace ("length:" ++ show (length (f:Unsafe.unsafeCoerce fs))) $ return st
+    -- printConts' st
+    putSignalState $ NetworkState es c vs  x ( f : Unsafe.unsafeCoerce fs)
     return st
 
 resetEventCont' :: NetworkState -> SignalStateIO ()
@@ -709,9 +734,13 @@ runCont' (NetworkState _ _ _ x fs) = do
     run x (Unsafe.unsafeCoerce fs)
     return ()
     where
-        run      x fs  = unwrapSignal $ x >>= compose fs
-        compose []     = const (Signal' $ return Nothing)
-        compose (f:fs) = \x -> f x >>= compose fs
+        run      x fs  = unwrapSignal $ (compose fs <~ x)
+        compose []     x = x
+        compose (f:fs) x = compose fs $ f x
+
+        -- run      x fs  = unwrapSignal $ x >>= compose fs
+        -- compose []     = const (Signal' $ return Nothing)
+        -- compose (f:fs) = \x -> f x >>= compose fs
 
 runEvent' :: Event -> SignalStateIO ()
 runEvent' (ev@(Event uid _)) = do
@@ -725,42 +754,71 @@ runEvent' (ev@(Event uid _)) = do
 
 globalEventDispatch' :: (Typeable a, Show a) => TBQueue Event -> Signal' a -> NetworkState -> IO ()
 globalEventDispatch' inBox signal event = do
-    ev    <- atomically $ readTBQueue inBox
+    ev <- atomically $ readTBQueue inBox
+    -- print ev
     (a,e) <- runSignalState (runEvent' ev >> unwrapSignal signal) event
+    print $ e
     print a
     globalEventDispatch' inBox signal e
+    -- (flip runSignalState) event $ do
+        -- unwrapSignal $ do
+            -- s <- signal
+            -- State.liftIO $ print "Result: "
+            -- State.liftIO $ print s
+            -- _ <- Signal' (getSignalState >>= printConts' >> (return $ Just ()))
+            -- _ <- Signal' $ do
+                -- (NetworkState es c vs x _) <- getSignalState
+                -- putSignalState $ NetworkState es c vs x []
+                -- getSignalState >>= printConts'
+                -- State.lift $ print "put"
+                -- return $ Just ()
+            -- _ <- Signal' (getSignalState >>= printConts' >> (return $ Just ()))
+            -- return s
+        -- forever $ do
+            -- ev <- State.lift $ atomically $ readTBQueue inBox
+            -- unwrapSignal (print <~ signal)
+            -- State.lift $ print "Forever"
+            -- getSignalState >>= printConts'
+            -- runEvent' ev
+    -- return ()
+    -- where
+        -- printSignal = Signal' $ return $ Just $ \s -> print s
 
 printConts' (NetworkState _ _ _ _ fs) = State.lift $ print $ length fs
 
 --Space leak!
 foldp' :: (Typeable b,Show b) => (a -> b -> b) -> b -> Signal' a -> Signal' b
-foldp' f bInit a = Signal' $ do
-    cont <- setEventCont' a f'
-    a'   <- unwrapSignal a
-    resetEventCont' cont
-    case a' of
-        Nothing -> return Nothing
-        Just a' -> do
-            b <- State.lift $ readIORef ref
-            let result = f a' b
-            return $ Just $ result
+foldp' f bInit a = f' ~~ a
     where
-        ref  = unsafePerformIO $ newIORef bInit
-        f' a = Signal' $ do
-            b <- State.lift $ readIORef ref
+        ref = unsafePerformIO $ newIORef bInit
+        f' = Signal' $ return $ Just $ \a -> unsafePerformIO $ do
+            b <- readIORef ref
             let result = f a b
-            -- State.lift $ print b
-            -- getSignalState >>= printConts'
-            (NetworkState es c vs x _) <- getSignalState
-            putSignalState $ NetworkState es c vs x []
-            -- getSignalState >>= printConts'
-            State.lift $ writeIORef ref result
-            return $ Just result
+            writeIORef ref result
+            return result
+
+    -- a >>= \a' -> return $ f a' bInit
+    -- Signal' $ do
+    -- let ref = unsafePerformIO $ newIORef bInit
+    -- cont <- setEventCont' a (\a -> a >>= \a' -> f a' bInit) --(f' ref)
+    -- a'   <- unwrapSignal a
+    -- resetEventCont' cont
+    -- case a' of
+        -- Nothing -> return Nothing
+        -- Just a' -> do
+            -- b <- State.lift $ readIORef ref
+            -- return $ Just $ f a' b
+    -- where
+        -- f' ref a = Signal' $ do
+            -- b <- State.lift $ readIORef ref
+            -- let result = f a b
+            -- State.lift $ writeIORef ref result
+            -- return $ Just result
 
 ----------------
 -- Old Version
 ----------------
-data    Event    = Event Int Dynamic
+data    Event    = Event Int Dynamic deriving (Show)
 type    StateIO  = State.StateT EventF IO
 newtype Signal a = Signal {unwrapState :: StateIO (Maybe a)}
 
@@ -857,12 +915,15 @@ runEvent (ev@(Event uid _)) = do
         Just st -> runCont st  -- !> ("execute event handler for: "++ show uid) 
         Nothing -> return ()   -- !> "no handler for the event"
 
-globalEventDispatch :: (Typeable a, Show a) => TBQueue Event -> Signal a -> EventF -> IO ()
-globalEventDispatch inBox signal event = do
-    ev <- atomically $ readTBQueue inBox
-    (a,e) <- State.runStateT (runEvent ev >> unwrapState signal) event
-    print a
-    globalEventDispatch inBox signal e
+-- globalEventDispatch :: (Typeable a, Show a) => TBQueue Event -> Signal a -> EventF -> IO ()
+-- globalEventDispatch inBox signal event = do
+    -- ev    <- atomically $ readTBQueue inBox
+    -- (_,e) <- State.runStateT (unwrapSignal signal) event
+    -- (flip State.runStateT) e $ forever $ do
+        -- runEvent ev
+        -- print 
+-- return ()
+    -- globalEventDispatch inBox signal e
             -- (a,eventf') <-  ( >> ) 
             -- let eventf'' = eventf'{prevState = IntMap.map (\(Rewritten p) -> (Fresh p)) $ prevState eventf',counter = 0}
             -- State.lift $ print s
@@ -1185,5 +1246,3 @@ isDown      = getSignal . glfwKeyToEventKey
 wasd        = go <~ isDown keyW ~~ isDown keyA ~~ isDown keyS ~~ isDown keyD
     where
         go w a s d = (((if d then 1 else 0) + (if a then (-1) else 0)),((if w then 1 else 0) + (if s then (-1) else 0)))
-
-

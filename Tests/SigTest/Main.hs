@@ -6,7 +6,7 @@ main :: IO()
 -- main = runSignal $ isDown keyW <|> isDown keyA
 -- main = runSignal $ (fst <~ mousePos) + (snd <~ mousePos)
 -- main = runSignal mouseClicks
--- main = runSignal tonsOfMouseAndTime
+main = runSignal tonsOfMouseAndTime
 -- main = runSignal $ dropIf (\(x,y) -> x > 400) (0,0) mousePos
 -- main = runSignal $ keepIf (\(x,y) -> x > 400) (0,0) mousePos
 -- main = runSignal $ sampleOn mouseClicks mousePos
@@ -18,11 +18,13 @@ main :: IO()
 -- main = runSignal multiPlay
 -- main = runSignal mousePos'
 -- main = runSignal $ combine [pure (666,-666),mousePos,mousePos]
-main = runSignal $ p1 -- $ (p2 + lift snd p') - (p1 + lift fst p')
-    where
+-- main = runSignal $ (-) <~ p2 ~~ p2 -- $ (p2 + lift snd p') - (p1 + lift fst p')
+    -- where
         -- p' = foldp (\(x,y) (w,z) -> (x+w,y+z)) (0,0) mousePos
-        p1 = foldp' (\(x,y) (z,w) -> (x+w,z-y)) (0,0) mousePos'
-        -- p2 = foldp (+) 0 $ lift snd mousePos
+        -- p1 = foldp' (\(x,y) (z,w) -> (x+w,z-y)) (0,0) mousePos'
+        -- p2 = foldp' (+) 0 (snd <~ mousePos')
+        -- p3 = foldp' (+) 0 (snd <~ mousePos')
+        -- p2 = (\a -> a + 0) <~ (snd <~ mousePos')
 
 -- multiPlay :: Signal ()
 -- multiPlay = playOn beat (isDown keyP) (isDown keyS)
@@ -33,17 +35,17 @@ main = runSignal $ p1 -- $ (p2 + lift snd p') - (p1 + lift fst p')
     -- where
         -- beat = 0
 
-tonsOfMouseAndTime :: Signal (Double,Double)
+-- tonsOfMouseAndTime :: Signal (Double,Double)
 tonsOfMouseAndTime = tenThousandTest
     where
         tupleTest (x,y) (z,w) = (x+w,z-y)
-        tupleTime       = (\x ->  (x,x)) <~ mousePos
-        test1           = tupleTest <~ mousePos
-        tenTests        = test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ mousePos)))))))))
+        tupleTime       = (\x ->  (x,x)) <~ mousePos'
+        test1           = tupleTest <~ mousePos'
+        tenTests        = test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ mousePos')))))))))
         test2           = tupleTest <~ tenTests
-        hundredTests    = test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ mousePos)))))))))
+        hundredTests    = test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ mousePos')))))))))
         test3           = tupleTest <~ hundredTests
-        thousandsTests  = test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ mousePos)))))))))
+        thousandsTests  = test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ mousePos')))))))))
         test4           = tupleTest <~ thousandsTests
-        tenThousandTest = test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ mousePos)))))))))
+        tenThousandTest = test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ mousePos')))))))))
 
