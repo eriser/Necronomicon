@@ -1084,14 +1084,12 @@ sampleOn a b = Signal $ do
             bValue <- bCont event
             case aValue of
                 NoChange _ -> case bValue of
-                    NoChange b -> readIORef ref >>= return . NoChange
+                    NoChange _ -> readIORef ref >>= return . NoChange
                     Change   b -> do
                         writeIORef ref b
-                        readIORef ref >>= return . NoChange
+                        return $ NoChange b
                 Change _ -> case bValue of
-                    NoChange b -> do
-                        writeIORef ref b
-                        return $ Change b
+                    NoChange _ -> readIORef ref >>= return . Change
                     Change   b -> do
                         writeIORef ref b
                         return $ Change b
