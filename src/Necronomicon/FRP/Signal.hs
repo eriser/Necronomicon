@@ -20,7 +20,7 @@ module Necronomicon.FRP.Signal (
     hour,
     keepIf,
     dropIf,
-    -- sampleOn,
+    sampleOn,
     keepWhen,
     dropWhen,
     isDown,
@@ -1071,4 +1071,28 @@ count signal = Signal $ do
                     let result = n + 1
                     writeIORef ref result
                     return $ Change result
+
+sampleOn :: Signal a -> Signal b -> Signal b
+sampleOn a b = Signal $ do
+    (aValue,aCont) <- runSignal a
+    (bValue,bCont) <- runSignal b
+    ref            <- newIORef bValue
+    return (bValue,processEvent aCont bCont ref)
+    where
+        processEvent aCont bCont ref event = do
+            aValue <- aCont event
+            bValue <- bCont event
+            case aValue of
+                NoChange _ -> case bValue of
+                    NoChange b -> readIORef ref >>= return . NoChange
+                    Change   b -> do
+                        writeIORef ref b
+                        readIORef ref >>= return . NoChange
+                Change _ -> case bValue of
+                    NoChange b -> do
+                        writeIORef ref b
+                        return $ Change b
+                    Change   b -> do
+                        writeIORef ref b
+                        return $ Change b
 

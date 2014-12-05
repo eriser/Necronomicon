@@ -10,10 +10,10 @@ main :: IO()
 -- main = runSignal $ (fst <~ mousePos) + (snd <~ mousePos)
 -- main = startSignal $ dropIf (>10) 0 $ count mouseClicks
 -- main = startSignal $ dropWhen (isDown keyW) mousePos
-main = startSignal $ keepWhen (isDown keyW) mousePos
+-- main = startSignal $ keepWhen (isDown keyW) mousePos
 -- main = startSignal $ dropIf (\(x,y) -> x > 400) (0,0) mousePos
 -- main = startSignal $ keepIf (\(x,y) -> x > 400) (0,0) mousePos
--- main = runSignal $ sampleOn mouseClicks mousePos
+main = startSignal $ sampleOn mouseClicks mousePos
 -- main = runSignal $ keepWhen ((\(x,_) -> x > 400) <~ mousePos) mousePos
 -- main = runSignal $ every $ 2 * second
 -- main = runSignal $ dropWhen ((\(x,_) -> x > 400) <~ mousePos) mousePos
