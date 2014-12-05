@@ -17,16 +17,16 @@ module Necronomicon.FRP.Signal (
     millisecond,
     minute,
     hour,
-    -- keepIf,
-    -- dropIf,
+    keepIf,
+    dropIf,
     -- sampleOn,
     -- keepWhen,
     -- dropWhen,
     isDown,
     -- playOn,
-    -- combine,
-    -- merge,
-    -- merges,
+    combine,
+    merge,
+    merges,
     keyA,
     keyB,
     keyC,
@@ -619,7 +619,7 @@ instance  Functor Signal where
                         return $ NoChange prev
 
 instance Applicative Signal where
-    pure a = Signal $ return (a,\ns -> return $ NoChange a)
+    pure a = Signal $ return (a,\_ -> return $ NoChange a)
     f <*> g = Signal $ do
         (defaultF,fCont) <- runSignal f
         (defaultG,gCont) <- runSignal g
@@ -649,97 +649,29 @@ instance Applicative Signal where
                             prev <- readIORef ref
                             return $NoChange prev
 
---use ioRef instead of dictionary lookup
-input :: Typeable a => a -> Int -> Signal a
-input a uid = Signal $ do
-    ref <- newIORef a
-    return (a,processState ref)
-    where
-        processState ref (Event uid' e) = do
-            case uid == uid' of
-                False -> do
-                    v <- readIORef ref 
-                    return $ NoChange v
-                True  -> case fromDynamic e of
-                    Nothing -> print "input type error" >> do
-                        v <- readIORef ref 
-                        return $ NoChange v
-                    Just v  -> do
-                        writeIORef ref v
-                        return $ Change v
-
-foldp :: (a -> b -> b) -> b -> Signal a -> Signal b
-foldp f bInit a = Signal $ do
-    (aDefaultValue,aCont) <- runSignal a
-    ref  <- newIORef bInit
-    return (f aDefaultValue bInit,processState aCont ref)
-    where
-        processState aCont ref event = do
-            aValue <- aCont event
-            case aValue of
-                NoChange _ -> do
-                    prev <- readIORef ref
-                    return $ NoChange prev
-                Change a' -> do
-                    prev <- readIORef ref
-                    let new = f a' prev
-                    writeIORef ref new
-                    return $ Change new
-
---------------------------------------
--- RunTime
---------------------------------------
-
-initWindow :: IO(Maybe GLFW.Window)
-initWindow = GLFW.init >>= \initSuccessful -> if initSuccessful then window else return Nothing
-    where
-        mkWindow = GLFW.createWindow 960 640 "Necronomicon" Nothing Nothing
-        window   = mkWindow >>= \w -> GLFW.makeContextCurrent w >> return w
-
-startSignal :: (Typeable a, Show a) => Signal a -> IO()
-startSignal s = initWindow >>= \mw ->
-    case mw of
-        Nothing -> print "Error starting GLFW." >> return ()
-        Just w  -> do
-            print "Starting signal run time"
-
-            globalDispatch <- atomically $ newTBQueue 100000
-            GLFW.setCursorPosCallback   w $ Just $ mousePosEvent   globalDispatch
-            GLFW.setMouseButtonCallback w $ Just $ mousePressEvent globalDispatch
-            GLFW.setKeyCallback         w $ Just $ keyPressEvent   globalDispatch
-            GLFW.setWindowSizeCallback  w $ Just $ dimensionsEvent globalDispatch
-
-            forkIO $ globalEventDispatch s globalDispatch
-
-            (ww,wh) <- GLFW.getWindowSize w
-            dimensionsEvent globalDispatch w ww wh
-            render False w
-    where
-        --event callbacks
-        mousePosEvent   eventNotify _ x y                                = atomically $ (writeTBQueue eventNotify $ Event 0 $ toDyn (x,y)) `orElse` return ()
-        mousePressEvent eventNotify _ _ GLFW.MouseButtonState'Released _ = atomically $ (writeTBQueue eventNotify $ Event 1 $ toDyn ()) `orElse` return ()
-        mousePressEvent _           _ _ GLFW.MouseButtonState'Pressed  _ = return ()
-        keyPressEvent   eventNotify _ k _ GLFW.KeyState'Pressed  _       = atomically $ (writeTBQueue eventNotify $ Event (glfwKeyToEventKey k) $ toDyn True)
-        keyPressEvent   eventNotify _ k _ GLFW.KeyState'Released _       = atomically $ (writeTBQueue eventNotify $ Event (glfwKeyToEventKey k) $ toDyn False)
-        keyPressEvent   eventNotify _ k _ _ _                            = return ()
-        dimensionsEvent eventNotify _ x y                                = atomically $ writeTBQueue eventNotify $ Event 2 $ toDyn (x,y)
-
-        render quit window
-            | quit      = print "Qutting" >> return ()
-            | otherwise = do
-                GLFW.pollEvents
-                q <- liftA (== GLFW.KeyState'Pressed) (GLFW.getKey window GLFW.Key'Q)
-                threadDelay $ 16667
-                render q window
-
-globalEventDispatch :: Show a => Signal a -> TBQueue Event -> IO()
-globalEventDispatch signal inBox = do
-    (a,processState) <- runSignal signal
-    print $ "Initial signal value: " ++ show a
-    forever $ do
-        e <- atomically $ readTBQueue inBox
-        a <- processState e
-        print a
+instance Alternative Signal where
+    empty = Signal $ return (undefined,\_ -> return $ NoChange undefined)
+    a <|> b = Signal $ do
+        (defaultA,aCont) <- runSignal a
+        (defaultB,bCont) <- runSignal b
+        ref <- newIORef defaultA
+        return (defaultA,processState aCont bCont ref)
+        where
+            processState aCont bCont ref event = do
+                aValue <- aCont event
+                case aValue of
+                    Change a -> do
+                        writeIORef ref a
+                        return $ Change a
+                    NoChange _ -> do
+                        bValue <- bCont event
+                        case bValue of
+                            Change b -> do
+                                writeIORef ref b
+                                return $ Change b
+                            NoChange _ -> do
+                                v <- readIORef ref
+                                return $ NoChange v
 
 instance Num a => Num (Signal a) where
     (+)         = liftA2 (+)
@@ -788,30 +720,64 @@ instance (Enum a) => Enum (Signal a) where
     pred     = lift pred
     -- toEnum   = lift toEnum
     -- fromEnum = pure
-                
-lift :: (a -> b) -> Signal a -> Signal b
-lift  = liftA
 
-lift2 :: (a -> b -> c) -> Signal a -> Signal b -> Signal c
-lift2 = liftA2
+instance Show (Signal a) where
+    show _ = "~~Signal~~"
 
-lift3 :: (a -> b -> c -> d) -> Signal a -> Signal b -> Signal c -> Signal d
-lift3 = liftA3
+--------------------------------------
+-- RunTime
+--------------------------------------
 
-lift4 :: (a -> b -> c -> d -> e) -> Signal a -> Signal b -> Signal c -> Signal d -> Signal e
-lift4 f a b c d = f <~ a ~~ b ~~ c ~~ d
+initWindow :: IO(Maybe GLFW.Window)
+initWindow = GLFW.init >>= \initSuccessful -> if initSuccessful then window else return Nothing
+    where
+        mkWindow = GLFW.createWindow 960 640 "Necronomicon" Nothing Nothing
+        window   = mkWindow >>= \w -> GLFW.makeContextCurrent w >> return w
 
-lift5 :: (a -> b -> c -> d -> e -> f) -> Signal a -> Signal b -> Signal c -> Signal d -> Signal e -> Signal f
-lift5 f a b c d e = f <~ a ~~ b ~~ c ~~ d ~~ e
+startSignal :: (Show a) => Signal a -> IO()
+startSignal s = initWindow >>= \mw ->
+    case mw of
+        Nothing -> print "Error starting GLFW." >> return ()
+        Just w  -> do
+            print "Starting signal run time"
 
-lift6 :: (a -> b -> c -> d -> e -> f -> g) -> Signal a -> Signal b -> Signal c -> Signal d -> Signal e -> Signal f -> Signal g
-lift6 f a b c d e f' = f <~ a ~~ b ~~ c ~~ d ~~ e ~~ f'
+            globalDispatch <- atomically $ newTBQueue 100000
+            GLFW.setCursorPosCallback   w $ Just $ mousePosEvent   globalDispatch
+            GLFW.setMouseButtonCallback w $ Just $ mousePressEvent globalDispatch
+            GLFW.setKeyCallback         w $ Just $ keyPressEvent   globalDispatch
+            GLFW.setWindowSizeCallback  w $ Just $ dimensionsEvent globalDispatch
 
-lift7 :: (a -> b -> c -> d -> e -> f -> g -> h) -> Signal a -> Signal b -> Signal c -> Signal d -> Signal e -> Signal f -> Signal g -> Signal h
-lift7 f a b c d e f' g = f <~ a ~~ b ~~ c ~~ d ~~ e ~~ f' ~~ g
+            forkIO $ globalEventDispatch s globalDispatch
 
-lift8 :: (a -> b -> c -> d -> e -> f -> g -> h -> i) -> Signal a -> Signal b -> Signal c -> Signal d -> Signal e -> Signal f -> Signal g -> Signal h -> Signal i
-lift8 f a b c d e f' g h = f <~ a ~~ b ~~ c ~~ d ~~ e ~~ f' ~~ g ~~ h
+            (ww,wh) <- GLFW.getWindowSize w
+            dimensionsEvent globalDispatch w ww wh
+            render False w
+    where
+        --event callbacks
+        mousePosEvent   eventNotify _ x y                                = atomically $ (writeTBQueue eventNotify $ Event 0 $ toDyn (x,y)) `orElse` return ()
+        mousePressEvent eventNotify _ _ GLFW.MouseButtonState'Released _ = atomically $ (writeTBQueue eventNotify $ Event 1 $ toDyn ()) `orElse` return ()
+        mousePressEvent _           _ _ GLFW.MouseButtonState'Pressed  _ = return ()
+        keyPressEvent   eventNotify _ k _ GLFW.KeyState'Pressed  _       = atomically $ (writeTBQueue eventNotify $ Event (glfwKeyToEventKey k) $ toDyn True)
+        keyPressEvent   eventNotify _ k _ GLFW.KeyState'Released _       = atomically $ (writeTBQueue eventNotify $ Event (glfwKeyToEventKey k) $ toDyn False)
+        keyPressEvent   eventNotify _ k _ _ _                            = return ()
+        dimensionsEvent eventNotify _ x y                                = atomically $ writeTBQueue eventNotify $ Event 2 $ toDyn (x,y)
+
+        render quit window
+            | quit      = print "Qutting" >> return ()
+            | otherwise = do
+                GLFW.pollEvents
+                q <- liftA (== GLFW.KeyState'Pressed) (GLFW.getKey window GLFW.Key'Q)
+                threadDelay $ 16667
+                render q window
+
+globalEventDispatch :: Show a => Signal a -> TBQueue Event -> IO()
+globalEventDispatch signal inBox = do
+    (a,processState) <- runSignal signal
+    print $ "Initial signal value: " ++ show a
+    forever $ do
+        e <- atomically $ readTBQueue inBox
+        a <- processState e
+        print a
 
 ---------------------------------------------
 -- Time
@@ -845,6 +811,24 @@ toHours        t = t / 3600
 ---------------------------------------------
 -- Input
 ---------------------------------------------
+
+input :: Typeable a => a -> Int -> Signal a
+input a uid = Signal $ do
+    ref <- newIORef a
+    return (a,processState ref)
+    where
+        processState ref (Event uid' e) = do
+            case uid == uid' of
+                False -> do
+                    v <- readIORef ref 
+                    return $ NoChange v
+                True  -> case fromDynamic e of
+                    Nothing -> print "input type error" >> do
+                        v <- readIORef ref 
+                        return $ NoChange v
+                    Just v  -> do
+                        writeIORef ref v
+                        return $ Change v
 
 --eventlist: 
 type Key  = GLFW.Key
@@ -905,7 +889,6 @@ glfwKeyToEventKey k
     | k == keyZ = 125
     | otherwise = -1
 
-
 mousePos :: Signal (Double,Double)
 mousePos = input (0,0) 0
 
@@ -922,3 +905,107 @@ wasd :: Signal (Double,Double)
 wasd = go <~ isDown keyW ~~ isDown keyA ~~ isDown keyS ~~ isDown keyD
     where
         go w a s d = (((if d then 1 else 0) + (if a then (-1) else 0)),((if w then 1 else 0) + (if s then (-1) else 0)))
+
+---------------------------------------------
+-- Combinators
+---------------------------------------------
+                
+lift :: (a -> b) -> Signal a -> Signal b
+lift  = liftA
+
+lift2 :: (a -> b -> c) -> Signal a -> Signal b -> Signal c
+lift2 = liftA2
+
+lift3 :: (a -> b -> c -> d) -> Signal a -> Signal b -> Signal c -> Signal d
+lift3 = liftA3
+
+lift4 :: (a -> b -> c -> d -> e) -> Signal a -> Signal b -> Signal c -> Signal d -> Signal e
+lift4 f a b c d = f <~ a ~~ b ~~ c ~~ d
+
+lift5 :: (a -> b -> c -> d -> e -> f) -> Signal a -> Signal b -> Signal c -> Signal d -> Signal e -> Signal f
+lift5 f a b c d e = f <~ a ~~ b ~~ c ~~ d ~~ e
+
+lift6 :: (a -> b -> c -> d -> e -> f -> g) -> Signal a -> Signal b -> Signal c -> Signal d -> Signal e -> Signal f -> Signal g
+lift6 f a b c d e f' = f <~ a ~~ b ~~ c ~~ d ~~ e ~~ f'
+
+lift7 :: (a -> b -> c -> d -> e -> f -> g -> h) -> Signal a -> Signal b -> Signal c -> Signal d -> Signal e -> Signal f -> Signal g -> Signal h
+lift7 f a b c d e f' g = f <~ a ~~ b ~~ c ~~ d ~~ e ~~ f' ~~ g
+
+lift8 :: (a -> b -> c -> d -> e -> f -> g -> h -> i) -> Signal a -> Signal b -> Signal c -> Signal d -> Signal e -> Signal f -> Signal g -> Signal h -> Signal i
+lift8 f a b c d e f' g h = f <~ a ~~ b ~~ c ~~ d ~~ e ~~ f' ~~ g ~~ h
+
+foldp :: (a -> b -> b) -> b -> Signal a -> Signal b
+foldp f bInit a = Signal $ do
+    (aDefaultValue,aCont) <- runSignal a
+    ref  <- newIORef bInit
+    return (f aDefaultValue bInit,processState aCont ref)
+    where
+        processState aCont ref event = do
+            aValue <- aCont event
+            case aValue of
+                NoChange _ -> do
+                    prev <- readIORef ref
+                    return $ NoChange prev
+                Change a' -> do
+                    prev <- readIORef ref
+                    let new = f a' prev
+                    writeIORef ref new
+                    return $ Change new
+
+merge :: Signal a -> Signal a -> Signal a
+merge = (<|>)
+
+merges :: [Signal a] -> Signal a
+merges = foldr (<|>) empty
+
+combine :: [Signal a] -> Signal [a]
+combine signals = Signal $ do
+    (defaultValues,continuations) <- liftM unzip $ mapM runSignal signals
+    return $ (defaultValues,processEvent continuations)
+    where
+        processEvent continuations event = do
+            liftM (foldr collapseContinuations (NoChange [])) $ mapM (\c -> c event) continuations
+            where
+                collapseContinuations (NoChange x) (NoChange xs) = NoChange $ x : xs
+                collapseContinuations (NoChange x) (Change   xs) = Change   $ x : xs
+                collapseContinuations (Change   x) (NoChange xs) = Change   $ x : xs
+                collapseContinuations (Change   x) (Change   xs) = Change   $ x : xs
+
+dropIf :: (a -> Bool) -> a -> Signal a -> Signal a
+dropIf pred init signal = Signal $ do
+    (sValue,sCont) <- runSignal signal
+    let defaultValue = if not (pred sValue) then sValue else init
+    ref <- newIORef defaultValue
+    return (defaultValue,processEvent sCont ref)
+    where
+        processEvent sCont ref event = do
+            sValue <- sCont event
+            case sValue of
+                NoChange s -> return $ NoChange s
+                Change   s -> case not $ pred s of
+                    True -> do
+                        writeIORef ref s
+                        return $ Change s
+                    False -> do
+                        v <- readIORef ref
+                        return $ NoChange v
+    
+keepIf :: (a -> Bool) -> a -> Signal a -> Signal a
+keepIf pred init signal = Signal $ do
+    (sValue,sCont) <- runSignal signal
+    let defaultValue = if pred sValue then sValue else init
+    ref <- newIORef init
+    return (defaultValue,processEvent sCont ref)
+    where
+        processEvent sCont ref event = do
+            sValue <- sCont event
+            case sValue of
+                NoChange s -> return $ NoChange s
+                Change   s -> case pred s of
+                    True -> do
+                        writeIORef ref s
+                        return $ Change s
+                    False -> do
+                        v <- readIORef ref
+                        return $ NoChange v
+

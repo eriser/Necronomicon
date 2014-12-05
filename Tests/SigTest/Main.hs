@@ -3,13 +3,14 @@ import Necronomicon.FRP
 import Debug.Trace
 
 main :: IO()
--- main = startSignal tonsOfMouseAndTime'
+-- main = startSignal wasd
+-- main = startSignal tonsOfMouseAndTime
 -- main = runSignal tonsOfMouseAndTime
--- main = runSignal $ isDown keyW <|> isDown keyA
+-- main = startSignal $ isDown keyW <|> isDown keyA
 -- main = runSignal $ (fst <~ mousePos) + (snd <~ mousePos)
 -- main = runSignal mouseClicks
--- main = runSignal $ dropIf (\(x,y) -> x > 400) (0,0) mousePos
--- main = runSignal $ keepIf (\(x,y) -> x > 400) (0,0) mousePos
+main = startSignal $ dropIf (\(x,y) -> x > 400) (0,0) mousePos
+-- main = startSignal $ keepIf (\(x,y) -> x > 400) (0,0) mousePos
 -- main = runSignal $ sampleOn mouseClicks mousePos
 -- main = runSignal $ keepWhen ((\(x,_) -> x > 400) <~ mousePos) mousePos
 -- main = runSignal $ every $ 2 * second
@@ -18,13 +19,14 @@ main :: IO()
 -- main = runSignal $ every second <|> fps 9.5
 -- main = runSignal multiPlay
 -- main = runSignal mousePos'
--- main = runSignal $ combine [pure (666,-666),mousePos,mousePos]
-main = startSignal $ p2 -- $ (p2 + lift snd p') - (p1 + lift fst p')
-    where
+-- main = startSignal $ combine [pure (666,-666),mousePos,mousePos]
+-- main = startSignal signals
+-- main = startSignal $ p2 -- $ (p2 + lift snd p') - (p1 + lift fst p')
+    -- where
         -- p' = foldp (\(x,y) (w,z) -> (x+w,y+z)) (0,0) mousePos
         -- p1 = foldp' (\(x,y) (z,w) -> (x+w,z-y)) (0,0) mousePos'
-        p2 = foldp (+) 0 (snd <~ mousePos)
-        p3 = foldp (+) 0 (snd <~ mousePos)
+        -- p2 = foldp (+) 0 (snd <~ mousePos)
+        -- p3 = foldp (+) 0 (snd <~ mousePos)
         -- p2 = (\a -> a + 0) <~ (snd <~ mousePos')
 
 -- multiPlay :: Signal ()
