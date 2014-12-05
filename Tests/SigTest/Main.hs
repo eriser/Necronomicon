@@ -3,17 +3,19 @@ import Necronomicon.FRP
 import Debug.Trace
 
 main :: IO()
--- main = startSignal wasd
--- main = startSignal tonsOfMouseAndTime
+-- main = runSignal $ fps 1 - fps 3
+-- main = runSignal $ fps 30
+-- main = runSignal wasd
 -- main = runSignal tonsOfMouseAndTime
--- main = startSignal $ isDown keyW <|> isDown keyA
+-- main = runSignal tonsOfMouseAndTime
+-- main = runSignal $ isDown keyW <|> isDown keyA
 -- main = runSignal $ (fst <~ mousePos) + (snd <~ mousePos)
--- main = startSignal $ dropIf (>10) 0 $ count mouseClicks
--- main = startSignal $ dropWhen (isDown keyW) mousePos
--- main = startSignal $ keepWhen (isDown keyW) mousePos
--- main = startSignal $ dropIf (\(x,y) -> x > 400) (0,0) mousePos
--- main = startSignal $ keepIf (\(x,y) -> x > 400) (0,0) mousePos
-main = startSignal $ sampleOn mouseClicks mousePos
+-- main = runSignal $ dropIf (>10) 0 $ count mouseClicks
+-- main = runSignal $ dropWhen (isDown keyW) mousePos
+-- main = runSignal $ keepWhen (isDown keyW) mousePos
+-- main = runSignal $ dropIf (\(x,y) -> x > 400) (0,0) mousePos
+-- main = runSignal $ keepIf (\(x,y) -> x > 400) (0,0) mousePos
+main = runSignal $ sampleOn (fps 3) mousePos
 -- main = runSignal $ keepWhen ((\(x,_) -> x > 400) <~ mousePos) mousePos
 -- main = runSignal $ every $ 2 * second
 -- main = runSignal $ dropWhen ((\(x,_) -> x > 400) <~ mousePos) mousePos
@@ -21,9 +23,9 @@ main = startSignal $ sampleOn mouseClicks mousePos
 -- main = runSignal $ every second <|> fps 9.5
 -- main = runSignal multiPlay
 -- main = runSignal mousePos'
--- main = startSignal $ combine [pure (666,-666),mousePos,mousePos]
--- main = startSignal signals
--- main = startSignal $ p2 -- $ (p2 + lift snd p') - (p1 + lift fst p')
+-- main = runSignal $ combine [pure (666,-666),mousePos,mousePos]
+-- main = runSignal signals
+-- main = runSignal $ p2 -- $ (p2 + lift snd p') - (p1 + lift fst p')
     -- where
         -- p' = foldp (\(x,y) (w,z) -> (x+w,y+z)) (0,0) mousePos
         -- p1 = foldp' (\(x,y) (z,w) -> (x+w,z-y)) (0,0) mousePos'
@@ -53,4 +55,3 @@ tonsOfMouseAndTime = tenThousandTest
         thousandsTests  = test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ mousePos)))))))))
         test4           = tupleTest <~ thousandsTests
         tenThousandTest = test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ mousePos)))))))))
-
