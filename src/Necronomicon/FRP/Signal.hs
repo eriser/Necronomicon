@@ -63,7 +63,9 @@ module Necronomicon.FRP.Signal (
     lift8,
     foldp',
     mousePos',
-    -- runCTest,
+    startSignal,
+    mousePos'',
+    foldp'',
     module Control.Applicative
     ) where
 
@@ -657,6 +659,160 @@ instance Applicative Signal' where
 -- instance State.MonadTrans (SignalState s) where
     -- lift act = SignalState (\k s -> act >>= \a -> k s a)
 
+-------------------------
+-- Signals 4.0
+-------------------------
+data EventValue a = Change a | NoChange a deriving (Show)
+data NetworkState' = NetworkState' {
+    currentEvent'' :: Event,
+    eventValues''  :: IntMap.IntMap Dynamic
+    } deriving (Show)
+data Signal'' a = Signal'' {runSignal'' :: IO(a,Event -> IO (EventValue a))}
+
+instance  Functor Signal'' where
+    fmap f x = Signal'' $ do
+        (defaultX,xCont) <- runSignal'' x
+        let defaultValue = f defaultX 
+        ref <- newIORef defaultValue
+        return (defaultValue,processState xCont ref)
+        where
+            processState xCont ref event = do
+                xValue <- xCont event
+                case xValue of
+                    Change x -> do
+                        let newValue = f x
+                        writeIORef ref newValue
+                        return $ Change newValue
+                    NoChange _ -> do
+                        prev <- readIORef ref
+                        return $ NoChange prev
+
+instance Applicative Signal'' where
+    pure a = Signal'' $ return (a,\ns -> return $ NoChange a)
+    f <*> g = Signal'' $ do
+        (defaultF,fCont) <- runSignal'' f
+        (defaultG,gCont) <- runSignal'' g
+        let defaultValue = defaultF defaultG
+        ref <- newIORef defaultValue
+        return (defaultValue,processState fCont gCont ref)
+        where
+            processState fCont gCont ref event = do
+                fValue <- fCont event
+                gValue <- gCont event
+                case fValue of
+                    Change f' -> case gValue of
+                        Change g' -> do
+                            let newValue = f' g'
+                            writeIORef ref newValue
+                            return $ Change newValue
+                        NoChange g' -> do
+                            let newValue = f' g'
+                            writeIORef ref newValue
+                            return $ Change newValue
+                    NoChange f' -> case gValue of
+                        Change g' -> do
+                            let newValue = f' g'
+                            writeIORef ref newValue
+                            return $ Change newValue
+                        NoChange _ -> do
+                            prev <- readIORef ref
+                            return $NoChange prev
+
+--use ioRef instead of dictionary lookup
+input :: Typeable a => a -> Int -> Signal'' a
+input a uid = Signal'' $ do
+    ref <- newIORef a
+    return (a,processState ref)
+    where
+        processState ref (Event uid' e) = do
+            case uid == uid' of
+                False -> do
+                    v <- readIORef ref 
+                    return $ NoChange v
+                True  -> case fromDynamic e of
+                    Nothing -> print "input type error" >> do
+                        v <- readIORef ref 
+                        return $ NoChange v
+                    Just v  -> do
+                        writeIORef ref v
+                        return $ Change v
+
+mousePos'' :: Signal'' (Double,Double)
+mousePos'' = input (0,0) 0
+
+mouseClicks'' :: Signal'' ()
+mouseClicks'' = input () 1
+
+dimensions'' :: Signal'' (Int,Int)
+dimensions'' = input (0,0) 2
+
+foldp'' :: (a -> b -> b) -> b -> Signal'' a -> Signal'' b
+foldp'' f bInit a = Signal'' $ do
+    (aDefaultValue,aCont) <- runSignal'' a
+    ref  <- newIORef bInit
+    return (f aDefaultValue bInit,processState aCont ref)
+    where
+        processState aCont ref event = do
+            aValue <- aCont event
+            case aValue of
+                NoChange _ -> do
+                    prev <- readIORef ref
+                    return $ NoChange prev
+                Change a' -> do
+                    prev <- readIORef ref
+                    let new = f a' prev
+                    writeIORef ref new
+                    return $ Change new
+
+globalEventDispatch'' :: Show a => Signal'' a -> TBQueue Event -> IO()
+globalEventDispatch'' signal inBox = do
+    (a,processState) <- runSignal'' signal
+    print $ "Initial signal value: " ++ show a
+    forever $ do
+        e <- atomically $ readTBQueue inBox
+        a <- processState e
+        print a
+
+startSignal :: (Typeable a, Show a) => Signal'' a -> IO()
+startSignal s = initWindow >>= \mw ->
+    case mw of
+        Nothing -> print "Error starting GLFW." >> return ()
+        Just w  -> do
+            print "Starting signal run time"
+
+            globalDispatch <- atomically $ newTBQueue 100000
+            GLFW.setCursorPosCallback   w $ Just $ mousePosEvent   globalDispatch
+            GLFW.setMouseButtonCallback w $ Just $ mousePressEvent globalDispatch
+            GLFW.setKeyCallback         w $ Just $ keyPressEvent   globalDispatch
+            GLFW.setWindowSizeCallback  w $ Just $ dimensionsEvent globalDispatch
+
+            forkIO $ globalEventDispatch'' s globalDispatch
+
+            (ww,wh) <- GLFW.getWindowSize w
+            dimensionsEvent globalDispatch w ww wh
+            render False w
+    where
+        --event callbacks
+        mousePosEvent   eventNotify _ x y                                = atomically $ (writeTBQueue eventNotify $ Event 0 $ toDyn (x,y)) `orElse` return ()
+        mousePressEvent eventNotify _ _ GLFW.MouseButtonState'Released _ = atomically $ (writeTBQueue eventNotify $ Event 1 $ toDyn ()) `orElse` return ()
+        mousePressEvent _           _ _ GLFW.MouseButtonState'Pressed  _ = return ()
+        keyPressEvent   eventNotify _ k _ GLFW.KeyState'Pressed  _       = atomically $ (writeTBQueue eventNotify $ Event (glfwKeyToEventKey k) $ toDyn True)
+        keyPressEvent   eventNotify _ k _ GLFW.KeyState'Released _       = atomically $ (writeTBQueue eventNotify $ Event (glfwKeyToEventKey k) $ toDyn False)
+        keyPressEvent   eventNotify _ k _ _ _                            = return ()
+        dimensionsEvent eventNotify _ x y                                = atomically $ writeTBQueue eventNotify $ Event 2 $ toDyn (x,y)
+
+        render quit window
+            | quit      = print "Qutting" >> return ()
+            | otherwise = do
+                GLFW.pollEvents
+                q <- liftA (== GLFW.KeyState'Pressed) (GLFW.getKey window GLFW.Key'Q)
+                threadDelay $ 16667
+                render q window
+
+
+-------------------------
+-- Signals 3.0
+-------------------------
 data NetworkState = forall a b. NetworkState {
     eventHandlers'  :: IntMap.IntMap NetworkState,
     currentEvent'   :: Maybe Event,
