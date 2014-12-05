@@ -61,11 +61,7 @@ module Necronomicon.FRP.Signal (
     lift6,
     lift7,
     lift8,
-    foldp',
-    mousePos',
     startSignal,
-    mousePos'',
-    foldp'',
     module Control.Applicative
     ) where
 
@@ -596,82 +592,17 @@ playOn _ (Signal player) (Signal stopper) = Signal $ \broadcastInbox -> do
                             then print "Start playing" >> loop True pInBox sInBox outBox
                             else loop isPlaying pInBox sInBox outBox
 -}
----------------------------------------------
--- Continuation Signals????
----------------------------------------------
-
-newtype SignalState s m a = SignalState {unwrapSignalState :: forall r. (s -> a -> m r) -> s -> m r}
-type    SignalStateIO     = SignalState NetworkState IO
-newtype Signal'         a = Signal'     {unwrapSignal :: SignalStateIO (Maybe a)}
-
-instance Monad m => Monad (SignalState s m) where
-    return x = SignalState $ \k s -> k s x
-    SignalState f >>= kk = SignalState (\k s -> f (\s' a -> unwrapSignalState (kk a) k s') s)
-
-instance (Monad m) => Functor (SignalState s m) where
-    fmap = liftM
-
-instance (Monad m) => Applicative (SignalState s m) where
-    pure  = return
-    (<*>) = ap
-
-runSignalState :: Monad m => SignalState s m a -> s -> m (a,s)
-runSignalState (SignalState f) s0 = f (\s a -> return (a,s)) s0
-
-getSignalState :: SignalState s m s
-getSignalState = SignalState $ \k s -> k s s
-
-putSignalState :: s -> SignalState s m ()
-putSignalState s = SignalState $ \k _ -> k s ()
-
-modifySignalState :: (s -> s) -> SignalState s m ()
-modifySignalState f = SignalState $ \k s -> k (f s) ()
-
-instance State.MonadTrans (SignalState s) where
-    lift act = SignalState (\k s -> act >>= \a -> k s a)
-
--- instance State.MonadIO Signal' where
-    -- liftIO act = Signal' $ do
-        -- a <- State.lift act
-        -- return $ Just a
-        -- act >>= \a -> State.lift . State.liftIO $ unwrapSignal
-
--- instance Monad Signal' where
-    -- return x = Signal' . return $ Just x
-    -- x >>= f = Signal' $ do
-        -- cont <- setEventCont' x f
-        -- mk   <- unwrapSignal x
-        -- resetEventCont' cont
-        -- case mk of
-            -- Just k  -> unwrapSignal $ f k
-            -- Nothing -> return Nothing
-
-instance  Functor Signal' where
-    fmap f x = Signal' $ fmap (fmap f) $ unwrapSignal x
-    
-instance Applicative Signal' where
-    pure = Signal' . return . Just
-    f <*> g = Signal' $ do
-        k <- unwrapSignal f
-        x <- unwrapSignal g
-        return $ k <*> x
-
--- instance State.MonadTrans (SignalState s) where
-    -- lift act = SignalState (\k s -> act >>= \a -> k s a)
 
 -------------------------
 -- Signals 4.0
 -------------------------
+data Event = Event Int Dynamic
 data EventValue a = Change a | NoChange a deriving (Show)
-data NetworkState' = NetworkState' {
-    currentEvent'' :: Event,
-    eventValues''  :: IntMap.IntMap Dynamic
-    } deriving (Show)
-data Signal'' a = Signal'' {runSignal'' :: IO(a,Event -> IO (EventValue a))}
+data Signal a = Signal {runSignal :: IO(a,Event -> IO (EventValue a))}
 
-instance  Functor Signal'' where
-    fmap f x = Signal'' $ do
-        (defaultX,xCont) <- runSignal'' x
+instance  Functor Signal where
+    fmap f x = Signal $ do
+        (defaultX,xCont) <- runSignal x
         let defaultValue = f defaultX 
         ref <- newIORef defaultValue
         return (defaultValue,processState xCont ref)
@@ -687,11 +618,11 @@ instance  Functor Signal'' where
                         prev <- readIORef ref
                         return $ NoChange prev
 
-instance Applicative Signal'' where
-    pure a = Signal'' $ return (a,\ns -> return $ NoChange a)
-    f <*> g = Signal'' $ do
-        (defaultF,fCont) <- runSignal'' f
-        (defaultG,gCont) <- runSignal'' g
+instance Applicative Signal where
+    pure a = Signal $ return (a,\ns -> return $ NoChange a)
+    f <*> g = Signal $ do
+        (defaultF,fCont) <- runSignal f
+        (defaultG,gCont) <- runSignal g
         let defaultValue = defaultF defaultG
         ref <- newIORef defaultValue
         return (defaultValue,processState fCont gCont ref)
@@ -719,8 +650,8 @@ instance Applicative Signal'' where
                             return $NoChange prev
 
 --use ioRef instead of dictionary lookup
-input :: Typeable a => a -> Int -> Signal'' a
-input a uid = Signal'' $ do
+input :: Typeable a => a -> Int -> Signal a
+input a uid = Signal $ do
     ref <- newIORef a
     return (a,processState ref)
     where
@@ -737,18 +668,9 @@ input a uid = Signal'' $ do
                         writeIORef ref v
                         return $ Change v
 
-mousePos'' :: Signal'' (Double,Double)
-mousePos'' = input (0,0) 0
-
-mouseClicks'' :: Signal'' ()
-mouseClicks'' = input () 1
-
-dimensions'' :: Signal'' (Int,Int)
-dimensions'' = input (0,0) 2
-
-foldp'' :: (a -> b -> b) -> b -> Signal'' a -> Signal'' b
-foldp'' f bInit a = Signal'' $ do
-    (aDefaultValue,aCont) <- runSignal'' a
+foldp :: (a -> b -> b) -> b -> Signal a -> Signal b
+foldp f bInit a = Signal $ do
+    (aDefaultValue,aCont) <- runSignal a
     ref  <- newIORef bInit
     return (f aDefaultValue bInit,processState aCont ref)
     where
@@ -764,16 +686,17 @@ foldp'' f bInit a = Signal'' $ do
                     writeIORef ref new
                     return $ Change new
 
-globalEventDispatch'' :: Show a => Signal'' a -> TBQueue Event -> IO()
-globalEventDispatch'' signal inBox = do
-    (a,processState) <- runSignal'' signal
-    print $ "Initial signal value: " ++ show a
-    forever $ do
-        e <- atomically $ readTBQueue inBox
-        a <- processState e
-        print a
+--------------------------------------
+-- RunTime
+--------------------------------------
 
-startSignal :: (Typeable a, Show a) => Signal'' a -> IO()
+initWindow :: IO(Maybe GLFW.Window)
+initWindow = GLFW.init >>= \initSuccessful -> if initSuccessful then window else return Nothing
+    where
+        mkWindow = GLFW.createWindow 960 640 "Necronomicon" Nothing Nothing
+        window   = mkWindow >>= \w -> GLFW.makeContextCurrent w >> return w
+
+startSignal :: (Typeable a, Show a) => Signal a -> IO()
 startSignal s = initWindow >>= \mw ->
     case mw of
         Nothing -> print "Error starting GLFW." >> return ()
@@ -786,7 +709,7 @@ startSignal s = initWindow >>= \mw ->
             GLFW.setKeyCallback         w $ Just $ keyPressEvent   globalDispatch
             GLFW.setWindowSizeCallback  w $ Just $ dimensionsEvent globalDispatch
 
-            forkIO $ globalEventDispatch'' s globalDispatch
+            forkIO $ globalEventDispatch s globalDispatch
 
             (ww,wh) <- GLFW.getWindowSize w
             dimensionsEvent globalDispatch w ww wh
@@ -809,406 +732,14 @@ startSignal s = initWindow >>= \mw ->
                 threadDelay $ 16667
                 render q window
 
-
--------------------------
--- Signals 3.0
--------------------------
-data NetworkState = forall a b. NetworkState {
-    eventHandlers'  :: IntMap.IntMap NetworkState,
-    currentEvent'   :: Maybe Event,
-    eventValues'    :: IntMap.IntMap Dynamic,
-    xcomp'          :: Signal' a,
-    fcomp'          :: [a -> Signal' b]
-    }
-
-instance Show NetworkState where
-    show (NetworkState eh ce ev x f) = "NetworkState {" ++ show eh ++ "," ++ show ce ++ "," ++ show ev ++ "," ++ show x ++ "," ++ show f
-
-instance Show (Signal' a) where
-    show _ = "Signal a"
-
-instance Show (a -> Signal' b) where
-    show _ = "(a -> Signal' b)"
-
-
-currentEventValue' :: Typeable a => Int -> Signal' a
-currentEventValue' uid = Signal' $ do
-    st <- getSignalState -- !> "currValue"
-    case IntMap.lookup uid (eventValues' st) of
-        -- Nothing -> waitEvent' uid
-        Nothing -> eventValue' uid
-        -- Just v  -> return $ fromDyn v (trace "currentEventValue: type error" Nothing) 
-        Just v  -> case fromDynamic v of
-            Nothing -> trace "currentEventValue: type error" $ return $ Nothing
-            Just v' -> return $ Just v'
-
-waitEvent' :: Typeable a => Int -> SignalStateIO (Maybe a)
-waitEvent' uid = do
-    st <- getSignalState -- !> "waitEvent"
-    let evs = eventHandlers' st 
-    case IntMap.lookup uid evs of
-        Nothing ->  do
-            State.lift $ print "waitEvent Nothing"
-            putSignalState st{eventHandlers' = IntMap.insert uid st evs} -- !> ("created event handler for: "++ show id)
-            return Nothing 
-        Just _ ->  do
-            State.lift $ print "waitEvent Just"
-            putSignalState st{eventHandlers' = IntMap.insert uid st evs} -- !> ("upadated event handler for: "++ show id)
-            eventValue' uid
-
-eventValue' :: Typeable a => Int -> SignalStateIO (Maybe a)
-eventValue' uid =  do
-    st <- getSignalState
-    let me = currentEvent' st
-    case me of
-        Nothing -> return Nothing -- !> "NO current EVENT"
-        Just (Event uid' r) -> do
-            if uid /= uid' then return Nothing else do
-                case fromDynamic r of
-                    Nothing -> do
-                        State.lift $ print "eventValue type error"
-                        return Nothing 
-                    Just x -> do
-                        State.lift $ print "Updated event value"
-                        putSignalState st{eventValues' = IntMap.insert uid (toDyn x) $ eventValues' st}
-                        return $ Just x
-
-setEventCont' :: (Signal' a) -> (a -> Signal' b) -> SignalStateIO NetworkState
-setEventCont' x f = do
-    st@(NetworkState es c vs x' fs) <- getSignalState
-    -- printConts' st
-    putSignalState $ NetworkState es c vs  x ( f : Unsafe.unsafeCoerce fs)
-    return st
-
-resetEventCont' :: NetworkState -> SignalStateIO ()
-resetEventCont' cont = do
-    st <- getSignalState
-    putSignalState cont{eventHandlers' = eventHandlers' st, eventValues' = eventValues' st, currentEvent' = currentEvent' st}
-
-runCont' :: NetworkState -> SignalStateIO ()
-runCont' (NetworkState _ _ _ x fs) = do
-    run x (Unsafe.unsafeCoerce fs)
-    return ()
-    where
-        run      x fs  = unwrapSignal $ (compose fs <~ x)
-        compose []     x = x
-        compose (f:fs) x = compose fs $ f x
-
-        -- run      x fs  = unwrapSignal $ x >>= compose fs
-        -- compose []     = const (Signal' $ return Nothing)
-        -- compose (f:fs) = \x -> f x >>= compose fs
-
-runEvent' :: Event -> SignalStateIO ()
-runEvent' (ev@(Event uid _)) = do
-    modifySignalState $ \st -> st{currentEvent' = Just ev ,eventValues' = IntMap.delete uid $ eventValues' st} -- !> ("inject event:" ++ show uid)
-    -- ths <- State.gets eventHandlers'
-    st <- getSignalState
-    let ths = eventHandlers' st
-    case IntMap.lookup uid ths of
-        Just st -> runCont' st  -- !> ("execute event handler for: "++ show uid) 
-        Nothing -> return ()   -- !> "no handler for the event"
-
-globalEventDispatch' :: (Typeable a, Show a) => TBQueue Event -> Signal' a -> NetworkState -> IO ()
-globalEventDispatch' inBox signal event = do
-    ev <- atomically $ readTBQueue inBox
-    -- print ev
-    (a,e) <- runSignalState (runEvent' ev >> unwrapSignal signal) event
-    print $ e
-    print a
-    globalEventDispatch' inBox signal e
-    -- (flip runSignalState) event $ do
-        -- unwrapSignal $ do
-            -- s <- signal
-            -- State.liftIO $ print "Result: "
-            -- State.liftIO $ print s
-            -- _ <- Signal' (getSignalState >>= printConts' >> (return $ Just ()))
-            -- _ <- Signal' $ do
-                -- (NetworkState es c vs x _) <- getSignalState
-                -- putSignalState $ NetworkState es c vs x []
-                -- getSignalState >>= printConts'
-                -- State.lift $ print "put"
-                -- return $ Just ()
-            -- _ <- Signal' (getSignalState >>= printConts' >> (return $ Just ()))
-            -- return s
-        -- forever $ do
-            -- ev <- State.lift $ atomically $ readTBQueue inBox
-            -- unwrapSignal (print <~ signal)
-            -- State.lift $ print "Forever"
-            -- getSignalState >>= printConts'
-            -- runEvent' ev
-    -- return ()
-    -- where
-        -- printSignal = Signal' $ return $ Just $ \s -> print s
-
-printConts' (NetworkState _ _ _ _ fs) = State.lift $ print $ length fs
-
---Space leak!
-foldp' :: (Typeable b,Show b) => (a -> b -> b) -> b -> Signal' a -> Signal' b
-foldp' f bInit a = f' ~~ a
-    where
-        ref = unsafePerformIO $ newIORef bInit
-        f' = Signal' $ return $ Just $ \a -> unsafePerformIO $ do
-            b <- readIORef ref
-            let result = f a b
-            writeIORef ref result
-            return result
-
-    -- a >>= \a' -> return $ f a' bInit
-    -- Signal' $ do
-    -- let ref = unsafePerformIO $ newIORef bInit
-    -- cont <- setEventCont' a (\a -> a >>= \a' -> f a' bInit) --(f' ref)
-    -- a'   <- unwrapSignal a
-    -- resetEventCont' cont
-    -- case a' of
-        -- Nothing -> return Nothing
-        -- Just a' -> do
-            -- b <- State.lift $ readIORef ref
-            -- return $ Just $ f a' b
-    -- where
-        -- f' ref a = Signal' $ do
-            -- b <- State.lift $ readIORef ref
-            -- let result = f a b
-            -- State.lift $ writeIORef ref result
-            -- return $ Just result
-
-----------------
--- Old Version
-----------------
-data    Event    = Event Int Dynamic deriving (Show)
-type    StateIO  = State.StateT EventF IO
-newtype Signal a = Signal {unwrapState :: StateIO (Maybe a)}
-
-instance Monad Signal where
-    return x = Signal . return $ Just x
-    x >>= f = Signal $ do
-        cont <- setEventCont x f
-        mk   <- unwrapState x
-        resetEventCont cont
-        case mk of
-            Just k  -> unwrapState $ f k
-            Nothing -> return Nothing
-
-instance  Functor Signal where
-    fmap f x = Signal $ fmap (fmap f) $ unwrapState x
-
-instance Applicative Signal where
-    pure  = return
-    f <*> g = Signal $ do
-        k <- unwrapState f
-        x <- unwrapState g
-        return $ k <*> x
-
-data EventF = forall a b. EventF {
-    eventHandlers  :: IntMap.IntMap EventF,
-    currentEvent   :: Maybe Event,
-    eventValues    :: IntMap.IntMap Dynamic,
-    xcomp          :: Signal a,
-    fcomp          :: [a -> Signal b]
-    }
-
-currentEventValue :: Typeable a => Int -> Signal a
-currentEventValue uid = Signal $ do
-    st <- State.get -- !> "currValue"
-    case IntMap.lookup uid (eventValues st) of
-        Nothing -> waitEvent uid
-        -- Just v  -> return $ fromDyn v (trace "currentEventValue: type error" Nothing) 
-        Just v  -> case fromDynamic v of
-            Nothing -> trace "currentEventValue: type error" $ return $ Nothing
-            Just v' -> return $ Just v'
-
-waitEvent :: Typeable a => Int -> StateIO (Maybe a)
-waitEvent uid = do
-    st <- State.get -- !> "waitEvent"
-    let evs = eventHandlers st 
-    case IntMap.lookup uid evs of
-        Nothing ->  do
-            State.put st{ eventHandlers = IntMap.insert uid st evs} -- !> ("created event handler for: "++ show id)
-            return Nothing 
-        Just _ ->  do
-            State.put st{ eventHandlers = IntMap.insert uid st evs} -- !> ("upadated event handler for: "++ show id)
-            eventValue uid
-
-eventValue :: Typeable a => Int -> StateIO (Maybe a)
-eventValue uid =  do
-    st <- State.get
-    let me = currentEvent st
-    case me of
-        Nothing -> return Nothing -- !> "NO current EVENT"
-        Just (Event uid' r) -> do
-            if uid' /= uid then return Nothing else do
-                case fromDynamic r of
-                    Nothing -> return Nothing 
-                    Just x -> do
-                        State.put st{eventValues = IntMap.insert uid r $ eventValues st}
-                        return $ Just x
-
-setEventCont :: (Signal a) -> (a -> Signal b) -> StateIO EventF
-setEventCont x f = do
-    st@(EventF es c vs x' fs) <- State.get
-    State.put $ EventF es c vs  x ( f : Unsafe.unsafeCoerce fs) -- st{xcomp=  x, fcomp=  f: unsafeCoerce fs}
-    -- trace ("length:" ++ show (length (f:Unsafe.unsafeCoerce fs))) $ return st
-    return st
-
-resetEventCont :: EventF -> StateIO ()
-resetEventCont cont = do
-    st <- State.get
-    State.put cont{eventHandlers = eventHandlers st, eventValues = eventValues st, currentEvent = currentEvent st}
-
-runCont :: EventF -> StateIO ()
-runCont (EventF _ _ _ x fs) = do
-    run x (Unsafe.unsafeCoerce fs)
-    return ()
-    where
-        run      x fs  = unwrapState $ x >>= compose fs
-        compose []     = const (Signal $ return Nothing)
-        compose (f:fs) = \x -> f x >>= compose fs
-
-runEvent :: Event -> StateIO ()
-runEvent (ev@(Event uid _)) = do
-    (State.modify $ \st -> st{currentEvent = Just ev ,eventValues = IntMap.delete uid $ eventValues st}) -- !> ("inject event:" ++ show uid)
-    ths <- State.gets eventHandlers
-    case IntMap.lookup uid ths of
-        Just st -> runCont st  -- !> ("execute event handler for: "++ show uid) 
-        Nothing -> return ()   -- !> "no handler for the event"
-
--- globalEventDispatch :: (Typeable a, Show a) => TBQueue Event -> Signal a -> EventF -> IO ()
--- globalEventDispatch inBox signal event = do
-    -- ev    <- atomically $ readTBQueue inBox
-    -- (_,e) <- State.runStateT (unwrapSignal signal) event
-    -- (flip State.runStateT) e $ forever $ do
-        -- runEvent ev
-        -- print 
--- return ()
-    -- globalEventDispatch inBox signal e
-            -- (a,eventf') <-  ( >> ) 
-            -- let eventf'' = eventf'{prevState = IntMap.map (\(Rewritten p) -> (Fresh p)) $ prevState eventf',counter = 0}
-            -- State.lift $ print s
-            -- return ()
-            -- print $ IntMap.toList $ prevState eventf''
-            -- globalEventDispatch inBox signal eventf''
-
-printConts (EventF _ _ _ _ fs) = State.lift $ print $ length fs
-
---Space leak!
-foldp :: (Typeable b,Show b) => (a -> b -> b) -> b -> Signal a -> Signal b
-foldp f bInit a = Signal $ do
-    -- State.get >>= printConts
-    -- cont <- State.get >>= setCont' a
-    cont <- setEventCont a f'
-    a'   <- unwrapState a
-    resetEventCont cont
-    case a' of
-        Nothing -> return Nothing
-        Just a' -> do
-            b <- State.lift $ readIORef ref
-            return $ Just $ f a' b
-    where
-        ref  = unsafePerformIO $ newIORef bInit
-        -- setCont' x st@(EventF es c vs x' (ff:fs)) = do
-            -- State.put $ EventF es c vs  x (Unsafe.unsafeCoerce f' : [])
-            -- return (EventF es c vs x' (ff:[]))
-        -- setCont' st = return st
-        f' a = Signal $ do
-            b <- State.lift $ readIORef ref
-            let result = f a b
-            -- State.lift $ print b
-            State.get >>= printConts
-            State.lift $ writeIORef ref result
-            return $ Just result
-
---------------------------------------
--- Alternative Instance
---------------------------------------
-
--- Would prefer this to act like Elm merge behavior
-instance Alternative Signal where
-    empty = Signal $ return Nothing
-    f <|> g = Signal $ do
-        x <- unwrapState f
-        y <- unwrapState g
-        return $ x <|> y
-
--- currentEventValueAlt :: Typeable a => Int -> Signal a
--- currentEventValueAlt uid = Signal $ do
-    -- waitEvent uid
-    -- st <- State.get -- !> "currValue"
-    -- case IntMap.lookup uid (eventValues st) of
-        -- Nothing -> waitEvent uid
-        -- Just v  -> return $ fromDyn v (error "currentEventValue: type error") 
-        -- Just v  -> return $ fromDynamic v
-
--- waitEventAlt :: Typeable a => Int -> State.State EventF (Maybe a)
--- waitEventAlt uid = do
-    -- st <- State.get -- !> "waitEvent"
-    -- let evs = eventHandlers st 
-    -- case IntMap.lookup uid evs of
-        -- Nothing ->  do
-            -- State.put st{eventHandlers = IntMap.insert uid st evs} -- !> ("created event handler for: "++ show id)
-            -- return Nothing 
-        -- Just _ ->  do
-            -- State.put st{eventHandlers = IntMap.insert uid st evs} -- !> ("upadated event handler for: "++ show id)
-            -- eventValue uid
-
--- eventValueAlt :: Typeable a => Int -> State.State EventF (Maybe a)
--- eventValueAlt uid =  do
-    -- st <- State.get
-    -- let me = currentEvent st
-    -- case me of
-        -- Nothing -> return Nothing -- !> "NO current EVENT"
-        -- Just (Event uid r) -> do
-            -- if uid /= uid then return Nothing else do
-                -- case fromDynamic r of
-                    -- Nothing -> return Nothing 
-                    -- Just x -> do
-                        -- State.put st{eventValues = IntMap.insert uid r $ eventValues st}
-                        -- return $ Just x
-
---------------------------------------
--- RunTime
---------------------------------------
-
-initWindow :: IO(Maybe GLFW.Window)
-initWindow = GLFW.init >>= \initSuccessful -> if initSuccessful then window else return Nothing
-    where
-        mkWindow = GLFW.createWindow 960 640 "Necronomicon" Nothing Nothing
-        window   = mkWindow >>= \w -> GLFW.makeContextCurrent w >> return w
-
-runSignal :: (Typeable a, Show a) => Signal' a -> IO()
-runSignal s = initWindow >>= \mw ->
-    case mw of
-        Nothing -> print "Error starting GLFW." >> return ()
-        Just w  -> do
-            print "Starting signal run time"
-
-            globalDispatch <- atomically $ newTBQueue 100000
-            GLFW.setCursorPosCallback   w $ Just $ mousePosEvent   globalDispatch
-            GLFW.setMouseButtonCallback w $ Just $ mousePressEvent globalDispatch
-            GLFW.setKeyCallback         w $ Just $ keyPressEvent   globalDispatch
-            GLFW.setWindowSizeCallback  w $ Just $ dimensionsEvent globalDispatch
-
-            -- forkIO $ globalEventDispatch globalDispatch s event0
-            forkIO $ globalEventDispatch' globalDispatch s event0'
-
-            (ww,wh) <- GLFW.getWindowSize w
-            dimensionsEvent globalDispatch w ww wh
-            render False w
-    where
-        --event callbacks
-        mousePosEvent   eventNotify _ x y                                = atomically $ (writeTBQueue eventNotify $ Event 0 $ toDyn (x,y)) `orElse` return ()
-        mousePressEvent eventNotify _ _ GLFW.MouseButtonState'Released _ = atomically $ (writeTBQueue eventNotify $ Event 1 $ toDyn ()) `orElse` return ()
-        mousePressEvent _           _ _ GLFW.MouseButtonState'Pressed  _ = return ()
-        keyPressEvent   eventNotify _ k _ GLFW.KeyState'Pressed  _       = atomically $ (writeTBQueue eventNotify $ Event (glfwKeyToEventKey k) $ toDyn True)
-        keyPressEvent   eventNotify _ k _ GLFW.KeyState'Released _       = atomically $ (writeTBQueue eventNotify $ Event (glfwKeyToEventKey k) $ toDyn False)
-        keyPressEvent   eventNotify _ k _ _ _                            = return ()
-        dimensionsEvent eventNotify _ x y                                = atomically $ writeTBQueue eventNotify $ Event 2 $ toDyn (x,y)
-
-        render quit window
-            | quit      = print "Qutting" >> return ()
-            | otherwise = do
-                GLFW.pollEvents
-                q <- liftA (== GLFW.KeyState'Pressed) (GLFW.getKey window GLFW.Key'Q)
-                threadDelay $ 16667
-                render q window
+globalEventDispatch :: Show a => Signal a -> TBQueue Event -> IO()
+globalEventDispatch signal inBox = do
+    (a,processState) <- runSignal signal
+    print $ "Initial signal value: " ++ show a
+    forever $ do
+        e <- atomically $ readTBQueue inBox
+        a <- processState e
+        print a
 
 instance Num a => Num (Signal a) where
     (+)         = liftA2 (+)
@@ -1315,12 +846,6 @@ toHours        t = t / 3600
 -- Input
 ---------------------------------------------
 
-event0' :: NetworkState
-event0' = NetworkState IntMap.empty Nothing IntMap.empty (Signal' $ return Nothing) [const $ Signal' $ return Nothing]
-
-event0 :: EventF
-event0 = EventF IntMap.empty Nothing IntMap.empty (Signal $ return Nothing) [const $ Signal $ return Nothing]
-
 --eventlist: 
 type Key  = GLFW.Key
 keyA = GLFW.Key'A
@@ -1380,25 +905,20 @@ glfwKeyToEventKey k
     | k == keyZ = 125
     | otherwise = -1
 
-getSignal' :: Typeable a => Int -> Signal' a
-getSignal' = currentEventValue'
 
-mousePos'    :: Signal' (Double,Double)
-mousePos'    = getSignal' 0
+mousePos :: Signal (Double,Double)
+mousePos = input (0,0) 0
 
-getSignal :: Typeable a => Int -> Signal a
-getSignal = currentEventValue
-
-mousePos    :: Signal (Double,Double)
 mouseClicks :: Signal ()
-dimensions  :: Signal (Int,Int)
-isDown      :: Key -> Signal Bool
-wasd        :: Signal (Double,Double)
+mouseClicks = input () 1
 
-mousePos    = getSignal 0
-mouseClicks = getSignal 1
-dimensions  = getSignal 2
-isDown      = getSignal . glfwKeyToEventKey
-wasd        = go <~ isDown keyW ~~ isDown keyA ~~ isDown keyS ~~ isDown keyD
+dimensions :: Signal (Int,Int)
+dimensions = input (0,0) 2
+
+isDown :: Key -> Signal Bool
+isDown = input False . glfwKeyToEventKey
+
+wasd :: Signal (Double,Double)
+wasd = go <~ isDown keyW ~~ isDown keyA ~~ isDown keyS ~~ isDown keyD
     where
         go w a s d = (((if d then 1 else 0) + (if a then (-1) else 0)),((if w then 1 else 0) + (if s then (-1) else 0)))

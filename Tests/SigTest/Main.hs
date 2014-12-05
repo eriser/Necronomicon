@@ -23,8 +23,8 @@ main = startSignal $ p2 -- $ (p2 + lift snd p') - (p1 + lift fst p')
     where
         -- p' = foldp (\(x,y) (w,z) -> (x+w,y+z)) (0,0) mousePos
         -- p1 = foldp' (\(x,y) (z,w) -> (x+w,z-y)) (0,0) mousePos'
-        p2 = foldp'' (+) 0 (snd <~ mousePos'')
-        p3 = foldp'' (+) 0 (snd <~ mousePos'')
+        p2 = foldp (+) 0 (snd <~ mousePos)
+        p3 = foldp (+) 0 (snd <~ mousePos)
         -- p2 = (\a -> a + 0) <~ (snd <~ mousePos')
 
 -- multiPlay :: Signal ()
@@ -36,30 +36,17 @@ main = startSignal $ p2 -- $ (p2 + lift snd p') - (p1 + lift fst p')
     -- where
         -- beat = 0
 
--- tonsOfMouseAndTime :: Signal (Double,Double)
+tonsOfMouseAndTime :: Signal (Double,Double)
 tonsOfMouseAndTime = tenThousandTest
     where
         tupleTest (x,y) (z,w) = (x+w,z-y)
-        tupleTime       = (\x ->  (x,x)) <~ mousePos'
-        test1           = tupleTest <~ mousePos'
-        tenTests        = test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ mousePos')))))))))
+        tupleTime       = (\x ->  (x,x)) <~ mousePos
+        test1           = tupleTest <~ mousePos
+        tenTests        = test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ mousePos)))))))))
         test2           = tupleTest <~ tenTests
-        hundredTests    = test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ mousePos')))))))))
+        hundredTests    = test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ mousePos)))))))))
         test3           = tupleTest <~ hundredTests
-        thousandsTests  = test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ mousePos')))))))))
+        thousandsTests  = test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ mousePos)))))))))
         test4           = tupleTest <~ thousandsTests
-        tenThousandTest = test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ mousePos')))))))))
-
-tonsOfMouseAndTime' = tenThousandTest
-    where
-        tupleTest (x,y) (z,w) = (x+w,z-y)
-        tupleTime       = (\x ->  (x,x)) <~ mousePos''
-        test1           = tupleTest <~ mousePos''
-        tenTests        = test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ mousePos'')))))))))
-        test2           = tupleTest <~ tenTests
-        hundredTests    = test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ mousePos'')))))))))
-        test3           = tupleTest <~ hundredTests
-        thousandsTests  = test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ mousePos'')))))))))
-        test4           = tupleTest <~ thousandsTests
-        tenThousandTest = test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ mousePos'')))))))))
+        tenThousandTest = test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ mousePos)))))))))
 
