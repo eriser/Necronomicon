@@ -3,6 +3,8 @@ import Necronomicon.FRP
 import Debug.Trace
 
 main :: IO()
+main = runSignal $ randFS $ fps 3
+-- main = runSignal $ randS 100 666 $ fps 3
 -- main = runSignal $ fps 1 - fps 3
 -- main = runSignal $ fps 30
 -- main = runSignal wasd
@@ -15,7 +17,7 @@ main :: IO()
 -- main = runSignal $ keepWhen (isDown keyW) mousePos
 -- main = runSignal $ dropIf (\(x,y) -> x > 400) (0,0) mousePos
 -- main = runSignal $ keepIf (\(x,y) -> x > 400) (0,0) mousePos
-main = runSignal $ sampleOn (fps 3) mousePos
+-- main = runSignal $ sampleOn (fps 3) mousePos
 -- main = runSignal $ keepWhen ((\(x,_) -> x > 400) <~ mousePos) mousePos
 -- main = runSignal $ every $ 2 * second
 -- main = runSignal $ dropWhen ((\(x,_) -> x > 400) <~ mousePos) mousePos

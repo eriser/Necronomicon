@@ -5,6 +5,8 @@ module Necronomicon.FRP.Signal (
     (~~),
     -- (=<~),
     -- execute,
+    randS,
+    randFS,
     count,
     wasd,
     dimensions,
@@ -79,6 +81,7 @@ import Debug.Trace
 import qualified Data.IntMap.Strict as IntMap
 import Data.Dynamic
 import Data.IORef
+import System.Random
 
 (<~) :: Functor f => (a -> b) -> f a -> f b
 (<~) = fmap
@@ -661,3 +664,35 @@ sampleOn a b = Signal $ \necro -> do
                     Change   b -> do
                         writeIORef ref b
                         return $ Change b
+
+randS :: Int -> Int -> Signal a -> Signal Int
+randS low high signal = Signal $ \necro -> do
+    (_,cont) <- unSignal signal necro
+    r        <- randomRIO (low,high)
+    ref      <- newIORef r
+    return (r,processEvent cont ref)
+    where
+        processEvent cont ref event = do
+            value <- cont event
+            case value of
+                NoChange _ -> readIORef ref >>= return . NoChange
+                Change   _ -> do
+                    r <- randomRIO (low,high)
+                    writeIORef ref r
+                    return $ Change r
+
+randFS :: Signal a -> Signal Float
+randFS signal = Signal $ \necro -> do
+    (_,cont) <- unSignal signal necro
+    r        <- randomRIO (0,1)
+    ref      <- newIORef r
+    return (r,processEvent cont ref)
+    where
+        processEvent cont ref event = do
+            value <- cont event
+            case value of
+                NoChange _ -> readIORef ref >>= return . NoChange
+                Change   _ -> do
+                    r <- randomRIO (0,1)
+                    writeIORef ref r
+                    return $ Change r
