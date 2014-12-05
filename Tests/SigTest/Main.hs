@@ -8,7 +8,9 @@ main :: IO()
 -- main = runSignal tonsOfMouseAndTime
 -- main = startSignal $ isDown keyW <|> isDown keyA
 -- main = runSignal $ (fst <~ mousePos) + (snd <~ mousePos)
-main = startSignal $ count mouseClicks
+-- main = startSignal $ dropIf (>10) 0 $ count mouseClicks
+-- main = startSignal $ dropWhen (isDown keyW) mousePos
+main = startSignal $ keepWhen (isDown keyW) mousePos
 -- main = startSignal $ dropIf (\(x,y) -> x > 400) (0,0) mousePos
 -- main = startSignal $ keepIf (\(x,y) -> x > 400) (0,0) mousePos
 -- main = runSignal $ sampleOn mouseClicks mousePos

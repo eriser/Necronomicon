@@ -21,8 +21,8 @@ module Necronomicon.FRP.Signal (
     keepIf,
     dropIf,
     -- sampleOn,
-    -- keepWhen,
-    -- dropWhen,
+    keepWhen,
+    dropWhen,
     isDown,
     -- playOn,
     combine,
@@ -78,12 +78,9 @@ import Data.Either
 import qualified Data.Set as Set
 import Debug.Trace
 import qualified Data.IntMap.Strict as IntMap
--- import qualified Control.Monad.State.Class as MonadState
--- import qualified Control.Monad.State.Strict as State
 import Data.Dynamic
--- import qualified Unsafe.Coerce as Unsafe
 import Data.IORef
--- import System.IO.Unsafe
+
 (<~) :: Functor f => (a -> b) -> f a -> f b
 (<~) = fmap
 
@@ -1011,6 +1008,51 @@ keepIf pred init signal = Signal $ do
                     False -> do
                         v <- readIORef ref
                         return $ NoChange v
+
+keepWhen :: Signal Bool -> Signal a -> Signal a
+keepWhen pred x = Signal $ do
+    (pValue,pCont) <- runSignal pred
+    (xValue,xCont) <- runSignal x
+    ref            <- newIORef xValue
+    return (xValue,processEvent pCont xCont ref)
+    where
+        processEvent pCont xCont ref event = do
+            pValue <- pCont event
+            xValue <- xCont event
+            case pValue of
+                Change p -> case xValue of
+                    Change   x -> go x p
+                    NoChange x -> readIORef ref >>= return . NoChange
+                NoChange p -> case xValue of
+                    Change   x -> go x p
+                    NoChange _ -> readIORef ref >>= return . NoChange
+            where
+                go x p = if p
+                         then writeIORef ref x >> (return $ Change x)
+                         else readIORef  ref   >>= return . NoChange
+
+
+dropWhen :: Signal Bool -> Signal a -> Signal a
+dropWhen pred x = Signal $ do
+    (pValue,pCont) <- runSignal pred
+    (xValue,xCont) <- runSignal x
+    ref            <- newIORef xValue
+    return (xValue,processEvent pCont xCont ref)
+    where
+        processEvent pCont xCont ref event = do
+            pValue <- pCont event
+            xValue <- xCont event
+            case pValue of
+                Change p -> case xValue of
+                    Change   x -> go x p
+                    NoChange x -> readIORef ref >>= return . NoChange
+                NoChange p -> case xValue of
+                    Change   x -> go x p
+                    NoChange _ -> readIORef ref >>= return . NoChange
+            where
+                go x p = if not p
+                         then writeIORef ref x >> (return $ Change x)
+                         else readIORef  ref   >>= return . NoChange
 
 count :: Signal a -> Signal Int
 count signal = Signal $ do
