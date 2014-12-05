@@ -5,6 +5,7 @@ module Necronomicon.FRP.Signal (
     (~~),
     -- (=<~),
     -- execute,
+    count,
     wasd,
     dimensions,
     Signal,
@@ -77,12 +78,12 @@ import Data.Either
 import qualified Data.Set as Set
 import Debug.Trace
 import qualified Data.IntMap.Strict as IntMap
-import qualified Control.Monad.State.Class as MonadState
-import qualified Control.Monad.State.Strict as State
+-- import qualified Control.Monad.State.Class as MonadState
+-- import qualified Control.Monad.State.Strict as State
 import Data.Dynamic
-import qualified Unsafe.Coerce as Unsafe
+-- import qualified Unsafe.Coerce as Unsafe
 import Data.IORef
-import System.IO.Unsafe
+-- import System.IO.Unsafe
 (<~) :: Functor f => (a -> b) -> f a -> f b
 (<~) = fmap
 
@@ -777,7 +778,9 @@ globalEventDispatch signal inBox = do
     forever $ do
         e <- atomically $ readTBQueue inBox
         a <- processState e
-        print a
+        case a of
+            NoChange _ -> return ()
+            Change  a' -> print a'
 
 ---------------------------------------------
 -- Time
@@ -909,7 +912,7 @@ wasd = go <~ isDown keyW ~~ isDown keyA ~~ isDown keyS ~~ isDown keyD
 ---------------------------------------------
 -- Combinators
 ---------------------------------------------
-                
+
 lift :: (a -> b) -> Signal a -> Signal b
 lift  = liftA
 
@@ -989,7 +992,7 @@ dropIf pred init signal = Signal $ do
                     False -> do
                         v <- readIORef ref
                         return $ NoChange v
-    
+
 keepIf :: (a -> Bool) -> a -> Signal a -> Signal a
 keepIf pred init signal = Signal $ do
     (sValue,sCont) <- runSignal signal
@@ -1008,4 +1011,22 @@ keepIf pred init signal = Signal $ do
                     False -> do
                         v <- readIORef ref
                         return $ NoChange v
+
+count :: Signal a -> Signal Int
+count signal = Signal $ do
+    (_,sCont) <- runSignal signal
+    ref <- newIORef 0
+    return (0,processEvent sCont ref)
+    where
+        processEvent sCont ref event = do
+            sValue <- sCont event
+            case sValue of
+                NoChange _ -> do
+                    n <- readIORef ref
+                    return $ NoChange n
+                Change _ -> do
+                    n <- readIORef ref
+                    let result = n + 1
+                    writeIORef ref result
+                    return $ Change result
 
