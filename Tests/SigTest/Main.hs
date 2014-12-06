@@ -3,7 +3,8 @@ import Necronomicon.FRP
 import Debug.Trace
 
 main :: IO()
-main = runSignal $ randFS $ fps 3
+main = runSignal $ dropRepeats $ isDown keyW <|> isDown keyA  <|> isDown keyS <|> isDown keyD
+-- main = runSignal $ randFS $ fps 3
 -- main = runSignal $ randS 100 666 $ fps 3
 -- main = runSignal $ fps 1 - fps 3
 -- main = runSignal $ fps 30
@@ -57,3 +58,4 @@ tonsOfMouseAndTime = tenThousandTest
         thousandsTests  = test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ mousePos)))))))))
         test4           = tupleTest <~ thousandsTests
         tenThousandTest = test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ mousePos)))))))))
+

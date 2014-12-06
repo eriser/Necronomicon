@@ -5,12 +5,12 @@ module Necronomicon.FRP.Signal (
     (~~),
     -- (=<~),
     -- execute,
+    dropRepeats,
     randS,
     randFS,
     count,
     wasd,
     dimensions,
-    Signal,
     mousePos,
     runSignal,
     mouseClicks,
@@ -104,7 +104,7 @@ data Necro        = Necro {
     globalDispatch  :: TBQueue Event,
     inputCounter    :: IORef Int
     }
-data Signal a = Signal {unSignal :: Necro -> IO(a,Event -> IO (EventValue a))}
+newtype Signal a = Signal {unSignal :: Necro -> IO(a,Event -> IO (EventValue a))}
 
 instance  Functor Signal where
     fmap f x = Signal $ \necro -> do
@@ -624,6 +624,22 @@ dropWhen pred x = Signal $ \necro -> do
                 go x p = if not p
                          then writeIORef ref x >> (return $ Change x)
                          else readIORef  ref   >>= return . NoChange
+
+dropRepeats :: (Eq a) => Signal a -> Signal a
+dropRepeats signal = Signal $ \necro -> do
+    (value,cont) <- unSignal signal necro
+    ref          <- newIORef value
+    return (value,processEvent ref cont)
+    where
+        processEvent ref cont event = do
+            value <- cont event
+            case value of
+                NoChange _ -> readIORef ref >>= return . NoChange
+                Change   v -> do
+                    prev <- readIORef ref
+                    if prev == v
+                        then return $ NoChange v
+                        else writeIORef ref v >> return (Change v)
 
 count :: Signal a -> Signal Int
 count signal = Signal $ \necro -> do
