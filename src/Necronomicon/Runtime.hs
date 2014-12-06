@@ -9,7 +9,13 @@ import Control.Concurrent.STM
 import Control.Monad
 import Control.Monad.Trans
 
-type SynthDef = Ptr CUGen
+data SynthDef = SynthDef {
+    synthDefOutput :: Ptr AudioSignal,
+    synthDefGraph :: Ptr CUGen,
+    synthDefUGens :: [CUGen],
+    synthDefConstants :: [Ptr AudioSignal]
+} deriving (Show)
+
 type NodeID = CUInt
 data RunState = NecroOffline | NecroBooting | NecroQuitting | NecroRunning deriving (Show, Eq)
 data RuntimeMessage = StartSynth SynthDef CDouble NodeID | StopSynth NodeID | CollectSynthDef SynthDef | ShutdownNrt
@@ -73,6 +79,11 @@ getSynthDefs = prGet necroSynthDefs
 
 getSynthDefsTVar :: Necronomicon (TVar [SynthDef])
 getSynthDefsTVar = prGetTVar necroSynthDefs
+
+setSynthDefs :: [SynthDef] -> Necronomicon ()
+setSynthDefs synthDefs = do
+    synthDefsTVar <- getSynthDefsTVar
+    nAtomically (writeTVar synthDefsTVar synthDefs)
 
 getRunning :: Necronomicon RunState
 getRunning = prGet necroRunning
@@ -145,7 +156,7 @@ processMessages messages =  mapM_ (processMessage) messages
                then return ()
                else process m
         process m = case m of
-            StartSynth synthDef time id -> liftIO $ playSynthInRtRuntime synthDef time id
+            StartSynth (SynthDef output graph ugens _) time id -> liftIO $ playSynthInRtRuntime time output graph id (fromIntegral $ length ugens)
             StopSynth id -> liftIO $ stopSynthInRtRuntime id
             CollectSynthDef synthDef -> addSynthDef synthDef
             ShutdownNrt -> necronomiconEndSequence
@@ -199,7 +210,7 @@ necronomiconEndSequence = do
     setRunning NecroQuitting
     liftIO shutdownNecronomiconCRuntime
     liftIO waitForRtFinished
-    freeUGens
+    freeSynthDefs
     setRunning NecroOffline
 
 waitForRunningStatus :: RunState -> Necronomicon ()
@@ -232,47 +243,60 @@ waitForRTStarted = waitForRTStatus rtStartedStatus
 waitForRtFinished :: IO ()
 waitForRtFinished = waitForRTStatus rtFinishedStatus
 
-freeUGens :: Necronomicon ()
-freeUGens = do
+freeSynthDefs :: Necronomicon ()
+freeSynthDefs = do
     synthDefs <- getSynthDefs
-    mapM_ (liftIO . freeUGen) synthDefs
+    mapM_ (freeSynthDef) synthDefs
+    setSynthDefs []
 
-data Signal = Signal {-# UNPACK #-} !CDouble {-# UNPACK #-} !CDouble
+freeSynthDef :: SynthDef -> Necronomicon ()
+freeSynthDef (SynthDef _ graph ugens signals) = do
+    mapM_ (freeUGen) ugens
+    mapM_ (nFree) signals
+    nFree graph
 
-instance Storable Signal where
+freeUGen :: CUGen -> Necronomicon ()
+freeUGen (CUGen calc inputs outputs) = do
+    nFree inputs
+    nFree outputs
+
+data AudioSignal = AudioSignal CDouble CDouble deriving (Show)
+
+zeroAudioSignal :: AudioSignal
+zeroAudioSignal = AudioSignal 0 0
+
+instance Storable AudioSignal where
     sizeOf _ = sizeOf (undefined :: CDouble) * 2
     alignment _ = alignment (undefined :: CDouble)
     peek ptr = do
         amp <- peekByteOff ptr 0 :: IO CDouble
         off <- peekByteOff ptr 8 :: IO CDouble
-        return (Signal amp off) 
-    poke ptr (Signal amp off) = do
+        return (AudioSignal amp off) 
+    poke ptr (AudioSignal amp off) = do
         pokeByteOff ptr 0 amp
         pokeByteOff ptr 8 off
         
-type Calc = FunPtr (Ptr () -> CDouble -> Signal)
-
-data CUGen = CUGen {-# UNPACK #-} !Calc {-# UNPACK #-} !(Ptr ()) {-# UNPACK #-} !CUInt deriving (Show)
+type Calc = FunPtr (Ptr (Ptr AudioSignal) -> Ptr AudioSignal -> ())
+data CUGen = CUGen Calc (Ptr (Ptr AudioSignal)) (Ptr AudioSignal) deriving (Show)
 
 instance Storable CUGen where
     sizeOf _ = sizeOf (undefined :: CDouble) * 3
     alignment _ = alignment (undefined :: CDouble)
     peek ptr = do
         calc <- peekByteOff ptr 0 :: IO Calc
-        args <- peekByteOff ptr 8 :: IO (Ptr ())
-        numArgs <- peekByteOff ptr 16 :: IO CUInt
-        return (CUGen calc args numArgs)
-    poke ptr (CUGen calc args numArgs) = do
+        inputs <- peekByteOff ptr 8 :: IO (Ptr (Ptr AudioSignal))
+        outputs <- peekByteOff ptr 16 :: IO (Ptr AudioSignal)
+        return (CUGen calc inputs outputs)
+    poke ptr (CUGen calc inputs outputs) = do
         pokeByteOff ptr 0 calc
-        pokeByteOff ptr 8 args
-        pokeByteOff ptr 16 numArgs
+        pokeByteOff ptr 8 inputs
+        pokeByteOff ptr 16 outputs
 
 foreign import ccall "start_rt_runtime" startRtRuntime :: IO ()
 foreign import ccall "handle_messages_in_nrt_fifo" handleNrtMessages :: IO ()
 foreign import ccall "shutdown_necronomicon" shutdownNecronomiconCRuntime :: IO ()
-foreign import ccall "play_synth" playSynthInRtRuntime :: SynthDef -> CDouble -> CUInt -> IO ()
+foreign import ccall "play_synth" playSynthInRtRuntime :: CDouble -> Ptr AudioSignal -> Ptr CUGen -> CUInt -> CUInt -> IO ()
 foreign import ccall "stop_synth" stopSynthInRtRuntime :: NodeID -> IO ()
-foreign import ccall "free_ugen" freeUGen :: SynthDef -> IO ()
 foreign import ccall "get_running" getRtRunning :: IO Int
 
 ifThenElse :: Bool -> a -> a -> a
@@ -287,3 +311,6 @@ nAtomically = liftIO . atomically
 
 nThreadDelay :: Int -> Necronomicon ()
 nThreadDelay = liftIO . threadDelay
+
+nFree :: Storable a => Ptr a -> Necronomicon ()
+nFree = liftIO . free

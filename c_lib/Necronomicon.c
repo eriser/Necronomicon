@@ -30,82 +30,81 @@ const double RECIP_TWO_PI =  1.0 / (M_PI * 2);
 const double SAMPLE_RATE = 44100;
 const double RECIP_SAMPLE_RATE = 1.0 / 44100.0;
 
-#define TABLE_SIZE   (256)
-const double RECIP_TABLE_SIZE = 1.0 / (double) TABLE_SIZE;
+#define TABLE_SIZE 256
+double RECIP_TABLE_SIZE = 1.0 / (double) TABLE_SIZE;
 double sine_table[TABLE_SIZE];
 
-const double TABLE_MUL_RECIP_SAMPLE_RATE = TABLE_SIZE * (1.0 / 44100.0);
-const double TABLE_SIZE_MUL_RECIP_TWO_PI = TABLE_SIZE * (1.0 / (M_PI*2));
+double TABLE_MUL_RECIP_SAMPLE_RATE = TABLE_SIZE * (1.0 / 44100.0);
+double TABLE_SIZE_MUL_RECIP_TWO_PI = TABLE_SIZE * (1.0 / (M_PI*2));
+
+///////////////
+// Time
+///////////////
+
+double absolute_time = 0; // Absolute sample time
+double current_time = 0; // Current time, can be manipulated via time shifting
+#define TIME_STACK_SIZE 8192
+#define TIME_STACK_SIZE_MASK 8191
+double time_stack[TIME_STACK_SIZE];
+unsigned int time_stack_index = 0;
+
+inline void push_time(double time)
+{
+	// assert(time_stack_index < TIME_STACK_SIZE_MASK);
+	time_stack[++time_stack_index] = current_time = time;
+}
+
+inline void pop_time()
+{
+	// assert(time_stack_index > 0);
+	current_time = time_stack[--time_stack_index];
+}
+
+inline void reset_current_time(double time)
+{
+	time_stack_index = 0;
+	time_stack[time_stack_index] = current_time = time;
+}
+
+/////////////////////
+// SynthDef structs
+/////////////////////
 
 typedef struct
 {
 	double amplitude;
 	double offset;
-} Signal;
+} audio_signal;
 
-int signalSize = sizeof(Signal);
-int signalAlignment = __alignof__(Signal);
+int signalSize = sizeof(audio_signal);
+int signalAlignment = __alignof__(audio_signal);
 
-typedef Signal Calc(void* args, double time);
+typedef void (*calc_func)(audio_signal** inputs, audio_signal* outputs);
 
-typedef struct
+typedef struct UGen
 {
-	Calc* calc;
-	void* args;
-	unsigned int numArgs;
-} UGen;
+	calc_func calc;
+	audio_signal** inputs;
+	audio_signal* outputs;
+} ugen;
 
-int ugenSize = sizeof(UGen);
-int ugenAlignment = __alignof__(UGen);
+int ugenSize = sizeof(ugen);
+int ugenAlignment = __alignof__(ugen);
 
 typedef struct synth_node
 {
 	double time; // Start time
-	UGen* ugen; // Synth Definition
+	audio_signal* output;
+	ugen* ugen_graph; // Synth Graph
 	struct synth_node* previous; // Previous node, used in synth_list for the scheduler
 	struct synth_node* next; // Next node, used in the synth_list for the scheduler
 	unsigned int key; // Node ID, used to look up synths in the synth hash table
 	unsigned int hash; // Cached hash of the node id for the synth hash table
+	unsigned int num_ugens;
 } synth_node;
 
 synth_node* current_node = NULL; // Global pointer to the currently playing synth_node
 void try_schedule_current_synth_for_removal(); // Forward declaration
-
-Signal numberCalc(void* args, double time)
-{
-	return ((Signal*) args)[0];
-}
-
-void pr_free_ugen(UGen* ugen)
-{
-	if (ugen == NULL)
-		return;
-
-	if (ugen->args == NULL)
-		return;
-	
-	if (ugen->calc != numberCalc)
-	{
-		unsigned int i;
-		for (i = 0; i < ugen->numArgs; ++i)
-		{
-			pr_free_ugen(&(((UGen*) ugen->args)[i]));
-		}
-	}
-
-	free(ugen->args);
-	ugen->args = NULL;
-}
-
-void free_ugen(UGen* ugen)
-{
-	puts("FREE UGEN!");
-	if (ugen == NULL)
-		return;
-	
-	pr_free_ugen(ugen);
-	free(ugen);	
-}
 
 void initialize_wave_tables()
 {
@@ -120,222 +119,184 @@ void initialize_wave_tables()
 // UGens
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-inline double sigsum(Signal signal)
+inline double sigsum(audio_signal signal)
 {
 	return signal.amplitude + signal.offset;
 }
 
-Signal delayCalc(void* args, double time)
+void sin_calc(audio_signal** inputs, audio_signal* outputs)
 {
-	UGen delayUGen = ((UGen*) args)[0];
-	UGen input = ((UGen*) args)[1];
-	Signal delayTimeSig = (delayUGen.calc(delayUGen.args, time));
-	int delayedTime = delayTimeSig.offset * (double) SAMPLE_RATE + time + (delayTimeSig.amplitude * RECIP_TWO_PI * (double) SAMPLE_RATE);
-	return input.calc(input.args, delayedTime);
-}
-
-Signal timeWarpCalc(void* args, double time)
-{
-	UGen timeUGen = ((UGen*) args)[0];
-	UGen input = ((UGen*) args)[1];
-	Signal modTimeSig = (timeUGen.calc(timeUGen.args, time));
-	int modedTime = modTimeSig.offset * time + (modTimeSig.amplitude * (double) SAMPLE_RATE);
-	return input.calc(input.args, modedTime);
-}
-
-Signal sinCalc(void* args, double time)
-{
-	UGen freqUGen = ((UGen*) args)[0];
-	Signal freq = freqUGen.calc(freqUGen.args, time);
+	audio_signal freq = *(inputs[0]);
 
     //sin function version
-	/* double amplitude = sin(freq.offset * TWO_PI * time * RECIP_SAMPLE_RATE + freq.amplitude); */
+	// double amplitude = sin(freq.offset * TWO_PI * time * RECIP_SAMPLE_RATE + freq.amplitude);
 
 	//look up table version
-	double rawIndex = freq.offset * TABLE_MUL_RECIP_SAMPLE_RATE * time + (freq.amplitude * TABLE_SIZE_MUL_RECIP_TWO_PI);
+	double rawIndex = freq.offset * TABLE_MUL_RECIP_SAMPLE_RATE * current_time + (freq.amplitude * TABLE_SIZE_MUL_RECIP_TWO_PI);
 	unsigned char index1 = rawIndex;
 	unsigned char index2 = index1+1;
 	double amp1 = sine_table[index1];
 	double amp2 = sine_table[index2];
 	double delta = rawIndex - ((long) rawIndex);
 	double amplitude = amp1 + delta * (amp2 - amp1);
-	
-	Signal signal = { amplitude, 0 };
-	return signal;
+
+	audio_signal output = { amplitude, 0 };
+	outputs[0] = output;
 }
 
-Signal addCalc(void* args, double time)
+void delay_calc(audio_signal** inputs, audio_signal* outputs)
 {
-	UGen a = ((UGen*) args)[0];
-	UGen b = ((UGen*) args)[1];
-	Signal as = a.calc(a.args, time);
-	Signal bs = b.calc(b.args, time);
-	Signal signal = { as.amplitude + bs.amplitude, as.offset + bs.offset };
-	return signal;
+	audio_signal delay_time_sig = *(inputs[0]);
+	double delayed_time = current_time - (delay_time_sig.offset * (double) SAMPLE_RATE) - (delay_time_sig.amplitude * RECIP_TWO_PI * (double) SAMPLE_RATE);
+	push_time(delayed_time);
 }
 
-Signal minusCalc(void* args, double time)
+void time_warp_calc(audio_signal** inputs, audio_signal* outputs)
 {
-	UGen a = ((UGen*) args)[0];
-	UGen b = ((UGen*) args)[1];
-	Signal as = a.calc(a.args, time);
-	Signal bs = b.calc(b.args, time);
-	Signal signal = { as.amplitude - bs.amplitude, as.offset - bs.offset };
-	return signal;
+	audio_signal mod_time_sig = *(inputs[0]);
+	double modded_time = mod_time_sig.offset * current_time + (mod_time_sig.amplitude * (double) SAMPLE_RATE);
+	push_time(modded_time);
 }
 
-Signal mulCalc(void* args, double time)
+void add_calc(audio_signal** inputs, audio_signal* outputs)
 {
-	UGen a = ((UGen*) args)[0];
-	UGen b = ((UGen*) args)[1];
-	Signal as = a.calc(a.args, time);
-	Signal bs = b.calc(b.args, time);
-	Signal signal;
+	audio_signal a = *(inputs[0]);
+	audio_signal b = *(inputs[1]);
+	audio_signal c = { a.amplitude + b.amplitude, a.offset + b.offset };
 
-	if (as.amplitude != 0)
+	outputs[0] = c;
+}
+
+void minus_calc(audio_signal** inputs, audio_signal* outputs)
+{
+	audio_signal a = *(inputs[0]);
+	audio_signal b = *(inputs[1]);
+	audio_signal c = { a.amplitude - b.amplitude, a.offset - b.offset };
+
+	outputs[0] = c;
+}
+
+void mul_calc(audio_signal** inputs, audio_signal* outputs)
+{
+	audio_signal a = *(inputs[0]);
+	audio_signal b = *(inputs[1]);
+	audio_signal c;
+
+	if (a.amplitude != 0)
 	{
-		signal.amplitude = (bs.amplitude + bs.offset) * as.amplitude;
-		signal.offset    = (bs.amplitude + bs.offset) * as.offset;
+		c.amplitude = (b.amplitude + b.offset) * a.amplitude;
+		c.offset    = (b.amplitude + b.offset) * a.offset;
 	}
 
 	else
 	{
-		signal.amplitude = (as.amplitude + as.offset) * bs.amplitude;
-		signal.offset    = (as.amplitude + as.offset) * bs.offset;
+		c.amplitude = (a.amplitude + a.offset) * b.amplitude;
+		c.offset    = (a.amplitude + a.offset) * b.offset;
 	}
 
-	return signal;
+	outputs[0] = c;
 }
 
-Signal udivCalc(void* args, double time)
+void div_calc(audio_signal** inputs, audio_signal* outputs)
 {
-	UGen a = ((UGen*) args)[0];
-	UGen b = ((UGen*) args)[1];
-	Signal as = a.calc(a.args, time);
-	Signal bs = b.calc(b.args, time);
-	Signal signal;
+	audio_signal a = *(inputs[0]);
+	audio_signal b = *(inputs[1]);
+	audio_signal c;
 
-	if (as.amplitude != 0)
+	if (a.amplitude != 0)
 	{
-		signal.amplitude = (bs.amplitude + bs.offset) / as.amplitude;
-		signal.offset    = (bs.amplitude + bs.offset) / as.offset;
+		c.amplitude = (b.amplitude + b.offset) / a.amplitude;
+		c.offset    = (b.amplitude + b.offset) / a.offset;
 	}
 
 	else
 	{
-		signal.amplitude = (as.amplitude + as.offset) / bs.amplitude;
-		signal.offset    = (as.amplitude + as.offset) / bs.offset;
+		c.amplitude = (a.amplitude + a.offset) / b.amplitude;
+		c.offset    = (a.amplitude + a.offset) / b.offset;
 	}
 
-	return signal;
+	outputs[0] = c;
 }
 
-Signal uabsCalc(void* args, double time)
+void abs_calc(audio_signal** inputs, audio_signal* outputs)
 {
-	UGen input = *((UGen*) args);
-	Signal signal = input.calc(input.args, time);
-	signal.amplitude = abs(signal.amplitude);
-	signal.offset = abs(signal.offset);
-	return signal;
+	audio_signal input = *(inputs[0]);
+	audio_signal output = { abs(input.amplitude), abs(input.offset) };
+	outputs[0] = output;
 }
 
-Signal signumCalc(void* args, double time)
+void signum_calc(audio_signal** inputs, audio_signal* outputs)
 {
-	UGen input = *((UGen*) args);
-	double signal = sigsum(input.calc(input.args, time));
-	Signal result = { 0, 0 };
+	double inputSum = sigsum(*(inputs[0]));
+	audio_signal output = { 0, 0 };
 
-	if (signal > 0)
+	if (inputSum > 0)
 	{
-		result.offset = 1;
+		output.offset = 1;
 	}
 	
-	else if (signal < 0)
+	else if (inputSum < 0)
 	{
-		result.offset = -1;
+		output.offset = -1;
 	}
-	
-	return result;
+
+	outputs[0] = output;
 }
 
-Signal negateCalc(void* args, double time)
+void negate_calc(audio_signal** inputs, audio_signal* outputs)
 {
-	UGen a = *((UGen*) args);
-	Signal as = a.calc(a.args, time);
-	Signal signal;
+	audio_signal input = *(inputs[0]);
+	audio_signal output;
 
-	if (as.amplitude != 0)
+	if (input.amplitude != 0)
 	{
-		signal.amplitude = -1 * as.amplitude;
-		signal.offset    = -1 * as.offset;
+		output.amplitude = -input.amplitude;
+		output.offset    = -input.offset;
 	}
 
 	else
 	{
-		signal.amplitude = 0;
-		signal.offset    = (as.amplitude+as.offset) * -1;
+		output.amplitude = 0;
+		output.offset    = -(input.amplitude + input.offset);
 	}
 
-	return signal;
+	outputs[0] = output;
 }
 
 // To do: Give this range parameters
-Signal line_calc(void* args, double time)
+void line_calc(audio_signal** inputs, audio_signal* outputs)
 {
-	UGen* input = (UGen*) args;
-	double signal = sigsum(input->calc(input->args, time));
-	double line_time = signal * (double) SAMPLE_RATE;
-	Signal result = { 0, 0 };
+	double input_sum = sigsum(*(inputs[0]));
+	double line_time = input_sum * (double) SAMPLE_RATE;
+	audio_signal output = { 0, 0 };
 
-	if ((line_time - time) <= 0)
+	if (line_time <= current_time)
 	{
 		try_schedule_current_synth_for_removal();
 	}
 
+	else if (current_time > 0)
+	{
+		output.amplitude = 1 - (current_time / line_time);
+	}
+	
 	else
 	{
-		result.amplitude = 1 - (time/line_time);
+		output.amplitude = 1;
 	}
 
-	return result;
+	outputs[0] = output;
 }
 
-void printTabs(unsigned int depth)
+void pop_time_calc(audio_signal** inputs, audio_signal* outputs)
 {
-	unsigned int i;
-	for (i = 0; i < depth; ++i)
-	{
-		printf(" ");
-	}
+	pop_time();
 }
 
-void printUGen(UGen* ugen, unsigned int depth)
+void print_ugen(ugen* ugen)
 {
-	printTabs(depth);
 	puts("(UGen");
-	printTabs(depth + 1);
-	printf("(Calc %p)\n", ugen->calc);
-	printTabs(depth + 1);
-	printf("(Args\n");
-
-	if (ugen->calc != numberCalc)
-	{
-		unsigned int i;
-		for (i = 0; i < ugen->numArgs; ++i)
-		{
-			printUGen(&((UGen*) ugen->args)[i], depth + 2);
-		}
-	}
-
-	else
-	{
-		printTabs(depth + 2);
-		Signal signal = ((Signal*) ugen->args)[0];
-		printf("(Signal %f %f))\n", signal.amplitude, signal.offset);
-	}	
-
-	printTabs(depth + 1);
-	printf("(NumArgs %i))\n", ugen->numArgs);
+	printf(" (Calc %p)\n", ugen->calc);
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -343,23 +304,25 @@ void printUGen(UGen* ugen, unsigned int depth)
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 typedef enum { false, true } bool;
-const unsigned int max_fifo_messages = 2048;
-const unsigned int fifo_size_mask = 2047;
+const unsigned int MAX_FIFO_MESSAGES = 2048;
+const unsigned int FIFO_SIZE_MASK = 2047;
 
-const unsigned int node_size = sizeof(synth_node);
-const unsigned int node_pointer_size = sizeof(synth_node*);
+const unsigned int NODE_SIZE = sizeof(synth_node);
+const unsigned int NODE_POINTER_SIZE = sizeof(synth_node*);
 
-synth_node* new_synth_node(double time, UGen* ugen)
+synth_node* new_synth_node(double time, audio_signal* output, ugen* ugen_graph, unsigned int num_ugens)
 {
-	synth_node* node = (synth_node*) malloc(node_size);
+	synth_node* node = (synth_node*) malloc(NODE_SIZE);
 	assert(node);
 	
 	node->time = time;
-	node->ugen = ugen;
+	node->output = output;
+	node->ugen_graph = ugen_graph;
 	node->previous = NULL;
 	node->next = NULL;
 	node->key = 0;
 	node->hash = 0;
+	node->num_ugens = num_ugens;
 	return node;
 }
 
@@ -397,7 +360,7 @@ typedef struct
 	message_type type;
 } message;
 
-unsigned int message_size = sizeof(message);
+const unsigned int MESSAGE_SIZE = sizeof(message);
 
 // Lock Free FIFO Queue (Ring Buffer)
 typedef message* message_fifo;
@@ -415,17 +378,17 @@ unsigned int rt_fifo_write_index = 0;
 #define FIFO_POP(fifo, read_index, size_mask) fifo[read_index & size_mask]; __sync_synchronize(); read_index++;
 
 // Non-realtime thread FIFO push/pop
-#define NRT_FIFO_PUSH(node) FIFO_PUSH(nrt_fifo, nrt_fifo_write_index, node, fifo_size_mask)
-#define NRT_FIFO_POP() FIFO_POP(nrt_fifo, nrt_fifo_read_index, fifo_size_mask)
+#define NRT_FIFO_PUSH(node) FIFO_PUSH(nrt_fifo, nrt_fifo_write_index, node, FIFO_SIZE_MASK)
+#define NRT_FIFO_POP() FIFO_POP(nrt_fifo, nrt_fifo_read_index, FIFO_SIZE_MASK)
 
 // Realtime thread FIFO push/pop
-#define RT_FIFO_PUSH(node) FIFO_PUSH(rt_fifo, rt_fifo_write_index, node, fifo_size_mask)
-#define RT_FIFO_POP() FIFO_POP(rt_fifo, rt_fifo_read_index, fifo_size_mask)
+#define RT_FIFO_PUSH(node) FIFO_PUSH(rt_fifo, rt_fifo_write_index, node, FIFO_SIZE_MASK)
+#define RT_FIFO_POP() FIFO_POP(rt_fifo, rt_fifo_read_index, FIFO_SIZE_MASK)
 
 // Allocate and null initialize a node list to be used as a node_fifo or node_list
 message_fifo new_message_fifo()
 {
-	unsigned int byte_size = message_size * max_fifo_messages;
+	unsigned int byte_size = MESSAGE_SIZE * MAX_FIFO_MESSAGES;
 	message_fifo fifo = (message_fifo) malloc(byte_size);
 	assert(fifo);
 	memset(fifo, 0, byte_size);
@@ -486,15 +449,15 @@ node_list scheduled_node_list = NULL;
 unsigned int scheduled_list_read_index = 0;
 unsigned int scheduled_list_write_index = 0;
 
-#define SCHEDULED_LIST_PUSH(node) FIFO_PUSH(scheduled_node_list, scheduled_list_write_index, node, fifo_size_mask)
-#define SCHEDULED_LIST_POP() FIFO_POP(scheduled_node_list, scheduled_list_read_index, fifo_size_mask)
-#define SCHEDULED_LIST_PEEK() (scheduled_node_list[scheduled_list_read_index & fifo_size_mask])
-#define SCHEDULED_LIST_PEEK_TIME() ((scheduled_node_list[scheduled_list_read_index & fifo_size_mask])->time)
+#define SCHEDULED_LIST_PUSH(node) FIFO_PUSH(scheduled_node_list, scheduled_list_write_index, node, FIFO_SIZE_MASK)
+#define SCHEDULED_LIST_POP() FIFO_POP(scheduled_node_list, scheduled_list_read_index, FIFO_SIZE_MASK)
+#define SCHEDULED_LIST_PEEK() (scheduled_node_list[scheduled_list_read_index & FIFO_SIZE_MASK])
+#define SCHEDULED_LIST_PEEK_TIME() ((scheduled_node_list[scheduled_list_read_index & FIFO_SIZE_MASK])->time)
 
 // Allocate and null initialize a node list to be used as a node_list
 node_list new_node_list()
 {
-	unsigned int byte_size = node_pointer_size * max_fifo_messages;
+	unsigned int byte_size = NODE_POINTER_SIZE * MAX_FIFO_MESSAGES;
 	node_list list = (node_list) malloc(byte_size);
 	assert(list);
 	memset(list, 0, byte_size);
@@ -521,8 +484,8 @@ void scheduled_list_free()
 void scheduled_list_sort()
 {
 	// Make sure our indexes are within bounds
-	scheduled_list_read_index = scheduled_list_read_index & fifo_size_mask; 
-	scheduled_list_write_index = scheduled_list_write_index & fifo_size_mask;
+	scheduled_list_read_index = scheduled_list_read_index & FIFO_SIZE_MASK; 
+	scheduled_list_write_index = scheduled_list_write_index & FIFO_SIZE_MASK;
 
 	if (scheduled_list_read_index == scheduled_list_write_index)
 		return;
@@ -531,7 +494,7 @@ void scheduled_list_sort()
 	synth_node* x;
 	double xTime, yTime;
 	
-	for (i = (scheduled_list_read_index + 1) & fifo_size_mask; i != scheduled_list_write_index; i = (i + 1) & fifo_size_mask)
+	for (i = (scheduled_list_read_index + 1) & FIFO_SIZE_MASK; i != scheduled_list_write_index; i = (i + 1) & FIFO_SIZE_MASK)
 	{
 		x = scheduled_node_list[i];
 		xTime = x->time;
@@ -539,13 +502,13 @@ void scheduled_list_sort()
 		
 		while (j != scheduled_list_read_index)
 		{
-			k = (j - 1) & fifo_size_mask;
+			k = (j - 1) & FIFO_SIZE_MASK;
 			yTime = scheduled_node_list[k]->time;
 			if (yTime < xTime)
 				break;
 
 			scheduled_node_list[j] = scheduled_node_list[k];
-			j = (j - 1) & fifo_size_mask;
+			j = (j - 1) & FIFO_SIZE_MASK;
 		}
 
 		scheduled_node_list[j] = x;
@@ -558,9 +521,8 @@ void scheduled_list_sort()
 
 // List used by ugens to queue for removal during RT runtime
 
-
-unsigned int max_removal_ids = 256; // Max number of ids able to be scheduled for removal *per sample frame*
-unsigned int removal_fifo_size_mask = 255;
+const unsigned int MAX_REMOVAL_IDS = 256; // Max number of ids able to be scheduled for removal *per sample frame*
+const unsigned int REMOVAL_FIFO_SIZE_MASK = 255;
 
 typedef unsigned int* node_id_fifo;
 
@@ -569,13 +531,13 @@ unsigned int removal_fifo_read_index = 0;
 unsigned int removal_fifo_write_index = 0;
 int removal_fifo_size = 0;
 
-#define REMOVAL_FIFO_PUSH(id) FIFO_PUSH(removal_fifo, removal_fifo_write_index, id, removal_fifo_size_mask)
-#define REMOVAL_FIFO_POP() FIFO_POP(removal_fifo, removal_fifo_read_index, removal_fifo_size_mask)
+#define REMOVAL_FIFO_PUSH(id) FIFO_PUSH(removal_fifo, removal_fifo_write_index, id, REMOVAL_FIFO_SIZE_MASK)
+#define REMOVAL_FIFO_POP() FIFO_POP(removal_fifo, removal_fifo_read_index, REMOVAL_FIFO_SIZE_MASK)
 
 // Allocate and null initialize a node list to be used as a node_list
 node_id_fifo new_removal_fifo()
 {
-	unsigned int byte_size = sizeof(unsigned int) * max_removal_ids;
+	unsigned int byte_size = sizeof(unsigned int) * MAX_REMOVAL_IDS;
 	node_id_fifo fifo = (node_id_fifo) malloc(byte_size);
 	assert(fifo);
 	memset(fifo, 0, byte_size);
@@ -602,8 +564,8 @@ void removal_fifo_free()
 // Fixed memory hash table using open Addressing with linear probing
 // This is not thread safe.
 
-const unsigned int max_synths = 8192;
-const unsigned int hash_table_size_mask = 8191;
+const unsigned int MAX_SYNTHS = 8192;
+const unsigned int HASH_TABLE_SIZE_MASK = 8191;
 unsigned int num_synths = 0;
 
 typedef union
@@ -612,12 +574,20 @@ typedef union
 	unsigned int word;
 } four_bytes;
 
+typedef union
+{
+	unsigned char bytes[8];
+	double d;
+	void* p;
+	unsigned long l;
+} eight_bytes;
+
 typedef synth_node** hash_table;
 hash_table synth_table = NULL;
 
 hash_table hash_table_new()
 {
-	unsigned int byte_size = node_pointer_size * max_synths;
+	unsigned int byte_size = NODE_POINTER_SIZE * MAX_SYNTHS;
 	hash_table table = (hash_table) malloc(byte_size);
 	assert(table);
 	memset(table, 0, byte_size);
@@ -628,7 +598,7 @@ hash_table hash_table_new()
 void hash_table_free(hash_table table)
 {
 	unsigned int i;
-	for (i = 0; i < max_synths; ++i)
+	for (i = 0; i < MAX_SYNTHS; ++i)
 	{
 		synth_node* node = table[i];
 		node_free(node);
@@ -638,21 +608,34 @@ void hash_table_free(hash_table table)
 }
 
 // FNV1-a hash function
-const unsigned int prime = 0x01000193; // 16777619
-const unsigned int seed = 0x811C9DC5; // 2166136261
+const unsigned long PRIME = 0x01000193; // 16777619
+const unsigned long SEED = 0x811C9DC5; // 2166136261
 
-#define FNV1A(byte, hash) ((byte ^ hash) * prime)
-#define HASH_KEY_PRIV(key) (FNV1A(key.bytes[3], FNV1A(key.bytes[2], FNV1A(key.bytes[1], FNV1A(key.bytes[0], seed)))))
+#define FNV1A(byte, hash) ((byte ^ hash) * PRIME)
+#define HASH_KEY_PRIV(key) (FNV1A(key.bytes[3], FNV1A(key.bytes[2], FNV1A(key.bytes[1], FNV1A(key.bytes[0], SEED)))))
 #define HASH_KEY(key) ((unsigned int) HASH_KEY_PRIV(((four_bytes) key)))
+
+#define HASH_EIGHT_BYTES_PRIV(key) (FNV1A(key.bytes[7], (FNV1A(key.bytes[6], (FNV1A(key.bytes[5], (FNV1A(key.bytes[4], (FNV1A(key.bytes[3], FNV1A(key.bytes[2], FNV1A(key.bytes[1], FNV1A(key.bytes[0], SEED)))))))))))))
+#define HASH_EIGHT_BYTES(key) ((unsigned long) HASH_EIGHT_BYTES_PRIV(((eight_bytes) key)))
+
+unsigned long hash_ptr(void* ptr)
+{
+	return HASH_EIGHT_BYTES(ptr);
+}
+
+unsigned long hash_double(double d)
+{
+	return HASH_EIGHT_BYTES(d);
+}
 
 void hash_table_insert(hash_table table, synth_node* node)
 {
-	assert(num_synths < max_synths);
+	assert(num_synths < MAX_SYNTHS);
 	node->hash = HASH_KEY(node->key);
-	unsigned int slot = node->hash & hash_table_size_mask;
+	unsigned int slot = node->hash & HASH_TABLE_SIZE_MASK;
 
 	while (table[slot])
-		slot = (slot + 1) & hash_table_size_mask;
+		slot = (slot + 1) & HASH_TABLE_SIZE_MASK;
 	
 	table[slot] = node;
 	++num_synths;
@@ -661,10 +644,10 @@ void hash_table_insert(hash_table table, synth_node* node)
 synth_node* hash_table_remove(hash_table table, unsigned int key)
 {
 	unsigned int hash = HASH_KEY(key);
-	unsigned int slot = hash & hash_table_size_mask;
+	unsigned int slot = hash & HASH_TABLE_SIZE_MASK;
 	unsigned int i = 0;
 	
-	while (i < max_synths)
+	while (i < MAX_SYNTHS)
 	{
 		if (table[slot])
 		{
@@ -678,7 +661,7 @@ synth_node* hash_table_remove(hash_table table, unsigned int key)
 		}
 
 		++i;
-		slot = (slot + 1) & hash_table_size_mask;
+		slot = (slot + 1) & HASH_TABLE_SIZE_MASK;
 	}
 
 	return NULL;
@@ -687,10 +670,10 @@ synth_node* hash_table_remove(hash_table table, unsigned int key)
 synth_node* hash_table_lookup(hash_table table, unsigned int key)
 {
 	unsigned int hash = HASH_KEY(key);
-	unsigned int slot = hash & hash_table_size_mask;
+	unsigned int slot = hash & HASH_TABLE_SIZE_MASK;
 	unsigned int i = 0;
 	
-	while (i < max_synths)
+	while (i < MAX_SYNTHS)
 	{
 		if (table[slot])
 		{
@@ -699,7 +682,7 @@ synth_node* hash_table_lookup(hash_table table, unsigned int key)
 		}
 
 		++i;
-		slot = (slot + 1) & hash_table_size_mask;
+		slot = (slot + 1) & HASH_TABLE_SIZE_MASK;
 	}
 
 	return NULL;
@@ -765,13 +748,12 @@ void doubly_linked_list_free(doubly_linked_list list)
 // RT thread Synth Node Handling
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-unsigned int absolute_time = 0;
 bool necronomicon_running = false;
 doubly_linked_list nrt_free_node_list = NULL;
-const unsigned int max_node_pool_count = 500;
-const unsigned int initial_node_count = 250;
+const unsigned int MAX_NODE_POOL_COUNT = 500;
+const unsigned int INITIAL_NODE_POOL_COUNT = 250;
 unsigned int node_pool_count = 0;
-synth_node default_node = { 0, NULL, NULL, NULL, 0, 0 };
+synth_node default_node = { 0, NULL, NULL, NULL, NULL, 0, 0, 0 };
 unsigned int next_node_id = 1000;
 
 void init_rt_thread()
@@ -789,6 +771,8 @@ void init_rt_thread()
 	scheduled_node_list = new_node_list();
 	removal_fifo = new_removal_fifo();
 	absolute_time = 0;
+	memset(time_stack, 0, TIME_STACK_SIZE * (sizeof(double)));
+	reset_current_time(absolute_time);
 
 	initialize_wave_tables();
 	current_node = NULL;
@@ -800,9 +784,9 @@ void init_rt_thread()
 	next_node_id = 1000;
 	
 	// Pre-allocate some ugen nodes for runtime
-	while (node_pool_count < initial_node_count)
+	while (node_pool_count < INITIAL_NODE_POOL_COUNT)
 	{
-		nrt_free_node_list = doubly_linked_list_push(nrt_free_node_list, new_synth_node(0, NULL));
+		nrt_free_node_list = doubly_linked_list_push(nrt_free_node_list, new_synth_node(0, NULL, NULL, 0));
 		++node_pool_count;
 	}
 
@@ -890,8 +874,8 @@ void add_scheduled_synths()
 // Iterate over the removal fifo and remove all synths in it.
 void remove_scheduled_synths()
 {
-	removal_fifo_read_index = removal_fifo_read_index & removal_fifo_size_mask;
-	removal_fifo_write_index = removal_fifo_write_index & removal_fifo_size_mask;
+	removal_fifo_read_index = removal_fifo_read_index & REMOVAL_FIFO_SIZE_MASK;
+	removal_fifo_write_index = removal_fifo_write_index & REMOVAL_FIFO_SIZE_MASK;
 	
 	while (removal_fifo_read_index != removal_fifo_write_index)
 	{
@@ -904,7 +888,7 @@ void remove_scheduled_synths()
 
 void try_schedule_current_synth_for_removal()
 {
-	if (current_node && (removal_fifo_size < removal_fifo_size_mask))
+	if (current_node && (removal_fifo_size < REMOVAL_FIFO_SIZE_MASK))
 	{
 		++removal_fifo_size;
 		REMOVAL_FIFO_PUSH(current_node->key);
@@ -958,9 +942,9 @@ void nrt_free_node(synth_node* node)
 {
 	if (node)
 	{
-		if (node_pool_count < max_node_pool_count)
+		if (node_pool_count < MAX_NODE_POOL_COUNT)
 		{
-			memcpy(node, &default_node, node_size);
+			memcpy(node, &default_node, NODE_SIZE);
 			++node_pool_count;
 			nrt_free_node_list = doubly_linked_list_push(nrt_free_node_list, node);
 		}
@@ -997,7 +981,7 @@ void handle_messages_in_nrt_fifo()
 	}
 }
 
-synth_node* nrt_alloc_node(UGen* ugen, double time, unsigned int node_id)
+synth_node* nrt_alloc_node(double time, audio_signal* output, ugen* ugen_graph, unsigned int node_id, unsigned int num_ugens)
 {
 	synth_node* node = NULL;
 	if (node_pool_count)
@@ -1008,24 +992,26 @@ synth_node* nrt_alloc_node(UGen* ugen, double time, unsigned int node_id)
 		{
 			nrt_free_node_list = node->next;
 			node->time = time;
-			node->ugen = ugen;
+			node->output = output;
+			node->ugen_graph = ugen_graph;
 			node->previous = NULL;
 			node->next = NULL;
 			node->key = node_id;
+			node->num_ugens = num_ugens;
 			
 			--node_pool_count;
 			return  node;
 		}
 	}
 
-	node = new_synth_node(time, ugen);
+	node = new_synth_node(time, output, ugen_graph, num_ugens);
 	node->key = node_id;
 	return node;
 }
 
-void play_synth(UGen* synth, double time, unsigned int node_id)
+void play_synth(audio_signal* output, ugen* ugen_graph, double time, unsigned int node_id, unsigned int num_ugens)
 {
-	message msg = { nrt_alloc_node(synth, time, node_id), START_SYNTH }; 
+	message msg = { nrt_alloc_node(time, output, ugen_graph, node_id, num_ugens), START_SYNTH }; 
 	RT_FIFO_PUSH(msg);
 }
 
@@ -1069,13 +1055,27 @@ void jack_shutdown(void *arg)
 	exit(1);
 }
 
+double process_current_node()
+{
+	unsigned int i;
+	unsigned int n = current_node->num_ugens;
+	ugen* ugen_graph = current_node->ugen_graph;
+	
+	for (i = 0; i < n; ++i)
+	{
+		const ugen u = ugen_graph[i];
+		u.calc(u.inputs, u.outputs);
+	}
+
+	return sigsum(*current_node->output);
+}
+
 int process(jack_nframes_t nframes, void* arg)
 {
 	jack_default_audio_sample_t* out1 = (jack_default_audio_sample_t*) jack_port_get_buffer(output_port1, nframes);
 	jack_default_audio_sample_t* out2 = (jack_default_audio_sample_t*) jack_port_get_buffer(output_port2, nframes);
 	handle_messages_in_rt_fifo(); // Handles messages including moving uge_nodes from the RT FIFO queue into the scheduled_synth_list
 
-	int time = 0;
 	unsigned int i;
 	for (i = 0; i < nframes; ++i)
     {
@@ -1083,13 +1083,20 @@ int process(jack_nframes_t nframes, void* arg)
 		out2[i] = 0;
 		add_scheduled_synths(); // Add any synths that need to start this frame into the current synth_list
 
+		// Signal result = sinSynth(absolute_time);
+		// double sample = result.amplitude + result.offset;
+		// double sample = sinSynth(absolute_time);
+		// out1[i] = sample;
+		// out2[i] = sample;
+
 		// Iterate through the synth_list calling calc on each synth and mixing in the result to the out buffers.
 		current_node = synth_list;
 		while (current_node)
 		{
-			time = current_node->time;
-			Signal signal = current_node->ugen->calc(current_node->ugen->args, absolute_time - time);
-			double sample = signal.amplitude + signal.offset;
+			reset_current_time(absolute_time - current_node->time);
+			// signal output = current_node->ugen->calc(current_node->ugen, absolute_time - time);
+			// double sample = output.amplitude + output.offset;
+			double sample = process_current_node();
 			out1[i] += sample;
 			out2[i] += sample;
 
@@ -1097,7 +1104,7 @@ int process(jack_nframes_t nframes, void* arg)
 		}
 
 		remove_scheduled_synths(); // Remove any synths that are scheduled for removal and send them to the NRT thread FIFO queue for freeing.
-        ++absolute_time; // Increment absolute time. We need to consider adjusting this for xruns
+        absolute_time += 1; // Increment absolute time. We need to consider adjusting this for xruns
     }
 
 	return 0;
@@ -1209,7 +1216,7 @@ void shutdown_necronomicon()
 void print_node(synth_node* node)
 {	
 	if (node)
-		printf("synth_node { time: %f, ugen: %p, previous: %p, next: %p, hash: %i, key %i }", node->time, node->ugen, node->previous, node->next, node->hash, node->key);
+		printf("synth_node { time: %f, ugen: %p, previous: %p, next: %p, hash: %i, key %i }", node->time, node->ugen_graph, node->previous, node->next, node->hash, node->key);
 	else
 		printf("0");
 }
@@ -1217,10 +1224,10 @@ void print_node(synth_node* node)
 void print_list(node_list list)
 {
 	printf("scheduled_list_read_index: %i, scheduled_list_write_index: %i\n", scheduled_list_read_index, scheduled_list_write_index);
-	unsigned int i = scheduled_list_read_index & fifo_size_mask;
-	scheduled_list_write_index = scheduled_list_write_index & fifo_size_mask;
+	unsigned int i = scheduled_list_read_index & FIFO_SIZE_MASK;
+	scheduled_list_write_index = scheduled_list_write_index & FIFO_SIZE_MASK;
 
-	for (; i != scheduled_list_write_index; i = (i + 1) & fifo_size_mask)
+	for (; i != scheduled_list_write_index; i = (i + 1) & FIFO_SIZE_MASK)
 	{
 		print_node(list[i]);
 		printf("\n");
@@ -1237,23 +1244,23 @@ void randomize_and_print_list(node_list list)
 	for (i = 0; i < 1000; ++i)
 	{
 		unsigned int num_pop = random() / (double) RAND_MAX * 100;
-	    while ((num_pop > 0) && ((scheduled_list_read_index & fifo_size_mask) != ((scheduled_list_write_index - 1) & fifo_size_mask)))
+	    while ((num_pop > 0) && ((scheduled_list_read_index & FIFO_SIZE_MASK) != ((scheduled_list_write_index - 1) & FIFO_SIZE_MASK)))
 		{
 			SCHEDULED_LIST_POP();
 			--num_pop;
 		}
 		
 		unsigned int num_push = random() / (double) RAND_MAX * 100;
-		while ((num_push > 0) && ((scheduled_list_read_index & fifo_size_mask) != (scheduled_list_write_index & fifo_size_mask)))
+		while ((num_push > 0) && ((scheduled_list_read_index & FIFO_SIZE_MASK) != (scheduled_list_write_index & FIFO_SIZE_MASK)))
 		{
-			synth_node* node = new_synth_node((random() / (double) RAND_MAX) * 10000.0, NULL);
+			synth_node* node = new_synth_node((random() / (double) RAND_MAX) * 10000.0, NULL, NULL, 0);
 			SCHEDULED_LIST_PUSH(node);
 			--num_push;
 		}
 	}
 
-	scheduled_list_read_index = scheduled_list_read_index & fifo_size_mask;
-	scheduled_list_write_index = scheduled_list_write_index & fifo_size_mask;
+	scheduled_list_read_index = scheduled_list_read_index & FIFO_SIZE_MASK;
+	scheduled_list_write_index = scheduled_list_write_index & FIFO_SIZE_MASK;
 	print_list(list);
 }
 
@@ -1270,9 +1277,9 @@ void sort_and_print_list(node_list list)
 void test_list()
 {
 	scheduled_node_list = new_node_list();
-	while (scheduled_list_write_index < (max_fifo_messages * 0.75))
+	while (scheduled_list_write_index < (MAX_FIFO_MESSAGES * 0.75))
 	{
-		synth_node* node = new_synth_node((random() / (double) RAND_MAX) * 10000.0, NULL);
+		synth_node* node = new_synth_node((random() / (double) RAND_MAX) * 10000.0, NULL, NULL, 0);
 		SCHEDULED_LIST_PUSH(node);
 	}
 
@@ -1300,10 +1307,10 @@ void print_hash_table(hash_table table)
 	printf("hash_table [");
 	
 	unsigned int i;
-	for (i = 0; i < max_synths; ++i)
+	for (i = 0; i < MAX_SYNTHS; ++i)
 	{
 		print_node(table[i]);
-		if (i < (max_synths - 1))
+		if (i < (MAX_SYNTHS - 1))
 			printf(", ");
 	}
 
@@ -1318,7 +1325,7 @@ void test_hash_table()
 	unsigned int i = 0;
 	for (i = 0; i < 1000; ++i)
 	{
-		printf("key: %u, hash: %u, slot %u\n", i, HASH_KEY(i), HASH_KEY(i) & hash_table_size_mask);
+		printf("key: %u, hash: %u, slot %u\n", i, HASH_KEY(i), HASH_KEY(i) & HASH_TABLE_SIZE_MASK);
 	}
 
     hash_table table = hash_table_new();
@@ -1326,7 +1333,7 @@ void test_hash_table()
 	for (i = 0; i < num_values; ++i)
 	{
 		times[i] = (random() / (double) RAND_MAX) * 10000.0;
-		synth_node* node = new_synth_node(times[i], NULL);
+		synth_node* node = new_synth_node(times[i], NULL, NULL, 0);
 		node->key = i;
 		hash_table_insert(table, node);
 		assert(node == hash_table_lookup(table, i));
@@ -1354,7 +1361,7 @@ void test_hash_table()
 
 	puts("Asserting NULL values...\n\n");
 
-	for (i = 0; i < max_synths; ++i)
+	for (i = 0; i < MAX_SYNTHS; ++i)
 	{
 		assert(hash_table_lookup(table, i) == NULL);
 	}
@@ -1411,7 +1418,7 @@ void test_doubly_linked_list()
 	int i; // Don't make this unsigned, we'll go infinite!
 	for (i = 50; i >= 0; --i)
 	{
-		synth_node* node = new_synth_node(i, NULL);
+		synth_node* node = new_synth_node(i, NULL, NULL, 0);
 		synth_list = doubly_linked_list_push(synth_list, node);
 	}
 
