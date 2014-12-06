@@ -4,13 +4,13 @@ import Debug.Trace
 
 main :: IO()
 
--- main = runSignal $ enterTest <|> spaceTest <|> altTest <|> shiftTest <|> ctrlTest
-    -- where
-        -- enterTest = (\p -> if p then "Enter" else "") <~ enter
-        -- spaceTest = (\p -> if p then "Space" else "") <~ space
-        -- altTest   = (\p -> if p then "Alt"   else "") <~ alt
-        -- shiftTest = (\p -> if p then "Shift" else "") <~ shift
-        -- ctrlTest  = (\p -> if p then "Ctrl"  else "") <~ ctrl
+main = runSignal $ enterTest <|> spaceTest <|> altTest <|> shiftTest <|> ctrlTest
+    where
+        enterTest = (\p -> if p then "Enter" else "") <~ enter
+        spaceTest = (\p -> if p then "Space" else "") <~ space
+        altTest   = (\p -> if p then "Alt"   else "") <~ alt
+        shiftTest = (\p -> if p then "Shift" else "") <~ shift
+        ctrlTest  = (\p -> if p then "Ctrl"  else "") <~ ctrl
 
 -- main = runSignal $ countIf (\(x,_) -> x > 400) mousePos
 -- main = runSignal $ dropRepeats $ isDown keyW <|> isDown keyA  <|> isDown keyS <|> isDown keyD
