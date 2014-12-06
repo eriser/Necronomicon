@@ -21,6 +21,7 @@ engineTest = do
     U.printSynthDef lineSynthDef
     nThreadDelay 5000000
     myCoolSynthDef <- U.compileSynthDef U.myCoolSynth
+    liftIO $ print myCoolSynthDef
     nodeID <- U.playSynth myCoolSynthDef 0
     nPrint "Waiting for user input..."
     _ <- liftIO $ getLine
