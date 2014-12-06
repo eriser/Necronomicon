@@ -5,10 +5,16 @@ module Necronomicon.FRP.Signal (
     (~~),
     -- (=<~),
     -- execute,
+    enter,
+    space,
+    shift,
+    ctrl,
+    alt,
     dropRepeats,
     randS,
     randFS,
     count,
+    countIf,
     wasd,
     dimensions,
     mousePos,
@@ -153,10 +159,10 @@ instance Applicative Signal where
                             return $ Change newValue
                         NoChange _ -> do
                             prev <- readIORef ref
-                            return $NoChange prev
+                            return $ NoChange prev
 
 instance Alternative Signal where
-    empty = Signal $ \_ -> return (undefined,\_ -> return $ NoChange undefined)
+    empty   = Signal $ \_ -> return (undefined,\_ -> return $ NoChange undefined)
     a <|> b = Signal $ \necro -> do
         (defaultA,aCont) <- unSignal a necro
         (defaultB,bCont) <- unSignal b necro
@@ -429,6 +435,14 @@ keyW = GLFW.Key'W
 keyX = GLFW.Key'X
 keyY = GLFW.Key'Y
 keyZ = GLFW.Key'Z
+keyEnter  = GLFW.Key'Enter
+keyLCtrl  = GLFW.Key'LeftControl
+keyRCtrl  = GLFW.Key'RightControl
+keyLAlt   = GLFW.Key'LeftAlt
+keyRAlt   = GLFW.Key'RightAlt
+keySpace  = GLFW.Key'Space
+keyLShift = GLFW.Key'LeftShift
+keyRShift = GLFW.Key'RightShift
 
 glfwKeyToEventKey :: GLFW.Key -> Int
 glfwKeyToEventKey k
@@ -458,7 +472,15 @@ glfwKeyToEventKey k
     | k == keyX = 123
     | k == keyY = 124
     | k == keyZ = 125
-    | otherwise = -1
+    | k == keyEnter = 126
+    | k == keySpace = 127
+    | k == keyLCtrl = 128
+    | k == keyRCtrl = 129
+    | k == keyLAlt  = 130
+    | k == keyRAlt  = 131
+    | k == keyLShift= 132
+    | k == keyRShift= 133
+    | otherwise     = -1
 
 mousePos :: Signal (Double,Double)
 mousePos = input (0,0) 0
@@ -476,6 +498,21 @@ wasd :: Signal (Double,Double)
 wasd = go <~ isDown keyW ~~ isDown keyA ~~ isDown keyS ~~ isDown keyD
     where
         go w a s d = (((if d then 1 else 0) + (if a then (-1) else 0)),((if w then 1 else 0) + (if s then (-1) else 0)))
+
+enter :: Signal Bool
+enter = isDown keyEnter
+
+space :: Signal Bool
+space = isDown keySpace
+
+ctrl :: Signal Bool
+ctrl = isDown keyLCtrl <|> isDown keyRCtrl
+
+alt :: Signal Bool
+alt  = isDown keyLAlt <|> isDown keyRAlt
+
+shift :: Signal Bool
+shift  = isDown keyLShift <|> isDown keyRShift
 
 ---------------------------------------------
 -- Combinators
@@ -658,6 +695,23 @@ count signal = Signal $ \necro -> do
                     let result = n + 1
                     writeIORef ref result
                     return $ Change result
+
+countIf :: (a -> Bool) -> Signal a -> Signal Int
+countIf pred signal = Signal $ \necro -> do
+    (_,sCont) <- unSignal signal necro
+    ref       <- newIORef 0
+    return (0,processEvent sCont ref)
+    where
+        processEvent sCont ref event = do
+            sValue <- sCont event
+            case sValue of
+                NoChange _ -> readIORef ref >>= return . NoChange
+                Change v   -> if pred v
+                              then do n <- readIORef ref
+                                      let result = n + 1
+                                      writeIORef ref result
+                                      return $ Change result
+                              else readIORef ref >>= return . NoChange
 
 sampleOn :: Signal a -> Signal b -> Signal b
 sampleOn a b = Signal $ \necro -> do
