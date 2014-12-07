@@ -35,6 +35,7 @@ library
         Necronomicon.FRP
         Necronomicon.FRP.Signal
         Necronomicon.Linear
+        Necronomicon.Noise
     Build-Depends:     
         base             >= 3 && < 5,
         stm              >= 2.4.0,
