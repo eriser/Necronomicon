@@ -70,6 +70,7 @@ module Necronomicon.FRP.Signal (
     lift6,
     lift7,
     lift8,
+    constant,
     module Control.Applicative
     ) where
 
@@ -82,18 +83,22 @@ import Data.Monoid
 import Control.Concurrent
 import Control.Concurrent.STM
 import Data.Either
-import qualified Data.Set as Set
+import qualified Data.IntSet as IntSet
 import Debug.Trace
 import qualified Data.IntMap.Strict as IntMap
 import Data.Dynamic
 import Data.IORef
 import System.Random
+import Data.List (unzip3)
 
 (<~) :: Functor f => (a -> b) -> f a -> f b
 (<~) = fmap
 
 (~~) :: Applicative f => f (a -> b) -> f a -> f b
 (~~) = (<*>)
+
+constant :: a -> Signal a
+constant = pure
 
 infixl 4 <~,~~
 
@@ -110,64 +115,74 @@ data Necro        = Necro {
     globalDispatch  :: TBQueue Event,
     inputCounter    :: IORef Int
     }
-newtype Signal a = Signal {unSignal :: Necro -> IO(a,Event -> IO (EventValue a))}
+newtype Signal a = Signal {unSignal :: Necro -> IO(a,Event -> IO (EventValue a),IntSet.IntSet)}
+
+idGuard :: IntSet.IntSet -> Handle -> IORef a -> Maybe (IO (EventValue a))
+idGuard set uid ref = case IntSet.member uid set of
+    True  -> Nothing
+    False -> Just (readIORef ref >>= return . NoChange)
 
 instance  Functor Signal where
     fmap f x = Signal $ \necro -> do
-        (defaultX,xCont) <- unSignal x necro
+        (defaultX,xCont,ids) <- unSignal x necro
         let defaultValue = f defaultX 
         ref <- newIORef defaultValue
-        return (defaultValue,processState xCont ref)
+        return (defaultValue,processState xCont ref ids,ids)
         where
-            processState xCont ref event = do
-                xValue <- xCont event
-                case xValue of
-                    Change x -> do
-                        let newValue = f x
-                        writeIORef ref newValue
-                        return $ Change newValue
-                    NoChange _ -> do
-                        prev <- readIORef ref
-                        return $ NoChange prev
-
-instance Applicative Signal where
-    pure a = Signal $ \_ -> return (a,\_ -> return $ NoChange a)
-    f <*> g = Signal $ \necro -> do
-        (defaultF,fCont) <- unSignal f necro
-        (defaultG,gCont) <- unSignal g necro
-        let defaultValue = defaultF defaultG
-        ref <- newIORef defaultValue
-        return (defaultValue,processState fCont gCont ref)
-        where
-            processState fCont gCont ref event = do
-                fValue <- fCont event
-                gValue <- gCont event
-                case fValue of
-                    Change f' -> case gValue of
-                        Change g' -> do
-                            let newValue = f' g'
-                            writeIORef ref newValue
-                            return $ Change newValue
-                        NoChange g' -> do
-                            let newValue = f' g'
-                            writeIORef ref newValue
-                            return $ Change newValue
-                    NoChange f' -> case gValue of
-                        Change g' -> do
-                            let newValue = f' g'
+            processState xCont ref ids event@(Event uid _) = case idGuard ids uid ref of
+                Just r -> r
+                Nothing-> do
+                    xValue <- xCont event
+                    case xValue of
+                        Change x -> do
+                            let newValue = f x
                             writeIORef ref newValue
                             return $ Change newValue
                         NoChange _ -> do
                             prev <- readIORef ref
                             return $ NoChange prev
 
+instance Applicative Signal where
+    pure a = Signal $ \_ -> return (a,\_ -> return $ NoChange a,IntSet.empty)
+    f <*> g = Signal $ \necro -> do
+        (defaultF,fCont,fIds) <- unSignal f necro
+        (defaultG,gCont,gIds) <- unSignal g necro
+        let defaultValue = defaultF defaultG
+        ref <- newIORef defaultValue
+        let ids = IntSet.union fIds gIds
+        return (defaultValue,processState fCont gCont ref ids,ids)
+        where
+            processState fCont gCont ref ids event@(Event uid _) = case idGuard ids uid ref of
+                Just r -> r
+                Nothing-> do
+                    fValue <- fCont event
+                    gValue <- gCont event
+                    case fValue of
+                        Change f' -> case gValue of
+                            Change g' -> do
+                                let newValue = f' g'
+                                writeIORef ref newValue
+                                return $ Change newValue
+                            NoChange g' -> do
+                                let newValue = f' g'
+                                writeIORef ref newValue
+                                return $ Change newValue
+                        NoChange f' -> case gValue of
+                            Change g' -> do
+                                let newValue = f' g'
+                                writeIORef ref newValue
+                                return $ Change newValue
+                            NoChange _ -> do
+                                prev <- readIORef ref
+                                return $ NoChange prev
+
 instance Alternative Signal where
-    empty   = Signal $ \_ -> return (undefined,\_ -> return $ NoChange undefined)
+    empty   = Signal $ \_ -> return (undefined,\_ -> return $ NoChange undefined,IntSet.empty)
     a <|> b = Signal $ \necro -> do
-        (defaultA,aCont) <- unSignal a necro
-        (defaultB,bCont) <- unSignal b necro
+        (defaultA,aCont,aIds) <- unSignal a necro
+        (defaultB,bCont,bIds) <- unSignal b necro
         ref <- newIORef defaultA
-        return (defaultA,processState aCont bCont ref)
+        return (defaultA,processState aCont bCont ref,IntSet.union aIds bIds)
         where
             processState aCont bCont ref event = do
                 aValue <- aCont event
@@ -243,7 +258,12 @@ instance Show (Signal a) where
 initWindow :: IO(Maybe GLFW.Window)
 initWindow = GLFW.init >>= \initSuccessful -> if initSuccessful then window else return Nothing
     where
-        mkWindow = GLFW.createWindow 960 640 "Necronomicon" Nothing Nothing
+        mkWindow = do
+            --Windowed
+            GLFW.createWindow 960 640 "Necronomicon" Nothing Nothing
+            --Full screen
+            -- fullScreenOnMain <- GLFW.getPrimaryMonitor
+            -- GLFW.createWindow 1920 1080 "Necronomicon" fullScreenOnMain Nothing
         window   = mkWindow >>= \w -> GLFW.makeContextCurrent w >> return w
 
 runSignal :: (Show a) => Signal a -> IO()
@@ -286,7 +306,7 @@ runSignal s = initWindow >>= \mw ->
 
 globalEventDispatch :: Show a => Signal a -> Necro -> IO()
 globalEventDispatch signal necro@(Necro inBox counter) = do
-    (a,processState) <- unSignal signal necro
+    (a,processState,eids) <- unSignal signal necro
     print a
     forever $ do
         e <- atomically $ readTBQueue inBox
@@ -319,9 +339,9 @@ toHours        t = t / 3600
 every :: Time -> Signal Time
 every time = Signal $ \necro -> do
     (Input uid inputSig) <- createInput (0::Double) necro
-    (sigValue,sigCont)   <- unSignal inputSig necro
+    (sigValue,sigCont,sIds)   <- unSignal inputSig necro
     forkIO $ timer uid $ globalDispatch necro
-    return $ (sigValue,sigCont)
+    return $ (sigValue,sigCont,IntSet.insert uid sIds)
     where
         timer uid outBox = forever $ do
             currentTime <- getCurrentTime
@@ -337,10 +357,10 @@ every time = Signal $ \necro -> do
 fps :: Time -> Signal Time
 fps time = Signal $ \necro -> do
     (Input uid inputSig) <- createInput (0::Double) necro
-    (sigValue,sigCont)   <- unSignal inputSig necro
+    (sigValue,sigCont,sIds)   <- unSignal inputSig necro
     ref <- newIORef 0
     forkIO $ timer ref uid $ globalDispatch necro
-    return $ (sigValue,sigCont)
+    return $ (sigValue,sigCont,IntSet.insert uid sIds)
     where
         timer ref  uid outBox = forever $ do
             lastTime    <- readIORef ref
@@ -363,7 +383,7 @@ fps time = Signal $ \necro -> do
 input :: Typeable a => a -> Int -> Signal a
 input a uid = Signal $ \_ -> do
     ref <- newIORef a
-    return (a,processState ref)
+    return (a,processState ref,IntSet.insert uid IntSet.empty)
     where
         processState ref (Event uid' e) = do
             case uid == uid' of
@@ -392,7 +412,7 @@ createInput a necro = do
     writeIORef (inputCounter necro) uid
     return $ Input uid $ Signal $ \_ -> do
         ref <- newIORef a
-        return (a,processEvent uid ref)
+        return (a,processEvent uid ref,IntSet.insert uid IntSet.empty)
     where
         processEvent uid ref (Event uid' e) = do
             case uid == uid' of
@@ -509,10 +529,10 @@ ctrl :: Signal Bool
 ctrl = isDown keyLCtrl <|> isDown keyRCtrl
 
 alt :: Signal Bool
-alt  = isDown keyLAlt <|> isDown keyRAlt
+alt = isDown keyLAlt <|> isDown keyRAlt
 
 shift :: Signal Bool
-shift  = isDown keyLShift <|> isDown keyRShift
+shift = isDown keyLShift <|> isDown keyRShift
 
 ---------------------------------------------
 -- Combinators
@@ -544,9 +564,9 @@ lift8 f a b c d e f' g h = f <~ a ~~ b ~~ c ~~ d ~~ e ~~ f' ~~ g ~~ h
 
 foldp :: (a -> b -> b) -> b -> Signal a -> Signal b
 foldp f bInit a = Signal $ \necro -> do
-    (aDefaultValue,aCont) <- unSignal a necro
+    (aDefaultValue,aCont,aIds) <- unSignal a necro
     ref  <- newIORef bInit
-    return (f aDefaultValue bInit,processState aCont ref)
+    return (f aDefaultValue bInit,processState aCont ref,aIds)
     where
         processState aCont ref event = do
             aValue <- aCont event
@@ -568,8 +588,8 @@ merges = foldr (<|>) empty
 
 combine :: [Signal a] -> Signal [a]
 combine signals = Signal $ \necro -> do
-    (defaultValues,continuations) <- liftM unzip $ mapM (\s -> unSignal s necro) signals
-    return $ (defaultValues,processEvent continuations)
+    (defaultValues,continuations,ids) <- liftM unzip3 $ mapM (\s -> unSignal s necro) signals
+    return $ (defaultValues,processEvent continuations,foldr IntSet.union IntSet.empty ids)
     where
         processEvent continuations event = do
             liftM (foldr collapseContinuations (NoChange [])) $ mapM (\c -> c event) continuations
@@ -581,10 +601,10 @@ combine signals = Signal $ \necro -> do
 
 dropIf :: (a -> Bool) -> a -> Signal a -> Signal a
 dropIf pred init signal = Signal $ \necro ->do
-    (sValue,sCont) <- unSignal signal necro
+    (sValue,sCont,sIds) <- unSignal signal necro
     let defaultValue = if not (pred sValue) then sValue else init
     ref <- newIORef defaultValue
-    return (defaultValue,processEvent sCont ref)
+    return (defaultValue,processEvent sCont ref,sIds)
     where
         processEvent sCont ref event = do
             sValue <- sCont event
@@ -600,10 +620,10 @@ dropIf pred init signal = Signal $ \necro ->do
 
 keepIf :: (a -> Bool) -> a -> Signal a -> Signal a
 keepIf pred init signal = Signal $ \necro ->do
-    (sValue,sCont) <- unSignal signal necro
+    (sValue,sCont,sIds) <- unSignal signal necro
     let defaultValue = if pred sValue then sValue else init
     ref <- newIORef init
-    return (defaultValue,processEvent sCont ref)
+    return (defaultValue,processEvent sCont ref,sIds)
     where
         processEvent sCont ref event = do
             sValue <- sCont event
@@ -619,10 +639,10 @@ keepIf pred init signal = Signal $ \necro ->do
 
 keepWhen :: Signal Bool -> Signal a -> Signal a
 keepWhen pred x = Signal $ \necro -> do
-    (pValue,pCont) <- unSignal pred necro
-    (xValue,xCont) <- unSignal x    necro
+    (pValue,pCont,pIds) <- unSignal pred necro
+    (xValue,xCont,xIds) <- unSignal x    necro
     ref            <- newIORef xValue
-    return (xValue,processEvent pCont xCont ref)
+    return (xValue,processEvent pCont xCont ref,IntSet.union pIds xIds)
     where
         processEvent pCont xCont ref event = do
             pValue <- pCont event
@@ -642,10 +662,10 @@ keepWhen pred x = Signal $ \necro -> do
 
 dropWhen :: Signal Bool -> Signal a -> Signal a
 dropWhen pred x = Signal $ \necro -> do
-    (pValue,pCont) <- unSignal pred necro 
-    (xValue,xCont) <- unSignal x    necro
+    (pValue,pCont,pIds) <- unSignal pred necro 
+    (xValue,xCont,xIds) <- unSignal x    necro
     ref            <- newIORef xValue
-    return (xValue,processEvent pCont xCont ref)
+    return (xValue,processEvent pCont xCont ref,IntSet.union pIds xIds)
     where
         processEvent pCont xCont ref event = do
             pValue <- pCont event
@@ -664,9 +684,9 @@ dropWhen pred x = Signal $ \necro -> do
 
 dropRepeats :: (Eq a) => Signal a -> Signal a
 dropRepeats signal = Signal $ \necro -> do
-    (value,cont) <- unSignal signal necro
+    (value,cont,ids) <- unSignal signal necro
     ref          <- newIORef value
-    return (value,processEvent ref cont)
+    return (value,processEvent ref cont,ids)
     where
         processEvent ref cont event = do
             value <- cont event
@@ -680,9 +700,9 @@ dropRepeats signal = Signal $ \necro -> do
 
 count :: Signal a -> Signal Int
 count signal = Signal $ \necro -> do
-    (_,sCont) <- unSignal signal necro
+    (_,sCont,ids) <- unSignal signal necro
     ref <- newIORef 0
-    return (0,processEvent sCont ref)
+    return (0,processEvent sCont ref,ids)
     where
         processEvent sCont ref event = do
             sValue <- sCont event
@@ -698,9 +718,9 @@ count signal = Signal $ \necro -> do
 
 countIf :: (a -> Bool) -> Signal a -> Signal Int
 countIf pred signal = Signal $ \necro -> do
-    (_,sCont) <- unSignal signal necro
+    (_,sCont,ids) <- unSignal signal necro
     ref       <- newIORef 0
-    return (0,processEvent sCont ref)
+    return (0,processEvent sCont ref,ids)
     where
         processEvent sCont ref event = do
             sValue <- sCont event
@@ -715,10 +735,10 @@ countIf pred signal = Signal $ \necro -> do
 
 sampleOn :: Signal a -> Signal b -> Signal b
 sampleOn a b = Signal $ \necro -> do
-    (aValue,aCont) <- unSignal a necro
-    (bValue,bCont) <- unSignal b necro
+    (aValue,aCont,aIds) <- unSignal a necro
+    (bValue,bCont,bIds) <- unSignal b necro
     ref            <- newIORef bValue
-    return (bValue,processEvent aCont bCont ref)
+    return (bValue,processEvent aCont bCont ref,IntSet.union aIds bIds)
     where
         processEvent aCont bCont ref event = do
             aValue <- aCont event
@@ -737,10 +757,10 @@ sampleOn a b = Signal $ \necro -> do
 
 randS :: Int -> Int -> Signal a -> Signal Int
 randS low high signal = Signal $ \necro -> do
-    (_,cont) <- unSignal signal necro
+    (_,cont,ids) <- unSignal signal necro
     r        <- randomRIO (low,high)
     ref      <- newIORef r
-    return (r,processEvent cont ref)
+    return (r,processEvent cont ref,ids)
     where
         processEvent cont ref event = do
             value <- cont event
@@ -753,10 +773,10 @@ randS low high signal = Signal $ \necro -> do
 
 randFS :: Signal a -> Signal Float
 randFS signal = Signal $ \necro -> do
-    (_,cont) <- unSignal signal necro
+    (_,cont,ids) <- unSignal signal necro
     r        <- randomRIO (0,1)
     ref      <- newIORef r
-    return (r,processEvent cont ref)
+    return (r,processEvent cont ref,ids)
     where
         processEvent cont ref event = do
             value <- cont event

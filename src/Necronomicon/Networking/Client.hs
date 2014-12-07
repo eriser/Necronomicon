@@ -45,7 +45,7 @@ startClient name serverIPAddress = print "Starting a client." >> (withSocketsDo 
 
         getSocket = do
             (serveraddr:_) <- getAddrInfo hints (Just serverIPAddress) (Just serverPort)
-            sock <- socket (addrFamily serveraddr) Datagram defaultProtocol
+            sock           <- socket (addrFamily serveraddr) Datagram defaultProtocol
             connect sock (addrAddress serveraddr) >> return sock
 
         handler sock = do

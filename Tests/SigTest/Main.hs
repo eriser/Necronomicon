@@ -3,14 +3,14 @@ import Necronomicon.FRP
 import Debug.Trace
 
 main :: IO()
-
-main = runSignal $ enterTest <|> spaceTest <|> altTest <|> shiftTest <|> ctrlTest
-    where
-        enterTest = (\p -> if p then "Enter" else "") <~ enter
-        spaceTest = (\p -> if p then "Space" else "") <~ space
-        altTest   = (\p -> if p then "Alt"   else "") <~ alt
-        shiftTest = (\p -> if p then "Shift" else "") <~ shift
-        ctrlTest  = (\p -> if p then "Ctrl"  else "") <~ ctrl
+-- main = runSignal $ needlessCrawlTest
+-- main = runSignal $ enterTest <|> spaceTest <|> altTest <|> shiftTest <|> ctrlTest
+    -- where
+        -- enterTest = (\p -> if p then "Enter" else "") <~ enter
+        -- spaceTest = (\p -> if p then "Space" else "") <~ space
+        -- altTest   = (\p -> if p then "Alt"   else "") <~ alt
+        -- shiftTest = (\p -> if p then "Shift" else "") <~ shift
+        -- ctrlTest  = (\p -> if p then "Ctrl"  else "") <~ ctrl
 
 -- main = runSignal $ countIf (\(x,_) -> x > 400) mousePos
 -- main = runSignal $ dropRepeats $ isDown keyW <|> isDown keyA  <|> isDown keyS <|> isDown keyD
@@ -19,8 +19,7 @@ main = runSignal $ enterTest <|> spaceTest <|> altTest <|> shiftTest <|> ctrlTes
 -- main = runSignal $ fps 1 - fps 3
 -- main = runSignal $ fps 30
 -- main = runSignal wasd
--- main = runSignal tonsOfMouseAndTime
--- main = runSignal tonsOfMouseAndTime
+main = runSignal tonsOfMouseAndTime
 -- main = runSignal $ isDown keyW <|> isDown keyA
 -- main = runSignal $ (fst <~ mousePos) + (snd <~ mousePos)
 -- main = runSignal $ dropIf (>10) 0 $ count mouseClicks
@@ -68,4 +67,19 @@ tonsOfMouseAndTime = tenThousandTest
         thousandsTests  = test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ mousePos)))))))))
         test4           = tupleTest <~ thousandsTests
         tenThousandTest = test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ mousePos)))))))))
+
+
+
+needlessCrawlTest :: Signal (Double,Double)
+needlessCrawlTest = tenThousandTest
+    where
+        tupleTest (x,y) (z,w) = (x+w,z-y)
+        test1           = tupleTest <~ pure (0,0)
+        tenTests        = test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ pure (0,0))))))))))
+        test2           = tupleTest <~ tenTests
+        hundredTests    = test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ pure (0,0))))))))))
+        test3           = tupleTest <~ hundredTests
+        thousandsTests  = test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ pure (0,0))))))))))
+        test4           = tupleTest <~ thousandsTests
+        tenThousandTest = test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ pure (0,0))))))))))
 
