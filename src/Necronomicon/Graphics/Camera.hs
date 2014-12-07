@@ -1,12 +1,14 @@
 module Necronomicon.Graphics.Camera where
 
+----------------------------------------------------------
 import Prelude
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.UI.GLFW as GLFW
 import Necronomicon.Linear
 import Necronomicon.Graphics.SceneObject
--- import Generator.Game.Utilities
 import Necronomicon.Graphics.Color
+import Debug.Trace
+----------------------------------------------------------
 
 perspCamera :: Vector3 -> Quaternion -> Vector2 -> Double -> Double -> Double -> Color -> SceneObject
 perspCamera pos r dimensions fov near far clearColor = SceneObject "Camera" True pos r (one::Vector3) Nothing (Just c) []
@@ -46,7 +48,10 @@ renderGraphics w scene = do
     -- GL.samples GL.$= 8
 
     renderCameras scene scene
-    
-    GLFW.swapBuffers w
-    GLFW.pollEvents
+
+    -- traceShow w $ return ()
+    -- GLFW.swapBuffers w
+    -- GLFW.pollEvents
     GL.flush
+
+

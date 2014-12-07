@@ -1,9 +1,56 @@
 import Prelude
--- import Necronomicon.FRP
 import Necronomicon hiding ((+),(-))
 import Debug.Trace
 
-main :: IO()
+main :: IO ()
+main = runSignal $ render testScene
+
+testScene :: Signal SceneObject
+testScene = root <~ combine [camSig,triSig]
+    where
+        triSig = testTri "TriSig"
+                 <~ foldp move zero wasd
+                 ~~ constant identityQuat
+                 ~~ constant []
+
+        camSig = perspCamera
+                 <~ constant (Vector3 0 0 20)
+                 ~~ constant identityQuat
+                 ~~ lift (\(x,y) -> Vector2 (fromIntegral x) (fromIntegral y) ) dimensions
+                 ~~ constant 60
+                 ~~ constant 0.1
+                 ~~ constant 200
+                 ~~ constant (RGB 1 1 1)
+        move (x,y) v = Vector3 (x + (_x v)) (y + (_y v)) 0 
+
+testTri :: String -> Vector3 -> Quaternion -> [SceneObject] -> SceneObject
+testTri name pos r chldn = SceneObject name True pos r one m Nothing []
+    where
+        m = Just $ Mesh
+             [Vector3 (-0.4) (-0.3) 0,
+              Vector3   0.4  (-0.3) 0,
+              Vector3     0    0.3  0]
+             [RGB 1 0 0,
+              RGB 0 1 0,
+              RGB 0 0 1]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+-- main :: IO()
 -- main = runSignal $ needlessCrawlTest
 -- main = runSignal $ enterTest <|> spaceTest <|> altTest <|> shiftTest <|> ctrlTest
     -- where
@@ -20,7 +67,7 @@ main :: IO()
 -- main = runSignal $ fps 1 - fps 3
 -- main = runSignal $ fps 30
 -- main = runSignal wasd
-main = runSignal tonsOfMouseAndTime
+-- main = runSignal tonsOfMouseAndTime
 -- main = runSignal $ isDown keyW <|> isDown keyA
 -- main = runSignal $ (fst <~ mousePos) + (snd <~ mousePos)
 -- main = runSignal $ dropIf (>10) 0 $ count mouseClicks

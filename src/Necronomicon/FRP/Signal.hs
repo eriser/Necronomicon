@@ -1,5 +1,6 @@
 module Necronomicon.FRP.Signal (
     Signal,
+    render,
     foldp,
     (<~),
     (~~),
@@ -74,6 +75,7 @@ module Necronomicon.FRP.Signal (
     module Control.Applicative
     ) where
 
+------------------------------------------------------
 import Control.Applicative
 import Prelude
 import Control.Monad
@@ -90,6 +92,9 @@ import Data.Dynamic
 import Data.IORef
 import System.Random
 import Data.List (unzip3)
+import Necronomicon.Graphics.Camera (renderGraphics)
+import Necronomicon.Graphics.SceneObject (SceneObject)
+------------------------------------------------------
 
 (<~) :: Functor f => (a -> b) -> f a -> f b
 (<~) = fmap
@@ -113,7 +118,8 @@ data Event        = Event Int Dynamic
 data EventValue a = Change a | NoChange a deriving (Show)
 data Necro        = Necro {
     globalDispatch  :: TBQueue Event,
-    inputCounter    :: IORef Int
+    inputCounter    :: IORef Int,
+    window          :: GLFW.Window
     }
 newtype Signal a = Signal {unSignal :: Necro -> IO(a,Event -> IO (EventValue a),IntSet.IntSet)}
 
@@ -280,7 +286,7 @@ runSignal s = initWindow >>= \mw ->
             GLFW.setWindowSizeCallback  w $ Just $ dimensionsEvent globalDispatch
 
             inputCounterRef <- newIORef 1000
-            let necro = Necro globalDispatch inputCounterRef
+            let necro = Necro globalDispatch inputCounterRef w
             forkIO $ globalEventDispatch s necro
 
             (ww,wh) <- GLFW.getWindowSize w
@@ -305,8 +311,8 @@ runSignal s = initWindow >>= \mw ->
                 render q window
 
 globalEventDispatch :: Show a => Signal a -> Necro -> IO()
-globalEventDispatch signal necro@(Necro inBox counter) = do
-    (a,processState,eids) <- unSignal signal necro
+globalEventDispatch signal necro@(Necro inBox _ _) = do
+    (a,processState,_) <- unSignal signal necro
     print a
     forever $ do
         e <- atomically $ readTBQueue inBox
@@ -786,3 +792,23 @@ randFS signal = Signal $ \necro -> do
                     r <- randomRIO (0,1)
                     writeIORef ref r
                     return $ Change r
+
+-- execute :: IO a -> Signal a
+-- execute action = Signal $ \necro -> do
+    -- a <- action
+    -- return (a,\_ -> return $ NoChange a,IntSet.empty)
+
+render :: Signal SceneObject -> Signal ()
+render scene = Signal $ \necro -> do
+    (sValue,sCont,ids) <- unSignal scene necro
+    let w               = window necro
+    renderGraphics w sValue
+    return ((),processEvent w sCont,ids)
+    where
+        processEvent w sCont event = do
+            s <- sCont event
+            case s of
+                NoChange _ -> return $ NoChange ()
+                Change   s -> renderGraphics w s >> return (Change ())
+
+
