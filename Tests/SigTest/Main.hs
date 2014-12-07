@@ -59,7 +59,6 @@ tonsOfMouseAndTime :: Signal (Double,Double)
 tonsOfMouseAndTime = tenThousandTest
     where
         tupleTest (x,y) (z,w) = (x+w,z-y)
-        tupleTime       = (\x ->  (x,x)) <~ mousePos
         test1           = tupleTest <~ mousePos
         tenTests        = test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ mousePos)))))))))
         test2           = tupleTest <~ tenTests
@@ -68,8 +67,6 @@ tonsOfMouseAndTime = tenThousandTest
         thousandsTests  = test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ mousePos)))))))))
         test4           = tupleTest <~ thousandsTests
         tenThousandTest = test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ mousePos)))))))))
-
-
 
 needlessCrawlTest :: Signal (Double,Double)
 needlessCrawlTest = tenThousandTest

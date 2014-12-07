@@ -38,8 +38,13 @@ data Client = Client {
 
 --Merge client states with server states?
 
-startClient :: String -> String -> IO()
-startClient name serverIPAddress = print "Starting a client." >> (withSocketsDo $ bracket getSocket sClose handler)
+startClient :: String -> String -> IO (TVar Client,TChan Message)
+startClient name serverIPAddress = do
+    print "Starting a client."
+    client            <- atomically $ newTVar $ Client name [] False empty
+    outgoingMesssages <- atomically $ newTChan
+    withSocketsDo $ bracket getSocket sClose $ handler client outgoingMesssages
+    return (client,outgoingMesssages)
     where
         hints = Just $ defaultHints {addrSocketType = Datagram}
 
@@ -48,9 +53,7 @@ startClient name serverIPAddress = print "Starting a client." >> (withSocketsDo 
             sock           <- socket (addrFamily serveraddr) Datagram defaultProtocol
             connect sock (addrAddress serveraddr) >> return sock
 
-        handler sock = do
-            client            <- atomically $ newTVar $ Client name [] False empty
-            outgoingMesssages <- atomically $ newTChan
+        handler client outgoingMesssages sock = do
             incomingMessages  <- atomically $ newTChan
             handle (sendQuitOnExit name sock) $ do
                 forkIO $ messageProcessor client incomingMessages oscFunctions

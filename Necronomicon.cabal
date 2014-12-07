@@ -35,7 +35,21 @@ library
         Necronomicon.FRP
         Necronomicon.FRP.Signal
         Necronomicon.Linear
+        Necronomicon.Linear.Plane
+        Necronomicon.Linear.Sphere
+        Necronomicon.Linear.AABB
+        Necronomicon.Linear.Ray
+        Necronomicon.Linear.Triangle
+        Necronomicon.Linear.Math
+        Necronomicon.Linear.Matrix
+        Necronomicon.Linear.Quaternion
+        Necronomicon.Linear.Vector
         Necronomicon.Noise
+        Necronomicon.Graphics
+        Necronomicon.Graphics.Camera
+        Necronomicon.Graphics.Mesh
+        Necronomicon.Graphics.Color
+        Necronomicon.Graphics.SceneObject
     Build-Depends:     
         base             >= 3 && < 5,
         stm              >= 2.4.0,
