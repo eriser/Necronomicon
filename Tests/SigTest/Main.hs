@@ -1,5 +1,6 @@
 import Prelude
-import Necronomicon.FRP
+-- import Necronomicon.FRP
+import Necronomicon hiding ((+),(-))
 import Debug.Trace
 
 main :: IO()
@@ -82,4 +83,5 @@ needlessCrawlTest = tenThousandTest
         thousandsTests  = test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ pure (0,0))))))))))
         test4           = tupleTest <~ thousandsTests
         tenThousandTest = test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ pure (0,0))))))))))
+
 
