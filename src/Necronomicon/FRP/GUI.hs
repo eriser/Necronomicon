@@ -1,4 +1,5 @@
-module Necronomicon.FRP.GUI (button)where
+module Necronomicon.FRP.GUI (button,
+                             Gui(Gui,input,element))where
 
 import Prelude
 import Necronomicon.FRP.Signal
@@ -7,30 +8,13 @@ import Necronomicon.Graphics
 
 data Gui a = Gui{input :: a, element :: SceneObject}
 
-button :: Vector3 -> (Double,Double) -> Color -> Signal (Gui ())
-button pos (mixy,maxy) color = pure $ Gui () $ SceneObject "" True pos identityQuat one m Nothing []
+button :: Vector2 -> Double -> Double -> Color -> Signal (Gui ())
+button (Vector2 x y) w h color = pure $ Gui () $ SceneObject "" True (Vector3 x y 0) identityQuat one m Nothing []
     where
-        m = Just $ Mesh
-             [Vector3 (-0.4) (-0.3) 0,
-              Vector3   0.4  (-0.3) 0,
-              Vector3     0    0.3  0,
-
-              Vector3 (-0.4) (-0.3) 0,
-              Vector3   0.4  (-0.3) 0,
-              Vector3     0    0.3  0]
-             [color,
-              color,
-              color]
-
--- rect pos r chldn = SceneObject "" True pos r one m Nothing []
-    -- where
-        -- m = Just $ Mesh
-             -- [Vector3 (-0.4) (-0.3) 0,
-              -- Vector3   0.4  (-0.3) 0,
-              -- Vector3     0    0.3  0]
-             -- [RGB 1 0 0,
-              -- RGB 0 1 0,
-              -- RGB 0 0 1]
-
+        p0 = Vector3 (0 - (w * 0.5)) (0 + (h * 0.5)) 0
+        p1 = Vector3 (0 - (w * 0.5)) (0 - (h * 0.5)) 0
+        p2 = Vector3 (0 + (w * 0.5)) (0 - (h * 0.5)) 0
+        p3 = Vector3 (0 + (w * 0.5)) (0 + (h * 0.5)) 0
+        m  = Just $ Mesh [p0,p1,p2,p3,p0,p2] [color,color,color,color,color,color]
 
 

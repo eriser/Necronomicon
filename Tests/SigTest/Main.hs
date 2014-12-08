@@ -7,7 +7,7 @@ main :: IO ()
 main = runSignal $ render testScene
 
 testScene :: Signal SceneObject
-testScene = root <~ combine [camSig,triSig]
+testScene = root <~ combine [camSig,triSig,element <~ button (Vector2 0 0) 2 2 (RGB 1 0 0)]
     where
         triSig = terrain
                  <~ foldp (+) zero (lift3 move wasd (fps 60) 5)
