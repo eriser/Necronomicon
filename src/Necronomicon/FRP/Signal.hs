@@ -1,5 +1,6 @@
 module Necronomicon.FRP.Signal (
     Signal (Signal),
+    Necro(Necro,inputCounter),
     render,
     foldp,
     (<~),

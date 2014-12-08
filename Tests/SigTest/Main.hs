@@ -7,21 +7,22 @@ main :: IO ()
 main = runSignal $ render testScene
 
 testScene :: Signal SceneObject
-testScene = root <~ combine [camSig,triSig,element <~ button (Vector2 0 0) 2 2 (RGB 1 0 0)]
+testScene = root <~ combine [camSig,triSig,element <~ rbutton]
     where
-        triSig = terrain
-                 <~ foldp (+) zero (lift3 move wasd (fps 60) 5)
-                 ~~ constant identityQuat
-                 ~~ constant []
+        rbutton = button (Vector2 0 0) 2 1.5 (RGB 1 0 0)
+        triSig  = terrain
+                  <~ foldp (+) zero (lift3 move wasd (fps 60) 5)
+                  ~~ constant identityQuat
+                  ~~ constant []
+
+        camSig  = perspCamera (Vector3 0 0 20) identityQuat
+                  <~ dimensions
+                  ~~ constant 60
+                  ~~ constant 0.1
+                  ~~ constant 200
+                  ~~ constant (RGB 0 0 0)
 
         move (x,y) z a = Vector3 (x*z*a) (y*z*a) 0
-
-        camSig = perspCamera (Vector3 0 0 20) identityQuat
-                 <~ dimensions
-                 ~~ constant 60
-                 ~~ constant 0.1
-                 ~~ constant 200
-                 ~~ constant (RGB 0 0 0)
 
 terrain :: Vector3 -> Quaternion -> [SceneObject] -> SceneObject
 terrain pos r chldn = SceneObject "Terrain" True pos r one (Just simplexMesh) Nothing []
