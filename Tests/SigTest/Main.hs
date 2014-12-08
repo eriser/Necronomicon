@@ -1,6 +1,7 @@
 import Prelude
-import Necronomicon hiding ((+),(-),(*))
+import Necronomicon hiding ((+),(-),(*),(/))
 import Debug.Trace
+import qualified Data.Vector as V
 
 main :: IO ()
 main = runSignal $ render testScene
@@ -8,7 +9,7 @@ main = runSignal $ render testScene
 testScene :: Signal SceneObject
 testScene = root <~ combine [camSig,triSig]
     where
-        triSig = testTri "TriSig"
+        triSig = terrain
                  <~ foldp (+) zero (lift3 move wasd (fps 60) 5)
                  ~~ constant identityQuat
                  ~~ constant []
@@ -22,6 +23,8 @@ testScene = root <~ combine [camSig,triSig]
                  ~~ constant 200
                  ~~ constant (RGB 0 0 0)
 
+terrain :: Vector3 -> Quaternion -> [SceneObject] -> SceneObject
+terrain pos r chldn = SceneObject "Terrain" True pos r one (Just simplexMesh) Nothing []
 
 testTri :: String -> Vector3 -> Quaternion -> [SceneObject] -> SceneObject
 testTri name pos r chldn = SceneObject name True pos r one m Nothing []
@@ -34,21 +37,31 @@ testTri name pos r chldn = SceneObject name True pos r one m Nothing []
               RGB 0 1 0,
               RGB 0 0 1]
 
+simplexMesh :: Mesh
+simplexMesh = Mesh simplexTris simplexColors
+    where
+        w                = 64
+        h                = 128
+        featureSize      = 16
+        scale            = 1.0 / 6.0
+        vscale           = 3
+        svec             = V.fromList $ map (\(x,y)   -> (x,simplex featureSize (x / fromIntegral w) (y / fromIntegral h),y)) $ map (\n -> (fromIntegral $ mod n w,fromIntegral $ div n h)) [0..(w*h)]
+        sval i
+            | i > V.length svec - 1 = svec V.! (mod (i - V.length svec) w + (V.length svec - w))
+            | otherwise             = svec V.! i
 
+        toVertex (x,y,z) = Vector3 (x*scale) (y*vscale) (z*scale*2)
+        toColor  (x,y,z) = RGBA (x / fromIntegral w) (y * 0.75 + 0.35) ((2*) $ z / fromIntegral h) 0.25
+        
+        addTwoTris i vs
+            | mod i w /= (w-1) = toVertex (sval i) : toVertex (sval $ i+w+1) : toVertex (sval $ i+w) : toVertex (sval $ i+w+1) : toVertex (sval $ i+1) : toVertex (sval i) : vs
+            | otherwise        = vs
+        addTwoColors i vs
+            | mod i w /= (w-1) = toColor (sval i) : toColor (sval $ i+w+1) : toColor (sval $ i+w) : toColor (sval $ i+w+1) : toColor (sval $ i+1) : toColor (sval i) : vs
+            | otherwise        = vs
 
-
-
-
-
-
-
-
-
-
-
-
-
-
+        simplexTris      = foldr addTwoTris   [] [0..(V.length svec)] 
+        simplexColors    = foldr addTwoColors [] [0..(V.length svec)]
 
 -- main :: IO()
 -- main = runSignal $ needlessCrawlTest

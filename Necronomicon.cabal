@@ -45,6 +45,8 @@ library
         Necronomicon.Linear.Quaternion
         Necronomicon.Linear.Vector
         Necronomicon.Noise
+        Necronomicon.Noise.DiamondSquare
+        Necronomicon.Noise.Simplex
         Necronomicon.Graphics
         Necronomicon.Graphics.Camera
         Necronomicon.Graphics.Mesh
@@ -94,7 +96,8 @@ executable SigTest
     default-extensions:
     build-depends:
         base             == 4.*,
-        Necronomicon
+        Necronomicon,
+        vector
 
 executable CTest
     main-is:          Main.hs

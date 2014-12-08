@@ -129,7 +129,7 @@ draw g = do
         Just m  -> GL.renderPrimitive GL.Triangles (mapM_ drawVertex $ zip (colors m) (vertices m))
         Nothing -> return ()
     where
-        drawVertex (c,v) = GL.color  (toGLColor3  c) >> GL.vertex (toGLVertex3 v)
+        drawVertex (c,v) = GL.color (toGLColor3  c) >> GL.vertex (toGLVertex3 v)
 
 drawScene :: SceneObject -> IO()
 drawScene g = GL.preservingMatrix $ draw g >> mapM_ drawScene (_children g)
@@ -143,10 +143,3 @@ findGameObject n g
         compareSearch (Just g1) _         = Just g1
         compareSearch _         (Just g2) = Just g2
         compareSearch _         _         = Nothing
-
--- feedback :: GameObject -> GameObject -> Signal GameObject -> SignalGen (Signal GameObject)
--- feedback initial prevScene =
-    -- case findGameObject (_name initial) prevScene of
-        -- Just g  -> delay g
-        -- Nothing -> delay initial
-
