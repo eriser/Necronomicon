@@ -94,6 +94,7 @@ import System.Random
 import Data.List (unzip3)
 import Necronomicon.Graphics.Camera (renderGraphics)
 import Necronomicon.Graphics.SceneObject (SceneObject)
+import Necronomicon.Linear.Vector (Vector2 (Vector2),Vector3 (Vector3))
 ------------------------------------------------------
 
 (<~) :: Functor f => (a -> b) -> f a -> f b
@@ -300,7 +301,7 @@ runSignal s = initWindow >>= \mw ->
         keyPressEvent   eventNotify _ k _ GLFW.KeyState'Pressed  _       = atomically $ (writeTBQueue eventNotify $ Event (glfwKeyToEventKey k) $ toDyn True)
         keyPressEvent   eventNotify _ k _ GLFW.KeyState'Released _       = atomically $ (writeTBQueue eventNotify $ Event (glfwKeyToEventKey k) $ toDyn False)
         keyPressEvent   eventNotify _ k _ _ _                            = return ()
-        dimensionsEvent eventNotify _ x y                                = atomically $ writeTBQueue eventNotify $ Event 2 $ toDyn (x,y)
+        dimensionsEvent eventNotify _ x y                                = atomically $ writeTBQueue eventNotify $ Event 2 $ toDyn $ Vector2 (fromIntegral x) (fromIntegral y)
 
         render quit window
             | quit      = print "Qutting" >> return ()
@@ -514,8 +515,8 @@ mousePos = input (0,0) 0
 mouseClicks :: Signal ()
 mouseClicks = input () 1
 
-dimensions :: Signal (Int,Int)
-dimensions = input (0,0) 2
+dimensions :: Signal Vector2
+dimensions = input (Vector2 0 0) 2
 
 isDown :: Key -> Signal Bool
 isDown = input False . glfwKeyToEventKey

@@ -4,10 +4,11 @@ import Prelude
 import Necronomicon.Linear.Math
 -- import qualified Necronomicon.Rendering.OpenGL as GL
 import qualified Graphics.Rendering.OpenGL as GL
+import Data.Typeable
 
-data Vector2 = Vector2 Double Double                     deriving (Show,Eq,Ord)
-data Vector3 = Vector3 Double Double Double              deriving (Show,Eq,Ord)
-data Vector4 = Vector4 Double Double Double Double       deriving (Show,Eq,Ord)
+data Vector2 = Vector2 Double Double                     deriving (Show,Eq,Ord,Typeable)
+data Vector3 = Vector3 Double Double Double              deriving (Show,Eq,Ord,Typeable)
+data Vector4 = Vector4 Double Double Double Double       deriving (Show,Eq,Ord,Typeable)
 
 --Vector class
 class Vector a where

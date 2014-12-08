@@ -13,14 +13,13 @@ testScene = root <~ combine [camSig,triSig]
                  ~~ constant identityQuat
                  ~~ constant []
 
-        camSig = perspCamera
-                 <~ constant (Vector3 0 0 20)
-                 ~~ constant identityQuat
-                 ~~ lift (\(x,y) -> Vector2 (fromIntegral x) (fromIntegral y) ) dimensions
+        camSig = perspCamera (Vector3 0 0 20) identityQuat
+                 <~ dimensions
                  ~~ constant 60
                  ~~ constant 0.1
                  ~~ constant 200
                  ~~ constant (RGB 1 1 1)
+
         move (x,y) v = Vector3 (x + (_x v)) (y + (_y v)) 0 
 
 testTri :: String -> Vector3 -> Quaternion -> [SceneObject] -> SceneObject
