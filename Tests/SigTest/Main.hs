@@ -18,7 +18,7 @@ testScene = root <~ combine [camSig,triSig]
                  ~~ constant 60
                  ~~ constant 0.1
                  ~~ constant 200
-                 ~~ constant (RGB 1 1 1)
+                 ~~ constant (RGB 0 0 0)
 
         move (x,y) v = Vector3 (x + (_x v)) (y + (_y v)) 0 
 

@@ -120,7 +120,7 @@ data EventValue a = Change a | NoChange a deriving (Show)
 data Necro        = Necro {
     globalDispatch  :: TBQueue Event,
     inputCounter    :: IORef Int,
-    window          :: GLFW.Window
+    sceneVar        :: TMVar SceneObject
     }
 newtype Signal a = Signal {unSignal :: Necro -> IO(a,Event -> IO (EventValue a),IntSet.IntSet)}
 
@@ -287,12 +287,13 @@ runSignal s = initWindow >>= \mw ->
             GLFW.setWindowSizeCallback  w $ Just $ dimensionsEvent globalDispatch
 
             inputCounterRef <- newIORef 1000
-            let necro = Necro globalDispatch inputCounterRef w
+            sceneVar        <- atomically newEmptyTMVar
+            let necro = Necro globalDispatch inputCounterRef sceneVar
             forkIO $ globalEventDispatch s necro
 
             (ww,wh) <- GLFW.getWindowSize w
             dimensionsEvent globalDispatch w ww wh
-            render False w
+            render False w sceneVar
     where
         --event callbacks
         mousePosEvent   eventNotify _ x y                                = atomically $ (writeTBQueue eventNotify $ Event 0 $ toDyn (x,y)) `orElse` return ()
@@ -303,13 +304,17 @@ runSignal s = initWindow >>= \mw ->
         keyPressEvent   eventNotify _ k _ _ _                            = return ()
         dimensionsEvent eventNotify _ x y                                = atomically $ writeTBQueue eventNotify $ Event 2 $ toDyn $ Vector2 (fromIntegral x) (fromIntegral y)
 
-        render quit window
+        render quit window sceneVar
             | quit      = print "Qutting" >> return ()
             | otherwise = do
                 GLFW.pollEvents
                 q <- liftA (== GLFW.KeyState'Pressed) (GLFW.getKey window GLFW.Key'Q)
+                ms <- atomically $ tryTakeTMVar sceneVar
+                case ms of
+                    Nothing -> return ()
+                    Just s  -> renderGraphics window s
                 threadDelay $ 16667
-                render q window
+                render q window sceneVar
 
 globalEventDispatch :: Show a => Signal a -> Necro -> IO()
 globalEventDispatch signal necro@(Necro inBox _ _) = do
@@ -802,14 +807,13 @@ randFS signal = Signal $ \necro -> do
 render :: Signal SceneObject -> Signal ()
 render scene = Signal $ \necro -> do
     (sValue,sCont,ids) <- unSignal scene necro
-    let w               = window necro
-    renderGraphics w sValue
-    return ((),processEvent w sCont,ids)
+    atomically $ tryPutTMVar (sceneVar necro) sValue
+    return ((),processEvent (sceneVar necro) sCont,ids)
     where
-        processEvent w sCont event = do
+        processEvent sVar sCont event = do
             s <- sCont event
             case s of
                 NoChange _ -> return $ NoChange ()
-                Change   s -> renderGraphics w s >> return (Change ())
+                Change   s -> atomically (tryPutTMVar sVar s) >> return (Change ())
 
 

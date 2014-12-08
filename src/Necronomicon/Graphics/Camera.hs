@@ -49,9 +49,8 @@ renderGraphics w scene = do
 
     renderCameras scene scene
 
-    -- traceShow w $ return ()
-    -- GLFW.swapBuffers w
-    -- GLFW.pollEvents
+    GLFW.swapBuffers w
+    GLFW.pollEvents
     GL.flush
 
 
