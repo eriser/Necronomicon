@@ -1,5 +1,5 @@
 module Necronomicon.FRP.Signal (
-    Signal,
+    Signal (Signal),
     render,
     foldp,
     (<~),
@@ -368,15 +368,17 @@ every time = Signal $ \necro -> do
                         Nothing -> return 0
                         Just t  -> return t
 
+-- fpsWhen ?
+-- combined global timers?
 fps :: Time -> Signal Time
 fps time = Signal $ \necro -> do
-    (Input uid inputSig) <- createInput (0::Double) necro
-    (sigValue,sigCont,sIds)   <- unSignal inputSig necro
+    (Input uid inputSig)    <- createInput (0::Double) necro
+    (sigValue,sigCont,sIds) <- unSignal inputSig necro
     ref <- newIORef 0
     forkIO $ timer ref uid $ globalDispatch necro
     return $ (sigValue,sigCont,IntSet.insert uid sIds)
     where
-        timer ref  uid outBox = forever $ do
+        timer ref uid outBox = forever $ do
             lastTime    <- readIORef ref
             currentTime <- getCurrentTime
             let delta    = (currentTime - lastTime)
