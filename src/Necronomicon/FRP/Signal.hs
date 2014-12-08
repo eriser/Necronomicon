@@ -112,6 +112,8 @@ ifThenElse :: Bool -> a -> a -> a
 ifThenElse True a _ = a
 ifThenElse False _ b = b
 
+-- maybe revert to global timer system?
+
 -------------------------
 -- Signals 4.0
 -------------------------

@@ -1,5 +1,5 @@
 import Prelude
-import Necronomicon hiding ((+),(-))
+import Necronomicon hiding ((+),(-),(*))
 import Debug.Trace
 
 main :: IO ()
@@ -9,9 +9,11 @@ testScene :: Signal SceneObject
 testScene = root <~ combine [camSig,triSig]
     where
         triSig = testTri "TriSig"
-                 <~ foldp move zero wasd
+                 <~ foldp (+) zero (lift3 move wasd (fps 60) 5)
                  ~~ constant identityQuat
                  ~~ constant []
+
+        move (x,y) z a = Vector3 (x*z*a) (y*z*a) 0
 
         camSig = perspCamera (Vector3 0 0 20) identityQuat
                  <~ dimensions
@@ -20,7 +22,6 @@ testScene = root <~ combine [camSig,triSig]
                  ~~ constant 200
                  ~~ constant (RGB 0 0 0)
 
-        move (x,y) v = Vector3 (x + (_x v)) (y + (_y v)) 0 
 
 testTri :: String -> Vector3 -> Quaternion -> [SceneObject] -> SceneObject
 testTri name pos r chldn = SceneObject name True pos r one m Nothing []
