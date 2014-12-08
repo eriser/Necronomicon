@@ -21,7 +21,9 @@ library
         Necronomicon
         Necronomicon.FRP
         Necronomicon.UGen
-        Necronomicon.Runtime
+        Necronomicon.Runtime,
+        Necronomicon.Util,
+        Necronomicon.Util.PriorityQueue
 		
     other-modules:
         Necronomicon.Language.Layout
@@ -101,3 +103,14 @@ executable AudioEngineTest
         hosc             >= 0.14,
         mtl              >= 2.1.3.0,
         Necronomicon
+
+executable PriorityQueueTest
+    main-is:          Main.hs
+    default-language: Haskell2010
+    ghc-options:      -threaded -Wall
+    hs-source-dirs:   Tests/PriorityQueueTest
+    default-extensions:
+    build-depends:
+        base             == 4.*,
+        Necronomicon,
+        QuickCheck

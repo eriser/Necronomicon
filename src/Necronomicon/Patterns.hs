@@ -15,7 +15,7 @@ import Data.Monoid
 import System.CPUTime
 import Sound.OSC.Time
 import qualified Data.Fixed as F
-import Necronomicon.Runtime
+import Necronomicon.Util.Functions
 
 (~>) :: a -> (a -> b) -> b
 (~>) a f = f a
@@ -75,17 +75,10 @@ instance Arrow PArr where
         where mapSnd g (a, b) = (a, g b)
 -}
 
-------------------------
--- Pattern Functions
-------------------------
 
-stdGen :: StdGen
-stdGen = mkStdGen 1
-
-inf :: Double
-inf = 1 / 0
-
-type TimedValue a = (Pattern a, Double)
+--------------------------
+-- Pattern Scheduler
+--------------------------
 
 runPattern :: (Show a) => Int -> Pattern a -> IO ()
 runPattern n (PSeq p _) = mapM_ (print . collapse p . fromIntegral) [0..(n - 1)]
@@ -187,6 +180,16 @@ wrapResize :: [a] -> [b] -> [a]
 wrapResize [] _ = []
 wrapResize _ [] = []
 wrapResize xs ys = foldl (\acc i -> acc ++ [xs !! (mod i (length xs))]) [] [0..(length ys - 1)] 
+
+--------------------------
+-- Pattern Functions
+--------------------------
+
+stdGen :: StdGen
+stdGen = mkStdGen 1
+
+inf :: Double
+inf = 1 / 0
 
 data Tree a = Node [Tree a] Int | Leaf a
 type PTree a = Pattern (Tree a)

@@ -47,14 +47,14 @@ compileSynthDef synthDef = do
 printSynthDef :: SynthDef -> Necronomicon ()
 printSynthDef synthDef = liftIO $ print synthDef
 
-playSynth :: SynthDef -> CDouble -> Necronomicon NodeID
+playSynth :: SynthDef -> CDouble -> Necronomicon Synth
 playSynth synthDef time = do
     id <- incrementNodeID
     sendMessage (StartSynth synthDef time id)
-    return id
+    return (Synth id)
 
-stopSynth :: NodeID -> Necronomicon ()
-stopSynth id = sendMessage (StopSynth id)
+stopSynth :: Synth -> Necronomicon ()
+stopSynth (Synth id) = sendMessage (StopSynth id)
 
 class UGenComponent a where
     toUGen :: a -> UGen
@@ -103,7 +103,7 @@ foreign import ccall "&line_calc" lineCalc :: Calc
 line :: (UGenComponent a) => a -> UGen
 line length = UGenFunc lineCalc [toUGen length]
 
--- Used internally for time control, don't use directly. ----------
+-- Used internally for time control, don't use directly. -----------------
 foreign import ccall "&pop_time_calc" __priv_pop_time_calc :: Calc
 __priv_pop_time :: UGen
 __priv_pop_time = UGenFunc __priv_pop_time_calc []
@@ -115,7 +115,7 @@ __priv_add_pop_time :: Compiled ()
 __priv_add_pop_time = do
     ugenGraph <- getGraph
     setGraph (__priv_precompiled_pop_time : ugenGraph)
--------------------------------------------------------------------
+--------------------------------------------------------------------------
 
 -- (/) :: UGenComponent a => a -> a -> UGen
 -- (/) = udiv
@@ -225,15 +225,15 @@ addConstant key constant = do
 
 runCompileSynthDef :: UGen -> IO SynthDef
 runCompileSynthDef ugen = do
-    (outputSignal, (CompiledData table revGraph constants)) <- runCompile (tableCompileSynthDef ugen) mkCompiledData
+    (outputSignal, (CompiledData table revGraph constants)) <- runCompile (compileUGenGraphBranch ugen) mkCompiledData
     print ("Total ugens: " ++ (show $ length revGraph))
     print ("Total constants: " ++ (show $ length constants))
     let graph = reverse revGraph
     compiledGraph <- newArray graph
     return (SynthDef outputSignal compiledGraph graph constants)
 
-tableCompileSynthDef :: UGen -> Compiled (Ptr AudioSignal)
-tableCompileSynthDef ugen = do
+compileUGenGraphBranch :: UGen -> Compiled (Ptr AudioSignal)
+compileUGenGraphBranch ugen = do
     let hashed = show ugen
     args <- compileUGenArgs ugen -- Compile argument input branches first to build up ugen cache table
     table <- getTable
@@ -241,19 +241,19 @@ tableCompileSynthDef ugen = do
         Just signalPtr -> return signalPtr
         Nothing -> compileUGen ugen args hashed
 
-compileUGenArgs (UGenTimeFunc _ timeArgs _) = mapM (tableCompileSynthDef) timeArgs
-compileUGenArgs (UGenFunc _ inputs) = mapM (tableCompileSynthDef) inputs
+compileUGenArgs (UGenTimeFunc _ timeArgs _) = mapM (compileUGenGraphBranch) timeArgs
+compileUGenArgs (UGenFunc _ inputs) = mapM (compileUGenGraphBranch) inputs
 compileUGenArgs (UGenNum _) = return []
 
 compileUGen :: UGen -> [Ptr AudioSignal] -> String -> Compiled (Ptr AudioSignal)
 compileUGen (UGenTimeFunc calc _ input) timeArgs key = do
     argsPtr <- liftIO (newArray timeArgs)
-    let ugen = (CUGen calc argsPtr nullPtr) -- During runtime the ugen will push a time shifted time value onto the time stack that other ugens will reference
+    let ugen = (CUGen calc argsPtr nullPtr) -- During runtime the ugen will push a time value onto the time stack that other ugens will reference
     ugenGraph <- getGraph
     setGraph (ugen : ugenGraph) -- Add the time func ugen to the graph *before* the audio input
     cachedTable <- getTable -- grab a temporary copy of the current cached ugen table
     setTable M.empty -- temporarily clear cache to prevent time shifted ugens from using cached ugens outside of the time shifted region
-    inputSignalPtr <- tableCompileSynthDef input -- compile the audio input as a separate step and add it *after* the time func ugen
+    inputSignalPtr <- compileUGenGraphBranch input -- compile the audio input as a separate step and add it *after* the time func ugen
     __priv_add_pop_time -- Add a ugen that will pop the time shifted time value off the time stack
     setTable (M.insert key inputSignalPtr cachedTable) -- reset table to prevent mixing time shifted/unshifted ugens. Also add the audio input as the output of this ugen
     return inputSignalPtr -- return the audio input as the output for this ugen
@@ -293,7 +293,7 @@ myCoolSynth = sig + timeWarp 0.475 sig + timeWarp 0.3 sig ~> gain 0.05 ~> t ~> t
         mod2  = 0.4 + sin (mod1 + 2.1 ~> gain 0.025 ) ~> gain 60.0
 
 lineSynth :: UGen
-lineSynth = (s 555.0) + (s 440.0 ~> delay 0.3)
+lineSynth = (s 555.0) + (s 440.0 ~> delay 0.15)
     where
         s f = (sin f) * l * 0.2
         l = line 0.3

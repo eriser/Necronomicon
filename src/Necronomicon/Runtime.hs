@@ -8,6 +8,10 @@ import Control.Concurrent
 import Control.Concurrent.STM
 import Control.Monad
 import Control.Monad.Trans
+import qualified Necronomicon.Util.PriorityQueue as PQ
+import Necronomicon.Patterns
+import Necronomicon.Util.Functions
+import qualified Data.Map.Strict as M
 
 data SynthDef = SynthDef {
     synthDefOutput :: Ptr AudioSignal,
@@ -17,16 +21,38 @@ data SynthDef = SynthDef {
 } deriving (Show)
 
 type NodeID = CUInt
+data Synth = Synth NodeID
+
 data RunState = NecroOffline | NecroBooting | NecroQuitting | NecroRunning deriving (Show, Eq)
 data RuntimeMessage = StartSynth SynthDef CDouble NodeID | StopSynth NodeID | CollectSynthDef SynthDef | ShutdownNrt
 type RunTimeMailbox = TChan RuntimeMessage
+
+data PDef = PDef {
+    pdefName :: String,
+    pdefPattern :: (Pattern (Necronomicon ()))
+}
+
+data ScheduledPdef = ScheduledPdef PDef Double
+
+instance Ord ScheduledPdef where
+    compare (ScheduledPdef _ t1) (ScheduledPdef _ t2) = compare t1 t2
+
+instance Eq ScheduledPdef where
+    (ScheduledPdef _ t1) == (ScheduledPdef _ t2) = t1 == t2
+
+data PRunTimeMessage = StartPattern PDef | StopPattern PDef | CollectPattern PDef
+type PRunTimeMailbox = TChan PRunTimeMessage
+type PDefQueue = (PQ.PriorityQueue ScheduledPdef, M.Map String PDef)
 
 data NecroVars = NecroVars {
     necroNrtThreadID :: TVar ThreadId,
     necroMailbox :: RunTimeMailbox,
     necroNextNodeID :: TVar NodeID,
     necroSynthDefs :: TVar [SynthDef],
-    necroRunning :: TVar RunState
+    necroRunning :: TVar RunState,
+    necroPatternThreadID :: TVar ThreadId,
+    necroPatternMailbox :: PRunTimeMailbox,
+    necroPatternQueue :: TVar PDefQueue
 }
 
 data Necronomicon a = Necronomicon { runNecroState :: NecroVars -> IO (a, NecroVars) }
@@ -96,6 +122,31 @@ setRunning running = do
     runningTVar <- getRunningTVar
     nAtomically (writeTVar runningTVar running)
 
+getPatternThreadId :: Necronomicon ThreadId
+getPatternThreadId = prGet necroPatternThreadID
+
+getPatternThreadIdTVar :: Necronomicon (TVar ThreadId)
+getPatternThreadIdTVar = prGetTVar necroPatternThreadID
+
+setPatternThreadId :: ThreadId -> Necronomicon ()
+setPatternThreadId id = do
+    idTVar <- getPatternThreadIdTVar
+    nAtomically (writeTVar idTVar id)
+
+getPatternMailBox :: Necronomicon PRunTimeMailbox
+getPatternMailBox = Necronomicon (\n -> return (necroPatternMailbox n, n))
+
+getPatternQueue :: Necronomicon PDefQueue
+getPatternQueue = prGet necroPatternQueue
+
+getPatternQueueTVar :: Necronomicon (TVar PDefQueue)
+getPatternQueueTVar = Necronomicon (\n -> return (necroPatternQueue n, n))
+
+setPatternQueue :: PDefQueue -> Necronomicon ()
+setPatternQueue queue = do
+    queueTVar <- getPatternQueueTVar
+    nAtomically (writeTVar queueTVar queue)
+
 mkNecroVars :: IO NecroVars
 mkNecroVars = do
     threadId <- myThreadId
@@ -104,7 +155,11 @@ mkNecroVars = do
     nextNodeId <- atomically $ newTVar 1000
     synthDefList <- atomically $ newTVar []
     running <- atomically $ newTVar NecroOffline
-    return (NecroVars threadIdTVar mailBox nextNodeId synthDefList running)
+    pThreadId <- myThreadId
+    pThreadIdTVar <- atomically $ newTVar pThreadId
+    pMailBox <- atomically $ newTChan
+    patternQueue <- atomically $ newTVar (PQ.empty, M.empty)
+    return (NecroVars threadIdTVar mailBox nextNodeId synthDefList running pThreadIdTVar pMailBox patternQueue)
 
 runNecronomicon :: Necronomicon a -> IO a
 runNecronomicon func = do
@@ -184,6 +239,28 @@ startNrtRuntime = do
                             liftIO $ handleNrtMessages
                             nThreadDelay 5000
                             necroNrtThreadFunc
+                        _ -> return ()
+
+startPatternScheduler :: Necronomicon ()
+startPatternScheduler = do
+    liftIO waitForRTStarted
+    vars <- getVars
+    patternSchedulerThreadID <- (liftIO $ forkIO (patternThread vars))
+    setPatternThreadId patternSchedulerThreadID
+    where
+        patternThread vars = do
+            runNecroState necroWork vars
+            return ()
+            where
+                necroWork = do
+                    running <- getRunning
+                    case running of
+                        NecroRunning -> do
+                            --messages <- collectMailbox
+                            --processMessages messages
+                            --liftIO $ handleNrtMessages
+                            nThreadDelay 5000
+                            necroWork
                         _ -> return ()
 
 incrementNodeID :: Necronomicon NodeID
@@ -298,10 +375,6 @@ foreign import ccall "shutdown_necronomicon" shutdownNecronomiconCRuntime :: IO 
 foreign import ccall "play_synth" playSynthInRtRuntime :: CDouble -> Ptr AudioSignal -> Ptr CUGen -> CUInt -> CUInt -> IO ()
 foreign import ccall "stop_synth" stopSynthInRtRuntime :: NodeID -> IO ()
 foreign import ccall "get_running" getRtRunning :: IO Int
-
-ifThenElse :: Bool -> a -> a -> a
-ifThenElse True a _ = a
-ifThenElse False _ b = b
 
 nPrint :: (Show a) => a -> Necronomicon ()
 nPrint = liftIO . print

@@ -11,7 +11,7 @@ playSynths :: SynthDef -> Int -> Necronomicon ()
 playSynths synthDef i
     | i <= 0 = return ()
     | otherwise = do
-        nodeId <- U.playSynth synthDef (fromIntegral i * 44100.0 * 0.2)
+        U.playSynth synthDef (fromIntegral i * 44100.0 * 0.2)
         playSynths synthDef (i - 1)
 
 engineTest :: Necronomicon ()
@@ -22,9 +22,10 @@ engineTest = do
     nThreadDelay 5000000
     myCoolSynthDef <- U.compileSynthDef U.myCoolSynth
     liftIO $ print myCoolSynthDef
-    nodeID <- U.playSynth myCoolSynthDef 0
+    myCoolSynth <- U.playSynth myCoolSynthDef 0
     nPrint "Waiting for user input..."
     _ <- liftIO $ getLine
+    U.stopSynth myCoolSynth
     return ()
         
 main :: IO ()

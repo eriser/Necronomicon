@@ -1058,8 +1058,8 @@ void jack_shutdown(void *arg)
 double process_current_node()
 {
 	unsigned int i;
-	unsigned int n = current_node->num_ugens;
-	ugen* ugen_graph = current_node->ugen_graph;
+	const unsigned int n = current_node->num_ugens;
+	const ugen* ugen_graph = current_node->ugen_graph;
 	
 	for (i = 0; i < n; ++i)
 	{
@@ -1083,20 +1083,12 @@ int process(jack_nframes_t nframes, void* arg)
 		out2[i] = 0;
 		add_scheduled_synths(); // Add any synths that need to start this frame into the current synth_list
 
-		// Signal result = sinSynth(absolute_time);
-		// double sample = result.amplitude + result.offset;
-		// double sample = sinSynth(absolute_time);
-		// out1[i] = sample;
-		// out2[i] = sample;
-
-		// Iterate through the synth_list calling calc on each synth and mixing in the result to the out buffers.
+		// Iterate through the synth_list, processing each synth and mixing in the result to the out buffers.
 		current_node = synth_list;
 		while (current_node)
 		{
 			reset_current_time(absolute_time - current_node->time);
-			// signal output = current_node->ugen->calc(current_node->ugen, absolute_time - time);
-			// double sample = output.amplitude + output.offset;
-			double sample = process_current_node();
+			const double sample = process_current_node();
 			out1[i] += sample;
 			out2[i] += sample;
 
