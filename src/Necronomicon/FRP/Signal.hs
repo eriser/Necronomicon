@@ -298,6 +298,7 @@ runSignal s = initWindow >>= \mw ->
 
             (ww,wh) <- GLFW.getWindowSize w
             dimensionsEvent globalDispatch w ww wh
+            
             render False w sceneVar
     where
         --event callbacks

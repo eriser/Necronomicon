@@ -4,12 +4,21 @@ import Debug.Trace
 import qualified Data.Vector as V
 
 main :: IO ()
-main = runSignal $ render testScene
+main = runSignal $ render testGUI
+
+testGUI :: Signal SceneObject
+testGUI = root <~ combine [camSig,element rbutton,element gbutton,element bbutton]
+    where
+        rbutton = button (Vector2 (-0.25) 0) 0.1 0.15 (RGB 1 0 0)
+        gbutton = button (Vector2   0     0) 0.1 0.15 (RGB 0 1 0)
+        bbutton = button (Vector2   0.25  0) 0.1 0.15 (RGB 0 0 1)
+
+        camSig  = orthoCamera (Vector3 0 0 20) identityQuat <~ dimensions ~~ constant (RGB 0 0 0)
+
 
 testScene :: Signal SceneObject
-testScene = root <~ combine [camSig,element rbutton]
+testScene = root <~ combine [camSig,triSig]
     where
-        rbutton = button (Vector2 0 0) 2 1.5 (RGB 1 0 0)
         triSig  = terrain
                   <~ foldp (+) zero (lift3 move wasd (fps 60) 5)
                   ~~ constant identityQuat
@@ -46,7 +55,7 @@ simplexMesh = Mesh simplexTris simplexColors
         featureSize      = 16
         scale            = 1.0 / 6.0
         vscale           = 3
-        svec             = V.fromList $ map (\(x,y)   -> (x,simplex featureSize (x / fromIntegral w) (y / fromIntegral h),y)) $ map (\n -> (fromIntegral $ mod n w,fromIntegral $ div n h)) [0..(w*h)]
+        svec             = V.fromList $ map (\(x,y) -> (x,simplex featureSize (x / fromIntegral w) (y / fromIntegral h),y)) $ map (\n -> (fromIntegral $ mod n w,fromIntegral $ div n h)) [0..(w*h)]
         sval i
             | i > V.length svec - 1 = svec V.! (mod (i - V.length svec) w + (V.length svec - w))
             | otherwise             = svec V.! i
