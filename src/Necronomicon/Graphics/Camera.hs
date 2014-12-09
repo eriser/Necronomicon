@@ -35,11 +35,12 @@ renderCamera scene g  = do
             GL.clearColor GL.$= GL.Color4 (fromRational $ toRational r) (fromRational $ toRational g) (fromRational $ toRational b) (fromRational $ toRational a)
             GL.clear [GL.ColorBuffer,GL.DepthBuffer]
             GL.viewport   GL.$= (GL.Position 0 0, GL.Size (floor . _x $ _dimensions c) (floor . _y $ _dimensions c))
-            GL.matrixMode GL.$= GL.Projection
             GL.loadIdentity
             case _fov c of
-                0 -> GL.ortho2D 0 1 0 1
-                _ -> GL.perspective (realToFrac $ _fov c) (realToFrac ratio) (realToFrac $ _near c) (realToFrac $ _far c)
+                0 -> GL.ortho2D (-1) 1 (-1) 1
+                _ -> do
+                    GL.matrixMode GL.$= GL.Projection
+                    GL.perspective (realToFrac $ _fov c) (realToFrac ratio) (realToFrac $ _near c) (realToFrac $ _far c)
             drawScene scene
             where
                 ratio = (realToFrac $ (_x $ _dimensions c) / (_y $ _dimensions c))::Double

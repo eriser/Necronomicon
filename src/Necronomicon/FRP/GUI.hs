@@ -61,7 +61,7 @@ button (Vector2 x y) w h color = Signal $ \necro -> do
         p2 = Vector3 (0 + (w * 0.5)) (0 - (h * 0.5)) 0
         p3 = Vector3 (0 + (w * 0.5)) (0 + (h * 0.5)) 0
         m  = Just $ Mesh [p0,p1,p2,p3,p0,p2] [color,color,color,color,color,color]
-        hw = w * 0.5 * 0.1
-        hh = h * 0.5 * 0.1
+        hw = w * 0.5 * 1
+        hh = h * 0.5 * 1
 
 
