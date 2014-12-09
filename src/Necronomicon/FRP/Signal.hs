@@ -1,6 +1,8 @@
 module Necronomicon.FRP.Signal (
     Signal (Signal),
     Necro(Necro,inputCounter),
+    EventValue(Change,NoChange),
+    Event(Event),
     render,
     foldp,
     (<~),
@@ -299,13 +301,17 @@ runSignal s = initWindow >>= \mw ->
             render False w sceneVar
     where
         --event callbacks
-        mousePosEvent   eventNotify _ x y                                = atomically $ (writeTBQueue eventNotify $ Event 0 $ toDyn (x,y)) `orElse` return ()
-        mousePressEvent eventNotify _ _ GLFW.MouseButtonState'Released _ = atomically $ (writeTBQueue eventNotify $ Event 1 $ toDyn ()) `orElse` return ()
-        mousePressEvent _           _ _ GLFW.MouseButtonState'Pressed  _ = return ()
+        mousePressEvent eventNotify _ _ GLFW.MouseButtonState'Released _ = atomically $ (writeTBQueue eventNotify $ Event 1 $ toDyn False) `orElse` return ()
+        mousePressEvent eventNotify _ _ GLFW.MouseButtonState'Pressed  _ = atomically $ (writeTBQueue eventNotify $ Event 1 $ toDyn True ) `orElse` return ()
         keyPressEvent   eventNotify _ k _ GLFW.KeyState'Pressed  _       = atomically $ (writeTBQueue eventNotify $ Event (glfwKeyToEventKey k) $ toDyn True)
         keyPressEvent   eventNotify _ k _ GLFW.KeyState'Released _       = atomically $ (writeTBQueue eventNotify $ Event (glfwKeyToEventKey k) $ toDyn False)
         keyPressEvent   eventNotify _ k _ _ _                            = return ()
         dimensionsEvent eventNotify _ x y                                = atomically $ writeTBQueue eventNotify $ Event 2 $ toDyn $ Vector2 (fromIntegral x) (fromIntegral y)
+        mousePosEvent   eventNotify w x y                                = do
+            (wx,wy) <- GLFW.getWindowSize w
+            let mx = ((x / fromIntegral wx) * 2) - 1
+            let my = ((y / fromIntegral wy) * 2) - 1
+            atomically $ (writeTBQueue eventNotify $ Event 0 $ toDyn (mx,my)) `orElse` return ()
 
         render quit window sceneVar
             | quit      = print "Qutting" >> return ()
@@ -523,7 +529,10 @@ mousePos :: Signal (Double,Double)
 mousePos = input (0,0) 0
 
 mouseClicks :: Signal ()
-mouseClicks = input () 1
+mouseClicks = (\_ -> ()) <~ keepIf (\x -> x == False) True mouseDown
+
+mouseDown :: Signal Bool
+mouseDown = input False 1
 
 dimensions :: Signal Vector2
 dimensions = input (Vector2 0 0) 2
