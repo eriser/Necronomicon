@@ -310,9 +310,7 @@ runSignal s = initWindow >>= \mw ->
         dimensionsEvent eventNotify _ x y                                = atomically $ writeTBQueue eventNotify $ Event 2 $ toDyn $ Vector2 (fromIntegral x) (fromIntegral y)
         mousePosEvent   eventNotify w x y                                = do
             (wx,wy) <- GLFW.getWindowSize w
-            let mx = ((x / fromIntegral wx) * 2) - 1
-            let my = ((y / fromIntegral wy) * 2) - 1
-            atomically $ (writeTBQueue eventNotify $ Event 0 $ toDyn (mx,my)) `orElse` return ()
+            atomically $ (writeTBQueue eventNotify $ Event 0 $ toDyn (x / fromIntegral wx,y / fromIntegral wy)) `orElse` return ()
 
         render quit window sceneVar
             | quit      = print "Qutting" >> return ()

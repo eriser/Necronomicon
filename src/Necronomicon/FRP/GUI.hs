@@ -27,8 +27,8 @@ gui gs = render $ root <~ combine (camSig : gs)
     where
         camSig  = orthoCamera (Vector3 0 0 20) identityQuat <~ dimensions ~~ constant (RGB 0 0 0)
 
-button :: Vector2 -> Double -> Double -> Color -> Signal (Gui Bool)
-button (Vector2 x y) w h color = Signal $ \necro -> do
+button :: Double -> Double -> Double -> Double -> Color -> Signal (Gui Bool)
+button x y w h color = Signal $ \necro -> do
     ref <- newIORef False
     mpr <- newIORef (0,0)
     return (Gui False sf,processEvent ref mpr,IntSet.fromList [0,1])
@@ -67,7 +67,7 @@ button (Vector2 x y) w h color = Signal $ \necro -> do
         p2 = Vector3 (0 + (w * 0.5)) (0 - (h * 0.5)) 0
         p3 = Vector3 (0 + (w * 0.5)) (0 + (h * 0.5)) 0
         m  = Just $ Mesh [p0,p1,p2,p3,p0,p2] [color,color,color,color,color,color]
-        hw = w * 0.5 * 1
-        hh = h * 0.5 * 1
+        hw = w * 0.5
+        hh = h * 0.5
 
 

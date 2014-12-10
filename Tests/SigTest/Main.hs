@@ -7,11 +7,11 @@ main :: IO ()
 main = runSignal $ testGUI
 
 testGUI :: Signal ()
-testGUI = gui [element rbutton,element gbutton,element bbutton]
+testGUI = gui [element redButton,element greenButton,element blueButton]
     where
-        rbutton = button (Vector2 (-0.25) 0) 0.1 0.15 (RGB 1 0 0)
-        gbutton = button (Vector2   0     0) 0.1 0.15 (RGB 0 1 0)
-        bbutton = button (Vector2   0.25  0) 0.1 0.15 (RGB 0 0 1)
+        redButton   = button 0.25 0.5 0.1 0.15 (RGB 1 0 0)
+        greenButton = button 0.50 0.5 0.1 0.15 (RGB 0 1 0)
+        blueButton  = button 0.75 0.5 0.1 0.15 (RGB 0 0 1)
 
 testScene :: Signal ()
 testScene = render $ root <~ combine [camSig,triSig]

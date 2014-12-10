@@ -37,7 +37,7 @@ renderCamera scene g  = do
             GL.viewport   GL.$= (GL.Position 0 0, GL.Size (floor . _x $ _dimensions c) (floor . _y $ _dimensions c))
             GL.loadIdentity
             case _fov c of
-                0 -> GL.ortho2D (-1) 1 (-1) 1
+                0 -> GL.ortho2D 0 1 1 0
                 _ -> do
                     GL.matrixMode GL.$= GL.Projection
                     GL.perspective (realToFrac $ _fov c) (realToFrac ratio) (realToFrac $ _near c) (realToFrac $ _far c)
