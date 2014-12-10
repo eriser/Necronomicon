@@ -1,7 +1,8 @@
 module Necronomicon.FRP.GUI (button,
                              Gui(Gui),
                              input,
-                             element)where
+                             element,
+                             gui)where
 
 import Prelude
 import Necronomicon.FRP.Signal
@@ -20,6 +21,11 @@ element :: Signal (Gui a) -> Signal SceneObject
 element = lift $ \(Gui _ s) -> s
 
 -- data Gui a = Gui{input :: a, element :: SceneObject}
+
+gui :: [Signal SceneObject] -> Signal ()
+gui gs = render $ root <~ combine (camSig : gs)
+    where
+        camSig  = orthoCamera (Vector3 0 0 20) identityQuat <~ dimensions ~~ constant (RGB 0 0 0)
 
 button :: Vector2 -> Double -> Double -> Color -> Signal (Gui Bool)
 button (Vector2 x y) w h color = Signal $ \necro -> do

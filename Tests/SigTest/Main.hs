@@ -4,20 +4,17 @@ import Debug.Trace
 import qualified Data.Vector as V
 
 main :: IO ()
-main = runSignal $ render testGUI
+main = runSignal $ testGUI
 
-testGUI :: Signal SceneObject
-testGUI = root <~ combine [camSig,element rbutton,element gbutton,element bbutton]
+testGUI :: Signal ()
+testGUI = gui [element rbutton,element gbutton,element bbutton]
     where
         rbutton = button (Vector2 (-0.25) 0) 0.1 0.15 (RGB 1 0 0)
         gbutton = button (Vector2   0     0) 0.1 0.15 (RGB 0 1 0)
         bbutton = button (Vector2   0.25  0) 0.1 0.15 (RGB 0 0 1)
 
-        camSig  = orthoCamera (Vector3 0 0 20) identityQuat <~ dimensions ~~ constant (RGB 0 0 0)
-
-
-testScene :: Signal SceneObject
-testScene = root <~ combine [camSig,triSig]
+testScene :: Signal ()
+testScene = render $ root <~ combine [camSig,triSig]
     where
         triSig  = terrain
                   <~ foldp (+) zero (lift3 move wasd (fps 60) 5)
