@@ -53,6 +53,7 @@ library
         Necronomicon.Graphics.Mesh
         Necronomicon.Graphics.Color
         Necronomicon.Graphics.SceneObject
+        Necronomicon.Graphics.Text
     Build-Depends:     
         base             >= 3 && < 5,
         stm              >= 2.4.0,
