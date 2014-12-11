@@ -25,7 +25,7 @@ element = lift $ \(Gui _ s) -> s
 gui :: [Signal SceneObject] -> Signal ()
 gui gs = render $ root <~ combine (camSig : gs)
     where
-        camSig  = orthoCamera (Vector3 0 0 20) identityQuat <~ dimensions ~~ constant (RGB 0 0 0)
+        camSig = orthoCamera (Vector3 0 0 20) identityQuat <~ dimensions ~~ constant (RGB 0 0 0)
 
 button :: Double -> Double -> Double -> Double -> Color -> Signal (Gui Bool)
 button x y w h color = Signal $ \necro -> do

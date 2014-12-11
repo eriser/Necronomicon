@@ -296,9 +296,18 @@ runSignal s = initWindow >>= \mw ->
             let necro = Necro globalDispatch inputCounterRef sceneVar
             forkIO $ globalEventDispatch s necro
 
+            threadDelay $ 16667
+        
+            GLFW.pollEvents
+            ms <- atomically $ tryTakeTMVar sceneVar
+            case ms of
+                Nothing -> return ()
+                Just s  -> renderGraphics w s
+
             (ww,wh) <- GLFW.getWindowSize w
             dimensionsEvent globalDispatch w ww wh
-            
+            mousePressEvent globalDispatch w 0 GLFW.MouseButtonState'Released GLFW.modifierKeysShift
+
             render False w sceneVar
     where
         --event callbacks
@@ -820,7 +829,8 @@ randFS signal = Signal $ \necro -> do
 render :: Signal SceneObject -> Signal ()
 render scene = Signal $ \necro -> do
     (sValue,sCont,ids) <- unSignal scene necro
-    atomically $ tryPutTMVar (sceneVar necro) sValue
+    -- atomically $ tryPutTMVar (sceneVar necro) sValue
+    atomically $ putTMVar (sceneVar necro) sValue
     return ((),processEvent (sceneVar necro) sCont,ids)
     where
         processEvent sVar sCont event = do

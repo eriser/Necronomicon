@@ -15,9 +15,10 @@ import Foreign.C.String
 import Graphics.Rendering.FreeType.Internal.Bitmap
 -- import Graphics.Texture.Load
 -- import Graphics.Utils
-import qualified Graphics.Rendering.FreeType.Internal.BitmapSize as BS
 
-{-
+import qualified Graphics.Rendering.FreeType.Internal.BitmapSize as BS
+import qualified Control.Exception as E
+
 loadCharacter :: FilePath -> Char -> Int -> Int -> IO TextureObject
 loadCharacter path char px texUnit = do
     -- FreeType (http://freetype.org/freetype2/docs/tutorial/step1.html)
@@ -41,7 +42,8 @@ loadCharacter path char px texUnit = do
     putStrLn $ "glyphs:" ++ show n
 
     fmt <- peek $ format slot
-    putStrLn $ "glyph format:" ++ glyphFormatString fmt
+    -- putStrLn $ "glyph format:" ++ glyphFormatString fmt
+    putStrLn $ "glyph format:" ++ show fmt
 
     -- This is [] for Ubuntu Mono, but I'm guessing for bitmap
     -- fonts this would be populated with the different font
@@ -91,8 +93,9 @@ loadCharacter path char px texUnit = do
     rowAlignment Unpack $= 1
 
     -- Generate an opengl texture.
-    tex <- newBoundTexUnit texUnit
-    printError
+    -- tex <- newBoundTexUnit texUnit
+    -- printError
+    let tex = undefined
 
     putStrLn "Buffering glyph bitmap into texture."
     texImage2D
@@ -103,7 +106,7 @@ loadCharacter path char px texUnit = do
         (TextureSize2D w' h')
         0
         (PixelData Red UnsignedByte $ buffer bmp)
-    printError
+    -- printError
 
     putStrLn "Texture loaded."
     textureFilter   Texture2D   $= ((Linear', Nothing), Linear')
@@ -111,7 +114,6 @@ loadCharacter path char px texUnit = do
     textureWrapMode Texture2D T $= (Repeated, ClampToEdge)
 
     return tex
--}
 
 runFreeType :: IO FT_Error -> IO ()
 runFreeType m = do
