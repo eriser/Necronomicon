@@ -59,8 +59,8 @@ button x y w h color = Signal $ \necro -> do
             
         st = SceneObject "" True (Vector3 x y 0) identityQuat one mt Nothing []
         sf = SceneObject "" True (Vector3 x y 0) identityQuat one mf Nothing []
-        mt = Just $ Mesh [p0,p1,p2,p3,p0,p2] [color,color,color,color,color,color]
-        mf = Just $ Mesh [p0,p1,p2,p3,p0,p2] [color*fc,color*fc,color*fc,color*fc,color*fc,color*fc]
+        mt = Just $ Mesh [p0,p1,p2,p3,p0,p2] [color,color,color,color,color,color] []
+        mf = Just $ Mesh [p0,p1,p2,p3,p0,p2] [color*fc,color*fc,color*fc,color*fc,color*fc,color*fc] []
         fc = RGB 0.5 0.5 0.5
         p0 = Vector3 (0 - (w * 0.5)) (0 + (h * 0.5)) 0
         p1 = Vector3 (0 - (w * 0.5)) (0 - (h * 0.5)) 0

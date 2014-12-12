@@ -126,8 +126,10 @@ draw g = do
     GL.rotate (toGLDouble . radToDeg . getAngle $ _rotation g) (toGLVec3 . getAxis $ _rotation g)
     GL.scale  (toGLDouble . _x $ _scale g) (toGLDouble . _y $ _scale g) (toGLDouble . _z $ _scale g)
     case _mesh g of
-        Just m  -> GL.renderPrimitive GL.Triangles (mapM_ drawVertex $ zip (colors m) (vertices m))
         Nothing -> return ()
+        Just m  -> do
+            mapM_ (\t -> GL.textureBinding GL.Texture2D GL.$= Just t) (textures m)
+            GL.renderPrimitive GL.Triangles (mapM_ drawVertex $ zip (colors m) (vertices m))
     where
         drawVertex (c,v) = GL.color (toGLColor3  c) >> GL.vertex (toGLVertex3 v)
 

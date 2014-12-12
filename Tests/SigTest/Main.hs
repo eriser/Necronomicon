@@ -43,9 +43,10 @@ testTri name pos r chldn = SceneObject name True pos r one m Nothing []
              [RGB 1 0 0,
               RGB 0 1 0,
               RGB 0 0 1]
+             []
 
 simplexMesh :: Mesh
-simplexMesh = Mesh simplexTris simplexColors
+simplexMesh = Mesh simplexTris simplexColors []
     where
         w                = 64
         h                = 128

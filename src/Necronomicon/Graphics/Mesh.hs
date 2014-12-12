@@ -3,16 +3,19 @@ module Necronomicon.Graphics.Mesh where
 import Prelude
 import Necronomicon.Linear
 import Necronomicon.Graphics.Color
+import qualified Graphics.Rendering.OpenGL as GL
 
 class MeshType a where
     vertices :: a -> [Vector3]
     colors   :: a -> [Color]
+    textures :: a -> [GL.TextureObject]
 
-data Mesh = Mesh [Vector3] [Color] deriving (Show)
+data Mesh = Mesh [Vector3] [Color] [GL.TextureObject] deriving (Show)
 
 instance MeshType Mesh where
-    vertices (Mesh v _) = v
-    colors   (Mesh _ c) = c
+    vertices (Mesh v _ _) = v
+    colors   (Mesh _ c _) = c
+    textures (Mesh _ _ t) = t
 
 data SimpleMesh = SimpleMesh {
     _simpleVertices  :: [Vector3],
