@@ -298,11 +298,11 @@ runSignal s = initWindow >>= \mw ->
 
             threadDelay $ 16667
         
-            GLFW.pollEvents
-            ms <- atomically $ tryTakeTMVar sceneVar
-            case ms of
-                Nothing -> return ()
-                Just s  -> renderGraphics w s
+            -- GLFW.pollEvents
+            -- ms <- atomically $ tryTakeTMVar sceneVar
+            -- case ms of
+                -- Nothing -> return ()
+                -- Just s  -> renderGraphics w s
 
             (ww,wh) <- GLFW.getWindowSize w
             dimensionsEvent globalDispatch w ww wh

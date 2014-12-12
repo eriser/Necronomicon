@@ -94,8 +94,9 @@ loadCharacter path char px texUnit = do
 
     -- Generate an opengl texture.
     -- tex <- newBoundTexUnit texUnit
+    (tex:_) <- genObjectNames 1
+    textureBinding Texture2D $= Just tex
     -- printError
-    let tex = undefined
 
     putStrLn "Buffering glyph bitmap into texture."
     texImage2D
