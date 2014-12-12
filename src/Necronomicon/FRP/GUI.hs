@@ -27,6 +27,19 @@ gui gs = render $ root <~ combine (camSig : gs)
     where
         camSig = orthoCamera (Vector3 0 0 20) identityQuat <~ dimensions ~~ constant (RGB 0 0 0)
 
+label :: Double -> Double -> Double -> Double -> Color -> String -> Signal SceneObject
+label x y w h color text = Signal $ \necro -> do
+    return (s,\_ -> return $ NoChange $ s,IntSet.empty)
+    where
+        s  = SceneObject "" True (Vector3 x y 0) identityQuat one m Nothing []
+        m  = Just $ Mesh [p0,p1,p2,p3,p0,p2] [color,color,color,color,color,color] []
+        p0 = Vector3 (0 - (w * 0.5)) (0 + (h * 0.5)) 0
+        p1 = Vector3 (0 - (w * 0.5)) (0 - (h * 0.5)) 0
+        p2 = Vector3 (0 + (w * 0.5)) (0 - (h * 0.5)) 0
+        p3 = Vector3 (0 + (w * 0.5)) (0 + (h * 0.5)) 0
+        hw = w * 0.5
+        hh = h * 0.5
+    
 button :: Double -> Double -> Double -> Double -> Color -> Signal (Gui Bool)
 button x y w h color = Signal $ \necro -> do
     ref <- newIORef False
@@ -66,7 +79,6 @@ button x y w h color = Signal $ \necro -> do
         p1 = Vector3 (0 - (w * 0.5)) (0 - (h * 0.5)) 0
         p2 = Vector3 (0 + (w * 0.5)) (0 - (h * 0.5)) 0
         p3 = Vector3 (0 + (w * 0.5)) (0 + (h * 0.5)) 0
-        m  = Just $ Mesh [p0,p1,p2,p3,p0,p2] [color,color,color,color,color,color]
         hw = w * 0.5
         hh = h * 0.5
 
