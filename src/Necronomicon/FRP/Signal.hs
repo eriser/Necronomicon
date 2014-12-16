@@ -76,6 +76,7 @@ module Necronomicon.FRP.Signal (
     lift7,
     lift8,
     constant,
+    sigPrint,
     module Control.Applicative
     ) where
 
@@ -599,6 +600,18 @@ lift7 f a b c d e f' g = f <~ a ~~ b ~~ c ~~ d ~~ e ~~ f' ~~ g
 
 lift8 :: (a -> b -> c -> d -> e -> f -> g -> h -> i) -> Signal a -> Signal b -> Signal c -> Signal d -> Signal e -> Signal f -> Signal g -> Signal h -> Signal i
 lift8 f a b c d e f' g h = f <~ a ~~ b ~~ c ~~ d ~~ e ~~ f' ~~ g ~~ h
+
+sigPrint :: Show a => Signal a -> Signal ()
+sigPrint s = Signal $ \necro -> do
+    (sValue,sCont,sIds) <- unSignal s necro
+    print sValue
+    return ((),processEvent sCont,sIds)
+    where
+        processEvent sCont event = do
+            sValue <- sCont event
+            case sValue of
+                NoChange s -> return $ NoChange ()
+                Change   s -> print s >> return (Change ())
 
 foldp :: (a -> b -> b) -> b -> Signal a -> Signal b
 foldp f bInit a = Signal $ \necro -> do

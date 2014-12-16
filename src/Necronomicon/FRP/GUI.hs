@@ -72,7 +72,8 @@ slider (Vector2 x y) (Size w h) color = Signal $ \necro -> do
                      y <= 0.5 + hh h of
                     False -> readIORef ref >>= return . NoChange
                     True  -> do
-                        let g = Gui (1 - y) (s $ linlin (0.5 - hh h) (0.5 + hh h) 1 0 y)
+                        let v = linlin (0.5 - hh h) (0.5 + hh h) 1 0 y
+                        let g = Gui v (s v)
                         writeIORef ref g
                         return $ Change g
             | otherwise = readIORef ref >>= return . NoChange
