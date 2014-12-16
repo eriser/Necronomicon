@@ -21,6 +21,7 @@ module Necronomicon.FRP.Signal (
     countIf,
     wasd,
     dimensions,
+    mouseDown,
     mousePos,
     runSignal,
     mouseClicks,
@@ -82,6 +83,7 @@ module Necronomicon.FRP.Signal (
 import Control.Applicative
 import Prelude
 import Control.Monad
+import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.UI.GLFW as GLFW
 import qualified Data.Fixed as F
 import Data.Monoid
@@ -283,6 +285,8 @@ runSignal s = initWindow >>= \mw ->
     case mw of
         Nothing -> print "Error starting GLFW." >> return ()
         Just w  -> do
+            GL.texture GL.Texture2D GL.$= GL.Enabled
+
             print "Starting signal run time"
 
             globalDispatch <- atomically $ newTBQueue 100000

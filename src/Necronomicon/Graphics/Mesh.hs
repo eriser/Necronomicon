@@ -8,14 +8,16 @@ import qualified Graphics.Rendering.OpenGL as GL
 class MeshType a where
     vertices :: a -> [Vector3]
     colors   :: a -> [Color]
-    textures :: a -> [GL.TextureObject]
+    texture  :: a -> Maybe GL.TextureObject
+    uv       :: a -> Maybe [Vector2]
 
-data Mesh = Mesh [Vector3] [Color] [GL.TextureObject] deriving (Show)
+data Mesh = Mesh [Vector3] [Color] (Maybe GL.TextureObject) (Maybe [Vector2]) deriving (Show)
 
 instance MeshType Mesh where
-    vertices (Mesh v _ _) = v
-    colors   (Mesh _ c _) = c
-    textures (Mesh _ _ t) = t
+    vertices (Mesh v _ _ _) = v
+    colors   (Mesh _ c _ _) = c
+    texture  (Mesh _ _ t _) = t
+    uv       (Mesh _ _ _ u) = u
 
 data SimpleMesh = SimpleMesh {
     _simpleVertices  :: [Vector3],

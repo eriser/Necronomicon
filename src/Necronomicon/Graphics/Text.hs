@@ -42,8 +42,8 @@ loadCharacter path char px texUnit = do
     putStrLn $ "glyphs:" ++ show n
 
     fmt <- peek $ format slot
-    -- putStrLn $ "glyph format:" ++ glyphFormatString fmt
-    putStrLn $ "glyph format:" ++ show fmt
+    putStrLn $ "glyph format:" ++ glyphFormatString fmt
+    -- putStrLn $ "glyph format:" ++ show fmt
 
     -- This is [] for Ubuntu Mono, but I'm guessing for bitmap
     -- fonts this would be populated with the different font
@@ -93,9 +93,9 @@ loadCharacter path char px texUnit = do
     rowAlignment Unpack $= 1
 
     -- Generate an opengl texture.
-    -- tex <- newBoundTexUnit texUnit
-    (tex:_) <- genObjectNames 1
-    textureBinding Texture2D $= Just tex
+    tex <- newBoundTexUnit texUnit
+    -- (tex:_) <- genObjectNames 1
+    -- textureBinding Texture2D $= Just tex
     -- printError
 
     putStrLn "Buffering glyph bitmap into texture."
@@ -113,7 +113,14 @@ loadCharacter path char px texUnit = do
     textureFilter   Texture2D   $= ((Linear', Nothing), Linear')
     textureWrapMode Texture2D S $= (Repeated, ClampToEdge)
     textureWrapMode Texture2D T $= (Repeated, ClampToEdge)
+    return tex
 
+newBoundTexUnit :: Int -> IO TextureObject
+newBoundTexUnit u = do
+    [tex] <- genObjectNames 1
+    texture Texture2D $= Enabled
+    activeTexture     $= TextureUnit (fromIntegral u)
+    textureBinding Texture2D $= Just tex
     return tex
 
 runFreeType :: IO FT_Error -> IO ()
@@ -132,3 +139,10 @@ fontFace ft fp = withCString fp $ \str ->
         runFreeType $ ft_New_Face ft str 0 ptr
         peek ptr
 
+glyphFormatString :: FT_Glyph_Format -> String
+glyphFormatString fmt
+    | fmt == ft_GLYPH_FORMAT_COMPOSITE = "ft_GLYPH_FORMAT_COMPOSITE"
+    | fmt == ft_GLYPH_FORMAT_OUTLINE = "ft_GLYPH_FORMAT_OUTLINE"
+    | fmt == ft_GLYPH_FORMAT_PLOTTER = "ft_GLYPH_FORMAT_PLOTTER"
+    | fmt == ft_GLYPH_FORMAT_BITMAP = "ft_GLYPH_FORMAT_BITMAP"
+    | otherwise = "ft_GLYPH_FORMAT_NONE"

@@ -52,7 +52,7 @@ renderGraphics :: GLFW.Window -> SceneObject -> IO ()
 renderGraphics w scene = do
     GL.depthFunc GL.$= Just GL.Less
 
-    GL.multisample GL.$= GL.Enabled
+    -- GL.multisample GL.$= GL.Enabled
     -- GL.samples GL.$= 8
 
     renderCameras scene scene
