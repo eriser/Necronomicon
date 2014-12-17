@@ -10,6 +10,11 @@ import Necronomicon.Graphics.Color
 import Debug.Trace
 ----------------------------------------------------------
 
+orthoCamera :: Vector3 -> Quaternion -> Vector2 -> Color -> SceneObject
+orthoCamera pos r dimensions clearColor = SceneObject "CameraOrtho" True pos r (one::Vector3) Nothing (Just c) []
+    where
+        c = Camera dimensions 0 0 0 clearColor
+
 perspCamera :: Vector3 -> Quaternion -> Vector2 -> Double -> Double -> Double -> Color -> SceneObject
 perspCamera pos r dimensions fov near far clearColor = SceneObject "Camera" True pos r (one::Vector3) Nothing (Just c) []
     where
@@ -30,9 +35,12 @@ renderCamera scene g  = do
             GL.clearColor GL.$= GL.Color4 (fromRational $ toRational r) (fromRational $ toRational g) (fromRational $ toRational b) (fromRational $ toRational a)
             GL.clear [GL.ColorBuffer,GL.DepthBuffer]
             GL.viewport   GL.$= (GL.Position 0 0, GL.Size (floor . _x $ _dimensions c) (floor . _y $ _dimensions c))
-            GL.matrixMode GL.$= GL.Projection
             GL.loadIdentity
-            GL.perspective (realToFrac $ _fov c) (realToFrac ratio) (realToFrac $ _near c) (realToFrac $ _far c)
+            case _fov c of
+                0 -> GL.ortho2D 0 1 1 0
+                _ -> do
+                    GL.matrixMode GL.$= GL.Projection
+                    GL.perspective (realToFrac $ _fov c) (realToFrac ratio) (realToFrac $ _near c) (realToFrac $ _far c)
             drawScene scene
             where
                 ratio = (realToFrac $ (_x $ _dimensions c) / (_y $ _dimensions c))::Double
@@ -44,7 +52,7 @@ renderGraphics :: GLFW.Window -> SceneObject -> IO ()
 renderGraphics w scene = do
     GL.depthFunc GL.$= Just GL.Less
 
-    GL.multisample GL.$= GL.Enabled
+    -- GL.multisample GL.$= GL.Enabled
     -- GL.samples GL.$= 8
 
     renderCameras scene scene

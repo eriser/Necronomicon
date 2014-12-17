@@ -1,6 +1,8 @@
 module Necronomicon.FRP.Signal (
     Signal (Signal),
     Necro(Necro,inputCounter),
+    EventValue(Change,NoChange),
+    Event(Event),
     render,
     foldp,
     (<~),
@@ -19,6 +21,7 @@ module Necronomicon.FRP.Signal (
     countIf,
     wasd,
     dimensions,
+    mouseDown,
     mousePos,
     runSignal,
     mouseClicks,
@@ -73,6 +76,7 @@ module Necronomicon.FRP.Signal (
     lift7,
     lift8,
     constant,
+    sigPrint,
     module Control.Applicative
     ) where
 
@@ -80,6 +84,7 @@ module Necronomicon.FRP.Signal (
 import Control.Applicative
 import Prelude
 import Control.Monad
+import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.UI.GLFW as GLFW
 import qualified Data.Fixed as F
 import Data.Monoid
@@ -281,6 +286,8 @@ runSignal s = initWindow >>= \mw ->
     case mw of
         Nothing -> print "Error starting GLFW." >> return ()
         Just w  -> do
+            GL.texture GL.Texture2D GL.$= GL.Enabled
+
             print "Starting signal run time"
 
             globalDispatch <- atomically $ newTBQueue 100000
@@ -294,18 +301,30 @@ runSignal s = initWindow >>= \mw ->
             let necro = Necro globalDispatch inputCounterRef sceneVar
             forkIO $ globalEventDispatch s necro
 
+            threadDelay $ 16667
+        
+            -- GLFW.pollEvents
+            -- ms <- atomically $ tryTakeTMVar sceneVar
+            -- case ms of
+                -- Nothing -> return ()
+                -- Just s  -> renderGraphics w s
+
             (ww,wh) <- GLFW.getWindowSize w
             dimensionsEvent globalDispatch w ww wh
+            mousePressEvent globalDispatch w 0 GLFW.MouseButtonState'Released GLFW.modifierKeysShift
+
             render False w sceneVar
     where
         --event callbacks
-        mousePosEvent   eventNotify _ x y                                = atomically $ (writeTBQueue eventNotify $ Event 0 $ toDyn (x,y)) `orElse` return ()
-        mousePressEvent eventNotify _ _ GLFW.MouseButtonState'Released _ = atomically $ (writeTBQueue eventNotify $ Event 1 $ toDyn ()) `orElse` return ()
-        mousePressEvent _           _ _ GLFW.MouseButtonState'Pressed  _ = return ()
+        mousePressEvent eventNotify _ _ GLFW.MouseButtonState'Released _ = atomically $ (writeTBQueue eventNotify $ Event 1 $ toDyn False) `orElse` return ()
+        mousePressEvent eventNotify _ _ GLFW.MouseButtonState'Pressed  _ = atomically $ (writeTBQueue eventNotify $ Event 1 $ toDyn True ) `orElse` return ()
         keyPressEvent   eventNotify _ k _ GLFW.KeyState'Pressed  _       = atomically $ (writeTBQueue eventNotify $ Event (glfwKeyToEventKey k) $ toDyn True)
         keyPressEvent   eventNotify _ k _ GLFW.KeyState'Released _       = atomically $ (writeTBQueue eventNotify $ Event (glfwKeyToEventKey k) $ toDyn False)
         keyPressEvent   eventNotify _ k _ _ _                            = return ()
         dimensionsEvent eventNotify _ x y                                = atomically $ writeTBQueue eventNotify $ Event 2 $ toDyn $ Vector2 (fromIntegral x) (fromIntegral y)
+        mousePosEvent   eventNotify w x y                                = do
+            (wx,wy) <- GLFW.getWindowSize w
+            atomically $ (writeTBQueue eventNotify $ Event 0 $ toDyn (x / fromIntegral wx,y / fromIntegral wy)) `orElse` return ()
 
         render quit window sceneVar
             | quit      = print "Qutting" >> return ()
@@ -523,7 +542,10 @@ mousePos :: Signal (Double,Double)
 mousePos = input (0,0) 0
 
 mouseClicks :: Signal ()
-mouseClicks = input () 1
+mouseClicks = (\_ -> ()) <~ keepIf (\x -> x == False) True mouseDown
+
+mouseDown :: Signal Bool
+mouseDown = input False 1
 
 dimensions :: Signal Vector2
 dimensions = input (Vector2 0 0) 2
@@ -578,6 +600,18 @@ lift7 f a b c d e f' g = f <~ a ~~ b ~~ c ~~ d ~~ e ~~ f' ~~ g
 
 lift8 :: (a -> b -> c -> d -> e -> f -> g -> h -> i) -> Signal a -> Signal b -> Signal c -> Signal d -> Signal e -> Signal f -> Signal g -> Signal h -> Signal i
 lift8 f a b c d e f' g h = f <~ a ~~ b ~~ c ~~ d ~~ e ~~ f' ~~ g ~~ h
+
+sigPrint :: Show a => Signal a -> Signal ()
+sigPrint s = Signal $ \necro -> do
+    (sValue,sCont,sIds) <- unSignal s necro
+    print sValue
+    return ((),processEvent sCont,sIds)
+    where
+        processEvent sCont event = do
+            sValue <- sCont event
+            case sValue of
+                NoChange s -> return $ NoChange ()
+                Change   s -> print s >> return (Change ())
 
 foldp :: (a -> b -> b) -> b -> Signal a -> Signal b
 foldp f bInit a = Signal $ \necro -> do
@@ -812,7 +846,8 @@ randFS signal = Signal $ \necro -> do
 render :: Signal SceneObject -> Signal ()
 render scene = Signal $ \necro -> do
     (sValue,sCont,ids) <- unSignal scene necro
-    atomically $ tryPutTMVar (sceneVar necro) sValue
+    -- atomically $ tryPutTMVar (sceneVar necro) sValue
+    atomically $ putTMVar (sceneVar necro) sValue
     return ((),processEvent (sceneVar necro) sCont,ids)
     where
         processEvent sVar sCont event = do

@@ -126,10 +126,25 @@ draw g = do
     GL.rotate (toGLDouble . radToDeg . getAngle $ _rotation g) (toGLVec3 . getAxis $ _rotation g)
     GL.scale  (toGLDouble . _x $ _scale g) (toGLDouble . _y $ _scale g) (toGLDouble . _z $ _scale g)
     case _mesh g of
-        Just m  -> GL.renderPrimitive GL.Triangles (mapM_ drawVertex $ zip (colors m) (vertices m))
         Nothing -> return ()
+        Just m  -> do
+            case texture m of
+                Nothing -> GL.renderPrimitive GL.Triangles (mapM_ drawVertex $ zip (colors m) (vertices m))
+                Just t  -> do
+                    case (uv m) of
+                        Nothing  -> GL.renderPrimitive GL.Triangles (mapM_ drawVertex $ zip (colors m) (vertices m))
+                        Just uvs -> do
+                            GL.texture GL.Texture2D GL.$= GL.Enabled
+                            GL.activeTexture GL.$= GL.TextureUnit 0
+                            GL.textureBinding GL.Texture2D GL.$= Just t
+                            GL.renderPrimitive GL.Triangles (mapM_ drawVertexUV $ zip3 (colors m) (vertices m) uvs)
+    GL.textureBinding GL.Texture2D GL.$= Nothing
     where
         drawVertex (c,v) = GL.color (toGLColor3  c) >> GL.vertex (toGLVertex3 v)
+        drawVertexUV (c,v,Vector2 u v') = do
+            GL.color    $ toGLColor3  c
+            GL.texCoord (GL.TexCoord2 (fromRational $ toRational u) (fromRational $ toRational v') :: GL.TexCoord2 GL.GLfloat)
+            GL.vertex   $ toGLVertex3 v
 
 drawScene :: SceneObject -> IO()
 drawScene g = GL.preservingMatrix $ draw g >> mapM_ drawScene (_children g)
