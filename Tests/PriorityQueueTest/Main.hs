@@ -38,10 +38,22 @@ testAddingRemoving testList = if null testList then True else snd $ addRemove PQ
                         insertedRemoved = removed inserted
 
 main :: IO ()
-main = let deepCheck p = quickCheckWith (stdArgs { maxSize = 1000, maxSuccess = 1000 }) p in do
-       print emptyIsEmpty
-       quickCheckWith (stdArgs { maxSize = 1000, maxSuccess = 10 }) testAddingRemoving
-       quickCheckWith (stdArgs { maxSize = 150, maxSuccess = 1000 }) testAddingRemoving
-       deepCheck testListLength
-       deepCheck testListEmptying
-       deepCheck testOrdering
+main = do
+    let list = [9999, 0, 0.1, 0.5, -0.666, 777, 321, 123456789, 22] :: [Double]
+    let queue = PQ.fromList list
+    let list' = PQ.toList queue
+    let multiplier = 10 :: Double
+    let queue' = PQ.mapInPlace (*multiplier) queue
+    let list'' = PQ.toList queue'
+    print list
+    print queue
+    print list'
+    print queue'
+    print list''
+    let deepCheck p = quickCheckWith (stdArgs { maxSize = 10000, maxSuccess = 1000 }) p in do
+        print emptyIsEmpty
+        quickCheckWith (stdArgs { maxSize = 200, maxSuccess = 10 }) testAddingRemoving
+        quickCheckWith (stdArgs { maxSize = 50, maxSuccess = 1000 }) testAddingRemoving
+        deepCheck testListLength
+        deepCheck testListEmptying
+        deepCheck testOrdering

@@ -79,6 +79,7 @@ executable PatternTest
     default-extensions: QuasiQuotes TemplateHaskell 
     build-depends:
         base             == 4.*,
+        mtl              >= 2.1.3.0,
         Necronomicon
 
 executable NecroNet

@@ -16,6 +16,12 @@ data Tree a = Tree Int a [a] (PriorityQueue a)
 
 instance Show a => Show (Tree a) where
     show (Tree rt x xs ts) = "(Tree " ++(show rt) ++ " " ++ (show x) ++ " " ++ (show xs) ++ " " ++ (show ts) ++ ")"
+    
+instance Functor Tree where
+    fmap f (Tree rk x xs ts) = (Tree rk (f x) (fmap f xs) (fmap (\t -> fmap f t) ts))
+
+mapInPlace :: (Ord a, Ord b) => (a -> b) -> PriorityQueue a -> PriorityQueue b
+mapInPlace f q = map (\t -> fmap f t) q
 
 empty :: Ord a => PriorityQueue a
 empty = []
@@ -100,3 +106,10 @@ findDeleteMin q = let (t, ts) = removeMinTree q in
 
 pop :: Ord a => PriorityQueue a -> (Maybe a, PriorityQueue a)
 pop = findDeleteMin
+
+toList :: Ord a => PriorityQueue a -> [a]
+toList queue = toListWork queue []
+    where
+        toListWork q list = case pop q of
+            (Nothing, _) -> list
+            (Just v, q') -> toListWork q' (list ++ [v])

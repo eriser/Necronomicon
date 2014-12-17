@@ -37,6 +37,10 @@ collapse (PSeq p _) t = collapse p t
 collapse PNothing _   = PNothing
 collapse v@(PVal _) _ = v
 
+plength :: Pattern a -> Int
+plength (PSeq _ l) = l
+plength _ = 1
+
 instance Functor Pattern where
     fmap _ PNothing = PNothing 
     fmap f (PVal x) = PVal (f x)
@@ -64,21 +68,10 @@ instance (Show a) => Show (Pattern a) where
     show (PVal a) = show a
     show PNothing = "PNothing"
 
-{-
-data PArr b c = PArr (b -> (c, PArr b c))
-
-instance Arrow PArr where
-    arr f = PArr f
-    first (PArr f) = PArr (mapFst f)
-        where mapFst g (a, b) = (g a, b)
-    second (PArr g) = PArr (mapSnd g)
-        where mapSnd g (a, b) = (a, g b)
--}
-
-
 --------------------------
 -- Pattern Scheduler
 --------------------------
+
 
 runPattern :: (Show a) => Int -> Pattern a -> IO ()
 runPattern n (PSeq p _) = mapM_ (print . collapse p . fromIntegral) [0..(n - 1)]
