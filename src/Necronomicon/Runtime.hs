@@ -44,6 +44,25 @@ instance Ord ScheduledPdef where
 instance Eq ScheduledPdef where
     (ScheduledPdef _ t1 _ _) == (ScheduledPdef _ t2 _ _) = t1 == t2
 
+pbeat :: String -> Pattern (Pattern (Necronomicon ()), Double) -> PDef
+pbeat name layout = PDef name (PSeq (PVal pfunc) (plength layout))
+    where pfunc t i = case collapse layout t of
+              PVal (p, d) -> case collapse p t of
+                  PVal v -> v >> return (Just d)
+                  _ -> return (Just d)
+              _ -> return Nothing
+
+pstream :: String -> Pattern (a -> Necronomicon ()) -> Pattern (Pattern a, Double) -> PDef
+pstream name func layout = PDef name (PSeq (PVal pfunc) (plength layout))
+    where pfunc t i = case collapse layout t of
+              PVal (p, d) -> case collapse p t of
+                  PVal v -> eval >> return (Just d)
+                      where eval = case collapse func t of
+                                PVal pf -> pf v
+                                _ -> return ()
+                  _ -> return (Just d)
+              _ -> return Nothing
+
 pbind :: String -> Pattern (Necronomicon ()) -> Pattern Double -> PDef 
 pbind name values durs = PDef name (PVal pfunc)
     where
@@ -73,15 +92,10 @@ data Necronomicon a = Necronomicon { runNecroState :: NecroVars -> IO (a, NecroV
 
 instance Monad Necronomicon where
     return x = Necronomicon (\n -> return (x, n))
-    (Necronomicon h) >>= f = Necronomicon $ \n -> do
-        (a, n') <- h n
-        let (Necronomicon g) = f a
-        (g n')
+    (Necronomicon h) >>= f = Necronomicon (\n -> h n >>= \(a, n') -> let (Necronomicon g) = f a in (g n'))
 
 instance MonadIO Necronomicon where
-    liftIO f = Necronomicon $ \n -> do
-        result <- f
-        return (result, n)
+    liftIO f = Necronomicon (\n -> f >>= \result -> return (result, n))
 
 instance Show a => Show (Necronomicon a) where
     show (Necronomicon n) = "(Necronomicon n)"
@@ -93,9 +107,7 @@ prGetTVar :: (NecroVars -> TVar a) -> Necronomicon (TVar a)
 prGetTVar getter = Necronomicon (\n -> return (getter n, n))
 
 prGet :: (NecroVars -> TVar a) -> Necronomicon a
-prGet getter = do
-    tvar <- prGetTVar getter
-    nAtomically (readTVar tvar)
+prGet getter = prGetTVar getter >>= \tvar -> nAtomically (readTVar tvar)
     
 getNrtThreadID :: Necronomicon ThreadId
 getNrtThreadID = prGet necroNrtThreadID
@@ -104,9 +116,7 @@ getNrtThreadIDTVar :: Necronomicon (TVar ThreadId)
 getNrtThreadIDTVar = prGetTVar necroNrtThreadID
 
 setNrtThreadID :: ThreadId -> Necronomicon ()
-setNrtThreadID threadID = do
-    nrtThreadIDTVar <- getNrtThreadIDTVar
-    nAtomically (writeTVar nrtThreadIDTVar threadID)
+setNrtThreadID threadID = getNrtThreadIDTVar >>= \nrtThreadIDTVar -> nAtomically (writeTVar nrtThreadIDTVar threadID)
 
 getMailBox :: Necronomicon RunTimeMailbox
 getMailBox = Necronomicon (\n -> return (necroMailbox n, n))
@@ -124,9 +134,7 @@ getSynthDefsTVar :: Necronomicon (TVar [SynthDef])
 getSynthDefsTVar = prGetTVar necroSynthDefs
 
 setSynthDefs :: [SynthDef] -> Necronomicon ()
-setSynthDefs synthDefs = do
-    synthDefsTVar <- getSynthDefsTVar
-    nAtomically (writeTVar synthDefsTVar synthDefs)
+setSynthDefs synthDefs = getSynthDefsTVar >>= \synthDefsTVar -> nAtomically (writeTVar synthDefsTVar synthDefs)
 
 getRunning :: Necronomicon RunState
 getRunning = prGet necroRunning
@@ -135,9 +143,7 @@ getRunningTVar :: Necronomicon (TVar RunState)
 getRunningTVar = prGetTVar necroRunning
 
 setRunning :: RunState -> Necronomicon ()
-setRunning running = do
-    runningTVar <- getRunningTVar
-    nAtomically (writeTVar runningTVar running)
+setRunning running = getRunningTVar >>= \runningTVar -> nAtomically (writeTVar runningTVar running)
 
 getPatternThreadId :: Necronomicon ThreadId
 getPatternThreadId = prGet necroPatternThreadID
@@ -146,9 +152,7 @@ getPatternThreadIdTVar :: Necronomicon (TVar ThreadId)
 getPatternThreadIdTVar = prGetTVar necroPatternThreadID
 
 setPatternThreadId :: ThreadId -> Necronomicon ()
-setPatternThreadId id = do
-    idTVar <- getPatternThreadIdTVar
-    nAtomically (writeTVar idTVar id)
+setPatternThreadId id = getPatternThreadIdTVar >>= \idTVar -> nAtomically (writeTVar idTVar id)
 
 getPatternMailBox :: Necronomicon PRunTimeMailbox
 getPatternMailBox = Necronomicon (\n -> return (necroPatternMailbox n, n))
@@ -160,9 +164,7 @@ getPatternQueueTVar :: Necronomicon (TVar PDefQueue)
 getPatternQueueTVar = Necronomicon (\n -> return (necroPatternQueue n, n))
 
 setPatternQueue :: PDefQueue -> Necronomicon ()
-setPatternQueue queue = do
-    queueTVar <- getPatternQueueTVar
-    nAtomically (writeTVar queueTVar queue)
+setPatternQueue queue = getPatternQueueTVar >>= \queueTVar -> nAtomically (writeTVar queueTVar queue)
 
 mkNecroVars :: IO NecroVars
 mkNecroVars = do
@@ -280,7 +282,7 @@ processPMessages messages =  mapM_ (processMessage) messages
                then return ()
                else process m
         process m = case m of
-            PlayPattern pdef@(PDef name pattern) -> nPrint "PlayPattern" >> getPatternQueue >>= \(pqueue, pmap) ->
+            PlayPattern pdef@(PDef name pattern) -> getPatternQueue >>= \(pqueue, pmap) ->
                 case M.lookup name pmap of
                     Just _ -> setPatternQueue (pqueue, M.insert name pdef pmap) -- Update existing pattern, HOW TO CORRECTLY INSERT/UPDATE EXISTING PATTERN WITH DIFFERENT RHYTHM!!!!!!!!!!!!
                     Nothing -> liftIO time >>= \currentTime -> -- New pattern
@@ -290,7 +292,7 @@ processPMessages messages =  mapM_ (processMessage) messages
                             pqueue' = PQ.insert pqueue (ScheduledPdef name (fromIntegral nextBeat) (fromIntegral nextBeat) 0)
                             pmap' = M.insert name pdef pmap
                         in setPatternQueue (pqueue', pmap')
-            StopPattern (PDef name _) -> nPrint "StopPattern" >> getPatternQueue >>= \(pqueue, pmap) -> setPatternQueue (pqueue, M.delete name pmap)
+            StopPattern (PDef name _) -> getPatternQueue >>= \(pqueue, pmap) -> setPatternQueue (pqueue, M.delete name pmap)
 
 sendPMessage :: PRunTimeMessage -> Necronomicon ()
 sendPMessage message = getPatternMailBox >>= \mailBox -> nAtomically $ writeTChan mailBox message
@@ -324,16 +326,16 @@ handleScheduledPatterns nextTime = getPatternQueue >>= \(pqueue, pmap) -> handle
     where
         handlePattern q m nextT hasChanged = case PQ.pop q of
             (Nothing, _) -> (if hasChanged then setPatternQueue (q, m) else return ()) >> return nextT
-            (Just (ScheduledPdef n t s i), q') -> liftIO time >>= \currentTime -> -- nPrint (" currentTime - t - patternLookAhead: " ++ (show $ currentTime - t)) >> 
+            (Just (ScheduledPdef n t s i), q') -> liftIO time >>= \currentTime -> 
                 if currentTime < (t - patternLookAhead)
                    then (if hasChanged then setPatternQueue (q, m) else return ()) >> return nextT
-                   else nPrint currentTime >> case M.lookup n m of
+                   else case M.lookup n m of
                        Nothing -> handlePattern q' m nextT changed
                        Just (PDef _ p) -> getTempo >>= \tempo ->
                            let tempoRatio = tempo / timeTempo
                                beat = (t - s) * tempoRatio
-                           in nPrint ("BEAT: " ++ (show beat)) >> case collapse p beat of
-                               PVal pfunc -> pfunc t i >>= \mdur -> case mdur of
+                           in case collapse p beat of
+                               PVal pfunc -> pfunc beat i >>= \mdur -> case mdur of
                                    Just dur -> handlePattern (PQ.insert q' (ScheduledPdef n (t + (dur * tempoRatio)) s (i + 1))) m nextT changed
                                    Nothing -> handlePattern q' m nextT changed
                                _ -> handlePattern q' m nextT changed
@@ -355,14 +357,7 @@ startPatternScheduler = do
                         defaultSleepTime = 10000 -- In microseconds
 
 incrementNodeID :: Necronomicon NodeID
-incrementNodeID = do
-    idTVar <- getNextNodeIDTVar
-    nAtomically (increment idTVar)
-    where
-        increment idTVar = do
-            nodeID <- readTVar idTVar
-            writeTVar idTVar (nodeID + 1)
-            return nodeID
+incrementNodeID = getNextNodeIDTVar >>= \idTVar -> nAtomically (readTVar idTVar >>= \nodeID -> writeTVar idTVar (nodeID + 1) >> return nodeID)
 
 addSynthDef :: SynthDef -> Necronomicon ()
 addSynthDef synthDef = getSynthDefsTVar >>= \synthDefsTVar ->
@@ -377,13 +372,10 @@ necronomiconEndSequence = do
     setRunning NecroOffline
 
 waitForRunningStatus :: RunState -> Necronomicon ()
-waitForRunningStatus status = do
-    currentStatus <- getRunning
+waitForRunningStatus status = getRunning >>= \currentStatus ->
     if currentStatus == status
         then return ()
-        else do
-            nThreadDelay 1000
-            waitForRunningStatus status
+        else nThreadDelay 1000 >> waitForRunningStatus status
 
 rtFinishedStatus :: Int
 rtFinishedStatus = 0
@@ -392,13 +384,10 @@ rtStartedStatus :: Int
 rtStartedStatus = 1
 
 waitForRTStatus :: Int -> IO ()
-waitForRTStatus status = do
-    rtRunning <- getRtRunning
+waitForRTStatus status = getRtRunning >>= \rtRunning ->
     if rtRunning == status
         then return ()
-        else do
-            threadDelay 1000
-            waitForRTStatus status
+        else threadDelay 1000 >> waitForRTStatus status
 
 waitForRTStarted :: IO ()
 waitForRTStarted = waitForRTStatus rtStartedStatus
@@ -407,21 +396,13 @@ waitForRtFinished :: IO ()
 waitForRtFinished = waitForRTStatus rtFinishedStatus
 
 freeSynthDefs :: Necronomicon ()
-freeSynthDefs = do
-    synthDefs <- getSynthDefs
-    mapM_ (freeSynthDef) synthDefs
-    setSynthDefs []
+freeSynthDefs = getSynthDefs >>= \synthDefs -> mapM_ (freeSynthDef) synthDefs >> setSynthDefs []
 
 freeSynthDef :: SynthDef -> Necronomicon ()
-freeSynthDef (SynthDef _ graph ugens signals) = do
-    mapM_ (freeUGen) ugens
-    mapM_ (nFree) signals
-    nFree graph
+freeSynthDef (SynthDef _ graph ugens signals) = mapM_ (freeUGen) ugens >> mapM_ (nFree) signals >> nFree graph
 
 freeUGen :: CUGen -> Necronomicon ()
-freeUGen (CUGen calc inputs outputs) = do
-    nFree inputs
-    nFree outputs
+freeUGen (CUGen calc inputs outputs) = nFree inputs >> nFree outputs
 
 data AudioSignal = AudioSignal CDouble CDouble deriving (Show)
 

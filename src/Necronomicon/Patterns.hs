@@ -279,11 +279,11 @@ place list = PGen lace
         listLength = fromIntegral $ length list
         recipLength = 1 / listLength
         wrapIndex x = wrapRange 0.0 listLength $ (fromIntegral ((floor x) :: Integer))
-        lace time = collapse item index
+        lace t = collapse item index
             where
-                wrappedTime = wrapIndex time
+                wrappedTime = wrapIndex t
                 item = list !! (floor wrappedTime)
-                index = ((time - wrappedTime) * recipLength)
+                index = ((t - wrappedTime) * recipLength)
 
 prand :: [Pattern a] -> Pattern a
 prand [] = PNothing
