@@ -334,7 +334,9 @@ handleScheduledPatterns nextTime = getPatternQueue >>= \(pqueue, pmap) -> handle
             (Nothing, _) -> (if hasChanged then setPatternQueue (q, m) else return ()) >> return nextT
             (Just (ScheduledPdef n l t b i), q') -> liftIO time >>= \currentTime ->
                 if currentTime < (t - patternLookAhead)
-                   then (if hasChanged then setPatternQueue (q, m) else return ()) >> return (secondsToMicro $ (t - currentTime) * 0.1)
+                   then if hasChanged
+                        then setPatternQueue (q, m) >> return nextT
+                        else return (secondsToMicro $ (t - currentTime) * 0.1)
                    else case M.lookup n m of
                        Nothing -> handlePattern q' m nextT changed
                        Just (PDef _ p) -> getTempo >>= \tempo ->
