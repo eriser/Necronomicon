@@ -36,13 +36,19 @@ data PDef = PDef {
     pdefPattern :: Pattern (Time -> Int -> Necronomicon (Maybe Double))
 } deriving (Show)
 
-data ScheduledPdef = ScheduledPdef { scheduledPDefName :: String, scheduledPDefNextTime :: Double, scheduledPdefStartTime :: Double, scheduledPDefIteration :: Int } deriving (Show)
+data ScheduledPdef = ScheduledPdef { 
+    scheduledPDefName :: String,
+    scheduledPDefLastTime :: Double,
+    scheduledPDefNextTime :: Double,
+    scheduledPDefBeat :: Double,
+    scheduledPDefIteration :: Int
+} deriving (Show)
 
 instance Ord ScheduledPdef where
-    compare (ScheduledPdef _ t1 _ _) (ScheduledPdef _ t2 _ _) = compare t1 t2
+    compare (ScheduledPdef _ _ t1 _ _) (ScheduledPdef _ _ t2 _ _) = compare t1 t2
 
 instance Eq ScheduledPdef where
-    (ScheduledPdef _ t1 _ _) == (ScheduledPdef _ t2 _ _) = t1 == t2
+    (ScheduledPdef _ _ t1 _ _) == (ScheduledPdef _ _ t2 _ _) = t1 == t2
 
 pbeat :: String -> Pattern (Pattern (Necronomicon ()), Double) -> PDef
 pbeat name layout = PDef name (PSeq (PVal pfunc) (plength layout))
@@ -56,10 +62,9 @@ pstream :: String -> Pattern (a -> Necronomicon ()) -> Pattern (Pattern a, Doubl
 pstream name func layout = PDef name (PSeq (PVal pfunc) (plength layout))
     where pfunc t i = case collapse layout t of
               PVal (p, d) -> case collapse p t of
-                  PVal v -> eval >> return (Just d)
-                      where eval = case collapse func t of
-                                PVal pf -> pf v
-                                _ -> return ()
+                  PVal v -> case collapse func (fromIntegral i) of
+                      PVal pf -> pf v >> return (Just d)
+                      _ -> return (Just d)
                   _ -> return (Just d)
               _ -> return Nothing
 
@@ -258,10 +263,10 @@ setTempo :: Double -> Necronomicon ()
 setTempo tempo = do
     tempoTVar <- prGetTVar necroTempo
     currentTempo <- nAtomically $ readTVar tempoTVar
-    nAtomically $ (writeTVar tempoTVar tempo)
+    nAtomically . writeTVar tempoTVar $ max 0 tempo
     (pqueue, pmap) <- getPatternQueue
     -- Adjust all the scheduled times in place so that we can proceed normally going forward with correctly adjusted times
-    let pqueue' = PQ.mapInPlace (\(ScheduledPdef n t s i) -> ScheduledPdef n (t * (currentTempo / tempo)) s i) pqueue
+    let pqueue' = PQ.mapInPlace (\(ScheduledPdef n l t b i) -> ScheduledPdef n l (l + ((t - l) * (tempo / currentTempo))) b i) pqueue
     setPatternQueue (pqueue', pmap)
 
 getCurrentBeat :: Necronomicon Int
@@ -285,11 +290,12 @@ processPMessages messages =  mapM_ (processMessage) messages
             PlayPattern pdef@(PDef name pattern) -> getPatternQueue >>= \(pqueue, pmap) ->
                 case M.lookup name pmap of
                     Just _ -> setPatternQueue (pqueue, M.insert name pdef pmap) -- Update existing pattern, HOW TO CORRECTLY INSERT/UPDATE EXISTING PATTERN WITH DIFFERENT RHYTHM!!!!!!!!!!!!
-                    Nothing -> liftIO time >>= \currentTime -> -- New pattern
+                    Nothing -> liftIO time >>= \currentTime -> getTempo >>= \tempo ->
                         let currentBeat = floor currentTime
                             length = plength pattern
-                            nextBeat =  currentBeat + length - (mod currentBeat length)
-                            pqueue' = PQ.insert pqueue (ScheduledPdef name (fromIntegral nextBeat) (fromIntegral nextBeat) 0)
+                            tempoRatio = timeTempo / tempo
+                            nextBeat =  (fromIntegral currentBeat) + ((fromIntegral $ length - (mod currentBeat length)) * tempoRatio)
+                            pqueue' = PQ.insert pqueue (ScheduledPdef name currentTime nextBeat 0 0)
                             pmap' = M.insert name pdef pmap
                         in setPatternQueue (pqueue', pmap')
             StopPattern (PDef name _) -> getPatternQueue >>= \(pqueue, pmap) -> setPatternQueue (pqueue, M.delete name pmap)
@@ -326,17 +332,19 @@ handleScheduledPatterns nextTime = getPatternQueue >>= \(pqueue, pmap) -> handle
     where
         handlePattern q m nextT hasChanged = case PQ.pop q of
             (Nothing, _) -> (if hasChanged then setPatternQueue (q, m) else return ()) >> return nextT
-            (Just (ScheduledPdef n t s i), q') -> liftIO time >>= \currentTime -> 
+            (Just (ScheduledPdef n l t b i), q') -> liftIO time >>= \currentTime ->
                 if currentTime < (t - patternLookAhead)
-                   then (if hasChanged then setPatternQueue (q, m) else return ()) >> return nextT
+                   then (if hasChanged then setPatternQueue (q, m) else return ()) >> return (secondsToMicro $ (t - currentTime) * 0.1)
                    else case M.lookup n m of
                        Nothing -> handlePattern q' m nextT changed
                        Just (PDef _ p) -> getTempo >>= \tempo ->
-                           let tempoRatio = tempo / timeTempo
-                               beat = (t - s) * tempoRatio
-                           in case collapse p beat of
-                               PVal pfunc -> pfunc beat i >>= \mdur -> case mdur of
-                                   Just dur -> handlePattern (PQ.insert q' (ScheduledPdef n (t + (dur * tempoRatio)) s (i + 1))) m nextT changed
+                           let tempoRatio = timeTempo / tempo
+                           in case collapse p b of
+                               PVal pfunc -> pfunc b i >>= \mdur -> case mdur of
+                                   Just dur -> handlePattern (PQ.insert q' (ScheduledPdef n t (t + scaledDur) (b + dur) (i + 1))) m waitTime changed
+                                       where
+                                           scaledDur = dur * tempoRatio
+                                           waitTime = secondsToMicro $ scaledDur * 0.1
                                    Nothing -> handlePattern q' m nextT changed
                                _ -> handlePattern q' m nextT changed
                 

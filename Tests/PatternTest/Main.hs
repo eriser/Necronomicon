@@ -4,17 +4,31 @@ import Prelude
 import Necronomicon
 import Control.Monad.Trans
 
-b = nPrint "!!B!!"
-p = nPrint "..P.."
+-- b = nPrint "!!B!!"
+-- p = nPrint "..P.."
 
 patternTest :: Necronomicon ()
 patternTest = do
+    setTempo 150
     runPDef $ pstream "myCoolPattern" (pure nPrint) [lich| 0 [1 2] _ [3 [4 5]] 6
                                                            0 [1 2] _ [3 [4 5]] 6
                                                            0 [1 2] _ [3 [4 5]] 6
                                                            0 [1 2] _ [3 [4 5]] 6 |]
     nSleep 10
+    runPDef $ pstream "MyCoolBeat" (pure nPrint) [lich| b p [_ b] p
+                                                        b p [_ b] p
+                                                        b p [_ b] p
+                                                        b p [_ b] p
+                                                        b p [_ b] p
+                                                      |]
+
+    runPDef $ pstream "one" (pure nPrint) [lich| one _ _ _ one _ _ _ one _ _ _ one _ _ _ one _ _ _ one _ _ _ one _ _ _ one _ _ _ |]
+    runPDef $ pstream "two" (pure nPrint) [lich| _ two _ _ _ two _ _ _ two _ _ _ two _ _ _ two _ _ _ two _ _ _ two _ _ _ two _ _ |]
+    runPDef $ pstream "three" (pure nPrint) [lich| _ _ three _ _ _ three _ _ _ three _ _ _ three _ _ _ three _ _ _ three _ _ _ three _ _ _ three _ |]
+    runPDef $ pstream "four" (pure nPrint) [lich| _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four  |]
     -- runPDef $ pbeat "MyCoolBeat" [lich| b p [_ b] p |]
+    nSleep 5
+    setTempo 60
     nSleep 10
     runPDef melo
     runPDef melo2
