@@ -34,7 +34,7 @@ gui gs = render $ root <~ combine (camSig : gs)
 
 label :: Vector2 -> Size -> Color -> String -> Signal SceneObject
 label (Vector2 x y) (Size w h) color (c:cs) = Signal $ \necro -> do
-    t <- loadCharacter "/home/casiosk1/code/Necronomicon/Tests/SigTest/fonts/OCRA.ttf" 'Z' 251 0
+    t <- loadCharacter "/home/casiosk1/code/Necronomicon/Tests/SigTest/fonts/OCRA.ttf" 'a' 251 0
     let s = SceneObject "" True (Vector3 x y 0) identityQuat one (m t) Nothing []
     return (s,\_ -> return . NoChange $ s,IntSet.empty)
     where

@@ -29,8 +29,8 @@ renderCamera scene g  = do
         Nothing -> return ()
         Just c  -> do
             let (r,g,b,a) = case _clearColor c of
-                    (RGB r g b)    -> (r,g,b,1.0)
-                    (RGBA r g b a) -> (r,g,b,a)
+                    RGB  r g b   -> (r,g,b,1.0)
+                    RGBA r g b a -> (r,g,b,a)
                 
             GL.clearColor GL.$= GL.Color4 (fromRational $ toRational r) (fromRational $ toRational g) (fromRational $ toRational b) (fromRational $ toRational a)
             GL.clear [GL.ColorBuffer,GL.DepthBuffer]
@@ -59,6 +59,6 @@ renderGraphics w scene = do
 
     GLFW.swapBuffers w
     GLFW.pollEvents
-    GL.flush
+    -- GL.flush
 
 

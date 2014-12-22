@@ -77,6 +77,7 @@ module Necronomicon.FRP.Signal (
     lift8,
     constant,
     sigPrint,
+    scene,
     module Control.Applicative
     ) where
 
@@ -99,7 +100,7 @@ import Data.IORef
 import System.Random
 import Data.List (unzip3)
 import Necronomicon.Graphics.Camera (renderGraphics)
-import Necronomicon.Graphics.SceneObject (SceneObject)
+import Necronomicon.Graphics.SceneObject (SceneObject,root)
 import Necronomicon.Linear.Vector (Vector2 (Vector2),Vector3 (Vector3))
 ------------------------------------------------------
 
@@ -269,6 +270,9 @@ instance Show (Signal a) where
 --------------------------------------
 -- RunTime
 --------------------------------------
+
+scene :: [Signal SceneObject] -> Signal ()
+scene os = render $ root <~ combine os
 
 initWindow :: IO(Maybe GLFW.Window)
 initWindow = GLFW.init >>= \initSuccessful -> if initSuccessful then window else return Nothing

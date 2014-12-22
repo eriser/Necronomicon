@@ -7,27 +7,27 @@ main :: IO ()
 main = runSignal $ testGUI
 
 testGUI :: Signal ()
-testGUI = gui [element redButton,element vslider,element blueButton]
+testGUI = gui [element redButton,element vslider,element blueButton,zLabel]
     where
-        vslider     = slider (Vector2 0.50 0.5) (Size 0.03 0.30) (RGB 0.5 0.5 0.5)
-        redButton   = button (Vector2 0.25 0.5) (Size 0.10 0.15) (RGB 1 0 0)
+        vslider     = slider (Vector2 0.10 0.5) (Size 0.03 0.30) (RGB 0.5 0.5 0.5)
+        redButton   = button (Vector2 0.25 0.5) (Size 0.10 0.15) (RGBA 1 0 0 0.1)
         blueButton  = button (Vector2 0.75 0.5) (Size 0.10 0.15) (RGB 0 0 1)
-        zLabel      = label  (Vector2 0.50 0.8) (Size 0.20 0.30) (RGB 1 1 1) "Zero"
+        zLabel      = label  (Vector2 0.50 0.5) (Size 0.10 0.15) (RGB 1 1 1) "Zero"
 
 testScene :: Signal ()
-testScene = render $ root <~ combine [camSig,triSig]
+testScene = scene [camSig,triSig]
     where
-        triSig  = terrain
-                  <~ foldp (+) zero (lift3 move wasd (fps 60) 5)
-                  ~~ constant identityQuat
-                  ~~ constant []
+        triSig = terrain
+                 <~ foldp (+) zero (lift3 move wasd (fps 60) 5)
+                 ~~ constant identityQuat
+                 ~~ constant []
 
-        camSig  = perspCamera (Vector3 0 0 20) identityQuat
-                  <~ dimensions
-                  ~~ constant 60
-                  ~~ constant 0.1
-                  ~~ constant 200
-                  ~~ constant (RGB 0 0 0)
+        camSig = perspCamera (Vector3 0 0 20) identityQuat
+                 <~ dimensions
+                 ~~ constant 60
+                 ~~ constant 0.1
+                 ~~ constant 200
+                 ~~ constant (RGB 0 0 0)
 
         move (x,y) z a = Vector3 (x*z*a) (y*z*a) 0
 
