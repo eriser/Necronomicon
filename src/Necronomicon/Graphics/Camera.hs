@@ -7,16 +7,17 @@ import qualified Graphics.UI.GLFW as GLFW
 import Necronomicon.Linear
 import Necronomicon.Graphics.SceneObject
 import Necronomicon.Graphics.Color
+import Necronomicon.Graphics.Mesh
 import Debug.Trace
 ----------------------------------------------------------
 
 orthoCamera :: Vector3 -> Quaternion -> Vector2 -> Color -> SceneObject
-orthoCamera pos r dimensions clearColor = SceneObject "CameraOrtho" True pos r (one::Vector3) Nothing (Just c) []
+orthoCamera pos r dimensions clearColor = SceneObject "CameraOrtho" True pos r (one::Vector3) EmptyMesh (Just c) []
     where
         c = Camera dimensions 0 0 0 clearColor
 
 perspCamera :: Vector3 -> Quaternion -> Vector2 -> Double -> Double -> Double -> Color -> SceneObject
-perspCamera pos r dimensions fov near far clearColor = SceneObject "Camera" True pos r (one::Vector3) Nothing (Just c) []
+perspCamera pos r dimensions fov near far clearColor = SceneObject "Camera" True pos r (one::Vector3) EmptyMesh (Just c) []
     where
         c = Camera dimensions (fov/2) near far clearColor
 

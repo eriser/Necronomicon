@@ -55,7 +55,7 @@ data SceneObject = SceneObject {
     _position :: Vector3,
     _rotation :: Quaternion,
     _scale    :: Vector3,
-    _mesh     :: Maybe Mesh,
+    _mesh     :: Mesh,
     _camera   :: Maybe Camera,
     _children :: [SceneObject]
     } deriving (Show)
@@ -76,7 +76,7 @@ rotation_ v o = o{_rotation = v}
 scale_ :: Vector3 -> SceneObject -> SceneObject
 scale_ v o = o{_scale = v}
 
-mesh_ :: Maybe Mesh -> SceneObject -> SceneObject
+mesh_ :: Mesh -> SceneObject -> SceneObject
 mesh_ v o = o{_mesh = v}
 
 camera_ :: Maybe Camera -> SceneObject -> SceneObject
@@ -101,7 +101,7 @@ _rotation_ f o = o{_rotation = f (_rotation o)}
 _scale_ :: (Vector3 -> Vector3) -> SceneObject -> SceneObject
 _scale_ f o = o{_scale = f (_scale o)}
 
-_mesh_ :: (Maybe Mesh -> Maybe Mesh) -> SceneObject -> SceneObject
+_mesh_ :: (Mesh -> Mesh) -> SceneObject -> SceneObject
 _mesh_ f o = o{_mesh = f (_mesh o)}
 
 _camera_ :: (Maybe Camera -> Maybe Camera) -> SceneObject -> SceneObject
@@ -115,10 +115,10 @@ _children_ f o = o{_children = f (_children o)}
 -------------------------------------------------------------------------------------------------------------------               
 
 root :: [SceneObject] -> SceneObject
-root = SceneObject "root" True zero identityQuat one Nothing Nothing
+root = SceneObject "root" True zero identityQuat one EmptyMesh Nothing
 
 plain :: String -> SceneObject
-plain name = SceneObject name True zero identityQuat one Nothing Nothing []
+plain name = SceneObject name True zero identityQuat one EmptyMesh Nothing []
 
 draw :: SceneObject -> IO()
 draw g = do
@@ -126,19 +126,15 @@ draw g = do
     GL.rotate (toGLDouble . radToDeg . getAngle $ _rotation g) (toGLVec3 . getAxis $ _rotation g)
     GL.scale  (toGLDouble . _x $ _scale g) (toGLDouble . _y $ _scale g) (toGLDouble . _z $ _scale g)
     case _mesh g of
-        Nothing -> return ()
-        Just m  -> case texture m of
-            Nothing -> GL.renderPrimitive GL.Triangles (mapM_ drawVertex $ zip (colors m) (vertices m))
-            Just t  -> case (uv m) of
-                Nothing  -> GL.renderPrimitive GL.Triangles (mapM_ drawVertex $ zip (colors m) (vertices m))
-                Just uvs -> do
-                    -- GL.texture         GL.Texture2D GL.$= GL.Enabled
-                    GL.activeTexture                GL.$= GL.TextureUnit 0
-                    GL.textureBinding  GL.Texture2D GL.$= Just t
-                    GL.renderPrimitive GL.Triangles (mapM_ drawVertexUV $ zip3 (colors m) (vertices m) uvs)
-    GL.textureBinding GL.Texture2D GL.$= Nothing
+        EmptyMesh         -> return ()
+        SimpleMesh vs cs  -> GL.renderPrimitive GL.Triangles (mapM_ drawVertex $ zip cs vs)
+        Mesh vs cs t  uvs -> do
+            GL.activeTexture                GL.$= GL.TextureUnit 0
+            GL.textureBinding  GL.Texture2D GL.$= Just t
+            GL.renderPrimitive GL.Triangles (mapM_ drawVertexUV $ zip3 cs vs uvs)
+            GL.textureBinding GL.Texture2D GL.$= Nothing
     where
-        drawVertex (c,v) = GL.color (toGLColor3  c) >> GL.vertex (toGLVertex3 v)
+        drawVertex (c,v) = GL.color (toGLColor3 c) >> GL.vertex (toGLVertex3 v)
         drawVertexUV (c,v,Vector2 u v') = do
             GL.color    $ toGLColor3  c
             GL.texCoord (GL.TexCoord2 (fromRational $ toRational u) (fromRational $ toRational v') :: GL.TexCoord2 GL.GLfloat)
@@ -156,3 +152,16 @@ findGameObject n g
         compareSearch (Just g1) _         = Just g1
         compareSearch _         (Just g2) = Just g2
         compareSearch _         _         = Nothing
+
+
+{-
+        Just m  -> case texture m of
+            Nothing -> GL.renderPrimitive GL.Triangles (mapM_ drawVertex $ zip (colors m) (vertices m))
+            Just t  -> case uv m of
+                Nothing  -> GL.renderPrimitive GL.Triangles (mapM_ drawVertex $ zip (colors m) (vertices m))
+                Just uvs -> do
+                    -- GL.texture         GL.Texture2D GL.$= GL.Enabled
+                    GL.activeTexture                GL.$= GL.TextureUnit 0
+                    GL.textureBinding  GL.Texture2D GL.$= Just t
+                    GL.renderPrimitive GL.Triangles (mapM_ drawVertexUV $ zip3 (colors m) (vertices m) uvs)
+-}

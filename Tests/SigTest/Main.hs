@@ -4,7 +4,7 @@ import Debug.Trace
 import qualified Data.Vector as V
 
 main :: IO ()
-main = runSignal $ testGUI
+main = runSignal testGUI
 
 testGUI :: Signal ()
 testGUI = gui [element redButton,element vslider,element blueButton,zLabel]
@@ -32,23 +32,21 @@ testScene = scene [camSig,triSig]
         move (x,y) z a = Vector3 (x*z*a) (y*z*a) 0
 
 terrain :: Vector3 -> Quaternion -> [SceneObject] -> SceneObject
-terrain pos r chldn = SceneObject "Terrain" True pos r one (Just simplexMesh) Nothing []
+terrain pos r chldn = SceneObject "Terrain" True pos r one simplexMesh Nothing []
 
 testTri :: String -> Vector3 -> Quaternion -> [SceneObject] -> SceneObject
 testTri name pos r chldn = SceneObject name True pos r one m Nothing []
     where
-        m = Just $ Mesh
-             [Vector3 (-0.4) (-0.3) 0,
-              Vector3   0.4  (-0.3) 0,
-              Vector3     0    0.3  0]
-             [RGB 1 0 0,
-              RGB 0 1 0,
-              RGB 0 0 1]
-             Nothing
-             Nothing
+        m = SimpleMesh
+            [Vector3 (-0.4) (-0.3) 0,
+             Vector3   0.4  (-0.3) 0,
+             Vector3     0    0.3  0]
+            [RGB 1 0 0,
+             RGB 0 1 0,
+             RGB 0 0 1]
 
 simplexMesh :: Mesh
-simplexMesh = Mesh simplexTris simplexColors Nothing Nothing
+simplexMesh = SimpleMesh simplexTris simplexColors
     where
         w                = 64
         h                = 128

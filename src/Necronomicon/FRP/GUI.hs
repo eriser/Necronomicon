@@ -38,7 +38,7 @@ label (Vector2 x y) (Size w h) color (c:cs) = Signal $ \necro -> do
     let s = SceneObject "" True (Vector3 x y 0) identityQuat one (m t) Nothing []
     return (s,\_ -> return . NoChange $ s,IntSet.empty)
     where
-        m t= Just $ Mesh [p0,p1,p2,p3,p0,p2] [color,color,color,color,color,color] (Just t) (Just [t0,t1,t2,t3,t0,t2])
+        m t= Mesh [p0,p1,p2,p3,p0,p2] [color,color,color,color,color,color] t [t0,t1,t2,t3,t0,t2]
         p0 = Vector3 (0 - (w * 0.5)) (0 + (h * 0.5)) 0
         p1 = Vector3 (0 - (w * 0.5)) (0 - (h * 0.5)) 0
         p2 = Vector3 (0 + (w * 0.5)) (0 - (h * 0.5)) 0
@@ -80,8 +80,8 @@ slider (Vector2 x y) (Size w h) color = Signal $ \necro -> do
 
         s  h = SceneObject "" True (Vector3 x y 0)    identityQuat one sm Nothing [v h]
         v  h = SceneObject "" True (Vector3 0 0 0.01) identityQuat one (vm h) Nothing []
-        sm   = Just $ Mesh [p0 1,p1 1,p2 1,p3 1,p0 1,p2 1] [color,color,color,color,color,color] Nothing Nothing
-        vm h = Just $ Mesh [p0 h,p1 h,p2 h,p3 h,p0 h,p2 h] [color*fc,color*fc,color*fc,color*fc,color*fc,color*fc] Nothing Nothing
+        sm   = SimpleMesh [p0 1,p1 1,p2 1,p3 1,p0 1,p2 1] [color,color,color,color,color,color]
+        vm h = SimpleMesh [p0 h,p1 h,p2 h,p3 h,p0 h,p2 h] [color*fc,color*fc,color*fc,color*fc,color*fc,color*fc]
         p0 v = Vector3 (0 - hw) (hh h - v * h) 0
         p1 v = Vector3 (0 - hw) (0 + hh h) 0
         p2 v = Vector3 (0 + hw) (0 + hh h) 0
@@ -122,8 +122,8 @@ button (Vector2 x y) (Size w h) color = Signal $ \necro -> do
             
         st = SceneObject "" True (Vector3 x y 0) identityQuat one mt Nothing []
         sf = SceneObject "" True (Vector3 x y 0) identityQuat one mf Nothing []
-        mt = Just $ Mesh [p0,p1,p2,p3,p0,p2] [color,color,color,color,color,color] Nothing Nothing
-        mf = Just $ Mesh [p0,p1,p2,p3,p0,p2] [color*fc,color*fc,color*fc,color*fc,color*fc,color*fc] Nothing Nothing
+        mt = SimpleMesh [p0,p1,p2,p3,p0,p2] [color,color,color,color,color,color]
+        mf = SimpleMesh [p0,p1,p2,p3,p0,p2] [color*fc,color*fc,color*fc,color*fc,color*fc,color*fc]
         fc = RGB 0.5 0.5 0.5
         p0 = Vector3 (0 - (w * 0.5)) (0 + (h * 0.5)) 0
         p1 = Vector3 (0 - (w * 0.5)) (0 - (h * 0.5)) 0
