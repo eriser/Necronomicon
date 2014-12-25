@@ -15,6 +15,7 @@ import qualified Data.Map.Strict as M
 import Sound.OSC.Time
 
 data SynthDef = SynthDef {
+    synthDefName :: String,
     synthDefOutput :: Ptr AudioSignal,
     synthDefGraph :: Ptr CUGen,
     synthDefUGens :: [CUGen],
@@ -23,9 +24,10 @@ data SynthDef = SynthDef {
 
 type NodeID = CUInt
 data Synth = Synth NodeID
+type SynthDefDict = M.Map String SynthDef
 
 data RunState = NecroOffline | NecroBooting | NecroQuitting | NecroRunning deriving (Show, Eq)
-data RuntimeMessage = StartSynth SynthDef CDouble NodeID | StopSynth NodeID | CollectSynthDef SynthDef | ShutdownNrt
+data RuntimeMessage = StartSynth String CDouble NodeID | StopSynth NodeID | CollectSynthDef SynthDef | ShutdownNrt
 type RunTimeMailbox = TChan RuntimeMessage
 
 instance Show (Time -> Int -> Necronomicon (Maybe Double)) where
@@ -85,7 +87,7 @@ data NecroVars = NecroVars {
     necroNrtThreadID :: TVar ThreadId,
     necroMailbox :: RunTimeMailbox,
     necroNextNodeID :: TVar NodeID,
-    necroSynthDefs :: TVar [SynthDef],
+    necroSynthDefs :: TVar SynthDefDict,
     necroRunning :: TVar RunState,
     necroPatternThreadID :: TVar ThreadId,
     necroPatternMailbox :: PRunTimeMailbox,
@@ -132,13 +134,13 @@ getNextNodeID = prGet necroNextNodeID
 getNextNodeIDTVar :: Necronomicon (TVar NodeID)
 getNextNodeIDTVar = prGetTVar necroNextNodeID
 
-getSynthDefs :: Necronomicon [SynthDef]
+getSynthDefs :: Necronomicon SynthDefDict
 getSynthDefs = prGet necroSynthDefs
 
-getSynthDefsTVar :: Necronomicon (TVar [SynthDef])
+getSynthDefsTVar :: Necronomicon (TVar SynthDefDict)
 getSynthDefsTVar = prGetTVar necroSynthDefs
 
-setSynthDefs :: [SynthDef] -> Necronomicon ()
+setSynthDefs :: SynthDefDict -> Necronomicon ()
 setSynthDefs synthDefs = getSynthDefsTVar >>= \synthDefsTVar -> nAtomically (writeTVar synthDefsTVar synthDefs)
 
 getRunning :: Necronomicon RunState
@@ -177,14 +179,14 @@ mkNecroVars = do
     threadIdTVar <- atomically $ newTVar threadId
     mailBox <- atomically $ newTChan
     nextNodeId <- atomically $ newTVar 1000
-    synthDefList <- atomically $ newTVar []
+    synthDefDict <- atomically $ newTVar M.empty
     running <- atomically $ newTVar NecroOffline
     pThreadId <- myThreadId
     pThreadIdTVar <- atomically $ newTVar pThreadId
     pMailBox <- atomically $ newTChan
     patternQueue <- atomically $ newTVar (PQ.empty, M.empty)
     tempo <- atomically $ newTVar 60.0
-    return (NecroVars threadIdTVar mailBox nextNodeId synthDefList running pThreadIdTVar pMailBox patternQueue tempo)
+    return (NecroVars threadIdTVar mailBox nextNodeId synthDefDict running pThreadIdTVar pMailBox patternQueue tempo)
 
 runNecronomicon :: Necronomicon a -> IO a
 runNecronomicon func = do
@@ -231,7 +233,9 @@ processMessages messages =  mapM_ (processMessage) messages
                then return ()
                else process m
         process m = case m of
-            StartSynth (SynthDef output graph ugens _) time id -> liftIO $ playSynthInRtRuntime time output graph id (fromIntegral $ length ugens)
+            StartSynth name time id -> getSynthDef name >>= \maybeSynthDef -> case maybeSynthDef of
+                Just (SynthDef _ output graph ugens _) -> liftIO $ playSynthInRtRuntime time output graph id (fromIntegral $ length ugens)
+                Nothing -> return ()
             StopSynth id -> liftIO $ stopSynthInRtRuntime id
             CollectSynthDef synthDef -> addSynthDef synthDef
             ShutdownNrt -> necronomiconEndSequence
@@ -369,9 +373,12 @@ startPatternScheduler = do
 incrementNodeID :: Necronomicon NodeID
 incrementNodeID = getNextNodeIDTVar >>= \idTVar -> nAtomically (readTVar idTVar >>= \nodeID -> writeTVar idTVar (nodeID + 1) >> return nodeID)
 
+getSynthDef :: String -> Necronomicon (Maybe SynthDef)
+getSynthDef name = getSynthDefs >>= \synthDefDict -> return $ M.lookup name synthDefDict
+
 addSynthDef :: SynthDef -> Necronomicon ()
-addSynthDef synthDef = getSynthDefsTVar >>= \synthDefsTVar ->
-    nAtomically (readTVar synthDefsTVar >>= \synthDefs -> writeTVar synthDefsTVar (synthDef : synthDefs))
+addSynthDef synthDef@(SynthDef name _ _ _ _) = getSynthDefsTVar >>= \synthDefsTVar ->
+    nAtomically (readTVar synthDefsTVar >>= \synthDefs -> writeTVar synthDefsTVar (M.insert name synthDef synthDefs))
 
 necronomiconEndSequence :: Necronomicon ()
 necronomiconEndSequence = do
@@ -406,10 +413,10 @@ waitForRtFinished :: IO ()
 waitForRtFinished = waitForRTStatus rtFinishedStatus
 
 freeSynthDefs :: Necronomicon ()
-freeSynthDefs = getSynthDefs >>= \synthDefs -> mapM_ (freeSynthDef) synthDefs >> setSynthDefs []
+freeSynthDefs = getSynthDefs >>= \synthDefs -> mapM_ (freeSynthDef) (M.elems synthDefs) >> setSynthDefs M.empty
 
 freeSynthDef :: SynthDef -> Necronomicon ()
-freeSynthDef (SynthDef _ graph ugens signals) = mapM_ (freeUGen) ugens >> mapM_ (nFree) signals >> nFree graph
+freeSynthDef (SynthDef _ _ graph ugens signals) = mapM_ (freeUGen) ugens >> mapM_ (nFree) signals >> nFree graph
 
 freeUGen :: CUGen -> Necronomicon ()
 freeUGen (CUGen calc inputs outputs) = nFree inputs >> nFree outputs

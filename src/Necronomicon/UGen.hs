@@ -37,20 +37,16 @@ infixl 1 ~>
 
 infixl 1 +>
 
-compileSynthDef :: UGen -> Necronomicon SynthDef
-compileSynthDef synthDef = do
-    compiledSynthDef <- liftIO $ runCompileSynthDef synthDef
-    sendMessage (CollectSynthDef compiledSynthDef)
-    return compiledSynthDef
+compileSynthDef :: String -> UGen -> Necronomicon ()
+compileSynthDef name synthDef = liftIO (runCompileSynthDef name synthDef) >>= addSynthDef
 
--- foreign import ccall "print_ugen" printUGen :: Ptr (CUGen) -> CUInt -> IO ()
-printSynthDef :: SynthDef -> Necronomicon ()
-printSynthDef synthDef = liftIO $ print synthDef
+printSynthDef :: String -> Necronomicon ()
+printSynthDef synthDefName = getSynthDef synthDefName >>= nPrint
 
-playSynth :: SynthDef -> CDouble -> Necronomicon Synth
-playSynth synthDef time = do
+playSynth :: String -> CDouble -> Necronomicon Synth
+playSynth synthDefName time = do
     id <- incrementNodeID
-    sendMessage (StartSynth synthDef time id)
+    sendMessage (StartSynth synthDefName time id)
     return (Synth id)
 
 stopSynth :: Synth -> Necronomicon ()
@@ -223,14 +219,14 @@ addConstant key constant = do
     constants <- getConstants
     setConstants (constant : constants)
 
-runCompileSynthDef :: UGen -> IO SynthDef
-runCompileSynthDef ugen = do
+runCompileSynthDef :: String -> UGen -> IO SynthDef
+runCompileSynthDef name ugen = do
     (outputSignal, (CompiledData table revGraph constants)) <- runCompile (compileUGenGraphBranch ugen) mkCompiledData
     print ("Total ugens: " ++ (show $ length revGraph))
     print ("Total constants: " ++ (show $ length constants))
     let graph = reverse revGraph
     compiledGraph <- newArray graph
-    return (SynthDef outputSignal compiledGraph graph constants)
+    return (SynthDef name outputSignal compiledGraph graph constants)
 
 compileUGenGraphBranch :: UGen -> Compiled (Ptr AudioSignal)
 compileUGenGraphBranch ugen = do
