@@ -2,8 +2,8 @@ module Necronomicon.Linear.Vector where
 
 import Prelude
 import Necronomicon.Linear.Math
--- import qualified Necronomicon.Rendering.OpenGL as GL
 import qualified Graphics.Rendering.OpenGL as GL
+import qualified Graphics.Rendering.OpenGL.GL.Tensor as GLT
 import Data.Typeable
 
 data Vector2 = Vector2 Double Double                     deriving (Show,Eq,Ord,Typeable)
@@ -403,3 +403,7 @@ toGLVec3 (Vector3 x y z) = GL.Vector3 (realToFrac x) (realToFrac y) (realToFrac 
 
 toGLVertex3 :: Vector3 -> GL.Vertex3 GL.GLdouble
 toGLVertex3 (Vector3 x y z) = GL.Vertex3 (realToFrac x) (realToFrac y) (realToFrac z) ::GL.Vertex3 GL.GLdouble
+
+toGLVertex4 :: Vector4 -> GLT.Vertex4 GL.GLfloat
+toGLVertex4 (Vector4 x y z w) = GLT.Vertex4 (realToFrac x) (realToFrac y) (realToFrac z) (realToFrac z) ::GLT.Vertex4 GL.GLfloat
+

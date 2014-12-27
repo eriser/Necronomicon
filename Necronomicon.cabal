@@ -51,6 +51,7 @@ library
         Necronomicon.Graphics
         Necronomicon.Graphics.Camera
         Necronomicon.Graphics.Mesh
+        Necronomicon.Graphics.Shader
         Necronomicon.Graphics.Color
         Necronomicon.Graphics.SceneObject
         Necronomicon.Graphics.Text
@@ -96,7 +97,7 @@ executable SigTest
     default-language: Haskell2010
     ghc-options:      -threaded -O3 -Wall
     hs-source-dirs:   Tests/SigTest
-    default-extensions:
+    default-extensions: QuasiQuotes TemplateHaskell
     build-depends:
         base             == 4.*,
         Necronomicon,
