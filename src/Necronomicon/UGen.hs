@@ -17,9 +17,10 @@ import Control.Concurrent.STM
 import Necronomicon.Runtime
 import Control.Monad.Trans
 import qualified Data.Map as M
+import Data.Monoid
 
-import Prelude hiding (fromRational, sin, (+), (*), (/))
-import qualified Prelude as P (fromRational, fromIntegral, sin,  (+), (*), (/))
+import Prelude hiding (fromRational, sin, (+), (*), (/), (-))
+import qualified Prelude as P (fromRational, fromIntegral, sin,  (+), (*), (/),(-))
 
 default (Double)
 -- fromIntegral n = (P.fromIntegral n) :: Double
@@ -293,3 +294,78 @@ lineSynth = (s 555.0) + (s 440.0 ~> delay 0.15)
     where
         s f = (sin f) * l * 0.2
         l = line 0.3
+
+data UGen' a = UGenVal a
+             | Silence
+               -- | UGenFunction'
+               -- | UGenList' [UGen' a]
+
+instance Functor UGen' where
+    fmap f (UGenVal a) = UGenVal $ f a
+
+instance Applicative UGen' where
+    pure a = UGenVal a
+    (UGenVal f) <*> (UGenVal g) = UGenVal $ f g
+
+instance Monad UGen' where
+    return = pure
+    (UGenVal g) >>= f = f g
+
+instance Num a => Num (UGen' a) where
+    (+)         = liftA2 (P.+)
+    (*)         = liftA2 (P.*)
+    (-)         = liftA2 (P.-)
+    negate      = liftA negate
+    abs         = liftA abs
+    signum      = liftA signum
+    fromInteger = pure . fromInteger
+
+instance Fractional a => Fractional (UGen' a) where
+    (/) = liftA2 (P./)
+    fromRational = pure . P.fromRational
+
+instance Floating a => Floating (UGen' a) where
+    pi      = pure pi
+    (**)    = liftA2 (**)
+    exp     = liftA exp
+    log     = liftA log
+    sin     = liftA P.sin
+    cos     = liftA cos
+    asin    = liftA asin
+    acos    = liftA acos
+    atan    = liftA atan
+    logBase = liftA2 logBase
+    sqrt    = liftA sqrt
+    tan     = liftA tan
+    tanh    = liftA tanh
+    sinh    = liftA sinh
+    cosh    = liftA cosh
+    asinh   = liftA asinh
+    atanh   = liftA atanh
+    acosh   = liftA acosh
+
+instance (Eq a) => Eq (UGen' a) where
+    UGenVal a == UGenVal b = a == b
+    UGenVal a /= UGenVal b = a /= b
+
+instance (Eq a, Ord a) => Ord (UGen' a) where
+    UGenVal a `compare` UGenVal b = compare a b
+    max     = liftA2 max
+    min     = liftA2 min
+
+instance (Enum a) => Enum (UGen' a) where
+    succ a = succ <$> a
+    pred a = pred <$> a
+    toEnum a = UGenVal (toEnum a)
+    fromEnum (UGenVal a) = fromEnum a
+
+instance (Monoid a) => Monoid (UGen' a) where
+    mempty      = Silence
+    mappend a b = (mappend) <$> a <*> b
+
+sin' :: Floating a => UGen' a -> UGen' a
+sin' (UGenVal f) = UGenVal $ P.sin f
+
+-- test :: UGen' Double
+-- test = sin' (pure 4.0) P.+ pure 4.0
+

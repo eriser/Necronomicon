@@ -72,7 +72,6 @@ instance (Show a) => Show (Pattern a) where
 -- Pattern Scheduler
 --------------------------
 
-
 runPattern :: (Show a) => Int -> Pattern a -> IO ()
 runPattern n (PSeq p _) = mapM_ (print . collapse p . fromIntegral) [0..(n - 1)]
 runPattern n (PGen p) = mapM_ (print . p . fromIntegral) [0..(n - 1)]
