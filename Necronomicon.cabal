@@ -25,6 +25,7 @@ library
     other-modules:
         Necronomicon.Language.Layout
         Necronomicon.Math
+        Necronomicon.Utility
         Necronomicon.Networking
         Necronomicon.Networking.Client
         Necronomicon.Networking.Server
@@ -49,6 +50,7 @@ library
         Necronomicon.Noise.DiamondSquare
         Necronomicon.Noise.Simplex
         Necronomicon.Graphics
+        Necronomicon.Graphics.BufferObject
         Necronomicon.Graphics.Camera
         Necronomicon.Graphics.Mesh
         Necronomicon.Graphics.Shader

@@ -5,20 +5,39 @@ import Necronomicon.Linear
 import Necronomicon.Graphics.Color
 import Necronomicon.Graphics.Shader
 import Necronomicon.Graphics.BufferObject
+import Necronomicon.Utility
+import Necronomicon.Graphics.BufferObject
+import Foreign.C.Types
 
 import qualified Graphics.Rendering.OpenGL as GL
-import qualified Data.Map as Map
+import qualified Data.IntMap as IntMap
 
 data Mesh = EmptyMesh
           | SimpleMesh [Vector3] [Color]
           | Mesh       [Vector3] [Color] GL.TextureObject [Vector2]
-          | ShaderMesh [Vector3] [Color] GL.TextureObject [Vector2] Shader
+          | ShaderMesh (IO GL.BufferObject) (IO GL.BufferObject) GL.TextureObject Shader
           deriving (Show)
 
-data Resources = Resources (Map.Map String LoadedShader)
+data Resources = Resources (IntMap.IntMap LoadedShader)
+
+shaderMesh :: [Vector3] -> [Color] -> [Vector2] -> [Int] -> GL.TextureObject -> Shader -> Mesh
+shaderMesh vertices colors uvs indices tex shdr = ShaderMesh arrayBuffer elementArrayBuffer tex shdr
+    where
+        arrayBuffer        = makeBuffer GL.ArrayBuffer $ toBuffer vertices
+        elementArrayBuffer = makeBuffer GL.ElementArrayBuffer $ undefined --interleave (toBuffer colors) (toBuffer uvs)
+
+class Bufferable a where
+    toBuffer :: [a] -> [Double]
+
+instance Bufferable Vector3 where
+    toBuffer [] = []
+    toBuffer (Vector3 x y z : vs) = x : y : z : toBuffer vs
+
+instance Show (IO GL.BufferObject) where
+    show _ = "IO GL.BufferObject"
 
 newResources :: Resources
-newResources = Resources Map.empty
+newResources = Resources IntMap.empty
 
 ambientShader :: Shader
 ambientShader = shader vs fs
@@ -34,8 +53,9 @@ ambientShader = shader vs fs
                     uniform vec4 projMatrix3;
                     uniform vec4 projMatrix4;
 
-                    in vec4  position;
-                    in vec3  color;
+                    in  vec3  position;
+                    in  vec3  color;
+                    in  vec2  uv;
                     out vec3 Color;
 
                     void main() 
@@ -44,7 +64,7 @@ ambientShader = shader vs fs
                         mat4 projMatrix = mat4(projMatrix1,projMatrix2,projMatrix3,projMatrix4);
 
                         Color       = color;
-                        gl_Position = position * viewMatrix * projMatrix; 
+                        gl_Position = vec4(position,1.0) * viewMatrix * projMatrix; 
                     }
              |]
 

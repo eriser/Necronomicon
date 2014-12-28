@@ -7,9 +7,10 @@ main :: IO ()
 main = runSignal testGUI
 
 testGUI :: Signal ()
-testGUI = gui [element vslider,element blueButton,zLabel]
+testGUI = gui [element vslider,element blueButton,zLabel,tri <~ input vslider]
     where
         vslider    = slider (Vector2 0.50 0.5) (Size 0.03 0.30) (RGB 0.5 0.5 0.5)
+        tri y      = testTri "" (Vector3 0 (1-y) 0) identityQuat []
         blueButton = button (Vector2 0.75 0.5) (Size 0.10 0.15) (RGB 0 0 1)
         zLabel     = label  (Vector2 0.25 0.5) (Size 0.10 0.15) (RGB 1 1 1) "Zero"
 

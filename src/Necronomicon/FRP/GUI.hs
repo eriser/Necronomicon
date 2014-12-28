@@ -32,21 +32,19 @@ gui gs = render $ root <~ combine (camSig : gs)
 
 label :: Vector2 -> Size -> Color -> String -> Signal SceneObject
 label (Vector2 x y) (Size w h) color (c:cs) = Signal $ \necro -> do
-    t <- loadCharacter "/home/casiosk1/code/Necronomicon/Tests/SigTest/fonts/OCRA.ttf" 'a' 251 0
+    t    <- loadCharacter "/home/casiosk1/code/Necronomicon/Tests/SigTest/fonts/OCRA.ttf" 'a' 251 0
     let s = SceneObject "" True (Vector3 x y 0) identityQuat one (m t) Nothing []
     return (s,\_ -> return . NoChange $ s,IntSet.empty)
     where
-        m t = ShaderMesh [p0,p1,p2,p3,p0,p2] [color,color,color,color,color,color] t [t0,t1,t2,t3,t0,t2] ambientShader
-        p0  = Vector3 (-hw)   hh  0
-        p1  = Vector3 (-hw) (-hh) 0
-        p2  = Vector3   hw  (-hh) 0
-        p3  = Vector3   hw    hh  0
         hw  = w * 0.5
         hh  = h * 0.5
-        t0  = Vector2 0 1
-        t1  = Vector2 0 0
-        t2  = Vector2 1 0
-        t3  = Vector2 1 1
+        m t = shaderMesh
+              [Vector3 (-hw)   hh  0,Vector3 (-hw) (-hh) 0,Vector3   hw  (-hh) 0,Vector3   hw    hh  0]
+              [color,color,color,color]
+              [Vector2 0 1,Vector2 0 0,Vector2 1 0,Vector2 1 1]
+              [0,1,2,3,0,2]
+              t
+              ambientShader
 
 guiEvent :: (Typeable a) => IORef (Gui b) -> Dynamic -> (a -> IO (EventValue (Gui b))) -> IO (EventValue (Gui b))
 guiEvent ref v f = case fromDynamic v of

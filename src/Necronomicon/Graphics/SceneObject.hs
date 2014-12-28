@@ -4,7 +4,7 @@ import Prelude
 import Control.Monad (foldM)
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.Rendering.OpenGL.GL.Tensor as GLT
-import qualified Data.Map as Map
+import qualified Data.IntMap as IntMap
 
 import Necronomicon.Linear
 import Necronomicon.Graphics.Mesh
@@ -138,11 +138,9 @@ draw world view proj resources@(Resources shaderMap) g = do
             GL.renderPrimitive GL.Triangles    $  mapM_ drawVertexUV $ zip3 cs vs uvs
             GL.textureBinding  GL.Texture2D GL.$= Nothing
             return resources
-        ShaderMesh vs cs t uvs sh -> do
-            (resources',(program,[mv1,mv2,mv3,mv4,pr1,pr2,pr3,pr4])) <- case Map.lookup (key sh) shaderMap of
-                Nothing  -> do
-                    sh' <- unShader sh
-                    return (Resources (Map.insert (key sh) sh' shaderMap),sh')
+        ShaderMesh arrayBuffer elementArrayBuffer tex sh -> do
+            (resources',(program,[mv1,mv2,mv3,mv4,pr1,pr2,pr3,pr4])) <- case IntMap.lookup (key sh) shaderMap of
+                Nothing  -> unShader sh >>= \sh' -> return (Resources (IntMap.insert (key sh) sh' shaderMap),sh')
                 Just sh' -> return (resources,sh')
             GL.currentProgram GL.$= Just program
 
@@ -158,7 +156,7 @@ draw world view proj resources@(Resources shaderMap) g = do
             GL.uniform pr3 GL.$= (toGLVertex4 $ _z proj)
             GL.uniform pr4 GL.$= (toGLVertex4 $ _w proj)
 
-            GL.renderPrimitive GL.Triangles (mapM_ drawVertex $ zip cs vs)
+            -- GL.renderPrimitive GL.Triangles (mapM_ drawVertex $ zip cs vs)
             GL.currentProgram GL.$= Nothing
             return resources'
 

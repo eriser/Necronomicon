@@ -352,7 +352,7 @@ globalEventDispatch signal necro@(Necro inBox _ _) = do
         a <- processState e
         case a of
             NoChange _ -> return ()
-            Change  a' -> print a'
+            Change  a' -> return () --print a'
 
 ---------------------------------------------
 -- Time

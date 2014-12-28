@@ -1,13 +1,11 @@
 module Necronomicon.Graphics.Shader (
     Shader(..),
     LoadedShader,
-    -- (Shader,vertexShader,fragmentShader),
     VertexShader(..),
     FragmentShader(..),
     loadShader,
     vert,
     frag,
-    -- Shader'(Shader'),
     compileVert,
     compileFrag,
     shader
@@ -15,13 +13,15 @@ module Necronomicon.Graphics.Shader (
 
 import Prelude
 import Control.Monad (unless)
+import System.IO (hPutStrLn, stderr)
+import Language.Haskell.TH.Syntax
+import Language.Haskell.TH.Quote
+import Necronomicon.Utility
+
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C
 import qualified Graphics.Rendering.OpenGL as GL
-import System.IO (hPutStrLn, stderr)
 import qualified Language.Haskell.TH as TH
-import Language.Haskell.TH.Syntax
-import Language.Haskell.TH.Quote
 
 data VertexShader   = VertexShader   {
     vertexString   :: String,
@@ -36,7 +36,7 @@ data FragmentShader = FragmentShader {
 type LoadedShader = (GL.Program,[GL.UniformLocation])
 
 data Shader = Shader {
-    key      :: String,
+    key      :: Int,
     unShader :: IO LoadedShader
     }
 
@@ -68,7 +68,7 @@ printError :: IO ()
 printError = GL.get GL.errors >>= mapM_ (hPutStrLn stderr . ("GL: "++) . show)
 
 vert :: QuasiQuoter
-vert = QuasiQuoter{quoteExp = shaderQuoter "compileVert"}
+vert =  QuasiQuoter{quoteExp = shaderQuoter "compileVert"}
 
 frag :: QuasiQuoter
 frag = QuasiQuoter{quoteExp = shaderQuoter "compileFrag"}
@@ -79,7 +79,7 @@ shaderQuoter compileString string = do
     return $ AppE (VarE name) (LitE $ StringL string)
 
 compileVert :: String -> VertexShader
-compileVert s = VertexShader s   . loadShaderBS "quasi-vert" GL.VertexShader   $ C.pack s
+compileVert s = VertexShader   s . loadShaderBS "quasi-vert" GL.VertexShader   $ C.pack s
 
 compileFrag :: String -> FragmentShader
 compileFrag s = FragmentShader s . loadShaderBS "quasi-frag" GL.FragmentShader $ C.pack s
@@ -92,7 +92,7 @@ getValueName s = do
         Nothing -> mkName s
 
 shader :: VertexShader -> FragmentShader -> Shader
-shader vs fs = Shader (vertexString vs ++ fragmentString fs) $ do
+shader vs fs = Shader (hash $ vertexString vs ++ fragmentString fs) $ do
 
     print "compiling shader"
 
