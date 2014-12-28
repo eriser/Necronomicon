@@ -380,9 +380,39 @@ instance (Monoid a) => Monoid (UGen a) where
     mempty      = Silence
     mappend a b = (mappend) <$> a <*> b
 
-sin' :: Floating a => UGen a -> UGen a
-sin' (UGenVal f) = UGenVal $ sin f
+----------------------------------------------------
+-- C imports
+----------------------------------------------------
+
+foreign import ccall "&sin_calc" sinCalc :: Calc
+sinOsc :: UGen Double -> UGen Double
+sinOsc freq = UGenFunc sinCalc [freq]
+
+-- foreign import ccall "&delay_calc" delayCalc :: Calc
+-- delay :: UGen Double -> UGen Double -> UGen Double
+-- delay amount input = UGenTimeFunc delayCalc [amount] input
+
+foreign import ccall "&add_calc" addCalc :: Calc
+add :: UGen Double -> UGen Double -> UGen Double
+add a b = UGenFunc addCalc [a,b]
+
+foreign import ccall "&minus_calc" minusCalc :: Calc
+minus :: UGen Double -> UGen Double -> UGen Double
+minus a b = UGenFunc minusCalc [a,b]
+
+foreign import ccall "&mul_calc" mulCalc :: Calc
+mul :: UGen Double -> UGen Double -> UGen Double
+mul a b = UGenFunc mulCalc [a,b]
+
+gain :: UGen Double -> UGen Double -> UGen Double
+gain = mul
+
+foreign import ccall "&div_calc" divCalc :: Calc
+udiv :: UGen Double -> UGen Double -> UGen Double
+udiv a b = UGenFunc divCalc [a,b]
+
+----------------------------------------------------
 
 test :: UGen Double
-test = sin' 4 + 4
+test = sinOsc 4 + 4
 
