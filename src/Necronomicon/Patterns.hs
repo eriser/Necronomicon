@@ -15,7 +15,7 @@ import Data.Monoid
 import System.CPUTime
 import Sound.OSC.Time
 import qualified Data.Fixed as F
-import Necronomicon.Runtime
+import Necronomicon.Util.Functions
 
 (~>) :: a -> (a -> b) -> b
 (~>) a f = f a
@@ -36,6 +36,10 @@ collapse (PGen f) t   = (f t)
 collapse (PSeq p _) t = collapse p t
 collapse PNothing _   = PNothing
 collapse v@(PVal _) _ = v
+
+plength :: Pattern a -> Int
+plength (PSeq _ l) = l
+plength _ = 1
 
 instance Functor Pattern where
     fmap _ PNothing = PNothing 
@@ -64,28 +68,10 @@ instance (Show a) => Show (Pattern a) where
     show (PVal a) = show a
     show PNothing = "PNothing"
 
-{-
-data PArr b c = PArr (b -> (c, PArr b c))
+--------------------------
+-- Pattern Scheduler
+--------------------------
 
-instance Arrow PArr where
-    arr f = PArr f
-    first (PArr f) = PArr (mapFst f)
-        where mapFst g (a, b) = (g a, b)
-    second (PArr g) = PArr (mapSnd g)
-        where mapSnd g (a, b) = (a, g b)
--}
-
-------------------------
--- Pattern Functions
-------------------------
-
-stdGen :: StdGen
-stdGen = mkStdGen 1
-
-inf :: Double
-inf = 1 / 0
-
-type TimedValue a = (Pattern a, Double)
 
 runPattern :: (Show a) => Int -> Pattern a -> IO ()
 runPattern n (PSeq p _) = mapM_ (print . collapse p . fromIntegral) [0..(n - 1)]
@@ -188,6 +174,16 @@ wrapResize [] _ = []
 wrapResize _ [] = []
 wrapResize xs ys = foldl (\acc i -> acc ++ [xs !! (mod i (length xs))]) [] [0..(length ys - 1)] 
 
+--------------------------
+-- Pattern Functions
+--------------------------
+
+stdGen :: StdGen
+stdGen = mkStdGen 1
+
+inf :: Double
+inf = 1 / 0
+
 data Tree a = Node [Tree a] Int | Leaf a
 type PTree a = Pattern (Tree a)
 
@@ -283,11 +279,11 @@ place list = PGen lace
         listLength = fromIntegral $ length list
         recipLength = 1 / listLength
         wrapIndex x = wrapRange 0.0 listLength $ (fromIntegral ((floor x) :: Integer))
-        lace time = collapse item index
+        lace t = collapse item index
             where
-                wrappedTime = wrapIndex time
+                wrappedTime = wrapIndex t
                 item = list !! (floor wrappedTime)
-                index = ((time - wrappedTime) * recipLength)
+                index = ((t - wrappedTime) * recipLength)
 
 prand :: [Pattern a] -> Pattern a
 prand [] = PNothing

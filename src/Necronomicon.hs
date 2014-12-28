@@ -13,7 +13,7 @@ module Necronomicon (module Necronomicon.Language.Layout,
 import Necronomicon.Networking
 import Necronomicon.Language.Layout
 import Necronomicon.Math
-import Necronomicon.UGen hiding ((~>),ifThenElse)
+import Necronomicon.UGen hiding ((~>))
 import Necronomicon.Patterns
 import Necronomicon.Runtime
 import Necronomicon.Linear
