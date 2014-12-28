@@ -301,44 +301,62 @@ lineSynth = (s 555.0) + (s 440.0 ~> delay 0.15)
 -}
 
 data UGen a = UGenVal a
+            | Silence
             | UGenFunc Calc [UGen a]
             | UGenList [UGen a]
-            | Silence
-               -- | UGenFunction'
-               -- | UGenList' [UGen' a]
+            deriving (Show)
+
+ulist :: [UGen a] -> UGen a
+ulist = UGenList
 
 (~>) :: a -> (a -> b) -> b
 (~>) a f = f a
 
 infixl 1 ~>
 
--- (+>) :: UGenComponent a => a -> (a -> UGen) -> UGen
--- (+>) a f = add a (f a)
+(+>) :: UGen Double -> (UGen Double -> UGen Double) -> UGen Double
+(+>) a f = add a (f a)
 
--- infixl 1 +>
+infixl 1 +>
+
+ugenFuncSilentFail :: UGen a
+ugenFuncSilentFail = trace "Cannot call a pure function on a UGenFunc! This is undefined behaviour!" $ Silence
 
 instance Functor UGen where
-    fmap f (UGenVal a) = UGenVal $ f a
+    fmap f (UGenVal a)   = UGenVal $ f a
+    fmap f Silence       = Silence
+    fmap f (UGenList as) = UGenList $ map (fmap f) as
+    fmap f _             = ugenFuncSilentFail
 
 instance Applicative UGen where
-    pure a = UGenVal a
-    (UGenVal f) <*> (UGenVal g) = UGenVal $ f g
+    pure                              = UGenVal
+    (UGenVal f)    <*> (UGenVal g)    = UGenVal $ f g
+    (UGenVal f)    <*> (UGenList gs)  = UGenList $ fmap (fmap f) gs
+    (UGenList fs)  <*> g              = UGenList $ map (<*> g) fs
+
+    Silence        <*> _              = Silence
+    _              <*> Silence        = Silence
+    (UGenFunc _ _) <*> _              = ugenFuncSilentFail
+    _              <*> (UGenFunc _ _) = ugenFuncSilentFail
 
 instance Monad UGen where
-    return = pure
-    (UGenVal g) >>= f = f g
+    return              = UGenVal
+    (UGenVal g)   >>= f = f g
+    Silence       >>= f = Silence
+    (UGenList gs) >>= f = UGenList $ map (>>= f) gs
+    _             >>= f = ugenFuncSilentFail
 
 instance Num a => Num (UGen a) where
-    (+)         = liftA2 (+)
-    (*)         = liftA2 (*)
-    (-)         = liftA2 (-)
+    (+)         = add
+    (*)         = mul
+    (-)         = minus
     negate      = liftA negate
     abs         = liftA abs
     signum      = liftA signum
     fromInteger = pure . fromInteger
 
 instance Fractional a => Fractional (UGen a) where
-    (/) = liftA2 (/)
+    (/) = udiv
     fromRational = pure . fromRational
 
 instance Floating a => Floating (UGen a) where
@@ -393,26 +411,25 @@ sinOsc freq = UGenFunc sinCalc [freq]
 -- delay amount input = UGenTimeFunc delayCalc [amount] input
 
 foreign import ccall "&add_calc" addCalc :: Calc
-add :: UGen Double -> UGen Double -> UGen Double
+add :: Num a => UGen a -> UGen a -> UGen a
 add a b = UGenFunc addCalc [a,b]
 
 foreign import ccall "&minus_calc" minusCalc :: Calc
-minus :: UGen Double -> UGen Double -> UGen Double
+minus :: Num a => UGen a -> UGen a -> UGen a
 minus a b = UGenFunc minusCalc [a,b]
 
 foreign import ccall "&mul_calc" mulCalc :: Calc
-mul :: UGen Double -> UGen Double -> UGen Double
+mul :: Num a => UGen a -> UGen a -> UGen a
 mul a b = UGenFunc mulCalc [a,b]
 
 gain :: UGen Double -> UGen Double -> UGen Double
 gain = mul
 
 foreign import ccall "&div_calc" divCalc :: Calc
-udiv :: UGen Double -> UGen Double -> UGen Double
+udiv :: Fractional a => UGen a -> UGen a -> UGen a
 udiv a b = UGenFunc divCalc [a,b]
 
 ----------------------------------------------------
 
 test :: UGen Double
-test = sinOsc 4 + 4
-
+test = sinOsc (ulist [4,4]) + sinOsc (ulist [3,ulist [2,2],sinOsc 1]) + ulist [3,2,1]

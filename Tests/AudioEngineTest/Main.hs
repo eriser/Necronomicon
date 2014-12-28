@@ -3,8 +3,8 @@ module Main where
 import Prelude
 import Control.Concurrent
 import Sound.OSC.Time
-import qualified Necronomicon.UGen as U
-import Necronomicon.Runtime
+import Necronomicon
+-- import Necronomicon.Runtime
 import Control.Monad.Trans
 
 -- playSynths :: Necronomicon ()
@@ -23,7 +23,8 @@ import Control.Monad.Trans
     -- _ <- liftIO $ getLine
     -- U.stopSynth myCoolSynth
     -- return ()
-        
-main :: IO ()
+
 -- main = runNecronomicon engineTest
-main = undefined
+
+main :: IO ()
+main = print test
