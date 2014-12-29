@@ -322,7 +322,7 @@ instance Num UGen where
     (+)         = add
     (*)         = mul
     (-)         = minus
-    -- negate      = liftA negate
+    negate      = mul $ UGenVal (-1)
     -- abs         = liftA abs
     -- signum      = liftA signum
     fromInteger = UGenVal . fromInteger
