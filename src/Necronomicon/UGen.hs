@@ -300,13 +300,12 @@ lineSynth = (s 555.0) + (s 440.0 ~> delay 0.15)
 
 -}
 
-data UGen a = UGenVal a
-            | Silence
-            | UGenFunc Calc [UGen a]
-            | UGenList [UGen a]
-            deriving (Show)
+data UGen = UGenVal Double
+          | UGenFunc Calc [UGen]
+          | UGenList [UGen]
+          deriving (Show)
 
-ulist :: [UGen a] -> UGen a
+ulist :: [UGen] -> UGen
 ulist = UGenList
 
 (~>) :: a -> (a -> b) -> b
@@ -314,96 +313,69 @@ ulist = UGenList
 
 infixl 1 ~>
 
-(+>) :: UGen Double -> (UGen Double -> UGen Double) -> UGen Double
+(+>) :: UGen -> (UGen -> UGen) -> UGen
 (+>) a f = add a (f a)
 
 infixl 1 +>
 
-ugenFuncSilentFail :: UGen a
-ugenFuncSilentFail = trace "Cannot call a pure function on a UGenFunc! This is undefined behaviour!" $ Silence
-
-instance Functor UGen where
-    fmap f (UGenVal a)   = UGenVal $ f a
-    fmap f Silence       = Silence
-    fmap f (UGenList as) = UGenList $ map (fmap f) as
-    fmap f _             = ugenFuncSilentFail
-
-instance Applicative UGen where
-    pure                              = UGenVal
-    (UGenVal f)    <*> (UGenVal g)    = UGenVal $ f g
-    (UGenVal f)    <*> (UGenList gs)  = UGenList $ fmap (fmap f) gs
-    (UGenList fs)  <*> g              = UGenList $ map (<*> g) fs
-
-    Silence        <*> _              = Silence
-    _              <*> Silence        = Silence
-    (UGenFunc _ _) <*> _              = ugenFuncSilentFail
-    _              <*> (UGenFunc _ _) = ugenFuncSilentFail
-
-instance Monad UGen where
-    return              = UGenVal
-    (UGenVal g)   >>= f = f g
-    Silence       >>= f = Silence
-    (UGenList gs) >>= f = UGenList $ map (>>= f) gs
-    _             >>= f = ugenFuncSilentFail
-
-instance Num a => Num (UGen a) where
+instance Num UGen where
     (+)         = add
     (*)         = mul
     (-)         = minus
-    negate      = liftA negate
-    abs         = liftA abs
-    signum      = liftA signum
-    fromInteger = pure . fromInteger
+    -- negate      = liftA negate
+    -- abs         = liftA abs
+    -- signum      = liftA signum
+    fromInteger = UGenVal . fromInteger
 
-instance Fractional a => Fractional (UGen a) where
+instance Fractional UGen where
     (/) = udiv
-    fromRational = pure . fromRational
+    fromRational = UGenVal . fromRational
 
-instance Floating a => Floating (UGen a) where
-    pi      = pure pi
-    (**)    = liftA2 (**)
-    exp     = liftA exp
-    log     = liftA log
-    sin     = liftA sin
-    cos     = liftA cos
-    asin    = liftA asin
-    acos    = liftA acos
-    atan    = liftA atan
-    logBase = liftA2 logBase
-    sqrt    = liftA sqrt
-    tan     = liftA tan
-    tanh    = liftA tanh
-    sinh    = liftA sinh
-    cosh    = liftA cosh
-    asinh   = liftA asinh
-    atanh   = liftA atanh
-    acosh   = liftA acosh
+instance Floating UGen where
+    pi      = UGenVal pi
+    -- (**)    = liftA2 (**)
+    -- exp     = liftA exp
+    -- log     = liftA log
+    sin     = sinOsc
+    -- cos     = liftA cos
+    -- asin    = liftA asin
+    -- acos    = liftA acos
+    -- atan    = liftA atan
+    -- logBase = liftA2 logBase
+    -- sqrt    = liftA sqrt
+    -- tan     = liftA tan
+    -- tanh    = liftA tanh
+    -- sinh    = liftA sinh
+    -- cosh    = liftA cosh
+    -- asinh   = liftA asinh
+    -- atanh   = liftA atanh
+    -- acosh   = liftA acosh
 
-instance (Eq a) => Eq (UGen a) where
-    UGenVal a == UGenVal b = a == b
-    UGenVal a /= UGenVal b = a /= b
+-- instance (Eq a) => Eq (UGen a) where
+    -- UGenVal a == UGenVal b = a == b
+    -- UGenVal a /= UGenVal b = a /= b
 
-instance (Eq a, Ord a) => Ord (UGen a) where
-    UGenVal a `compare` UGenVal b = compare a b
-    max     = liftA2 max
-    min     = liftA2 min
+-- instance (Eq a, Ord a) => Ord (UGen a) where
+    -- UGenVal a `compare` UGenVal b = compare a b
+    -- max     = liftA2 max
+    -- min     = liftA2 min
 
-instance (Enum a) => Enum (UGen a) where
-    succ a = succ <$> a
-    pred a = pred <$> a
-    toEnum a = UGenVal (toEnum a)
-    fromEnum (UGenVal a) = fromEnum a
+-- instance (Enum a) => Enum (UGen a) where
+    -- succ a = succ <$> a
+    -- pred a = pred <$> a
+    -- toEnum a = UGenVal (toEnum a)
+    -- fromEnum (UGenVal a) = fromEnum a
 
-instance (Monoid a) => Monoid (UGen a) where
-    mempty      = Silence
-    mappend a b = (mappend) <$> a <*> b
+instance Monoid UGen where
+    mempty      = 0
+    mappend a b = add a b
 
 ----------------------------------------------------
 -- C imports
 ----------------------------------------------------
 
 foreign import ccall "&sin_calc" sinCalc :: Calc
-sinOsc :: UGen Double -> UGen Double
+sinOsc :: UGen -> UGen
 sinOsc freq = UGenFunc sinCalc [freq]
 
 -- foreign import ccall "&delay_calc" delayCalc :: Calc
@@ -411,25 +383,25 @@ sinOsc freq = UGenFunc sinCalc [freq]
 -- delay amount input = UGenTimeFunc delayCalc [amount] input
 
 foreign import ccall "&add_calc" addCalc :: Calc
-add :: Num a => UGen a -> UGen a -> UGen a
+add :: UGen -> UGen -> UGen
 add a b = UGenFunc addCalc [a,b]
 
 foreign import ccall "&minus_calc" minusCalc :: Calc
-minus :: Num a => UGen a -> UGen a -> UGen a
+minus :: UGen -> UGen -> UGen
 minus a b = UGenFunc minusCalc [a,b]
 
 foreign import ccall "&mul_calc" mulCalc :: Calc
-mul :: Num a => UGen a -> UGen a -> UGen a
+mul :: UGen -> UGen -> UGen
 mul a b = UGenFunc mulCalc [a,b]
 
-gain :: UGen Double -> UGen Double -> UGen Double
+gain :: UGen -> UGen -> UGen
 gain = mul
 
 foreign import ccall "&div_calc" divCalc :: Calc
-udiv :: Fractional a => UGen a -> UGen a -> UGen a
+udiv :: UGen -> UGen -> UGen
 udiv a b = UGenFunc divCalc [a,b]
 
 ----------------------------------------------------
 
-test :: UGen Double
+test :: UGen
 test = sinOsc (ulist [4,4]) + sinOsc (ulist [3,ulist [2,2],sinOsc 1]) + ulist [3,2,1]
