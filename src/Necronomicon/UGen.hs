@@ -297,14 +297,13 @@ lineSynth = (s 555.0) + (s 440.0 ~> delay 0.15)
     where
         s f = (sin f) * l * 0.2
         l = line 0.3
-
 -}
 
 (>>>) :: a -> (a -> b) -> b
 (>>>) a f = f a
 infixl 0 >>>
 
-(+>) :: (UGenType a) => a -> (a -> a) -> a
+(+>) :: UGenType a => a -> (a -> a) -> a
 (+>) a f = add a (f a)
 infixl 1 +>
 
@@ -399,7 +398,7 @@ instance Floating [UGen] where
     -- UGenVal a /= UGenVal b = a /= b
 
 --------------------------------------------------------------------------------------
--- UGenInput
+-- UGenType Class
 --------------------------------------------------------------------------------------
 class (Show a,Num a,Fractional a) => UGenType a where
     ugen :: String -> Calc -> [a] -> a
@@ -447,6 +446,9 @@ foreign import ccall "&div_calc" divCalc :: Calc
 udiv :: UGenType a => a -> a -> a
 udiv x y = ugen "udiv" divCalc [x,y]
 
+foreign import ccall "&line_calc" lineCalc :: Calc
+line :: UGenType a => a -> a
+line length = ugen "line" lineCalc [length]
 ----------------------------------------------------
 
 sinTest :: [UGen]
@@ -456,4 +458,6 @@ sinTest = sin [1,2] + sin [444,555,666] + sin 100 + 1 >>> gain 0.5
 sinTest2 :: [UGen]
 sinTest2 = sin [0,10..100]
 
+mySynth :: UGen -> UGen
+mySynth freq = sin freq
 

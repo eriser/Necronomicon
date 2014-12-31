@@ -830,8 +830,8 @@ randS low high signal = Signal $ \necro -> do
 randFS :: Signal a -> Signal Float
 randFS signal = Signal $ \necro -> do
     (_,cont,ids) <- unSignal signal necro
-    r        <- randomRIO (0,1)
-    ref      <- newIORef r
+    r            <- randomRIO (0,1)
+    ref          <- newIORef r
     return (r,processEvent cont ref,ids)
     where
         processEvent cont ref event = do

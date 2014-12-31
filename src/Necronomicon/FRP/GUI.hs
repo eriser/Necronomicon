@@ -39,7 +39,7 @@ label (Vector2 x y) (Size w h) color (c:cs) = Signal $ \necro -> do
         hw  = w * 0.5
         hh  = h * 0.5
         m t = shaderMesh
-              [Vector3 (-hw)   hh  0,Vector3 (-hw) (-hh) 0,Vector3   hw  (-hh) 0,Vector3   hw    hh  0]
+              [Vector3 (-hw) hh 0,Vector3 (-hw) (-hh) 0,Vector3 hw (-hh) 0,Vector3 hw hh 0]
               [color,color,color,color]
               [Vector2 0 1,Vector2 0 0,Vector2 1 0,Vector2 1 1]
               [0,1,2,3,0,2]
