@@ -305,8 +305,119 @@ data UGen = UGenVal Double
           | UGenList [UGen]
           deriving (Show)
 
+foldt :: (UGen -> a -> a) -> a -> UGen -> a
+foldt f x (UGenList us) = foldr (flip $ foldt f) x us
+foldt f x u = f u x
+
+ulength :: UGen -> Int
+ulength (UGenList us) = length us
+ulength _             = 1
+
+ubreadth :: UGen -> Int
+ubreadth = foldt (\u l -> if ulength u > l then ulength u else l) 0
+
+udepth :: UGen -> Int
+udepth (UGenList us) = 1 + foldr compareDepths 0 us
+    where
+        compareDepths u d = if depth > d then depth else d
+            where
+                depth = udepth u
+udepth _ = 1
+
 ulist :: [UGen] -> UGen
-ulist = UGenList
+-- ulist [] = trace ???
+ulist us = UGenList us
+    -- where
+        -- expand (UGenList us) u@(UGenVal _) = 
+        -- breadth = ubreadth $ UGenList us
+        -- depth   = udepth   $ UGenList us
+
+data UGenType a where
+    UGenValCon   :: Double -> UGenType Double
+    UGenPair     :: UGenType Double -> UGenType Double -> UGenType Double
+    UGenFuncCon  :: Calc -> UGenType Double -> UGenType Double
+    UGenFuncCon2 :: Calc -> UGenType Double -> UGenType Double -> UGenType Double
+
+instance Show (UGenType Double) where
+    show (UGenValCon   d) = "(UGenValCon " ++ ")"
+    show (UGenPair d1 d2) = "(UGenPair "   ++ show d1 ++ "  ,  " ++ show d2 ++ ")"
+    show (UGenFuncCon calc arg) = "(UGenFuncCon " ++ show arg ++ ")"
+    show (UGenFuncCon2 calc arg1 arg2) = "(UGenFuncCon2 "   ++ show arg1 ++ " " ++ show arg2 ++ ")"
+
+instance Num (UGenType Double) where
+    (+)         = add'
+    (*)         = undefined 
+    (-)         = undefined
+    negate      = undefined
+    -- abs         = liftA abs
+    -- signum      = liftA signum
+    fromInteger = UGenValCon . fromInteger
+
+pair :: UGenType Double -> UGenType Double -> UGenType Double
+pair u1 u2 = UGenPair u1 u2
+
+calcUGenFunc :: Calc -> UGenType Double -> UGenType Double
+calcUGenFunc calc (UGenPair u1 u2) = UGenPair (UGenFuncCon calc u1) (UGenFuncCon calc u2)
+calcUGenFunc calc u                = UGenFuncCon calc u
+
+calcUGenFunc2 :: Calc -> UGenType Double -> UGenType Double -> UGenType Double
+calcUGenFunc2 calc (UGenPair u1 u1') (UGenPair u2 u2') = UGenPair (UGenFuncCon2 calc u1 u2) (UGenFuncCon2 calc u1' u2')
+calcUGenFunc2 calc (UGenPair u1 u1')           u2      = UGenPair (UGenFuncCon2 calc u1 u2) (UGenFuncCon2 calc u1' u2 )
+calcUGenFunc2 calc           u1      (UGenPair u2 u2') = UGenPair (UGenFuncCon2 calc u1 u2) (UGenFuncCon2 calc u1  u2')
+calcUGenFunc2 calc           u1                u2      = UGenFuncCon2 calc u1 u2
+
+sinOsc' :: UGenType Double -> UGenType Double
+sinOsc' = calcUGenFunc sinCalc
+
+add' :: UGenType Double -> UGenType Double -> UGenType Double
+add' = calcUGenFunc2 addCalc
+
+sinTest1 :: UGenType Double
+sinTest1 = sinOsc' 0
+
+sinTest2 :: UGenType Double
+sinTest2 = sinOsc' 0 + sinOsc' (pair (pair 440 880) (pair 440 880))
+
+
+data UGenValue a = UGenVal' a
+                 | UGenFunc' Calc [UGenValue a]
+                 deriving (Show)
+
+data UGen' a = UGenValue (UGenValue a)
+             | UGenList' [UGenValue a]
+             deriving (Show)
+
+instance Num (UGen' Double) where
+    -- (+)         = add''
+    (*)         = undefined 
+    (-)         = undefined
+    negate      = undefined
+    -- abs         = liftA abs
+    -- signum      = liftA signum
+    fromInteger = UGenValue . UGenVal' . fromInteger
+
+sinOsc'' :: UGen' Double -> UGen' Double
+sinOsc'' (UGenList' us) = UGenList' $ map (\f -> UGenFunc' sinCalc [f]) us
+sinOsc'' (UGenValue  u) = UGenValue $ UGenFunc' sinCalc [u]
+
+add'' :: UGen' Double -> UGen' Double -> UGen' Double
+add'' (UGenList' us1) (UGenList' us2) = UGenList' $ map (\(x,y) -> UGenFunc' addCalc [x,y]) $ zip us1 us2
+add'' (UGenList' us1) (UGenValue  u2) = UGenList' $ map (\x -> UGenFunc' addCalc [x,u2]) us1
+add'' (UGenValue  u1) (UGenList' us2) = UGenList' $ map (\y -> UGenFunc' addCalc [u1,y]) us2
+add'' (UGenValue  u1) (UGenValue  u2) = UGenValue $ UGenFunc' addCalc [u1,u2]
+
+sinTest1' :: UGen' Double
+sinTest1' = sinOsc'' 880 + sinOsc'' 440
+
+{-
+[[0,0,0],[1,1,1],[2,2,2]]
+square (ulist [440,ulist 220]) 0.5
+
+[ [0,1,2],[3,4] ] +  [ 3, [4,5],[[6,7],[8,9]],11]
+[ [3 + 0, 3 + 1, 3 + 2],[4 + 3, 5 + 4],[[6 + 0,7 + 0],[8 + 1,9 + 1],[6 + 2, 7 + 2]],[11 + 3,11 + 4]]
+
+[ [0,1,2] , [3,4]  , 6 , [[7,8],[9,10,11]] => [ [[0,0,0],[1,1,1],[2,2,2]] , [[3,3,3],[4,4,4]] , [[6,6,6],[6,6,6],[6,6,6]] , [[7,8,7],[9,10,11],[7,8,7]] ]
+-}
 
 (~>) :: a -> (a -> b) -> b
 (~>) a f = f a
@@ -370,6 +481,18 @@ instance Monoid UGen where
     mempty      = 0
     mappend a b = add a b
 
+-- multiChannelExpand :: Calc -> [UGen] -> UGen
+-- multiChannelExpand f args = UGenFunc f
+    -- where
+        -- alength = foldr (\as l -> if length as > l then length as else l) 0 args
+
+
+{-
+
+[0,[1,2],[[3,4],[5,6]],7] =>
+
+-}
+
 ----------------------------------------------------
 -- C imports
 ----------------------------------------------------
@@ -405,3 +528,6 @@ udiv a b = UGenFunc divCalc [a,b]
 
 test :: UGen
 test = sinOsc (ulist [4,4]) + sinOsc (ulist [3,ulist [2,2],sinOsc 1]) + ulist [3,2,1]
+
+-- test2 = sinOsc (sinOsc 5,4) + sinOsc (3,2,sinOsc 1) + (0,sinOsc 2)
+
