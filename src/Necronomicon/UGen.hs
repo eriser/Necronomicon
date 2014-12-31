@@ -304,7 +304,7 @@ lineSynth = (s 555.0) + (s 440.0 ~> delay 0.15)
 (>>>) a f = f a
 infixl 0 >>>
 
-(+>) :: (UGenInput a) => a -> (a -> a) -> a
+(+>) :: (UGenType a) => a -> (a -> a) -> a
 (+>) a f = add a (f a)
 infixl 1 +>
 
@@ -401,28 +401,27 @@ instance Floating [UGen] where
 --------------------------------------------------------------------------------------
 -- UGenInput
 --------------------------------------------------------------------------------------
-class (Show a,Num a,Fractional a) => UGenInput a where
+class (Show a,Num a,Fractional a) => UGenType a where
     ugen :: String -> Calc -> [a] -> a
 
-instance UGenInput UGen where
+instance UGenType UGen where
     ugen name calc args = UGenFunc name calc args
 
-instance UGenInput [UGen] where
+instance UGenType [UGen] where
     ugen name calc args = expand 0
         where
             argsWithLengths = zip args $ map length args
-            longest = foldr (\(_,argLength) longest -> if argLength > longest then argLength else longest) 0 argsWithLengths
+            longest         = foldr (\(_,argLength) longest -> if argLength > longest then argLength else longest) 0 argsWithLengths
             expand n
                 | n >= longest = []
                 | otherwise    = UGenFunc name calc (map (\(arg,length) -> arg !! mod n length) argsWithLengths) : expand (n + 1)
 
---------------
---------------------------------------
+----------------------------------------------------
 -- C imports
 ----------------------------------------------------
 
 foreign import ccall "&sin_calc" sinCalc :: Calc
-sinOsc :: UGenInput a => a -> a
+sinOsc :: UGenType a => a -> a
 sinOsc freq = ugen "sinOsc" sinCalc [freq]
 
 -- foreign import ccall "&delay_calc" delayCalc :: Calc
@@ -430,22 +429,22 @@ sinOsc freq = ugen "sinOsc" sinCalc [freq]
 -- delay amount input = UGenTimeFunc delayCalc [amount] input
 
 foreign import ccall "&add_calc" addCalc :: Calc
-add :: UGenInput a => a -> a -> a
+add :: UGenType a => a -> a -> a
 add x y = ugen "add" addCalc [x,y]
 
 foreign import ccall "&minus_calc" minusCalc :: Calc
-minus :: UGenInput a => a -> a -> a
+minus :: UGenType a => a -> a -> a
 minus x y = ugen "minus" minusCalc [x,y]
 
 foreign import ccall "&mul_calc" mulCalc :: Calc
-mul :: UGenInput a => a -> a -> a
+mul :: UGenType a => a -> a -> a
 mul x y = ugen "mul" mulCalc [x,y]
 
-gain :: UGenInput a => a -> a -> a
+gain :: UGenType a => a -> a -> a
 gain = mul
 
 foreign import ccall "&div_calc" divCalc :: Calc
-udiv :: UGenInput a => a -> a -> a
+udiv :: UGenType a => a -> a -> a
 udiv x y = ugen "udiv" divCalc [x,y]
 
 ----------------------------------------------------
