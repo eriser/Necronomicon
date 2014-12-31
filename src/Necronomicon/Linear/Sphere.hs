@@ -4,14 +4,9 @@ module Necronomicon.Linear.Sphere (Sphere(Sphere,sphCenter,sphRadius),
                                    sphereIntersectsAABB,
                                    intersectsPlane) where
 
-import Prelude
 import Necronomicon.Linear.Vector
 import Necronomicon.Linear.AABB
 import Necronomicon.Linear.Plane
-
-ifThenElse :: Bool -> a -> a -> a
-ifThenElse True a _ = a
-ifThenElse False _ b = b
 
 data Sphere = Sphere { sphCenter::Vector3, sphRadius::Double } deriving (Eq)
 

@@ -4,13 +4,6 @@ module Necronomicon.Util.PriorityQueue where
     Skew Binomial Heap implementation from Okasaki's Pure Functional Data Structures
 -}
 
-
-import Prelude
-
-ifThenElse :: Bool -> a -> a -> a
-ifThenElse True a _ = a
-ifThenElse False _ b = b
-
 type PriorityQueue a = [Tree a]
 data Tree a = Tree Int a [a] (PriorityQueue a)
 

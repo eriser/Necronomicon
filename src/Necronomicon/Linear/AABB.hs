@@ -14,8 +14,6 @@ module Necronomicon.Linear.AABB (Corner(FarLeftBottom,FarLeftTop,FarRighTop,FarR
                                  corners,
                                  corner) where
 
-import Prelude
-
 -- import Necronomicon.Game.Utilities
 import Necronomicon.Linear.Vector
 
@@ -31,10 +29,6 @@ import Necronomicon.Linear.Vector
  6-------7
 
 -}
-
-ifThenElse :: Bool -> a -> a -> a
-ifThenElse True a _ = a
-ifThenElse False _ b = b
 
 data Corner = FarLeftBottom | FarLeftTop  | FarRighTop     | FarRightBottom |
               NearRightTop  | NearLeftTop | NearLeftBottom | NearRightBottom deriving (Show, Ord, Eq)

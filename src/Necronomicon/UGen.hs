@@ -20,8 +20,6 @@ import Control.Monad.Trans
 import qualified Data.Map as M
 import Data.Monoid
 
-import Prelude
-
 {-
 -- import Prelude hiding (fromRational, sin, (+), (*), (/), (-))
 -- import qualified Prelude as P (fromRational, fromIntegral, sin,  (+), (*), (/),(-))
@@ -313,7 +311,7 @@ data UGen = UGenVal Double
 
 instance Show UGen where
     show (UGenVal d) = show d
-    show (UGenFunc s _ us) = "(" ++ s ++ " " ++ foldr (\u s -> show u ++ " " ++ s) "" us ++ ")"
+    show (UGenFunc s _ us) = "(" ++ s ++ foldl (\s u -> s ++ " " ++ show u) "" us ++ ")"
 
 instance Num UGen where
     (+)         = add
@@ -398,7 +396,7 @@ instance Floating [UGen] where
 --------------------------------------------------------------------------------------
 -- UGenType Class
 --------------------------------------------------------------------------------------
-class (Show a,Num a,Fractional a) => UGenType a where
+class (Show a, Num a, Fractional a) => UGenType a where
     ugen :: String -> Calc -> [a] -> a
 
 instance UGenType UGen where
@@ -427,22 +425,22 @@ sinOsc freq = ugen "sinOsc" sinCalc [freq]
 
 foreign import ccall "&add_calc" addCalc :: Calc
 add :: UGenType a => a -> a -> a
-add x y = ugen "add" addCalc [x,y]
+add x y = ugen "add" addCalc [x, y]
 
 foreign import ccall "&minus_calc" minusCalc :: Calc
 minus :: UGenType a => a -> a -> a
-minus x y = ugen "minus" minusCalc [x,y]
+minus x y = ugen "minus" minusCalc [x, y]
 
 foreign import ccall "&mul_calc" mulCalc :: Calc
 mul :: UGenType a => a -> a -> a
-mul x y = ugen "mul" mulCalc [x,y]
+mul x y = ugen "mul" mulCalc [x, y]
 
 gain :: UGenType a => a -> a -> a
 gain = mul
 
 foreign import ccall "&div_calc" divCalc :: Calc
 udiv :: UGenType a => a -> a -> a
-udiv x y = ugen "udiv" divCalc [x,y]
+udiv x y = ugen "udiv" divCalc [x, y]
 
 foreign import ccall "&line_calc" lineCalc :: Calc
 line :: UGenType a => a -> a
@@ -450,14 +448,14 @@ line length = ugen "line" lineCalc [length]
 ----------------------------------------------------
 
 sinTest :: [UGen]
-sinTest = sin [1,2] + sin [444,555,666] + sin 100 + 1 |> gain 0.5
+sinTest = sin [1, 2] + sin [444, 555, 666] + sin 100 + 1 |> gain 0.5
 
 --Yes, you can even do things like this
 sinTest2 :: [UGen]
 sinTest2 = sin [0,10..100]
 
 sinTest3 :: [UGen]
-sinTest3 = sin [1,2] |> sin |> gain (sin 13) |> gain 0.5
+sinTest3 = sin [1, 2] |> sin |> gain (sin 13) |> gain 0.5
 
 mySynth :: UGen -> UGen
 mySynth freq = sin freq

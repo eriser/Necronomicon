@@ -83,7 +83,6 @@ module Necronomicon.FRP.Signal (
 
 ------------------------------------------------------
 import Control.Applicative
-import Prelude
 import Control.Monad
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.UI.GLFW as GLFW
@@ -115,10 +114,6 @@ constant :: a -> Signal a
 constant = pure
 
 infixl 4 <~,~~
-
-ifThenElse :: Bool -> a -> a -> a
-ifThenElse True a _ = a
-ifThenElse False _ b = b
 
 -- maybe revert to global timer system?
 

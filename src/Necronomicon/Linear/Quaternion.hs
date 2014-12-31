@@ -24,14 +24,8 @@ module Necronomicon.Linear.Quaternion (Quaternion(Quaternion,qw,qv),
                                        identityQuat,
                                        zeroQuat) where
 
-import Prelude
-
 import Necronomicon.Linear.Math
 import Necronomicon.Linear.Vector
-
-ifThenElse :: Bool -> a -> a -> a
-ifThenElse True a _ = a
-ifThenElse False _ b = b
 
 data Quaternion = Quaternion { qw::Double, qv::Vector3 } deriving (Show, Eq)
 
