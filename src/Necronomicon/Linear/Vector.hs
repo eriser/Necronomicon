@@ -149,6 +149,10 @@ instance Num Vector2 where
     signum      (Vector2 x  y )                 = Vector2 (signum x) (signum y)
     fromInteger i                               = Vector2 (fromInteger i) (fromInteger i)
 
+instance Fractional Vector2 where
+    Vector2 x1 y1 / Vector2 x2 y2 = Vector2 (x1/x2) (y1/y2)
+    fromRational r = Vector2 (fromRational r) (fromRational r)
+
 instance Num Vector3 where
     (+)         (Vector3 x1 y1 z1) (Vector3 x2 y2 z2) = Vector3 (x1+x2) (y1+y2) (z1+z2)
     (*)         (Vector3 x1 y1 z1) (Vector3 x2 y2 z2) = Vector3 (x1*x2) (y1*y2) (z1*z2)
@@ -158,6 +162,10 @@ instance Num Vector3 where
     signum      (Vector3 x  y  z )                    = Vector3 (signum x) (signum y) (signum z)
     fromInteger i                                     = Vector3 (fromInteger i) (fromInteger i) (fromInteger i)
 
+instance Fractional Vector3 where
+    Vector3 x1 y1 z1 / Vector3 x2 y2 z2 = Vector3 (x1/x2) (y1/y2) (z1/z2)
+    fromRational r = Vector3 (fromRational r) (fromRational r) (fromRational r)
+
 instance Num Vector4 where
     (+)         (Vector4 x1 y1 z1 w1) (Vector4 x2 y2 z2 w2) = Vector4 (x1+x2) (y1+y2) (z1+z2) (w1+w2)
     (*)         (Vector4 x1 y1 z1 w1) (Vector4 x2 y2 z2 w2) = Vector4 (x1*x2) (y1*y2) (z1*z2) (w1*w2)
@@ -166,6 +174,10 @@ instance Num Vector4 where
     abs         (Vector4 x  y  z  w )                       = Vector4 (abs x) (abs y) (abs z) (abs w)
     signum      (Vector4 x  y  z  w )                       = Vector4 (signum x) (signum y) (signum z) (signum w)
     fromInteger i                                           = Vector4 (fromInteger i) (fromInteger i) (fromInteger i) (fromInteger i)
+
+instance Fractional Vector4 where
+    Vector4 x1 y1 z1 w1 / Vector4 x2 y2 z2 w2 = Vector4 (x1/x2) (y1/y2) (z1/z2) (w1/w2)
+    fromRational r = Vector4 (fromRational r) (fromRational r) (fromRational r) (fromRational r)
 
 --LinearMath Instances
 
@@ -332,12 +344,6 @@ right2   = Vector2   1   0
 up2 :: Vector2
 up2      = Vector2   0   1
 
-zero2 :: Vector2
-zero2    = Vector2   0   0
-
-one2 :: Vector2
-one2     = Vector2   1   1
-
 back :: Vector3
 back     = Vector3   0   0 (-1)
 
@@ -356,12 +362,6 @@ right    = Vector3   1   0   0
 up :: Vector3
 up       = Vector3   0   1   0
 
-zero :: Vector3
-zero     = Vector3   0   0   0
-
-one :: Vector3
-one      = Vector3   1   1   1
-
 back4 :: Vector4
 back4    = Vector4   0   0 (-1)  1
 
@@ -379,12 +379,6 @@ right4   = Vector4   1   0   0   1
 
 up4 :: Vector4
 up4      = Vector4   0   1   0   1
-
-zero4 :: Vector4
-zero4    = Vector4   0   0   0   0
-
-one4 :: Vector4
-one4     = Vector4   1   1   1   1
 
 cross :: Vector3 -> Vector3 -> Vector3
 cross (Vector3 x1 y1 z1) (Vector3 x2 y2 z2) = Vector3 (y1*z2-z1*y2) (z1*x2-x1*z2) (x1*y2-y1*x2)

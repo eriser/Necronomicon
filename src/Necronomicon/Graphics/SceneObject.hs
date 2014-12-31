@@ -119,10 +119,10 @@ _children_ f o = o{_children = f (_children o)}
 -------------------------------------------------------------------------------------------------------------------               
 
 root :: [SceneObject] -> SceneObject
-root = SceneObject "root" True zero identityQuat one EmptyMesh Nothing
+root = SceneObject "root" True 0 identityQuat 1 EmptyMesh Nothing
 
 plain :: String -> SceneObject
-plain name = SceneObject name True zero identityQuat one EmptyMesh Nothing []
+plain name = SceneObject name True 0 identityQuat 1 EmptyMesh Nothing []
 
 draw :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> SceneObject -> IO (Resources,Matrix4x4)
 draw world view proj resources@(Resources shaderMap) g = do

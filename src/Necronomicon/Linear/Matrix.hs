@@ -324,19 +324,19 @@ identity2 :: Matrix2x2
 identity2 = Matrix2x2 (Vector2 1 0) (Vector2 0 1)
 
 matZero2 :: Matrix2x2 
-matZero2 = Matrix2x2 zero2 zero2
+matZero2 = Matrix2x2 0 0
 
 identity3 :: Matrix3x3
 identity3 = Matrix3x3 (Vector3 1 0 0) (Vector3 0 1 0) (Vector3 0 0 1)
 
 matZero3 :: Matrix3x3
-matZero3 = Matrix3x3 zero zero zero
+matZero3 = Matrix3x3 0 0 0
 
 identity4 :: Matrix4x4
 identity4 = Matrix4x4 (Vector4 1 0 0 0) (Vector4 0 1 0 0) (Vector4 0 0 1 0) (Vector4 0 0 0 1)
 
 matZero4 :: Matrix4x4
-matZero4 = Matrix4x4 zero4 zero4 zero4 zero4
+matZero4 = Matrix4x4 0 0 0 0
 
 -- | Rotation matrix from a Quaternion.
 rotFromQuaternion :: Quaternion -> Matrix3x3
