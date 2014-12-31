@@ -4,51 +4,49 @@ import Debug.Trace
 import qualified Data.Vector as V
 
 main :: IO ()
-main = runSignal $ testGUI
+main = runSignal testGUI
 
 testGUI :: Signal ()
-testGUI = gui [element redButton,element vslider,element blueButton]
+testGUI = gui [element vslider,element blueButton,zLabel,tri <~ input vslider]
     where
-        vslider     = slider (Vector2 0.50 0.5) (Size 0.03 0.30) (RGB 0.5 0.5 0.5)
-        redButton   = button (Vector2 0.25 0.5) (Size 0.10 0.15) (RGB 1 0 0)
-        blueButton  = button (Vector2 0.75 0.5) (Size 0.10 0.15) (RGB 0 0 1)
-        zLabel      = label  (Vector2 0.50 0.8) (Size 0.20 0.30) (RGB 1 1 1) "Zero"
+        vslider    = slider (Vector2 0.50 0.5) (Size 0.03 0.30) (RGB 0.5 0.5 0.5)
+        tri y      = testTri "" (Vector3 0 (1-y) 0) identityQuat []
+        blueButton = button (Vector2 0.75 0.5) (Size 0.10 0.15) (RGB 0 0 1)
+        zLabel     = label  (Vector2 0.25 0.5) (Size 0.10 0.15) (RGB 1 1 1) "Zero"
 
 testScene :: Signal ()
-testScene = render $ root <~ combine [camSig,triSig]
+testScene = scene [camSig,triSig]
     where
-        triSig  = terrain
-                  <~ foldp (+) zero (lift3 move wasd (fps 60) 5)
-                  ~~ constant identityQuat
-                  ~~ constant []
+        triSig = terrain
+                 <~ foldp (+) zero (lift3 move wasd (fps 60) 5)
+                 ~~ constant identityQuat
+                 ~~ constant []
 
-        camSig  = perspCamera (Vector3 0 0 20) identityQuat
-                  <~ dimensions
-                  ~~ constant 60
-                  ~~ constant 0.1
-                  ~~ constant 200
-                  ~~ constant (RGB 0 0 0)
+        camSig = perspCamera (Vector3 0 0 20) identityQuat
+                 <~ dimensions
+                 ~~ constant 60
+                 ~~ constant 0.1
+                 ~~ constant 200
+                 ~~ constant (RGB 0 0 0)
 
         move (x,y) z a = Vector3 (x*z*a) (y*z*a) 0
 
 terrain :: Vector3 -> Quaternion -> [SceneObject] -> SceneObject
-terrain pos r chldn = SceneObject "Terrain" True pos r one (Just simplexMesh) Nothing []
+terrain pos r chldn = SceneObject "Terrain" True pos r one simplexMesh Nothing []
 
 testTri :: String -> Vector3 -> Quaternion -> [SceneObject] -> SceneObject
 testTri name pos r chldn = SceneObject name True pos r one m Nothing []
     where
-        m = Just $ Mesh
-             [Vector3 (-0.4) (-0.3) 0,
-              Vector3   0.4  (-0.3) 0,
-              Vector3     0    0.3  0]
-             [RGB 1 0 0,
-              RGB 0 1 0,
-              RGB 0 0 1]
-             Nothing
-             Nothing
+        m = SimpleMesh
+            [Vector3 (-0.4) (-0.3) 0,
+             Vector3   0.4  (-0.3) 0,
+             Vector3     0    0.3  0]
+            [RGB 1 0 0,
+             RGB 0 1 0,
+             RGB 0 0 1]
 
 simplexMesh :: Mesh
-simplexMesh = Mesh simplexTris simplexColors Nothing Nothing
+simplexMesh = SimpleMesh simplexTris simplexColors
     where
         w                = 64
         h                = 128

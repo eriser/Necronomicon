@@ -77,6 +77,7 @@ module Necronomicon.FRP.Signal (
     lift8,
     constant,
     sigPrint,
+    scene,
     module Control.Applicative
     ) where
 
@@ -99,8 +100,9 @@ import Data.IORef
 import System.Random
 import Data.List (unzip3)
 import Necronomicon.Graphics.Camera (renderGraphics)
-import Necronomicon.Graphics.SceneObject (SceneObject)
+import Necronomicon.Graphics.SceneObject (SceneObject,root)
 import Necronomicon.Linear.Vector (Vector2 (Vector2),Vector3 (Vector3))
+import Necronomicon.Graphics.Mesh (Resources,newResources)
 ------------------------------------------------------
 
 (<~) :: Functor f => (a -> b) -> f a -> f b
@@ -270,6 +272,9 @@ instance Show (Signal a) where
 -- RunTime
 --------------------------------------
 
+scene :: [Signal SceneObject] -> Signal ()
+scene os = render $ root <~ combine os
+
 initWindow :: IO(Maybe GLFW.Window)
 initWindow = GLFW.init >>= \initSuccessful -> if initSuccessful then window else return Nothing
     where
@@ -313,7 +318,7 @@ runSignal s = initWindow >>= \mw ->
             dimensionsEvent globalDispatch w ww wh
             mousePressEvent globalDispatch w 0 GLFW.MouseButtonState'Released GLFW.modifierKeysShift
 
-            render False w sceneVar
+            render False w sceneVar newResources
     where
         --event callbacks
         mousePressEvent eventNotify _ _ GLFW.MouseButtonState'Released _ = atomically $ (writeTBQueue eventNotify $ Event 1 $ toDyn False) `orElse` return ()
@@ -326,17 +331,17 @@ runSignal s = initWindow >>= \mw ->
             (wx,wy) <- GLFW.getWindowSize w
             atomically $ (writeTBQueue eventNotify $ Event 0 $ toDyn (x / fromIntegral wx,y / fromIntegral wy)) `orElse` return ()
 
-        render quit window sceneVar
+        render quit window sceneVar resources
             | quit      = print "Qutting" >> return ()
             | otherwise = do
                 GLFW.pollEvents
                 q <- liftA (== GLFW.KeyState'Pressed) (GLFW.getKey window GLFW.Key'Q)
                 ms <- atomically $ tryTakeTMVar sceneVar
-                case ms of
-                    Nothing -> return ()
-                    Just s  -> renderGraphics window s
+                resources' <- case ms of
+                    Nothing -> return resources
+                    Just s  -> renderGraphics window resources s 
                 threadDelay $ 16667
-                render q window sceneVar
+                render q window sceneVar resources'
 
 globalEventDispatch :: Show a => Signal a -> Necro -> IO()
 globalEventDispatch signal necro@(Necro inBox _ _) = do
@@ -347,7 +352,7 @@ globalEventDispatch signal necro@(Necro inBox _ _) = do
         a <- processState e
         case a of
             NoChange _ -> return ()
-            Change  a' -> print a'
+            Change  a' -> return () --print a'
 
 ---------------------------------------------
 -- Time
@@ -825,8 +830,8 @@ randS low high signal = Signal $ \necro -> do
 randFS :: Signal a -> Signal Float
 randFS signal = Signal $ \necro -> do
     (_,cont,ids) <- unSignal signal necro
-    r        <- randomRIO (0,1)
-    ref      <- newIORef r
+    r            <- randomRIO (0,1)
+    ref          <- newIORef r
     return (r,processEvent cont ref,ids)
     where
         processEvent cont ref event = do

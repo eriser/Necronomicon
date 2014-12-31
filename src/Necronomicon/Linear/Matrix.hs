@@ -5,7 +5,10 @@ import Prelude
 -- import Necronomicon.Game.Utilities
 import Necronomicon.Linear.Vector
 import Necronomicon.Linear.Quaternion
-
+import qualified Graphics.Rendering.OpenGL as GL
+import qualified Graphics.Rendering.OpenGL.GL.CoordTrans as GLC
+import Foreign.Ptr (Ptr)
+import Unsafe.Coerce (unsafeCoerce)
 
 (|>) :: a -> (a -> b) -> b
 b |> a = a b
@@ -362,15 +365,44 @@ transformationMatrix (Matrix3x3 r1 r2 r3) (Vector3 tx ty tz) = Matrix4x4 (append
         append (Vector3 x y z) = Vector4 x y z
 
 -- | Construct a transformation matrix from a translation vector, a rotation matrix, and a scale vector
-trsMatrix :: Vector3 -> Matrix3x3 -> Vector3 -> Matrix4x4
-trsMatrix (Vector3 tx ty tz) r (Vector3 sx sy sz) = Matrix4x4 (append r1 tx) (append r2 ty) (append r3 tz) (Vector4 0 0 0 1)
+trsMatrix' :: Vector3 -> Matrix3x3 -> Vector3 -> Matrix4x4
+trsMatrix' (Vector3 tx ty tz) r (Vector3 sx sy sz) = Matrix4x4 (append r1 tx) (append r2 ty) (append r3 tz) (Vector4 0 0 0 1)
     where
         (Matrix3x3 r1 r2 r3)   = r .*. Matrix3x3 (Vector3 sx 0 0) (Vector3 0 sy 0) (Vector3 0 0 sz)
         append (Vector3 x y z) = Vector4 x y z
 
 -- | Construct a transformation matrix from a translation vector, a rotation quaternion, and a scale vector
-trsMatrix' :: Vector3 -> Quaternion -> Vector3 -> Matrix4x4
-trsMatrix' (Vector3 tx ty tz) q (Vector3 sx sy sz) = Matrix4x4 (append r1 tx) (append r2 ty) (append r3 tz) (Vector4 0 0 0 1)
+trsMatrix :: Vector3 -> Quaternion -> Vector3 -> Matrix4x4
+trsMatrix (Vector3 tx ty tz) q (Vector3 sx sy sz) = Matrix4x4 (append r1 tx) (append r2 ty) (append r3 tz) (Vector4 0 0 0 1)
     where
         (Matrix3x3 r1 r2 r3)   = rotFromQuaternion q .*. Matrix3x3 (Vector3 sx 0 0) (Vector3 0 sy 0) (Vector3 0 0 sz)
         append (Vector3 x y z) = Vector4 x y z
+
+orthoMatrix :: Double -> Double -> Double -> Double -> Double -> Double -> Matrix4x4
+orthoMatrix l r b t n f = Matrix4x4
+                          (Vector4 (2/r-l) 0       0       (-((r+l)/(r-l))))
+                          (Vector4 0       (2/t-b) 0       (-((t+b)/(t-b))))
+                          (Vector4 0       0       (2/f-n) (  (f+n)/(f-n) ))
+                          (Vector4 0       0       0       1               )
+
+perspMatrix :: Double -> Double -> Double -> Double -> Matrix4x4
+perspMatrix fov aspect near far = Matrix4x4 (Vector4 (f/aspect) 0 0 0) (Vector4 0 f 0 0) (Vector4 0 0 ((near+far)/(near-far)) ((2*far*near)/(near-far))) (Vector4 0 0 (-1) 0)
+    where
+        f = 1 / tan (fov / 2)
+
+mat4ToList :: Matrix4x4 -> [Double]
+mat4ToList (Matrix4x4 (Vector4 a b c d) (Vector4 e f g h) (Vector4 i j k l) (Vector4 m n o p)) = [a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p]
+
+withNecroMatrix :: Matrix4x4 -> (Ptr GL.GLfloat -> IO a) -> IO a
+withNecroMatrix necroMatrix action = do
+    mat <- GLC.newMatrix GLC.ColumnMajor $ map (fromRational . toRational) $ mat4ToList necroMatrix :: IO (GL.GLmatrix GL.GLfloat)
+    GLC.withMatrix mat $ \_ -> action
+
+-- uniformMat :: GL.UniformLocation -> GL.SettableStateVar Matrix4x4
+-- uniformMat loc = GL.makeSettableStateVar $ \mat -> withNecroMatrix mat $ \ptr -> glUniformMatrix4fv (unsafeCoerce loc) 1 1 ptr
+    -- where
+        -- aux
+        --glUniformMatrix4fv (unsafeCoerce loc) 1 1 ptr
+
+-- glUniformMatrix4fv :: GL.GLint -> GL.GLint -> GL.GLint -> Ptr GL.GLfloat -> IO()
+-- glUniformMatrix4fv loc i i' ptr = undefined

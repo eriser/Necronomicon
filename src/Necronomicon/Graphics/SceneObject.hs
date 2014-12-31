@@ -1,11 +1,15 @@
 module Necronomicon.Graphics.SceneObject where
 
 import Prelude
+import Control.Monad (foldM)
 import qualified Graphics.Rendering.OpenGL as GL
+import qualified Graphics.Rendering.OpenGL.GL.Tensor as GLT
+import qualified Data.IntMap as IntMap
 
 import Necronomicon.Linear
 import Necronomicon.Graphics.Mesh
 import Necronomicon.Graphics.Color
+import Necronomicon.Graphics.Shader
 
 --Camera
 data Camera = Camera {
@@ -55,7 +59,7 @@ data SceneObject = SceneObject {
     _position :: Vector3,
     _rotation :: Quaternion,
     _scale    :: Vector3,
-    _mesh     :: Maybe Mesh,
+    _mesh     :: Mesh,
     _camera   :: Maybe Camera,
     _children :: [SceneObject]
     } deriving (Show)
@@ -76,7 +80,7 @@ rotation_ v o = o{_rotation = v}
 scale_ :: Vector3 -> SceneObject -> SceneObject
 scale_ v o = o{_scale = v}
 
-mesh_ :: Maybe Mesh -> SceneObject -> SceneObject
+mesh_ :: Mesh -> SceneObject -> SceneObject
 mesh_ v o = o{_mesh = v}
 
 camera_ :: Maybe Camera -> SceneObject -> SceneObject
@@ -101,7 +105,7 @@ _rotation_ f o = o{_rotation = f (_rotation o)}
 _scale_ :: (Vector3 -> Vector3) -> SceneObject -> SceneObject
 _scale_ f o = o{_scale = f (_scale o)}
 
-_mesh_ :: (Maybe Mesh -> Maybe Mesh) -> SceneObject -> SceneObject
+_mesh_ :: (Mesh -> Mesh) -> SceneObject -> SceneObject
 _mesh_ f o = o{_mesh = f (_mesh o)}
 
 _camera_ :: (Maybe Camera -> Maybe Camera) -> SceneObject -> SceneObject
@@ -115,39 +119,59 @@ _children_ f o = o{_children = f (_children o)}
 -------------------------------------------------------------------------------------------------------------------               
 
 root :: [SceneObject] -> SceneObject
-root = SceneObject "root" True zero identityQuat one Nothing Nothing
+root = SceneObject "root" True zero identityQuat one EmptyMesh Nothing
 
 plain :: String -> SceneObject
-plain name = SceneObject name True zero identityQuat one Nothing Nothing []
+plain name = SceneObject name True zero identityQuat one EmptyMesh Nothing []
 
-draw :: SceneObject -> IO()
-draw g = do
+draw :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> SceneObject -> IO (Resources,Matrix4x4)
+draw world view proj resources@(Resources shaderMap) g = do
     GL.translate (toGLVec3 $ _position g)
     GL.rotate (toGLDouble . radToDeg . getAngle $ _rotation g) (toGLVec3 . getAxis $ _rotation g)
     GL.scale  (toGLDouble . _x $ _scale g) (toGLDouble . _y $ _scale g) (toGLDouble . _z $ _scale g)
-    case _mesh g of
-        Nothing -> return ()
-        Just m  -> do
-            case texture m of
-                Nothing -> GL.renderPrimitive GL.Triangles (mapM_ drawVertex $ zip (colors m) (vertices m))
-                Just t  -> do
-                    case (uv m) of
-                        Nothing  -> GL.renderPrimitive GL.Triangles (mapM_ drawVertex $ zip (colors m) (vertices m))
-                        Just uvs -> do
-                            GL.texture GL.Texture2D GL.$= GL.Enabled
-                            GL.activeTexture GL.$= GL.TextureUnit 0
-                            GL.textureBinding GL.Texture2D GL.$= Just t
-                            GL.renderPrimitive GL.Triangles (mapM_ drawVertexUV $ zip3 (colors m) (vertices m) uvs)
-    GL.textureBinding GL.Texture2D GL.$= Nothing
+    resources' <- case _mesh g of
+        EmptyMesh         -> return resources
+        SimpleMesh vs cs  -> GL.renderPrimitive GL.Triangles (mapM_ drawVertex $ zip cs vs) >> return resources
+        Mesh vs cs t  uvs -> do
+            GL.activeTexture                GL.$= GL.TextureUnit 0
+            GL.textureBinding  GL.Texture2D GL.$= Just t
+            GL.renderPrimitive GL.Triangles    $  mapM_ drawVertexUV $ zip3 cs vs uvs
+            GL.textureBinding  GL.Texture2D GL.$= Nothing
+            return resources
+        ShaderMesh arrayBuffer elementArrayBuffer tex sh -> do
+            (resources',(program,[mv1,mv2,mv3,mv4,pr1,pr2,pr3,pr4])) <- case IntMap.lookup (key sh) shaderMap of
+                Nothing  -> unShader sh >>= \sh' -> return (Resources (IntMap.insert (key sh) sh' shaderMap),sh')
+                Just sh' -> return (resources,sh')
+            GL.currentProgram GL.$= Just program
+
+            --set uniform vectors for the modelView matrix. Haskell's OpenGL library doesn't come stock with a way to set mat4 uniforms, so we have to break it up :(
+            GL.uniform mv1 GL.$= (toGLVertex4 $ _x modelView)
+            GL.uniform mv2 GL.$= (toGLVertex4 $ _y modelView)
+            GL.uniform mv3 GL.$= (toGLVertex4 $ _z modelView)
+            GL.uniform mv4 GL.$= (toGLVertex4 $ _w modelView)
+
+            --same for proj matrix
+            GL.uniform pr1 GL.$= (toGLVertex4 $ _x proj)
+            GL.uniform pr2 GL.$= (toGLVertex4 $ _y proj)
+            GL.uniform pr3 GL.$= (toGLVertex4 $ _z proj)
+            GL.uniform pr4 GL.$= (toGLVertex4 $ _w proj)
+
+            -- GL.renderPrimitive GL.Triangles (mapM_ drawVertex $ zip cs vs)
+            GL.currentProgram GL.$= Nothing
+            return resources'
+
+    return (resources',newWorld)
     where
-        drawVertex (c,v) = GL.color (toGLColor3  c) >> GL.vertex (toGLVertex3 v)
+        newWorld  = world    .*. (trsMatrix (_position g) (_rotation g) (_scale g))
+        modelView = newWorld .*. view
+        drawVertex (c,v) = GL.color (toGLColor3 c) >> GL.vertex (toGLVertex3 v)
         drawVertexUV (c,v,Vector2 u v') = do
             GL.color    $ toGLColor3  c
             GL.texCoord (GL.TexCoord2 (fromRational $ toRational u) (fromRational $ toRational v') :: GL.TexCoord2 GL.GLfloat)
             GL.vertex   $ toGLVertex3 v
 
-drawScene :: SceneObject -> IO()
-drawScene g = GL.preservingMatrix $ draw g >> mapM_ drawScene (_children g)
+drawScene :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> SceneObject -> IO Resources
+drawScene world view proj resources g = GL.preservingMatrix $ draw world view proj resources g >>= \(resources',newWorld) -> foldM (drawScene newWorld view proj) resources' (_children g)
 
 --breadth first?
 findGameObject :: String -> SceneObject -> Maybe SceneObject
@@ -158,3 +182,16 @@ findGameObject n g
         compareSearch (Just g1) _         = Just g1
         compareSearch _         (Just g2) = Just g2
         compareSearch _         _         = Nothing
+
+
+{-
+        Just m  -> case texture m of
+            Nothing -> GL.renderPrimitive GL.Triangles (mapM_ drawVertex $ zip (colors m) (vertices m))
+            Just t  -> case uv m of
+                Nothing  -> GL.renderPrimitive GL.Triangles (mapM_ drawVertex $ zip (colors m) (vertices m))
+                Just uvs -> do
+                    -- GL.texture         GL.Texture2D GL.$= GL.Enabled
+                    GL.activeTexture                GL.$= GL.TextureUnit 0
+                    GL.textureBinding  GL.Texture2D GL.$= Just t
+                    GL.renderPrimitive GL.Triangles (mapM_ drawVertexUV $ zip3 (colors m) (vertices m) uvs)
+-}

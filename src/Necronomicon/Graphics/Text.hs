@@ -51,8 +51,7 @@ loadCharacter path char px texUnit = do
     putStr "Sizes:"
     numSizes <- peek $ num_fixed_sizes ff
     sizesPtr <- peek $ available_sizes ff
-    sizes <- forM [0 .. numSizes-1] $ \i ->
-        peek $ sizesPtr `plusPtr` fromIntegral i :: IO BS.FT_Bitmap_Size
+    sizes <- forM [0 .. numSizes-1] $ \i -> peek $ sizesPtr `plusPtr` fromIntegral i :: IO BS.FT_Bitmap_Size
     print sizes
 
     l <- peek $ bitmap_left slot

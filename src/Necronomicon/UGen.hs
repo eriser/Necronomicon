@@ -17,9 +17,13 @@ import Control.Concurrent.STM
 import Necronomicon.Runtime
 import Control.Monad.Trans
 import qualified Data.Map as M
+import Data.Monoid
 
-import Prelude hiding (fromRational, sin, (+), (*), (/))
-import qualified Prelude as P (fromRational, fromIntegral, sin,  (+), (*), (/))
+import Prelude
+
+{-
+-- import Prelude hiding (fromRational, sin, (+), (*), (/), (-))
+-- import qualified Prelude as P (fromRational, fromIntegral, sin,  (+), (*), (/),(-))
 
 default (Double)
 -- fromIntegral n = (P.fromIntegral n) :: Double
@@ -293,3 +297,167 @@ lineSynth = (s 555.0) + (s 440.0 ~> delay 0.15)
     where
         s f = (sin f) * l * 0.2
         l = line 0.3
+-}
+
+(>>>) :: a -> (a -> b) -> b
+(>>>) a f = f a
+infixl 0 >>>
+
+(+>) :: UGenType a => a -> (a -> a) -> a
+(+>) a f = add a (f a)
+infixl 1 +>
+
+--------------------------------------------------------------------------------------
+-- UGen
+--------------------------------------------------------------------------------------
+data UGen = UGenVal Double
+          | UGenFunc String Calc [UGen]
+
+instance Show UGen where
+    show (UGenVal d) = show d
+    show (UGenFunc s _ us) = "(" ++ s ++ " " ++ foldr (\u s -> show u ++ " " ++ s) "" us ++ ")"
+
+instance Num UGen where
+    (+)         = add
+    (*)         = mul
+    (-)         = minus
+    negate      = mul (-1)
+    -- abs         = liftA abs
+    -- signum      = liftA signum
+    fromInteger = UGenVal . fromInteger
+
+instance Fractional UGen where
+    (/) = udiv
+    fromRational = UGenVal . fromRational
+
+instance Floating UGen where
+    pi      = UGenVal pi
+    -- (**)    = liftA2 (**)
+    -- exp     = liftA exp
+    -- log     = liftA log
+    sin     = sinOsc
+    -- cos     = liftA cos
+    -- asin    = liftA asin
+    -- acos    = liftA acos
+    -- atan    = liftA atan
+    -- logBase = liftA2 logBase
+    -- sqrt    = liftA sqrt
+    -- tan     = liftA tan
+    -- tanh    = liftA tanh
+    -- sinh    = liftA sinh
+    -- cosh    = liftA cosh
+    -- asinh   = liftA asinh
+    -- atanh   = liftA atanh
+    -- acosh   = liftA acosh
+
+-- instance (Eq a) => Eq (UGen a) where
+    -- UGenVal a == UGenVal b = a == b
+    -- UGenVal a /= UGenVal b = a /= b
+
+instance Enum UGen where
+    succ a = a + 1
+    pred a = a - 1
+    toEnum a = UGenVal $ fromIntegral a
+    fromEnum (UGenVal a) = floor a
+
+instance Num [UGen] where
+    (+)           = add
+    (*)           = mul
+    (-)           = minus
+    negate        = mul (-1)
+    -- abs         = liftA abs
+    -- signum      = liftA signum
+    fromInteger i = [UGenVal $ fromInteger i]
+
+instance Fractional [UGen] where
+    (/)            = udiv
+    fromRational r = [UGenVal $ fromRational r]
+
+instance Floating [UGen] where
+    pi      = [UGenVal pi]
+    -- (**)    = liftA2 (**)
+    -- exp     = liftA exp
+    -- log     = liftA log
+    sin     = sinOsc
+    -- cos     = liftA cos
+    -- asin    = liftA asin
+    -- acos    = liftA acos
+    -- atan    = liftA atan
+    -- logBase = liftA2 logBase
+    -- sqrt    = liftA sqrt
+    -- tan     = liftA tan
+    -- tanh    = liftA tanh
+    -- sinh    = liftA sinh
+    -- cosh    = liftA cosh
+    -- asinh   = liftA asinh
+    -- atanh   = liftA atanh
+    -- acosh   = liftA acosh
+
+-- instance (Eq a) => Eq (UGen a) where
+    -- UGenVal a == UGenVal b = a == b
+    -- UGenVal a /= UGenVal b = a /= b
+
+--------------------------------------------------------------------------------------
+-- UGenType Class
+--------------------------------------------------------------------------------------
+class (Show a,Num a,Fractional a) => UGenType a where
+    ugen :: String -> Calc -> [a] -> a
+
+instance UGenType UGen where
+    ugen name calc args = UGenFunc name calc args
+
+instance UGenType [UGen] where
+    ugen name calc args = expand 0
+        where
+            argsWithLengths = zip args $ map length args
+            longest         = foldr (\(_,argLength) longest -> if argLength > longest then argLength else longest) 0 argsWithLengths
+            expand n
+                | n >= longest = []
+                | otherwise    = UGenFunc name calc (map (\(arg,length) -> arg !! mod n length) argsWithLengths) : expand (n + 1)
+
+----------------------------------------------------
+-- C imports
+----------------------------------------------------
+
+foreign import ccall "&sin_calc" sinCalc :: Calc
+sinOsc :: UGenType a => a -> a
+sinOsc freq = ugen "sinOsc" sinCalc [freq]
+
+-- foreign import ccall "&delay_calc" delayCalc :: Calc
+-- delay :: UGen Double -> UGen Double -> UGen Double
+-- delay amount input = UGenTimeFunc delayCalc [amount] input
+
+foreign import ccall "&add_calc" addCalc :: Calc
+add :: UGenType a => a -> a -> a
+add x y = ugen "add" addCalc [x,y]
+
+foreign import ccall "&minus_calc" minusCalc :: Calc
+minus :: UGenType a => a -> a -> a
+minus x y = ugen "minus" minusCalc [x,y]
+
+foreign import ccall "&mul_calc" mulCalc :: Calc
+mul :: UGenType a => a -> a -> a
+mul x y = ugen "mul" mulCalc [x,y]
+
+gain :: UGenType a => a -> a -> a
+gain = mul
+
+foreign import ccall "&div_calc" divCalc :: Calc
+udiv :: UGenType a => a -> a -> a
+udiv x y = ugen "udiv" divCalc [x,y]
+
+foreign import ccall "&line_calc" lineCalc :: Calc
+line :: UGenType a => a -> a
+line length = ugen "line" lineCalc [length]
+----------------------------------------------------
+
+sinTest :: [UGen]
+sinTest = sin [1,2] + sin [444,555,666] + sin 100 + 1 >>> gain 0.5
+
+--Yes, you can even do things like this
+sinTest2 :: [UGen]
+sinTest2 = sin [0,10..100]
+
+mySynth :: UGen -> UGen
+mySynth freq = sin freq
+

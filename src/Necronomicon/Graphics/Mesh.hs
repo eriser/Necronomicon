@@ -3,41 +3,78 @@ module Necronomicon.Graphics.Mesh where
 import Prelude
 import Necronomicon.Linear
 import Necronomicon.Graphics.Color
+import Necronomicon.Graphics.Shader
+import Necronomicon.Graphics.BufferObject
+import Necronomicon.Utility
+import Necronomicon.Graphics.BufferObject
+import Foreign.C.Types
+
 import qualified Graphics.Rendering.OpenGL as GL
+import qualified Data.IntMap as IntMap
 
-class MeshType a where
-    vertices :: a -> [Vector3]
-    colors   :: a -> [Color]
-    texture  :: a -> Maybe GL.TextureObject
-    uv       :: a -> Maybe [Vector2]
+data Mesh = EmptyMesh
+          | SimpleMesh [Vector3] [Color]
+          | Mesh       [Vector3] [Color] GL.TextureObject [Vector2]
+          | ShaderMesh (IO GL.BufferObject) (IO GL.BufferObject) GL.TextureObject Shader
+          deriving (Show)
 
-data Mesh = Mesh [Vector3] [Color] (Maybe GL.TextureObject) (Maybe [Vector2]) deriving (Show)
+data Resources = Resources (IntMap.IntMap LoadedShader)
 
-instance MeshType Mesh where
-    vertices (Mesh v _ _ _) = v
-    colors   (Mesh _ c _ _) = c
-    texture  (Mesh _ _ t _) = t
-    uv       (Mesh _ _ _ u) = u
+shaderMesh :: [Vector3] -> [Color] -> [Vector2] -> [Int] -> GL.TextureObject -> Shader -> Mesh
+shaderMesh vertices colors uvs indices tex shdr = ShaderMesh arrayBuffer elementArrayBuffer tex shdr
+    where
+        arrayBuffer        = makeBuffer GL.ArrayBuffer $ toBuffer vertices
+        elementArrayBuffer = makeBuffer GL.ElementArrayBuffer $ undefined --interleave (toBuffer colors) (toBuffer uvs)
 
-data SimpleMesh = SimpleMesh {
-    _simpleVertices  :: [Vector3],
-    _simpleColors    :: [Color]
-    } deriving (Show)
+class Bufferable a where
+    toBuffer :: [a] -> [Double]
 
-instance MeshType SimpleMesh where
-    vertices (SimpleMesh v _) = v
-    colors   (SimpleMesh _ c) = c
+instance Bufferable Vector3 where
+    toBuffer [] = []
+    toBuffer (Vector3 x y z : vs) = x : y : z : toBuffer vs
 
-data Mesh' = Mesh' {
-    _vertices :: [Vector3],
-    _colors   :: [Color],
-    _normals  :: Maybe [Vector3],
-    _tangents :: Maybe [Vector3],
-    _uvs      :: Maybe [Vector2],
-    _indices  :: [Int]
-    } deriving (Show)
+instance Show (IO GL.BufferObject) where
+    show _ = "IO GL.BufferObject"
 
-instance MeshType Mesh' where
-    vertices (Mesh' v _ _ _ _ _) = v
-    colors   (Mesh' _ c _ _ _ _) = c
+newResources :: Resources
+newResources = Resources IntMap.empty
+
+ambientShader :: Shader
+ambientShader = shader vs fs
+    where
+        vs = [vert| #version 130
+                    uniform vec4 modelViewMatrix1;
+                    uniform vec4 modelViewMatrix2;
+                    uniform vec4 modelViewMatrix3;
+                    uniform vec4 modelViewMatrix4;
+
+                    uniform vec4 projMatrix1;
+                    uniform vec4 projMatrix2;
+                    uniform vec4 projMatrix3;
+                    uniform vec4 projMatrix4;
+
+                    in  vec3  position;
+                    in  vec3  color;
+                    in  vec2  uv;
+                    out vec3 Color;
+
+                    void main() 
+                    {
+                        mat4 viewMatrix = mat4(modelViewMatrix1,modelViewMatrix2,modelViewMatrix3,modelViewMatrix4);
+                        mat4 projMatrix = mat4(projMatrix1,projMatrix2,projMatrix3,projMatrix4);
+
+                        Color       = color;
+                        gl_Position = vec4(position,1.0) * viewMatrix * projMatrix; 
+                    }
+             |]
+
+        fs = [frag| #version 130
+                    in vec3  Color;
+                    out vec4 outputF;
+
+                    void main() 
+                    {
+                        outputF = vec4(Color,1.0);
+                    }
+             |]
 
