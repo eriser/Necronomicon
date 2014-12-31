@@ -27,4 +27,4 @@ import Control.Monad.Trans
 -- main = runNecronomicon engineTest
 
 main :: IO ()
-main = print sinTest2
+main = print sinTest
