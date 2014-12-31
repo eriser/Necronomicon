@@ -298,7 +298,7 @@ pwrand [] _ = PNothing
 pwrand _ [] = PNothing
 pwrand _ [p] = p
 pwrand prob list = if length prob /= length list then PNothing
-                   else PGen (\t -> collapse (wrandValue $ rands !! (floor t)) t) 
+                   else PGen (\t -> collapse (wrandValue $ rands !! (floor t)) t)
     where
         rands = (randomRs (0.0, 1.0) stdGen)
         sumProb = sum prob

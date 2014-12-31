@@ -9,6 +9,8 @@ import Control.Monad.Trans
 
 patternTest :: Necronomicon ()
 patternTest = do
+    let p2 = pseq 1 [1, pseq 2 [5..11]] Prelude.+ pseq 1 [2..5]
+    nPrint (collapse (collapse p2 1) 1)
     setTempo 150
     runPDef $ pstream "myCoolPattern" (pure nPrint) [lich| 0 [1 2] _ [3 [4 5]] 6
                                                            0 [1 2] _ [3 [4 5]] 6
