@@ -304,9 +304,9 @@ lineSynth = (s 555.0) + (s 440.0 ~> delay 0.15)
 (>>>) a f = f a
 infixl 0 >>>
 
--- (+>) :: UGen -> (UGen -> UGen) -> UGen
--- (+>) a f = add a (f a)
--- infixl 1 +>
+(+>) :: (UGenInput a) => a -> (a -> a) -> a
+(+>) a f = add a (f a)
+infixl 1 +>
 
 --------------------------------------------------------------------------------------
 -- UGen
