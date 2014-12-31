@@ -15,6 +15,7 @@ import Control.Applicative
 import Control.Concurrent
 import Control.Concurrent.STM
 import Necronomicon.Runtime
+import Necronomicon.Util
 import Control.Monad.Trans
 import qualified Data.Map as M
 import Data.Monoid
@@ -299,9 +300,6 @@ lineSynth = (s 555.0) + (s 440.0 ~> delay 0.15)
         l = line 0.3
 -}
 
-(>>>) :: a -> (a -> b) -> b
-(>>>) a f = f a
-infixl 0 >>>
 
 (+>) :: UGenType a => a -> (a -> a) -> a
 (+>) a f = add a (f a)
@@ -452,11 +450,14 @@ line length = ugen "line" lineCalc [length]
 ----------------------------------------------------
 
 sinTest :: [UGen]
-sinTest = sin [1,2] + sin [444,555,666] + sin 100 + 1 >>> gain 0.5
+sinTest = sin [1,2] + sin [444,555,666] + sin 100 + 1 |> gain 0.5
 
 --Yes, you can even do things like this
 sinTest2 :: [UGen]
 sinTest2 = sin [0,10..100]
+
+sinTest3 :: [UGen]
+sinTest3 = sin [1,2] |> sin |> gain (sin 13) |> gain 0.5
 
 mySynth :: UGen -> UGen
 mySynth freq = sin freq

@@ -3,21 +3,13 @@ module Necronomicon.Linear.Matrix where
 import Prelude
 
 -- import Necronomicon.Game.Utilities
+import Necronomicon.Util
 import Necronomicon.Linear.Vector
 import Necronomicon.Linear.Quaternion
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.Rendering.OpenGL.GL.CoordTrans as GLC
 import Foreign.Ptr (Ptr)
 import Unsafe.Coerce (unsafeCoerce)
-
-(|>) :: a -> (a -> b) -> b
-b |> a = a b
-
-(<|) :: (a -> b) -> a -> b
-a <| b = a b
-
-infixl 0 |>
-infixl 0 <|
 
 -- Matrices - Row Major
 data Matrix2x2  = Matrix2x2 Vector2 Vector2                 deriving (Show,Eq,Ord)
