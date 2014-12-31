@@ -348,10 +348,6 @@ instance Floating UGen where
     -- atanh   = liftA atanh
     -- acosh   = liftA acosh
 
--- instance (Eq a) => Eq (UGen a) where
-    -- UGenVal a == UGenVal b = a == b
-    -- UGenVal a /= UGenVal b = a /= b
-
 instance Enum UGen where
     succ a = a + 1
     pred a = a - 1
@@ -391,10 +387,6 @@ instance Floating [UGen] where
     -- atanh   = liftA atanh
     -- acosh   = liftA acosh
 
--- instance (Eq a) => Eq (UGen a) where
-    -- UGenVal a == UGenVal b = a == b
-    -- UGenVal a /= UGenVal b = a /= b
-
 --------------------------------------------------------------------------------------
 -- UGenType Class
 --------------------------------------------------------------------------------------
@@ -408,10 +400,11 @@ instance UGenType [UGen] where
     ugen name calc args = expand 0
         where
             argsWithLengths = zip args $ map length args
-            longest         = foldr (\(_,argLength) longest -> if argLength > longest then argLength else longest) 0 argsWithLengths
+            args'           = map (\(arg,len) -> if len <= 0 then ([UGenVal 0],1) else (arg,len)) argsWithLengths
+            longest         = foldr (\(_,argLength) longest -> if argLength > longest then argLength else longest) 0 args'
             expand n
                 | n >= longest = []
-                | otherwise    = UGenFunc name calc (map (\(arg,length) -> arg !! mod n length) argsWithLengths) : expand (n + 1)
+                | otherwise    = UGenFunc name calc (map (\(arg,length) -> arg !! mod n length) args') : expand (n + 1)
 
 ----------------------------------------------------
 -- C imports
@@ -450,7 +443,7 @@ line length = ugen "line" lineCalc [length]
 ----------------------------------------------------
 
 sinTest :: [UGen]
-sinTest = sin [1,2] + sin [444,555,666] + sin 100 + 1 |> gain 0.5
+sinTest = sin [1,2,3] + 1 + [] --sin [1,2] + sin [444,555,666] + sin 100 + 1 |> gain 0.5
 
 --Yes, you can even do things like this
 sinTest2 :: [UGen]
