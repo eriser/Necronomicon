@@ -8,13 +8,8 @@ module Necronomicon.Linear.Plane (Plane(Plane,pnorm,pd),
                                   pnormalize,
                                   planeIntersectsAABB) where
 
-import Prelude
 import Necronomicon.Linear.AABB
 import Necronomicon.Linear.Vector
-
-ifThenElse :: Bool -> a -> a -> a
-ifThenElse True a _ = a
-ifThenElse False _ b = b
 
 {-
     Plane is defined using the general form equation: Ax + By + Cz + D = 0

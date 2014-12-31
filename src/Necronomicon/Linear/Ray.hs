@@ -10,18 +10,12 @@ module Necronomicon.Linear.Ray (Ray(rayOrigin,rayDirection),
                                 rayIntersectsPlane,
                                 rayIntersectsSphere) where
 
-import Prelude
-
 import Necronomicon.Linear.Math
 import Necronomicon.Linear.Vector
 import Necronomicon.Linear.Plane
 import Necronomicon.Linear.Triangle
 import Necronomicon.Linear.Sphere
 import Necronomicon.Linear.AABB
-
-ifThenElse :: Bool -> a -> a -> a
-ifThenElse True a _ = a
-ifThenElse False _ b = b
 
 -- It is assumed that rayDirection is a normalized vector!
 data Ray = Ray { rayOrigin :: Vector3, rayDirection :: Vector3 } deriving (Eq)
