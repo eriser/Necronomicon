@@ -18,7 +18,7 @@ testScene :: Signal ()
 testScene = scene [camSig,triSig]
     where
         triSig = terrain
-                 <~ foldp (+) zero (lift3 move wasd (fps 60) 5)
+                 <~ foldp (+) 0 (lift3 move wasd (fps 60) 5)
                  ~~ constant identityQuat
                  ~~ constant []
 
@@ -32,10 +32,10 @@ testScene = scene [camSig,triSig]
         move (x,y) z a = Vector3 (x*z*a) (y*z*a) 0
 
 terrain :: Vector3 -> Quaternion -> [SceneObject] -> SceneObject
-terrain pos r chldn = SceneObject "Terrain" True pos r one simplexMesh Nothing []
+terrain pos r chldn = SceneObject "Terrain" True pos r 1 simplexMesh Nothing []
 
 testTri :: String -> Vector3 -> Quaternion -> [SceneObject] -> SceneObject
-testTri name pos r chldn = SceneObject name True pos r one m Nothing []
+testTri name pos r chldn = SceneObject name True pos r 1 m Nothing []
     where
         m = SimpleMesh
             [Vector3 (-0.4) (-0.3) 0,

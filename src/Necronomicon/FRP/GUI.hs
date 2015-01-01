@@ -33,7 +33,7 @@ gui gs = render $ root <~ combine (camSig : gs)
 label :: Vector2 -> Size -> Color -> String -> Signal SceneObject
 label (Vector2 x y) (Size w h) color (c:cs) = Signal $ \necro -> do
     t    <- loadCharacter "/home/casiosk1/code/Necronomicon/Tests/SigTest/fonts/OCRA.ttf" 'a' 251 0
-    let s = SceneObject "" True (Vector3 x y 0) identityQuat one (m t) Nothing []
+    let s = SceneObject "" True (Vector3 x y 0) identityQuat 1 (m t) Nothing []
     return (s,\_ -> return . NoChange $ s,IntSet.empty)
     where
         hw  = w * 0.5
@@ -74,8 +74,8 @@ slider (Vector2 x y) (Size w h) color = Signal $ \necro -> do
                         return $ Change g
             | otherwise = readIORef ref >>= return . NoChange
 
-        s  h = SceneObject "" True (Vector3 x y 0)    identityQuat one sm Nothing [v h]
-        v  h = SceneObject "" True (Vector3 0 0 0.01) identityQuat one (vm h) Nothing []
+        s  h = SceneObject "" True (Vector3 x y 0)    identityQuat 1 sm Nothing [v h]
+        v  h = SceneObject "" True (Vector3 0 0 0.01) identityQuat 1 (vm h) Nothing []
         sm   = SimpleMesh [p0 1,p1 1,p2 1,p3 1,p0 1,p2 1] [color,color,color,color,color,color]
         vm h = SimpleMesh [p0 h,p1 h,p2 h,p3 h,p0 h,p2 h] [color*fc,color*fc,color*fc,color*fc,color*fc,color*fc]
         p0 v = Vector3 (0 - hw) (hh h - v * h) 0
@@ -116,8 +116,8 @@ button (Vector2 x y) (Size w h) color = Signal $ \necro -> do
                     True  -> return $ NoChange (Gui v st)
                     False -> return $ NoChange (Gui v sf)
             
-        st = SceneObject "" True (Vector3 x y 0) identityQuat one mt Nothing []
-        sf = SceneObject "" True (Vector3 x y 0) identityQuat one mf Nothing []
+        st = SceneObject "" True (Vector3 x y 0) identityQuat 1 mt Nothing []
+        sf = SceneObject "" True (Vector3 x y 0) identityQuat 1 mf Nothing []
         mt = SimpleMesh [p0,p1,p2,p3,p0,p2] [color,color,color,color,color,color]
         mf = SimpleMesh [p0,p1,p2,p3,p0,p2] [color*fc,color*fc,color*fc,color*fc,color*fc,color*fc]
         fc = RGB 0.5 0.5 0.5

@@ -13,18 +13,18 @@ import Debug.Trace
 ----------------------------------------------------------
 
 orthoCamera :: Vector3 -> Quaternion -> Vector2 -> Color -> SceneObject
-orthoCamera pos r dimensions clearColor = SceneObject "CameraOrtho" True pos r (one::Vector3) EmptyMesh (Just c) []
+orthoCamera pos r dimensions clearColor = SceneObject "CameraOrtho" True pos r 1 EmptyMesh (Just c) []
     where
         c = Camera dimensions 0 0 0 clearColor
 
 perspCamera :: Vector3 -> Quaternion -> Vector2 -> Double -> Double -> Double -> Color -> SceneObject
-perspCamera pos r dimensions fov near far clearColor = SceneObject "Camera" True pos r (one::Vector3) EmptyMesh (Just c) []
+perspCamera pos r dimensions fov near far clearColor = SceneObject "Camera" True pos r 1 EmptyMesh (Just c) []
     where
         c = Camera dimensions (fov/2) near far clearColor
 
 renderCamera :: Matrix4x4 -> SceneObject -> Resources -> SceneObject -> IO (Resources,Matrix4x4)
 renderCamera view scene resources g  = do
-    let newView = view .*. (trsMatrix (_position g) (_rotation g) (one ::Vector3))
+    let newView = view .*. (trsMatrix (_position g) (_rotation g) 1)
     GL.rotate (toGLDouble . radToDeg $ getAngle (_rotation g))  (toGLVec3 (-(getAxis (_rotation g))))
     GL.translate (toGLVec3 (-(_position g)))
     -- GL.scale  (toGLDouble sx) (toGLDouble sy) (toGLDouble sz)
