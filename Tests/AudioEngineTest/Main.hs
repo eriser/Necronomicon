@@ -12,7 +12,7 @@ playSynths = mapM_ (\i -> playSynth "LineSynth" (fromIntegral i * 44100.0 * 0.2)
 engineTest :: Necronomicon ()
 engineTest = do
     compileSynthDef "LineSynth" lineSynth
-    playSynths
+    -- playSynths
     printSynthDef "LineSynth"
     nThreadDelay 5000000
     compileSynthDef "MyCoolSynth" myCoolSynth2

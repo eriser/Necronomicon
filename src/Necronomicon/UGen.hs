@@ -361,8 +361,12 @@ lineSynth = s 555.0 -- + (s 440.0 |> delay 0.15)
         s f = sin f * l * 0.2
         l = line 0.3
 
+-- myCoolSynth2 = foldl (|>) (sin 0.3) (replicate 21 sin)
+
 myCoolSynth2 :: UGen
-myCoolSynth2 = foldl (|>) (sin 0.3) (replicate 21 sin)
+myCoolSynth2 = sin (440 + mod) |> gain 0.25
+    where
+        mod = sin (10 + sin 0.1 * 9) |> gain 40
 
 
 --------------------------------------------------------------------------------------
@@ -387,7 +391,6 @@ data CompiledData = CompiledData {
     compiledUGenTable :: UGenOutputTable,
     compiledUGenGraph :: [CUGen],
     compiledConstants :: [Ptr AudioSignal]
-    
 }
 
 mkCompiledData :: CompiledData

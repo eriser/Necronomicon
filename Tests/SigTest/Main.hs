@@ -4,7 +4,10 @@ import Debug.Trace
 import qualified Data.Vector as V
 
 main :: IO ()
-main = runSignal testGUI
+main = runSignal testSound
+
+testSound :: Signal ()
+testSound = playWhile myCoolSynth2 enter
 
 testGUI :: Signal ()
 testGUI = gui [element vslider,element blueButton,zLabel,tri <~ input vslider]
