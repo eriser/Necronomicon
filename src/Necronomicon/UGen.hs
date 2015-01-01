@@ -311,7 +311,7 @@ data UGen = UGenVal Double
 
 instance Show UGen where
     show (UGenVal d) = show d
-    show (UGenFunc s _ us) = "(" ++ s ++ foldl (\s u -> s ++ " " ++ show u) "" us ++ ")"
+    show (UGenFunc s _ us) = "(" ++ s ++ foldl (\acc u -> acc ++ " " ++ show u) "" us ++ ")"
 
 instance Num UGen where
     (+)         = add
