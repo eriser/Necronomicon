@@ -293,6 +293,15 @@ void pop_time_calc(audio_signal** inputs, audio_signal* outputs)
 	pop_time();
 }
 
+ // THIS NEEDS TO BE FIXED TO WORK CORRECTLY!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+void out_calc(audio_signal** inputs, audio_signal* outputs)
+{
+	unsigned int output_channel = abs(sigsum(*(inputs[0])));
+	audio_signal* input_signal = inputs[1];
+
+	outputs[output_channel] = *input_signal;
+}
+
 void print_ugen(ugen* ugen)
 {
 	puts("(UGen");
