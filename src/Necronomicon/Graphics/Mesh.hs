@@ -23,15 +23,19 @@ data Resources = Resources (IntMap.IntMap LoadedShader)
 shaderMesh :: [Vector3] -> [Color] -> [Vector2] -> [Int] -> GL.TextureObject -> Shader -> Mesh
 shaderMesh vertices colors uvs indices tex shdr = ShaderMesh arrayBuffer elementArrayBuffer tex shdr
     where
-        arrayBuffer        = makeBuffer GL.ArrayBuffer $ toBuffer vertices
-        elementArrayBuffer = makeBuffer GL.ElementArrayBuffer $ undefined --interleave (toBuffer colors) (toBuffer uvs)
+        arrayBuffer        = makeBuffer GL.ArrayBuffer $ vecsToBuffer vertices
+        elementArrayBuffer = makeBuffer GL.ElementArrayBuffer $ colorsAndUVsToBuffer colors uvs
+        -- vad                = VertexArrayDescriptor 3 Float 0 
 
-class Bufferable a where
-    toBuffer :: [a] -> [Double]
+vecsToBuffer :: [Vector3] -> [Double]
+vecsToBuffer [] = []
+vecsToBuffer (Vector3 x y z : vs) = x : y : z : vecsToBuffer vs
 
-instance Bufferable Vector3 where
-    toBuffer [] = []
-    toBuffer (Vector3 x y z : vs) = x : y : z : toBuffer vs
+colorsAndUVsToBuffer :: [Color] -> [Vector2] -> [Double]
+colorsAndUVsToBuffer _ [] = []
+colorsAndUVsToBuffer [] _ = []
+colorsAndUVsToBuffer (RGB  r g b   : cs) (Vector2 u v : uvs) = r : g : b : u : v : colorsAndUVsToBuffer cs uvs
+colorsAndUVsToBuffer (RGBA r g b _ : cs) (Vector2 u v : uvs) = r : g : b : u : v : colorsAndUVsToBuffer cs uvs
 
 instance Show (IO GL.BufferObject) where
     show _ = "IO GL.BufferObject"
