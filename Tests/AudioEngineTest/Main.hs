@@ -4,29 +4,27 @@ import Prelude
 import Control.Concurrent
 import Sound.OSC.Time
 import Necronomicon
--- import Necronomicon.Runtime
 import Control.Monad.Trans
 
--- playSynths :: Necronomicon ()
--- playSynths = mapM_ (\i -> U.playSynth "LineSynth" (fromIntegral i * 44100.0 * 0.2)) [0..20]
+playSynths :: Necronomicon ()
+playSynths = mapM_ (\i -> playSynth "LineSynth" (fromIntegral i * 44100.0 * 0.2)) [0..20]
 
--- engineTest :: Necronomicon ()
--- engineTest = do
-    -- U.compileSynthDef "LineSynth" U.lineSynth
-    -- playSynths
-    -- U.printSynthDef "LineSynth"
-    -- nThreadDelay 5000000
-    -- U.compileSynthDef "MyCoolSynth" U.myCoolSynth
-    -- U.printSynthDef "MyCoolSynth"
-    -- myCoolSynth <- U.playSynth "MyCoolSynth" 0
-    -- nPrint "Waiting for user input..."
-    -- _ <- liftIO $ getLine
-    -- U.stopSynth myCoolSynth
-    -- return ()
-
--- main = runNecronomicon engineTest
+engineTest :: Necronomicon ()
+engineTest = do
+    compileSynthDef "LineSynth" lineSynth
+    playSynths
+    printSynthDef "LineSynth"
+    nThreadDelay 5000000
+    compileSynthDef "MyCoolSynth" myCoolSynth2
+    printSynthDef "MyCoolSynth"
+    myCoolSynth <- playSynth "MyCoolSynth" 0
+    nPrint "Waiting for user input..."
+    _ <- liftIO $ getLine
+    stopSynth myCoolSynth
+    return ()
 
 main :: IO ()
 main = do
        print sinTest
        print sinTest3
+       runNecronomicon engineTest
