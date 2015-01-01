@@ -105,7 +105,7 @@ import Necronomicon.Graphics.SceneObject (SceneObject,root)
 import Necronomicon.Linear.Vector (Vector2 (Vector2),Vector3 (Vector3))
 import Necronomicon.Graphics.Mesh (Resources,newResources)
 import Necronomicon.UGen 
-import Necronomicon.Runtime (NecroVars(..),mkNecroVars,Synth(..),runNecroState,startNecronomicon)
+import Necronomicon.Runtime (NecroVars(..),mkNecroVars,Synth(..),runNecroState,startNecronomicon,Necronomicon)
 import Control.Monad.Trans (liftIO)
 ------------------------------------------------------
 
@@ -868,18 +868,10 @@ playWhile synth shouldPlay = Signal $ \necro -> do
     let synthName       = "playWhileSynth" ++ show counterValue
     ref                <- newIORef pValue
     synthRef           <- newIORef (Nothing :: Maybe Synth)
-    (_,newNecroVars)   <- readIORef (necroVars necro) >>= runNecroState (necroActions synthName False False pValue synthRef)
+    (_,newNecroVars)   <- readIORef (necroVars necro) >>= runNecroState (compileAndRunSynth synthName synth False False pValue synthRef)
     writeIORef (necroVars necro) newNecroVars
     return ((),processEvent ref pCont synthName synthRef (necroVars necro),ids)
     where
-        necroActions synthName isCompiled isPlaying shouldPlay synthRef = do
-            if not isCompiled then compileSynthDef synthName synth else return ()
-            case (isPlaying,shouldPlay) of
-                (True ,True)  -> return ()
-                (False,False) -> return ()
-                (False,True)  -> playSynth synthName 0 >>= \s -> liftIO (writeIORef synthRef $ Just s) >> return ()
-                (True ,False) -> liftIO (readIORef synthRef) >>= \(Just synth) -> stopSynth synth >> liftIO (writeIORef synthRef Nothing) >> return ()
-
         processEvent ref pCont synthName synthRef necroVars event = do
             e <- pCont event
             case e of
@@ -890,13 +882,22 @@ playWhile synth shouldPlay = Signal $ \necro -> do
                         (True ,True)  -> return $ Change ()
                         (False,False) -> return $ Change ()
                         (True ,False) -> do
-                            (_,newNecroVars) <- readIORef necroVars >>= runNecroState (necroActions synthName True True False synthRef)
+                            (_,newNecroVars) <- readIORef necroVars >>= runNecroState (compileAndRunSynth synthName synth True True False synthRef)
                             writeIORef necroVars newNecroVars
                             writeIORef ref False
                             return $ Change ()
                         (False,True)  -> do
-                            (_,newNecroVars) <- readIORef necroVars >>= runNecroState (necroActions synthName True False True synthRef)
+                            (_,newNecroVars) <- readIORef necroVars >>= runNecroState (compileAndRunSynth synthName synth True False True synthRef)
                             writeIORef necroVars newNecroVars
                             writeIORef ref True
                             return $ Change ()
+
+compileAndRunSynth :: String -> UGen -> Bool -> Bool -> Bool -> IORef (Maybe Synth) -> Necronomicon ()
+compileAndRunSynth synthName synth isCompiled isPlaying shouldPlay synthRef = do
+    if not isCompiled then compileSynthDef synthName synth else return ()
+    case (isPlaying,shouldPlay) of
+        (True ,True)  -> return ()
+        (False,False) -> return ()
+        (False,True)  -> playSynth synthName 0 >>= \s -> liftIO (writeIORef synthRef $ Just s) >> return ()
+        (True ,False) -> liftIO (readIORef synthRef) >>= \(Just synth) -> stopSynth synth >> liftIO (writeIORef synthRef Nothing) >> return ()
 
