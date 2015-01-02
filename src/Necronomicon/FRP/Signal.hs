@@ -105,7 +105,7 @@ import Necronomicon.Graphics.SceneObject (SceneObject,root)
 import Necronomicon.Linear.Vector (Vector2 (Vector2),Vector3 (Vector3))
 import Necronomicon.Graphics.Mesh (Resources,newResources)
 import Necronomicon.UGen 
-import Necronomicon.Runtime (NecroVars(..),mkNecroVars,Synth(..),runNecroState,startNecronomicon,Necronomicon)
+import Necronomicon.Runtime (NecroVars(..),mkNecroVars,Synth(..),runNecroState,startNecronomicon,shutdownNecronomicon,Necronomicon)
 import Control.Monad.Trans (liftIO)
 ------------------------------------------------------
 
@@ -314,7 +314,7 @@ runSignal s = initWindow >>= \mw ->
             dimensionsEvent globalDispatch w ww wh
             mousePressEvent globalDispatch w 0 GLFW.MouseButtonState'Released GLFW.modifierKeysShift
 
-            render False w sceneVar newResources
+            render False w sceneVar newResources necroVars
     where
         --event callbacks
         mousePressEvent eventNotify _ _ GLFW.MouseButtonState'Released _ = atomically $ (writeTBQueue eventNotify $ Event 1 $ toDyn False) `orElse` return ()
@@ -327,8 +327,8 @@ runSignal s = initWindow >>= \mw ->
             (wx,wy) <- GLFW.getWindowSize w
             atomically $ (writeTBQueue eventNotify $ Event 0 $ toDyn (x / fromIntegral wx,y / fromIntegral wy)) `orElse` return ()
 
-        render quit window sceneVar resources
-            | quit      = print "Qutting" >> return ()
+        render quit window sceneVar resources necroVarsRef
+            | quit      = readIORef necroVarsRef >>= runNecroState shutdownNecronomicon >> print "Qutting" >> return ()
             | otherwise = do
                 GLFW.pollEvents
                 q <- liftA (== GLFW.KeyState'Pressed) (GLFW.getKey window GLFW.Key'Q)
@@ -337,7 +337,7 @@ runSignal s = initWindow >>= \mw ->
                     Nothing -> return resources
                     Just s  -> renderGraphics window resources s 
                 threadDelay $ 16667
-                render q window sceneVar resources'
+                render q window sceneVar resources' necroVarsRef
 
 globalEventDispatch :: Show a => Signal a -> Necro -> IO()
 globalEventDispatch signal necro = do
