@@ -4,7 +4,7 @@ import Debug.Trace
 import qualified Data.Vector as V
 
 main :: IO ()
-main = runSignal testSound
+main = runSignal testSound3
 
 testSound :: Signal ()
 testSound = playWhile myCoolSynth2 (isDown keyW)
@@ -12,6 +12,9 @@ testSound = playWhile myCoolSynth2 (isDown keyW)
 
 testSound2 :: Signal ()
 testSound2 = play lineSynth <| isDown keyS
+
+testSound3 :: Signal ()
+testSound3 = playUntil myCoolSynth2 (isDown keyP) (isDown keyS)
 
 testGUI :: Signal ()
 testGUI = gui [element vslider,element blueButton,zLabel,tri <~ input vslider]
