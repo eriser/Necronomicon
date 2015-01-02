@@ -7,10 +7,11 @@ main :: IO ()
 main = runSignal testPattern
 
 testPattern :: Signal ()
-testPattern = gui [tri <~ (playPattern 0 pattern (isDown keyP) / 10) ]
+testPattern = gui [tri <~ pattern / 10 ]
     where
-        tri y   = testTri "" (Vector3 0 (1-y) 0) identityQuat []
-        pattern = [lich| 0 [1 2] _ [3 [4 5]] 6
+        tri y   = testTri "" (Vector3 0.5 y 0) identityQuat []
+        pattern = playPattern 0 (isDown keyP)
+                  [lich| 0 [1 2] _ [3 [4 5]] 6
                          0 [1 2] _ [3 [4 5]] 6
                          0 [1 2] _ [3 [4 5]] 6
                          0 [1 2] _ [3 [4 5]] 6 |]

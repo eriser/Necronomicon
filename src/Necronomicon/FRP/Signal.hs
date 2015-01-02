@@ -949,8 +949,8 @@ compileAndRunSynth synthName synth isCompiled isPlaying shouldPlay synthRef = do
         (False,True)  -> playSynth synthName 0 >>= \s -> liftIO (writeIORef synthRef $ Just s) >> return ()
         (True ,False) -> liftIO (readIORef synthRef) >>= \(Just synth) -> stopSynth synth >> liftIO (writeIORef synthRef Nothing) >> return ()
 
-playPattern :: (Show a,Typeable a) => a -> Pattern (Pattern a,Double) -> Signal Bool -> Signal a
-playPattern init pattern playSig = Signal $ \necro -> do
+playPattern :: (Show a,Typeable a) => a -> Signal Bool -> Pattern (Pattern a,Double) -> Signal a
+playPattern init playSig pattern = Signal $ \necro -> do
     (pValue,pCont,pids) <- unSignal playSig necro
     counterValue        <- readIORef (inputCounter necro) >>= \counterValue -> writeIORef (inputCounter necro) (counterValue + 1) >> return (counterValue + 1)
     ref                 <- newIORef init
