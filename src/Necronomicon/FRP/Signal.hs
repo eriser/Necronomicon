@@ -3,6 +3,7 @@ module Necronomicon.FRP.Signal (
     Necro(Necro,inputCounter),
     EventValue(Change,NoChange),
     Event(Event),
+    playPattern,
     play,
     playUntil,
     playWhile,
@@ -105,7 +106,8 @@ import Necronomicon.Graphics.SceneObject (SceneObject,root)
 import Necronomicon.Linear.Vector (Vector2 (Vector2),Vector3 (Vector3))
 import Necronomicon.Graphics.Mesh (Resources,newResources)
 import Necronomicon.UGen 
-import Necronomicon.Runtime (NecroVars(..),mkNecroVars,Synth(..),runNecroState,startNecronomicon,shutdownNecronomicon,Necronomicon)
+import Necronomicon.Runtime -- (NecroVars(..),mkNecroVars,Synth(..),runNecroState,startNecronomicon,shutdownNecronomicon,Necronomicon)
+import Necronomicon.Patterns (Pattern(..))
 import Control.Monad.Trans (liftIO)
 ------------------------------------------------------
 
@@ -947,3 +949,22 @@ compileAndRunSynth synthName synth isCompiled isPlaying shouldPlay synthRef = do
         (False,True)  -> playSynth synthName 0 >>= \s -> liftIO (writeIORef synthRef $ Just s) >> return ()
         (True ,False) -> liftIO (readIORef synthRef) >>= \(Just synth) -> stopSynth synth >> liftIO (writeIORef synthRef Nothing) >> return ()
 
+playPattern :: (Show a,Typeable a) => a -> Pattern (Pattern a,Double) -> Signal Bool -> Signal a
+playPattern init pattern playSig = Signal $ \necro -> do
+    (pValue,pCont,pids) <- unSignal playSig necro
+    counterValue        <- readIORef (inputCounter necro) >>= \counterValue -> writeIORef (inputCounter necro) (counterValue + 1) >> return (counterValue + 1)
+    ref                 <- newIORef init
+    let pdef             = pstream ("signalsPDef" ++ show counterValue) (pure $ liftIO . atomically . writeTBQueue (globalDispatch necro) . Event counterValue . toDyn) pattern
+    readIORef (necroVars necro) >>= runNecroState (setTempo 150) >>= \(_,newNecroVars) -> writeIORef (necroVars necro) newNecroVars
+    return (init,processEvent pCont counterValue pdef (necroVars necro) ref,IntSet.insert counterValue pids)
+    where
+        processEvent pCont counterValue pdef necroVarRef ref event@(Event uid e) = do
+            p <- pCont event
+            case (p,uid == counterValue,fromDynamic e) of
+                (Change True ,_,_) -> readIORef necroVarRef >>= runNecroState (runPDef pdef) >>= \(_,newNecroVars) -> writeIORef necroVarRef newNecroVars >> readIORef ref >>= return . NoChange
+                (Change False,_,_) -> readIORef necroVarRef >>= runNecroState (pstop   pdef) >>= \(_,newNecroVars) -> writeIORef necroVarRef newNecroVars >> readIORef ref >>= return . NoChange
+                (_,True,Just v )   -> writeIORef ref v >> return (Change v)
+                _                  -> readIORef  ref >>= return . NoChange
+
+-- nPrint :: (Show a) => a -> Necronomicon ()
+-- nPrint = liftIO . print

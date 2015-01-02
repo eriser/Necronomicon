@@ -4,7 +4,16 @@ import Debug.Trace
 import qualified Data.Vector as V
 
 main :: IO ()
-main = runSignal testSound3
+main = runSignal testPattern
+
+testPattern :: Signal ()
+testPattern = gui [tri <~ (playPattern 0 pattern (isDown keyP) / 10) ]
+    where
+        tri y   = testTri "" (Vector3 0 (1-y) 0) identityQuat []
+        pattern = [lich| 0 [1 2] _ [3 [4 5]] 6
+                         0 [1 2] _ [3 [4 5]] 6
+                         0 [1 2] _ [3 [4 5]] 6
+                         0 [1 2] _ [3 [4 5]] 6 |]
 
 testSound :: Signal ()
 testSound = playWhile myCoolSynth2 (isDown keyW)
