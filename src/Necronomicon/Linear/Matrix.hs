@@ -3,7 +3,7 @@ module Necronomicon.Linear.Matrix where
 import Prelude
 
 -- import Necronomicon.Game.Utilities
-import Necronomicon.Util
+import Necronomicon.Utility
 import Necronomicon.Linear.Vector
 import Necronomicon.Linear.Quaternion
 import qualified Graphics.Rendering.OpenGL as GL

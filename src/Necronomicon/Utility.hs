@@ -1,4 +1,4 @@
-module Necronomicon.Utility (hash) where
+module Necronomicon.Utility (hash, (|>), (<|)) where
 
 import Prelude
 import Data.Bits
@@ -24,3 +24,14 @@ instance Hashable Bool where hash x = case x of
 instance Hashable Char where hash = fromEnum
 
 instance Hashable a => Hashable [a] where hash = foldl' hashAndCombine 0
+
+(|>) :: a -> (a -> b) -> b
+b |> a = a b
+
+infixl 0 |>
+
+(<|) :: (a -> b) -> a -> b
+a <| b = a b
+
+infixl 0 <|
+

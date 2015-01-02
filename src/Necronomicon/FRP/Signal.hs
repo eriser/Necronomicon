@@ -3,7 +3,7 @@ module Necronomicon.FRP.Signal (
     Necro(Necro,inputCounter),
     EventValue(Change,NoChange),
     Event(Event),
-    -- play,
+    play,
     -- playOn,
     playWhile,
     render,
@@ -865,7 +865,7 @@ playWhile :: UGen -> Signal Bool -> Signal ()
 playWhile synth shouldPlay = Signal $ \necro -> do
     (pValue,pCont,ids) <- unSignal shouldPlay necro
     counterValue       <- readIORef (inputCounter necro) >>= \counterValue -> writeIORef (inputCounter necro) (counterValue + 1) >> return (counterValue + 1)
-    let synthName       = "playWhileSynth" ++ show counterValue
+    let synthName       = "signalsSynth" ++ show counterValue
     ref                <- newIORef pValue
     synthRef           <- newIORef (Nothing :: Maybe Synth)
     (_,newNecroVars)   <- readIORef (necroVars necro) >>= runNecroState (compileAndRunSynth synthName synth False False pValue synthRef)
@@ -891,6 +891,25 @@ playWhile synth shouldPlay = Signal $ \necro -> do
                             writeIORef necroVars newNecroVars
                             writeIORef ref True
                             return $ Change ()
+
+play :: UGen -> Signal Bool -> Signal ()
+play synth sig = Signal $ \necro -> do
+    (_,pCont,ids)    <- unSignal sig necro
+    counterValue     <- readIORef (inputCounter necro) >>= \counterValue -> writeIORef (inputCounter necro) (counterValue + 1) >> return (counterValue + 1)
+    let synthName     = "signalsSynth" ++ show counterValue
+    (_,newNecroVars) <- readIORef (necroVars necro) >>= runNecroState (compileSynthDef synthName synth)
+    writeIORef (necroVars necro) newNecroVars
+    return ((),processEvent pCont synthName (necroVars necro),ids)
+    where
+        processEvent pCont synthName necroVars event = do
+            e <- pCont event
+            case e of
+                NoChange _     -> return $ NoChange ()
+                Change   False -> return $ Change ()
+                Change   True  -> do
+                    print "Play!"
+                    readIORef necroVars >>= runNecroState (playSynth synthName 0) >>= \(_,newNecroVars) -> writeIORef necroVars newNecroVars
+                    return $ Change ()
 
 compileAndRunSynth :: String -> UGen -> Bool -> Bool -> Bool -> IORef (Maybe Synth) -> Necronomicon ()
 compileAndRunSynth synthName synth isCompiled isPlaying shouldPlay synthRef = do

@@ -1,5 +1,5 @@
 import Prelude
-import Necronomicon hiding ((+),(-),(*),(/))
+import Necronomicon
 import Debug.Trace
 import qualified Data.Vector as V
 
@@ -7,7 +7,11 @@ main :: IO ()
 main = runSignal testSound
 
 testSound :: Signal ()
-testSound = playWhile myCoolSynth2 enter
+testSound = playWhile myCoolSynth2 (isDown keyW)
+        <|> playWhile myCoolSynth3 (isDown keyA)
+
+testSound2 :: Signal ()
+testSound2 = play lineSynth <| isDown keyS
 
 testGUI :: Signal ()
 testGUI = gui [element vslider,element blueButton,zLabel,tri <~ input vslider]

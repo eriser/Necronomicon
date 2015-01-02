@@ -16,6 +16,7 @@ import Control.Concurrent
 import Control.Concurrent.STM
 import Necronomicon.Runtime
 import Necronomicon.Util
+import Necronomicon.Utility
 import Control.Monad.Trans
 import qualified Data.Map as M
 import Data.Monoid
@@ -368,6 +369,10 @@ myCoolSynth2 = sin (440 + mod) |> gain 0.25
     where
         mod = sin (10 + sin 0.1 * 9) |> gain 40
 
+myCoolSynth3 :: UGen
+myCoolSynth3 = sin (880 + mod) |> gain 0.25
+    where
+        mod = sin (20 + sin 0.1 * 9) |> gain 80
 
 --------------------------------------------------------------------------------------
 -- SynthDefs
