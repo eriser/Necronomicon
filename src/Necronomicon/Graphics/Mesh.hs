@@ -8,6 +8,7 @@ import Necronomicon.Graphics.BufferObject
 import Necronomicon.Utility
 import Necronomicon.Graphics.BufferObject
 import Foreign.C.Types
+import Foreign.Storable (sizeOf)
 
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Data.IntMap as IntMap
@@ -15,27 +16,19 @@ import qualified Data.IntMap as IntMap
 data Mesh = EmptyMesh
           | SimpleMesh [Vector3] [Color]
           | Mesh       [Vector3] [Color] GL.TextureObject [Vector2]
-          | ShaderMesh (IO GL.BufferObject) (IO GL.BufferObject) GL.TextureObject Shader
+          | ShaderMesh (IO GL.BufferObject) (IO GL.BufferObject) (GL.VertexArrayDescriptor GL.GLfloat) Int GL.TextureObject Shader
           deriving (Show)
 
 data Resources = Resources (IntMap.IntMap LoadedShader)
 
 shaderMesh :: [Vector3] -> [Color] -> [Vector2] -> [Int] -> GL.TextureObject -> Shader -> Mesh
-shaderMesh vertices colors uvs indices tex shdr = ShaderMesh arrayBuffer elementArrayBuffer tex shdr
+shaderMesh vertices colors uvs indices tex shdr = ShaderMesh arrayBuffer elementArrayBuffer vad (length indices) tex shdr
     where
-        arrayBuffer        = makeBuffer GL.ArrayBuffer $ vecsToBuffer vertices
-        elementArrayBuffer = makeBuffer GL.ElementArrayBuffer $ colorsAndUVsToBuffer colors uvs
-        -- vad                = VertexArrayDescriptor 3 Float 0 
-
-vecsToBuffer :: [Vector3] -> [Double]
-vecsToBuffer [] = []
-vecsToBuffer (Vector3 x y z : vs) = x : y : z : vecsToBuffer vs
-
-colorsAndUVsToBuffer :: [Color] -> [Vector2] -> [Double]
-colorsAndUVsToBuffer _ [] = []
-colorsAndUVsToBuffer [] _ = []
-colorsAndUVsToBuffer (RGB  r g b   : cs) (Vector2 u v : uvs) = r : g : b : u : v : colorsAndUVsToBuffer cs uvs
-colorsAndUVsToBuffer (RGBA r g b _ : cs) (Vector2 u v : uvs) = r : g : b : u : v : colorsAndUVsToBuffer cs uvs
+        vad                = GL.VertexArrayDescriptor 3 GL.Float (fromIntegral $ sizeOf (undefined::GL.GLfloat) * 3) offset0 
+        arrayBuffer        = makeBuffer GL.ArrayBuffer (map realToFrac (vecsToBuffer vertices) :: [GL.GLfloat]) 
+        elementArrayBuffer = makeBuffer GL.ElementArrayBuffer (map fromIntegral indices :: [GL.GLuint])
+        vecsToBuffer []    = []
+        vecsToBuffer (Vector3 x y z : vs) = x : y : z : vecsToBuffer vs
 
 instance Show (IO GL.BufferObject) where
     show _ = "IO GL.BufferObject"
@@ -58,8 +51,8 @@ ambientShader = shader vs fs
                     uniform vec4 projMatrix4;
 
                     in  vec3  position;
-                    in  vec3  color;
-                    in  vec2  uv;
+                    //in  vec3  color;
+                    //in  vec2  uv;
                     out vec3 Color;
 
                     void main() 
@@ -67,7 +60,8 @@ ambientShader = shader vs fs
                         mat4 viewMatrix = mat4(modelViewMatrix1,modelViewMatrix2,modelViewMatrix3,modelViewMatrix4);
                         mat4 projMatrix = mat4(projMatrix1,projMatrix2,projMatrix3,projMatrix4);
 
-                        Color       = color;
+                        //Color       = color;
+                        Color = vec3(1.0,1.0,1.0);
                         gl_Position = vec4(position,1.0) * viewMatrix * projMatrix; 
                     }
              |]

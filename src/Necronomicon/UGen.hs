@@ -1,6 +1,6 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
-module Necronomicon.UGen where 
-                                
+module Necronomicon.UGen where
+
 import GHC.Exts
 import Data.List
 import Debug.Trace
@@ -160,7 +160,7 @@ instance UGenNum Double UGen where
     (*) d u = mul (UGenNum d) u
     (/) d u = udiv (UGenNum d) u
     (-) d u = minus (UGenNum d) u
-    
+
 
 infixl 6 +
 infixl 7 *
@@ -382,6 +382,7 @@ printSynthDef :: String -> Necronomicon ()
 printSynthDef synthDefName = getSynthDef synthDefName >>= nPrint
 
 playSynth :: String -> CDouble -> Necronomicon Synth
+-- playSynth synthDefName time = incrementNodeID >>= sendMessage . StartSynth synthDefName time >> return (Synth id)
 playSynth synthDefName time = incrementNodeID >>= \id -> sendMessage (StartSynth synthDefName time id) >> return (Synth id)
 
 stopSynth :: Synth -> Necronomicon ()

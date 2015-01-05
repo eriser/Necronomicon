@@ -8,7 +8,8 @@ module Necronomicon.Graphics.Shader (
     frag,
     compileVert,
     compileFrag,
-    shader
+    shader,
+    offset0
     ) where
 
 import Prelude
@@ -22,6 +23,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Language.Haskell.TH as TH
+import Foreign.Ptr (Ptr,wordPtrToPtr)
 
 data VertexShader   = VertexShader   {
     vertexString   :: String,
@@ -33,7 +35,7 @@ data FragmentShader = FragmentShader {
     unFragmentShader :: IO GL.Shader
     } deriving (Show)
 
-type LoadedShader = (GL.Program,[GL.UniformLocation])
+type LoadedShader = (GL.Program,[GL.UniformLocation],[GL.AttribLocation])
 
 data Shader = Shader {
     key      :: Int,
@@ -114,5 +116,16 @@ shader vs fs = Shader (hash $ vertexString vs ++ fragmentString fs) $ do
     pr3 <- GL.get $ GL.uniformLocation program "projMatrix3"
     pr4 <- GL.get $ GL.uniformLocation program "projMatrix4"
 
-    return (program,[mv1,mv2,mv3,mv4,pr1,pr2,pr3,pr3])
+    posA <- GL.get $ GL.attribLocation program "position"
+    -- colA <- GL.get $ GL.attribLocation program "color"
 
+    return (program,[mv1,mv2,mv3,mv4,pr1,pr2,pr3,pr3],[posA])
+
+-- |Produce a 'Ptr' value to be used as an offset of the given number
+-- of bytes.
+offsetPtr :: Int -> Ptr a
+offsetPtr = wordPtrToPtr . fromIntegral
+
+-- |A zero-offset 'Ptr'.
+offset0 :: Ptr a
+offset0 = offsetPtr 0

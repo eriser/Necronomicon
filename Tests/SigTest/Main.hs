@@ -4,7 +4,7 @@ import Debug.Trace
 import qualified Data.Vector as V
 
 main :: IO ()
-main = runSignal testPattern
+main = runSignal testShader
 
 testPattern :: Signal ()
 testPattern = gui [tri <~ pattern / 10 ]
@@ -25,6 +25,11 @@ testSound2 = play lineSynth <| isDown keyS
 
 testSound3 :: Signal ()
 testSound3 = playUntil myCoolSynth2 (isDown keyP) (isDown keyS)
+
+testShader :: Signal ()
+testShader = gui [zLabel]
+    where
+        zLabel     = label (Vector2 0.25 0.5) (Size 0.0 0.0) (RGB 1 1 1) "Zero"
 
 testGUI :: Signal ()
 testGUI = gui [element vslider,element blueButton,zLabel,tri <~ input vslider]

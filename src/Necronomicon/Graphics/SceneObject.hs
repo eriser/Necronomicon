@@ -126,9 +126,9 @@ plain name = SceneObject name True 0 identityQuat 1 EmptyMesh Nothing []
 
 draw :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> SceneObject -> IO (Resources,Matrix4x4)
 draw world view proj resources@(Resources shaderMap) g = do
-    GL.translate (toGLVec3 $ _position g)
-    GL.rotate (toGLDouble . radToDeg . getAngle $ _rotation g) (toGLVec3 . getAxis $ _rotation g)
-    GL.scale  (toGLDouble . _x $ _scale g) (toGLDouble . _y $ _scale g) (toGLDouble . _z $ _scale g)
+    -- GL.translate (toGLVec3 $ _position g)
+    -- GL.rotate (toGLDouble . radToDeg . getAngle $ _rotation g) (toGLVec3 . getAxis $ _rotation g)
+    -- GL.scale  (toGLDouble . _x $ _scale g) (toGLDouble . _y $ _scale g) (toGLDouble . _z $ _scale g)
     resources' <- case _mesh g of
         EmptyMesh         -> return resources
         SimpleMesh vs cs  -> GL.renderPrimitive GL.Triangles (mapM_ drawVertex $ zip cs vs) >> return resources
@@ -138,8 +138,8 @@ draw world view proj resources@(Resources shaderMap) g = do
             GL.renderPrimitive GL.Triangles    $  mapM_ drawVertexUV $ zip3 cs vs uvs
             GL.textureBinding  GL.Texture2D GL.$= Nothing
             return resources
-        ShaderMesh arrayBuffer elementArrayBuffer tex sh -> do
-            (resources',(program,[mv1,mv2,mv3,mv4,pr1,pr2,pr3,pr4])) <- case IntMap.lookup (key sh) shaderMap of
+        ShaderMesh vertexBuffer indexBuffer vad numIndices tex sh -> do
+            (resources',(program,[mv1,mv2,mv3,mv4,pr1,pr2,pr3,pr4],[posA])) <- case IntMap.lookup (key sh) shaderMap of
                 Nothing  -> unShader sh >>= \sh' -> return (Resources (IntMap.insert (key sh) sh' shaderMap),sh')
                 Just sh' -> return (resources,sh')
             GL.currentProgram GL.$= Just program
@@ -156,14 +156,37 @@ draw world view proj resources@(Resources shaderMap) g = do
             GL.uniform pr3 GL.$= (toGLVertex4 $ _z proj)
             GL.uniform pr4 GL.$= (toGLVertex4 $ _w proj)
 
-            -- GL.renderPrimitive GL.Triangles (mapM_ drawVertex $ zip cs vs)
+            print "world"
+            print newWorld
+            
+            print "modelView"
+            print modelView
+
+            print "proj"
+            print proj
+
+            --Bind Vertex buffer
+            vbuf <- vertexBuffer
+            GL.bindBuffer GL.ArrayBuffer GL.$= Just vbuf
+            GL.vertexAttribPointer posA  GL.$= (GL.ToFloat, vad)
+            GL.vertexAttribArray   posA  GL.$= GL.Enabled
+
+            --Bind Index buffer
+            ibuf <- indexBuffer
+            GL.bindBuffer GL.ElementArrayBuffer GL.$= Just ibuf
+
+            --Draw the elements with the current bindings
+            GL.drawElements GL.Triangles (fromIntegral numIndices) GL.UnsignedInt offset0
+
             GL.currentProgram GL.$= Nothing
             return resources'
 
     return (resources',newWorld)
     where
-        newWorld  = world    .*. (trsMatrix (_position g) (_rotation g) (_scale g))
-        modelView = newWorld .*. view
+        -- newWorld  = world    .*. (trsMatrix (_position g) (_rotation g) (_scale g))
+        newWorld  = identity
+        -- modelView = newWorld .*. view
+        modelView = newWorld
         drawVertex (c,v) = GL.color (toGLColor3 c) >> GL.vertex (toGLVertex3 v)
         drawVertexUV (c,v,Vector2 u v') = do
             GL.color    $ toGLColor3  c
@@ -171,7 +194,8 @@ draw world view proj resources@(Resources shaderMap) g = do
             GL.vertex   $ toGLVertex3 v
 
 drawScene :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> SceneObject -> IO Resources
-drawScene world view proj resources g = GL.preservingMatrix $ draw world view proj resources g >>= \(resources',newWorld) -> foldM (drawScene newWorld view proj) resources' (_children g)
+-- drawScene world view proj resources g = GL.preservingMatrix $ draw world view proj resources g >>= \(resources',newWorld) -> foldM (drawScene newWorld view proj) resources' (_children g)
+drawScene world view proj resources g = draw world view proj resources g >>= \(resources',newWorld) -> foldM (drawScene newWorld view proj) resources' (_children g)
 
 --breadth first?
 findGameObject :: String -> SceneObject -> Maybe SceneObject

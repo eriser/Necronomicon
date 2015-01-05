@@ -12,10 +12,10 @@ import Foreign.C.Types
 -- import Data.Array.Storable
 import Data.ByteString (ByteString, useAsCStringLen)
 
-makeBuffer :: GL.BufferTarget -> [Double] -> IO GL.BufferObject
-makeBuffer target elems = makeBufferWithLength target (length elems) (map realToFrac elems)
+makeBuffer :: (Storable a) => GL.BufferTarget -> [a] -> IO GL.BufferObject
+makeBuffer target elems = makeBufferWithLength target (length elems) elems
 
-makeBufferWithLength :: GL.BufferTarget -> Int -> [CFloat] -> IO GL.BufferObject
+makeBufferWithLength :: (Storable a) => GL.BufferTarget -> Int -> [a] -> IO GL.BufferObject
 makeBufferWithLength target len elems = do
     [buffer] <- GL.genObjectNames 1
     GL.bindBuffer target GL.$= Just buffer
@@ -27,5 +27,5 @@ makeBufferWithLength target len elems = do
     withArray elems $ \ptr -> GL.bufferData target GL.$= (n, ptr, GL.StaticDraw)
     return buffer
     where
-        n = fromIntegral $ len * sizeOf (undefined::CDouble)
+        n = fromIntegral $ len * sizeOf (head elems)
 
