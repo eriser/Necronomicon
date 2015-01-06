@@ -27,9 +27,21 @@ testSound3 :: Signal ()
 testSound3 = playUntil myCoolSynth2 (isDown keyP) (isDown keyS)
 
 testShader :: Signal ()
-testShader = gui [zLabel]
+testShader = gui [so <~ lift snd mousePos]
     where
-        zLabel     = label (Vector2 0.25 0.5) (Size 0.0 0.0) (RGB 1 1 1) "Zero"
+        --Need to figure out the issue with lazy rendering....
+        -- zLabel = label  (Vector2 0.25 0.5) (Size 0.1 0.1) (RGB 1 1 1) "Zero"
+        so y = SceneObject "ShaderTest" True (Vector3 0.5 y 0) identityQuat 1 m Nothing []
+        hw = 0.1
+        hh = 0.1
+        color = RGB 1 1 1
+        m  = shaderMesh
+             [Vector3 (-hw) hh 0,Vector3 (hw) (hh) 0,Vector3 (-hw) (-hh) 0,Vector3 hw (-hh) 0]
+             [color,color,color,color]
+             [Vector2 0 1,Vector2 0 0,Vector2 1 0,Vector2 1 1]
+             [0,1,2,3,2,1]
+             undefined
+             ambientShader
 
 testGUI :: Signal ()
 testGUI = gui [element vslider,element blueButton,zLabel,tri <~ input vslider]

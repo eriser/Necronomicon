@@ -16,15 +16,16 @@ import qualified Data.IntMap as IntMap
 data Mesh = EmptyMesh
           | SimpleMesh [Vector3] [Color]
           | Mesh       [Vector3] [Color] GL.TextureObject [Vector2]
-          | ShaderMesh (IO GL.BufferObject) (IO GL.BufferObject) (GL.VertexArrayDescriptor GL.GLfloat) Int GL.TextureObject Shader
+          -- | ShaderMesh (IO GL.BufferObject) (IO GL.BufferObject) (GL.VertexArrayDescriptor GL.GLfloat) Int GL.TextureObject Shader
+          | ShaderMesh (IO GL.BufferObject) (IO GL.BufferObject) (GL.VertexArrayDescriptor GL.GLfloat) Int Shader
           deriving (Show)
 
 data Resources = Resources (IntMap.IntMap LoadedShader)
 
 shaderMesh :: [Vector3] -> [Color] -> [Vector2] -> [Int] -> GL.TextureObject -> Shader -> Mesh
-shaderMesh vertices colors uvs indices tex shdr = ShaderMesh arrayBuffer elementArrayBuffer vad (length indices) tex shdr
+shaderMesh vertices colors uvs indices tex shdr = ShaderMesh arrayBuffer elementArrayBuffer vad (length indices) {-tex-} shdr
     where
-        vad                = GL.VertexArrayDescriptor 3 GL.Float (fromIntegral $ sizeOf (undefined::GL.GLfloat) * 3) offset0 
+        vad                = GL.VertexArrayDescriptor 3 GL.Float (fromIntegral $ sizeOf (undefined::GL.GLfloat) * 3) offset0
         arrayBuffer        = makeBuffer GL.ArrayBuffer (map realToFrac (vecsToBuffer vertices) :: [GL.GLfloat]) 
         elementArrayBuffer = makeBuffer GL.ElementArrayBuffer (map fromIntegral indices :: [GL.GLuint])
         vecsToBuffer []    = []
@@ -62,17 +63,18 @@ ambientShader = shader vs fs
 
                         //Color       = color;
                         Color = vec3(1.0,1.0,1.0);
-                        gl_Position = vec4(position,1.0) * viewMatrix * projMatrix; 
+                        //gl_Position = vec4(position,1.0) * viewMatrix * projMatrix; 
+                        gl_Position = vec4(position,1.0);// * projMatrix; 
                     }
              |]
 
         fs = [frag| #version 130
                     in vec3  Color;
-                    out vec4 outputF;
+                    out vec4 fragColor;
 
-                    void main() 
+                    void main()
                     {
-                        outputF = vec4(Color,1.0);
+                        fragColor = vec4(Color,1.0);
                     }
              |]
 

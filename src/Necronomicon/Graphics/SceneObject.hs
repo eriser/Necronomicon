@@ -138,7 +138,7 @@ draw world view proj resources@(Resources shaderMap) g = do
             GL.renderPrimitive GL.Triangles    $  mapM_ drawVertexUV $ zip3 cs vs uvs
             GL.textureBinding  GL.Texture2D GL.$= Nothing
             return resources
-        ShaderMesh vertexBuffer indexBuffer vad numIndices tex sh -> do
+        ShaderMesh vertexBuffer indexBuffer vad numIndices {-tex-} sh -> do
             (resources',(program,[mv1,mv2,mv3,mv4,pr1,pr2,pr3,pr4],[posA])) <- case IntMap.lookup (key sh) shaderMap of
                 Nothing  -> unShader sh >>= \sh' -> return (Resources (IntMap.insert (key sh) sh' shaderMap),sh')
                 Just sh' -> return (resources,sh')
@@ -156,14 +156,14 @@ draw world view proj resources@(Resources shaderMap) g = do
             GL.uniform pr3 GL.$= (toGLVertex4 $ _z proj)
             GL.uniform pr4 GL.$= (toGLVertex4 $ _w proj)
 
-            print "world"
-            print newWorld
+            -- print "world"
+            -- print newWorld
             
-            print "modelView"
-            print modelView
+            -- print "modelView"
+            -- print modelView
 
-            print "proj"
-            print proj
+            -- print "proj"
+            -- print proj
 
             --Bind Vertex buffer
             vbuf <- vertexBuffer
