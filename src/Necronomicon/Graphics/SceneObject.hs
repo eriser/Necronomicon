@@ -138,8 +138,8 @@ draw world view proj resources@(Resources shaderMap) g = do
             GL.renderPrimitive GL.Triangles    $  mapM_ drawVertexUV $ zip3 cs vs uvs
             GL.textureBinding  GL.Texture2D GL.$= Nothing
             return resources
-        ShaderMesh vertexBuffer indexBuffer vad numIndices {-tex-} sh -> do
-            (resources',(program,[mv1,mv2,mv3,mv4,pr1,pr2,pr3,pr4],[posA])) <- case IntMap.lookup (key sh) shaderMap of
+        ShaderMesh vertexBuffer indexBuffer [vertexVad,colorVad] numIndices {-tex-} sh -> do
+            (resources',(program,[mv1,mv2,mv3,mv4,pr1,pr2,pr3,pr4],[posA,colA])) <- case IntMap.lookup (key sh) shaderMap of
                 Nothing  -> unShader sh >>= \sh' -> return (Resources (IntMap.insert (key sh) sh' shaderMap),sh')
                 Just sh' -> return (resources,sh')
             GL.currentProgram GL.$= Just program
@@ -168,8 +168,14 @@ draw world view proj resources@(Resources shaderMap) g = do
             --Bind Vertex buffer
             vbuf <- vertexBuffer
             GL.bindBuffer GL.ArrayBuffer GL.$= Just vbuf
-            GL.vertexAttribPointer posA  GL.$= (GL.ToFloat, vad)
+
+            --Setup vertex attribute
+            GL.vertexAttribPointer posA  GL.$= (GL.ToFloat, vertexVad)
             GL.vertexAttribArray   posA  GL.$= GL.Enabled
+
+            --Setup color attribute
+            GL.vertexAttribPointer colA  GL.$= (GL.ToFloat, colorVad)
+            GL.vertexAttribArray   colA  GL.$= GL.Enabled
 
             --Bind Index buffer
             ibuf <- indexBuffer

@@ -37,7 +37,7 @@ testShader = gui [so <~ lift snd mousePos]
         color = RGB 1 0.5 0.25
         m  = shaderMesh
              [Vector3 (-hw) hh 0,Vector3 (hw) (hh) 0,Vector3 (-hw) (-hh) 0,Vector3 hw (-hh) 0]
-             [color,color,color,color]
+             [RGB 1 0 0,RGB 0 1 0,RGB 0 0 1,RGB 1 0 1]
              [Vector2 0 1,Vector2 0 0,Vector2 1 0,Vector2 1 1]
              [0,1,2,3,2,1]
              undefined

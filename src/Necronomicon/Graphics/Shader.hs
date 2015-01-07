@@ -9,7 +9,8 @@ module Necronomicon.Graphics.Shader (
     compileVert,
     compileFrag,
     shader,
-    offset0
+    offset0,
+    offsetPtr
     ) where
 
 import Prelude
@@ -117,9 +118,9 @@ shader vs fs = Shader (hash $ vertexString vs ++ fragmentString fs) $ do
     pr4 <- GL.get $ GL.uniformLocation program "projMatrix4"
 
     posA <- GL.get $ GL.attribLocation program "position"
-    -- colA <- GL.get $ GL.attribLocation program "color"
+    colA <- GL.get $ GL.attribLocation program "color"
 
-    return (program,[mv1,mv2,mv3,mv4,pr1,pr2,pr3,pr4],[posA])
+    return (program,[mv1,mv2,mv3,mv4,pr1,pr2,pr3,pr4],[posA,colA])
 
 -- |Produce a 'Ptr' value to be used as an offset of the given number
 -- of bytes.

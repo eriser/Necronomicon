@@ -17,19 +17,22 @@ data Mesh = EmptyMesh
           | SimpleMesh [Vector3] [Color]
           | Mesh       [Vector3] [Color] GL.TextureObject [Vector2]
           -- | ShaderMesh (IO GL.BufferObject) (IO GL.BufferObject) (GL.VertexArrayDescriptor GL.GLfloat) Int GL.TextureObject Shader
-          | ShaderMesh (IO GL.BufferObject) (IO GL.BufferObject) (GL.VertexArrayDescriptor GL.GLfloat) Int Shader
+          | ShaderMesh (IO GL.BufferObject) (IO GL.BufferObject) [GL.VertexArrayDescriptor GL.GLfloat] Int Shader
           deriving (Show)
 
 data Resources = Resources (IntMap.IntMap LoadedShader)
 
 shaderMesh :: [Vector3] -> [Color] -> [Vector2] -> [Int] -> GL.TextureObject -> Shader -> Mesh
-shaderMesh vertices colors uvs indices tex shdr = ShaderMesh arrayBuffer elementArrayBuffer vad (length indices) {-tex-} shdr
+shaderMesh vertices colors uvs indices tex shdr = ShaderMesh arrayBuffer elementArrayBuffer [vertexVad,colorVad] (length indices) {-tex-} shdr
     where
-        vad                = GL.VertexArrayDescriptor 3 GL.Float (fromIntegral $ sizeOf (undefined::GL.GLfloat) * 3) offset0
-        arrayBuffer        = makeBuffer GL.ArrayBuffer (map realToFrac (vecsToBuffer vertices) :: [GL.GLfloat]) 
+        arrayBuffer        = makeBuffer GL.ArrayBuffer (map realToFrac (vecsToBuffer vertices colors) :: [GL.GLfloat]) 
+        vertexVad          = GL.VertexArrayDescriptor 3 GL.Float (fromIntegral $ sizeOf (undefined::GL.GLfloat) * 6) offset0
+        colorVad           = GL.VertexArrayDescriptor 3 GL.Float (fromIntegral $ sizeOf (undefined::GL.GLfloat) * 6) (offsetPtr $ sizeOf (undefined :: GL.GLfloat) * 3)
         elementArrayBuffer = makeBuffer GL.ElementArrayBuffer (map fromIntegral indices :: [GL.GLuint])
-        vecsToBuffer []    = []
-        vecsToBuffer (Vector3 x y z : vs) = x : y : z : vecsToBuffer vs
+        vecsToBuffer [] _  = []
+        vecsToBuffer _  [] = []
+        vecsToBuffer (Vector3 x y z : vs) (RGB  r g b   : cs) = x : y : z : r : g : b : vecsToBuffer vs cs
+        vecsToBuffer (Vector3 x y z : vs) (RGBA r g b _ : cs) = x : y : z : r : g : b : vecsToBuffer vs cs
 
 instance Show (IO GL.BufferObject) where
     show _ = "IO GL.BufferObject"
@@ -56,7 +59,7 @@ ambientShader = shader vs fs
                         
                         Color       = color;
                         //gl_Position = vec4(position,1.0) * modelView * proj; 
-                        gl_Position = vec4(position,1.0) * proj; 
+                        gl_Position = vec4(position,1.0) * proj;
                     }
              |]
 
