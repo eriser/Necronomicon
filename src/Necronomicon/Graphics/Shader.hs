@@ -119,7 +119,7 @@ shader vs fs = Shader (hash $ vertexString vs ++ fragmentString fs) $ do
     posA <- GL.get $ GL.attribLocation program "position"
     -- colA <- GL.get $ GL.attribLocation program "color"
 
-    return (program,[mv1,mv2,mv3,mv4,pr1,pr2,pr3,pr3],[posA])
+    return (program,[mv1,mv2,mv3,mv4,pr1,pr2,pr3,pr4],[posA])
 
 -- |Produce a 'Ptr' value to be used as an offset of the given number
 -- of bytes.

@@ -163,7 +163,7 @@ draw world view proj resources@(Resources shaderMap) g = do
             -- print modelView
 
             -- print "proj"
-            -- print proj
+            -- print (toGLVertex4 $ _z proj)
 
             --Bind Vertex buffer
             vbuf <- vertexBuffer

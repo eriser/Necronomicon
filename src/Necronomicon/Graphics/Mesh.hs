@@ -41,30 +41,22 @@ ambientShader :: Shader
 ambientShader = shader vs fs
     where
         vs = [vert| #version 130
-                    uniform vec4 modelViewMatrix1;
-                    uniform vec4 modelViewMatrix2;
-                    uniform vec4 modelViewMatrix3;
-                    uniform vec4 modelViewMatrix4;
-
-                    uniform vec4 projMatrix1;
-                    uniform vec4 projMatrix2;
-                    uniform vec4 projMatrix3;
-                    uniform vec4 projMatrix4;
+                    uniform vec4 modelViewMatrix1,modelViewMatrix2,modelViewMatrix3,modelViewMatrix4;
+                    uniform vec4 projMatrix1,     projMatrix2,     projMatrix3,     projMatrix4;
 
                     in  vec3  position;
-                    //in  vec3  color;
+                    in  vec3  color;
                     //in  vec2  uv;
                     out vec3 Color;
 
                     void main() 
                     {
-                        mat4 viewMatrix = mat4(modelViewMatrix1,modelViewMatrix2,modelViewMatrix3,modelViewMatrix4);
-                        mat4 projMatrix = mat4(projMatrix1,projMatrix2,projMatrix3,projMatrix4);
-
-                        //Color       = color;
-                        Color = vec3(1.0,1.0,1.0);
-                        //gl_Position = vec4(position,1.0) * viewMatrix * projMatrix; 
-                        gl_Position = vec4(position,1.0);// * projMatrix; 
+                        mat4 modelView = mat4(modelViewMatrix1,modelViewMatrix2,modelViewMatrix3,modelViewMatrix4);
+                        mat4 proj      = mat4(projMatrix1,projMatrix2,projMatrix3,projMatrix4);
+                        
+                        Color       = color;
+                        //gl_Position = vec4(position,1.0) * modelView * proj; 
+                        gl_Position = vec4(position,1.0) * proj; 
                     }
              |]
 

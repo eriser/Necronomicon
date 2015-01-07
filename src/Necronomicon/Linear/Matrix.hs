@@ -14,7 +14,10 @@ import Unsafe.Coerce (unsafeCoerce)
 -- Matrices - Row Major
 data Matrix2x2  = Matrix2x2 Vector2 Vector2                 deriving (Show,Eq,Ord)
 data Matrix3x3  = Matrix3x3 Vector3 Vector3 Vector3         deriving (Show,Eq,Ord)
-data Matrix4x4  = Matrix4x4 Vector4 Vector4 Vector4 Vector4 deriving (Show,Eq,Ord)
+data Matrix4x4  = Matrix4x4 Vector4 Vector4 Vector4 Vector4 deriving (Eq,Ord)
+
+instance Show Matrix4x4 where
+    show (Matrix4x4 x y z w) = "Matrix4x4\n" ++ show x ++ "\n" ++ show y ++ "\n" ++ show z ++ "\n" ++ show w
 
 -- Matrix class
 class Matrix a where
@@ -374,10 +377,10 @@ trsMatrix (Vector3 tx ty tz) q (Vector3 sx sy sz) = Matrix4x4 (append r1 tx) (ap
 
 orthoMatrix :: Double -> Double -> Double -> Double -> Double -> Double -> Matrix4x4
 orthoMatrix l r b t n f = Matrix4x4
-                          (Vector4 (2/r-l) 0       0       (-((r+l)/(r-l))))
-                          (Vector4 0       (2/t-b) 0       (-((t+b)/(t-b))))
-                          (Vector4 0       0       (2/f-n) (  (f+n)/(f-n) ))
-                          (Vector4 0       0       0       1               )
+                          (Vector4 (2/(r-l)) 0       0        (-((r+l)/(r-l))))
+                          (Vector4 0       (2/(t-b)) 0        (-((t+b)/(t-b))))
+                          (Vector4 0       0       (-2/(f-n)) (  (f+n)/(f-n) ))
+                          (Vector4 0       0       0          1               )
 
 perspMatrix :: Double -> Double -> Double -> Double -> Matrix4x4
 perspMatrix fov aspect near far = Matrix4x4 (Vector4 (f/aspect) 0 0 0) (Vector4 0 f 0 0) (Vector4 0 0 ((near+far)/(near-far)) ((2*far*near)/(near-far))) (Vector4 0 0 (-1) 0)

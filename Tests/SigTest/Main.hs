@@ -34,7 +34,7 @@ testShader = gui [so <~ lift snd mousePos]
         so y = SceneObject "ShaderTest" True (Vector3 0.5 y 0) identityQuat 1 m Nothing []
         hw = 0.1
         hh = 0.1
-        color = RGB 1 1 1
+        color = RGB 1 0.5 0.25
         m  = shaderMesh
              [Vector3 (-hw) hh 0,Vector3 (hw) (hh) 0,Vector3 (-hw) (-hh) 0,Vector3 hw (-hh) 0]
              [color,color,color,color]
