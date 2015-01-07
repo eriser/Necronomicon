@@ -158,6 +158,9 @@ draw world view proj resources@(Resources shaderMap) g = do
 
             -- print "world"
             -- print newWorld
+
+            -- print "view"
+            -- print view
             
             -- print "modelView"
             -- print modelView
@@ -189,10 +192,10 @@ draw world view proj resources@(Resources shaderMap) g = do
 
     return (resources',newWorld)
     where
-        -- newWorld  = world    .*. (trsMatrix (_position g) (_rotation g) (_scale g))
-        newWorld  = identity
-        -- modelView = newWorld .*. view
-        modelView = newWorld
+        newWorld  = world    .*. (trsMatrix (_position g) (_rotation g) (_scale g))
+        modelView = newWorld .*. view
+        -- newWorld  = identity
+        -- modelView = newWorld
         drawVertex (c,v) = GL.color (toGLColor3 c) >> GL.vertex (toGLVertex3 v)
         drawVertexUV (c,v,Vector2 u v') = do
             GL.color    $ toGLColor3  c

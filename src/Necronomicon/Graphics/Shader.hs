@@ -107,15 +107,15 @@ shader vs fs = Shader (hash $ vertexString vs ++ fragmentString fs) $ do
     GL.validateProgram program
     GL.linkProgram     program
 
-    mv1 <- GL.get $ GL.uniformLocation program "modelViewMatrix1"
-    mv2 <- GL.get $ GL.uniformLocation program "modelViewMatrix2"
-    mv3 <- GL.get $ GL.uniformLocation program "modelViewMatrix3"
-    mv4 <- GL.get $ GL.uniformLocation program "modelViewMatrix4"
+    mv1 <- GL.get $ GL.uniformLocation program "mv1"
+    mv2 <- GL.get $ GL.uniformLocation program "mv2"
+    mv3 <- GL.get $ GL.uniformLocation program "mv3"
+    mv4 <- GL.get $ GL.uniformLocation program "mv4"
 
-    pr1 <- GL.get $ GL.uniformLocation program "projMatrix1"
-    pr2 <- GL.get $ GL.uniformLocation program "projMatrix2"
-    pr3 <- GL.get $ GL.uniformLocation program "projMatrix3"
-    pr4 <- GL.get $ GL.uniformLocation program "projMatrix4"
+    pr1 <- GL.get $ GL.uniformLocation program "pr1"
+    pr2 <- GL.get $ GL.uniformLocation program "pr2"
+    pr3 <- GL.get $ GL.uniformLocation program "pr3"
+    pr4 <- GL.get $ GL.uniformLocation program "pr4"
 
     posA <- GL.get $ GL.attribLocation program "position"
     colA <- GL.get $ GL.attribLocation program "color"

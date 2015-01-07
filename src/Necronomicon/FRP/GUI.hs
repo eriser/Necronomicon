@@ -28,7 +28,7 @@ element = lift $ \(Gui _ s) -> s
 gui :: [Signal SceneObject] -> Signal ()
 gui gs = render $ root <~ combine (camSig : gs)
     where
-        camSig = orthoCamera (Vector3 0 0 20) identityQuat <~ dimensions ~~ constant (RGB 0 0 0)
+        camSig = orthoCamera (Vector3 0 0 0) identityQuat <~ dimensions ~~ constant (RGB 0 0 0)
 
 label :: Vector2 -> Size -> Color -> String -> Signal SceneObject
 label (Vector2 x y) (Size w h) color (c:cs) = Signal $ \necro -> do

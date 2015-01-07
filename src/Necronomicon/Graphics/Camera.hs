@@ -40,7 +40,7 @@ renderCamera view scene resources g  = do
             GL.loadIdentity
             resources' <- case _fov c of
                 -- 0 -> GL.ortho2D 0 1 1 0 >> drawScene identity4 (invert newView) (orthoMatrix 0 1 0 1 0 1) resources scene
-                0 -> drawScene identity4 (invert newView) (orthoMatrix (-1) 1 (-1) 1 (-1) 1) resources scene
+                0 -> drawScene identity4 (invert newView) (orthoMatrix (-1 * ratio) (1 * ratio) (-1) 1 (-1) 1) resources scene
                 _ -> do
                     -- GL.matrixMode GL.$= GL.Projection
                     -- GL.perspective (realToFrac $ _fov c) (realToFrac ratio) (realToFrac $ _near c) (realToFrac $ _far c)
