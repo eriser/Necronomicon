@@ -32,14 +32,17 @@ gui gs = render $ root <~ combine (camSig : gs)
 
 label :: Vector2 -> Size -> Color -> String -> Signal SceneObject
 label (Vector2 x y) (Size w h) color (c:cs) = Signal $ \necro -> do
-    t    <- loadCharacter "/home/casiosk1/code/Necronomicon/Tests/SigTest/fonts/OCRA.ttf" 'a' 251 0
+    t    <- loadCharacter "/home/casiosk1/code/Necronomicon/Tests/SigTest/fonts/OCRA.ttf" 'a' 128 0
     let s = SceneObject "" True (Vector3 x y 0) identityQuat 1 (m t) Nothing []
     return (s,\_ -> return . NoChange $ s,IntSet.empty)
     where
         hw  = w * 0.5
         hh  = h * 0.5
-        m t = shaderMesh
-              [Vector3 (-hw) hh 0,Vector3 (hw) (hh) 0,Vector3 (-hw) (-hh) 0,Vector3 hw (-hh) 0]
+        m t = texturedMesh
+              [Vector3 (-hw)   hh  0,
+               Vector3   hw    hh  0,
+               Vector3 (-hw) (-hh) 0,
+               Vector3   hw  (-hh) 0]
               [color,color,color,color]
               [Vector2 0 1,Vector2 0 0,Vector2 1 0,Vector2 1 1]
               [0,1,2,3,2,1]

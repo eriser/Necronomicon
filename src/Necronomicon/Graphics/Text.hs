@@ -117,8 +117,8 @@ loadCharacter path char px texUnit = do
 newBoundTexUnit :: Int -> IO TextureObject
 newBoundTexUnit u = do
     [tex] <- genObjectNames 1
-    texture Texture2D $= Enabled
-    activeTexture     $= TextureUnit (fromIntegral u)
+    texture Texture2D        $= Enabled
+    activeTexture            $= TextureUnit (fromIntegral u)
     textureBinding Texture2D $= Just tex
     return tex
 

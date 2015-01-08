@@ -333,8 +333,8 @@ runSignal s = initWindow >>= \mw ->
             | quit      = readIORef necroVarsRef >>= runNecroState shutdownNecronomicon >> print "Qutting" >> return ()
             | otherwise = do
                 GLFW.pollEvents
-                q <- liftA (== GLFW.KeyState'Pressed) (GLFW.getKey window GLFW.Key'Q)
-                ms <- atomically $ tryTakeTMVar sceneVar
+                q          <- liftA (== GLFW.KeyState'Pressed) (GLFW.getKey window GLFW.Key'Q)
+                ms         <- atomically $ tryTakeTMVar sceneVar
                 resources' <- case ms of
                     Nothing -> return resources
                     Just s  -> renderGraphics window resources s 

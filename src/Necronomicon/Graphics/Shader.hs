@@ -82,10 +82,10 @@ shaderQuoter compileString string = do
     return $ AppE (VarE name) (LitE $ StringL string)
 
 compileVert :: String -> VertexShader
-compileVert s = VertexShader   s . loadShaderBS "quasi-vert" GL.VertexShader   $ C.pack s
+compileVert s = VertexShader   s . loadShaderBS "vert" GL.VertexShader   $ C.pack s
 
 compileFrag :: String -> FragmentShader
-compileFrag s = FragmentShader s . loadShaderBS "quasi-frag" GL.FragmentShader $ C.pack s
+compileFrag s = FragmentShader s . loadShaderBS "frag" GL.FragmentShader $ C.pack s
 
 getValueName :: String -> Q Name
 getValueName s = do
@@ -94,33 +94,23 @@ getValueName s = do
         Just n  -> n
         Nothing -> mkName s
 
-shader :: VertexShader -> FragmentShader -> Shader
-shader vs fs = Shader (hash $ vertexString vs ++ fragmentString fs) $ do
-
-    print "compiling shader"
+shader :: String -> [String] -> [String] -> VertexShader -> FragmentShader -> Shader
+shader shaderName uniformNames attributeNames vs fs = Shader (hash shaderName) $ do
+    putStrLn $ "Compiling shader: " ++ shaderName
 
     program <- GL.createProgram
     vs'     <- unVertexShader   vs
     fs'     <- unFragmentShader fs
+
     GL.attachShader    program  vs'
     GL.attachShader    program  fs'
     GL.validateProgram program
     GL.linkProgram     program
 
-    mv1 <- GL.get $ GL.uniformLocation program "mv1"
-    mv2 <- GL.get $ GL.uniformLocation program "mv2"
-    mv3 <- GL.get $ GL.uniformLocation program "mv3"
-    mv4 <- GL.get $ GL.uniformLocation program "mv4"
+    uniforms   <- mapM (GL.get . GL.uniformLocation program) uniformNames
+    attributes <- mapM (GL.get . GL.attribLocation  program) attributeNames
 
-    pr1 <- GL.get $ GL.uniformLocation program "pr1"
-    pr2 <- GL.get $ GL.uniformLocation program "pr2"
-    pr3 <- GL.get $ GL.uniformLocation program "pr3"
-    pr4 <- GL.get $ GL.uniformLocation program "pr4"
-
-    posA <- GL.get $ GL.attribLocation program "position"
-    colA <- GL.get $ GL.attribLocation program "color"
-
-    return (program,[mv1,mv2,mv3,mv4,pr1,pr2,pr3,pr4],[posA,colA])
+    return (program,uniforms,attributes)
 
 -- |Produce a 'Ptr' value to be used as an offset of the given number
 -- of bytes.
