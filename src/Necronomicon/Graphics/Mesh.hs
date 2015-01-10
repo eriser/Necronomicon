@@ -9,19 +9,30 @@ import Necronomicon.Utility
 import Necronomicon.Graphics.BufferObject
 import Foreign.C.Types
 import Foreign.Storable (sizeOf)
+import Necronomicon.Util.TGA (loadTextureFromTGA)
+import Data.IORef
 
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Data.IntMap as IntMap
+import qualified Data.Map as Map
 
 data Mesh = EmptyMesh
           | SimpleMesh [Vector3] [Color]
           | Mesh       [Vector3] [Color] GL.TextureObject [Vector2]
-          | ShaderMesh (Matrix4x4 -> Matrix4x4 -> Resources -> IO Resources)
+          | ShaderMesh (Matrix4x4 -> Matrix4x4 -> Resources -> IO ())
 
 instance Show Mesh where
     show _ = "Mesh"
 
-data Resources = Resources (IntMap.IntMap LoadedShader)
+data Resources = Resources {
+    shadersRef  :: IORef (IntMap.IntMap LoadedShader),
+    texturesRef :: IORef (Map.Map String GL.TextureObject)
+    }
+
+data Texture = Texture {
+    textureKey :: String,
+    unTexture  :: IO GL.TextureObject
+    }
 
 shaderMesh :: [Vector3] -> [Color] -> [Vector2] -> [Int] -> GL.TextureObject -> Shader -> Mesh
 shaderMesh vertices colors uvs indices tex shdr = ShaderMesh draw
@@ -33,11 +44,10 @@ shaderMesh vertices colors uvs indices tex shdr = ShaderMesh draw
         numIndices   = length indices
         
         draw modelView proj resources = do
-            (resources',(program,uniforms,attributes)) <- getResources resources ambientShader
+            (program,uniforms,attributes) <- getShader resources textureShader
             GL.currentProgram GL.$= Just program
             bindMatrixUniforms uniforms modelView proj
             bindThenDraw vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad]) numIndices
-            return resources'
 
 texturedMesh :: [Vector3] -> [Color] -> [Vector2] -> [Int] -> GL.TextureObject -> Mesh
 texturedMesh vertices colors uvs indices tex = ShaderMesh draw
@@ -50,14 +60,27 @@ texturedMesh vertices colors uvs indices tex = ShaderMesh draw
         numIndices   = length indices
 
         draw modelView proj resources = do
-            (resources',(program,texu : uniforms,attributes)) <- getResources resources textureShader
-            GL.currentProgram GL.$= Just program
+            (program,texu : uniforms,attributes) <- getShader resources textureShader
+            texture <- getTexture resources $ Texture "Gas20.tga" (loadTextureFromTGA "/home/casiosk1/code/Necronomicon/Tests/SigTest/textures/Gas20.tga")
+            
+            GL.currentProgram  GL.$= Just program
             bindMatrixUniforms uniforms modelView proj
-            GL.activeTexture  GL.$= GL.TextureUnit 0
-            GL.textureBinding GL.Texture2D GL.$= Just tex
-            GL.uniform texu   GL.$= GL.Index1 (0 :: GL.GLuint)
+            GL.activeTexture   GL.$= GL.TextureUnit 0
+            GL.textureBinding  GL.Texture2D GL.$= Just texture
+            GL.uniform texu    GL.$= GL.TextureUnit 0
             bindThenDraw vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
-            return resources'
+
+getShader :: Resources -> Shader -> IO LoadedShader
+getShader resources sh = readIORef (shadersRef resources) >>= \shaders ->
+    case IntMap.lookup (key sh) shaders of
+        Nothing     -> unShader sh >>= \shader -> (writeIORef (shadersRef resources) $ IntMap.insert (key sh) shader shaders) >> return shader
+        Just shader -> return shader
+
+getTexture :: Resources -> Texture -> IO GL.TextureObject
+getTexture resources tex = readIORef (texturesRef resources) >>= \textures ->
+    case Map.lookup (textureKey tex) textures of
+        Nothing      -> unTexture tex >>= \texture -> (writeIORef (texturesRef resources) $ Map.insert (textureKey tex) texture textures) >> return texture
+        Just texture -> return texture
 
 posCol [] _  = []
 posCol _  [] = []
@@ -69,10 +92,6 @@ posColorUV _ [] _ = []
 posColorUV _ _ [] = []
 posColorUV (Vector3 x y z : vs) (RGB  r g b   : cs) (Vector2 u v : uvs) = x : y : z : r : g : b : u : v : posColorUV vs cs uvs
 posColorUV (Vector3 x y z : vs) (RGBA r g b _ : cs) (Vector2 u v : uvs) = x : y : z : r : g : b : u : v : posColorUV vs cs uvs
-
-getResources resources@(Resources shaderMap) sh = case IntMap.lookup (key sh) shaderMap of
-    Nothing  -> unShader sh >>= \sh' -> return (Resources (IntMap.insert (key sh) sh' shaderMap),sh')
-    Just sh' -> return (resources,sh')
 
 bindMatrixUniforms (mv1:mv2:mv3:mv4:pr1:pr2:pr3:pr4:_) modelView proj = do
     --set uniform vectors for the modelView matrix. Haskell's OpenGL library doesn't come stock with a way to set mat4 uniforms, so we have to break it up :(
@@ -103,37 +122,40 @@ bindThenDraw vertexBuffer indexBuffer atributesAndVads numIndices = do
 instance Show (IO GL.BufferObject) where
     show _ = "IO GL.BufferObject"
 
-newResources :: Resources
-newResources = Resources IntMap.empty
+newResources :: IO Resources
+newResources = do
+    smap <- newIORef IntMap.empty
+    tmap <- newIORef Map.empty
+    return $ Resources smap tmap
 
 ambientShader :: Shader
-ambientShader = shader "ambient" ["mv1","mv2","mv3","mv4","pr1","pr2","pr3","pr4"] ["position","color"] vs fs
+ambientShader = shader "ambient" ["mv1","mv2","mv3","mv4","pr1","pr2","pr3","pr4"] ["position","in_color"] vs fs
     where
         vs = [vert| #version 130
                     uniform vec4 mv1,mv2,mv3,mv4;
                     uniform vec4 pr1,pr2,pr3,pr4;
 
-                    in  vec3  position;
-                    in  vec3  color;
-                    out vec3 Color;
+                    in  vec3 position;
+                    in  vec3 in_color;
+                    out vec3 color;
 
                     void main() 
                     {
                         mat4 modelView = mat4(mv1,mv2,mv3,mv4);
                         mat4 proj      = mat4(pr1,pr2,pr3,pr4);
                         
-                        Color       = color;
+                        color       = in_color;
                         gl_Position = vec4(position,1.0) * modelView * proj; 
                     }
              |]
 
         fs = [frag| #version 130
-                    in vec3  Color;
+                    in  vec3 color;
                     out vec4 fragColor;
 
                     void main()
                     {
-                        fragColor = vec4(Color,1.0);
+                        fragColor = vec4(color,1.0);
                     }
              |]
 
@@ -173,7 +195,7 @@ textureShader = shader "texture" ["tex","mv1","mv2","mv3","mv4","pr1","pr2","pr3
                     {
                         //fragColor = vec4(color,1.0) * texture2D(tex,uv);
                         //fragColor = vec4(uv,0.0,1.0); //texture2D(tex,uv);
-                        fragColor = vec4(uv,0.0,1.0); //texture2D(tex,uv);
+                        fragColor = vec4(texture(tex,uv).xyz,1.0);
                     }
              |]
 

@@ -124,31 +124,17 @@ root = SceneObject "root" True 0 identityQuat 1 EmptyMesh Nothing
 plain :: String -> SceneObject
 plain name = SceneObject name True 0 identityQuat 1 EmptyMesh Nothing []
 
-draw :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> SceneObject -> IO (Resources,Matrix4x4)
-draw world view proj resources g = do
-    resources' <- case _mesh g of
-        EmptyMesh         -> return resources
-        SimpleMesh vs cs  -> GL.renderPrimitive GL.Triangles (mapM_ drawVertex $ zip cs vs) >> return resources
-        Mesh vs cs t  uvs -> do
-            GL.activeTexture                GL.$= GL.TextureUnit 0
-            GL.textureBinding  GL.Texture2D GL.$= Just t
-            GL.renderPrimitive GL.Triangles    $  mapM_ drawVertexUV $ zip3 cs vs uvs
-            GL.textureBinding  GL.Texture2D GL.$= Nothing
-            return resources
-        ShaderMesh drawMesh -> drawMesh modelView proj resources
-    return (resources',newWorld)
+drawScene :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> SceneObject -> IO ()
+drawScene world view proj resources g = draw world view proj resources g >>= \newWorld -> mapM_ (drawScene newWorld view proj resources) (_children g)
+
+draw :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> SceneObject -> IO Matrix4x4
+draw world view proj resources g = case _mesh g of
+    ShaderMesh drawMesh -> drawMesh modelView proj resources >> return newWorld
+    _                   -> return newWorld
     where
         newWorld  = world    .*. (trsMatrix (_position g) (_rotation g) (_scale g))
         modelView = newWorld .*. view
-        
-        drawVertex (c,v) = GL.color (toGLColor3 c) >> GL.vertex (toGLVertex3 v)
-        drawVertexUV (c,v,Vector2 u v') = do
-            GL.color    $ toGLColor3  c
-            GL.texCoord (GL.TexCoord2 (fromRational $ toRational u) (fromRational $ toRational v') :: GL.TexCoord2 GL.GLfloat)
-            GL.vertex   $ toGLVertex3 v
 
-drawScene :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> SceneObject -> IO Resources
-drawScene world view proj resources g = draw world view proj resources g >>= \(resources',newWorld) -> foldM (drawScene newWorld view proj) resources' (_children g)
 
 --breadth first?
 findGameObject :: String -> SceneObject -> Maybe SceneObject
@@ -160,15 +146,3 @@ findGameObject n g
         compareSearch _         (Just g2) = Just g2
         compareSearch _         _         = Nothing
 
-
-{-
-        Just m  -> case texture m of
-            Nothing -> GL.renderPrimitive GL.Triangles (mapM_ drawVertex $ zip (colors m) (vertices m))
-            Just t  -> case uv m of
-                Nothing  -> GL.renderPrimitive GL.Triangles (mapM_ drawVertex $ zip (colors m) (vertices m))
-                Just uvs -> do
-                    -- GL.texture         GL.Texture2D GL.$= GL.Enabled
-                    GL.activeTexture                GL.$= GL.TextureUnit 0
-                    GL.textureBinding  GL.Texture2D GL.$= Just t
-                    GL.renderPrimitive GL.Triangles (mapM_ drawVertexUV $ zip3 (colors m) (vertices m) uvs)
--}

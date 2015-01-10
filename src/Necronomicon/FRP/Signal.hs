@@ -315,8 +315,8 @@ runSignal s = initWindow >>= \mw ->
             (ww,wh) <- GLFW.getWindowSize w
             dimensionsEvent globalDispatch w ww wh
             mousePressEvent globalDispatch w 0 GLFW.MouseButtonState'Released GLFW.modifierKeysShift
-
-            render False w sceneVar newResources necroVars
+            resources <- newResources 
+            render False w sceneVar resources necroVars
     where
         --event callbacks
         mousePressEvent eventNotify _ _ GLFW.MouseButtonState'Released _ = atomically $ (writeTBQueue eventNotify $ Event 1 $ toDyn False) `orElse` return ()
@@ -335,11 +335,11 @@ runSignal s = initWindow >>= \mw ->
                 GLFW.pollEvents
                 q          <- liftA (== GLFW.KeyState'Pressed) (GLFW.getKey window GLFW.Key'Q)
                 ms         <- atomically $ tryTakeTMVar sceneVar
-                resources' <- case ms of
-                    Nothing -> return resources
+                case ms of
+                    Nothing -> return ()
                     Just s  -> renderGraphics window resources s 
                 threadDelay $ 16667
-                render q window sceneVar resources' necroVarsRef
+                render q window sceneVar resources necroVarsRef
 
 globalEventDispatch :: Show a => Signal a -> Necro -> IO()
 globalEventDispatch signal necro = do
