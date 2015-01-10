@@ -17,7 +17,7 @@ makeBuffer target elems = makeBufferWithLength target (length elems) elems
 
 makeBufferWithLength :: (Storable a) => GL.BufferTarget -> Int -> [a] -> IO GL.BufferObject
 makeBufferWithLength target len elems = do
-    -- print "makeBuffer"
+    print "makeBuffer"
     [buffer] <- GL.genObjectNames 1
     GL.bindBuffer target GL.$= Just buffer
     withArray elems $ \ptr -> GL.bufferData target GL.$= (n, ptr, GL.StaticDraw)

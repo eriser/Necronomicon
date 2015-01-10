@@ -29,17 +29,9 @@ testSound3 = playUntil myCoolSynth2 (isDown keyP) (isDown keyS)
 testShader :: Signal ()
 testShader = gui [so <~ mousePos,zLabel]
     where
-        so (x ,y) = SceneObject "ShaderTest" True (Vector3 x y 0) identityQuat 1 (Just m) Nothing []
-        m  = texturedMesh
-             (rect 0.2 0.2)
-             [RGB   1 0 0,RGB   0 1 0,RGB   0 0 1,RGB   1 0 1]
-             [Vector2 0 1,Vector2 0 0,Vector2 1 0,Vector2 1 1]
-             [0,1,2,3,2,1]
-             (tga "/home/casiosk1/code/Necronomicon/Tests/SigTest/textures/Gas20.tga")
-
-        --Need to figure out the issue with lazy rendering....
-        zLabel = label  (Vector2 0.0 0.0) (Size 0.25 0.25) (RGB 1 1 1) "Zero"
-
+        so (x,y) = SceneObject "ShaderTest" True (Vector3 x y 0) identityQuat 1 (Just model) Nothing []
+        model    = Model (rect 0.2 0.2) (ambient <| tga "/home/casiosk1/code/Necronomicon/Tests/SigTest/textures/Gas20.tga")
+        zLabel   = label (Vector2 0.0 0.0) (Size 0.25 0.25) white "Zero"
 
 testGUI :: Signal ()
 testGUI = gui [element vslider,element blueButton,zLabel,tri <~ input vslider]
@@ -71,16 +63,9 @@ testScene = scene [camSig,triSig]
 -- terrain pos r chldn = SceneObject "Terrain" True pos r 1 simplexMesh Nothing []
 
 testTri :: String -> Vector3 -> Quaternion -> [SceneObject] -> SceneObject
-testTri name pos r chldn = SceneObject name True pos r 1 (Just m) Nothing []
+testTri name pos r chldn = SceneObject name True pos r 1 (Just model) Nothing []
     where
-        m = ambientMesh
-            [Vector3 (-0.4) (-0.3) 0,
-             Vector3   0.4  (-0.3) 0,
-             Vector3     0    0.3  0]
-            [RGB 1 0 0,
-             RGB 0 1 0,
-             RGB 0 0 1]
-            [0,1,2]
+        model = Model (tri 0.3 white) vertexColored
 
 {-
 simplexMesh :: Mesh
