@@ -1,10 +1,51 @@
 import Prelude
-import Necronomicon hiding ((+),(-),(*),(/))
+import Necronomicon
 import Debug.Trace
 import qualified Data.Vector as V
 
 main :: IO ()
-main = runSignal testGUI
+main = runSignal testShader
+
+testPattern :: Signal ()
+testPattern = gui [tri <~ pattern / 10 ]
+    where
+        tri y   = testTri "" (Vector3 0.5 y 0) identityQuat []
+        pattern = playPattern 0 (isDown keyP)
+                  [lich| 0 [1 2] _ [3 [4 5]] 6
+                         0 [1 2] _ [3 [4 5]] 6
+                         0 [1 2] _ [3 [4 5]] 6
+                         0 [1 2] _ [3 [4 5]] 6 |]
+
+testSound :: Signal ()
+testSound = playWhile myCoolSynth2 (isDown keyW)
+        <|> playWhile myCoolSynth3 (isDown keyA)
+
+testSound2 :: Signal ()
+testSound2 = play lineSynth <| isDown keyS
+
+testSound3 :: Signal ()
+testSound3 = playUntil myCoolSynth2 (isDown keyP) (isDown keyS)
+
+testShader :: Signal ()
+testShader = gui [so <~ mousePos,zLabel]
+    where
+        so (x,y) = SceneObject "ShaderTest" True (Vector3 x y 0) identityQuat 1 m Nothing []
+        hw = 0.1
+        hh = 0.1
+        m  = shaderMesh
+             [Vector3 (-hw)   hh  0,
+              Vector3   hw    hh  0,
+              Vector3 (-hw) (-hh) 0,
+              Vector3   hw  (-hh) 0]
+             [RGB   1 0 0,RGB   0 1 0,RGB   0 0 1,RGB   1 0 1]
+             [Vector2 0 1,Vector2 0 0,Vector2 1 0,Vector2 1 1]
+             [0,1,2,3,2,1]
+             undefined
+             ambientShader
+
+        --Need to figure out the issue with lazy rendering....
+        zLabel = label  (Vector2 0.0 0.0) (Size 0.25 0.25) (RGB 1 1 1) "Zero"
+
 
 testGUI :: Signal ()
 testGUI = gui [element vslider,element blueButton,zLabel,tri <~ input vslider]

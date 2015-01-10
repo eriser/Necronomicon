@@ -8,7 +8,9 @@ module Necronomicon.Graphics.Shader (
     frag,
     compileVert,
     compileFrag,
-    shader
+    shader,
+    offset0,
+    offsetPtr
     ) where
 
 import Prelude
@@ -22,6 +24,7 @@ import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Language.Haskell.TH as TH
+import Foreign.Ptr (Ptr,wordPtrToPtr)
 
 data VertexShader   = VertexShader   {
     vertexString   :: String,
@@ -33,7 +36,7 @@ data FragmentShader = FragmentShader {
     unFragmentShader :: IO GL.Shader
     } deriving (Show)
 
-type LoadedShader = (GL.Program,[GL.UniformLocation])
+type LoadedShader = (GL.Program,[GL.UniformLocation],[GL.AttribLocation])
 
 data Shader = Shader {
     key      :: Int,
@@ -79,10 +82,10 @@ shaderQuoter compileString string = do
     return $ AppE (VarE name) (LitE $ StringL string)
 
 compileVert :: String -> VertexShader
-compileVert s = VertexShader   s . loadShaderBS "quasi-vert" GL.VertexShader   $ C.pack s
+compileVert s = VertexShader   s . loadShaderBS "vert" GL.VertexShader   $ C.pack s
 
 compileFrag :: String -> FragmentShader
-compileFrag s = FragmentShader s . loadShaderBS "quasi-frag" GL.FragmentShader $ C.pack s
+compileFrag s = FragmentShader s . loadShaderBS "frag" GL.FragmentShader $ C.pack s
 
 getValueName :: String -> Q Name
 getValueName s = do
@@ -91,28 +94,29 @@ getValueName s = do
         Just n  -> n
         Nothing -> mkName s
 
-shader :: VertexShader -> FragmentShader -> Shader
-shader vs fs = Shader (hash $ vertexString vs ++ fragmentString fs) $ do
-
-    print "compiling shader"
+shader :: String -> [String] -> [String] -> VertexShader -> FragmentShader -> Shader
+shader shaderName uniformNames attributeNames vs fs = Shader (hash shaderName) $ do
+    putStrLn $ "Compiling shader: " ++ shaderName
 
     program <- GL.createProgram
     vs'     <- unVertexShader   vs
     fs'     <- unFragmentShader fs
+
     GL.attachShader    program  vs'
     GL.attachShader    program  fs'
     GL.validateProgram program
     GL.linkProgram     program
 
-    mv1 <- GL.get $ GL.uniformLocation program "modelViewMatrix1"
-    mv2 <- GL.get $ GL.uniformLocation program "modelViewMatrix2"
-    mv3 <- GL.get $ GL.uniformLocation program "modelViewMatrix3"
-    mv4 <- GL.get $ GL.uniformLocation program "modelViewMatrix4"
+    uniforms   <- mapM (GL.get . GL.uniformLocation program) uniformNames
+    attributes <- mapM (GL.get . GL.attribLocation  program) attributeNames
 
-    pr1 <- GL.get $ GL.uniformLocation program "projMatrix1"
-    pr2 <- GL.get $ GL.uniformLocation program "projMatrix2"
-    pr3 <- GL.get $ GL.uniformLocation program "projMatrix3"
-    pr4 <- GL.get $ GL.uniformLocation program "projMatrix4"
+    return (program,uniforms,attributes)
 
-    return (program,[mv1,mv2,mv3,mv4,pr1,pr2,pr3,pr3])
+-- |Produce a 'Ptr' value to be used as an offset of the given number
+-- of bytes.
+offsetPtr :: Int -> Ptr a
+offsetPtr = wordPtrToPtr . fromIntegral
 
+-- |A zero-offset 'Ptr'.
+offset0 :: Ptr a
+offset0 = offsetPtr 0

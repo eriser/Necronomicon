@@ -125,10 +125,7 @@ plain :: String -> SceneObject
 plain name = SceneObject name True 0 identityQuat 1 EmptyMesh Nothing []
 
 draw :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> SceneObject -> IO (Resources,Matrix4x4)
-draw world view proj resources@(Resources shaderMap) g = do
-    GL.translate (toGLVec3 $ _position g)
-    GL.rotate (toGLDouble . radToDeg . getAngle $ _rotation g) (toGLVec3 . getAxis $ _rotation g)
-    GL.scale  (toGLDouble . _x $ _scale g) (toGLDouble . _y $ _scale g) (toGLDouble . _z $ _scale g)
+draw world view proj resources g = do
     resources' <- case _mesh g of
         EmptyMesh         -> return resources
         SimpleMesh vs cs  -> GL.renderPrimitive GL.Triangles (mapM_ drawVertex $ zip cs vs) >> return resources
@@ -138,32 +135,12 @@ draw world view proj resources@(Resources shaderMap) g = do
             GL.renderPrimitive GL.Triangles    $  mapM_ drawVertexUV $ zip3 cs vs uvs
             GL.textureBinding  GL.Texture2D GL.$= Nothing
             return resources
-        ShaderMesh arrayBuffer elementArrayBuffer tex sh -> do
-            (resources',(program,[mv1,mv2,mv3,mv4,pr1,pr2,pr3,pr4])) <- case IntMap.lookup (key sh) shaderMap of
-                Nothing  -> unShader sh >>= \sh' -> return (Resources (IntMap.insert (key sh) sh' shaderMap),sh')
-                Just sh' -> return (resources,sh')
-            GL.currentProgram GL.$= Just program
-
-            --set uniform vectors for the modelView matrix. Haskell's OpenGL library doesn't come stock with a way to set mat4 uniforms, so we have to break it up :(
-            GL.uniform mv1 GL.$= (toGLVertex4 $ _x modelView)
-            GL.uniform mv2 GL.$= (toGLVertex4 $ _y modelView)
-            GL.uniform mv3 GL.$= (toGLVertex4 $ _z modelView)
-            GL.uniform mv4 GL.$= (toGLVertex4 $ _w modelView)
-
-            --same for proj matrix
-            GL.uniform pr1 GL.$= (toGLVertex4 $ _x proj)
-            GL.uniform pr2 GL.$= (toGLVertex4 $ _y proj)
-            GL.uniform pr3 GL.$= (toGLVertex4 $ _z proj)
-            GL.uniform pr4 GL.$= (toGLVertex4 $ _w proj)
-
-            -- GL.renderPrimitive GL.Triangles (mapM_ drawVertex $ zip cs vs)
-            GL.currentProgram GL.$= Nothing
-            return resources'
-
+        ShaderMesh drawMesh -> drawMesh modelView proj resources
     return (resources',newWorld)
     where
         newWorld  = world    .*. (trsMatrix (_position g) (_rotation g) (_scale g))
         modelView = newWorld .*. view
+        
         drawVertex (c,v) = GL.color (toGLColor3 c) >> GL.vertex (toGLVertex3 v)
         drawVertexUV (c,v,Vector2 u v') = do
             GL.color    $ toGLColor3  c
@@ -171,7 +148,7 @@ draw world view proj resources@(Resources shaderMap) g = do
             GL.vertex   $ toGLVertex3 v
 
 drawScene :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> SceneObject -> IO Resources
-drawScene world view proj resources g = GL.preservingMatrix $ draw world view proj resources g >>= \(resources',newWorld) -> foldM (drawScene newWorld view proj) resources' (_children g)
+drawScene world view proj resources g = draw world view proj resources g >>= \(resources',newWorld) -> foldM (drawScene newWorld view proj) resources' (_children g)
 
 --breadth first?
 findGameObject :: String -> SceneObject -> Maybe SceneObject

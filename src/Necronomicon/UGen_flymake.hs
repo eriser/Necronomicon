@@ -1,6 +1,6 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
-module Necronomicon.UGen where 
-                                
+module Necronomicon.UGen where
+
 import GHC.Exts
 import Data.List
 import Debug.Trace
@@ -16,6 +16,7 @@ import Control.Concurrent
 import Control.Concurrent.STM
 import Necronomicon.Runtime
 import Necronomicon.Util
+import Necronomicon.Utility
 import Control.Monad.Trans
 import qualified Data.Map as M
 import Data.Monoid
@@ -159,7 +160,7 @@ instance UGenNum Double UGen where
     (*) d u = mul (UGenNum d) u
     (/) d u = udiv (UGenNum d) u
     (-) d u = minus (UGenNum d) u
-    
+
 
 infixl 6 +
 infixl 7 *
@@ -361,9 +362,21 @@ lineSynth = s 555.0 -- + (s 440.0 |> delay 0.15)
         s f = sin f * l * 0.2
         l = line 0.3
 
-myCoolSynth2 :: UGen
-myCoolSynth2 = foldl (|>) (sin 0.3) (replicate 21 sin)
+-- myCoolSynth2 = foldl (|>) (sin 0.3) (replicate 21 sin)
 
+myCoolSynth2 :: UGen
+myCoolSynth2 = sin (440 + mod) |> gain 0.25
+    where
+        mod = sin (10 + sin 0.1 * 9) |> gain 40
+
+<<<<<<< HEAD
+=======
+myCoolSynth3 :: UGen
+myCoolSynth3 = sin (880 + mod) |> gain 0.25
+    where
+        mod = sin (20 + sin 0.1 * 9) |> gain 80
+
+>>>>>>> 2e1bc4e3a033a1d74fb340b52ab9692226e3be70
 --------------------------------------------------------------------------------------
 -- SynthDefs
 --------------------------------------------------------------------------------------
@@ -372,6 +385,7 @@ printSynthDef :: String -> Necronomicon ()
 printSynthDef synthDefName = getSynthDef synthDefName >>= nPrint
 
 playSynth :: String -> CDouble -> Necronomicon Synth
+-- playSynth synthDefName time = incrementNodeID >>= sendMessage . StartSynth synthDefName time >> return (Synth id)
 playSynth synthDefName time = incrementNodeID >>= \id -> sendMessage (StartSynth synthDefName time id) >> return (Synth id)
 
 stopSynth :: Synth -> Necronomicon ()
@@ -386,7 +400,6 @@ data CompiledData = CompiledData {
     compiledUGenTable :: UGenOutputTable,
     compiledUGenGraph :: [CUGen],
     compiledConstants :: [Ptr AudioSignal]
-    
 }
 
 mkCompiledData :: CompiledData
