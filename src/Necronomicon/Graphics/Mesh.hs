@@ -34,6 +34,9 @@ data Texture = Texture {
     unTexture  :: IO GL.TextureObject
     }
 
+tga :: String -> Texture
+tga path = Texture path $ loadTextureFromTGA path
+
 shaderMesh :: [Vector3] -> [Color] -> [Vector2] -> [Int] -> GL.TextureObject -> Shader -> Mesh
 shaderMesh vertices colors uvs indices tex shdr = ShaderMesh draw
     where
@@ -44,12 +47,12 @@ shaderMesh vertices colors uvs indices tex shdr = ShaderMesh draw
         numIndices   = length indices
         
         draw modelView proj resources = do
-            (program,uniforms,attributes) <- getShader resources textureShader
+            (program,uniforms,attributes) <- getShader resources ambientShader
             GL.currentProgram GL.$= Just program
             bindMatrixUniforms uniforms modelView proj
             bindThenDraw vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad]) numIndices
 
-texturedMesh :: [Vector3] -> [Color] -> [Vector2] -> [Int] -> GL.TextureObject -> Mesh
+texturedMesh :: [Vector3] -> [Color] -> [Vector2] -> [Int] -> Texture -> Mesh
 texturedMesh vertices colors uvs indices tex = ShaderMesh draw
     where
         vertexBuffer = makeBuffer GL.ArrayBuffer           (map realToFrac (posColorUV vertices colors uvs) :: [GL.GLfloat]) 
@@ -61,7 +64,7 @@ texturedMesh vertices colors uvs indices tex = ShaderMesh draw
 
         draw modelView proj resources = do
             (program,texu : uniforms,attributes) <- getShader resources textureShader
-            texture <- getTexture resources $ Texture "Gas20.tga" (loadTextureFromTGA "/home/casiosk1/code/Necronomicon/Tests/SigTest/textures/Gas20.tga")
+            texture                              <- getTexture resources tex
             
             GL.currentProgram  GL.$= Just program
             bindMatrixUniforms uniforms modelView proj

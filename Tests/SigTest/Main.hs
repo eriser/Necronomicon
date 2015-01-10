@@ -32,7 +32,7 @@ testShader = gui [so <~ mousePos,zLabel]
         so (x,y) = SceneObject "ShaderTest" True (Vector3 x y 0) identityQuat 1 m Nothing []
         hw = 0.1
         hh = 0.1
-        m  = shaderMesh
+        m  = texturedMesh
              [Vector3 (-hw)   hh  0,
               Vector3   hw    hh  0,
               Vector3 (-hw) (-hh) 0,
@@ -40,8 +40,7 @@ testShader = gui [so <~ mousePos,zLabel]
              [RGB   1 0 0,RGB   0 1 0,RGB   0 0 1,RGB   1 0 1]
              [Vector2 0 1,Vector2 0 0,Vector2 1 0,Vector2 1 1]
              [0,1,2,3,2,1]
-             undefined
-             ambientShader
+             (tga "/home/casiosk1/code/Necronomicon/Tests/SigTest/textures/Gas20.tga")
 
         --Need to figure out the issue with lazy rendering....
         zLabel = label  (Vector2 0.0 0.0) (Size 0.25 0.25) (RGB 1 1 1) "Zero"
