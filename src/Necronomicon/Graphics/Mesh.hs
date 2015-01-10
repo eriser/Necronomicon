@@ -50,7 +50,7 @@ rect w h = Mesh (show w ++ show h ++ "rect") $ loadMesh vertices colors uvs indi
         hh       = h * 0.5
         vertices = [Vector3 (-hw) (-hh) 0,Vector3 hw (-hh) 0,Vector3 (-hw) hh 0,Vector3 hw hh 0]
         colors   = [white,white,white,white]
-        uvs      = [Vector2 0 0,Vector2 1 0,Vector2 0 1,Vector2 1 1]
+        uvs      = [Vector2 0 1,Vector2 1 1,Vector2 0 0,Vector2 1 0]
         indices  = [2,0,1,3,2,1]
 
 tri :: Double -> Color -> Mesh

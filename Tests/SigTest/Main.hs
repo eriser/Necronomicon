@@ -27,14 +27,14 @@ testSound3 :: Signal ()
 testSound3 = playUntil myCoolSynth2 (isDown keyP) (isDown keyS)
 
 testShader :: Signal ()
-testShader = gui [so <~ mousePos,zLabel]
+testShader = gui [so <~ mousePos,pure zLabel]
     where
         so (x,y) = SceneObject "ShaderTest" True (Vector3 x y 0) identityQuat 1 (Just model) Nothing []
         model    = Model (rect 0.2 0.2) (ambient <| tga "/home/casiosk1/code/Necronomicon/Tests/SigTest/textures/Gas20.tga")
-        zLabel   = label (Vector2 0.0 0.0) (Size 0.25 0.25) white "Zero"
+        zLabel   = label (Vector2 0.0 0.0) (Size 0.25 0.25) white "hello world"
 
 testGUI :: Signal ()
-testGUI = gui [element vslider,element blueButton,zLabel,tri <~ input vslider]
+testGUI = gui [element vslider,element blueButton,pure zLabel,tri <~ input vslider]
     where
         vslider    = slider (Vector2 0.50 0.5) (Size 0.03 0.30) (RGB 0.5 0.5 0.5)
         tri y      = testTri "" (Vector3 0 (1-y) 0) identityQuat []

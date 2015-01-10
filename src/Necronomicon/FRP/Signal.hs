@@ -327,7 +327,8 @@ runSignal s = initWindow >>= \mw ->
         dimensionsEvent eventNotify _ x y                                = atomically $ writeTBQueue eventNotify $ Event 2 $ toDyn $ Vector2 (fromIntegral x) (fromIntegral y)
         mousePosEvent   eventNotify w x y                                = do
             (wx,wy) <- GLFW.getWindowSize w
-            atomically $ (writeTBQueue eventNotify $ Event 0 $ toDyn ((x / fromIntegral wx) * 2 - 1,(y / fromIntegral wy) * (-2) + 1)) `orElse` return ()
+            let pos = ((x / fromIntegral wx) * 2 - 1,(y / fromIntegral wy) * (-2) + 1)
+            atomically $ (writeTBQueue eventNotify $ Event 0 $ toDyn pos) `orElse` return ()
 
         render quit window sceneVar resources necroVarsRef
             | quit      = readIORef necroVarsRef >>= runNecroState shutdownNecronomicon >> print "Qutting" >> return ()

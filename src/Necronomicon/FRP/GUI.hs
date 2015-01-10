@@ -31,24 +31,8 @@ gui gs = render $ root <~ combine (camSig : gs)
     where
         camSig = orthoCamera (Vector3 0 0 0) identityQuat <~ dimensions ~~ constant (RGB 0 0 0)
 
-label :: Vector2 -> Size -> Color -> String -> Signal SceneObject
-label (Vector2 x y) (Size w h) color (c:cs) = Signal $ \necro -> return (s,\_ -> return . NoChange $ s,IntSet.empty)
-    where
-        t  = Texture "font" $ loadCharacter "/home/casiosk1/code/Necronomicon/Tests/SigTest/fonts/OCRA.ttf" 'a' 128 0
-        s  = SceneObject "" True (Vector3 x y 0) identityQuat 1 (Just m) Nothing []
-        m  = Model (rect w h) (ambient t)
-
-        -- hw = w * 0.5
-        -- hh = h * 0.5
-        -- m t = texturedMesh
-              -- [Vector3 (-hw)   hh  0,
-               -- Vector3   hw    hh  0,
-               -- Vector3 (-hw) (-hh) 0,
-               -- Vector3   hw  (-hh) 0]
-              -- [color,color,color,color]
-              -- [Vector2 0 1,Vector2 0 0,Vector2 1 0,Vector2 1 1]
-              -- [0,1,2,3,2,1]
-              -- t
+label :: Vector2 -> Size -> Color -> String -> SceneObject
+label (Vector2 x y) (Size w h) color text = position_ (Vector3 x y 0) $ createText text "/home/casiosk1/code/Necronomicon/Tests/SigTest/fonts/OCRA.ttf" (w*h*1000) ambient
 
 guiEvent :: (Typeable a) => IORef (Gui b) -> Dynamic -> (a -> IO (EventValue (Gui b))) -> IO (EventValue (Gui b))
 guiEvent ref v f = case fromDynamic v of
