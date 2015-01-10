@@ -1,18 +1,23 @@
 module Necronomicon.Util.TGA(readTGA,
                              writeTGA,
                              TGAData(..),
-                             Picture(..)) where
+                             Picture(..),
+                             loadTextureFromTGA) where
 
 import Data.Word
 import Data.Bits
 import Data.Int
-import qualified Data.ByteString.Lazy as B
+import qualified Data.ByteString as B
 
 import qualified Graphics.Rendering.OpenGL as GL
 import Foreign.ForeignPtr
 import Foreign.Marshal.Array
 import Foreign.Ptr
 import Foreign.Storable
+import Data.Word (Word8(..), Word16)
+import Data.ByteString.Internal (ByteString(..),toForeignPtr)
+-- import Foreign.ForeignPtr (ForeignPtr, withForeignPtr)
+-- import Foreign.Ptr (Ptr, plusPtr, castPtr)
 
 -- see http://en.wikipedia.org/wiki/Truevision_TGA
 -- or  http://de.wikipedia.org/wiki/Targa_Image_File
@@ -45,7 +50,7 @@ readTGA fileName = do bs <- B.readFile fileName
                                       ((fi bs 12)+(shiftL (fi bs 13) 8))   -- width
                                       ((fi bs 14)+(shiftL (fi bs 15) 8)) ) -- height
 
-fi :: B.ByteString -> Int64 -> Int
+fi :: B.ByteString -> Int -> Int
 fi bs i = fromIntegral $ B.index bs i
 
 readId bs = B.take len (B.drop 17 bs)
@@ -112,15 +117,27 @@ getData (RGB24 d) = d
 getData (PaletteUncompressed _ d) = d
 getData (MonoUncompressed d) = d
 
+withPixels b m = aux . toForeignPtr $ b
+    where aux (fp,o,_) = withForeignPtr fp $ \p -> m (plusPtr p o)
 
-toPixelData :: TGAData -> IO (GL.PixelData GL.GLfloat)
-toPixelData tgaData = case picture tgaData of
-    RGB32 d -> go 32 d
-    RGB32 d -> go 24 d
-    where
-        length = width tgaData * height tgaData * 3
-        go bitDepth dat = do
-            let normalized = map ((/ bitDepth) . fromIntegral) $ B.unpack dat
-            print normalized
-            ptr <- newArray normalized
-            return $ GL.PixelData GL.RGB GL.Float ptr
+newBoundTexUnit :: Int -> IO GL.TextureObject
+newBoundTexUnit u = do
+    [tex] <- GL.genObjectNames 1
+    GL.texture        GL.Texture2D GL.$= GL.Enabled
+    GL.activeTexture               GL.$= GL.TextureUnit (fromIntegral u)
+    GL.textureBinding GL.Texture2D GL.$= Just tex
+    return tex
+
+loadTextureFromTGA :: String -> IO GL.TextureObject
+loadTextureFromTGA path = do
+    tex <- newBoundTexUnit 0
+    tga <- readTGA path
+    let size = GL.TextureSize2D (fromIntegral (width tga)) (fromIntegral  (height tga))
+    case picture tga of
+        RGB32 p -> withPixels p (GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.RGB8 size 0 . GL.PixelData GL.RGB GL.UnsignedByte)
+        RGB24 p -> withPixels p (GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.RGB8 size 0 . GL.PixelData GL.RGB GL.UnsignedByte)
+    GL.textureFilter   GL.Texture2D      GL.$= ((GL.Linear', Nothing), GL.Linear')
+    GL.textureWrapMode GL.Texture2D GL.S GL.$= (GL.Repeated, GL.ClampToEdge)
+    GL.textureWrapMode GL.Texture2D GL.T GL.$= (GL.Repeated, GL.ClampToEdge)
+    return tex
+

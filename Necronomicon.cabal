@@ -26,6 +26,7 @@ library
 		
     other-modules:
         Necronomicon.Language.Layout
+        Necronomicon.Util.TGA,
         Necronomicon.Math
         Necronomicon.Utility
         Necronomicon.Networking
