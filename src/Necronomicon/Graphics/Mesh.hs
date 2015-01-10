@@ -39,8 +39,8 @@ shaderMesh vertices colors uvs indices tex shdr = ShaderMesh draw
             bindThenDraw vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad]) numIndices
             return resources'
 
-texturedMesh :: [Vector3] -> [Color] -> [Vector2] -> [Int] -> GL.TextureObject -> Shader -> Mesh
-texturedMesh vertices colors uvs indices tex shdr = ShaderMesh draw
+texturedMesh :: [Vector3] -> [Color] -> [Vector2] -> [Int] -> GL.TextureObject -> Mesh
+texturedMesh vertices colors uvs indices tex = ShaderMesh draw
     where
         vertexBuffer = makeBuffer GL.ArrayBuffer           (map realToFrac (posColorUV vertices colors uvs) :: [GL.GLfloat]) 
         indexBuffer  = makeBuffer GL.ElementArrayBuffer    (map fromIntegral indices :: [GL.GLuint])

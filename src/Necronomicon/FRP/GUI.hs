@@ -12,6 +12,7 @@ import Prelude
 import Necronomicon.FRP.Signal
 import Necronomicon.Linear
 import Necronomicon.Graphics
+import Necronomicon.Util (loadTextureFromTGA)
 import Data.IORef
 import Data.Dynamic
 import qualified Data.IntSet as IntSet
@@ -32,7 +33,8 @@ gui gs = render $ root <~ combine (camSig : gs)
 
 label :: Vector2 -> Size -> Color -> String -> Signal SceneObject
 label (Vector2 x y) (Size w h) color (c:cs) = Signal $ \necro -> do
-    t    <- loadCharacter "/home/casiosk1/code/Necronomicon/Tests/SigTest/fonts/OCRA.ttf" 'a' 128 0
+    -- t    <- loadCharacter "/home/casiosk1/code/Necronomicon/Tests/SigTest/fonts/OCRA.ttf" 'a' 128 0
+    t    <- loadTextureFromTGA "/home/casiosk1/code/Necronomicon/Tests/SigTest/textures/Gas20.tga"
     let s = SceneObject "" True (Vector3 x y 0) identityQuat 1 (m t) Nothing []
     return (s,\_ -> return . NoChange $ s,IntSet.empty)
     where
@@ -47,7 +49,6 @@ label (Vector2 x y) (Size w h) color (c:cs) = Signal $ \necro -> do
               [Vector2 0 1,Vector2 0 0,Vector2 1 0,Vector2 1 1]
               [0,1,2,3,2,1]
               t
-              ambientShader
 
 guiEvent :: (Typeable a) => IORef (Gui b) -> Dynamic -> (a -> IO (EventValue (Gui b))) -> IO (EventValue (Gui b))
 guiEvent ref v f = case fromDynamic v of
