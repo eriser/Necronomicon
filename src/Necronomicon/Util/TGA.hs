@@ -135,8 +135,8 @@ loadTextureFromTGA path = do
     tga <- readTGA path
     print "Loading to texture."
     case picture tga of
-        RGB32 p -> withPixels p (GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.RGBA' (GL.TextureSize2D (fromIntegral (width tga)) (fromIntegral  (height tga))) 0 . GL.PixelData GL.RGB GL.UnsignedByte)
-        RGB24 p -> withPixels p (GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.RGBA' (GL.TextureSize2D (fromIntegral (width tga)) (fromIntegral  (height tga))) 0 . GL.PixelData GL.RGB GL.UnsignedByte)
+        RGB32 p -> withPixels p (GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.RGB8 (GL.TextureSize2D (fromIntegral (width tga)) (fromIntegral  (height tga))) 0 . GL.PixelData GL.RGB GL.UnsignedByte)
+        RGB24 p -> withPixels p (GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.RGB8 (GL.TextureSize2D (fromIntegral (width tga)) (fromIntegral  (height tga))) 0 . GL.PixelData GL.RGB GL.UnsignedByte)
     GL.textureFilter   GL.Texture2D      GL.$= ((GL.Linear', Nothing), GL.Linear')
     GL.textureWrapMode GL.Texture2D GL.S GL.$= (GL.Repeated, GL.ClampToEdge)
     GL.textureWrapMode GL.Texture2D GL.T GL.$= (GL.Repeated, GL.ClampToEdge)

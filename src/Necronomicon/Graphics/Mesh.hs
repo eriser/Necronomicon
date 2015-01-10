@@ -139,7 +139,7 @@ ambientShader = shader "ambient" ["mv1","mv2","mv3","mv4","pr1","pr2","pr3","pr4
 
 
 textureShader :: Shader
-textureShader = shader "texture" ["tex","mv1","mv2","mv3","mv4","pr1","pr2","pr3","pr4"] ["position","color","uv"] vs fs
+textureShader = shader "texture" ["tex","mv1","mv2","mv3","mv4","pr1","pr2","pr3","pr4"] ["position","in_color","in_uv"] vs fs
     where
         vs = [vert| #version 130
                     uniform vec4 mv1,mv2,mv3,mv4;
@@ -171,7 +171,9 @@ textureShader = shader "texture" ["tex","mv1","mv2","mv3","mv4","pr1","pr2","pr3
 
                     void main()
                     {
-                        fragColor = vec4(color,1.0) * texture2D(tex,uv);
+                        //fragColor = vec4(color,1.0) * texture2D(tex,uv);
+                        //fragColor = vec4(uv,0.0,1.0); //texture2D(tex,uv);
+                        fragColor = vec4(uv,0.0,1.0); //texture2D(tex,uv);
                     }
              |]
 
