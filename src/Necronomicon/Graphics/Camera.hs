@@ -13,12 +13,12 @@ import Debug.Trace
 ----------------------------------------------------------
 
 orthoCamera :: Vector3 -> Quaternion -> Vector2 -> Color -> SceneObject
-orthoCamera pos r dimensions clearColor = SceneObject "CameraOrtho" True pos r 1 EmptyMesh (Just c) []
+orthoCamera pos r dimensions clearColor = SceneObject "CameraOrtho" True pos r 1 Nothing (Just c) []
     where
         c = Camera dimensions 0 0 0 clearColor
 
 perspCamera :: Vector3 -> Quaternion -> Vector2 -> Double -> Double -> Double -> Color -> SceneObject
-perspCamera pos r dimensions fov near far clearColor = SceneObject "Camera" True pos r 1 EmptyMesh (Just c) []
+perspCamera pos r dimensions fov near far clearColor = SceneObject "Camera" True pos r 1 Nothing (Just c) []
     where
         c = Camera dimensions (fov/2) near far clearColor
 

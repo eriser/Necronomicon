@@ -16,10 +16,7 @@ import qualified Graphics.Rendering.OpenGL as GL
 import qualified Data.IntMap as IntMap
 import qualified Data.Map as Map
 
-data Mesh = EmptyMesh
-          | SimpleMesh [Vector3] [Color]
-          | Mesh       [Vector3] [Color] GL.TextureObject [Vector2]
-          | ShaderMesh (Matrix4x4 -> Matrix4x4 -> Resources -> IO ())
+data Mesh = Mesh {drawMesh :: (Matrix4x4 -> Matrix4x4 -> Resources -> IO ())}
 
 instance Show Mesh where
     show _ = "Mesh"
@@ -37,8 +34,14 @@ data Texture = Texture {
 tga :: String -> Texture
 tga path = Texture path $ loadTextureFromTGA path
 
-shaderMesh :: [Vector3] -> [Color] -> [Vector2] -> [Int] -> GL.TextureObject -> Shader -> Mesh
-shaderMesh vertices colors uvs indices tex shdr = ShaderMesh draw
+rect :: Double -> Double -> [Vector3]
+rect w h = [Vector3 (-hw) hh 0,Vector3 hw hh 0,Vector3 (-hw) (-hh) 0,Vector3 hw (-hh) 0]
+    where
+        hw = w * 0.5
+        hh = h * 0.5
+
+ambientMesh :: [Vector3] -> [Color] -> [Int] -> Mesh
+ambientMesh vertices colors indices = Mesh draw
     where
         vertexBuffer = makeBuffer GL.ArrayBuffer           (map realToFrac (posCol vertices colors) :: [GL.GLfloat]) 
         indexBuffer  = makeBuffer GL.ElementArrayBuffer    (map fromIntegral indices :: [GL.GLuint])
@@ -53,7 +56,7 @@ shaderMesh vertices colors uvs indices tex shdr = ShaderMesh draw
             bindThenDraw vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad]) numIndices
 
 texturedMesh :: [Vector3] -> [Color] -> [Vector2] -> [Int] -> Texture -> Mesh
-texturedMesh vertices colors uvs indices tex = ShaderMesh draw
+texturedMesh vertices colors uvs indices tex = Mesh draw
     where
         vertexBuffer = makeBuffer GL.ArrayBuffer           (map realToFrac (posColorUV vertices colors uvs) :: [GL.GLfloat]) 
         indexBuffer  = makeBuffer GL.ElementArrayBuffer    (map fromIntegral indices :: [GL.GLuint])

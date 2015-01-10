@@ -29,14 +29,9 @@ testSound3 = playUntil myCoolSynth2 (isDown keyP) (isDown keyS)
 testShader :: Signal ()
 testShader = gui [so <~ mousePos,zLabel]
     where
-        so (x,y) = SceneObject "ShaderTest" True (Vector3 x y 0) identityQuat 1 m Nothing []
-        hw = 0.1
-        hh = 0.1
+        so (x ,y) = SceneObject "ShaderTest" True (Vector3 x y 0) identityQuat 1 (Just m) Nothing []
         m  = texturedMesh
-             [Vector3 (-hw)   hh  0,
-              Vector3   hw    hh  0,
-              Vector3 (-hw) (-hh) 0,
-              Vector3   hw  (-hh) 0]
+             (rect 0.2 0.2)
              [RGB   1 0 0,RGB   0 1 0,RGB   0 0 1,RGB   1 0 1]
              [Vector2 0 1,Vector2 0 0,Vector2 1 0,Vector2 1 1]
              [0,1,2,3,2,1]
@@ -57,10 +52,11 @@ testGUI = gui [element vslider,element blueButton,zLabel,tri <~ input vslider]
 testScene :: Signal ()
 testScene = scene [camSig,triSig]
     where
-        triSig = terrain
-                 <~ foldp (+) 0 (lift3 move wasd (fps 60) 5)
-                 ~~ constant identityQuat
-                 ~~ constant []
+        triSig = pure $ testTri "Test" 0 identityQuat []
+        -- triSig = terrain
+                 -- <~ foldp (+) 0 (lift3 move wasd (fps 60) 5)
+                 -- ~~ constant identityQuat
+                 -- ~~ constant []
 
         camSig = perspCamera (Vector3 0 0 20) identityQuat
                  <~ dimensions
@@ -71,20 +67,22 @@ testScene = scene [camSig,triSig]
 
         move (x,y) z a = Vector3 (x*z*a) (y*z*a) 0
 
-terrain :: Vector3 -> Quaternion -> [SceneObject] -> SceneObject
-terrain pos r chldn = SceneObject "Terrain" True pos r 1 simplexMesh Nothing []
+-- terrain :: Vector3 -> Quaternion -> [SceneObject] -> SceneObject
+-- terrain pos r chldn = SceneObject "Terrain" True pos r 1 simplexMesh Nothing []
 
 testTri :: String -> Vector3 -> Quaternion -> [SceneObject] -> SceneObject
-testTri name pos r chldn = SceneObject name True pos r 1 m Nothing []
+testTri name pos r chldn = SceneObject name True pos r 1 (Just m) Nothing []
     where
-        m = SimpleMesh
+        m = ambientMesh
             [Vector3 (-0.4) (-0.3) 0,
              Vector3   0.4  (-0.3) 0,
              Vector3     0    0.3  0]
             [RGB 1 0 0,
              RGB 0 1 0,
              RGB 0 0 1]
+            [0,1,2]
 
+{-
 simplexMesh :: Mesh
 simplexMesh = SimpleMesh simplexTris simplexColors
     where
@@ -110,6 +108,7 @@ simplexMesh = SimpleMesh simplexTris simplexColors
 
         simplexTris      = foldr addTwoTris   [] [0..(V.length svec)] 
         simplexColors    = foldr addTwoColors [] [0..(V.length svec)]
+-}
 
 -- main :: IO()
 -- main = runSignal $ needlessCrawlTest
