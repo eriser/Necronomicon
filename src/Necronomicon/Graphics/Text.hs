@@ -176,7 +176,7 @@ loadFontAtlas font = do
 
     let size = TextureSize2D (floor atlasWidth) (floor atlasHeight)
     putStrLn $ "Atlas size: " ++ show size
-    texImage2D Texture2D NoProxy 0 R8 size 0 $ PixelData Red UnsignedByte nullPtr
+    texImage2D Texture2D NoProxy 0 RGB8 size 0 $ PixelData Luminance UnsignedByte nullPtr
 
     textureFilter   Texture2D   $= ((Linear', Nothing), Linear')
     textureWrapMode Texture2D S $= (Repeated, ClampToEdge)
@@ -211,7 +211,7 @@ addCharToAtlas w ff charMap char = do
                            0
                            (TexturePosition2D (floor $ charTX charMetric * w) 0)
                            (TextureSize2D     (floor $ charWidth charMetric) (floor $ charHeight charMetric))
-                           (PixelData Red UnsignedByte $ buffer bmp)
+                           (PixelData Luminance UnsignedByte $ buffer bmp)
 
 getCharMetrics :: FT_Face -> Int -> IO CharMetric
 getCharMetrics ff char = do
