@@ -227,10 +227,12 @@ getCharMetrics ff char = do
     top    <- peek $ bitmap_top slot
     let charMetric = CharMetric
                      (toEnum char)
-                     (fromIntegral (shift (Metrics.horiAdvance metric) (-6)))
-                     (fromIntegral (shift (Metrics.vertAdvance metric) (-6)))
-                     (fromIntegral (shift (Metrics.width       metric) (-6)))
-                     (fromIntegral (shift (Metrics.height      metric) (-6)))
+                     (fromIntegral (shift (Metrics.horiAdvance  metric) (-6)))
+                     (fromIntegral (shift (Metrics.vertAdvance  metric) (-6)))
+                     (fromIntegral (shift (Metrics.horiBearingX metric) (-6)))
+                     (fromIntegral (shift (Metrics.horiBearingY metric) (-6)))
+                     (fromIntegral (shift (Metrics.width        metric) (-6)))
+                     (fromIntegral (shift (Metrics.height       metric) (-6)))
                      (fromIntegral left)
                      (fromIntegral top)
                      0
@@ -249,7 +251,7 @@ getFont resources font = readIORef (fontsRef resources) >>= \fonts ->
 renderFont :: String -> Font -> (NecroTex.Texture -> Material) -> Linear.Matrix4x4 -> Linear.Matrix4x4 -> Resources -> IO()
 renderFont text font material modelView proj resources = do
     loadedFont <- getFont resources font
-    let (vertices,colors,uvs,indices,_,_) = foldl (textMesh (characters loadedFont) ((fromIntegral $ fontSize font) * 4) (atlasWidth loadedFont) (atlasHeight loadedFont)) ([],[],[],[],0,0) text
+    let (vertices,colors,uvs,indices,_,_) = foldl (textMesh (characters loadedFont) ((fromIntegral $ fontSize font) * 1.0) (atlasWidth loadedFont) (atlasHeight loadedFont)) ([],[],[],[],0,0) text
         fontMesh                          = Mesh [] $ Mesh.loadDynamicMesh (characterVertexBuffer loadedFont) (characterIndexBuffer loadedFont) vertices colors uvs indices
     drawMeshWithMaterial (material $ atlas loadedFont) fontMesh modelView proj resources
 
@@ -272,20 +274,22 @@ textMesh :: Map.Map Char CharMetric ->
             ([Linear.Vector3],[Color.Color],[Linear.Vector2],[Int],Int,Double) ->
             Char ->
             ([Linear.Vector3],[Color.Color],[Linear.Vector2],[Int],Int,Double)
-textMesh charMetrics size atlasWidth atlasHeight (vertices,colors,uvs,indices,count,x) char = (vertices',colors',uvs',indices',count + 4,x+w)
+textMesh charMetrics size atlasWidth atlasHeight (vertices,colors,uvs,indices,count,x) char = (vertices',colors',uvs',indices',count + 4,x+advanceX charMetric)
     where
         charMetric = case Map.lookup char charMetrics of
-            Nothing -> CharMetric (toEnum 0) 0 0 0 0 0 0 0
+            Nothing -> CharMetric (toEnum 0) 0 0 0 0 0 0 0 0 0
             Just cm -> cm
         w          = charWidth  charMetric
         h          = charHeight charMetric
         t          = charTop    charMetric
         tx         = charTX     charMetric
+        bx         = bearingX   charMetric
+        by         = bearingY   charMetric
 
-        vertices'  = Linear.Vector3 (x     / size) (t     / size) 0  :
-                     Linear.Vector3 ((x+w) / size) (t     / size) 0  :
-                     Linear.Vector3 (x     / size) ((t+h) / size) 0  :
-                     Linear.Vector3 ((x+w) / size) ((t+h) / size) 0  :
+        vertices'  = Linear.Vector3 ((x+bx)   / size) ((t-by)   / size) 0  :
+                     Linear.Vector3 ((x+bx+w) / size) ((t-by)   / size) 0  :
+                     Linear.Vector3 ((x+bx)   / size) ((t-by+h) / size) 0  :
+                     Linear.Vector3 ((x+bx+w) / size) ((t-by+h) / size) 0  :
                      vertices
         colors'    = Color.white : Color.white : Color.white : Color.white : colors
         uvs'       = Linear.Vector2 (tx                 ) (h / atlasHeight) :

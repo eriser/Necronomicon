@@ -24,6 +24,8 @@ newtype Material   = Material {drawMeshWithMaterial :: (Mesh -> Matrix4x4 -> Mat
 data    CharMetric = CharMetric{character             :: Char,
                                 advanceX              :: Double,
                                 advanceY              :: Double,
+                                bearingX              :: Double,
+                                bearingY              :: Double,
                                 charWidth             :: Double,
                                 charHeight            :: Double,
                                 charLeft              :: Double,

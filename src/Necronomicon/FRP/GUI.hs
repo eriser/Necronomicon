@@ -31,12 +31,9 @@ gui gs = render $ root <~ combine (camSig : gs)
     where
         camSig = orthoCamera (Vector3 0 0 0) identityQuat <~ dimensions ~~ constant (RGB 0 0 0)
 
-label :: Vector2 -> Size -> Color -> String -> SceneObject
-label (Vector2 x y) (Size w h) color text = SceneObject "" True (Vector3 x y 0) identityQuat 1 (Just $ drawText text (font path size) ambient) Nothing []
--- label (Vector2 x y) (Size w h) color text = SceneObject "" True (Vector3 x y 0) identityQuat 1 (Just model) Nothing []
+label :: Vector2 -> Int -> Color -> String -> SceneObject
+label (Vector2 x y) size color text = SceneObject "" True (Vector3 x y 0) identityQuat (fromIntegral size / 400) (Just $ drawText text (font path size) ambient) Nothing []
     where
-        -- model = Model (rect 0.5 0.5) (ambient $ fontAtlasTexture (font path size))
-        size  = floor $ w * h * 1000
         path  = "/home/casiosk1/code/Necronomicon/Tests/SigTest/fonts/OCRA.ttf"
 
 guiEvent :: (Typeable a) => IORef (Gui b) -> Dynamic -> (a -> IO (EventValue (Gui b))) -> IO (EventValue (Gui b))
