@@ -43,8 +43,8 @@ data FragmentShader = FragmentShader {
 type LoadedShader = (GL.Program,[GL.UniformLocation],[GL.AttribLocation])
 
 data Shader = Shader {
-    key      :: Int,
-    unShader :: IO LoadedShader
+    key        :: Int,
+    loadShader :: IO LoadedShader
     }
 
 instance Show (IO GL.Shader) where
@@ -53,8 +53,8 @@ instance Show (IO GL.Shader) where
 instance Show Shader where
     show _ = "Shader"
 
-loadShader :: GL.ShaderType -> FilePath -> IO GL.Shader
-loadShader shaderType filePath = BS.readFile filePath >>= loadShaderBS filePath shaderType
+-- loadShader :: GL.ShaderType -> FilePath -> IO GL.Shader
+-- loadShader shaderType filePath = BS.readFile filePath >>= loadShaderBS filePath shaderType
 
 loadShaderBS :: FilePath -> GL.ShaderType -> BS.ByteString -> IO GL.Shader
 loadShaderBS filePath shaderType src = do

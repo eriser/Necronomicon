@@ -9,6 +9,7 @@ import Necronomicon.Linear
 import Necronomicon.Graphics.SceneObject
 import Necronomicon.Graphics.Color
 import Necronomicon.Graphics.Mesh
+import Necronomicon.Graphics.Model
 import Debug.Trace
 ----------------------------------------------------------
 
@@ -44,7 +45,6 @@ renderCamera view scene resources g  = let newView = view .*. (trsMatrix (_posit
         return $ newView
             
 renderCameras :: Matrix4x4 -> SceneObject -> Resources -> SceneObject -> IO ()
--- renderCameras view scene resources g = GL.preservingMatrix $ renderCamera view scene resources g >>= \(resources',newView) -> foldM (renderCameras newView scene) resources' (_children g)
 renderCameras view scene resources g = renderCamera view scene resources g >>= \newView -> mapM_ (renderCameras newView scene resources) (_children g)
 
 renderGraphics :: GLFW.Window -> Resources -> SceneObject -> IO ()

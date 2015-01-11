@@ -61,6 +61,7 @@ library
         Necronomicon.Graphics.SceneObject
         Necronomicon.Graphics.Text
         Necronomicon.Graphics.Texture
+        Necronomicon.Graphics.Model
     Build-Depends:     
         base             >= 3 && < 5,
         stm              >= 2.4.0,

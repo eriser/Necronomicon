@@ -25,3 +25,13 @@ makeBufferWithLength target len elems = do
     where
         n = fromIntegral $ len * sizeOf (head elems)
 
+
+makeDynamicBuffer :: (Storable a) => GL.BufferObject -> GL.BufferTarget -> [a] -> IO GL.BufferObject
+makeDynamicBuffer buffer target elems = do
+    -- print "makeDynamicBuffer"
+    GL.bindBuffer target GL.$= Just buffer
+    withArray elems $ \ptr -> GL.bufferData target GL.$= (n, ptr, GL.DynamicDraw)
+    return buffer
+    where
+        len = length elems
+        n   = fromIntegral $ len * sizeOf (head elems)

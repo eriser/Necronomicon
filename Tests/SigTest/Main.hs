@@ -1,6 +1,4 @@
-import Prelude
 import Necronomicon
-import Debug.Trace
 import qualified Data.Vector as V
 
 main :: IO ()
