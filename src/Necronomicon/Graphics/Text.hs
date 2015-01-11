@@ -251,7 +251,7 @@ getFont resources font = readIORef (fontsRef resources) >>= \fonts ->
 renderFont :: String -> Font -> (NecroTex.Texture -> Material) -> Linear.Matrix4x4 -> Linear.Matrix4x4 -> Resources -> IO()
 renderFont text font material modelView proj resources = do
     loadedFont <- getFont resources font
-    let (vertices,colors,uvs,indices,_,_) = foldl (textMesh (characters loadedFont) ((fromIntegral $ fontSize font) * 1.0) (atlasWidth loadedFont) (atlasHeight loadedFont)) ([],[],[],[],0,0) text
+    let (vertices,colors,uvs,indices,_,_) = foldl (textMesh (characters loadedFont) ((fromIntegral $ fontSize font) * 1) (atlasWidth loadedFont) (atlasHeight loadedFont)) ([],[],[],[],0,0) text
         fontMesh                          = Mesh [] $ Mesh.loadDynamicMesh (characterVertexBuffer loadedFont) (characterIndexBuffer loadedFont) vertices colors uvs indices
     drawMeshWithMaterial (material $ atlas loadedFont) fontMesh modelView proj resources
 
