@@ -1,4 +1,6 @@
-module Necronomicon.Graphics.Text where
+module Necronomicon.Graphics.Text (drawText,
+                                   renderFont,
+                                   font) where
 
 import Prelude    
 import Control.Monad
@@ -21,107 +23,11 @@ import qualified Graphics.Rendering.FreeType.Internal.BitmapSize as BS
 import qualified Control.Exception as E
 import qualified Data.Map as Map
 
--- import Necronomicon.Graphics.SceneObject
 import qualified Necronomicon.Linear as Linear
 import qualified Necronomicon.Graphics.Mesh as Mesh (rect,loadDynamicMesh)
 import qualified Necronomicon.Graphics.Texture as NecroTex
 import Necronomicon.Graphics.Model
 import qualified Necronomicon.Graphics.Color as Color (Color(..),white)
-
-loadCharacter :: FilePath -> Char -> Int -> Int -> IO TextureObject
-loadCharacter path char px texUnit = do
-    -- FreeType (http://freetype.org/freetype2/docs/tutorial/step1.html)
-    ft <- freeType
-
-    -- Get the Ubuntu Mono fontface.
-    ff <- fontFace ft path
-    runFreeType $ ft_Set_Pixel_Sizes ff (fromIntegral px) 0
-
-    -- Get the unicode char index.
-    chNdx <- ft_Get_Char_Index ff $ fromIntegral $ fromEnum char
-
-    -- Load the glyph into freetype memory.
-    runFreeType $ ft_Load_Glyph ff chNdx 0
-
-    -- Get the GlyphSlot.
-    slot <- peek $ glyph ff
-
-    -- Number of glyphs
-    n <- peek $ num_glyphs ff
-    putStrLn $ "glyphs:" ++ show n
-
-    fmt <- peek $ format slot
-    putStrLn $ "glyph format:" ++ glyphFormatString fmt
-    -- putStrLn $ "glyph format:" ++ show fmt
-
-    -- This is [] for Ubuntu Mono, but I'm guessing for bitmap
-    -- fonts this would be populated with the different font
-    -- sizes.
-    putStr "Sizes:"
-    numSizes <- peek $ num_fixed_sizes ff
-    sizesPtr <- peek $ available_sizes ff
-    sizes <- forM [0 .. numSizes-1] $ \i -> peek $ sizesPtr `plusPtr` fromIntegral i :: IO BS.FT_Bitmap_Size
-    print sizes
-
-    l <- peek $ bitmap_left slot
-    t <- peek $ bitmap_top slot
-    putStrLn $ concat [ "left:"
-                      , show l
-                      , "\ntop:"
-                      , show t
-                      ]
-
-    runFreeType $ ft_Render_Glyph slot ft_RENDER_MODE_NORMAL
-
-    -- Get the char bitmap.
-    bmp <- peek $ bitmap slot
-    putStrLn $ concat ["width:"
-                      , show $ width bmp
-                      , " rows:"
-                      , show $ rows bmp
-                      , " pitch:"
-                      , show $ pitch bmp
-                      , " num_grays:"
-                      , show $ num_grays bmp
-                      , " pixel_mode:"
-                      , show $ pixel_mode bmp
-                      , " palette_mode:"
-                      , show $ palette_mode bmp
-                      ]
-
-    let w  = fromIntegral $ width bmp
-        h  = fromIntegral $ rows bmp
-        w' = fromIntegral w
-        h' = fromIntegral h
-
-    -- Set the texture params on our bound texture.
-    texture Texture2D $= Enabled
-
-    -- Set the alignment to 1 byte.
-    rowAlignment Unpack $= 1
-
-    -- Generate an opengl texture.
-    tex <- newBoundTexUnit texUnit
-    -- (tex:_) <- genObjectNames 1
-    -- textureBinding Texture2D $= Just tex
-    -- printError
-
-    putStrLn "Buffering glyph bitmap into texture."
-    texImage2D
-        Texture2D
-        NoProxy
-        0
-        R8
-        (TextureSize2D w' h')
-        0
-        (PixelData Red UnsignedByte $ buffer bmp)
-    -- printError
-
-    putStrLn "Texture loaded."
-    textureFilter   Texture2D   $= ((Linear', Nothing), Linear')
-    textureWrapMode Texture2D S $= (Repeated, ClampToEdge)
-    textureWrapMode Texture2D T $= (Repeated, ClampToEdge)
-    return tex
 
 newBoundTexUnit :: Int -> IO TextureObject
 newBoundTexUnit u = do
@@ -169,7 +75,7 @@ loadFontAtlas font = do
     runFreeType $ ft_Set_Pixel_Sizes ff (fromIntegral $ fontSize font) 0
 
     metrics <- mapM (getCharMetrics ff) [32..128] --[32..128]
-    let (atlasWidth,atlasHeight) = foldr (\metric (w,h) -> (w + charWidth metric,max h (charHeight metric))) (0,0) metrics
+    let (atlasWidth,atlasHeight) = foldr (\metric (w,h) -> (w + advanceX metric,max h (charHeight metric))) (0,0) metrics
 
     atlasTexture <- newBoundTexUnit 0
     rowAlignment Unpack $= 1
@@ -254,18 +160,6 @@ renderFont text font material modelView proj resources = do
     let (vertices,colors,uvs,indices,_,_) = foldl (textMesh (characters loadedFont) ((fromIntegral $ fontSize font) * 1) (atlasWidth loadedFont) (atlasHeight loadedFont)) ([],[],[],[],0,0) text
         fontMesh                          = Mesh [] $ Mesh.loadDynamicMesh (characterVertexBuffer loadedFont) (characterIndexBuffer loadedFont) vertices colors uvs indices
     drawMeshWithMaterial (material $ atlas loadedFont) fontMesh modelView proj resources
-
-{-
-
-0,1---------1,1
-|             |
-|             |
-|             |
-0,0---------1,0
-
-0,0 : 1,0 : 0,1 : 1,1 : []
-
--}
 
 textMesh :: Map.Map Char CharMetric ->
             Double ->
