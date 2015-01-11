@@ -26,6 +26,10 @@ import qualified Graphics.Rendering.OpenGL as GL
 import qualified Language.Haskell.TH as TH
 import Foreign.Ptr (Ptr,wordPtrToPtr)
 
+------------------------------------------------------------------------------------------
+-- Shaders
+------------------------------------------------------------------------------------------
+
 data VertexShader   = VertexShader   {
     vertexString   :: String,
     unVertexShader :: IO GL.Shader
@@ -120,3 +124,29 @@ offsetPtr = wordPtrToPtr . fromIntegral
 -- |A zero-offset 'Ptr'.
 offset0 :: Ptr a
 offset0 = offsetPtr 0
+
+
+------------------------------------------------------------------------------------------
+-- Material
+------------------------------------------------------------------------------------------
+
+-- data Material = Material {drawMeshWithMaterial :: Mesh -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ()}
+
+{-
+ambientMesh :: [Vector3] -> [Color] -> [Int] -> Mesh
+ambientMesh vertices colors indices = Mesh draw
+    where
+        vertexBuffer = makeBuffer GL.ArrayBuffer           (map realToFrac (posCol vertices colors) :: [GL.GLfloat]) 
+        indexBuffer  = makeBuffer GL.ElementArrayBuffer    (map fromIntegral indices :: [GL.GLuint])
+        vertexVad    = GL.VertexArrayDescriptor 3 GL.Float (fromIntegral $ sizeOf (undefined::GL.GLfloat) * 6) offset0
+        colorVad     = GL.VertexArrayDescriptor 3 GL.Float (fromIntegral $ sizeOf (undefined::GL.GLfloat) * 6) (offsetPtr $ sizeOf (undefined :: GL.GLfloat) * 3)
+        numIndices   = length indices
+        
+        draw modelView proj resources = do
+            (program,uniforms,attributes) <- getShader resources ambientShader
+            GL.currentProgram GL.$= Just program
+            bindMatrixUniforms uniforms modelView proj
+            bindThenDraw vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad]) numIndices
+-}
+
+

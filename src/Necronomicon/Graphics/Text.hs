@@ -13,11 +13,15 @@ import Graphics.Rendering.FreeType.Internal.GlyphSlot
 import Foreign
 import Foreign.C.String
 import Graphics.Rendering.FreeType.Internal.Bitmap
--- import Graphics.Texture.Load
--- import Graphics.Utils
 
 import qualified Graphics.Rendering.FreeType.Internal.BitmapSize as BS
 import qualified Control.Exception as E
+import qualified Data.Map as Map
+
+import Necronomicon.Graphics.SceneObject
+import qualified Necronomicon.Linear as Linear
+import qualified Necronomicon.Graphics.Mesh as Mesh
+import qualified Necronomicon.Graphics.Texture as NecroTex
 
 loadCharacter :: FilePath -> Char -> Int -> Int -> IO TextureObject
 loadCharacter path char px texUnit = do
@@ -145,3 +149,20 @@ glyphFormatString fmt
     | fmt == ft_GLYPH_FORMAT_PLOTTER = "ft_GLYPH_FORMAT_PLOTTER"
     | fmt == ft_GLYPH_FORMAT_BITMAP = "ft_GLYPH_FORMAT_BITMAP"
     | otherwise = "ft_GLYPH_FORMAT_NONE"
+
+createText :: String -> String -> Double -> (NecroTex.Texture -> Mesh.Material) -> SceneObject
+createText text fontPath size materialFunction = SceneObject "" True 0 Linear.identityQuat 1 Nothing Nothing characters
+    where
+        sqrtSize                   = sqrt size * 0.01
+        len                        = fromIntegral $ length text
+        (characters,_)             = foldl createCharacter ([],0) text
+        createCharacter (cs,num) c = (SceneObject "" True (Linear.Vector3 ((num / len) * sqrtSize * len) 0 0) Linear.identityQuat 1 (Just model) Nothing [] : cs,num + 1)
+            where
+                texture = NecroTex.Texture (c : fontPath) $ loadCharacter fontPath c (floor size) 0
+                model   = Mesh.Model (Mesh.rect sqrtSize sqrtSize) (materialFunction texture)
+
+-- label (Vector2 x y) (Size w h) color (c:cs) = SceneObject "" True (Vector3 x y 0) identityQuat 1 (Just m) Nothing []
+    -- where
+        -- t  = Texture "font" $ loadCharacter "/home/casiosk1/code/Necronomicon/Tests/SigTest/fonts/OCRA.ttf" 'A' 128 0
+        -- m  = Model (rect w h) (ambient t)
+

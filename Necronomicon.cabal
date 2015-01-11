@@ -60,6 +60,7 @@ library
         Necronomicon.Graphics.Color
         Necronomicon.Graphics.SceneObject
         Necronomicon.Graphics.Text
+        Necronomicon.Graphics.Texture
     Build-Depends:     
         base             >= 3 && < 5,
         stm              >= 2.4.0,
