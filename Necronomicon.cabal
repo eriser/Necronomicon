@@ -7,6 +7,10 @@ Author:                 Chad McKinney and Curtis McKinney
 Maintainer:             chad@chadmckinneyaudio.com
 Build-Type:             Simple
 Cabal-Version:          >=1.10
+data-dir: resources
+data-files:
+    textures/*.tga
+    fonts/*.ttf
 
 library
     default-language:   Haskell2010
@@ -62,6 +66,7 @@ library
         Necronomicon.Graphics.Text
         Necronomicon.Graphics.Texture
         Necronomicon.Graphics.Model
+        Paths_Necronomicon
     Build-Depends:     
         base             >= 3 && < 5,
         stm              >= 2.4.0,

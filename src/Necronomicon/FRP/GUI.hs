@@ -34,7 +34,7 @@ gui gs = render $ root <~ combine (camSig : gs)
 label :: Vector2 -> Int -> Color -> String -> SceneObject
 label (Vector2 x y) size color text = SceneObject "" True (Vector3 x y 0) identityQuat (fromIntegral size / 400) (Just $ drawText text (font path size) ambient) Nothing []
     where
-        path  = "/home/casiosk1/code/Necronomicon/Tests/SigTest/fonts/OCRA.ttf"
+        path  = "OCRA.ttf"
 
 guiEvent :: (Typeable a) => IORef (Gui b) -> Dynamic -> (a -> IO (EventValue (Gui b))) -> IO (EventValue (Gui b))
 guiEvent ref v f = case fromDynamic v of

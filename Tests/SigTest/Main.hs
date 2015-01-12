@@ -28,7 +28,7 @@ testShader :: Signal ()
 testShader = gui [so <~ mousePos,pure zLabel]
     where
         so (x,y) = SceneObject "ShaderTest" True (Vector3 x y 0) identityQuat 1 (Just model) Nothing []
-        model    = Model (rect 0.2 0.2) (ambient <| tga "/home/casiosk1/code/Necronomicon/Tests/SigTest/textures/Gas20.tga")
+        model    = Model (rect 0.2 0.2) (ambient (tga "Gas20.tga"))
         zLabel   = label (Vector2 0.0 0.0) 50 white "Hello world!"
 
 testGUI :: Signal ()

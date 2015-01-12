@@ -18,6 +18,7 @@ import Foreign.C.String
 import Graphics.Rendering.FreeType.Internal.Bitmap
 import Data.Bits (shift)
 import Data.IORef
+import System.Environment (getExecutablePath)
 
 import qualified Graphics.Rendering.FreeType.Internal.BitmapSize as BS
 import qualified Control.Exception as E
@@ -28,6 +29,7 @@ import qualified Necronomicon.Graphics.Mesh as Mesh (rect,loadDynamicMesh)
 import qualified Necronomicon.Graphics.Texture as NecroTex
 import Necronomicon.Graphics.Model
 import qualified Necronomicon.Graphics.Color as Color (Color(..),white)
+import Paths_Necronomicon
 
 newBoundTexUnit :: Int -> IO TextureObject
 newBoundTexUnit u = do
@@ -70,8 +72,10 @@ drawText = FontRenderer
 
 loadFontAtlas :: Font -> IO LoadedFont
 loadFontAtlas font = do
+    putStrLn $ "loadFontAtlas: " ++ fontKey font
+    fontPath <- getDataFileName ""
     ft <- freeType
-    ff <- fontFace ft $ fontKey font
+    ff <- fontFace ft $ fontPath ++ "fonts/" ++ fontKey font
     runFreeType $ ft_Set_Pixel_Sizes ff (fromIntegral $ fontSize font) 0
 
     metrics <- mapM (getCharMetrics ff) [32..128] --[32..128]
