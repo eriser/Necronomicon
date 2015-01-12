@@ -29,6 +29,9 @@ import qualified Data.Map as Map
 
 -}
 
+mesh :: String -> [Vector3] -> [Color] -> [Vector2] -> [Int] -> Mesh
+mesh name vertices colors uvs indices = Mesh name $ loadMesh vertices colors uvs indices
+
 rect :: Double -> Double -> Mesh
 rect w h = Mesh (show w ++ show h ++ "rect") $ loadMesh vertices colors uvs indices
     where

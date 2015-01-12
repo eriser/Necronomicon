@@ -135,6 +135,8 @@ getCharMetrics ff char = do
     metric <- peek $ metrics slot
     left   <- peek $ bitmap_left slot
     top    <- peek $ bitmap_top slot
+    runFreeType    $ ft_Render_Glyph slot ft_RENDER_MODE_NORMAL
+    bmp    <- peek $ bitmap slot
     let charMetric = CharMetric
                      (toEnum char)
                      (fromIntegral (shift (Metrics.horiAdvance  metric) (-6)))

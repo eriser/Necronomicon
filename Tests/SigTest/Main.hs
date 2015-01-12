@@ -1,8 +1,8 @@
 import Necronomicon
-import qualified Data.Vector as V
+import Data.Fixed (mod')
 
 main :: IO ()
-main = runSignal testShader
+main = runSignal testScene
 
 testPattern :: Signal ()
 testPattern = gui [tri <~ pattern / 10 ]
@@ -29,7 +29,7 @@ testShader = gui [so <~ mousePos,pure zLabel]
     where
         so (x,y) = SceneObject "ShaderTest" True (Vector3 x y 0) identityQuat 1 (Just model) Nothing []
         model    = Model (rect 0.2 0.2) (ambient (tga "Gas20.tga"))
-        zLabel   = label (Vector2 0.0 0.0) (Font "OCRA.ttf" 50) white "Hello world!"
+        zLabel   = label (Vector2 0 0 ) (Font "OCRA.ttf" 50) white "Hello world!"
 
 testGUI :: Signal ()
 testGUI = gui [element vslider,element blueButton,pure zLabel,tri <~ input vslider]
@@ -42,56 +42,52 @@ testGUI = gui [element vslider,element blueButton,pure zLabel,tri <~ input vslid
 testScene :: Signal ()
 testScene = scene [camSig,triSig]
     where
-        triSig = pure $ testTri "Test" 0 identityQuat []
-        -- triSig = terrain
-                 -- <~ foldp (+) 0 (lift3 move wasd (fps 60) 5)
-                 -- ~~ constant identityQuat
-                 -- ~~ constant []
+        -- triSig = pure $ testTri "Test" 0 identityQuat []
+        triSig = terrain 
+                 <~ foldp (+) 0 (lift3 move wasd (fps 60) 5)
+                 ~~ constant identityQuat
+                 ~~ constant []
 
-        camSig = perspCamera (Vector3 0 0 20) identityQuat
+        camSig = perspCamera (Vector3 0 0 10) identityQuat
                  <~ dimensions
-                 ~~ constant 60
+                 ~~ constant 90
                  ~~ constant 0.1
-                 ~~ constant 200
+                 ~~ constant 100
                  ~~ constant (RGB 0 0 0)
 
         move (x,y) z a = Vector3 (x*z*a) (y*z*a) 0
 
--- terrain :: Vector3 -> Quaternion -> [SceneObject] -> SceneObject
--- terrain pos r chldn = SceneObject "Terrain" True pos r 1 simplexMesh Nothing []
+terrain :: Vector3 -> Quaternion -> [SceneObject] -> SceneObject
+terrain pos r chldn = SceneObject "Terrain" True pos r 1 (Just $ Model simplexMesh vertexColored) Nothing []
 
 testTri :: String -> Vector3 -> Quaternion -> [SceneObject] -> SceneObject
 testTri name pos r chldn = SceneObject name True pos r 1 (Just model) Nothing []
     where
         model = Model (tri 0.3 white) vertexColored
 
-{-
 simplexMesh :: Mesh
-simplexMesh = SimpleMesh simplexTris simplexColors
+simplexMesh = mesh "simplex" vertices colors uvs indices
     where
         w                = 64
         h                = 128
-        featureSize      = 16
-        scale            = 1.0 / 6.0
+        features         = 16
+        scale            = 1 / 6
         vscale           = 3
-        svec             = V.fromList $ map (\(x,y) -> (x,simplex featureSize (x / fromIntegral w) (y / fromIntegral h),y)) $ map (\n -> (fromIntegral $ mod n w,fromIntegral $ div n h)) [0..(w*h)]
-        sval i
-            | i > V.length svec - 1 = svec V.! (mod (i - V.length svec) w + (V.length svec - w))
-            | otherwise             = svec V.! i
+        values           = [(x,simplex features (x / w) (y / h),y) | (x,y) <- [(mod' n w,fromIntegral . floor $ n / h) | n <- [0..w*h]]]
 
-        toVertex (x,y,z) = Vector3 (x*scale) (y*vscale) (z*scale*2)
-        toColor  (x,y,z) = RGBA (x / fromIntegral w) (y * 0.75 + 0.35) ((2*) $ z / fromIntegral h) 0.25
-        
-        addTwoTris i vs
-            | mod i w /= (w-1) = toVertex (sval i) : toVertex (sval $ i+w+1) : toVertex (sval $ i+w) : toVertex (sval $ i+w+1) : toVertex (sval $ i+1) : toVertex (sval i) : vs
-            | otherwise        = vs
-        addTwoColors i vs
-            | mod i w /= (w-1) = toColor (sval i) : toColor (sval $ i+w+1) : toColor (sval $ i+w) : toColor (sval $ i+w+1) : toColor (sval $ i+1) : toColor (sval i) : vs
-            | otherwise        = vs
+        toVertex (x,y,z) = Vector3 (x*scale) (y*vscale) (z*scale)
+        toColor  (x,y,z) = RGBA    (x / w) (y * 0.75 + 0.35) (z / h) 0.25
+        toUV     (x,y,_) = Vector2 (x / w) (y / h)
 
-        simplexTris      = foldr addTwoTris   [] [0..(V.length svec)] 
-        simplexColors    = foldr addTwoColors [] [0..(V.length svec)]
--}
+        addIndices w i indices
+            | mod i w /= (w-1) = i : i+w+1 : i+w : i+w+1 : i+1 : i : indices
+            | otherwise        = indices
+
+        vertices = map toVertex values
+        colors   = map toColor  values
+        uvs      = map toUV     values
+        indices  = foldr (addIndices (round w)) [] [0..(length values)]
+
 
 -- main :: IO()
 -- main = runSignal $ needlessCrawlTest
