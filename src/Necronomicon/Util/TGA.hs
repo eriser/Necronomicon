@@ -16,11 +16,11 @@ import Foreign.Ptr
 import Foreign.Storable
 import Data.Word (Word8(..), Word16)
 import Data.ByteString.Internal (ByteString(..),toForeignPtr)
--- import Foreign.ForeignPtr (ForeignPtr, withForeignPtr)
--- import Foreign.Ptr (Ptr, plusPtr, castPtr)
+import Paths_Necronomicon
 
 -- see http://en.wikipedia.org/wiki/Truevision_TGA
 -- or  http://de.wikipedia.org/wiki/Targa_Image_File
+
 
 data Picture = RGB24 ImageData |
                RGB32 ImageData |
@@ -130,8 +130,10 @@ newBoundTexUnit u = do
 
 loadTextureFromTGA :: String -> IO GL.TextureObject
 loadTextureFromTGA path = do
+    putStrLn $ "loadTextureFromTGA: " ++ path
+    texturePath <- getDataFileName ""
     tex <- newBoundTexUnit 0
-    tga <- readTGA path
+    tga <- readTGA $ texturePath ++ "textures/" ++ path
     let size = GL.TextureSize2D (fromIntegral (width tga)) (fromIntegral  (height tga))
     case picture tga of
         RGB32 p -> withPixels p (GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.RGB8 size 0 . GL.PixelData GL.RGB GL.UnsignedByte)

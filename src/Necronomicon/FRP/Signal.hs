@@ -104,7 +104,7 @@ import Data.List (unzip3)
 import Necronomicon.Graphics.Camera (renderGraphics)
 import Necronomicon.Graphics.SceneObject (SceneObject,root)
 import Necronomicon.Linear.Vector (Vector2 (Vector2),Vector3 (Vector3))
-import Necronomicon.Graphics.Mesh (Resources,newResources)
+import Necronomicon.Graphics.Model (newResources,Resources)
 import Necronomicon.UGen 
 import Necronomicon.Runtime -- (NecroVars(..),mkNecroVars,Synth(..),runNecroState,startNecronomicon,shutdownNecronomicon,Necronomicon)
 import Necronomicon.Patterns (Pattern(..))

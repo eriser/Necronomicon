@@ -10,6 +10,8 @@ import Necronomicon.Linear
 import Necronomicon.Graphics.Mesh
 import Necronomicon.Graphics.Color
 import Necronomicon.Graphics.Shader
+import Necronomicon.Graphics.Model
+import Necronomicon.Graphics.Text (renderFont)
 
 --Camera
 data Camera = Camera {
@@ -129,8 +131,9 @@ drawScene world view proj resources g = draw world view proj resources g >>= \ne
 
 draw :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> SceneObject -> IO Matrix4x4
 draw world view proj resources g = case _model g of
-    Just (Model mesh material) -> drawMeshWithMaterial material mesh modelView proj resources >> return newWorld
-    Nothing                    -> return newWorld
+    Just (Model             mesh material) -> drawMeshWithMaterial material mesh modelView proj resources >> return newWorld
+    Just (FontRenderer text font material) -> renderFont text font material      modelView proj resources >> return newWorld
+    Nothing                                -> return newWorld
     where
         newWorld  = world    .*. (trsMatrix (_position g) (_rotation g) (_scale g))
         modelView = newWorld .*. view

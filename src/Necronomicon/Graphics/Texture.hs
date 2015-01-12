@@ -1,11 +1,11 @@
 module Necronomicon.Graphics.Texture where
 
-import Necronomicon.Util.TGA (loadTextureFromTGA)
 import qualified Graphics.Rendering.OpenGL as GL
+import Necronomicon.Util.TGA (loadTextureFromTGA)
 
 data Texture = Texture {
-    textureKey :: String,
-    unTexture  :: IO GL.TextureObject
+    textureKey  :: String,
+    loadTexture :: IO GL.TextureObject
     }
 
 tga :: String -> Texture
