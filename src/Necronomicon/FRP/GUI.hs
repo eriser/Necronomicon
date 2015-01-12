@@ -31,10 +31,8 @@ gui gs = render $ root <~ combine (camSig : gs)
     where
         camSig = orthoCamera (Vector3 0 0 0) identityQuat <~ dimensions ~~ constant (RGB 0 0 0)
 
-label :: Vector2 -> Int -> Color -> String -> SceneObject
-label (Vector2 x y) size color text = SceneObject "" True (Vector3 x y 0) identityQuat (fromIntegral size / 400) (Just $ drawText text (font path size) ambient) Nothing []
-    where
-        path  = "OCRA.ttf"
+label :: Vector2 -> Font -> Color ->  String -> SceneObject
+label (Vector2 x y) font@(Font _ size) color text = SceneObject "" True (Vector3 x y 0) identityQuat (fromIntegral size / 400) (Just $ drawText text font ambient) Nothing []
 
 guiEvent :: (Typeable a) => IORef (Gui b) -> Dynamic -> (a -> IO (EventValue (Gui b))) -> IO (EventValue (Gui b))
 guiEvent ref v f = case fromDynamic v of
