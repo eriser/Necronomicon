@@ -2,7 +2,7 @@ module Necronomicon.Graphics.Text (drawText,
                                    renderFont,
                                    font) where
 
-import Prelude    
+import Prelude
 import Control.Monad
 import Graphics.Rendering.OpenGL hiding (bitmap)
 import Graphics.Rendering.OpenGL.GL.PixelRectangles.PixelStorage
@@ -131,13 +131,12 @@ getCharMetrics ff char = do
 
     --not sure if this is necessary??
     runFreeType    $ ft_Render_Glyph slot ft_RENDER_MODE_NORMAL
-    
+
     metric <- peek $ metrics slot
     left   <- peek $ bitmap_left slot
     top    <- peek $ bitmap_top slot
     runFreeType    $ ft_Render_Glyph slot ft_RENDER_MODE_NORMAL
     bmp    <- peek $ bitmap slot
-    widht  <-
     let charMetric = CharMetric
                      (toEnum char)
                      (fromIntegral (shift (Metrics.horiAdvance  metric) (-6)))
@@ -199,4 +198,3 @@ textMesh charMetrics size atlasWidth atlasHeight (vertices,colors,uvs,indices,co
                      Linear.Vector2 (tx + w / atlasWidth) 0                 :
                      uvs
         indices'   = count + 2 : count + 0 : count + 1 : count + 3 : count + 2 : count + 1 : indices
-

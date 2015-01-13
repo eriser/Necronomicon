@@ -43,7 +43,7 @@ testScene :: Signal ()
 testScene = scene [camSig,triSig]
     where
         -- triSig = pure $ testTri "Test" 0 identityQuat []
-        triSig = terrain 
+        triSig = terrain
                  <~ foldp (+) 0 (lift3 move wasd (fps 60) 5)
                  ~~ constant identityQuat
                  ~~ constant []
@@ -68,12 +68,9 @@ testTri name pos r chldn = SceneObject name True pos r 1 (Just model) Nothing []
 simplexMesh :: Mesh
 simplexMesh = mesh "simplex" vertices colors uvs indices
     where
-        w                = 64
-        h                = 128
-        features         = 16
-        scale            = 1 / 6
-        vscale           = 3
-        values           = [(x,simplex features (x / w) (y / h),y) | (x,y) <- [(mod' n w,fromIntegral . floor $ n / h) | n <- [0..w*h]]]
+        (w,h)            = (64,128)
+        (scale,vscale)   = (1 / 6,3)
+        values           = [(x,simplex 16 (x / w) (y / h),y) | (x,y) <- [(mod' n w,fromIntegral . floor $ n / h) | n <- [0..w*h]]]
 
         toVertex (x,y,z) = Vector3 (x*scale) (y*vscale) (z*scale)
         toColor  (x,y,z) = RGBA    (x / w) (y * 0.75 + 0.35) (z / h) 0.25
@@ -166,5 +163,3 @@ needlessCrawlTest = tenThousandTest
         thousandsTests  = test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ pure (0,0))))))))))
         test4           = tupleTest <~ thousandsTests
         tenThousandTest = test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ pure (0,0))))))))))
-
-
