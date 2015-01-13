@@ -68,7 +68,7 @@ ambient tex = Material draw
             (program,texu : uniforms,attributes)                             <- getShader  resources ambientShader
             (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh    resources mesh
             texture                                                          <- getTexture resources tex
-            
+
             GL.currentProgram  GL.$= Just program
             bindMatrixUniforms uniforms modelView proj
             GL.activeTexture   GL.$= GL.TextureUnit 0
@@ -83,7 +83,7 @@ uvTest tex = Material draw
             (program,texu : uniforms,attributes)                             <- getShader  resources uvTestShader
             (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh    resources mesh
             texture                                                          <- getTexture resources tex
-            
+
             GL.currentProgram  GL.$= Just program
             bindMatrixUniforms uniforms modelView proj
             GL.activeTexture   GL.$= GL.TextureUnit 0
@@ -98,7 +98,7 @@ colorTest tex = Material draw
             (program,texu : uniforms,attributes)                             <- getShader  resources colorTestShader
             (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh    resources mesh
             texture                                                          <- getTexture resources tex
-            
+
             GL.currentProgram  GL.$= Just program
             bindMatrixUniforms uniforms modelView proj
             GL.activeTexture   GL.$= GL.TextureUnit 0
@@ -128,13 +128,13 @@ getMesh resources mesh = case meshKey mesh of
 
 loadMesh :: [Vector3] -> [Color] -> [Vector2] -> [Int] -> IO LoadedMesh
 loadMesh vertices colors uvs indices = do
-    vertexBuffer  <- makeBuffer GL.ArrayBuffer        (map realToFrac (posColorUV vertices colors uvs) :: [GL.GLfloat]) 
+    vertexBuffer  <- makeBuffer GL.ArrayBuffer        (map realToFrac (posColorUV vertices colors uvs) :: [GL.GLfloat])
     indexBuffer   <- makeBuffer GL.ElementArrayBuffer (map fromIntegral indices :: [GL.GLuint])
     return (vertexBuffer,indexBuffer,length indices,vadPosColorUV)
 
 loadDynamicMesh :: GL.BufferObject -> GL.BufferObject -> [Vector3] -> [Color] -> [Vector2] -> [Int] -> IO LoadedMesh
 loadDynamicMesh vBuf iBuf vertices colors uvs indices = do
-    vertexBuffer  <- makeDynamicBuffer vBuf GL.ArrayBuffer        (map realToFrac (posColorUV vertices colors uvs) :: [GL.GLfloat]) 
+    vertexBuffer  <- makeDynamicBuffer vBuf GL.ArrayBuffer        (map realToFrac (posColorUV vertices colors uvs) :: [GL.GLfloat])
     indexBuffer   <- makeDynamicBuffer iBuf GL.ElementArrayBuffer (map fromIntegral indices :: [GL.GLuint])
     return (vertexBuffer,indexBuffer,length indices,vadPosColorUV)
 
@@ -180,7 +180,7 @@ bindThenDraw vertexBuffer indexBuffer atributesAndVads numIndices = do
     GL.currentProgram GL.$= Nothing
 
 vertexColoredShader :: Shader
-vertexColoredShader = shader "vertexColored" ["mv1","mv2","mv3","mv4","pr1","pr2","pr3","pr4"] ["position","in_color"] vs fs
+vertexColoredShader = shader "vertexColored" ["mv1","mv2","mv3","mv4","pr1","pr2","pr3","pr4"] ["position","in_color"] (loadVertexShader "ambient-vert.glsl") fs
     where
         vs = [vert| #version 130
                     uniform vec4 mv1,mv2,mv3,mv4;
@@ -190,13 +190,13 @@ vertexColoredShader = shader "vertexColored" ["mv1","mv2","mv3","mv4","pr1","pr2
                     in  vec3 in_color;
                     out vec3 color;
 
-                    void main() 
+                    void main()
                     {
                         mat4 modelView = mat4(mv1,mv2,mv3,mv4);
                         mat4 proj      = mat4(pr1,pr2,pr3,pr4);
-                        
+
                         color       = in_color;
-                        gl_Position = vec4(position,1.0) * modelView * proj; 
+                        gl_Position = vec4(position,1.0) * modelView * proj;
                     }
              |]
 
@@ -224,13 +224,13 @@ ambientShader = shader "ambient" ["tex","mv1","mv2","mv3","mv4","pr1","pr2","pr3
                     out vec3 color;
                     out vec2 uv;
 
-                    void main() 
+                    void main()
                     {
                         mat4 modelView = mat4(mv1,mv2,mv3,mv4);
                         mat4 proj      = mat4(pr1,pr2,pr3,pr4);
                         color          = in_color;
                         uv             = in_uv;
-                        gl_Position    = vec4(position,1.0) * modelView * proj; 
+                        gl_Position    = vec4(position,1.0) * modelView * proj;
                     }
              |]
 
@@ -261,13 +261,13 @@ uvTestShader = shader "uvTest" ["tex","mv1","mv2","mv3","mv4","pr1","pr2","pr3",
                     out vec3 color;
                     out vec2 uv;
 
-                    void main() 
+                    void main()
                     {
                         mat4 modelView = mat4(mv1,mv2,mv3,mv4);
                         mat4 proj      = mat4(pr1,pr2,pr3,pr4);
                         color          = in_color;
                         uv             = in_uv;
-                        gl_Position    = vec4(position,1.0) * modelView * proj; 
+                        gl_Position    = vec4(position,1.0) * modelView * proj;
                     }
              |]
 
@@ -299,13 +299,13 @@ colorTestShader = shader "colorTest" ["tex","mv1","mv2","mv3","mv4","pr1","pr2",
                     out vec3 color;
                     out vec2 uv;
 
-                    void main() 
+                    void main()
                     {
                         mat4 modelView = mat4(mv1,mv2,mv3,mv4);
                         mat4 proj      = mat4(pr1,pr2,pr3,pr4);
                         color          = in_color;
                         uv             = in_uv;
-                        gl_Position    = vec4(position,1.0) * modelView * proj; 
+                        gl_Position    = vec4(position,1.0) * modelView * proj;
                     }
              |]
 
@@ -321,4 +321,3 @@ colorTestShader = shader "colorTest" ["tex","mv1","mv2","mv3","mv4","pr1","pr2",
                         fragColor = vec4(color,1.0);
                     }
              |]
-

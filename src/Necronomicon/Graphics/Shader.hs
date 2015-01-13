@@ -10,7 +10,9 @@ module Necronomicon.Graphics.Shader (
     compileFrag,
     shader,
     offset0,
-    offsetPtr
+    offsetPtr,
+    loadVertexShader,
+    loadFragmentShader
     ) where
 
 import Prelude
@@ -25,20 +27,15 @@ import qualified Data.ByteString.Char8 as C
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Language.Haskell.TH as TH
 import Foreign.Ptr (Ptr,wordPtrToPtr)
+import Paths_Necronomicon
 
 ------------------------------------------------------------------------------------------
 -- Shaders
 ------------------------------------------------------------------------------------------
 
-data VertexShader   = VertexShader   {
-    vertexString   :: String,
-    unVertexShader :: IO GL.Shader
-    } deriving (Show)
+newtype VertexShader   = VertexShader   {unVertexShader :: IO GL.Shader} deriving (Show)
 
-data FragmentShader = FragmentShader {
-    fragmentString   :: String,
-    unFragmentShader :: IO GL.Shader
-    } deriving (Show)
+newtype FragmentShader = FragmentShader {unFragmentShader :: IO GL.Shader} deriving (Show)
 
 type LoadedShader = (GL.Program,[GL.UniformLocation],[GL.AttribLocation])
 
@@ -71,6 +68,24 @@ loadShaderBS filePath shaderType src = do
         ioError (userError "shader compilation failed")
     return shader
 
+loadVertexShader :: FilePath -> VertexShader
+loadVertexShader   path = VertexShader load
+   where
+    load = do
+        putStrLn $ "loadVertexShader: " ++ path
+        resources <- getDataFileName ""
+        shaderPath <- BS.readFile $ resources ++ "shaders/" ++ path
+        loadShaderBS path GL.VertexShader shaderPath
+
+loadFragmentShader :: FilePath -> FragmentShader
+loadFragmentShader path = FragmentShader load
+    where
+        load = do
+            putStrLn $ "loadVertexShader: " ++ path
+            resources <- getDataFileName ""
+            shaderPath <- BS.readFile $ resources ++ "shaders/" ++ path
+            loadShaderBS path GL.FragmentShader shaderPath
+
 printError :: IO ()
 printError = GL.get GL.errors >>= mapM_ (hPutStrLn stderr . ("GL: "++) . show)
 
@@ -86,10 +101,10 @@ shaderQuoter compileString string = do
     return $ AppE (VarE name) (LitE $ StringL string)
 
 compileVert :: String -> VertexShader
-compileVert s = VertexShader   s . loadShaderBS "vert" GL.VertexShader   $ C.pack s
+compileVert s = VertexShader   . loadShaderBS "vert" GL.VertexShader   $ C.pack s
 
 compileFrag :: String -> FragmentShader
-compileFrag s = FragmentShader s . loadShaderBS "frag" GL.FragmentShader $ C.pack s
+compileFrag s = FragmentShader . loadShaderBS "frag" GL.FragmentShader $ C.pack s
 
 getValueName :: String -> Q Name
 getValueName s = do
@@ -136,17 +151,15 @@ offset0 = offsetPtr 0
 ambientMesh :: [Vector3] -> [Color] -> [Int] -> Mesh
 ambientMesh vertices colors indices = Mesh draw
     where
-        vertexBuffer = makeBuffer GL.ArrayBuffer           (map realToFrac (posCol vertices colors) :: [GL.GLfloat]) 
+        vertexBuffer = makeBuffer GL.ArrayBuffer           (map realToFrac (posCol vertices colors) :: [GL.GLfloat])
         indexBuffer  = makeBuffer GL.ElementArrayBuffer    (map fromIntegral indices :: [GL.GLuint])
         vertexVad    = GL.VertexArrayDescriptor 3 GL.Float (fromIntegral $ sizeOf (undefined::GL.GLfloat) * 6) offset0
         colorVad     = GL.VertexArrayDescriptor 3 GL.Float (fromIntegral $ sizeOf (undefined::GL.GLfloat) * 6) (offsetPtr $ sizeOf (undefined :: GL.GLfloat) * 3)
         numIndices   = length indices
-        
+
         draw modelView proj resources = do
             (program,uniforms,attributes) <- getShader resources ambientShader
             GL.currentProgram GL.$= Just program
             bindMatrixUniforms uniforms modelView proj
             bindThenDraw vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad]) numIndices
 -}
-
-
