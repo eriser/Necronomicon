@@ -4,11 +4,9 @@ import Necronomicon.Linear
 import Necronomicon.Graphics.Color
 import Necronomicon.Graphics.Shader
 import Necronomicon.Graphics.BufferObject
-import Necronomicon.Utility
 import Necronomicon.Graphics.Texture
 import Necronomicon.Graphics.Model
 
-import Foreign.C.Types
 import Foreign.Storable (sizeOf)
 import Data.IORef
 
@@ -29,6 +27,9 @@ import qualified Data.Map as Map
 
 -}
 
+-- consider replacing IO load action with various flavors of constructors instead:
+--Mesh,LitMesh,DynamicMesh,DynamicLitMesh
+
 mesh :: String -> [Vector3] -> [Color] -> [Vector2] -> [Int] -> Mesh
 mesh name vertices colors uvs indices = Mesh name $ loadMesh vertices colors uvs indices
 
@@ -43,9 +44,9 @@ rect w h = Mesh (show w ++ show h ++ "rect") $ loadMesh vertices colors uvs indi
         indices  = [2,0,1,3,2,1]
 
 tri :: Double -> Color -> Mesh
-tri size color = Mesh (show size ++ "tri") $ loadMesh vertices colors uvs indices
+tri triSize color = Mesh (show triSize ++ "tri") $ loadMesh vertices colors uvs indices
     where
-        vertices = [Vector3 (-size) (-size) 0, Vector3 size (-size) 0, Vector3 0 size 0]
+        vertices = [Vector3 (-triSize) (-triSize) 0, Vector3 triSize (-triSize) 0, Vector3 0 triSize 0]
         colors   = [color,color,color]
         uvs      = [Vector2 1 1,Vector2 0 0,Vector2 0 1]
         indices  = [0,1,2]

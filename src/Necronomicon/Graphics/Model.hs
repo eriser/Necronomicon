@@ -1,14 +1,9 @@
 module Necronomicon.Graphics.Model where
 
 import Necronomicon.Linear
-import Necronomicon.Graphics.Color
 import Necronomicon.Graphics.Shader
-import Necronomicon.Graphics.BufferObject
-import Necronomicon.Utility
 import Necronomicon.Graphics.Texture
-
 import Data.IORef
-
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Data.IntMap as IntMap
 import qualified Data.Map as Map
@@ -50,15 +45,10 @@ instance Show Model where
 instance Show Mesh where
     show _ = "Mesh"
 
-instance Show (IO GL.BufferObject) where
-    show _ = "IO GL.BufferObject"
-
-
 newResources :: IO Resources
 newResources = do
     smap <- newIORef IntMap.empty
     tmap <- newIORef Map.empty
     mmap <- newIORef Map.empty
-    fmap <- newIORef Map.empty
-    return $ Resources smap tmap mmap fmap
-
+    mapf <- newIORef Map.empty
+    return $ Resources smap tmap mmap mapf

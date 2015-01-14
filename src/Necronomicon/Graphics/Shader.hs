@@ -3,7 +3,6 @@ module Necronomicon.Graphics.Shader (
     LoadedShader,
     VertexShader(..),
     FragmentShader(..),
-    loadShader,
     vert,
     frag,
     compileVert,
@@ -25,7 +24,6 @@ import Necronomicon.Utility
 import qualified Data.ByteString as BS
 import qualified Data.ByteString.Char8 as C
 import qualified Graphics.Rendering.OpenGL as GL
-import qualified Language.Haskell.TH as TH
 import Foreign.Ptr (Ptr,wordPtrToPtr)
 import Paths_Necronomicon
 
@@ -33,19 +31,10 @@ import Paths_Necronomicon
 -- Shaders
 ------------------------------------------------------------------------------------------
 
-newtype VertexShader   = VertexShader   {unVertexShader :: IO GL.Shader} deriving (Show)
-
-newtype FragmentShader = FragmentShader {unFragmentShader :: IO GL.Shader} deriving (Show)
-
-type LoadedShader = (GL.Program,[GL.UniformLocation],[GL.AttribLocation])
-
-data Shader = Shader {
-    key        :: Int,
-    loadShader :: IO LoadedShader
-    }
-
-instance Show (IO GL.Shader) where
-    show _ = "IO GL.Shader"
+newtype VertexShader   = VertexShader   {unVertexShader   :: IO GL.Shader}
+newtype FragmentShader = FragmentShader {unFragmentShader :: IO GL.Shader}
+data    Shader         = Shader         {key :: Int,loadShader :: IO LoadedShader}
+type    LoadedShader   = (GL.Program,[GL.UniformLocation],[GL.AttribLocation])
 
 instance Show Shader where
     show _ = "Shader"
@@ -55,18 +44,18 @@ instance Show Shader where
 
 loadShaderBS :: FilePath -> GL.ShaderType -> BS.ByteString -> IO GL.Shader
 loadShaderBS filePath shaderType src = do
-    shader <- GL.createShader shaderType
-    GL.shaderSourceBS shader GL.$= src
-    GL.compileShader shader
+    newShader <- GL.createShader shaderType
+    GL.shaderSourceBS newShader GL.$= src
+    GL.compileShader  newShader
     printError
-    ok      <- GL.get (GL.compileStatus shader)
-    infoLog <- GL.get (GL.shaderInfoLog shader)
+    ok      <- GL.get (GL.compileStatus newShader)
+    infoLog <- GL.get (GL.shaderInfoLog newShader)
     unless (null infoLog)
         (mapM_ putStrLn ["Shader info log for '" ++ filePath ++ "':", infoLog, ""])
     unless ok $ do
-        GL.deleteObjectName shader
+        GL.deleteObjectName newShader
         ioError (userError "shader compilation failed")
-    return shader
+    return newShader
 
 loadVertexShader :: FilePath -> VertexShader
 loadVertexShader   path = VertexShader load
@@ -81,7 +70,7 @@ loadFragmentShader :: FilePath -> FragmentShader
 loadFragmentShader path = FragmentShader load
     where
         load = do
-            putStrLn $ "loadVertexShader: " ++ path
+            putStrLn $ "loadFragmentShader: " ++ path
             resources <- getDataFileName ""
             shaderPath <- BS.readFile $ resources ++ "shaders/" ++ path
             loadShaderBS path GL.FragmentShader shaderPath

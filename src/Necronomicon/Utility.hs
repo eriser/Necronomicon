@@ -2,10 +2,10 @@ module Necronomicon.Utility (hash, (|>), (<|)) where
 
 import Prelude
 import Data.Bits
-import Data.Int
-import Data.Word
+-- import Data.Int
+-- import Data.Word
 import Data.List (foldl')
-import Foreign.C
+-- import Foreign.C
 
 class Hashable a where
     hash :: a -> Int
@@ -17,9 +17,7 @@ hashAndCombine :: Hashable h => Int -> h -> Int
 hashAndCombine acc h = acc `combine` hash h
 
 instance Hashable ()   where hash _ = 0
-instance Hashable Bool where hash x = case x of
-                                 True  -> 1
-                                 False -> 0
+instance Hashable Bool where hash x = if x then 1 else 0
 
 instance Hashable Char where hash = fromEnum
 
@@ -34,4 +32,3 @@ infixl 0 |>
 a <| b = a b
 
 infixl 0 <|
-
