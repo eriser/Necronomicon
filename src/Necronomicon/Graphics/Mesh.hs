@@ -178,116 +178,33 @@ bindThenDraw vertexBuffer indexBuffer atributesAndVads numIndices = do
     GL.currentProgram GL.$= Nothing
 
 vertexColoredShader :: Shader
-vertexColoredShader = shader "vertexColored" ["mv1","mv2","mv3","mv4","pr1","pr2","pr3","pr4"] ["position","in_color"] (loadVertexShader "ambient-vert.glsl") (loadFragmentShader "ambient-frag.glsl")
+vertexColoredShader = shader
+                      "vertexColored"
+                      ["mv1","mv2","mv3","mv4","pr1","pr2","pr3","pr4"]
+                      ["position","in_color"]
+                      (loadVertexShader "colored-vert.glsl")
+                      (loadFragmentShader "colored-frag.glsl")
 
-ambientShader :: Shader
-ambientShader = shader "ambient" ["tex","mv1","mv2","mv3","mv4","pr1","pr2","pr3","pr4"] ["position","in_color","in_uv"] vs fs
-    where
-        vs = [vert| #version 130
-                    uniform vec4 mv1,mv2,mv3,mv4;
-                    uniform vec4 pr1,pr2,pr3,pr4;
+ambientShader       :: Shader
+ambientShader       = shader
+                      "ambient"
+                      ["tex","mv1","mv2","mv3","mv4","pr1","pr2","pr3","pr4"]
+                      ["position","in_color","in_uv"]
+                      (loadVertexShader "ambient-vert.glsl")
+                      (loadFragmentShader "ambient-frag.glsl")
 
-                    in  vec3  position;
-                    in  vec3  in_color;
-                    in  vec2  in_uv;
+uvTestShader        :: Shader
+uvTestShader        = shader
+                      "uvTest"
+                      ["tex","mv1","mv2","mv3","mv4","pr1","pr2","pr3","pr4"]
+                      ["position","in_color","in_uv"]
+                      (loadVertexShader "ambient-vert.glsl")
+                      (loadFragmentShader "uvTest-frag.glsl")
 
-                    out vec3 color;
-                    out vec2 uv;
-
-                    void main()
-                    {
-                        mat4 modelView = mat4(mv1,mv2,mv3,mv4);
-                        mat4 proj      = mat4(pr1,pr2,pr3,pr4);
-                        color          = in_color;
-                        uv             = in_uv;
-                        gl_Position    = vec4(position,1.0) * modelView * proj;
-                    }
-             |]
-
-        fs = [frag| #version 130
-                    uniform sampler2D tex;
-
-                    in vec3  color;
-                    in vec2  uv;
-                    out vec4 fragColor;
-
-                    void main()
-                    {
-                        fragColor = vec4(color,1.0) * texture2D(tex,uv);
-                    }
-             |]
-
-uvTestShader :: Shader
-uvTestShader = shader "uvTest" ["tex","mv1","mv2","mv3","mv4","pr1","pr2","pr3","pr4"] ["position","in_color","in_uv"] vs fs
-    where
-        vs = [vert| #version 130
-                    uniform vec4 mv1,mv2,mv3,mv4;
-                    uniform vec4 pr1,pr2,pr3,pr4;
-
-                    in  vec3  position;
-                    in  vec3  in_color;
-                    in  vec2  in_uv;
-
-                    out vec3 color;
-                    out vec2 uv;
-
-                    void main()
-                    {
-                        mat4 modelView = mat4(mv1,mv2,mv3,mv4);
-                        mat4 proj      = mat4(pr1,pr2,pr3,pr4);
-                        color          = in_color;
-                        uv             = in_uv;
-                        gl_Position    = vec4(position,1.0) * modelView * proj;
-                    }
-             |]
-
-        fs = [frag| #version 130
-                    uniform sampler2D tex;
-
-                    in vec3  color;
-                    in vec2  uv;
-                    out vec4 fragColor;
-
-                    void main()
-                    {
-                        fragColor = vec4(uv.xy,0.0,1.0);
-                    }
-             |]
-
-
-colorTestShader :: Shader
-colorTestShader = shader "colorTest" ["tex","mv1","mv2","mv3","mv4","pr1","pr2","pr3","pr4"] ["position","in_color","in_uv"] vs fs
-    where
-        vs = [vert| #version 130
-                    uniform vec4 mv1,mv2,mv3,mv4;
-                    uniform vec4 pr1,pr2,pr3,pr4;
-
-                    in  vec3  position;
-                    in  vec3  in_color;
-                    in  vec2  in_uv;
-
-                    out vec3 color;
-                    out vec2 uv;
-
-                    void main()
-                    {
-                        mat4 modelView = mat4(mv1,mv2,mv3,mv4);
-                        mat4 proj      = mat4(pr1,pr2,pr3,pr4);
-                        color          = in_color;
-                        uv             = in_uv;
-                        gl_Position    = vec4(position,1.0) * modelView * proj;
-                    }
-             |]
-
-        fs = [frag| #version 130
-                    uniform sampler2D tex;
-
-                    in vec3  color;
-                    in vec2  uv;
-                    out vec4 fragColor;
-
-                    void main()
-                    {
-                        fragColor = vec4(color,1.0);
-                    }
-             |]
+colorTestShader     :: Shader
+colorTestShader     = shader
+                      "colorTest"
+                      ["tex","mv1","mv2","mv3","mv4","pr1","pr2","pr3","pr4"]
+                      ["position","in_color","in_uv"]
+                      (loadVertexShader "ambient-vert.glsl")
+                      (loadFragmentShader "colorTest-frag.glsl")
