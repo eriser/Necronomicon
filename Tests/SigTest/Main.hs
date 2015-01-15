@@ -44,15 +44,15 @@ testScene = scene [camSig,triSig]
     where
         -- triSig = pure $ testTri "Test" 0 identityQuat []
         triSig = terrain
-                 <~ foldp (+) 0 (lift3 move wasd (fps 60) 5)
+                 <~ foldp (+) 0 (lift3 move wasd (fps 30) 5)
                  ~~ constant identityQuat
                  ~~ constant []
 
         camSig = perspCamera (Vector3 0 0 10) identityQuat
                  <~ dimensions
-                 ~~ constant 90
+                 ~~ constant 60
                  ~~ constant 0.1
-                 ~~ constant 100
+                 ~~ constant 1000
                  ~~ constant (RGB 0 0 0)
 
         move (x,y) z a = Vector3 (x*z*a) (y*z*a) 0

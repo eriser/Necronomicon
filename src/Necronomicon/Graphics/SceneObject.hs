@@ -54,6 +54,8 @@ _far_ f r = r{_far=f (_far r)}
 _clearColor_ :: (Color -> Color) -> Camera -> Camera
 _clearColor_ f r = r{_clearColor=f (_clearColor r)}
 
+--Different kinds of SceneObjects?
+
 --SceneObject
 data SceneObject = SceneObject {
     _name     :: String,
@@ -116,9 +118,9 @@ _camera_ f o = o{_camera = f (_camera o)}
 _children_ :: ([SceneObject] -> [SceneObject]) -> SceneObject -> SceneObject
 _children_ f o = o{_children = f (_children o)}
 
--------------------------------------------------------------------------------------------------------------------               
+-------------------------------------------------------------------------------------------------------------------
 -- Scene functions
--------------------------------------------------------------------------------------------------------------------               
+-------------------------------------------------------------------------------------------------------------------
 
 root :: [SceneObject] -> SceneObject
 root = SceneObject "root" True 0 identityQuat 1 Nothing Nothing
@@ -147,4 +149,3 @@ findGameObject n g
         compareSearch (Just g1) _         = Just g1
         compareSearch _         (Just g2) = Just g2
         compareSearch _         _         = Nothing
-

@@ -10,10 +10,11 @@ import Necronomicon.Graphics.Model
 import Foreign.Storable (sizeOf)
 import Data.IORef
 
-import qualified Graphics.Rendering.OpenGL as GL
-import qualified Data.IntMap as IntMap
-import qualified Data.Map as Map
-
+import qualified Graphics.Rendering.OpenGL     as GL
+import qualified Graphics.Rendering.OpenGL.Raw as GLRaw (glUniformMatrix4fv)
+import qualified Data.IntMap                   as IntMap
+import qualified Data.Map                      as Map
+import qualified Data.Vector.Storable          as V (unsafeWith,fromList)
 
 {-
 
@@ -55,57 +56,53 @@ vertexColored :: Material
 vertexColored = Material draw
     where
         draw mesh modelView proj resources = do
-            (program,uniforms,attributes)                              <- getShader resources vertexColoredShader
+            (program,mv:pr:_,attributes)                               <- getShader resources vertexColoredShader
             (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:_) <- getMesh   resources mesh
 
             GL.currentProgram GL.$= Just program
-            bindMatrixUniforms uniforms modelView proj
-            bindThenDraw vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad]) numIndices
+            bindThenDraw mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad]) numIndices
 
 ambient :: Texture -> Material
 ambient tex = Material draw
     where
         draw mesh modelView proj resources = do
-            (program,texu : uniforms,attributes)                             <- getShader  resources ambientShader
+            (program,mv:pr:texu:_,attributes)                                <- getShader  resources ambientShader
             (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh    resources mesh
             texture                                                          <- getTexture resources tex
 
             GL.currentProgram  GL.$= Just program
-            bindMatrixUniforms uniforms modelView proj
             GL.activeTexture   GL.$= GL.TextureUnit 0
             GL.textureBinding  GL.Texture2D GL.$= Just texture
             GL.uniform texu    GL.$= GL.TextureUnit 0
-            bindThenDraw vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
+            bindThenDraw mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
 
 uvTest :: Texture -> Material
 uvTest tex = Material draw
     where
         draw mesh modelView proj resources = do
-            (program,texu : uniforms,attributes)                             <- getShader  resources uvTestShader
+            (program,mv:pr:texu:_,attributes)                                <- getShader  resources uvTestShader
             (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh    resources mesh
             texture                                                          <- getTexture resources tex
 
             GL.currentProgram  GL.$= Just program
-            bindMatrixUniforms uniforms modelView proj
             GL.activeTexture   GL.$= GL.TextureUnit 0
             GL.textureBinding  GL.Texture2D GL.$= Just texture
             GL.uniform texu    GL.$= GL.TextureUnit 0
-            bindThenDraw vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
+            bindThenDraw mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
 
 colorTest :: Texture -> Material
 colorTest tex = Material draw
     where
         draw mesh modelView proj resources = do
-            (program,texu : uniforms,attributes)                             <- getShader  resources colorTestShader
+            (program,mv:pr:texu:_,attributes)                                <- getShader  resources colorTestShader
             (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh    resources mesh
             texture                                                          <- getTexture resources tex
 
             GL.currentProgram  GL.$= Just program
-            bindMatrixUniforms uniforms modelView proj
             GL.activeTexture   GL.$= GL.TextureUnit 0
             GL.textureBinding  GL.Texture2D GL.$= Just texture
             GL.uniform texu    GL.$= GL.TextureUnit 0
-            bindThenDraw vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
+            bindThenDraw mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
 
 getShader :: Resources -> Shader -> IO LoadedShader
 getShader resources sh = readIORef (shadersRef resources) >>= \shaders ->
@@ -150,27 +147,15 @@ posColorUV _ _ [] = []
 posColorUV (Vector3 x y z : vs) (RGB  r g b   : cs) (Vector2 u v : uvs) = x : y : z : r : g : b : u : v : posColorUV vs cs uvs
 posColorUV (Vector3 x y z : vs) (RGBA r g b _ : cs) (Vector2 u v : uvs) = x : y : z : r : g : b : u : v : posColorUV vs cs uvs
 
-bindMatrixUniforms :: [GL.UniformLocation] -> Matrix4x4 -> Matrix4x4  -> IO()
-bindMatrixUniforms (mv1:mv2:mv3:mv4:pr1:pr2:pr3:pr4:_) modelView proj = do
-    --set uniform vectors for the modelView matrix. Haskell's OpenGL library doesn't come stock with a way to set mat4 uniforms, so we have to break it up :(
-    GL.uniform mv1 GL.$= (toGLVertex4 $ _x modelView)
-    GL.uniform mv2 GL.$= (toGLVertex4 $ _y modelView)
-    GL.uniform mv3 GL.$= (toGLVertex4 $ _z modelView)
-    GL.uniform mv4 GL.$= (toGLVertex4 $ _w modelView)
-
-    --same for proj matrix
-    GL.uniform pr1 GL.$= (toGLVertex4 $ _x proj)
-    GL.uniform pr2 GL.$= (toGLVertex4 $ _y proj)
-    GL.uniform pr3 GL.$= (toGLVertex4 $ _z proj)
-    GL.uniform pr4 GL.$= (toGLVertex4 $ _w proj)
-
 setupAttribute :: (GL.AttribLocation,GL.VertexArrayDescriptor GL.GLfloat) -> IO()
 setupAttribute (loc,vad) = do
     GL.vertexAttribPointer loc  GL.$= (GL.ToFloat, vad)
     GL.vertexAttribArray   loc  GL.$= GL.Enabled
 
-bindThenDraw :: GL.BufferObject -> GL.BufferObject -> [(GL.AttribLocation,GL.VertexArrayDescriptor GL.GLfloat)] -> Int -> IO()
-bindThenDraw vertexBuffer indexBuffer atributesAndVads numIndices = do
+bindThenDraw :: GL.UniformLocation -> GL.UniformLocation -> Matrix4x4 -> Matrix4x4 -> GL.BufferObject -> GL.BufferObject -> [(GL.AttribLocation,GL.VertexArrayDescriptor GL.GLfloat)] -> Int -> IO()
+bindThenDraw (GL.UniformLocation mv) (GL.UniformLocation pr) modelView proj vertexBuffer indexBuffer atributesAndVads numIndices = do
+    V.unsafeWith (V.fromList . map realToFrac $ mat4ToList modelView) $ \ptr ->  GLRaw.glUniformMatrix4fv mv 1 0 ptr
+    V.unsafeWith (V.fromList . map realToFrac $ mat4ToList proj     ) $ \ptr ->  GLRaw.glUniformMatrix4fv pr 1 0 ptr
     GL.bindBuffer GL.ArrayBuffer GL.$= Just vertexBuffer
     mapM_ setupAttribute atributesAndVads
     GL.bindBuffer GL.ElementArrayBuffer GL.$= Just indexBuffer
@@ -180,9 +165,9 @@ bindThenDraw vertexBuffer indexBuffer atributesAndVads numIndices = do
 vertexColoredShader :: Shader
 vertexColoredShader = shader
                       "vertexColored"
-                      ["mv1","mv2","mv3","mv4","pr1","pr2","pr3","pr4"]
+                      ["modelView","proj"]
                       ["position","in_color"]
-                      (loadVertexShader "colored-vert.glsl")
+                      (loadVertexShader   "colored-vert.glsl")
                       (loadFragmentShader "colored-frag.glsl")
 
 ambientShader       :: Shader
@@ -190,7 +175,7 @@ ambientShader       = shader
                       "ambient"
                       ["tex","mv1","mv2","mv3","mv4","pr1","pr2","pr3","pr4"]
                       ["position","in_color","in_uv"]
-                      (loadVertexShader "ambient-vert.glsl")
+                      (loadVertexShader   "ambient-vert.glsl")
                       (loadFragmentShader "ambient-frag.glsl")
 
 uvTestShader        :: Shader
@@ -198,7 +183,7 @@ uvTestShader        = shader
                       "uvTest"
                       ["tex","mv1","mv2","mv3","mv4","pr1","pr2","pr3","pr4"]
                       ["position","in_color","in_uv"]
-                      (loadVertexShader "ambient-vert.glsl")
+                      (loadVertexShader   "ambient-vert.glsl")
                       (loadFragmentShader "uvTest-frag.glsl")
 
 colorTestShader     :: Shader
@@ -206,5 +191,5 @@ colorTestShader     = shader
                       "colorTest"
                       ["tex","mv1","mv2","mv3","mv4","pr1","pr2","pr3","pr4"]
                       ["position","in_color","in_uv"]
-                      (loadVertexShader "ambient-vert.glsl")
+                      (loadVertexShader   "ambient-vert.glsl")
                       (loadFragmentShader "colorTest-frag.glsl")
