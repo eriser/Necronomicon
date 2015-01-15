@@ -30,11 +30,11 @@ import qualified Data.Map as Map
 -- consider replacing IO load action with various flavors of constructors instead:
 --Mesh,LitMesh,DynamicMesh,DynamicLitMesh
 
-mesh :: String -> [Vector3] -> [Color] -> [Vector2] -> [Int] -> Mesh
-mesh name vertices colors uvs indices = Mesh name $ loadMesh vertices colors uvs indices
+-- mesh :: String -> [Vector3] -> [Color] -> [Vector2] -> [Int] -> Mesh
+-- mesh name vertices colors uvs indices = Mesh name $ loadMesh vertices colors uvs indices
 
 rect :: Double -> Double -> Mesh
-rect w h = Mesh (show w ++ show h ++ "rect") $ loadMesh vertices colors uvs indices
+rect w h = Mesh (show w ++ show h ++ "rect") vertices colors uvs indices
     where
         hw       = w * 0.5
         hh       = h * 0.5
@@ -44,7 +44,7 @@ rect w h = Mesh (show w ++ show h ++ "rect") $ loadMesh vertices colors uvs indi
         indices  = [2,0,1,3,2,1]
 
 tri :: Double -> Color -> Mesh
-tri triSize color = Mesh (show triSize ++ "tri") $ loadMesh vertices colors uvs indices
+tri triSize color = Mesh (show triSize ++ "tri") vertices colors uvs indices
     where
         vertices = [Vector3 (-triSize) (-triSize) 0, Vector3 triSize (-triSize) 0, Vector3 0 triSize 0]
         colors   = [color,color,color]
@@ -110,8 +110,8 @@ colorTest tex = Material draw
 getShader :: Resources -> Shader -> IO LoadedShader
 getShader resources sh = readIORef (shadersRef resources) >>= \shaders ->
     case IntMap.lookup (key sh) shaders of
-        Nothing     -> loadShader sh >>= \shader -> (writeIORef (shadersRef resources) $ IntMap.insert (key sh) shader shaders) >> return shader
-        Just shader -> return shader
+        Nothing           -> loadShader sh >>= \loadedShader -> (writeIORef (shadersRef resources) $ IntMap.insert (key sh) loadedShader shaders) >> return loadedShader
+        Just loadedShader -> return loadedShader
 
 getTexture :: Resources -> Texture -> IO GL.TextureObject
 getTexture resources tex = case textureKey tex of
@@ -121,20 +121,17 @@ getTexture resources tex = case textureKey tex of
         Just texture -> return texture
 
 getMesh :: Resources -> Mesh -> IO LoadedMesh
-getMesh resources mesh = case meshKey mesh of
-    [] -> loadMesh' mesh
-    _  -> readIORef (meshesRef resources) >>= \meshes -> case Map.lookup (meshKey mesh) meshes of
-        Nothing         -> loadMesh' mesh >>= \loadedMesh -> (writeIORef (meshesRef resources) $ Map.insert (meshKey mesh) loadedMesh meshes) >> return loadedMesh
-        Just loadedMesh -> return loadedMesh
+getMesh resources mesh@(Mesh mKey _ _ _ _) = readIORef (meshesRef resources) >>= \meshes -> case Map.lookup mKey meshes of
+    Nothing         -> loadMesh mesh >>= \loadedMesh -> (writeIORef (meshesRef resources) $ Map.insert mKey loadedMesh meshes) >> return loadedMesh
+    Just loadedMesh -> return loadedMesh
+getMesh _         mesh                     = loadMesh mesh
 
-loadMesh :: [Vector3] -> [Color] -> [Vector2] -> [Int] -> IO LoadedMesh
-loadMesh vertices colors uvs indices = do
+loadMesh :: Mesh -> IO LoadedMesh
+loadMesh (Mesh _ vertices colors uvs indices) = do
     vertexBuffer  <- makeBuffer GL.ArrayBuffer        (map realToFrac (posColorUV vertices colors uvs) :: [GL.GLfloat])
     indexBuffer   <- makeBuffer GL.ElementArrayBuffer (map fromIntegral indices :: [GL.GLuint])
     return (vertexBuffer,indexBuffer,length indices,vadPosColorUV)
-
-loadDynamicMesh :: GL.BufferObject -> GL.BufferObject -> [Vector3] -> [Color] -> [Vector2] -> [Int] -> IO LoadedMesh
-loadDynamicMesh vBuf iBuf vertices colors uvs indices = do
+loadMesh (DynamicMesh vBuf iBuf vertices colors uvs indices) = do
     vertexBuffer  <- makeDynamicBuffer vBuf GL.ArrayBuffer        (map realToFrac (posColorUV vertices colors uvs) :: [GL.GLfloat])
     indexBuffer   <- makeDynamicBuffer iBuf GL.ElementArrayBuffer (map fromIntegral indices :: [GL.GLuint])
     return (vertexBuffer,indexBuffer,length indices,vadPosColorUV)
@@ -181,35 +178,7 @@ bindThenDraw vertexBuffer indexBuffer atributesAndVads numIndices = do
     GL.currentProgram GL.$= Nothing
 
 vertexColoredShader :: Shader
-vertexColoredShader = shader "vertexColored" ["mv1","mv2","mv3","mv4","pr1","pr2","pr3","pr4"] ["position","in_color"] (loadVertexShader "ambient-vert.glsl") fs
-    where
-        vs = [vert| #version 130
-                    uniform vec4 mv1,mv2,mv3,mv4;
-                    uniform vec4 pr1,pr2,pr3,pr4;
-
-                    in  vec3 position;
-                    in  vec3 in_color;
-                    out vec3 color;
-
-                    void main()
-                    {
-                        mat4 modelView = mat4(mv1,mv2,mv3,mv4);
-                        mat4 proj      = mat4(pr1,pr2,pr3,pr4);
-
-                        color       = in_color;
-                        gl_Position = vec4(position,1.0) * modelView * proj;
-                    }
-             |]
-
-        fs = [frag| #version 130
-                    in  vec3 color;
-                    out vec4 fragColor;
-
-                    void main()
-                    {
-                        fragColor = vec4(color,1.0);
-                    }
-             |]
+vertexColoredShader = shader "vertexColored" ["mv1","mv2","mv3","mv4","pr1","pr2","pr3","pr4"] ["position","in_color"] (loadVertexShader "ambient-vert.glsl") (loadFragmentShader "ambient-frag.glsl")
 
 ambientShader :: Shader
 ambientShader = shader "ambient" ["tex","mv1","mv2","mv3","mv4","pr1","pr2","pr3","pr4"] ["position","in_color","in_uv"] vs fs

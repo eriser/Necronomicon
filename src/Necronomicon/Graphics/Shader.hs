@@ -15,6 +15,7 @@ module Necronomicon.Graphics.Shader (
     ) where
 
 import Prelude
+import Data.Maybe (fromMaybe)
 import Control.Monad (unless)
 import System.IO (hPutStrLn, stderr)
 import Language.Haskell.TH.Syntax
@@ -79,10 +80,10 @@ printError :: IO ()
 printError = GL.get GL.errors >>= mapM_ (hPutStrLn stderr . ("GL: "++) . show)
 
 vert :: QuasiQuoter
-vert =  QuasiQuoter{quoteExp = shaderQuoter "compileVert"}
+vert = QuasiQuoter (shaderQuoter "compileVert") (error "This quoter has not been defined") (error "This quoter has not been defined") (error "This quoter has not been defined")
 
 frag :: QuasiQuoter
-frag = QuasiQuoter{quoteExp = shaderQuoter "compileFrag"}
+frag = QuasiQuoter (shaderQuoter "compileFrag") (error "This quoter has not been defined") (error "This quoter has not been defined") (error "This quoter has not been defined")
 
 shaderQuoter :: String -> String -> Q Exp
 shaderQuoter compileString string = do
@@ -96,11 +97,7 @@ compileFrag :: String -> FragmentShader
 compileFrag s = FragmentShader . loadShaderBS "frag" GL.FragmentShader $ C.pack s
 
 getValueName :: String -> Q Name
-getValueName s = do
-    name <- lookupValueName s
-    return $ case name of
-        Just n  -> n
-        Nothing -> mkName s
+getValueName s = lookupValueName s >>= return . fromMaybe (mkName s)
 
 shader :: String -> [String] -> [String] -> VertexShader -> FragmentShader -> Shader
 shader shaderName uniformNames attributeNames vs fs = Shader (hash shaderName) $ do

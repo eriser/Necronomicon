@@ -25,7 +25,7 @@ import qualified Control.Exception as E
 import qualified Data.Map as Map
 
 import qualified Necronomicon.Linear as Linear
-import qualified Necronomicon.Graphics.Mesh as Mesh (rect,loadDynamicMesh)
+import qualified Necronomicon.Graphics.Mesh as Mesh (rect)
 import qualified Necronomicon.Graphics.Texture as NecroTex
 import Necronomicon.Graphics.Model
 import qualified Necronomicon.Graphics.Color as Color (Color(..),white)
@@ -164,7 +164,7 @@ renderFont :: String -> Font -> (NecroTex.Texture -> Material) -> Linear.Matrix4
 renderFont text font material modelView proj resources = do
     loadedFont <- getFont resources font
     let (vertices,colors,uvs,indices,_,_) = foldl (textMesh (characters loadedFont) ((fromIntegral $ fontSize font) * 1) (atlasWidth loadedFont) (atlasHeight loadedFont)) ([],[],[],[],0,0) text
-        fontMesh                          = Mesh [] $ Mesh.loadDynamicMesh (characterVertexBuffer loadedFont) (characterIndexBuffer loadedFont) vertices colors uvs indices
+        fontMesh                          = DynamicMesh (characterVertexBuffer loadedFont) (characterIndexBuffer loadedFont) vertices colors uvs indices
     drawMeshWithMaterial (material $ atlas loadedFont) fontMesh modelView proj resources
 
 textMesh :: Map.Map Char CharMetric ->

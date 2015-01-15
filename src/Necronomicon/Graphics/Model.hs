@@ -3,6 +3,7 @@ module Necronomicon.Graphics.Model where
 import Necronomicon.Linear
 import Necronomicon.Graphics.Shader
 import Necronomicon.Graphics.Texture
+import Necronomicon.Graphics.Color
 import Data.IORef
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Data.IntMap as IntMap
@@ -11,7 +12,10 @@ import qualified Data.Map as Map
 data    Model      = Model        Mesh   Material
                    | FontRenderer String Font (Texture -> Material)
 
-data    Mesh       = Mesh {meshKey :: String,loadMesh' :: IO LoadedMesh}
+data     Mesh      = Mesh        String [Vector3] [Color] [Vector2] [Int]
+                   | DynamicMesh GL.BufferObject GL.BufferObject [Vector3] [Color] [Vector2] [Int]
+                   deriving (Show)
+
 type    LoadedMesh = (GL.BufferObject,GL.BufferObject,Int,[GL.VertexArrayDescriptor GL.GLfloat])
 
 newtype Material   = Material {drawMeshWithMaterial :: (Mesh -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ())}
@@ -26,14 +30,17 @@ data    CharMetric = CharMetric{character             :: Char,
                                 charLeft              :: Double,
                                 charTop               :: Double,
                                 charTX                :: Double} deriving (Show)
+
 data    Font       = Font      {fontKey               :: String,
                                 fontSize              :: Int}
+
 data    LoadedFont = LoadedFont{atlas                 :: Texture,
                                 atlasWidth            :: Double,
                                 atlasHeight           :: Double,
                                 characters            :: Map.Map Char CharMetric,
                                 characterVertexBuffer :: GL.BufferObject,
                                 characterIndexBuffer  :: GL.BufferObject}
+
 data    Resources  = Resources {shadersRef            :: IORef (IntMap.IntMap LoadedShader),
                                 texturesRef           :: IORef (Map.Map String GL.TextureObject),
                                 meshesRef             :: IORef (Map.Map String LoadedMesh),
@@ -42,9 +49,6 @@ data    Resources  = Resources {shadersRef            :: IORef (IntMap.IntMap Lo
 instance Show Model where
     show _ = "Model"
 
-instance Show Mesh where
-    show _ = "Mesh"
-
 newResources :: IO Resources
 newResources = do
     smap <- newIORef IntMap.empty
@@ -52,3 +56,7 @@ newResources = do
     mmap <- newIORef Map.empty
     mapf <- newIORef Map.empty
     return $ Resources smap tmap mmap mapf
+
+meshKey :: Mesh -> String
+meshKey (Mesh       mKey _ _ _ _    ) = mKey
+meshKey _                             = []

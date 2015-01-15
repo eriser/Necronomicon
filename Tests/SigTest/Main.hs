@@ -66,7 +66,7 @@ testTri name pos r chldn = SceneObject name True pos r 1 (Just model) Nothing []
         model = Model (tri 0.3 white) vertexColored
 
 simplexMesh :: Mesh
-simplexMesh = mesh "simplex" vertices colors uvs indices
+simplexMesh = Mesh "simplex" vertices colors uvs indices
     where
         (w,h)            = (64,128)
         (scale,vscale)   = (1 / 6,3)
