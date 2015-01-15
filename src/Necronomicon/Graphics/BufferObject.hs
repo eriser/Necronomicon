@@ -2,15 +2,9 @@
 module Necronomicon.Graphics.BufferObject where
 
 import Prelude
--- import Data.Word (Word32)
 import qualified Graphics.Rendering.OpenGL as GL
--- import Foreign.ForeignPtr
 import Foreign.Marshal.Array
--- import Foreign.Ptr
 import Foreign.Storable
--- import Foreign.C.Types
--- import Data.Array.Storable
--- import Data.ByteString (ByteString, useAsCStringLen)
 
 makeBuffer :: (Storable a) => GL.BufferTarget -> [a] -> IO GL.BufferObject
 makeBuffer target elems = makeBufferWithLength target (length elems) elems

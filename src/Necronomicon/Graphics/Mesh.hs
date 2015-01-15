@@ -173,7 +173,7 @@ vertexColoredShader = shader
 ambientShader       :: Shader
 ambientShader       = shader
                       "ambient"
-                      ["tex","mv1","mv2","mv3","mv4","pr1","pr2","pr3","pr4"]
+                      ["tex","modelView","proj"]
                       ["position","in_color","in_uv"]
                       (loadVertexShader   "ambient-vert.glsl")
                       (loadFragmentShader "ambient-frag.glsl")
@@ -181,7 +181,7 @@ ambientShader       = shader
 uvTestShader        :: Shader
 uvTestShader        = shader
                       "uvTest"
-                      ["tex","mv1","mv2","mv3","mv4","pr1","pr2","pr3","pr4"]
+                      ["tex","modelView","proj"]
                       ["position","in_color","in_uv"]
                       (loadVertexShader   "ambient-vert.glsl")
                       (loadFragmentShader "uvTest-frag.glsl")
@@ -189,7 +189,7 @@ uvTestShader        = shader
 colorTestShader     :: Shader
 colorTestShader     = shader
                       "colorTest"
-                      ["tex","mv1","mv2","mv3","mv4","pr1","pr2","pr3","pr4"]
+                      ["tex","modelView","proj"]
                       ["position","in_color","in_uv"]
                       (loadVertexShader   "ambient-vert.glsl")
                       (loadFragmentShader "colorTest-frag.glsl")
