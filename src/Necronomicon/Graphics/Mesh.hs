@@ -66,7 +66,7 @@ ambient :: Texture -> Material
 ambient tex = Material draw
     where
         draw mesh modelView proj resources = do
-            (program,mv:pr:texu:_,attributes)                                <- getShader  resources ambientShader
+            (program,texu:mv:pr:_,attributes)                                <- getShader  resources ambientShader
             (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh    resources mesh
             texture                                                          <- getTexture resources tex
 
@@ -80,7 +80,7 @@ uvTest :: Texture -> Material
 uvTest tex = Material draw
     where
         draw mesh modelView proj resources = do
-            (program,mv:pr:texu:_,attributes)                                <- getShader  resources uvTestShader
+            (program,texu:mv:pr:_,attributes)                                <- getShader  resources uvTestShader
             (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh    resources mesh
             texture                                                          <- getTexture resources tex
 
@@ -94,7 +94,7 @@ colorTest :: Texture -> Material
 colorTest tex = Material draw
     where
         draw mesh modelView proj resources = do
-            (program,mv:pr:texu:_,attributes)                                <- getShader  resources colorTestShader
+            (program,texu:mv:pr:_,attributes)                                <- getShader  resources colorTestShader
             (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh    resources mesh
             texture                                                          <- getTexture resources tex
 
