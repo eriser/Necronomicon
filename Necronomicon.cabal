@@ -27,7 +27,7 @@ library
         Necronomicon.Runtime,
         Necronomicon.Util,
         Necronomicon.Util.PriorityQueue
-		
+
     other-modules:
         Necronomicon.Language.Layout
         Necronomicon.Util.TGA,
@@ -67,7 +67,7 @@ library
         Necronomicon.Graphics.Texture
         Necronomicon.Graphics.Model
         Paths_Necronomicon
-    Build-Depends:     
+    Build-Depends:
         base             >= 3 && < 5,
         stm              >= 2.4.0,
         containers       >= 0.4.0,
@@ -81,6 +81,7 @@ library
         hosc             >= 0.14,
         GLFW-b           >= 1.4.0,
         OpenGL           >= 2.8,
+        OpenGLRaw        >= 1.5.0,
         mtl              >= 2.1.3.0,
         freetype2        >= 0.1.1
 
@@ -89,7 +90,7 @@ executable PatternTest
     default-language: Haskell2010
     ghc-options:      -threaded -Wall
     hs-source-dirs:   Tests/PatternTest
-    default-extensions: QuasiQuotes TemplateHaskell 
+    default-extensions: QuasiQuotes TemplateHaskell
     build-depends:
         base             == 4.*,
         mtl              >= 2.1.3.0,
@@ -104,7 +105,7 @@ executable NecroNet
     build-depends:
         base             == 4.*,
         Necronomicon
-		
+
 executable SigTest
     main-is:          Main.hs
     default-language: Haskell2010

@@ -8,14 +8,14 @@ module Necronomicon.FRP.GUI (button,
                              slider,
                              Size(Size))where
 
-import Prelude
-import Necronomicon.FRP.Signal
-import Necronomicon.Linear
-import Necronomicon.Graphics
-import Necronomicon.Util (loadTextureFromTGA)
-import Data.IORef
-import Data.Dynamic
-import qualified Data.IntSet as IntSet
+import           Data.Dynamic
+import qualified Data.IntSet             as IntSet
+import           Data.IORef
+import           Necronomicon.FRP.Signal
+import           Necronomicon.Graphics
+import           Necronomicon.Linear
+import           Necronomicon.Util       (loadTextureFromTGA)
+import           Prelude
 
 data Gui a = Gui a SceneObject
 data Size = Size Double Double
@@ -32,7 +32,7 @@ gui gs = render $ root <~ combine (camSig : gs)
         camSig = orthoCamera (Vector3 0 0 0) identityQuat <~ dimensions ~~ constant (RGB 0 0 0)
 
 label :: Vector2 -> Font -> Color ->  String -> SceneObject
-label (Vector2 x y) font@(Font _ size) color text = SceneObject "" True (Vector3 x y 0) identityQuat (fromIntegral size / 400) (Just $ drawText text font ambient) Nothing []
+label (Vector2 x y) font color text = SceneObject (Vector3 x y 0) identityQuat 1 (drawText text font ambient) []
 
 guiEvent :: (Typeable a) => IORef (Gui b) -> Dynamic -> (a -> IO (EventValue (Gui b))) -> IO (EventValue (Gui b))
 guiEvent ref v f = case fromDynamic v of
@@ -62,8 +62,8 @@ slider (Vector2 x y) (Size w h) color = Signal $ \necro -> do
                         return $ Change g
             | otherwise = readIORef ref >>= return . NoChange
 
-        s  h = SceneObject "" True (Vector3 x y 0)    identityQuat 1 sm Nothing [v h]
-        v  h = SceneObject "" True (Vector3 0 0 0.01) identityQuat 1 (vm h) Nothing []
+        s  h = SceneObject (Vector3 x y 0)    identityQuat 1 sm [v h]
+        v  h = SceneObject (Vector3 0 0 0.01) identityQuat 1 (vm h) []
         p0 v = Vector3 (0 - hw) (hh h - v * h) 0
         p1 v = Vector3 (0 - hw) (0 + hh h) 0
         p2 v = Vector3 (0 + hw) (0 + hh h) 0
@@ -105,12 +105,11 @@ button (Vector2 x y) (Size w h) color = Signal $ \necro -> do
                 case v of
                     True  -> return $ NoChange (Gui v st)
                     False -> return $ NoChange (Gui v sf)
-            
-        st = SceneObject "" True (Vector3 x y 0) identityQuat 1 (Just $ m color) Nothing []
-        sf = SceneObject "" True (Vector3 x y 0) identityQuat 1 (Just $ m fc   ) Nothing []
+
+        st = SceneObject (Vector3 x y 0) identityQuat 1 (m color) []
+        sf = SceneObject (Vector3 x y 0) identityQuat 1 (m fc   ) []
         fc = RGB 0.5 0.5 0.5
         hw = w * 0.5
         hh = h * 0.5
         m c= Model (rect w h) vertexColored
         --c is color....
-

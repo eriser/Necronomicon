@@ -9,7 +9,6 @@ import Necronomicon.Linear.Quaternion
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.Rendering.OpenGL.GL.CoordTrans as GLC
 import Foreign.Ptr (Ptr)
-import Unsafe.Coerce (unsafeCoerce)
 
 -- Matrices - Row Major
 data Matrix2x2  = Matrix2x2 Vector2 Vector2                 deriving (Show,Eq,Ord)
@@ -174,7 +173,7 @@ instance LinearMath Vector4 Matrix4x4 where
     (.-.) _ _ = undefined
     (./.) _ _ = undefined
     apply _ _ _ = undefined
-        
+
 --Matrix product
 instance LinearMath Matrix2x2 Matrix2x2 where
     type Return Matrix2x2 Matrix2x2    = Matrix2x2
@@ -217,7 +216,7 @@ instance LinearMath Matrix4x4 Matrix4x4 where
     apply _ _ _ = undefined
 
 --Vector instance
-    
+
 --Vector Instances
 instance Vector Matrix2x2 where
     type Component Matrix2x2 = Vector2
@@ -243,7 +242,7 @@ instance Vector Matrix2x2 where
 
     _swizzle2  get get' v = Matrix2x2 (get v) (get' v)
     swizzle2_  set set' v = set' (_y v) . set (_x v)
-    _swizzle2_ mdf mdf' f = mdf' f . mdf f 
+    _swizzle2_ mdf mdf' f = mdf' f . mdf f
 
     _swizzle3 _ _ _ _ = undefined
     swizzle3_ _ _ _ _ = undefined
@@ -276,7 +275,7 @@ instance Vector Matrix3x3 where
 
     _swizzle2 _ _ _ = undefined
     swizzle2_ _ _ _ = undefined
-    _swizzle2_ mdf mdf' f = mdf' f . mdf f 
+    _swizzle2_ mdf mdf' f = mdf' f . mdf f
 
     _swizzle3  get get' get'' v = Matrix3x3 (get v) (get' v) (get'' v)
     swizzle3_  set set' set'' v = set'' (_z v) . set' (_y v) . set (_x v)
@@ -291,7 +290,7 @@ instance Vector Matrix4x4 where
     type Swizzle2  Matrix4x4 = Matrix2x2
     type Swizzle3  Matrix4x4 = Matrix3x3
     type Swizzle4  Matrix4x4 = Matrix4x4
-    
+
     toList (Matrix4x4 x y z w) = [x, y, z, w]
     _x (Matrix4x4 x _ _ _) = x
     _y (Matrix4x4 _ y _ _) = y
@@ -308,7 +307,7 @@ instance Vector Matrix4x4 where
 
     _swizzle2 _ _ _ = undefined
     swizzle2_ _ _ _ = undefined
-    _swizzle2_ mdf mdf' f = mdf' f . mdf f 
+    _swizzle2_ mdf mdf' f = mdf' f . mdf f
 
     _swizzle3 _ _ _ _ = undefined
     swizzle3_ _ _ _ _ = undefined
@@ -326,12 +325,13 @@ translation m = Vector3 (_w <| _x m) (_w <| _y m) (_w <| _z m)
 identity2 :: Matrix2x2
 identity2 = Matrix2x2 (Vector2 1 0) (Vector2 0 1)
 
-matZero2 :: Matrix2x2 
+matZero2 :: Matrix2x2
 matZero2 = Matrix2x2 0 0
 
 identity3 :: Matrix3x3
 identity3 = Matrix3x3 (Vector3 1 0 0) (Vector3 0 1 0) (Vector3 0 0 1)
 
+identity :: Matrix4x4
 identity = identity4
 
 matZero3 :: Matrix3x3
@@ -383,7 +383,7 @@ orthoMatrix l r b t n f = Matrix4x4
                           (Vector4 0       0       0          1               )
 
 perspMatrix :: Double -> Double -> Double -> Double -> Matrix4x4
-perspMatrix fov aspect near far = Matrix4x4 (Vector4 (f/aspect) 0 0 0) (Vector4 0 f 0 0) (Vector4 0 0 ((near+far)/(near-far)) ((2*far*near)/(near-far))) (Vector4 0 0 (-1) 0)
+perspMatrix fov aspect near far = Matrix4x4 (Vector4 (negate $ f/aspect) 0 0 0) (Vector4 0 (-f) 0 0) (Vector4 0 0 ((near+far)/(near-far)) ((2*far*near)/(near-far))) (Vector4 0 0 (-1) 0)
     where
         f = 1 / tan (fov / 2)
 
@@ -393,7 +393,7 @@ mat4ToList (Matrix4x4 (Vector4 a b c d) (Vector4 e f g h) (Vector4 i j k l) (Vec
 withNecroMatrix :: Matrix4x4 -> (Ptr GL.GLfloat -> IO a) -> IO a
 withNecroMatrix necroMatrix action = do
     mat <- GLC.newMatrix GLC.ColumnMajor $ map (fromRational . toRational) $ mat4ToList necroMatrix :: IO (GL.GLmatrix GL.GLfloat)
-    GLC.withMatrix mat $ \_ -> action
+    GLC.withMatrix mat $ const action
 
 -- uniformMat :: GL.UniformLocation -> GL.SettableStateVar Matrix4x4
 -- uniformMat loc = GL.makeSettableStateVar $ \mat -> withNecroMatrix mat $ \ptr -> glUniformMatrix4fv (unsafeCoerce loc) 1 1 ptr

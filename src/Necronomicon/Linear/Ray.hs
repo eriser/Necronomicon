@@ -3,9 +3,7 @@ module Necronomicon.Linear.Ray (Ray(rayOrigin,rayDirection),
                                 invDirection,
                                 invRay,
                                 rayIntersectsPoint,
-                                rayIntersectsPoint,
                                 rayIntersectsTriangle,
-                                rayIntersectsTriangle',
                                 rayIntersectsAABB,
                                 rayIntersectsPlane,
                                 rayIntersectsSphere) where
@@ -35,7 +33,7 @@ rayIntersectsPoint (Ray org dir) v = normalize (v - org) == dir
 -- Algorithm from "Fast, Minimum Storage Ray-Triangle Intersection"
 rayIntersectsTriangle :: Ray -> Triangle -> Maybe Vector3
 rayIntersectsTriangle r (Triangle v0 v1 v2) = rayIntersectsTriangle' r v0 v1 v2
-                 
+
 rayIntersectsTriangle' :: Ray -> Vector3 -> Vector3 -> Vector3 -> Maybe Vector3
 rayIntersectsTriangle' r@(Ray org dir) v0 v1 v2
     | epCheck   = Nothing
@@ -50,21 +48,21 @@ rayIntersectsTriangle' r@(Ray org dir) v0 v1 v2
         epCheck = det > (-epsilon) && det < epsilon
         invDet  = 1.0 / det
         tvec    = org - v0
-        u       = (dot tvec pvec) * invDet
+        u       = dot tvec pvec * invDet
         uCheck  = u < 0 || u > 1
         qvec    = cross tvec edge1
-        v       = (dot dir qvec) * invDet
+        v       = dot dir qvec * invDet
         vCheck  = v < 0 || (u + v) > 1
-        point   = positionOnRay r ((dot edge2 qvec) * invDet)
+        point   = positionOnRay r (dot edge2 qvec * invDet)
 
 rayIntersectsPlane :: Ray -> Plane -> Maybe Vector3
 rayIntersectsPlane r@(Ray org dir) (Plane norm d)
-    | (abs denom) < epsilon = Nothing
+    | abs denom < epsilon = Nothing
     | tCheck = Nothing
     | otherwise = Just point
     where
         denom = dot norm dir
-        nom = (dot norm org) + d
+        nom = dot norm org + d
         t = -(nom/denom)
         tCheck = t < 0
         point = positionOnRay r t
@@ -79,18 +77,21 @@ rayIntersectsSphere ray@(Ray p d) (Sphere c r) = if behindRay then point else po
         behindRay = dvpcd < 0
         outsideRadius = vpcm > r
         pc = positionOnRay ray dvpcd -- projection of the center of the sphere on the ray
-        dist = sqrt ((r ** 2) - ((magnitude (pc - c) ** 2)))
+        dist = sqrt (r ** 2 - (magnitude (pc - c) ** 2))
         pcpm = magnitude (pc - p)
 
         -- center of sphere is behind ray
         onEdge = vpcm == r
         insideP = positionOnRay ray (dist - pcpm)
-        point = if outsideRadius then Nothing else if onEdge then Just p else  Just insideP
+        point
+            | outsideRadius = Nothing
+            | onEdge        = Just p
+            | otherwise     = Just insideP
 
         -- center of sphere projects on the ray
         outsideP = positionOnRay ray di1
             where
-                di1 = if outsideRadius then pcpm - dist else pcpm + dist    
+                di1 = if outsideRadius then pcpm - dist else pcpm + dist
         point' = if magnitude (c - pc) > r then Nothing else Just outsideP
 
 rayIntersectsAABB :: Ray -> AABB -> Maybe Vector3
@@ -100,10 +101,10 @@ rayIntersectsAABB ray@(Ray org@(Vector3 ox oy oz) (Vector3 dx dy dz)) aabb@(AABB
         moreCheck side o d = o >= side && d < 0
         point
             | lessEq org mn && less mx org = Just org
-            | lessCheck mnx ox dx = Just $ positionOnRay ray ((mnx - ox) / dx) 
+            | lessCheck mnx ox dx = Just $ positionOnRay ray ((mnx - ox) / dx)
             | moreCheck mxx ox dx = Just $ positionOnRay ray ((mxx - ox) / dx)
-            | lessCheck mny oy dy = Just $ positionOnRay ray ((mny - oy) / dy) 
+            | lessCheck mny oy dy = Just $ positionOnRay ray ((mny - oy) / dy)
             | moreCheck mxy oy dy = Just $ positionOnRay ray ((mxy - oy) / dy)
-            | lessCheck mnz oz dz = Just $ positionOnRay ray ((mnz - oz) / dz) 
+            | lessCheck mnz oz dz = Just $ positionOnRay ray ((mnz - oz) / dz)
             | moreCheck mxz oz dz = Just $ positionOnRay ray ((mxz - oz) / dz)
             | otherwise = Nothing

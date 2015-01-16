@@ -3,52 +3,39 @@ module Necronomicon.Graphics.Shader (
     LoadedShader,
     VertexShader(..),
     FragmentShader(..),
-    loadShader,
     vert,
     frag,
     compileVert,
     compileFrag,
     shader,
     offset0,
-    offsetPtr
+    offsetPtr,
+    loadVertexShader,
+    loadFragmentShader
     ) where
 
-import Prelude
-import Control.Monad (unless)
-import System.IO (hPutStrLn, stderr)
-import Language.Haskell.TH.Syntax
-import Language.Haskell.TH.Quote
-import Necronomicon.Utility
+import           Control.Monad              (unless)
+import           Data.Maybe                 (fromMaybe)
+import           Language.Haskell.TH.Quote
+import           Language.Haskell.TH.Syntax
+import           Necronomicon.Utility
+import           Prelude
+import           System.IO                  (hPutStrLn, stderr)
 
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Char8 as C
-import qualified Graphics.Rendering.OpenGL as GL
-import qualified Language.Haskell.TH as TH
-import Foreign.Ptr (Ptr,wordPtrToPtr)
+import qualified Data.ByteString            as BS
+import qualified Data.ByteString.Char8      as C
+import           Foreign.Ptr                (Ptr, wordPtrToPtr)
+import qualified Graphics.Rendering.OpenGL  as GL
+import           Paths_Necronomicon
 
 ------------------------------------------------------------------------------------------
 -- Shaders
 ------------------------------------------------------------------------------------------
 
-data VertexShader   = VertexShader   {
-    vertexString   :: String,
-    unVertexShader :: IO GL.Shader
-    } deriving (Show)
-
-data FragmentShader = FragmentShader {
-    fragmentString   :: String,
-    unFragmentShader :: IO GL.Shader
-    } deriving (Show)
-
-type LoadedShader = (GL.Program,[GL.UniformLocation],[GL.AttribLocation])
-
-data Shader = Shader {
-    key        :: Int,
-    loadShader :: IO LoadedShader
-    }
-
-instance Show (IO GL.Shader) where
-    show _ = "IO GL.Shader"
+newtype VertexShader   = VertexShader   {unVertexShader        :: IO GL.Shader}
+newtype FragmentShader = FragmentShader {unFragmentShader      :: IO GL.Shader}
+data    Shader         = Shader         {key :: Int,loadShader :: IO LoadedShader}
+type    LoadedShader   = (GL.Program,[GL.UniformLocation],[GL.AttribLocation])
 
 instance Show Shader where
     show _ = "Shader"
@@ -58,27 +45,45 @@ instance Show Shader where
 
 loadShaderBS :: FilePath -> GL.ShaderType -> BS.ByteString -> IO GL.Shader
 loadShaderBS filePath shaderType src = do
-    shader <- GL.createShader shaderType
-    GL.shaderSourceBS shader GL.$= src
-    GL.compileShader shader
+    newShader <- GL.createShader shaderType
+    GL.shaderSourceBS newShader GL.$= src
+    GL.compileShader  newShader
     printError
-    ok      <- GL.get (GL.compileStatus shader)
-    infoLog <- GL.get (GL.shaderInfoLog shader)
+    ok      <- GL.get (GL.compileStatus newShader)
+    infoLog <- GL.get (GL.shaderInfoLog newShader)
     unless (null infoLog)
         (mapM_ putStrLn ["Shader info log for '" ++ filePath ++ "':", infoLog, ""])
     unless ok $ do
-        GL.deleteObjectName shader
+        GL.deleteObjectName newShader
         ioError (userError "shader compilation failed")
-    return shader
+    return newShader
+
+loadVertexShader :: FilePath -> VertexShader
+loadVertexShader   path = VertexShader load
+   where
+    load = do
+        putStrLn $ "loadVertexShader: " ++ path
+        resources <- getDataFileName ""
+        shaderPath <- BS.readFile $ resources ++ "shaders/" ++ path
+        loadShaderBS path GL.VertexShader shaderPath
+
+loadFragmentShader :: FilePath -> FragmentShader
+loadFragmentShader path = FragmentShader load
+    where
+        load = do
+            putStrLn $ "loadFragmentShader: " ++ path
+            resources <- getDataFileName ""
+            shaderPath <- BS.readFile $ resources ++ "shaders/" ++ path
+            loadShaderBS path GL.FragmentShader shaderPath
 
 printError :: IO ()
 printError = GL.get GL.errors >>= mapM_ (hPutStrLn stderr . ("GL: "++) . show)
 
 vert :: QuasiQuoter
-vert =  QuasiQuoter{quoteExp = shaderQuoter "compileVert"}
+vert = QuasiQuoter (shaderQuoter "compileVert") (error "This quoter has not been defined") (error "This quoter has not been defined") (error "This quoter has not been defined")
 
 frag :: QuasiQuoter
-frag = QuasiQuoter{quoteExp = shaderQuoter "compileFrag"}
+frag = QuasiQuoter (shaderQuoter "compileFrag") (error "This quoter has not been defined") (error "This quoter has not been defined") (error "This quoter has not been defined")
 
 shaderQuoter :: String -> String -> Q Exp
 shaderQuoter compileString string = do
@@ -86,17 +91,13 @@ shaderQuoter compileString string = do
     return $ AppE (VarE name) (LitE $ StringL string)
 
 compileVert :: String -> VertexShader
-compileVert s = VertexShader   s . loadShaderBS "vert" GL.VertexShader   $ C.pack s
+compileVert s = VertexShader   . loadShaderBS "vert" GL.VertexShader   $ C.pack s
 
 compileFrag :: String -> FragmentShader
-compileFrag s = FragmentShader s . loadShaderBS "frag" GL.FragmentShader $ C.pack s
+compileFrag s = FragmentShader . loadShaderBS "frag" GL.FragmentShader $ C.pack s
 
 getValueName :: String -> Q Name
-getValueName s = do
-    name <- lookupValueName s
-    return $ case name of
-        Just n  -> n
-        Nothing -> mkName s
+getValueName s = lookupValueName s >>= return . fromMaybe (mkName s)
 
 shader :: String -> [String] -> [String] -> VertexShader -> FragmentShader -> Shader
 shader shaderName uniformNames attributeNames vs fs = Shader (hash shaderName) $ do
@@ -136,17 +137,15 @@ offset0 = offsetPtr 0
 ambientMesh :: [Vector3] -> [Color] -> [Int] -> Mesh
 ambientMesh vertices colors indices = Mesh draw
     where
-        vertexBuffer = makeBuffer GL.ArrayBuffer           (map realToFrac (posCol vertices colors) :: [GL.GLfloat]) 
+        vertexBuffer = makeBuffer GL.ArrayBuffer           (map realToFrac (posCol vertices colors) :: [GL.GLfloat])
         indexBuffer  = makeBuffer GL.ElementArrayBuffer    (map fromIntegral indices :: [GL.GLuint])
         vertexVad    = GL.VertexArrayDescriptor 3 GL.Float (fromIntegral $ sizeOf (undefined::GL.GLfloat) * 6) offset0
         colorVad     = GL.VertexArrayDescriptor 3 GL.Float (fromIntegral $ sizeOf (undefined::GL.GLfloat) * 6) (offsetPtr $ sizeOf (undefined :: GL.GLfloat) * 3)
         numIndices   = length indices
-        
+
         draw modelView proj resources = do
             (program,uniforms,attributes) <- getShader resources ambientShader
             GL.currentProgram GL.$= Just program
             bindMatrixUniforms uniforms modelView proj
             bindThenDraw vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad]) numIndices
 -}
-
-
