@@ -91,6 +91,54 @@ typedef struct UGen
 int ugenSize = sizeof(ugen);
 int ugenAlignment = __alignof__(ugen);
 
+struct ugen2;
+typedef struct ugen2 ugen2;
+
+struct ugen2
+{
+	void (*calc)(ugen2* u);
+	void (*constructor)(ugen2* u); 
+	void (*deconstructor)(ugen2* u);
+	void* data; // ugen defined data structure
+	unsigned int* inputs; // indexes to the graph wire buffer
+	unsigned int* outputs; // indexes to the graph wire buffer
+};
+
+typedef void (*ugen_constructor)(ugen2* u);
+typedef void (*ugen_deconstructor)(ugen2* u);
+typedef void (*calc_func2)(ugen2* u);
+
+void sin_calc2(ugen2* u)
+{
+	double* freq = ((double*) u->data);
+	printf("Doom! %f\n", *freq);
+	*freq += 1;
+}
+
+void sin_deconstructor(ugen2* u)
+{
+	free(u->data);
+}
+
+void sin_constructor(ugen2* u)
+{
+	u->calc = &sin_calc2;
+	u->deconstructor = &sin_deconstructor;
+	u->data = malloc(sizeof(double));
+	*((double*) u->data) = 0;
+}
+
+typedef struct synth_node2
+{
+	ugen2* ugen_graph; // Synth Graph
+	double* ugen_wires; // UGen output wire buffers
+	struct synth_node2* previous; // Previous node, used in synth_list for the scheduler
+	struct synth_node2* next; // Next node, used in the synth_list for the scheduler
+	unsigned int key; // Node ID, used to look up synths in the synth hash table
+	unsigned int hash; // Cached hash of the node id for the synth hash table
+	unsigned int num_ugens;
+} synth_node2;
+
 typedef struct synth_node
 {
 	double time; // Start time
