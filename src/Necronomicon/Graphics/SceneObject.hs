@@ -1,17 +1,17 @@
 module Necronomicon.Graphics.SceneObject where
 
-import Prelude
-import Control.Monad (foldM)
-import qualified Graphics.Rendering.OpenGL as GL
+import           Control.Monad                       (foldM)
+import qualified Data.IntMap                         as IntMap
+import qualified Graphics.Rendering.OpenGL           as GL
 import qualified Graphics.Rendering.OpenGL.GL.Tensor as GLT
-import qualified Data.IntMap as IntMap
+import           Prelude
 
-import Necronomicon.Linear
-import Necronomicon.Graphics.Mesh
-import Necronomicon.Graphics.Color
-import Necronomicon.Graphics.Shader
-import Necronomicon.Graphics.Model
-import Necronomicon.Graphics.Text (renderFont)
+import           Necronomicon.Graphics.Color
+import           Necronomicon.Graphics.Mesh
+import           Necronomicon.Graphics.Model
+import           Necronomicon.Graphics.Shader
+import           Necronomicon.Graphics.Text          (renderFont)
+import           Necronomicon.Linear
 
 --Camera
 data Camera = Camera {
@@ -157,13 +157,13 @@ _children_ f (PlainObject  p r s   cs) = PlainObject  p r s   (f cs)
 root :: [SceneObject] -> SceneObject
 root = PlainObject 0 identityQuat 1
 
-drawScene :: Vector2 -> Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> SceneObject -> IO ()
-drawScene dimensions world view proj resources g = draw dimensions world view proj resources g >>= \newWorld -> mapM_ (drawScene dimensions newWorld view proj resources) (_children g)
+drawScene :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> SceneObject -> IO ()
+drawScene world view proj resources g = draw world view proj resources g >>= \newWorld -> mapM_ (drawScene newWorld view proj resources) (_children g)
 
-draw :: Vector2 -> Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> SceneObject -> IO Matrix4x4
-draw dimensions world view proj resources g = case _model g of
+draw :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> SceneObject -> IO Matrix4x4
+draw world view proj resources g = case _model g of
     Just (Model             mesh material) -> drawMeshWithMaterial material mesh modelView proj resources >> return newWorld
-    Just (FontRenderer text font material) -> renderFont text dimensions font material modelView proj resources >> return newWorld
+    Just (FontRenderer text font material) -> renderFont text font material modelView proj resources >> return newWorld
     Nothing                                -> return newWorld
     where
         newWorld  = world    .*. (trsMatrix (_position g) (_rotation g) (_scale g))

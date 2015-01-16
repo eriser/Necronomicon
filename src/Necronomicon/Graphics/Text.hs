@@ -1,29 +1,30 @@
 module Necronomicon.Graphics.Text (drawText,
                                    renderFont) where
 
-import Prelude
-import Data.Maybe (fromMaybe)
-import Control.Monad
-import Graphics.Rendering.OpenGL hiding (bitmap)
-import Graphics.Rendering.FreeType.Internal
-import Graphics.Rendering.FreeType.Internal.PrimitiveTypes
-import Graphics.Rendering.FreeType.Internal.Library
-import Graphics.Rendering.FreeType.Internal.FaceType
-import Graphics.Rendering.FreeType.Internal.Face
-import Graphics.Rendering.FreeType.Internal.GlyphSlot
-import qualified Graphics.Rendering.FreeType.Internal.GlyphMetrics as Metrics
-import Foreign
-import Foreign.C.String
-import Graphics.Rendering.FreeType.Internal.Bitmap
-import Data.IORef
+import           Control.Monad
+import           Data.IORef
+import           Data.Maybe                                          (fromMaybe)
+import           Foreign
+import           Foreign.C.String
+import           Graphics.Rendering.FreeType.Internal
+import           Graphics.Rendering.FreeType.Internal.Bitmap
+import           Graphics.Rendering.FreeType.Internal.Face
+import           Graphics.Rendering.FreeType.Internal.FaceType
+import qualified Graphics.Rendering.FreeType.Internal.GlyphMetrics   as Metrics
+import           Graphics.Rendering.FreeType.Internal.GlyphSlot
+import           Graphics.Rendering.FreeType.Internal.Library
+import           Graphics.Rendering.FreeType.Internal.PrimitiveTypes
+import           Graphics.Rendering.OpenGL                           hiding
+                                                                      (bitmap)
+import           Prelude
 
-import qualified Data.Map as Map
+import qualified Data.Map                                            as Map
 
-import qualified Necronomicon.Linear as Linear
-import qualified Necronomicon.Graphics.Texture as NecroTex
-import Necronomicon.Graphics.Model
-import qualified Necronomicon.Graphics.Color as Color (Color(..),white)
-import Paths_Necronomicon
+import qualified Necronomicon.Graphics.Color                         as Color (Color (..), white)
+import           Necronomicon.Graphics.Model
+import qualified Necronomicon.Graphics.Texture                       as NecroTex
+import qualified Necronomicon.Linear                                 as Linear
+import           Paths_Necronomicon
 
 newBoundTexUnit :: Int -> IO TextureObject
 newBoundTexUnit u = do
@@ -97,6 +98,7 @@ addCharToAtlas w ff charMap char = do
         Just charMetric -> texSubImage2D
                            Texture2D
                            0
+                           --TODO: This might be causing the artifacts.
                            (TexturePosition2D (floor $ charTX charMetric * w) 0)
                            (TextureSize2D     (floor $ charWidth charMetric) (floor $ charHeight charMetric))
                            (PixelData Luminance UnsignedByte $ buffer bmp)
@@ -106,24 +108,17 @@ getCharMetrics ff char = do
     chNdx  <- ft_Get_Char_Index ff $ fromIntegral $ fromEnum char
     runFreeType $ ft_Load_Glyph ff chNdx 0
     slot   <- peek $ glyph ff
-
-    --not sure if this is necessary??
     runFreeType    $ ft_Render_Glyph slot ft_RENDER_MODE_NORMAL
-
     metric <- peek $ metrics slot
     left   <- peek $ bitmap_left slot
     top    <- peek $ bitmap_top slot
-    -- runFreeType    $ ft_Render_Glyph slot ft_RENDER_MODE_NORMAL
     bmp    <- peek $ bitmap slot
-    -- badvanceX <- horiAdvance bmp
     let charMetric = CharMetric
                      (toEnum char)
                      ((fromIntegral $ Metrics.horiAdvance metric) / 64)
                      ((fromIntegral $ Metrics.vertAdvance metric) / 64)
                      ((fromIntegral $ Metrics.horiBearingX metric) / 64)
                      ((fromIntegral $ Metrics.horiBearingY metric) / 64)
-                    --  (fromIntegral (shift (Metrics.horiBearingX metric) (-6)))
-                    --  (fromIntegral (shift (Metrics.horiBearingY metric) (-6)))
                      (fromIntegral $ width bmp)
                      (fromIntegral $ rows bmp)
                      (fromIntegral left)
@@ -140,22 +135,21 @@ getFont resources font = readIORef (fontsRef resources) >>= \fonts ->
         Nothing    -> loadFontAtlas font >>= \font' -> (writeIORef (fontsRef resources) $ Map.insert (fontKey font) font' fonts) >> return font'
         Just font' -> return font'
 
-renderFont :: String -> Linear.Vector2 -> Font -> (NecroTex.Texture -> Material) -> Linear.Matrix4x4 -> Linear.Matrix4x4 -> Resources -> IO()
-renderFont text dimensions font material modelView proj resources = do
+renderFont :: String -> Font -> (NecroTex.Texture -> Material) -> Linear.Matrix4x4 -> Linear.Matrix4x4 -> Resources -> IO()
+renderFont text font material modelView proj resources = do
     loadedFont <- getFont resources font
     let (vertices,colors,uvs,indices,_,_,_) = foldl characterMesh ([],[],[],[],0,0,0) text
-        characterMesh                       = textMesh (characters loadedFont) dimensions (atlasWidth loadedFont) (atlasHeight loadedFont)
+        characterMesh                       = textMesh (characters loadedFont) (atlasWidth loadedFont) (atlasHeight loadedFont)
         fontMesh                            = DynamicMesh (characterVertexBuffer loadedFont) (characterIndexBuffer loadedFont) vertices colors uvs indices
     drawMeshWithMaterial (material $ atlas loadedFont) fontMesh modelView proj resources
 
 textMesh :: Map.Map Char CharMetric ->
-            Linear.Vector2 ->
             Double ->
             Double ->
             ([Linear.Vector3],[Color.Color],[Linear.Vector2],[Int],Int,Double,Double) ->
             Char ->
             ([Linear.Vector3],[Color.Color],[Linear.Vector2],[Int],Int,Double,Double)
-textMesh charMetrics (Linear.Vector2 screenWidth screenHeight) aWidth aHeight (vertices,colors,uvs,indices,count,x,y) char = case char of
+textMesh charMetrics aWidth aHeight (vertices,colors,uvs,indices,count,x,y) char = case char of
     '\n' -> (vertices ,colors ,uvs ,indices ,count    ,0   ,y - aHeight * yscale)
     _    -> (vertices',colors',uvs',indices',count + 4,x+ax,y)
     where
@@ -163,25 +157,22 @@ textMesh charMetrics (Linear.Vector2 screenWidth screenHeight) aWidth aHeight (v
         w          = charWidth  charMetric * xscale
         h          = charHeight charMetric * yscale
         l          = charLeft   charMetric * xscale
-        t          = charTop    charMetric * yscale
+        t          = charTop    charMetric * yscale * (negate 1)
         ax         = advanceX   charMetric * xscale
         tx         = charTX     charMetric
-        bx         = bearingX   charMetric * xscale
+        -- bx         = bearingX   charMetric * xscale
         by         = bearingY   charMetric * yscale
 
-        --TODO: Don't hardcode this!
-        -- xscale     = 2 / screenWidth
-        xscale     = 2 / 1020
+        xscale     = 2 / 1024
         yscale     = xscale
-        -- yscale     = 2 / screenHeight
 
-        vertices'  = Linear.Vector3 (l+x+bx)   ((y+t)-by)   0  :
-                     Linear.Vector3 (l+x+bx+w) ((y+t)-by)   0  :
-                     Linear.Vector3 (l+x+bx)   ((y+t+h)-by) 0  :
-                     Linear.Vector3 (l+x+bx+w) ((y+t+h)-by) 0  : vertices
+        vertices'  = Linear.Vector3 (l+x)   (y - t) 0  :
+                     Linear.Vector3 (l+x+w) (y - t) 0  :
+                     Linear.Vector3 (l+x)   ((y - t) - h) 0  :
+                     Linear.Vector3 (l+x+w) ((y - t) - h) 0  : vertices
         colors'    = Color.white : Color.white : Color.white : Color.white : colors
-        uvs'       = Linear.Vector2 (tx                                 ) (charHeight charMetric / aHeight) :
-                     Linear.Vector2 (tx + charWidth  charMetric / aWidth) (charHeight charMetric / aHeight) :
-                     Linear.Vector2 (tx                                 ) 0                                 :
-                     Linear.Vector2 (tx + charWidth  charMetric / aWidth) 0                                 : uvs
+        uvs'       = Linear.Vector2 (tx                                 ) 0 :
+                     Linear.Vector2 (tx + charWidth  charMetric / aWidth) 0 :
+                     Linear.Vector2 (tx                                 ) (charHeight charMetric / aHeight) :
+                     Linear.Vector2 (tx + charWidth  charMetric / aWidth) (charHeight charMetric / aHeight) : uvs
         indices'   = count + 2 : count + 0 : count + 1 : count + 3 : count + 2 : count + 1 : indices

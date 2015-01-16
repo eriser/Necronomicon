@@ -1,16 +1,16 @@
 module Necronomicon.Graphics.Camera where
 
 ----------------------------------------------------------
-import Prelude
-import Control.Monad (foldM)
-import qualified Graphics.Rendering.OpenGL as GL
-import qualified Graphics.UI.GLFW as GLFW
-import Necronomicon.Linear
-import Necronomicon.Graphics.SceneObject
-import Necronomicon.Graphics.Color
-import Necronomicon.Graphics.Mesh
-import Necronomicon.Graphics.Model
-import Debug.Trace
+import           Control.Monad                     (foldM)
+import           Debug.Trace
+import qualified Graphics.Rendering.OpenGL         as GL
+import qualified Graphics.UI.GLFW                  as GLFW
+import           Necronomicon.Graphics.Color
+import           Necronomicon.Graphics.Mesh
+import           Necronomicon.Graphics.Model
+import           Necronomicon.Graphics.SceneObject
+import           Necronomicon.Linear
+import           Prelude
 ----------------------------------------------------------
 
 orthoCamera :: Vector3 -> Quaternion -> Vector2 -> Color -> SceneObject
@@ -39,8 +39,8 @@ renderCamera view scene resources g  = let newView = view .*. (trsMatrix (_posit
         GL.loadIdentity
 
         case _fov c of
-            0 -> drawScene (_dimensions c) identity4 (invert newView) (orthoMatrix (-1 * ratio) (1 * ratio) (-1) 1 (-1) 1) resources scene
-            _ -> drawScene (_dimensions c) identity4 (invert newView) (perspMatrix (_fov c) ratio (_near c) (_far c))      resources scene
+            0 -> drawScene identity4 (invert newView) (orthoMatrix (-1 * ratio) (1 * ratio) (-1) 1 (-1) 1) resources scene
+            _ -> drawScene identity4 (invert newView) (perspMatrix (_fov c) ratio (_near c) (_far c))      resources scene
 
         return $ newView
 

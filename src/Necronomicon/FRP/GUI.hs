@@ -8,14 +8,14 @@ module Necronomicon.FRP.GUI (button,
                              slider,
                              Size(Size))where
 
-import Prelude
-import Necronomicon.FRP.Signal
-import Necronomicon.Linear
-import Necronomicon.Graphics
-import Necronomicon.Util (loadTextureFromTGA)
-import Data.IORef
-import Data.Dynamic
-import qualified Data.IntSet as IntSet
+import           Data.Dynamic
+import qualified Data.IntSet             as IntSet
+import           Data.IORef
+import           Necronomicon.FRP.Signal
+import           Necronomicon.Graphics
+import           Necronomicon.Linear
+import           Necronomicon.Util       (loadTextureFromTGA)
+import           Prelude
 
 data Gui a = Gui a SceneObject
 data Size = Size Double Double

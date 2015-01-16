@@ -1,13 +1,13 @@
 module Necronomicon.Graphics.Model where
 
-import Necronomicon.Linear
-import Necronomicon.Graphics.Shader
-import Necronomicon.Graphics.Texture
-import Necronomicon.Graphics.Color
-import Data.IORef
-import qualified Graphics.Rendering.OpenGL as GL
-import qualified Data.IntMap as IntMap
-import qualified Data.Map as Map
+import qualified Data.IntMap                   as IntMap
+import           Data.IORef
+import qualified Data.Map                      as Map
+import qualified Graphics.Rendering.OpenGL     as GL
+import           Necronomicon.Graphics.Color
+import           Necronomicon.Graphics.Shader
+import           Necronomicon.Graphics.Texture
+import           Necronomicon.Linear
 
 data    Model      = Model        Mesh   Material
                    | FontRenderer String Font (Texture -> Material)
@@ -20,19 +20,19 @@ type    LoadedMesh = (GL.BufferObject,GL.BufferObject,Int,[GL.VertexArrayDescrip
 
 newtype Material   = Material {drawMeshWithMaterial :: (Mesh -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ())}
 
-data    CharMetric = CharMetric{character             :: Char,
-                                advanceX              :: Double,
-                                advanceY              :: Double,
-                                bearingX              :: Double,
-                                bearingY              :: Double,
-                                charWidth             :: Double,
-                                charHeight            :: Double,
-                                charLeft              :: Double,
-                                charTop               :: Double,
-                                charTX                :: Double} deriving (Show)
+data    CharMetric = CharMetric{character  :: Char,
+                                advanceX   :: Double,
+                                advanceY   :: Double,
+                                bearingX   :: Double,
+                                bearingY   :: Double,
+                                charWidth  :: Double,
+                                charHeight :: Double,
+                                charLeft   :: Double,
+                                charTop    :: Double,
+                                charTX     :: Double} deriving (Show)
 
-data    Font       = Font      {fontKey               :: String,
-                                fontSize              :: Int}
+data    Font       = Font      {fontKey  :: String,
+                                fontSize :: Int}
 
 data    LoadedFont = LoadedFont{atlas                 :: Texture,
                                 atlasWidth            :: Double,
@@ -41,10 +41,10 @@ data    LoadedFont = LoadedFont{atlas                 :: Texture,
                                 characterVertexBuffer :: GL.BufferObject,
                                 characterIndexBuffer  :: GL.BufferObject}
 
-data    Resources  = Resources {shadersRef            :: IORef (IntMap.IntMap LoadedShader),
-                                texturesRef           :: IORef (Map.Map String GL.TextureObject),
-                                meshesRef             :: IORef (Map.Map String LoadedMesh),
-                                fontsRef              :: IORef (Map.Map String LoadedFont)}
+data    Resources  = Resources {shadersRef  :: IORef (IntMap.IntMap LoadedShader),
+                                texturesRef :: IORef (Map.Map String GL.TextureObject),
+                                meshesRef   :: IORef (Map.Map String LoadedMesh),
+                                fontsRef    :: IORef (Map.Map String LoadedFont)}
 
 instance Show Model where
     show _ = "Model"

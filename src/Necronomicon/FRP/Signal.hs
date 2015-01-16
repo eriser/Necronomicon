@@ -85,30 +85,31 @@ module Necronomicon.FRP.Signal (
     ) where
 
 ------------------------------------------------------
-import Control.Applicative
-import Control.Monad
-import qualified Graphics.Rendering.OpenGL as GL
-import qualified Graphics.UI.GLFW as GLFW
-import qualified Data.Fixed as F
-import Data.Monoid
-import Control.Concurrent
-import Control.Concurrent.STM
-import Data.Either
-import qualified Data.IntSet as IntSet
-import Debug.Trace
-import qualified Data.IntMap.Strict as IntMap
-import Data.Dynamic
-import Data.IORef
-import System.Random
-import Data.List (unzip3)
-import Necronomicon.Graphics.Camera (renderGraphics)
-import Necronomicon.Graphics.SceneObject (SceneObject,root)
-import Necronomicon.Linear.Vector (Vector2 (Vector2),Vector3 (Vector3))
-import Necronomicon.Graphics.Model (newResources,Resources)
-import Necronomicon.UGen
-import Necronomicon.Runtime -- (NecroVars(..),mkNecroVars,Synth(..),runNecroState,startNecronomicon,shutdownNecronomicon,Necronomicon)
-import Necronomicon.Patterns (Pattern(..))
-import Control.Monad.Trans (liftIO)
+import           Control.Applicative
+import           Control.Concurrent
+import           Control.Concurrent.STM
+import           Control.Monad
+import           Control.Monad.Trans               (liftIO)
+import           Data.Dynamic
+import           Data.Either
+import qualified Data.Fixed                        as F
+import qualified Data.IntMap.Strict                as IntMap
+import qualified Data.IntSet                       as IntSet
+import           Data.IORef
+import           Data.List                         (unzip3)
+import           Data.Monoid
+import           Debug.Trace
+import qualified Graphics.Rendering.OpenGL         as GL
+import qualified Graphics.UI.GLFW                  as GLFW
+import           Necronomicon.Graphics.Camera      (renderGraphics)
+import           Necronomicon.Graphics.Model       (Resources, newResources)
+import           Necronomicon.Graphics.SceneObject (SceneObject, root)
+import           Necronomicon.Linear.Vector        (Vector2 (Vector2),
+                                                    Vector3 (Vector3))
+import           Necronomicon.Patterns             (Pattern (..))
+import           Necronomicon.Runtime
+import           Necronomicon.UGen
+import           System.Random
 ------------------------------------------------------
 
 (<~) :: Functor f => (a -> b) -> f a -> f b
@@ -130,10 +131,10 @@ infixl 4 <~,~~
 data Event        = Event Int Dynamic
 data EventValue a = Change a | NoChange a deriving (Show)
 data Necro        = Necro {
-    globalDispatch  :: TBQueue Event,
-    inputCounter    :: IORef Int,
-    sceneVar        :: TMVar SceneObject,
-    necroVars       :: IORef NecroVars
+    globalDispatch :: TBQueue Event,
+    inputCounter   :: IORef Int,
+    sceneVar       :: TMVar SceneObject,
+    necroVars      :: IORef NecroVars
     }
 newtype Signal a = Signal {unSignal :: Necro -> IO(a,Event -> IO (EventValue a),IntSet.IntSet)}
 

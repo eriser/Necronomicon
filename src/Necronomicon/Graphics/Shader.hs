@@ -14,26 +14,26 @@ module Necronomicon.Graphics.Shader (
     loadFragmentShader
     ) where
 
-import Prelude
-import Data.Maybe (fromMaybe)
-import Control.Monad (unless)
-import System.IO (hPutStrLn, stderr)
-import Language.Haskell.TH.Syntax
-import Language.Haskell.TH.Quote
-import Necronomicon.Utility
+import           Control.Monad              (unless)
+import           Data.Maybe                 (fromMaybe)
+import           Language.Haskell.TH.Quote
+import           Language.Haskell.TH.Syntax
+import           Necronomicon.Utility
+import           Prelude
+import           System.IO                  (hPutStrLn, stderr)
 
-import qualified Data.ByteString as BS
-import qualified Data.ByteString.Char8 as C
-import qualified Graphics.Rendering.OpenGL as GL
-import Foreign.Ptr (Ptr,wordPtrToPtr)
-import Paths_Necronomicon
+import qualified Data.ByteString            as BS
+import qualified Data.ByteString.Char8      as C
+import           Foreign.Ptr                (Ptr, wordPtrToPtr)
+import qualified Graphics.Rendering.OpenGL  as GL
+import           Paths_Necronomicon
 
 ------------------------------------------------------------------------------------------
 -- Shaders
 ------------------------------------------------------------------------------------------
 
-newtype VertexShader   = VertexShader   {unVertexShader   :: IO GL.Shader}
-newtype FragmentShader = FragmentShader {unFragmentShader :: IO GL.Shader}
+newtype VertexShader   = VertexShader   {unVertexShader        :: IO GL.Shader}
+newtype FragmentShader = FragmentShader {unFragmentShader      :: IO GL.Shader}
 data    Shader         = Shader         {key :: Int,loadShader :: IO LoadedShader}
 type    LoadedShader   = (GL.Program,[GL.UniformLocation],[GL.AttribLocation])
 

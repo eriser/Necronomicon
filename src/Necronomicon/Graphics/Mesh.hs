@@ -1,20 +1,20 @@
 module Necronomicon.Graphics.Mesh where
 
-import Necronomicon.Linear
-import Necronomicon.Graphics.Color
-import Necronomicon.Graphics.Shader
-import Necronomicon.Graphics.BufferObject
-import Necronomicon.Graphics.Texture
-import Necronomicon.Graphics.Model
+import           Necronomicon.Graphics.BufferObject
+import           Necronomicon.Graphics.Color
+import           Necronomicon.Graphics.Model
+import           Necronomicon.Graphics.Shader
+import           Necronomicon.Graphics.Texture
+import           Necronomicon.Linear
 
-import Foreign.Storable (sizeOf)
-import Data.IORef
+import           Data.IORef
+import           Foreign.Storable                   (sizeOf)
 
-import qualified Graphics.Rendering.OpenGL     as GL
-import qualified Graphics.Rendering.OpenGL.Raw as GLRaw (glUniformMatrix4fv)
-import qualified Data.IntMap                   as IntMap
-import qualified Data.Map                      as Map
-import qualified Data.Vector.Storable          as V (unsafeWith,fromList)
+import qualified Data.IntMap                        as IntMap
+import qualified Data.Map                           as Map
+import qualified Data.Vector.Storable               as V (fromList, unsafeWith)
+import qualified Graphics.Rendering.OpenGL          as GL
+import qualified Graphics.Rendering.OpenGL.Raw      as GLRaw (glUniformMatrix4fv)
 
 {-
 

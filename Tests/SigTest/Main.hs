@@ -29,7 +29,7 @@ testShader = gui [so <~ mousePos,pure zLabel]
     where
         so (x,y) = SceneObject (Vector3 x y 0) identityQuat 1 model []
         model    = Model (rect 0.2 0.2) (ambient (tga "Gas20.tga"))
-        zLabel   = label (Vector2 0 0 ) (Font "OCRA.ttf" 50) white "Hello\nworld!"
+        zLabel   = label (Vector2 0 0 ) (Font "OCRA.ttf" 50) white "Hello world!"
 
 testGUI :: Signal ()
 testGUI = gui [element vslider,element blueButton,pure zLabel,tri <~ input vslider]
