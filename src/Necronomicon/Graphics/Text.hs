@@ -157,19 +157,17 @@ textMesh charMetrics aWidth aHeight (vertices,colors,uvs,indices,count,x,y) char
         w          = charWidth  charMetric * xscale
         h          = charHeight charMetric * yscale
         l          = charLeft   charMetric * xscale
-        t          = charTop    charMetric * yscale * (negate 1)
+        t          = charTop    charMetric * yscale
         ax         = advanceX   charMetric * xscale
         tx         = charTX     charMetric
-        -- bx         = bearingX   charMetric * xscale
-        by         = bearingY   charMetric * yscale
 
         xscale     = 2 / 1024
         yscale     = xscale
 
-        vertices'  = Linear.Vector3 (l+x)   (y - t) 0  :
-                     Linear.Vector3 (l+x+w) (y - t) 0  :
-                     Linear.Vector3 (l+x)   ((y - t) - h) 0  :
-                     Linear.Vector3 (l+x+w) ((y - t) - h) 0  : vertices
+        vertices'  = Linear.Vector3 (l+x)   (y + t)     0  :
+                     Linear.Vector3 (l+x+w) (y + t)     0  :
+                     Linear.Vector3 (l+x)   (y + t - h) 0  :
+                     Linear.Vector3 (l+x+w) (y + t - h) 0  : vertices
         colors'    = Color.white : Color.white : Color.white : Color.white : colors
         uvs'       = Linear.Vector2 (tx                                 ) 0 :
                      Linear.Vector2 (tx + charWidth  charMetric / aWidth) 0 :
