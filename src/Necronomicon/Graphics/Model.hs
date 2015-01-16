@@ -12,7 +12,7 @@ import qualified Data.Map as Map
 data    Model      = Model        Mesh   Material
                    | FontRenderer String Font (Texture -> Material)
 
-data     Mesh      = Mesh        String [Vector3] [Color] [Vector2] [Int]
+data     Mesh      = Mesh        String                          [Vector3] [Color] [Vector2] [Int]
                    | DynamicMesh GL.BufferObject GL.BufferObject [Vector3] [Color] [Vector2] [Int]
                    deriving (Show)
 

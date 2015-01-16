@@ -32,7 +32,7 @@ gui gs = render $ root <~ combine (camSig : gs)
         camSig = orthoCamera (Vector3 0 0 0) identityQuat <~ dimensions ~~ constant (RGB 0 0 0)
 
 label :: Vector2 -> Font -> Color ->  String -> SceneObject
-label (Vector2 x y) font@(Font _ size) color text = SceneObject (Vector3 x y 0) identityQuat (fromIntegral size / 400) (drawText text font ambient) []
+label (Vector2 x y) font color text = SceneObject (Vector3 x y 0) identityQuat 1 (drawText text font ambient) []
 
 guiEvent :: (Typeable a) => IORef (Gui b) -> Dynamic -> (a -> IO (EventValue (Gui b))) -> IO (EventValue (Gui b))
 guiEvent ref v f = case fromDynamic v of

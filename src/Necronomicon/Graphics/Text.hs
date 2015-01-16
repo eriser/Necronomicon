@@ -2,6 +2,7 @@ module Necronomicon.Graphics.Text (drawText,
                                    renderFont) where
 
 import Prelude
+import Data.Maybe (fromMaybe)
 import Control.Monad
 import Graphics.Rendering.OpenGL hiding (bitmap)
 import Graphics.Rendering.FreeType.Internal
@@ -59,8 +60,10 @@ loadFontAtlas font = do
     ff <- fontFace ft $ fontPath ++ "fonts/" ++ fontKey font
     runFreeType $ ft_Set_Pixel_Sizes ff (fromIntegral $ fontSize font) 0
 
+    -- let scalex = 2 / 1920
+        -- scaley = 2 / 1080
     cmetrics <- mapM (getCharMetrics ff) [32..128] --[32..128]
-    let (atlasWidth',atlasHeight') = foldr (\metric (w,h) -> (w + advanceX metric,max h (charHeight metric))) (0,0) cmetrics
+    let (atlasWidth',atlasHeight') = foldr (\metric (w,h) -> (w + charWidth metric, max h (charHeight metric))) (0,0) cmetrics
 
     atlasTexture <- newBoundTexUnit 0
     rowAlignment Unpack $= 1
@@ -110,15 +113,19 @@ getCharMetrics ff char = do
     metric <- peek $ metrics slot
     left   <- peek $ bitmap_left slot
     top    <- peek $ bitmap_top slot
-    runFreeType    $ ft_Render_Glyph slot ft_RENDER_MODE_NORMAL
+    -- runFreeType    $ ft_Render_Glyph slot ft_RENDER_MODE_NORMAL
+    bmp    <- peek $ bitmap slot
+    -- badvanceX <- horiAdvance bmp
     let charMetric = CharMetric
                      (toEnum char)
-                     (fromIntegral (shift (Metrics.horiAdvance  metric) (-6)))
-                     (fromIntegral (shift (Metrics.vertAdvance  metric) (-6)))
-                     (fromIntegral (shift (Metrics.horiBearingX metric) (-6)))
-                     (fromIntegral (shift (Metrics.horiBearingY metric) (-6)))
-                     (fromIntegral (shift (Metrics.width        metric) (-6)))
-                     (fromIntegral (shift (Metrics.height       metric) (-6)))
+                     ((fromIntegral $ Metrics.horiAdvance metric) / 64)
+                     ((fromIntegral $ Metrics.vertAdvance metric) / 64)
+                     ((fromIntegral $ Metrics.horiBearingX metric) / 64)
+                     ((fromIntegral $ Metrics.horiBearingY metric) / 64)
+                    --  (fromIntegral (shift (Metrics.horiBearingX metric) (-6)))
+                    --  (fromIntegral (shift (Metrics.horiBearingY metric) (-6)))
+                     (fromIntegral $ width bmp)
+                     (fromIntegral $ rows bmp)
                      (fromIntegral left)
                      (fromIntegral top)
                      0
@@ -133,41 +140,48 @@ getFont resources font = readIORef (fontsRef resources) >>= \fonts ->
         Nothing    -> loadFontAtlas font >>= \font' -> (writeIORef (fontsRef resources) $ Map.insert (fontKey font) font' fonts) >> return font'
         Just font' -> return font'
 
-renderFont :: String -> Font -> (NecroTex.Texture -> Material) -> Linear.Matrix4x4 -> Linear.Matrix4x4 -> Resources -> IO()
-renderFont text font material modelView proj resources = do
+renderFont :: String -> Linear.Vector2 -> Font -> (NecroTex.Texture -> Material) -> Linear.Matrix4x4 -> Linear.Matrix4x4 -> Resources -> IO()
+renderFont text dimensions font material modelView proj resources = do
     loadedFont <- getFont resources font
-    let (vertices,colors,uvs,indices,_,_,_) = foldl (textMesh (characters loadedFont) ((fromIntegral $ fontSize font) * 1) (atlasWidth loadedFont) (atlasHeight loadedFont)) ([],[],[],[],0,0,0) text
+    let (vertices,colors,uvs,indices,_,_,_) = foldl characterMesh ([],[],[],[],0,0,0) text
+        characterMesh                       = textMesh (characters loadedFont) dimensions (atlasWidth loadedFont) (atlasHeight loadedFont)
         fontMesh                            = DynamicMesh (characterVertexBuffer loadedFont) (characterIndexBuffer loadedFont) vertices colors uvs indices
     drawMeshWithMaterial (material $ atlas loadedFont) fontMesh modelView proj resources
 
 textMesh :: Map.Map Char CharMetric ->
-            Double ->
+            Linear.Vector2 ->
             Double ->
             Double ->
             ([Linear.Vector3],[Color.Color],[Linear.Vector2],[Int],Int,Double,Double) ->
             Char ->
             ([Linear.Vector3],[Color.Color],[Linear.Vector2],[Int],Int,Double,Double)
-textMesh charMetrics fSize aWidth aHeight (vertices,colors,uvs,indices,count,x,y) char = case char of
-    '\n' -> (vertices ,colors ,uvs ,indices ,count    ,0                    ,y - aHeight)
-    _    -> (vertices',colors',uvs',indices',count + 4,x+advanceX charMetric,y)
+textMesh charMetrics (Linear.Vector2 screenWidth screenHeight) aWidth aHeight (vertices,colors,uvs,indices,count,x,y) char = case char of
+    '\n' -> (vertices ,colors ,uvs ,indices ,count    ,0   ,y - aHeight * yscale)
+    _    -> (vertices',colors',uvs',indices',count + 4,x+ax,y)
     where
-        charMetric = case Map.lookup char charMetrics of
-            Nothing -> CharMetric (toEnum 0) 0 0 0 0 0 0 0 0 0
-            Just cm -> cm
-        w          = charWidth  charMetric
-        h          = charHeight charMetric
-        t          = charTop    charMetric
+        charMetric = fromMaybe (CharMetric (toEnum 0) 0 0 0 0 0 0 0 0 0) $ Map.lookup char charMetrics
+        w          = charWidth  charMetric * xscale
+        h          = charHeight charMetric * yscale
+        l          = charLeft   charMetric * xscale
+        t          = charTop    charMetric * yscale
+        ax         = advanceX   charMetric * xscale
         tx         = charTX     charMetric
-        bx         = bearingX   charMetric
-        by         = bearingY   charMetric
+        bx         = bearingX   charMetric * xscale
+        by         = bearingY   charMetric * yscale
 
-        vertices'  = Linear.Vector3 ((x+bx)   / fSize) ((y+t-by)   / fSize) 0  :
-                     Linear.Vector3 ((x+bx+w) / fSize) ((y+t-by)   / fSize) 0  :
-                     Linear.Vector3 ((x+bx)   / fSize) ((y+t-by+h) / fSize) 0  :
-                     Linear.Vector3 ((x+bx+w) / fSize) ((y+t-by+h) / fSize) 0  : vertices
+        --TODO: Don't hardcode this!
+        -- xscale     = 2 / screenWidth
+        xscale     = 2 / 1020
+        yscale     = xscale
+        -- yscale     = 2 / screenHeight
+
+        vertices'  = Linear.Vector3 (l+x+bx)   ((y+t)-by)   0  :
+                     Linear.Vector3 (l+x+bx+w) ((y+t)-by)   0  :
+                     Linear.Vector3 (l+x+bx)   ((y+t+h)-by) 0  :
+                     Linear.Vector3 (l+x+bx+w) ((y+t+h)-by) 0  : vertices
         colors'    = Color.white : Color.white : Color.white : Color.white : colors
-        uvs'       = Linear.Vector2 (tx             ) (h / aHeight) :
-                     Linear.Vector2 (tx + w / aWidth) (h / aHeight) :
-                     Linear.Vector2 (tx             ) 0             :
-                     Linear.Vector2 (tx + w / aWidth) 0             : uvs
+        uvs'       = Linear.Vector2 (tx                                 ) (charHeight charMetric / aHeight) :
+                     Linear.Vector2 (tx + charWidth  charMetric / aWidth) (charHeight charMetric / aHeight) :
+                     Linear.Vector2 (tx                                 ) 0                                 :
+                     Linear.Vector2 (tx + charWidth  charMetric / aWidth) 0                                 : uvs
         indices'   = count + 2 : count + 0 : count + 1 : count + 3 : count + 2 : count + 1 : indices
