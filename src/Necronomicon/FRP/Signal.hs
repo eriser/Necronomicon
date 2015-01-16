@@ -105,7 +105,7 @@ import Necronomicon.Graphics.Camera (renderGraphics)
 import Necronomicon.Graphics.SceneObject (SceneObject,root)
 import Necronomicon.Linear.Vector (Vector2 (Vector2),Vector3 (Vector3))
 import Necronomicon.Graphics.Model (newResources,Resources)
-import Necronomicon.UGen 
+import Necronomicon.UGen
 import Necronomicon.Runtime -- (NecroVars(..),mkNecroVars,Synth(..),runNecroState,startNecronomicon,shutdownNecronomicon,Necronomicon)
 import Necronomicon.Patterns (Pattern(..))
 import Control.Monad.Trans (liftIO)
@@ -145,7 +145,7 @@ idGuard set uid ref = case IntSet.member uid set of
 instance  Functor Signal where
     fmap f x = Signal $ \necro -> do
         (defaultX,xCont,ids) <- unSignal x necro
-        let defaultValue = f defaultX 
+        let defaultValue = f defaultX
         ref <- newIORef defaultValue
         return (defaultValue,processState xCont ref ids,ids)
         where
@@ -311,11 +311,11 @@ runSignal s = initWindow >>= \mw ->
             forkIO $ globalEventDispatch s necro
 
             threadDelay $ 16667
-        
+
             (ww,wh) <- GLFW.getWindowSize w
             dimensionsEvent globalDispatch w ww wh
             mousePressEvent globalDispatch w 0 GLFW.MouseButtonState'Released GLFW.modifierKeysShift
-            resources <- newResources 
+            resources <- newResources
             render False w sceneVar resources necroVars
     where
         --event callbacks
@@ -338,7 +338,7 @@ runSignal s = initWindow >>= \mw ->
                 ms         <- atomically $ tryTakeTMVar sceneVar
                 case ms of
                     Nothing -> return ()
-                    Just s  -> renderGraphics window resources s 
+                    Just s  -> renderGraphics window resources s
                 threadDelay $ 16667
                 render q window sceneVar resources necroVarsRef
 
@@ -428,11 +428,11 @@ input a uid = Signal $ \_ -> do
         processState ref (Event uid' e) = do
             case uid == uid' of
                 False -> do
-                    v <- readIORef ref 
+                    v <- readIORef ref
                     return $ NoChange v
                 True  -> case fromDynamic e of
                     Nothing -> print "input type error" >> do
-                        v <- readIORef ref 
+                        v <- readIORef ref
                         return $ NoChange v
                     Just v  -> do
                         writeIORef ref v
@@ -457,17 +457,17 @@ createInput a necro = do
         processEvent uid ref (Event uid' e) = do
             case uid == uid' of
                 False -> do
-                    v <- readIORef ref 
+                    v <- readIORef ref
                     return $ NoChange v
                 True  -> case fromDynamic e of
                     Nothing -> print "input type error" >> do
-                        v <- readIORef ref 
+                        v <- readIORef ref
                         return $ NoChange v
                     Just v  -> do
                         writeIORef ref v
                         return $ Change v
 
---eventlist: 
+--eventlist:
 type Key  = GLFW.Key
 keyA = GLFW.Key'A
 keyB = GLFW.Key'B
@@ -717,7 +717,7 @@ keepWhen pred x = Signal $ \necro -> do
 
 dropWhen :: Signal Bool -> Signal a -> Signal a
 dropWhen pred x = Signal $ \necro -> do
-    (pValue,pCont,pIds) <- unSignal pred necro 
+    (pValue,pCont,pIds) <- unSignal pred necro
     (xValue,xCont,xIds) <- unSignal x    necro
     ref            <- newIORef xValue
     return (xValue,processEvent pCont xCont ref,IntSet.union pIds xIds)

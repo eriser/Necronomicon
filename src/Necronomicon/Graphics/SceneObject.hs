@@ -57,76 +57,105 @@ _clearColor_ f r = r{_clearColor=f (_clearColor r)}
 --Different kinds of SceneObjects?
 
 --SceneObject
-data SceneObject = SceneObject {
-    _name     :: String,
-    _active   :: Bool,
-    _position :: Vector3,
-    _rotation :: Quaternion,
-    _scale    :: Vector3,
-    _model    :: Maybe Model,
-    _camera   :: Maybe Camera,
-    _children :: [SceneObject]
-    } deriving (Show)
+-- TODO: finish removing cruft!
+data SceneObject = SceneObject  Vector3 Quaternion Vector3 Model  [SceneObject]
+                 | CameraObject Vector3 Quaternion Vector3 Camera [SceneObject]
+                 | PlainObject  Vector3 Quaternion Vector3        [SceneObject]
+                 deriving (Show)
 
---setters
-name_ :: String -> SceneObject -> SceneObject
-name_ n o = o{_name = n}
+--Getters
+_position :: SceneObject -> Vector3
+_position (SceneObject  p _ _ _ _) = p
+_position (CameraObject p _ _ _ _) = p
+_position (PlainObject  p _ _   _) = p
 
-active_ :: Bool -> SceneObject -> SceneObject
-active_ a o = o{_active = a}
+_rotation :: SceneObject -> Quaternion
+_rotation (SceneObject  _ r _ _ _) = r
+_rotation (CameraObject _ r _ _ _) = r
+_rotation (PlainObject  _ r _   _) = r
 
+_scale :: SceneObject -> Vector3
+_scale (SceneObject  _ _ s _ _) = s
+_scale (CameraObject _ _ s _ _) = s
+_scale (PlainObject  _ _ s   _) = s
+
+_model :: SceneObject -> Maybe Model
+_model (SceneObject  _ _ _ m _) = Just m
+_model _                        = Nothing
+
+_camera   :: SceneObject -> Maybe Camera
+_camera (CameraObject _ _ _ c _) = Just c
+_camera _                        = Nothing
+
+_children :: SceneObject -> [SceneObject]
+_children (SceneObject  _ _ _ _ cs) = cs
+_children (CameraObject _ _ _ _ cs) = cs
+_children (PlainObject  _ _ _   cs) = cs
+
+--Setters
 position_ :: Vector3 -> SceneObject -> SceneObject
-position_ v o = o{_position = v}
+position_ p (SceneObject  _ r s m cs) = SceneObject  p r s m cs
+position_ p (CameraObject _ r s c cs) = CameraObject p r s c cs
+position_ p (PlainObject  _ r s   cs) = PlainObject  p r s   cs
 
 rotation_ :: Quaternion -> SceneObject -> SceneObject
-rotation_ v o = o{_rotation = v}
+rotation_ r (SceneObject  p _ s m cs) = SceneObject  p r s m cs
+rotation_ r (CameraObject p _ s c cs) = CameraObject p r s c cs
+rotation_ r (PlainObject  p _ s   cs) = PlainObject  p r s   cs
 
 scale_ :: Vector3 -> SceneObject -> SceneObject
-scale_ v o = o{_scale = v}
+scale_ s (SceneObject  p r _ m cs) = SceneObject  p r s m cs
+scale_ s (CameraObject p r _ c cs) = CameraObject p r s c cs
+scale_ s (PlainObject  p r _   cs) = PlainObject  p r s   cs
 
-model_ :: Maybe Model -> SceneObject -> SceneObject
-model_ v o = o{_model = v}
+model_ :: Model -> SceneObject -> SceneObject
+model_ m (SceneObject  p r s _ cs) = SceneObject p r s m cs
+model_ _ o                         = o
 
-camera_ :: Maybe Camera -> SceneObject -> SceneObject
-camera_ v o = o{_camera = v}
+camera_ :: Camera -> SceneObject -> SceneObject
+camera_ c (CameraObject  p r s _ cs) = CameraObject p r s c cs
+camera_ _ o                          = o
 
 children_ :: [SceneObject] -> SceneObject -> SceneObject
-children_ v o = o{_children = v}
+children_ cs (SceneObject  p r s m _) = SceneObject  p r s m cs
+children_ cs (CameraObject p r s c _) = CameraObject p r s c cs
+children_ cs (PlainObject  p r s   _) = PlainObject  p r s   cs
 
 --modifiers
-_name_ :: (String -> String) -> SceneObject -> SceneObject
-_name_ f o = o{_name = f (_name o)}
-
-_active_ :: (Bool -> Bool) -> SceneObject -> SceneObject
-_active_ f o = o{_active = f (_active o)}
-
 _position_ :: (Vector3 -> Vector3) -> SceneObject -> SceneObject
-_position_ f o = o{_position = f (_position o)}
+_position_ f (SceneObject  p r s m cs) = SceneObject  (f p) r s m cs
+_position_ f (CameraObject p r s c cs) = CameraObject (f p) r s c cs
+_position_ f (PlainObject  p r s   cs) = PlainObject  (f p) r s   cs
 
 _rotation_ :: (Quaternion -> Quaternion) -> SceneObject -> SceneObject
-_rotation_ f o = o{_rotation = f (_rotation o)}
+_rotation_ f (SceneObject  p r s m cs) = SceneObject  p (f r) s m cs
+_rotation_ f (CameraObject p r s c cs) = CameraObject p (f r) s c cs
+_rotation_ f (PlainObject  p r s   cs) = PlainObject  p (f r) s   cs
 
 _scale_ :: (Vector3 -> Vector3) -> SceneObject -> SceneObject
-_scale_ f o = o{_scale = f (_scale o)}
+_scale_ f (SceneObject  p r s m cs) = SceneObject  p r (f s) m cs
+_scale_ f (CameraObject p r s c cs) = CameraObject p r (f s) c cs
+_scale_ f (PlainObject  p r s   cs) = PlainObject  p r (f s)   cs
 
-_model_ :: (Maybe Model -> Maybe Model) -> SceneObject -> SceneObject
-_model_ f o = o{_model = f (_model o)}
+_model_ :: (Model -> Model) -> SceneObject -> SceneObject
+_model_ f (SceneObject  p r s m cs) = SceneObject  p r s (f m) cs
+_model_ _ o                         = o
 
-_camera_ :: (Maybe Camera -> Maybe Camera) -> SceneObject -> SceneObject
-_camera_ f o = o{_camera = f (_camera o)}
+_camera_ :: (Camera -> Camera) -> SceneObject -> SceneObject
+_camera_ f (CameraObject p r s c cs) = CameraObject p r s (f c) cs
+_camera_ _ o                         = o
 
 _children_ :: ([SceneObject] -> [SceneObject]) -> SceneObject -> SceneObject
-_children_ f o = o{_children = f (_children o)}
+_children_ f (SceneObject  p r s m cs) = SceneObject  p r s m (f cs)
+_children_ f (CameraObject p r s c cs) = CameraObject p r s c (f cs)
+_children_ f (PlainObject  p r s   cs) = PlainObject  p r s   (f cs)
 
 -------------------------------------------------------------------------------------------------------------------
 -- Scene functions
 -------------------------------------------------------------------------------------------------------------------
 
 root :: [SceneObject] -> SceneObject
-root = SceneObject "root" True 0 identityQuat 1 Nothing Nothing
-
-plain :: String -> SceneObject
-plain name = SceneObject name True 0 identityQuat 1 Nothing Nothing []
+root = PlainObject 0 identityQuat 1
 
 drawScene :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> SceneObject -> IO ()
 drawScene world view proj resources g = draw world view proj resources g >>= \newWorld -> mapM_ (drawScene newWorld view proj resources) (_children g)
@@ -139,13 +168,3 @@ draw world view proj resources g = case _model g of
     where
         newWorld  = world    .*. (trsMatrix (_position g) (_rotation g) (_scale g))
         modelView = newWorld .*. view
-
---breadth first?
-findGameObject :: String -> SceneObject -> Maybe SceneObject
-findGameObject n g
-    | _name g == n = Just g
-    | otherwise    = foldr compareSearch Nothing . map (findGameObject n) $ _children g
-    where
-        compareSearch (Just g1) _         = Just g1
-        compareSearch _         (Just g2) = Just g2
-        compareSearch _         _         = Nothing

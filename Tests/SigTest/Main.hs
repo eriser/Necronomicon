@@ -27,7 +27,7 @@ testSound3 = playUntil myCoolSynth2 (isDown keyP) (isDown keyS)
 testShader :: Signal ()
 testShader = gui [so <~ mousePos,pure zLabel]
     where
-        so (x,y) = SceneObject "ShaderTest" True (Vector3 x y 0) identityQuat 1 (Just model) Nothing []
+        so (x,y) = SceneObject (Vector3 x y 0) identityQuat 1 model []
         model    = Model (rect 0.2 0.2) (ambient (tga "Gas20.tga"))
         zLabel   = label (Vector2 0 0 ) (Font "OCRA.ttf" 50) white "Hello\nworld!"
 
@@ -58,10 +58,10 @@ testScene = scene [camSig,triSig]
         move (x,y) z a = Vector3 (x*z*a) (y*z*a) 0
 
 terrain :: Vector3 -> Quaternion -> [SceneObject] -> SceneObject
-terrain pos r chldn = SceneObject "Terrain" True pos r 1 (Just $ Model simplexMesh vertexColored) Nothing []
+terrain pos r chldn = SceneObject pos r 1 (Model simplexMesh vertexColored) []
 
 testTri :: String -> Vector3 -> Quaternion -> [SceneObject] -> SceneObject
-testTri name pos r chldn = SceneObject name True pos r 1 (Just model) Nothing []
+testTri name pos r chldn = SceneObject pos r 1 model []
     where
         model = Model (tri 0.3 white) vertexColored
 

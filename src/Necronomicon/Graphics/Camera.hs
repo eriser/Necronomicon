@@ -14,12 +14,12 @@ import Debug.Trace
 ----------------------------------------------------------
 
 orthoCamera :: Vector3 -> Quaternion -> Vector2 -> Color -> SceneObject
-orthoCamera pos r dimensions clearColor = SceneObject "CameraOrtho" True pos r 1 Nothing (Just c) []
+orthoCamera pos r dimensions clearColor = CameraObject pos r 1 c []
     where
         c = Camera dimensions 0 0 0 clearColor
 
 perspCamera :: Vector3 -> Quaternion -> Vector2 -> Double -> Double -> Double -> Color -> SceneObject
-perspCamera pos r dimensions fov near far clearColor = SceneObject "Camera" True pos r 1 Nothing (Just c) []
+perspCamera pos r dimensions fov near far clearColor = CameraObject pos r 1 c []
     where
         c = Camera dimensions (fov/2) near far clearColor
 
@@ -43,7 +43,7 @@ renderCamera view scene resources g  = let newView = view .*. (trsMatrix (_posit
             _ -> drawScene identity4 (invert newView) (perspMatrix (_fov c) ratio (_near c) (_far c))      resources scene
 
         return $ newView
-            
+
 renderCameras :: Matrix4x4 -> SceneObject -> Resources -> SceneObject -> IO ()
 renderCameras view scene resources g = renderCamera view scene resources g >>= \newView -> mapM_ (renderCameras newView scene resources) (_children g)
 
@@ -56,4 +56,3 @@ renderGraphics w resources scene = do
     GLFW.swapBuffers w
     GLFW.pollEvents
     -- GL.flush
-
