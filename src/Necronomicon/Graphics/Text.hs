@@ -9,14 +9,11 @@ import           Foreign.C.String
 import           Graphics.Rendering.FreeType.Internal
 import           Graphics.Rendering.FreeType.Internal.Bitmap
 import           Graphics.Rendering.FreeType.Internal.Face
-import           Graphics.Rendering.FreeType.Internal.FaceType
 import qualified Graphics.Rendering.FreeType.Internal.GlyphMetrics   as Metrics
 import           Graphics.Rendering.FreeType.Internal.GlyphSlot
 import           Graphics.Rendering.FreeType.Internal.Library
 import           Graphics.Rendering.FreeType.Internal.PrimitiveTypes
-import           Graphics.Rendering.OpenGL                           hiding
-                                                                      (bitmap)
-import           Prelude
+import           Graphics.Rendering.OpenGL                           hiding (bitmap)
 
 import qualified Data.Map                                            as Map
 
@@ -64,7 +61,7 @@ loadFontAtlas font = do
     -- let scalex = 2 / 1920
         -- scaley = 2 / 1080
     cmetrics <- mapM (getCharMetrics ff) [32..128] --[32..128]
-    let (atlasWidth',atlasHeight') = foldr (\metric (w,h) -> (w + charWidth metric, max h (charHeight metric))) (0,0) cmetrics
+    let (atlasWidth',atlasHeight') = foldr (\metric (w,h) -> (w + charWidth metric + 1, max h (charHeight metric))) (0,0) cmetrics
 
     atlasTexture <- newBoundTexUnit 0
     rowAlignment Unpack $= 1
@@ -99,8 +96,8 @@ addCharToAtlas w ff charMap char = do
                            Texture2D
                            0
                            --TODO: This might be causing the artifacts.
-                           (TexturePosition2D (floor $ charTX charMetric * w) 0)
-                           (TextureSize2D     (floor $ charWidth charMetric) (floor $ charHeight charMetric))
+                           (TexturePosition2D (round $ charTX charMetric * w) 0)
+                           (TextureSize2D     (round $ charWidth charMetric) (round $ charHeight charMetric))
                            (PixelData Luminance UnsignedByte $ buffer bmp)
 
 getCharMetrics :: FT_Face -> Int -> IO CharMetric
@@ -127,7 +124,7 @@ getCharMetrics ff char = do
     return charMetric
 
 createCharMap :: Double -> CharMetric -> (Double,Map.Map Char CharMetric) -> (Double,Map.Map Char CharMetric)
-createCharMap w charMetric (x,charMap) = (x + charWidth charMetric,Map.insert (character charMetric) (charMetric{charTX = x / w}) charMap)
+createCharMap w charMetric (x,charMap) = (x + charWidth charMetric + 1,Map.insert (character charMetric) (charMetric{charTX = x / w}) charMap)
 
 getFont :: Resources -> Font -> IO LoadedFont
 getFont resources font = readIORef (fontsRef resources) >>= \fonts ->
@@ -138,7 +135,7 @@ getFont resources font = readIORef (fontsRef resources) >>= \fonts ->
 renderFont :: String -> Font -> (NecroTex.Texture -> Material) -> Linear.Matrix4x4 -> Linear.Matrix4x4 -> Resources -> IO()
 renderFont text font material modelView proj resources = do
     loadedFont <- getFont resources font
-    let (vertices,colors,uvs,indices,_,_,_) = foldl characterMesh ([],[],[],[],0,0,0) text
+    let (vertices,colors,uvs,indices,_,_,_) = foldl characterMesh ([],[],[],[],0,0,0) $ fitTextIntoBounds text (600,0) (characters loadedFont)
         characterMesh                       = textMesh (characters loadedFont) (atlasWidth loadedFont) (atlasHeight loadedFont)
         fontMesh                            = DynamicMesh (characterVertexBuffer loadedFont) (characterIndexBuffer loadedFont) vertices colors uvs indices
     drawMeshWithMaterial (material $ atlas loadedFont) fontMesh modelView proj resources
@@ -170,7 +167,39 @@ textMesh charMetrics aWidth aHeight (vertices,colors,uvs,indices,count,x,y) char
                      Linear.Vector3 (l+x+w) (y + t - h) 0  : vertices
         colors'    = Color.white : Color.white : Color.white : Color.white : colors
         uvs'       = Linear.Vector2 (tx                                 ) 0 :
-                     Linear.Vector2 (tx + charWidth  charMetric / aWidth) 0 :
-                     Linear.Vector2 (tx                                 ) (charHeight charMetric / aHeight) :
-                     Linear.Vector2 (tx + charWidth  charMetric / aWidth) (charHeight charMetric / aHeight) : uvs
+                     Linear.Vector2 (tx + (charWidth  charMetric) / aWidth) 0 :
+                     Linear.Vector2 (tx                                 ) ((charHeight charMetric) / aHeight) :
+                     Linear.Vector2 (tx + (charWidth  charMetric) / aWidth) ((charHeight charMetric) / aHeight) : uvs
         indices'   = count + 2 : count + 0 : count + 1 : count + 3 : count + 2 : count + 1 : indices
+
+type TextWord = (String,Double)
+
+emptyWord :: TextWord
+emptyWord = ([],0)
+
+fitTextIntoBounds :: String -> (Double,Double) -> Map.Map Char CharMetric -> String
+fitTextIntoBounds text (w,_) cmetrics = finalText
+    where
+        (finalText,_) = foldr (fitWordsIntoBounds w       )  emptyWord words'
+        (_,words',_)  = foldr (splitCharIntoWords cmetrics) (emptyWord,[],0) text
+
+fitWordsIntoBounds :: Double -> TextWord -> TextWord -> TextWord
+fitWordsIntoBounds boundsWidth (word,wordWidth) (text,currentWidth) = if wordWidth + currentWidth < boundsWidth
+    then (word ++ text,wordWidth + currentWidth)
+    else (word ++ ('\n' : text),0)
+
+splitCharIntoWords :: Map.Map Char CharMetric -> Char -> (TextWord,[TextWord],Double) -> (TextWord,[TextWord],Double)
+splitCharIntoWords cmetrics char ((word,wordLength),words',totalLength) = if isWhiteSpace char
+    then ( emptyWord , (char : word,wordLength + cAdvance) : words' , totalLength + wordLength + cAdvance)
+    else ((char : word,wordLength + cAdvance), words' , totalLength)
+    where
+        cAdvance = case Map.lookup char cmetrics of
+            Nothing -> 0
+            Just m  -> advanceX m
+        isWhiteSpace c = case c of
+            ' '  -> True
+            '\n' -> True
+            _    -> False
+
+--TODO: Finish text with bounds for chat
+-- textMeshWithBounds :: String -> Int -> Int ->

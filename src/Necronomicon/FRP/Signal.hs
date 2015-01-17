@@ -174,28 +174,25 @@ instance Applicative Signal where
         return (defaultValue,processState fCont gCont ref ids,ids)
         where
             processState fCont gCont ref ids event@(Event uid _) = case idGuard ids uid ref of
+            --TODO: Maybe lazy case statements are the best way to handle this!
                 Just r -> r
                 Nothing-> do
                     fValue <- fCont event
                     gValue <- gCont event
-                    case fValue of
-                        Change f' -> case gValue of
-                            Change g' -> do
-                                let newValue = f' g'
-                                writeIORef ref newValue
-                                return $ Change newValue
-                            NoChange g' -> do
-                                let newValue = f' g'
-                                writeIORef ref newValue
-                                return $ Change newValue
-                        NoChange f' -> case gValue of
-                            Change g' -> do
-                                let newValue = f' g'
-                                writeIORef ref newValue
-                                return $ Change newValue
-                            NoChange _ -> do
-                                prev <- readIORef ref
-                                return $ NoChange prev
+                    case (fValue,gValue) of
+                        (Change f',Change g') -> do
+                            let newValue = f' g'
+                            writeIORef ref newValue
+                            return $ Change newValue
+                        (Change f',NoChange g') -> do
+                            let newValue = f' g'
+                            writeIORef ref newValue
+                            return $ Change newValue
+                        (NoChange f',Change g') -> do
+                            let newValue = f' g'
+                            writeIORef ref newValue
+                            return $ Change newValue
+                        _ -> readIORef ref >>= return . NoChange
 
 instance Alternative Signal where
     empty   = Signal $ \_ -> return (undefined,\_ -> return $ NoChange undefined,IntSet.empty)
