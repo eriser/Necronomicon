@@ -13,21 +13,21 @@ import           Necronomicon.Linear
 import           Prelude
 ----------------------------------------------------------
 
-orthoCamera :: Vector3 -> Quaternion -> Vector2 -> Color -> SceneObject
-orthoCamera pos r dimensions clearColor = CameraObject pos r 1 c []
+orthoCamera :: Vector3 -> Quaternion -> Color -> SceneObject
+orthoCamera pos r clearColor = CameraObject pos r 1 c []
     where
-        c = Camera dimensions 0 0 0 clearColor
+        c = Camera 0 0 0 clearColor
 
-perspCamera :: Vector3 -> Quaternion -> Vector2 -> Double -> Double -> Double -> Color -> SceneObject
-perspCamera pos r dimensions fov near far clearColor = CameraObject pos r 1 c []
+perspCamera :: Vector3 -> Quaternion -> Double -> Double -> Double -> Color -> SceneObject
+perspCamera pos r fov near far clearColor = CameraObject pos r 1 c []
     where
-        c = Camera dimensions (fov/2) near far clearColor
+        c = Camera (fov/2) near far clearColor
 
-renderCamera :: Matrix4x4 -> SceneObject -> Resources -> SceneObject -> IO Matrix4x4
-renderCamera view scene resources g  = let newView = view .*. (trsMatrix (_position g) (_rotation g) 1) in case _camera g of
+renderCamera :: (Int,Int) -> Matrix4x4 -> SceneObject -> Resources -> SceneObject -> IO Matrix4x4
+renderCamera (w,h) view scene resources g  = let newView = view .*. (trsMatrix (_position g) (_rotation g) 1) in case _camera g of
     Nothing -> return newView
     Just c  -> do
-        let  ratio    = (realToFrac $ (_x $ _dimensions c) / (_y $ _dimensions c))::Double
+        let  ratio    = fromIntegral w / fromIntegral h
         let (r,g,b,a) = case _clearColor c of
                 RGB  r g b   -> (r,g,b,1.0)
                 RGBA r g b a -> (r,g,b,a)
@@ -35,7 +35,7 @@ renderCamera view scene resources g  = let newView = view .*. (trsMatrix (_posit
         GL.clearColor GL.$= GL.Color4 (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a)
         GL.clear [GL.ColorBuffer,GL.DepthBuffer]
 
-        GL.viewport GL.$= (GL.Position 0 0, GL.Size (floor . _x $ _dimensions c) (floor . _y $ _dimensions c))
+        GL.viewport GL.$= (GL.Position 0 0, GL.Size (fromIntegral w) (fromIntegral h))
         GL.loadIdentity
 
         case _fov c of
@@ -44,15 +44,16 @@ renderCamera view scene resources g  = let newView = view .*. (trsMatrix (_posit
 
         return $ newView
 
-renderCameras :: Matrix4x4 -> SceneObject -> Resources -> SceneObject -> IO ()
-renderCameras view scene resources g = renderCamera view scene resources g >>= \newView -> mapM_ (renderCameras newView scene resources) (_children g)
+renderCameras :: (Int,Int) -> Matrix4x4 -> SceneObject -> Resources -> SceneObject -> IO ()
+renderCameras (w,h) view scene resources g = renderCamera (w,h) view scene resources g >>= \newView -> mapM_ (renderCameras (w,h) newView scene resources) (_children g)
 
 renderGraphics :: GLFW.Window -> Resources -> SceneObject -> IO ()
-renderGraphics w resources scene = do
+renderGraphics window resources scene = do
     GL.depthFunc GL.$= Just GL.Less
 
-    renderCameras identity4 scene resources scene
+    (w,h) <- GLFW.getWindowSize window
+    renderCameras (w,h) identity4 scene resources scene
 
-    GLFW.swapBuffers w
+    GLFW.swapBuffers window
     GLFW.pollEvents
     -- GL.flush

@@ -9,16 +9,23 @@ import qualified Graphics.Rendering.OpenGL as GL
 import qualified Data.IntMap as IntMap
 import qualified Data.Map as Map
 
-data    Model      = Model        Mesh   Material
-                   | FontRenderer String Font (Texture -> Material)
+data Model = Model        Mesh   Material
+           | FontRenderer String Font (Texture -> Material)
+           deriving (Show)
 
-data     Mesh      = Mesh        String                          [Vector3] [Color] [Vector2] [Int]
-                   | DynamicMesh GL.BufferObject GL.BufferObject [Vector3] [Color] [Vector2] [Int]
-                   deriving (Show)
+instance Show (Texture -> Material) where
+    show _ = "TextureFunction"
 
-type    LoadedMesh = (GL.BufferObject,GL.BufferObject,Int,[GL.VertexArrayDescriptor GL.GLfloat])
+data Mesh  = Mesh        String                          [Vector3] [Color] [Vector2] [Int]
+           | DynamicMesh GL.BufferObject GL.BufferObject [Vector3] [Color] [Vector2] [Int]
+           deriving (Show)
 
-newtype Material   = Material {drawMeshWithMaterial :: (Mesh -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ())}
+type LoadedMesh = (GL.BufferObject,GL.BufferObject,Int,[GL.VertexArrayDescriptor GL.GLfloat])
+
+newtype Material = Material {drawMeshWithMaterial :: (Mesh -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ())}
+
+instance Show Material where
+    show _ = "Material"
 
 data    CharMetric = CharMetric{character             :: Char,
                                 advanceX              :: Double,
@@ -32,22 +39,22 @@ data    CharMetric = CharMetric{character             :: Char,
                                 charTX                :: Double} deriving (Show)
 
 data    Font       = Font      {fontKey               :: String,
-                                fontSize              :: Int}
+                                fontSize              :: Int} deriving (Show)
 
 data    LoadedFont = LoadedFont{atlas                 :: Texture,
                                 atlasWidth            :: Double,
                                 atlasHeight           :: Double,
                                 characters            :: Map.Map Char CharMetric,
                                 characterVertexBuffer :: GL.BufferObject,
-                                characterIndexBuffer  :: GL.BufferObject}
+                                characterIndexBuffer  :: GL.BufferObject} deriving (Show)
 
 data    Resources  = Resources {shadersRef            :: IORef (IntMap.IntMap LoadedShader),
                                 texturesRef           :: IORef (Map.Map String GL.TextureObject),
                                 meshesRef             :: IORef (Map.Map String LoadedMesh),
                                 fontsRef              :: IORef (Map.Map String LoadedFont)}
 
-instance Show Model where
-    show _ = "Model"
+instance Show Resources where
+    show _ = "Resources"
 
 newResources :: IO Resources
 newResources = do

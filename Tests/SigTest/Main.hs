@@ -7,7 +7,7 @@ main = runSignal testShader
 testPattern :: Signal ()
 testPattern = gui [tri <~ pattern / 10 ]
     where
-        tri y   = testTri "" (Vector3 0.5 y 0) identityQuat []
+        tri y   = testTri (Vector3 0.5 y 0) identity
         pattern = playPattern 0 (isDown keyP)
                   [lich| 0 [1 2] _ [3 [4 5]] 6
                          0 [1 2] _ [3 [4 5]] 6
@@ -27,43 +27,32 @@ testSound3 = playUntil myCoolSynth2 (isDown keyP) (isDown keyS)
 testShader :: Signal ()
 testShader = gui [so <~ mousePos,pure zLabel]
     where
-        so (x,y) = SceneObject (Vector3 x y 0) identityQuat 1 model []
+        so (x,y) = SceneObject (Vector3 x y 0) identity 1 model []
         model    = Model (rect 0.2 0.2) (ambient (tga "Gas20.tga"))
-        zLabel   = label (Vector2 0 0 ) (Font "OCRA.ttf" 20) white "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris ipsum risus, luctus vel mollis non, hendrerit non mi. Sed at blandit ex. Donec aliquam pellentesque convallis. Integer in nisl ut ipsum dignissim vestibulum. Aenean porta nunc magna, id porttitor quam scelerisque non. Ut malesuada mi lectus, vitae finibus est lacinia nec. Nunc varius sodales porttitor. Nam faucibus tortor quis ullamcorper feugiat. Etiam mollis tellus mi, pretium consequat justo suscipit in. Etiam posuere placerat risus, eget efficitur nulla. Integer non leo vitae justo egestas consequat."
+        zLabel   = label
+                <| Vector2 (-1) 0
+                <| Font "OCRA.ttf" 20
+                <| white
+                <| "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris ipsum risus, luctus vel mollis non, hendrerit non mi. Sed at blandit ex. Donec aliquam pellentesque convallis. Integer in nisl ut ipsum dignissim vestibulum. Aenean porta nunc magna, id porttitor quam scelerisque non. Ut malesuada mi lectus, vitae finibus est lacinia nec. Nunc varius sodales porttitor. Nam faucibus tortor quis ullamcorper feugiat. Etiam mollis tellus mi, pretium consequat justo suscipit in. Etiam posuere placerat risus, eget efficitur nulla. Integer non leo vitae justo egestas consequat."
 
 testGUI :: Signal ()
 testGUI = gui [element vslider,element blueButton,pure zLabel,tri <~ input vslider]
     where
         vslider    = slider (Vector2 0.50 0.5) (Size 0.03 0.30) (RGB 0.5 0.5 0.5)
-        tri y      = testTri "" (Vector3 0 (1-y) 0) identityQuat []
+        tri y      = testTri(Vector3 0 (1-y) 0) identity
         blueButton = button (Vector2 0.75 0.5) (Size 0.10 0.15) (RGB 0 0 1)
         zLabel     = label  (Vector2 0.25 0.5) (Font "OCRA.ttf" 50) white "Zero"
 
 testScene :: Signal ()
-testScene = scene [camSig,triSig]
+testScene = scene [pure cam,terrainSig]
     where
-        -- triSig = pure $ testTri "Test" 0 identityQuat []
-        triSig = terrain
-                 <~ foldp (+) 0 (lift3 move wasd (fps 30) 5)
-                 ~~ constant identityQuat
-                 ~~ constant []
-
-        camSig = perspCamera (Vector3 0 0 10) identityQuat
-                 <~ dimensions
-                 ~~ constant 60
-                 ~~ constant 0.1
-                 ~~ constant 1000
-                 ~~ constant (RGB 0 0 0)
-
         move (x,y) z a = Vector3 (x*z*a) (y*z*a) 0
+        cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black
+        terrain pos    = SceneObject pos identity 1 (Model simplexMesh vertexColored) []
+        terrainSig     = terrain <~ foldp (+) 0 (lift3 move wasd (fps 30) 5)
 
-terrain :: Vector3 -> Quaternion -> [SceneObject] -> SceneObject
-terrain pos r chldn = SceneObject pos r 1 (Model simplexMesh vertexColored) []
-
-testTri :: String -> Vector3 -> Quaternion -> [SceneObject] -> SceneObject
-testTri name pos r chldn = SceneObject pos r 1 model []
-    where
-        model = Model (tri 0.3 white) vertexColored
+testTri :: Vector3 -> Quaternion -> SceneObject
+testTri pos r = SceneObject pos r 1 (Model (tri 0.3 white) vertexColored) []
 
 simplexMesh :: Mesh
 simplexMesh = Mesh "simplex" vertices colors uvs indices
@@ -84,7 +73,6 @@ simplexMesh = Mesh "simplex" vertices colors uvs indices
         colors   = map toColor  values
         uvs      = map toUV     values
         indices  = foldr (addIndices (round w)) [] [0..(length values)]
-
 
 -- main :: IO()
 -- main = runSignal $ needlessCrawlTest

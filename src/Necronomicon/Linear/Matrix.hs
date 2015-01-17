@@ -331,8 +331,8 @@ matZero2 = Matrix2x2 0 0
 identity3 :: Matrix3x3
 identity3 = Matrix3x3 (Vector3 1 0 0) (Vector3 0 1 0) (Vector3 0 0 1)
 
-identity :: Matrix4x4
-identity = identity4
+-- identity :: Matrix4x4
+-- identity = identity4
 
 matZero3 :: Matrix3x3
 matZero3 = Matrix3x3 0 0 0

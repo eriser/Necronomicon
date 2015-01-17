@@ -58,9 +58,7 @@ loadFontAtlas font = do
     ff <- fontFace ft $ fontPath ++ "fonts/" ++ fontKey font
     runFreeType $ ft_Set_Pixel_Sizes ff (fromIntegral $ fontSize font) 0
 
-    -- let scalex = 2 / 1920
-        -- scaley = 2 / 1080
-    cmetrics <- mapM (getCharMetrics ff) [32..128] --[32..128]
+    cmetrics <- mapM (getCharMetrics ff) [32..128]
     let (atlasWidth',atlasHeight') = foldr (\metric (w,h) -> (w + charWidth metric + 1, max h (charHeight metric))) (0,0) cmetrics
 
     atlasTexture <- newBoundTexUnit 0
@@ -132,10 +130,14 @@ getFont resources font = readIORef (fontsRef resources) >>= \fonts ->
         Nothing    -> loadFontAtlas font >>= \font' -> (writeIORef (fontsRef resources) $ Map.insert (fontKey font) font' fonts) >> return font'
         Just font' -> return font'
 
+fontScale :: Double
+fontScale = 2 / 1024
+
+--Change dynamic meshes to "load" their buffers the first time, so users don't have to supply them
 renderFont :: String -> Font -> (NecroTex.Texture -> Material) -> Linear.Matrix4x4 -> Linear.Matrix4x4 -> Resources -> IO()
 renderFont text font material modelView proj resources = do
     loadedFont <- getFont resources font
-    let (vertices,colors,uvs,indices,_,_,_) = foldl characterMesh ([],[],[],[],0,0,0) $ fitTextIntoBounds text (600,0) (characters loadedFont)
+    let (vertices,colors,uvs,indices,_,_,_) = foldl characterMesh ([],[],[],[],0,0,0) $ fitTextIntoBounds text (1 ,0) (characters loadedFont)
         characterMesh                       = textMesh (characters loadedFont) (atlasWidth loadedFont) (atlasHeight loadedFont)
         fontMesh                            = DynamicMesh (characterVertexBuffer loadedFont) (characterIndexBuffer loadedFont) vertices colors uvs indices
     drawMeshWithMaterial (material $ atlas loadedFont) fontMesh modelView proj resources
@@ -147,19 +149,16 @@ textMesh :: Map.Map Char CharMetric ->
             Char ->
             ([Linear.Vector3],[Color.Color],[Linear.Vector2],[Int],Int,Double,Double)
 textMesh charMetrics aWidth aHeight (vertices,colors,uvs,indices,count,x,y) char = case char of
-    '\n' -> (vertices ,colors ,uvs ,indices ,count    ,0   ,y - aHeight * yscale)
+    '\n' -> (vertices ,colors ,uvs ,indices ,count    ,0   ,y - aHeight * fontScale)
     _    -> (vertices',colors',uvs',indices',count + 4,x+ax,y)
     where
         charMetric = fromMaybe (CharMetric (toEnum 0) 0 0 0 0 0 0 0 0 0) $ Map.lookup char charMetrics
-        w          = charWidth  charMetric * xscale
-        h          = charHeight charMetric * yscale
-        l          = charLeft   charMetric * xscale
-        t          = charTop    charMetric * yscale
-        ax         = advanceX   charMetric * xscale
+        w          = charWidth  charMetric * fontScale
+        h          = charHeight charMetric * fontScale
+        l          = charLeft   charMetric * fontScale
+        t          = charTop    charMetric * fontScale
+        ax         = advanceX   charMetric * fontScale
         tx         = charTX     charMetric
-
-        xscale     = 2 / 1024
-        yscale     = xscale
 
         vertices'  = Linear.Vector3 (l+x)   (y + t)     0  :
                      Linear.Vector3 (l+x+w) (y + t)     0  :
@@ -180,7 +179,7 @@ emptyWord = ([],0)
 fitTextIntoBounds :: String -> (Double,Double) -> Map.Map Char CharMetric -> String
 fitTextIntoBounds text (w,_) cmetrics = finalText
     where
-        (finalText,_) = foldr (fitWordsIntoBounds w       )  emptyWord words'
+        (finalText,_) = foldr (fitWordsIntoBounds (w / fontScale))  emptyWord words'
         (_,words',_)  = foldr (splitCharIntoWords cmetrics) (emptyWord,[],0) text
 
 fitWordsIntoBounds :: Double -> TextWord -> TextWord -> TextWord

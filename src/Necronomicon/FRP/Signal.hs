@@ -310,9 +310,6 @@ runSignal s = initWindow >>= \mw ->
 
             threadDelay $ 16667
 
-            (ww,wh) <- GLFW.getWindowSize w
-            dimensionsEvent globalDispatch w ww wh
-            mousePressEvent globalDispatch w 0 GLFW.MouseButtonState'Released GLFW.modifierKeysShift
             resources <- newResources
             render False w sceneVar resources necroVars
     where
@@ -550,7 +547,7 @@ mouseDown :: Signal Bool
 mouseDown = input False 1
 
 dimensions :: Signal Vector2
-dimensions = input (Vector2 0 0) 2
+dimensions = input (Vector2 960 640) 2
 
 isDown :: Key -> Signal Bool
 isDown = input False . glfwKeyToEventKey
@@ -642,15 +639,25 @@ merges = foldr (<|>) empty
 combine :: [Signal a] -> Signal [a]
 combine signals = Signal $ \necro -> do
     (defaultValues,continuations,ids) <- liftM unzip3 $ mapM (\s -> unSignal s necro) signals
-    return $ (defaultValues,processEvent continuations,foldr IntSet.union IntSet.empty ids)
+    refs <- mapM newIORef defaultValues
+    return $ (defaultValues,processEvent $ zip3 continuations ids refs,foldr IntSet.union IntSet.empty ids)
     where
-        processEvent continuations event = do
-            liftM (foldr collapseContinuations (NoChange [])) $ mapM (\c -> c event) continuations
-            where
-                collapseContinuations (NoChange x) (NoChange xs) = NoChange $ x : xs
-                collapseContinuations (NoChange x) (Change   xs) = Change   $ x : xs
-                collapseContinuations (Change   x) (NoChange xs) = Change   $ x : xs
-                collapseContinuations (Change   x) (Change   xs) = Change   $ x : xs
+        processEvent continuations event = liftM (foldr collapseContinuations (NoChange [])) $ mapM (runEvent event) continuations
+
+        runEvent event@(Event uid _) (continuation,ids,ref) = case idGuard ids uid ref of
+            Just r  -> r
+            Nothing -> do
+                v <- continuation event
+                case v of
+                    NoChange v' -> writeIORef ref v'
+                    Change   v' -> writeIORef ref v'
+                return v
+
+collapseContinuations :: EventValue a -> EventValue [a] -> EventValue [a]
+collapseContinuations (NoChange x) (NoChange xs) = NoChange $ x : xs
+collapseContinuations (NoChange x) (Change   xs) = Change   $ x : xs
+collapseContinuations (Change   x) (NoChange xs) = Change   $ x : xs
+collapseContinuations (Change   x) (Change   xs) = Change   $ x : xs
 
 dropIf :: (a -> Bool) -> a -> Signal a -> Signal a
 dropIf pred init signal = Signal $ \necro ->do
@@ -850,9 +857,9 @@ render scene = Signal $ \necro -> do
     (sValue,sCont,ids) <- unSignal scene necro
     -- atomically $ tryPutTMVar (sceneVar necro) sValue
     atomically $ putTMVar (sceneVar necro) sValue
-    return ((),processEvent (sceneVar necro) sCont,ids)
+    return ((),processEvent (sceneVar necro) sCont ids,ids)
     where
-        processEvent sVar sCont event = do
+        processEvent sVar sCont ids event@(Event uid _) = if not $ IntSet.member uid ids then return (NoChange ()) else do
             s <- sCont event
             case s of
                 NoChange _ -> return $ NoChange ()
