@@ -205,14 +205,15 @@ fitWordsIntoBounds boundsWidth constant (text,currentWidth) (word,wordWidth) = i
     else (text ++ "\n" ++ word,wordWidth)
 
 splitCharIntoWords :: Map.Map Char CharMetric -> Char -> (TextWord,[TextWord],Double) -> (TextWord,[TextWord],Double)
-splitCharIntoWords cmetrics char ((word,wordLength),words',totalLength) = if isWhiteSpace char
-    then ( ([char],cAdvance) , (word,wordLength) : words' , totalLength + wordLength + cAdvance)
-    else ((char : word,wordLength + cAdvance), words' , totalLength)
+splitCharIntoWords cmetrics char ((word,wordLength),words',totalLength)
+    | isWhiteSpace char = (([char],cAdvance) , (word,wordLength) : words' , totalLength + wordLength + cAdvance)
+    | otherwise         = ((char : word,wordLength + cAdvance), words' , totalLength)
     where
         cAdvance = case Map.lookup char cmetrics of
             Nothing -> 10
-            Just m  -> advanceX m * fontScale -- * 1.05
+            Just m  -> advanceX m * fontScale
         isWhiteSpace c = case c of
             ' '  -> True
             '\n' -> True
             _    -> False
+        -- isLargerThan

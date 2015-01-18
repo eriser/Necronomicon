@@ -65,8 +65,8 @@ chat (Vector2 x y) (Size w h) font color = textEditSignal textInput (toggle $ li
                     (Change char,_)     -> returnNewText textRef $ t ++ [char]
 
         returnNewText r t = writeIORef r t >> (return . Change . chatBackground $ background t)
-        background      t = SceneObject (Vector3  0   ((h/2+0.2))  0) identity 1 (Model (rect w 0.1) (vertexColored color)) [textObject t]
-        textObject      t = SceneObject (Vector3  0  0  1) identity 1 (drawBoundText t font ambient (w * 0.9,h)) []
+        background      t = SceneObject (Vector3  0   ((h/2+0.2))  0) identity 1 (Model (rect w 0.05) (vertexColored color)) [textObject t]
+        textObject      t = SceneObject (Vector3  0  0  1) identity 1 (drawBoundText t font ambient (w,h)) []
         chatBackground  c = SceneObject (Vector3  x  y  0) identity 1 (Model (rect w h) (vertexColored color)) [c]
         emptyObject       = PlainObject 0 identity 1 []
 
