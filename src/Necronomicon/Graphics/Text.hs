@@ -141,7 +141,8 @@ getFont resources font = readIORef (fontsRef resources) >>= \fonts ->
         Just font' -> return font'
 
 fontScale :: Double
-fontScale = 2 / 1080
+fontScale = 1 / 1080
+-- fontScale = 1
 
 --Change dynamic meshes to "load" their buffers the first time, so users don't have to supply them
 renderFont :: String -> Font -> (NecroTex.Texture -> Material) -> Maybe (Double,Double) -> Linear.Matrix4x4 -> Linear.Matrix4x4 -> Resources -> IO()
@@ -161,7 +162,7 @@ textMesh :: Map.Map Char CharMetric ->
             Char ->
             ([Linear.Vector3],[Color.Color],[Linear.Vector2],[Int],Int,Double,Double)
 textMesh charMetrics aWidth aHeight (vertices,colors,uvs,indices,count,x,y) char = case char of
-    '\n' -> (vertices ,colors ,uvs ,indices ,count    ,0   ,y - aHeight * fontScale)
+    '\n' -> (vertices ,colors ,uvs ,indices ,count    ,0   ,y + aHeight * fontScale)
     _    -> (vertices',colors',uvs',indices',count + 4,x+ax,y)
     where
         charMetric = fromMaybe (CharMetric (toEnum 0) 0 0 0 0 0 0 0 0 0) $ Map.lookup char charMetrics
@@ -172,10 +173,10 @@ textMesh charMetrics aWidth aHeight (vertices,colors,uvs,indices,count,x,y) char
         ax         = advanceX   charMetric * fontScale
         tx         = charTX     charMetric
 
-        vertices'  = Linear.Vector3 (l+x)   (y + t     - aHeight * fontScale) 0  :
-                     Linear.Vector3 (l+x+w) (y + t     - aHeight * fontScale) 0  :
-                     Linear.Vector3 (l+x)   (y + t - h - aHeight * fontScale) 0  :
-                     Linear.Vector3 (l+x+w) (y + t - h - aHeight * fontScale) 0  : vertices
+        vertices'  = Linear.Vector3 (l+x)   (y - t     + aHeight * fontScale) 0  :
+                     Linear.Vector3 (l+x+w) (y - t     + aHeight * fontScale) 0  :
+                     Linear.Vector3 (l+x)   (y - t + h + aHeight * fontScale) 0  :
+                     Linear.Vector3 (l+x+w) (y - t + h + aHeight * fontScale) 0  : vertices
         colors'    = Color.white : Color.white : Color.white : Color.white : colors
         uvs'       = Linear.Vector2 (tx                                   ) 0 :
                      Linear.Vector2 (tx + (charWidth  charMetric) / aWidth) 0 :
@@ -209,7 +210,7 @@ splitCharIntoWords cmetrics char ((word,wordLength),words',totalLength) = if isW
     where
         cAdvance = case Map.lookup char cmetrics of
             Nothing -> 10
-            Just m  -> advanceX m * fontScale * 1.05
+            Just m  -> advanceX m * fontScale -- * 1.05
         isWhiteSpace c = case c of
             ' '  -> True
             '\n' -> True

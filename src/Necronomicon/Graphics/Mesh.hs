@@ -31,19 +31,17 @@ import qualified Graphics.Rendering.OpenGL.Raw      as GLRaw (glUniformMatrix4fv
 rect :: Double -> Double -> Mesh
 rect w h = Mesh (show w ++ show h ++ "rect") vertices colors uvs indices
     where
-        hw       = w * 0.5
-        hh       = h * 0.5
-        vertices = [Vector3 (-hw) (-hh) 0,Vector3 hw (-hh) 0,Vector3 (-hw) hh 0,Vector3 hw hh 0]
+        vertices = [Vector3 0 0 0,Vector3 w 0 0,Vector3 0 h 0,Vector3 w h 0]
         colors   = [white,white,white,white]
-        uvs      = [Vector2 0 1,Vector2 1 1,Vector2 0 0,Vector2 1 0]
+        uvs      = [Vector2 0 0,Vector2 1 0,Vector2 0 1,Vector2 1 1]
         indices  = [2,0,1,3,2,1]
 
 tri :: Double -> Color -> Mesh
 tri triSize color = Mesh (show triSize ++ "tri") vertices colors uvs indices
     where
-        vertices = [Vector3 (-triSize) (-triSize) 0, Vector3 triSize (-triSize) 0, Vector3 0 triSize 0]
+        vertices = [Vector3 0 0 0, Vector3 triSize 0 0, Vector3 0 triSize 0]
         colors   = [color,color,color]
-        uvs      = [Vector2 1 1,Vector2 0 0,Vector2 0 1]
+        uvs      = [Vector2 0 0,Vector2 1 0,Vector2 0 1]
         indices  = [0,1,2]
 
 vertexColored :: Color -> Material

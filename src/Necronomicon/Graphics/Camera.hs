@@ -24,7 +24,7 @@ perspCamera pos r fov near far clearColor = CameraObject pos r 1 c []
         c = Camera (fov/2) near far clearColor
 
 renderCamera :: (Int,Int) -> Matrix4x4 -> SceneObject -> Resources -> SceneObject -> IO Matrix4x4
-renderCamera (w,h) view scene resources g  = let newView = view .*. (trsMatrix (_position g) (_rotation g) 1) in case _camera g of
+renderCamera (w,h) view scene resources g = case _camera g of
     Nothing -> return newView
     Just c  -> do
         let  ratio    = fromIntegral w / fromIntegral h
@@ -39,10 +39,12 @@ renderCamera (w,h) view scene resources g  = let newView = view .*. (trsMatrix (
         GL.loadIdentity
 
         case _fov c of
-            0 -> drawScene identity4 (invert newView) (orthoMatrix (-1 * ratio) (1 * ratio) (-1) 1 (-1) 1) resources scene
+            0 -> drawScene identity4 (invert newView) (orthoMatrix 0 ratio 1 0 (-1) 1) resources scene
             _ -> drawScene identity4 (invert newView) (perspMatrix (_fov c) ratio (_near c) (_far c))      resources scene
 
         return $ newView
+    where
+        newView = view .*. (trsMatrix (_position g) (_rotation g) 1)
 
 renderCameras :: (Int,Int) -> Matrix4x4 -> SceneObject -> Resources -> SceneObject -> IO ()
 renderCameras (w,h) view scene resources g = renderCamera (w,h) view scene resources g >>= \newView -> mapM_ (renderCameras (w,h) newView scene resources) (_children g)
@@ -50,9 +52,9 @@ renderCameras (w,h) view scene resources g = renderCamera (w,h) view scene resou
 renderGraphics :: GLFW.Window -> Resources -> SceneObject -> IO ()
 renderGraphics window resources scene = do
     GL.depthFunc     GL.$= Just GL.Less
-    -- GL.blend         GL.$= GL.Enabled
-    -- GL.blendBuffer 0 GL.$= GL.Enabled
-    -- GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
+    GL.blend         GL.$= GL.Enabled
+    GL.blendBuffer 0 GL.$= GL.Enabled
+    GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
 
     (w,h) <- GLFW.getWindowSize window
     renderCameras (w,h) identity4 scene resources scene

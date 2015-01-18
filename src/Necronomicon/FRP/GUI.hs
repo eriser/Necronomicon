@@ -49,22 +49,25 @@ chat (Vector2 x y) (Size w h) font color = textEditSignal textInput (toggle $ li
             let ids = IntSet.union inIDs tIDs
             textRef   <- newIORef ""
             activeRef <- newIORef False
-            return (emptyObject,processEvent textRef activeRef inputCont toggleCont,ids)
+            return (chatBackground emptyObject,processEvent textRef activeRef inputCont toggleCont,ids)
 
         processEvent textRef activeRef inputCont toggleCont event = toggleCont event >>= \toggle -> case toggle of
-            Change   isActive -> writeIORef activeRef isActive >> if isActive then readIORef textRef >>= return . Change . background else return (Change emptyObject)
-            NoChange isActive -> if not isActive then return (NoChange emptyObject) else do
+            Change   isActive -> writeIORef activeRef isActive >> if isActive
+                then readIORef textRef >>= return . Change . chatBackground . background
+                else return (Change $ chatBackground emptyObject)
+            NoChange isActive -> if not isActive then return (NoChange $ chatBackground emptyObject) else do
                 t <- readIORef textRef
                 c <- inputCont event
                 case (c,t) of
-                    (NoChange _,_)        -> return . NoChange $ background t
-                    (Change '\n',(ht:ts)) -> returnNewText textRef ""
-                    (Change '\b',(ht:ts)) -> returnNewText textRef $ init t
-                    (Change char,_)       -> returnNewText textRef $ t ++ [char]
+                    (NoChange _,_)      -> return . NoChange $ background t
+                    (Change '\n',(_:_)) -> returnNewText textRef ""
+                    (Change '\b',(_:_)) -> returnNewText textRef $ init t
+                    (Change char,_)     -> returnNewText textRef $ t ++ [char]
 
-        returnNewText r t = writeIORef r t >> (return . Change $ background t)
-        background      t = SceneObject (Vector3  x         y    0) identity 1 (Model (rect w h) (vertexColored color)) [textObject t]
-        textObject      t = SceneObject (Vector3 (-w/2.05) (h/2) 1) identity 1 (drawBoundText t font ambient (w * 0.9,h)) []
+        returnNewText r t = writeIORef r t >> (return . Change . chatBackground $ background t)
+        background      t = SceneObject (Vector3  0   ((h/2+0.2))  0) identity 1 (Model (rect w 0.1) (vertexColored color)) [textObject t]
+        textObject      t = SceneObject (Vector3  0  0  1) identity 1 (drawBoundText t font ambient (w * 0.9,h)) []
+        chatBackground  c = SceneObject (Vector3  x  y  0) identity 1 (Model (rect w h) (vertexColored color)) [c]
         emptyObject       = PlainObject 0 identity 1 []
 
 slider :: Vector2 -> Size -> Color -> Signal (Gui Double)
