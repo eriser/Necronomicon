@@ -36,11 +36,29 @@ label :: Vector2 -> Font -> Color -> String -> SceneObject
 label (Vector2 x y) font color text = SceneObject (Vector3 x y 0) identity 1 (drawText text font ambient) []
 
 textEdit :: Vector2 -> Size -> Font -> Color -> Signal SceneObject
-textEdit (Vector2 x y) (Size w h) font color = pure background
+textEdit (Vector2 x y) (Size w h) font color = textEditSignal textInput
     where
-        background = SceneObject (Vector3  x       y    0) identity 1 (Model (rect w h) (vertexColored color)) [textObject]
-        textObject = SceneObject (Vector3 (-w/2.05)  (h/2) 1) identity 1 (drawBoundText text font ambient (w * 0.9,h)) []
-        text       = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris ipsum risus, luctus vel mollis non, hendrerit non mi. Sed at blandit ex. Donec aliquam pellentesque convallis. Integer in nisl ut ipsum dignissim vestibulum. Aenean porta nunc magna, id porttitor quam scelerisque non. Ut malesuada mi lectus, vitae finibus est lacinia nec. Nunc varius sodales porttitor. Nam faucibus tortor quis ullamcorper feugiat. Etiam mollis tellus mi, pretium consequat justo suscipit in. Etiam posuere placerat risus, eget efficitur nulla. Integer non leo vitae justo egestas consequat."
+        textEditSignal textInputSignal = Signal $ \necro -> do
+            (_,inputCont,ids) <- unSignal textInputSignal necro
+            textRef <- newIORef ""
+            return (background "",processEvent textRef inputCont,ids)
+
+        processEvent textRef inputCont event = do
+            t <- readIORef textRef
+            c <- inputCont event
+            case (c,t) of
+                (NoChange _,_)        -> return . NoChange $ background t
+                (Change '\b',(ht:ts)) -> do
+                    let text = init t
+                    writeIORef textRef text
+                    return . Change $ background text
+                (Change char,_) -> do
+                    let text = t ++ [char]
+                    writeIORef textRef text
+                    return . Change $ background text
+
+        background t = SceneObject (Vector3  x         y    0) identity 1 (Model (rect w h) (vertexColored color)) [textObject t]
+        textObject t = SceneObject (Vector3 (-w/2.05) (h/2) 1) identity 1 (drawBoundText t font ambient (w * 0.9,h)) []
 
 guiEvent :: (Typeable a) => IORef (Gui b) -> Dynamic -> (a -> IO (EventValue (Gui b))) -> IO (EventValue (Gui b))
 guiEvent ref v f = case fromDynamic v of

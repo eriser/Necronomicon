@@ -8,7 +8,7 @@ testChat :: Signal ()
 testChat = gui [chatBox]
     where
         chatBox = textEdit 0 <| Size 2 0.25
-                             <| Font "OCRA.ttf" 16
+                             <| Font "OCRA.ttf" 26
                              <| gray 0.1
 
 testPattern :: Signal ()
@@ -39,7 +39,7 @@ testShader = gui [so <~ mousePos,pure zLabel]
         zLabel   = label <| Vector2 (-1) 0
                          <| Font "OCRA.ttf" 20
                          <| white
-                         <| "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris ipsum risus, luctus vel mollis non, hendrerit non mi. Sed at blandit ex. Donec aliquam pellentesque convallis. Integer in nisl ut ipsum dignissim vestibulum. Aenean porta nunc magna, id porttitor quam scelerisque non. Ut malesuada mi lectus, vitae finibus est lacinia nec. Nunc varius sodales porttitor. Nam faucibus tortor quis ullamcorper feugiat. Etiam mollis tellus mi, pretium consequat justo suscipit in. Etiam posuere placerat risus, eget efficitur nulla. Integer non leo vitae justo egestas consequat."
+                         <| "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris ipsum risus, luctus vel mollis non, hendrerit non mi. Sed at blandit ex. Donec aliquam pellentesque convallis. Integer in nisl ut ipsum dignissim vestibulum. Aenean porta nunc magna, id porttitor quam scelerisque non. Ut malesuada mi lectus, vitae finibus est lacinia nec. Nunc varius sodales porttitor. Nam faucibus tortor quis ullamcorper feugiat. Etiam mollis tellus mi, pretium consequat justo suscipit in. Etiam posuere placerat risus, eget efficitur nulla."
 
 testGUI :: Signal ()
 testGUI = gui [element vslider,element blueButton,pure zLabel,tri <~ input vslider]

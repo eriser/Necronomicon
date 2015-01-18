@@ -208,8 +208,8 @@ splitCharIntoWords cmetrics char ((word,wordLength),words',totalLength) = if isW
     else ((char : word,wordLength + cAdvance), words' , totalLength)
     where
         cAdvance = case Map.lookup char cmetrics of
-            Nothing -> 0
-            Just m  -> advanceX m * fontScale
+            Nothing -> 10
+            Just m  -> advanceX m * fontScale * 1.05
         isWhiteSpace c = case c of
             ' '  -> True
             '\n' -> True

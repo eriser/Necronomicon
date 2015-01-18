@@ -50,9 +50,9 @@ renderCameras (w,h) view scene resources g = renderCamera (w,h) view scene resou
 renderGraphics :: GLFW.Window -> Resources -> SceneObject -> IO ()
 renderGraphics window resources scene = do
     GL.depthFunc     GL.$= Just GL.Less
-    GL.blend         GL.$= GL.Enabled
-    GL.blendBuffer 0 GL.$= GL.Enabled
-    GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
+    -- GL.blend         GL.$= GL.Enabled
+    -- GL.blendBuffer 0 GL.$= GL.Enabled
+    -- GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
 
     (w,h) <- GLFW.getWindowSize window
     renderCameras (w,h) identity4 scene resources scene
