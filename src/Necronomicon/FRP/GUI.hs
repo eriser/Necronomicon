@@ -1,12 +1,13 @@
 
-module Necronomicon.FRP.GUI (button,
-                             Gui(Gui),
+module Necronomicon.FRP.GUI (Gui(..),
+                             Size(..),
+                             button,
                              input,
                              element,
                              gui,
                              label,
                              slider,
-                             Size(Size))where
+                             textEdit)where
 
 import           Data.Dynamic
 import qualified Data.IntSet             as IntSet
@@ -27,12 +28,37 @@ element :: Signal (Gui a) -> Signal SceneObject
 element = lift $ \(Gui _ s) -> s
 
 gui :: [Signal SceneObject] -> Signal ()
-gui gs = render $ root <~ combine (camSig : gs)
+gui gs = render $ root <~ combine (pure cam : gs)
     where
-        camSig = orthoCamera (Vector3 0 0 0) identityQuat <~ dimensions ~~ constant (RGB 0 0 0)
+        cam = orthoCamera 0 identity black
 
-label :: Vector2 -> Font -> Color ->  String -> SceneObject
-label (Vector2 x y) font color text = SceneObject (Vector3 x y 0) identityQuat 1 (drawText text font ambient) []
+label :: Vector2 -> Font -> Color -> String -> SceneObject
+label (Vector2 x y) font color text = SceneObject (Vector3 x y 0) identity 1 (drawText text font ambient) []
+
+textEdit :: Vector2 -> Size -> Font -> Color -> Signal SceneObject
+textEdit (Vector2 x y) (Size w h) font color = textEditSignal textInput
+    where
+        textEditSignal textInputSignal = Signal $ \necro -> do
+            (_,inputCont,ids) <- unSignal textInputSignal necro
+            textRef <- newIORef ""
+            return (background "",processEvent textRef inputCont,ids)
+
+        processEvent textRef inputCont event = do
+            t <- readIORef textRef
+            c <- inputCont event
+            case (c,t) of
+                (NoChange _,_)        -> return . NoChange $ background t
+                (Change '\b',(ht:ts)) -> do
+                    let text = init t
+                    writeIORef textRef text
+                    return . Change $ background text
+                (Change char,_) -> do
+                    let text = t ++ [char]
+                    writeIORef textRef text
+                    return . Change $ background text
+
+        background t = SceneObject (Vector3  x         y    0) identity 1 (Model (rect w h) (vertexColored color)) [textObject t]
+        textObject t = SceneObject (Vector3 (-w/2.05) (h/2) 1) identity 1 (drawBoundText t font ambient (w * 0.9,h)) []
 
 guiEvent :: (Typeable a) => IORef (Gui b) -> Dynamic -> (a -> IO (EventValue (Gui b))) -> IO (EventValue (Gui b))
 guiEvent ref v f = case fromDynamic v of
@@ -62,8 +88,8 @@ slider (Vector2 x y) (Size w h) color = Signal $ \necro -> do
                         return $ Change g
             | otherwise = readIORef ref >>= return . NoChange
 
-        s  h = SceneObject (Vector3 x y 0)    identityQuat 1 sm [v h]
-        v  h = SceneObject (Vector3 0 0 0.01) identityQuat 1 (vm h) []
+        s  h = SceneObject (Vector3 x y 0)    identity 1 sm [v h]
+        v  h = SceneObject (Vector3 0 0 0.01) identity 1 (vm h) []
         p0 v = Vector3 (0 - hw) (hh h - v * h) 0
         p1 v = Vector3 (0 - hw) (0 + hh h) 0
         p2 v = Vector3 (0 + hw) (0 + hh h) 0
@@ -106,10 +132,10 @@ button (Vector2 x y) (Size w h) color = Signal $ \necro -> do
                     True  -> return $ NoChange (Gui v st)
                     False -> return $ NoChange (Gui v sf)
 
-        st = SceneObject (Vector3 x y 0) identityQuat 1 (m color) []
-        sf = SceneObject (Vector3 x y 0) identityQuat 1 (m fc   ) []
+        st = SceneObject (Vector3 x y 0) identity 1 (m color) []
+        sf = SceneObject (Vector3 x y 0) identity 1 (m fc   ) []
         fc = RGB 0.5 0.5 0.5
         hw = w * 0.5
         hh = h * 0.5
-        m c= Model (rect w h) vertexColored
+        m c= Model (rect w h) (vertexColored c)
         --c is color....

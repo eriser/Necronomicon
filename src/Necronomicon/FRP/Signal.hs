@@ -81,6 +81,10 @@ module Necronomicon.FRP.Signal (
     constant,
     sigPrint,
     scene,
+    glfwKeyToEventKey,
+    eventKeyToChar,
+    textInput,
+    unSignal,
     module Control.Applicative
     ) where
 
@@ -174,28 +178,25 @@ instance Applicative Signal where
         return (defaultValue,processState fCont gCont ref ids,ids)
         where
             processState fCont gCont ref ids event@(Event uid _) = case idGuard ids uid ref of
+            --TODO: Maybe lazy case statements are the best way to handle this!
                 Just r -> r
                 Nothing-> do
                     fValue <- fCont event
                     gValue <- gCont event
-                    case fValue of
-                        Change f' -> case gValue of
-                            Change g' -> do
-                                let newValue = f' g'
-                                writeIORef ref newValue
-                                return $ Change newValue
-                            NoChange g' -> do
-                                let newValue = f' g'
-                                writeIORef ref newValue
-                                return $ Change newValue
-                        NoChange f' -> case gValue of
-                            Change g' -> do
-                                let newValue = f' g'
-                                writeIORef ref newValue
-                                return $ Change newValue
-                            NoChange _ -> do
-                                prev <- readIORef ref
-                                return $ NoChange prev
+                    case (fValue,gValue) of
+                        (Change f',Change g') -> do
+                            let newValue = f' g'
+                            writeIORef ref newValue
+                            return $ Change newValue
+                        (Change f',NoChange g') -> do
+                            let newValue = f' g'
+                            writeIORef ref newValue
+                            return $ Change newValue
+                        (NoChange f',Change g') -> do
+                            let newValue = f' g'
+                            writeIORef ref newValue
+                            return $ Change newValue
+                        _ -> readIORef ref >>= return . NoChange
 
 instance Alternative Signal where
     empty   = Signal $ \_ -> return (undefined,\_ -> return $ NoChange undefined,IntSet.empty)
@@ -313,9 +314,8 @@ runSignal s = initWindow >>= \mw ->
 
             threadDelay $ 16667
 
-            (ww,wh) <- GLFW.getWindowSize w
-            dimensionsEvent globalDispatch w ww wh
-            mousePressEvent globalDispatch w 0 GLFW.MouseButtonState'Released GLFW.modifierKeysShift
+            -- GL.doubleBuffer GL.$= True
+
             resources <- newResources
             render False w sceneVar resources necroVars
     where
@@ -504,6 +504,7 @@ keyRAlt   = GLFW.Key'RightAlt
 keySpace  = GLFW.Key'Space
 keyLShift = GLFW.Key'LeftShift
 keyRShift = GLFW.Key'RightShift
+keyBackspace = GLFW.Key'Backspace
 
 glfwKeyToEventKey :: GLFW.Key -> Int
 glfwKeyToEventKey k
@@ -541,7 +542,86 @@ glfwKeyToEventKey k
     | k == keyRAlt  = 131
     | k == keyLShift= 132
     | k == keyRShift= 133
+    | k == keyBackspace = 134
     | otherwise     = -1
+
+eventKeyToChar :: Int -> Bool -> Char
+eventKeyToChar k isShiftDown
+    | k == 100 && not isShiftDown = 'a'
+    | k == 101 && not isShiftDown = 'b'
+    | k == 102 && not isShiftDown = 'c'
+    | k == 103 && not isShiftDown = 'd'
+    | k == 104 && not isShiftDown = 'e'
+    | k == 105 && not isShiftDown = 'f'
+    | k == 106 && not isShiftDown = 'g'
+    | k == 107 && not isShiftDown = 'h'
+    | k == 108 && not isShiftDown = 'i'
+    | k == 109 && not isShiftDown = 'j'
+    | k == 110 && not isShiftDown = 'k'
+    | k == 111 && not isShiftDown = 'l'
+    | k == 112 && not isShiftDown = 'm'
+    | k == 113 && not isShiftDown = 'n'
+    | k == 114 && not isShiftDown = 'o'
+    | k == 115 && not isShiftDown = 'p'
+    | k == 116 && not isShiftDown = 'q'
+    | k == 117 && not isShiftDown = 'r'
+    | k == 118 && not isShiftDown = 's'
+    | k == 119 && not isShiftDown = 't'
+    | k == 120 && not isShiftDown = 'u'
+    | k == 121 && not isShiftDown = 'v'
+    | k == 122 && not isShiftDown = 'w'
+    | k == 123 && not isShiftDown = 'x'
+    | k == 124 && not isShiftDown = 'y'
+    | k == 125 && not isShiftDown = 'z'
+
+    | k == 100 && isShiftDown = 'A'
+    | k == 101 && isShiftDown = 'B'
+    | k == 102 && isShiftDown = 'C'
+    | k == 103 && isShiftDown = 'D'
+    | k == 104 && isShiftDown = 'E'
+    | k == 105 && isShiftDown = 'F'
+    | k == 106 && isShiftDown = 'G'
+    | k == 107 && isShiftDown = 'H'
+    | k == 108 && isShiftDown = 'I'
+    | k == 109 && isShiftDown = 'J'
+    | k == 110 && isShiftDown = 'K'
+    | k == 111 && isShiftDown = 'L'
+    | k == 112 && isShiftDown = 'M'
+    | k == 113 && isShiftDown = 'N'
+    | k == 114 && isShiftDown = 'O'
+    | k == 115 && isShiftDown = 'P'
+    | k == 116 && isShiftDown = 'Q'
+    | k == 117 && isShiftDown = 'R'
+    | k == 118 && isShiftDown = 'S'
+    | k == 119 && isShiftDown = 'T'
+    | k == 120 && isShiftDown = 'U'
+    | k == 121 && isShiftDown = 'V'
+    | k == 122 && isShiftDown = 'W'
+    | k == 123 && isShiftDown = 'X'
+    | k == 124 && isShiftDown = 'Y'
+    | k == 125 && isShiftDown = 'Z'
+
+    | k == 126 = '\n'
+    | k == 127 = ' '
+    | k == 128 = ' '
+    | k == 129 = ' '
+    | k == 130 = ' '
+    | k == 131 = ' '
+    | k == 132 = ' '
+    | k == 133 = ' '
+    | k == 134 = '\b'
+    | otherwise = ' '
+
+textInput :: Signal Char
+textInput = Signal $ \necro -> do
+    shiftRef <- newIORef False
+    charRef  <- newIORef ' '
+    return (' ',processEvent shiftRef charRef,IntSet.fromList [100..134])
+    where
+        processEvent shiftRef charRef (Event uid eval) = case (uid == 132 || uid == 133,uid >= 100 && uid <= 134,fromDynamic eval) of
+            (True,_,Just isShiftDown) -> writeIORef shiftRef isShiftDown >> readIORef charRef >>= return . NoChange
+            (_,True,Just True)        -> readIORef  shiftRef >>= return . Change . eventKeyToChar uid
+            _                         -> readIORef  charRef  >>= return . NoChange
 
 mousePos :: Signal (Double,Double)
 mousePos = input (0,0) 0
@@ -553,7 +633,7 @@ mouseDown :: Signal Bool
 mouseDown = input False 1
 
 dimensions :: Signal Vector2
-dimensions = input (Vector2 0 0) 2
+dimensions = input (Vector2 960 640) 2
 
 isDown :: Key -> Signal Bool
 isDown = input False . glfwKeyToEventKey
@@ -645,15 +725,25 @@ merges = foldr (<|>) empty
 combine :: [Signal a] -> Signal [a]
 combine signals = Signal $ \necro -> do
     (defaultValues,continuations,ids) <- liftM unzip3 $ mapM (\s -> unSignal s necro) signals
-    return $ (defaultValues,processEvent continuations,foldr IntSet.union IntSet.empty ids)
+    refs <- mapM newIORef defaultValues
+    return $ (defaultValues,processEvent $ zip3 continuations ids refs,foldr IntSet.union IntSet.empty ids)
     where
-        processEvent continuations event = do
-            liftM (foldr collapseContinuations (NoChange [])) $ mapM (\c -> c event) continuations
-            where
-                collapseContinuations (NoChange x) (NoChange xs) = NoChange $ x : xs
-                collapseContinuations (NoChange x) (Change   xs) = Change   $ x : xs
-                collapseContinuations (Change   x) (NoChange xs) = Change   $ x : xs
-                collapseContinuations (Change   x) (Change   xs) = Change   $ x : xs
+        processEvent continuations event = liftM (foldr collapseContinuations (NoChange [])) $ mapM (runEvent event) continuations
+
+        runEvent event@(Event uid _) (continuation,ids,ref) = case idGuard ids uid ref of
+            Just r  -> r
+            Nothing -> do
+                v <- continuation event
+                case v of
+                    NoChange v' -> writeIORef ref v'
+                    Change   v' -> writeIORef ref v'
+                return v
+
+collapseContinuations :: EventValue a -> EventValue [a] -> EventValue [a]
+collapseContinuations (NoChange x) (NoChange xs) = NoChange $ x : xs
+collapseContinuations (NoChange x) (Change   xs) = Change   $ x : xs
+collapseContinuations (Change   x) (NoChange xs) = Change   $ x : xs
+collapseContinuations (Change   x) (Change   xs) = Change   $ x : xs
 
 dropIf :: (a -> Bool) -> a -> Signal a -> Signal a
 dropIf pred init signal = Signal $ \necro ->do
@@ -853,9 +943,9 @@ render scene = Signal $ \necro -> do
     (sValue,sCont,ids) <- unSignal scene necro
     -- atomically $ tryPutTMVar (sceneVar necro) sValue
     atomically $ putTMVar (sceneVar necro) sValue
-    return ((),processEvent (sceneVar necro) sCont,ids)
+    return ((),processEvent (sceneVar necro) sCont ids,ids)
     where
-        processEvent sVar sCont event = do
+        processEvent sVar sCont ids event@(Event uid _) = if not $ IntSet.member uid ids then return (NoChange ()) else do
             s <- sCont event
             case s of
                 NoChange _ -> return $ NoChange ()

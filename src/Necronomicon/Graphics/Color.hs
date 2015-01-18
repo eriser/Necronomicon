@@ -6,7 +6,7 @@ import qualified Graphics.Rendering.OpenGL as GL
 import Necronomicon.Linear.Vector
 
 --Vector4 instance?
-data Color = RGB Double Double Double | RGBA Double Double Double Double deriving (Show, Eq) 
+data Color = RGB Double Double Double | RGBA Double Double Double Double deriving (Show, Eq)
 
 instance Num Color where
     (+)     c1 c2 = cadd c1 c2
@@ -57,7 +57,7 @@ instance LinearFunction Color where
     distance  _ _ = undefined
     angle     _ _ = undefined
     direction _ _ = undefined
-    
+
 cmul :: Color -> Color -> Color
 cmul (RGB r1 g1 b1)     (RGB r2 g2 b2)     = RGB  (r1*r2) (g1*g2) (b1*b2)
 cmul (RGB r1 g1 b1)     (RGBA r2 g2 b2 a)  = RGBA (r1*r2) (g1*g2) (b1*b2) a
@@ -117,7 +117,6 @@ cdot (RGB _ _ _)        (RGBA _ _ _ _)     = undefined
 cdot (RGBA _ _ _ _)     (RGB _ _ _)        = undefined
 cdot (RGBA r1 g1 b1 a1) (RGBA r2 g2 b2 a2) = (r1*r2) + (g1*g2) + (b1*b2) + (a1*a2)
 
-
 clerp :: Color -> Color -> Double -> Color
 clerp (RGB r1 g1 b1    ) (RGB r2 g2 b2    ) t = RGB  (r1 + (r2 - r1)*t) (g1 + (g2 - g1)*t) (b1 + (b2 - b1)*t)
 clerp (RGBA r1 g1 b1 a1) (RGBA r2 g2 b2 a2) t = RGBA (r1 + (r2 - r1)*t) (g1 + (g2 - g1)*t) (b1 + (b2 - b1)*t) (a1 + (a2 - a1)*t)
@@ -138,6 +137,9 @@ white = RGB 1 1 1
 
 whiteA :: Color
 whiteA = RGBA 1 1 1 1
+
+gray :: Double -> Color
+gray shade = RGB shade shade shade
 
 cast :: Color -> Color
 cast (RGB r g b   ) = RGBA r g b 1

@@ -22,7 +22,7 @@ module Necronomicon.Linear.Quaternion (Quaternion(Quaternion,qw,qv),
                                        fromAxisAngle',
                                        fromAA',
                                        slerp,
-                                       identityQuat,
+                                       identity,
                                        zeroQuat) where
 
 import Necronomicon.Linear.Math
@@ -193,7 +193,7 @@ instance LinearFunction Quaternion where
     magnitude    q                                       = sqrt (sqrMagnitude q)
     sqrMagnitude   (Quaternion w  v )                    = w*w + sqrMagnitude v
     dot            (Quaternion w1 v1) (Quaternion w2 v2) = w1*w2 + dot v1 v2
-    normalize    q@(Quaternion w  v )                    = if mag > 0 then Quaternion (w/mag) (v .*. mag) else identityQuat
+    normalize    q@(Quaternion w  v )                    = if mag > 0 then Quaternion (w/mag) (v .*. mag) else identity
         where
             mag = magnitude q
 
@@ -208,8 +208,8 @@ instance LinearFunction Quaternion where
     angle     _ _ = undefined
     direction _ _ = undefined
 
-identityQuat :: Quaternion
-identityQuat = Quaternion 1 (Vector3 0 0 0)
+identity :: Quaternion
+identity = Quaternion 1 (Vector3 0 0 0)
 
 zeroQuat :: Quaternion
 zeroQuat = Quaternion 0 (Vector3 0 0 0)

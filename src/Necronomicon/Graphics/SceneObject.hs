@@ -15,16 +15,11 @@ import           Necronomicon.Linear
 
 --Camera
 data Camera = Camera {
-    _dimensions :: Vector2,
     _fov        :: Double,
     _near       :: Double,
     _far        :: Double,
     _clearColor :: Color
     } deriving (Show)
-
---setters
-dimensions_ :: Vector2 -> Camera -> Camera
-dimensions_ v r = r{_dimensions=v}
 
 fov_ :: Double -> Camera -> Camera
 fov_ v r = r{_fov=v}
@@ -37,10 +32,6 @@ far_ v r = r{_far=v}
 
 clearColor_ :: Color -> Camera -> Camera
 clearColor_ v r = r{_clearColor=v}
-
---modifiers
-_dimensions_ :: (Vector2 -> Vector2) -> Camera -> Camera
-_dimensions_ f r = r{_dimensions=f (_dimensions r)}
 
 _fov_ :: (Double -> Double) -> Camera -> Camera
 _fov_ f r = r{_fov=f (_fov r)}
@@ -57,7 +48,6 @@ _clearColor_ f r = r{_clearColor=f (_clearColor r)}
 --Different kinds of SceneObjects?
 
 --SceneObject
--- TODO: finish removing cruft!
 data SceneObject = SceneObject  Vector3 Quaternion Vector3 Model  [SceneObject]
                  | CameraObject Vector3 Quaternion Vector3 Camera [SceneObject]
                  | PlainObject  Vector3 Quaternion Vector3        [SceneObject]
@@ -155,15 +145,15 @@ _children_ f (PlainObject  p r s   cs) = PlainObject  p r s   (f cs)
 -------------------------------------------------------------------------------------------------------------------
 
 root :: [SceneObject] -> SceneObject
-root = PlainObject 0 identityQuat 1
+root = PlainObject 0 identity 1
 
 drawScene :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> SceneObject -> IO ()
 drawScene world view proj resources g = draw world view proj resources g >>= \newWorld -> mapM_ (drawScene newWorld view proj resources) (_children g)
 
 draw :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> SceneObject -> IO Matrix4x4
 draw world view proj resources g = case _model g of
-    Just (Model             mesh material) -> drawMeshWithMaterial material mesh modelView proj resources >> return newWorld
-    Just (FontRenderer text font material) -> renderFont text font material modelView proj resources >> return newWorld
+    Just    (Model        mesh     material             ) -> drawMeshWithMaterial material        mesh modelView proj resources >> return newWorld
+    Just    (FontRenderer text font material maybeBounds) -> renderFont text font material maybeBounds modelView proj resources >> return newWorld
     Nothing                                -> return newWorld
     where
         newWorld  = world    .*. (trsMatrix (_position g) (_rotation g) (_scale g))
