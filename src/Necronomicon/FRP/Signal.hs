@@ -85,6 +85,7 @@ module Necronomicon.FRP.Signal (
     eventKeyToChar,
     textInput,
     unSignal,
+    toggle,
     module Control.Applicative
     ) where
 
@@ -618,10 +619,22 @@ textInput = Signal $ \necro -> do
     charRef  <- newIORef ' '
     return (' ',processEvent shiftRef charRef,IntSet.fromList [100..134])
     where
-        processEvent shiftRef charRef (Event uid eval) = case (uid == 132 || uid == 133,uid >= 100 && uid <= 134,fromDynamic eval) of
+        processEvent shiftRef charRef (Event uid eval) = trace "textInput" $ case (uid == 132 || uid == 133,uid >= 100 && uid <= 134,fromDynamic eval) of
             (True,_,Just isShiftDown) -> writeIORef shiftRef isShiftDown >> readIORef charRef >>= return . NoChange
             (_,True,Just True)        -> readIORef  shiftRef >>= return . Change . eventKeyToChar uid
             _                         -> readIORef  charRef  >>= return . NoChange
+
+toggle :: Signal Bool -> Signal Bool
+toggle boolSignal = Signal $ \necro -> do
+    (bValue,boolCont,boolIds) <- unSignal boolSignal necro
+    boolRef <- newIORef bValue
+    return (bValue,processEvent boolRef boolCont boolIds,boolIds)
+    where
+        processEvent boolRef boolCont ids event@(Event uid _) = case idGuard ids uid boolRef of
+            Just r  -> r
+            Nothing -> boolCont event >>= \b -> case b of
+                Change True -> readIORef boolRef >>= \prevBool -> writeIORef boolRef (not prevBool) >> return (Change (not prevBool))
+                _           -> readIORef boolRef >>= return . NoChange
 
 mousePos :: Signal (Double,Double)
 mousePos = input (0,0) 0

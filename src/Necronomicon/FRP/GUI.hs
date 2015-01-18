@@ -7,7 +7,7 @@ module Necronomicon.FRP.GUI (Gui(..),
                              gui,
                              label,
                              slider,
-                             textEdit)where
+                             chat)where
 
 import           Data.Dynamic
 import qualified Data.IntSet             as IntSet
@@ -32,38 +32,40 @@ gui gs = render $ root <~ combine (pure cam : gs)
     where
         cam = orthoCamera 0 identity black
 
-label :: Vector2 -> Font -> Color -> String -> SceneObject
-label (Vector2 x y) font color text = SceneObject (Vector3 x y 0) identity 1 (drawText text font ambient) []
-
-textEdit :: Vector2 -> Size -> Font -> Color -> Signal SceneObject
-textEdit (Vector2 x y) (Size w h) font color = textEditSignal textInput
-    where
-        textEditSignal textInputSignal = Signal $ \necro -> do
-            (_,inputCont,ids) <- unSignal textInputSignal necro
-            textRef <- newIORef ""
-            return (background "",processEvent textRef inputCont,ids)
-
-        processEvent textRef inputCont event = do
-            t <- readIORef textRef
-            c <- inputCont event
-            case (c,t) of
-                (NoChange _,_)        -> return . NoChange $ background t
-                (Change '\b',(ht:ts)) -> do
-                    let text = init t
-                    writeIORef textRef text
-                    return . Change $ background text
-                (Change char,_) -> do
-                    let text = t ++ [char]
-                    writeIORef textRef text
-                    return . Change $ background text
-
-        background t = SceneObject (Vector3  x         y    0) identity 1 (Model (rect w h) (vertexColored color)) [textObject t]
-        textObject t = SceneObject (Vector3 (-w/2.05) (h/2) 1) identity 1 (drawBoundText t font ambient (w * 0.9,h)) []
-
 guiEvent :: (Typeable a) => IORef (Gui b) -> Dynamic -> (a -> IO (EventValue (Gui b))) -> IO (EventValue (Gui b))
 guiEvent ref v f = case fromDynamic v of
     Nothing -> print "button Type error" >> readIORef ref >>= return . NoChange
     Just v' -> f v'
+
+label :: Vector2 -> Font -> Color -> String -> SceneObject
+label (Vector2 x y) font color text = SceneObject (Vector3 x y 0) identity 1 (drawText text font ambient) []
+
+chat :: Vector2 -> Size -> Font -> Color -> Signal SceneObject
+chat (Vector2 x y) (Size w h) font color = textEditSignal textInput (toggle ctrl)
+    where
+        textEditSignal textInputSignal toggleSignal = Signal $ \necro -> do
+            (_,inputCont,inIDs) <- unSignal textInputSignal necro
+            (_,toggleCont,tIDs) <- unSignal toggleSignal    necro
+            let ids = IntSet.union inIDs tIDs
+            textRef   <- newIORef ""
+            activeRef <- newIORef False
+            return (emptyObject,processEvent textRef activeRef inputCont toggleCont,ids)
+
+        processEvent textRef activeRef inputCont toggleCont event = toggleCont event >>= \toggle -> case toggle of
+            Change   isActive -> writeIORef activeRef isActive >> if isActive then readIORef textRef >>= return . Change . background else return (Change emptyObject)
+            NoChange isActive -> if not isActive then return (NoChange emptyObject) else do
+                t <- readIORef textRef
+                c <- inputCont event
+                case (c,t) of
+                    (NoChange _,_)        -> return . NoChange $ background t
+                    (Change '\n',(ht:ts)) -> returnNewText textRef ""
+                    (Change '\b',(ht:ts)) -> returnNewText textRef $ init t
+                    (Change char,_)       -> returnNewText textRef $ t ++ [char]
+
+        returnNewText r t = writeIORef r t >> (return . Change $ background t)
+        background      t = SceneObject (Vector3  x         y    0) identity 1 (Model (rect w h) (vertexColored color)) [textObject t]
+        textObject      t = SceneObject (Vector3 (-w/2.05) (h/2) 1) identity 1 (drawBoundText t font ambient (w * 0.9,h)) []
+        emptyObject       = PlainObject 0 identity 1 []
 
 slider :: Vector2 -> Size -> Color -> Signal (Gui Double)
 slider (Vector2 x y) (Size w h) color = Signal $ \necro -> do
