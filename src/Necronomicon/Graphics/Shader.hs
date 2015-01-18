@@ -59,13 +59,15 @@ loadShaderBS filePath shaderType src = do
     return newShader
 
 loadVertexShader :: FilePath -> VertexShader
-loadVertexShader   path = VertexShader load
+loadVertexShader path = VertexShader load
    where
-    load = do
-        putStrLn $ "loadVertexShader: " ++ path
-        resources <- getDataFileName ""
-        shaderPath <- BS.readFile $ resources ++ "shaders/" ++ path
-        loadShaderBS path GL.VertexShader shaderPath
+       load = do
+           resources <- getDataFileName ""
+           putStrLn $ "loadVertexShader: " ++ path
+           putStrLn $ "resources path: " ++ resources
+           putStrLn $ "final path: " ++ resources ++ "shaders/" ++ path
+           shaderPath <- BS.readFile $ resources ++ "shaders/" ++ path
+           loadShaderBS path GL.VertexShader shaderPath
 
 loadFragmentShader :: FilePath -> FragmentShader
 loadFragmentShader path = FragmentShader load
