@@ -28,12 +28,6 @@ import qualified Graphics.Rendering.OpenGL.Raw      as GLRaw (glUniformMatrix4fv
 
 -}
 
--- consider replacing IO load action with various flavors of constructors instead:
---Mesh,LitMesh,DynamicMesh,DynamicLitMesh
-
--- mesh :: String -> [Vector3] -> [Color] -> [Vector2] -> [Int] -> Mesh
--- mesh name vertices colors uvs indices = Mesh name $ loadMesh vertices colors uvs indices
-
 rect :: Double -> Double -> Mesh
 rect w h = Mesh (show w ++ show h ++ "rect") vertices colors uvs indices
     where
@@ -52,14 +46,15 @@ tri triSize color = Mesh (show triSize ++ "tri") vertices colors uvs indices
         uvs      = [Vector2 1 1,Vector2 0 0,Vector2 0 1]
         indices  = [0,1,2]
 
-vertexColored :: Material
-vertexColored = Material draw
+vertexColored :: Color -> Material
+vertexColored (RGB r g b) = Material draw
     where
         draw mesh modelView proj resources = do
-            (program,mv:pr:_,attributes)                               <- getShader resources vertexColoredShader
+            (program,baseColor:mv:pr:_,attributes)                     <- getShader resources vertexColoredShader
             (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:_) <- getMesh   resources mesh
 
-            GL.currentProgram GL.$= Just program
+            GL.currentProgram    GL.$= Just program
+            GL.uniform baseColor GL.$= (GL.Vertex3 (realToFrac r) (realToFrac g) (realToFrac b) :: GL.Vertex3 GL.GLfloat)
             bindThenDraw mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad]) numIndices
 
 ambient :: Texture -> Material
@@ -165,7 +160,7 @@ bindThenDraw (GL.UniformLocation mv) (GL.UniformLocation pr) modelView proj vert
 vertexColoredShader :: Shader
 vertexColoredShader = shader
                       "vertexColored"
-                      ["modelView","proj"]
+                      ["baseColor","modelView","proj"]
                       ["position","in_color"]
                       (loadVertexShader   "colored-vert.glsl")
                       (loadFragmentShader "colored-frag.glsl")

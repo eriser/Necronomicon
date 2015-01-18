@@ -1,12 +1,13 @@
 
-module Necronomicon.FRP.GUI (button,
-                             Gui(Gui),
+module Necronomicon.FRP.GUI (Gui(..),
+                             Size(..),
+                             button,
                              input,
                              element,
                              gui,
                              label,
                              slider,
-                             Size(Size))where
+                             textEdit)where
 
 import           Data.Dynamic
 import qualified Data.IntSet             as IntSet
@@ -31,8 +32,15 @@ gui gs = render $ root <~ combine (pure cam : gs)
     where
         cam = orthoCamera 0 identity black
 
-label :: Vector2 -> Font -> Color ->  String -> SceneObject
+label :: Vector2 -> Font -> Color -> String -> SceneObject
 label (Vector2 x y) font color text = SceneObject (Vector3 x y 0) identity 1 (drawText text font ambient) []
+
+textEdit :: Vector2 -> Size -> Font -> Color -> Signal SceneObject
+textEdit (Vector2 x y) (Size w h) font color = pure background
+    where
+        background = SceneObject (Vector3  x       y    0) identity 1 (Model (rect w h) (vertexColored color)) [textObject]
+        textObject = SceneObject (Vector3 (-w/2.05)  (h/2) 1) identity 1 (drawBoundText text font ambient (w * 0.9,h)) []
+        text       = "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris ipsum risus, luctus vel mollis non, hendrerit non mi. Sed at blandit ex. Donec aliquam pellentesque convallis. Integer in nisl ut ipsum dignissim vestibulum. Aenean porta nunc magna, id porttitor quam scelerisque non. Ut malesuada mi lectus, vitae finibus est lacinia nec. Nunc varius sodales porttitor. Nam faucibus tortor quis ullamcorper feugiat. Etiam mollis tellus mi, pretium consequat justo suscipit in. Etiam posuere placerat risus, eget efficitur nulla. Integer non leo vitae justo egestas consequat."
 
 guiEvent :: (Typeable a) => IORef (Gui b) -> Dynamic -> (a -> IO (EventValue (Gui b))) -> IO (EventValue (Gui b))
 guiEvent ref v f = case fromDynamic v of
@@ -111,5 +119,5 @@ button (Vector2 x y) (Size w h) color = Signal $ \necro -> do
         fc = RGB 0.5 0.5 0.5
         hw = w * 0.5
         hh = h * 0.5
-        m c= Model (rect w h) vertexColored
+        m c= Model (rect w h) (vertexColored c)
         --c is color....

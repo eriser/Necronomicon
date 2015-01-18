@@ -2,7 +2,14 @@ import Necronomicon
 import Data.Fixed (mod')
 
 main :: IO ()
-main = runSignal testShader
+main = runSignal testChat
+
+testChat :: Signal ()
+testChat = gui [chatBox]
+    where
+        chatBox = textEdit 0 <| Size 2 0.25
+                             <| Font "OCRA.ttf" 16
+                             <| gray 0.1
 
 testPattern :: Signal ()
 testPattern = gui [tri <~ pattern / 10 ]
@@ -29,11 +36,10 @@ testShader = gui [so <~ mousePos,pure zLabel]
     where
         so (x,y) = SceneObject (Vector3 x y 0) identity 1 model []
         model    = Model (rect 0.2 0.2) (ambient (tga "Gas20.tga"))
-        zLabel   = label
-                <| Vector2 (-1) 0
-                <| Font "OCRA.ttf" 20
-                <| white
-                <| "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris ipsum risus, luctus vel mollis non, hendrerit non mi. Sed at blandit ex. Donec aliquam pellentesque convallis. Integer in nisl ut ipsum dignissim vestibulum. Aenean porta nunc magna, id porttitor quam scelerisque non. Ut malesuada mi lectus, vitae finibus est lacinia nec. Nunc varius sodales porttitor. Nam faucibus tortor quis ullamcorper feugiat. Etiam mollis tellus mi, pretium consequat justo suscipit in. Etiam posuere placerat risus, eget efficitur nulla. Integer non leo vitae justo egestas consequat."
+        zLabel   = label <| Vector2 (-1) 0
+                         <| Font "OCRA.ttf" 20
+                         <| white
+                         <| "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris ipsum risus, luctus vel mollis non, hendrerit non mi. Sed at blandit ex. Donec aliquam pellentesque convallis. Integer in nisl ut ipsum dignissim vestibulum. Aenean porta nunc magna, id porttitor quam scelerisque non. Ut malesuada mi lectus, vitae finibus est lacinia nec. Nunc varius sodales porttitor. Nam faucibus tortor quis ullamcorper feugiat. Etiam mollis tellus mi, pretium consequat justo suscipit in. Etiam posuere placerat risus, eget efficitur nulla. Integer non leo vitae justo egestas consequat."
 
 testGUI :: Signal ()
 testGUI = gui [element vslider,element blueButton,pure zLabel,tri <~ input vslider]
@@ -48,11 +54,11 @@ testScene = scene [pure cam,terrainSig]
     where
         move (x,y) z a = Vector3 (x*z*a) (y*z*a) 0
         cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black
-        terrain pos    = SceneObject pos identity 1 (Model simplexMesh vertexColored) []
+        terrain pos    = SceneObject pos identity 1 (Model simplexMesh $ vertexColored white) []
         terrainSig     = terrain <~ foldp (+) 0 (lift3 move wasd (fps 30) 5)
 
 testTri :: Vector3 -> Quaternion -> SceneObject
-testTri pos r = SceneObject pos r 1 (Model (tri 0.3 white) vertexColored) []
+testTri pos r = SceneObject pos r 1 (Model (tri 0.3 white) $ vertexColored white) []
 
 simplexMesh :: Mesh
 simplexMesh = Mesh "simplex" vertices colors uvs indices
