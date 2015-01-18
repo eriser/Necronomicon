@@ -5,6 +5,7 @@ module Necronomicon.Graphics.Text (drawText,
 import           Debug.Trace
 import           Control.Monad
 import           Data.IORef
+import           Data.List                                           (foldl')
 import           Data.Maybe                                          (fromMaybe)
 import           Foreign
 import           Foreign.C.String
@@ -151,8 +152,8 @@ renderFont text font material maybeBounds modelView proj resources = do
     let characterMesh                       = textMesh (characters loadedFont) (atlasWidth loadedFont) (atlasHeight loadedFont)
         fontMesh                            = DynamicMesh (characterVertexBuffer loadedFont) (characterIndexBuffer loadedFont) vertices colors uvs indices
         (vertices,colors,uvs,indices,_,_,_) = case maybeBounds of
-            Nothing -> foldl characterMesh ([],[],[],[],0,0,0) text
-            Just  b -> foldl characterMesh ([],[],[],[],0,0,0) $ fitTextIntoBounds text b (characters loadedFont)
+            Nothing -> foldl' characterMesh ([],[],[],[],0,0,0) text
+            Just  b -> foldl' characterMesh ([],[],[],[],0,0,0) $ fitTextIntoBounds text b (characters loadedFont)
     drawMeshWithMaterial (material $ atlas loadedFont) fontMesh modelView proj resources
 
 textMesh :: Map.Map Char CharMetric ->
@@ -192,8 +193,8 @@ emptyWord = ([],0)
 fitTextIntoBounds :: String -> (Double,Double) -> Map.Map Char CharMetric -> String
 fitTextIntoBounds text (w,_) cmetrics = finalText
     where
-        (finalText,_)    = foldl (fitWordsIntoBounds w characterPadding) emptyWord (word:words')
-        (word,words',_)  = foldr (splitCharIntoWords cmetrics) (emptyWord,[],0) text
+        (finalText,_)    = foldl' (fitWordsIntoBounds w characterPadding) emptyWord (word:words')
+        (word,words',_)  = foldr  (splitCharIntoWords cmetrics) (emptyWord,[],0) text
         characterPadding = case Map.lookup ' ' cmetrics of
             Nothing -> 0
             Just cm -> advanceX cm * fontScale
@@ -201,7 +202,7 @@ fitTextIntoBounds text (w,_) cmetrics = finalText
 fitWordsIntoBounds :: Double -> Double -> TextWord -> TextWord -> TextWord
 fitWordsIntoBounds boundsWidth constant (text,currentWidth) (word,wordWidth) = if currentWidth + wordWidth < boundsWidth
     then (text ++ word ,currentWidth + wordWidth)
-    else (text ++ word ++ "\n",0)
+    else (text ++ "\n" ++ word,wordWidth)
 
 splitCharIntoWords :: Map.Map Char CharMetric -> Char -> (TextWord,[TextWord],Double) -> (TextWord,[TextWord],Double)
 splitCharIntoWords cmetrics char ((word,wordLength),words',totalLength) = if isWhiteSpace char
