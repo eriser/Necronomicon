@@ -200,9 +200,11 @@ fitTextIntoBounds text (w,_) cmetrics = finalText
             Just cm -> advanceX cm * fontScale
 
 fitWordsIntoBounds :: Double -> Double -> TextWord -> TextWord -> TextWord
-fitWordsIntoBounds boundsWidth constant (text,currentWidth) (word,wordWidth) = if currentWidth + wordWidth < boundsWidth
-    then (text ++ word ,currentWidth + wordWidth)
-    else (text ++ "\n" ++ word,wordWidth)
+fitWordsIntoBounds boundsWidth constant (text,currentWidth) (word,wordWidth)
+    | currentWidth + wordWidth < boundsWidth = (text ++ word ,currentWidth + wordWidth)
+    | otherwise                              = (text ++ "\n" ++ word,wordWidth)
+    -- where
+        -- isLargerThanLineSize word =
 
 splitCharIntoWords :: Map.Map Char CharMetric -> Char -> (TextWord,[TextWord],Double) -> (TextWord,[TextWord],Double)
 splitCharIntoWords cmetrics char ((word,wordLength),words',totalLength)
@@ -216,4 +218,3 @@ splitCharIntoWords cmetrics char ((word,wordLength),words',totalLength)
             ' '  -> True
             '\n' -> True
             _    -> False
-        -- isLargerThan
