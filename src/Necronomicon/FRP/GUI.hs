@@ -41,7 +41,7 @@ label :: Vector2 -> Font -> Color -> String -> SceneObject
 label (Vector2 x y) font color text = SceneObject (Vector3 x y 0) identity 1 (drawText text font ambient) []
 
 chat :: Vector2 -> Size -> Font -> Color -> Signal SceneObject
-chat (Vector2 x y) (Size w h) font color = textEditSignal textInput (toggle ctrl)
+chat (Vector2 x y) (Size w h) font color = textEditSignal textInput (toggle $ lift2 (&&) ctrl $ isDown keyT)
     where
         textEditSignal textInputSignal toggleSignal = Signal $ \necro -> do
             (_,inputCont,inIDs) <- unSignal textInputSignal necro
