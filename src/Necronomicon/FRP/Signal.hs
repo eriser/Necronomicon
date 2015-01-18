@@ -619,7 +619,7 @@ textInput = Signal $ \necro -> do
     charRef  <- newIORef ' '
     return (' ',processEvent shiftRef charRef,IntSet.fromList [100..134])
     where
-        processEvent shiftRef charRef (Event uid eval) = trace "textInput" $ case (uid == 132 || uid == 133,uid >= 100 && uid <= 134,fromDynamic eval) of
+        processEvent shiftRef charRef (Event uid eval) = case (uid == 132 || uid == 133,uid >= 100 && uid <= 134,fromDynamic eval) of
             (True,_,Just isShiftDown) -> writeIORef shiftRef isShiftDown >> readIORef charRef >>= return . NoChange
             (_,True,Just True)        -> readIORef  shiftRef >>= return . Change . eventKeyToChar uid
             _                         -> readIORef  charRef  >>= return . NoChange
