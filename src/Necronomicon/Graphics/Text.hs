@@ -193,23 +193,21 @@ emptyWord = ([],0)
 fitTextIntoBounds :: String -> (Double,Double) -> Map.Map Char CharMetric -> String
 fitTextIntoBounds text (w,_) cmetrics = finalText
     where
-        (finalText,_)    = foldl' (fitWordsIntoBounds w characterPadding) emptyWord (word:words')
-        (word,words',_)  = foldr  (splitCharIntoWords cmetrics) (emptyWord,[],0) text
+        (finalText,_)    = foldl' (fitWordsIntoBounds w)           emptyWord      (words' ++ [word])
+        (word,words',_)  = foldl' (splitCharIntoWords w cmetrics) (emptyWord,[],0) text
         characterPadding = case Map.lookup ' ' cmetrics of
             Nothing -> 0
             Just cm -> advanceX cm * fontScale
 
-fitWordsIntoBounds :: Double -> Double -> TextWord -> TextWord -> TextWord
-fitWordsIntoBounds boundsWidth constant (text,currentWidth) (word,wordWidth)
+fitWordsIntoBounds :: Double -> TextWord -> TextWord -> TextWord
+fitWordsIntoBounds boundsWidth (text,currentWidth) (word,wordWidth)
     | currentWidth + wordWidth < boundsWidth = (text ++ word ,currentWidth + wordWidth)
     | otherwise                              = (text ++ "\n" ++ word,wordWidth)
-    -- where
-        -- isLargerThanLineSize word =
 
-splitCharIntoWords :: Map.Map Char CharMetric -> Char -> (TextWord,[TextWord],Double) -> (TextWord,[TextWord],Double)
-splitCharIntoWords cmetrics char ((word,wordLength),words',totalLength)
-    | isWhiteSpace char = (([char],cAdvance) , (word,wordLength) : words' , totalLength + wordLength + cAdvance)
-    | otherwise         = ((char : word,wordLength + cAdvance), words' , totalLength)
+splitCharIntoWords :: Double -> Map.Map Char CharMetric -> (TextWord,[TextWord],Double) -> Char -> (TextWord,[TextWord],Double)
+splitCharIntoWords width cmetrics ((word,wordLength),words',totalLength) char
+    | isWhiteSpace char || wordLength > width = ( ([],0), words' ++ [(word,wordLength),([char],cAdvance)], totalLength + wordLength + cAdvance)
+    | otherwise                               = ((word ++ [char],wordLength + cAdvance), words' , totalLength)
     where
         cAdvance = case Map.lookup char cmetrics of
             Nothing -> 10
