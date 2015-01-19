@@ -286,10 +286,10 @@ initWindow = GLFW.init >>= \initSuccessful -> if initSuccessful then window else
     where
         mkWindow = do
             --Windowed
-            -- GLFW.createWindow 960 640 "Necronomicon" Nothing Nothing
+            GLFW.createWindow 960 640 "Necronomicon" Nothing Nothing
             --Full screen
-            fullScreenOnMain <- GLFW.getPrimaryMonitor
-            GLFW.createWindow 1920 1080 "Necronomicon" fullScreenOnMain Nothing
+            -- fullScreenOnMain <- GLFW.getPrimaryMonitor
+            -- GLFW.createWindow 1920 1080 "Necronomicon" fullScreenOnMain Nothing
         window   = mkWindow >>= \w -> GLFW.makeContextCurrent w >> return w
 
 runSignal :: (Show a) => Signal a -> IO()
