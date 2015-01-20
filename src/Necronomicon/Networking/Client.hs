@@ -246,7 +246,7 @@ setSyncArg (Int32 id : Int32 index : v : []) client = atomically (readTVar (sync
 setSyncArg _ _ = return ()
 
 receiveChat :: (String -> String -> IO()) -> [Datum] -> Client -> IO ()
-receiveChat chatCallback (ASCII_String name : ASCII_String msg : []) client = putStrLn ("Chat - " ++ show name ++ ": " ++ show msg) >> chatCallback (show name) (show msg)
+receiveChat chatCallback (ASCII_String name : ASCII_String msg : []) client = putStrLn ("Chat - " ++ show name ++ ": " ++ show msg) >> chatCallback (C.unpack name) (C.unpack msg)
 receiveChat _ _ _ = return ()
 
 

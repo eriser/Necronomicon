@@ -289,10 +289,10 @@ initWindow = GLFW.init >>= \initSuccessful -> if initSuccessful then window else
     where
         mkWindow = do
             --Windowed
-            GLFW.createWindow 960 640 "Necronomicon" Nothing Nothing
+            -- GLFW.createWindow 960 640 "Necronomicon" Nothing Nothing
             --Full screen
-            --fullScreenOnMain <- GLFW.getPrimaryMonitor
-            --GLFW.createWindow 1920 1080 "Necronomicon" fullScreenOnMain Nothing
+            fullScreenOnMain <- GLFW.getPrimaryMonitor
+            GLFW.createWindow 1920 1080 "Necronomicon" fullScreenOnMain Nothing
         window   = mkWindow >>= \w -> GLFW.makeContextCurrent w >> return w
 
 runSignal :: (Show a) => Signal a -> IO()
@@ -341,7 +341,7 @@ runSignal s = initWindow >>= \mw ->
             atomically $ (writeTBQueue eventNotify $ Event 0 $ toDyn pos) `orElse` return ()
 
         --Networking event callbacks
-        chatEvent eventNotify userName message = atomically $ (writeTBQueue eventNotify $ Event 3 $ toDyn (message)) `orElse` return ()
+        chatEvent eventNotify userName message = atomically $ (writeTBQueue eventNotify $ Event 3 $ toDyn (userName ++ ": " ++ message)) `orElse` return ()
 
         render quit window sceneVar resources necroVars client
             | quit      = quitClient client >> runNecroState shutdownNecronomicon necroVars >> print "Qutting" >> return ()

@@ -7,8 +7,8 @@ main = runSignal testChat
 testChat :: Signal ()
 testChat = gui [chatBox]
     where
-        chatBox = chat <| Vector2 0.0 0.15
-                       <| Size 0.35 0.35
+        chatBox = chat <| Vector2 0.0 0.0
+                       <| Size 0.35 0.5
                        <| Font "OCRA.ttf" 16
                        <| gray 0.1
 
