@@ -10,7 +10,7 @@ import System.Environment (getArgs)
 import Network.Socket hiding (send,recv,recvFrom,sendTo)
 import Network.Socket.ByteString
 import Control.Exception
-import Control.Monad (unless)
+import Control.Monad (unless,forever)
 import System.CPUTime
 import Data.Map (insert,lookup,empty,Map,member,delete)
 import qualified Data.Sequence as Seq
@@ -24,27 +24,38 @@ import Necronomicon.Networking.Message
 import System.Exit
 
 data Client = Client {
-    userName    :: String,
-    users       :: [String],
-    shouldQuit  :: Bool,
-    syncObjects :: Map Int SyncObject
-    } deriving (Show)
+    userName     :: String,
+    users        :: TVar [String],
+    connected    :: TVar Bool,
+    syncObjects  :: TVar (Map Int SyncObject),
+    outBox       :: TChan Message,
+    inBox        :: TChan Message,
+    shouldQuit   :: TVar QuitStatus
+    }
 
--- efficient manner to do events
--- A global state which comes automatically
--- a global piece which comes automatically. Accomplished with paths -> \yig\start, etc? or something else?
--- A global score (a series of events ordered in time) which comes automatically
+data QuitStatus = StillRunning
+                | ShouldQuit
+                | Quitting
+                | DoneQuitting
+
 -- Clock synchronization!
 
---Merge client states with server states?
+newClient :: String -> IO Client
+newClient name = do
+    users       <- atomically $ newTVar []
+    connected   <- atomically $ newTVar False
+    syncObjects <- atomically $ newTVar empty
+    outBox      <- atomically $ newTChan
+    inBox       <- atomically $ newTChan
+    shouldQuit  <- atomically $ newTVar StillRunning
+    return $ Client name users connected syncObjects outBox inBox shouldQuit
 
-startClient :: String -> String -> IO (TVar Client,TChan Message)
+startClient :: String -> String -> IO Client
 startClient name serverIPAddress = do
     print "Starting a client."
-    client            <- atomically $ newTVar $ Client name [] False empty
-    outgoingMesssages <- atomically $ newTChan
-    withSocketsDo $ bracket getSocket sClose $ handler client outgoingMesssages
-    return (client,outgoingMesssages)
+    client <- newClient name
+    withSocketsDo (getSocket >>= handler client)
+    return client
     where
         hints = Just $ defaultHints {addrSocketType = Datagram}
 
@@ -53,18 +64,14 @@ startClient name serverIPAddress = do
             sock           <- socket (addrFamily serveraddr) Datagram defaultProtocol
             connect sock (addrAddress serveraddr) >> return sock
 
-        handler client outgoingMesssages sock = do
-            incomingMessages  <- atomically $ newTChan
-            handle (sendQuitOnExit name sock) $ do
-                forkIO $ messageProcessor client incomingMessages oscFunctions
-                forkIO $ listener incomingMessages sock
-                forkIO $ aliveLoop name outgoingMesssages
-
-                atomically $ writeTChan outgoingMesssages $ Message "clientLogin" [toOSCString name]
-                forkIO $ testNetworking name outgoingMesssages
+        handler client sock = do
+                forkIO $ messageProcessor client oscFunctions
+                forkIO $ listener         client sock
+                forkIO $ aliveLoop        client
+                forkIO $ sender           client sock
+                forkIO $ quitLoop         client sock
                 print "Logging in..."
-
-                sender name outgoingMesssages sock
+                atomically $ writeTChan (outBox client) $ Message "clientLogin" [toOSCString name]
 
         oscFunctions =
             insert "userList"         userList         $
@@ -77,17 +84,15 @@ startClient name serverIPAddress = do
             insert "receiveChat"      receiveChat      $
             Data.Map.empty
 
-testNetworking :: String -> TChan Message -> IO ()
-testNetworking name outgoingMesssages = do
-    atomically . writeTChan outgoingMesssages . syncObjectMessage . SyncObject 1 "ClientName" "" $ Seq.fromList [SyncString name,SyncDouble 0]
+testNetworking :: Client -> IO ()
+testNetworking client = forever $ do
+    atomically . writeTChan (outBox client) . syncObjectMessage . SyncObject 1 "ClientName" "" $ Seq.fromList [SyncString (userName client),SyncDouble 0]
     threadDelay 1000000
-    atomically . writeTChan outgoingMesssages . setArgMessage 1 1 $ SyncDouble 666
+    atomically . writeTChan (outBox client) . setArgMessage 1 1 $ SyncDouble 666
     threadDelay 1000000
-    atomically . writeTChan outgoingMesssages $ removeObjectMessage 1
+    atomically . writeTChan (outBox client) $ removeObjectMessage 1
     threadDelay 1000000
-    atomically . writeTChan outgoingMesssages $ chatMessage name "This is a chat, motherfucker"
-    testNetworking name outgoingMesssages
-    
+    atomically . writeTChan (outBox client) $ chatMessage (userName client) "This is a chat, motherfucker"
 
 sendQuitOnExit :: String -> Socket -> SomeException -> IO()
 sendQuitOnExit name csock e = do
@@ -96,71 +101,90 @@ sendQuitOnExit name csock e = do
     Control.Exception.catch (send csock $ encodeMessage $ Message "clientLogout" [toOSCString name]) (\e -> print (e :: IOException) >> return 0)
     exitSuccess
 
-sender :: String -> TChan Message -> Socket -> IO()
-sender name outgoingMesssages sock = do
-    msg <- atomically $ readTChan outgoingMesssages
+quitLoop :: Client -> Socket -> IO()
+quitLoop client sock = do
+    atomically $ readTVar   (shouldQuit client) >>= waitToQuit
+    atomically $ writeTVar  (shouldQuit client) Quitting
+    Control.Exception.catch (send sock $ encodeMessage $ Message "clientLogout" [toOSCString (userName client)]) (\e -> print (e :: IOException) >> return 0)
+    close sock
+    atomically $ writeTVar  (shouldQuit client) DoneQuitting
+    where
+        waitToQuit StillRunning = retry
+        waitToQuit Quitting     = retry
+        waitToQuit DoneQuitting = retry
+        waitToQuit ShouldQuit   = return ()
+
+quitClient :: Client -> IO ()
+quitClient client = atomically (writeTVar (shouldQuit client) ShouldQuit) >> (atomically $ readTVar (shouldQuit client) >>= waitTillDone)
+    where
+        waitTillDone StillRunning = retry
+        waitTillDone Quitting     = retry
+        waitTillDone ShouldQuit   = retry
+        waitTillDone DoneQuitting = return ()
+
+sender :: Client -> Socket -> IO()
+sender client sock = forever $ do
+    msg <- atomically $ readTChan (outBox client)
     con <- isConnected sock
     case con of
-        False -> sender name outgoingMesssages sock
+        False -> return ()
         True  -> do
             Control.Exception.catch (send sock $ encodeMessage msg) (\e -> print (e :: IOException) >> return 0)
-            sender name outgoingMesssages sock
+            return ()
 
-aliveLoop :: String -> TChan Message -> IO ()
-aliveLoop name outgoingMesssages = do
+aliveLoop :: Client -> IO ()
+aliveLoop client = forever $ do
     t <- time
-    atomically $ writeTChan outgoingMesssages $ Message "clientAlive" [toOSCString name,Double t]
-    threadDelay 1000000
-    aliveLoop name outgoingMesssages
+    shouldQuit <- atomically $ readTVar (shouldQuit client)
+    case shouldQuit of
+        StillRunning -> (atomically $ writeTChan (outBox client) $ Message "clientAlive" [toOSCString (userName client),Double t]) >> threadDelay 1000000
+        _            -> threadDelay 1000000
 
-listener :: TChan Message -> Socket -> IO()
-listener incomingMessages sock = do
+listener :: Client -> Socket -> IO()
+listener client sock = forever $ do
     con <- isConnected sock
     case con of
-        False -> threadDelay 1000000 >> listener incomingMessages sock
+        False -> threadDelay 1000000
         True  -> do
             (msg,d) <- Control.Exception.catch (recvFrom sock 4096) (\e -> print (e :: IOException) >> return (C.pack "",SockAddrUnix "127.0.0.1"))
             -- print "Message size: "
             -- print $ B.length msg
             case decodeMessage msg of
-                Nothing   -> listener incomingMessages sock
-                Just m    -> do
-                    atomically $ writeTChan incomingMessages m
-                    listener incomingMessages sock
+                Nothing   -> return ()
+                Just m    -> atomically $ writeTChan (inBox client) m
 
-messageProcessor :: TVar Client -> TChan Message -> Data.Map.Map String ([Datum] -> Client -> IO Client) -> IO()
-messageProcessor client incomingMessages oscFunctions = do
-    m <- atomically $ readTChan incomingMessages
-    c <- atomically $ readTVar client
-    c'<- processOscMessage m oscFunctions c
-    checkIfShouldQuit c'
-    atomically $ writeTVar client c'
-    messageProcessor client incomingMessages oscFunctions
-                    
-processOscMessage :: Message -> Data.Map.Map String ([Datum] -> Client -> IO Client) -> Client -> IO Client
+messageProcessor :: Client -> Data.Map.Map String ([Datum] -> Client -> IO ()) -> IO()
+messageProcessor client oscFunctions = forever $ do
+    m <- atomically $ readTChan (inBox client)
+    processOscMessage m oscFunctions client
+    -- checkIfShouldQuit c'
+
+processOscMessage :: Message -> Data.Map.Map String ([Datum] -> Client -> IO ()) -> Client -> IO ()
 processOscMessage  (Message address datum) oscFunctions client =
     case Data.Map.lookup address oscFunctions of
         Just f  -> f datum client
-        Nothing -> print ("No oscFunction found with the address pattern: " ++ address)  >> return client
+        Nothing -> print ("No oscFunction found with the address pattern: " ++ address)
 
 chatMessage :: String -> String -> Message
 chatMessage name msg = Message "receiveChat" [toOSCString name,toOSCString msg]
 
+
+
 ------------------------------
 --OSC callbacks
 -----------------------------
-userList :: [Datum] -> Client -> IO Client
-userList d (Client n _ q so) = do
+userList :: [Datum] -> Client -> IO ()
+userList d client = do
     print  "Received user list:"
     print  $ userStringList
-    return $ Client n userStringList q so
+    atomically $ writeTVar (users client) userStringList
     where
         userStringList = foldr addUserName [] d
         addUserName u us = case datumToString u of
             Just u' -> u': us
             Nothing -> us
 
-clientAliveReply :: [Datum] -> Client -> IO Client
+clientAliveReply :: [Datum] -> Client -> IO ()
 clientAliveReply (Double serverTime : Double clientSendTime : []) client = do
     currentTime      <- time
     let estServerTime = serverTime + ((currentTime - clientSendTime) / 2)
@@ -171,40 +195,37 @@ clientAliveReply (Double serverTime : Double clientSendTime : []) client = do
     -- print $ "Estimated current server time: " ++ show estServerTime
     -- print $ "Difference between current time and estimated server time: " ++ show diffTime
     -- print $ "Server is alive."
-    return client
-clientAliveReply _  client = return client
+    return ()
+clientAliveReply _  _ = return ()
 
-clientLoginReply :: [Datum] -> Client -> IO Client
-clientLoginReply (Int32 s:[]) client =
-    case s == 1 of
-        True  -> print "Succesfully logged in." >> return client
-        False -> print "Couldn't log in to server!" >> (return $ clientQuit client)
-clientLoginReply _  client           = return client
+clientLoginReply :: [Datum] -> Client -> IO ()
+clientLoginReply (Int32 s:[]) client
+    | s == 1    = atomically (writeTVar (connected client) True)  >> print "Succesfully logged in."
+    | otherwise = atomically (writeTVar (connected client) False) >> print "Couldn't log in to server!"
+        --  >> (return $ clientQuit client)
+clientLoginReply _  _  = return ()
 
-addSyncObject :: [Datum] -> Client -> IO Client
+addSyncObject :: [Datum] -> Client -> IO ()
 addSyncObject m client = case messageToSync m of
-    Nothing -> return client
+    Nothing -> return ()
     Just so -> do
-        let client' = Client (userName client) (users client) (shouldQuit client) $ insert (objectID so) so $ syncObjects client
+        atomically (readTVar (syncObjects client) >>= \sos -> writeTVar (syncObjects client) (insert (objectID so) so sos))
         print "Adding SyncObject: "
         putStrLn ""
-        print client'
-        putStrLn ""
-        return client'
+        -- print client'
 
-removeSyncObject :: [Datum] -> Client -> IO Client
-removeSyncObject (Int32 id:[]) client = case member (fromIntegral id) (syncObjects client) of
-    False -> return client
+removeSyncObject :: [Datum] -> Client -> IO ()
+removeSyncObject (Int32 id:[]) client = atomically (readTVar (syncObjects client)) >>= \sos -> case member (fromIntegral id) sos of
+    False -> return ()
     True  -> do
-        let client' = Client (userName client) (users client) (shouldQuit client) $ delete (fromIntegral id) $ syncObjects client
+        atomically (writeTVar (syncObjects client) (delete (fromIntegral id) sos))
         print "Removing SyncObject: "
         putStrLn ""
-        print client'
-        putStrLn ""
-        return client'
+        -- print client'
+        -- putStrLn ""
 
-sync :: [Datum] -> Client -> IO Client
-sync m client = return $ Client (userName client) (users client) (shouldQuit client) $ fromSynchronizationMsg m
+sync :: [Datum] -> Client -> IO ()
+sync m client = atomically (readTVar (syncObjects client) >>= \sos -> writeTVar (syncObjects client) (fromSynchronizationMsg m))
 -- sync m client = do
     -- print "Synchronizing: "
     -- putStrLn ""
@@ -215,31 +236,24 @@ sync m client = return $ Client (userName client) (users client) (shouldQuit cli
         -- client' = Client (userName client) (users client) (shouldQuit client) $ fromSynchronizationMsg m
 
 --Remember the locally set no latency for originator trick!
-setSyncArg :: [Datum] -> Client -> IO Client
-setSyncArg (Int32 id : Int32 index : v : []) client = case Data.Map.lookup (fromIntegral id) (syncObjects client) of
-    Nothing -> return client
+setSyncArg :: [Datum] -> Client -> IO ()
+setSyncArg (Int32 id : Int32 index : v : []) client = atomically (readTVar (syncObjects client)) >>= \sos -> case Data.Map.lookup (fromIntegral id) sos of
+    Nothing -> return ()
     Just so -> do
         print "Set SyncArg: "
-        return $ Client (userName client) (users client) (shouldQuit client) newSyncObjects
+        atomically $ writeTVar (syncObjects client) newSyncObjects
         where
-            newSyncObjects = Data.Map.insert (fromIntegral id) (setArg (fromIntegral index) (datumToArg v) so) $ syncObjects client
-setSyncArg _ client = return client
+            newSyncObjects = Data.Map.insert (fromIntegral id) (setArg (fromIntegral index) (datumToArg v) so) sos
+setSyncArg _ _ = return ()
 
-receiveChat :: [Datum] -> Client -> IO Client
-receiveChat (ASCII_String name : ASCII_String msg : []) client = do
-    print name
-    print msg
-    return client
-receiveChat _ client = return client
-        
+receiveChat :: [Datum] -> Client -> IO ()
+receiveChat (ASCII_String name : ASCII_String msg : []) client = putStrLn $ "Chat - " ++ show name ++ ": " ++ show msg
+receiveChat _ _ = return ()
+
+
 ------------------------------
---Client Mutation
+-- API
 -----------------------------
 
-clientQuit :: Client -> Client
-clientQuit (Client n us _ so) = Client n us True so
-
-checkIfShouldQuit :: Client -> IO ()
-checkIfShouldQuit (Client _ _ True _) = exitSuccess
-checkIfShouldQuit _                   = return ()
-
+sendChatMessage :: String -> Client -> IO()
+sendChatMessage chat client = atomically $ writeTChan (outBox client) $ chatMessage (userName client) chat

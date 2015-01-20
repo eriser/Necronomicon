@@ -17,6 +17,7 @@ import           Necronomicon.Graphics
 import           Necronomicon.Linear
 import           Necronomicon.Util       (loadTextureFromTGA)
 import           Prelude
+import           Necronomicon.Networking (sendChatMessage)
 
 data Gui a = Gui a SceneObject
 data Size = Size Double Double
@@ -41,35 +42,50 @@ label :: Vector2 -> Font -> Color -> String -> SceneObject
 label (Vector2 x y) font color text = SceneObject (Vector3 x y 0) identity 1 (drawText text font ambient) []
 
 chat :: Vector2 -> Size -> Font -> Color -> Signal SceneObject
-chat (Vector2 x y) (Size w h) font color = textEditSignal textInput (toggle $ lift2 (&&) ctrl $ isDown keyT)
+chat (Vector2 x y) (Size w h) font color = addChild <~ textEditSignal textInput (toggle $ lift2 (&&) ctrl $ isDown keyT) ~~ chatDisplay (Vector2 x y) (Size w h) font color
     where
         textEditSignal textInputSignal toggleSignal = Signal $ \necro -> do
             (_,inputCont,inIDs) <- unSignal textInputSignal necro
             (_,toggleCont,tIDs) <- unSignal toggleSignal    necro
-            let ids = IntSet.union inIDs tIDs
-            textRef   <- newIORef ""
-            activeRef <- newIORef False
-            metrics   <- charMetrics font
-            return (chatBackground emptyObject,processEvent textRef activeRef inputCont toggleCont metrics,ids)
+            let ids              = IntSet.union inIDs tIDs
+            textRef             <- newIORef ""
+            activeRef           <- newIORef False
+            metrics             <- charMetrics font
+            return (emptyObject,processEvent textRef activeRef inputCont toggleCont metrics (client necro),ids)
 
-        processEvent textRef activeRef inputCont toggleCont metrics event = toggleCont event >>= \toggle -> case toggle of
-            Change   isActive -> writeIORef activeRef isActive >> if isActive
-                then readIORef textRef >>= return . Change . chatBackground . background
-                else return (Change $ chatBackground emptyObject)
-            NoChange isActive -> if not isActive then return (NoChange $ chatBackground emptyObject) else do
-                t <- readIORef textRef
-                c <- inputCont event
-                case (c,t) of
-                    (NoChange _,_)      -> return . NoChange $ background t
-                    (Change '\n',(_:_)) -> returnNewText textRef metrics ""
-                    (Change '\b',(_:_)) -> returnNewText textRef metrics $ init t
-                    (Change char,_)     -> returnNewText textRef metrics $ t ++ [char]
+        processEvent textRef activeRef inputCont toggleCont metrics client event = toggleCont event >>= go
+            where go (Change   isActive) = writeIORef activeRef isActive >> if isActive then readIORef textRef >>= return . Change . background else return $ Change emptyObject
+                  go (NoChange isActive) = if not isActive then return $ NoChange emptyObject else do
+                      t <- readIORef textRef
+                      c <- inputCont event
+                      case (c,t) of
+                          (NoChange _,_)      -> return . NoChange $ background t
+                          (Change '\n',(_:_)) -> sendChatMessage t client >> returnNewText textRef metrics ""
+                          (Change '\b',(_:_)) -> returnNewText textRef metrics $ init t
+                          (Change char,_)     -> returnNewText textRef metrics $ t ++ [char]
 
-        returnNewText r cm t = writeIORef r t >> (return . Change . chatBackground . background $ fitTextIntoBounds t (w,0.055) cm)
+        returnNewText r cm t = writeIORef r t >> (return . Change . background $ fitTextIntoBounds t (w,0.055) cm)
         background         t = SceneObject (Vector3  0 ((h/2+0.2))  0) identity 1 (Model (rect w 0.055) (vertexColored color)) [textObject t]
         textObject         t = SceneObject (Vector3  0 0  1) identity 1 (drawText t font ambient) []
-        chatBackground     c = SceneObject (Vector3  x y  0) identity 1 (Model (rect w h) (vertexColored color)) [c]
         emptyObject          = PlainObject 0 identity 1 []
+
+chatDisplay :: Vector2 -> Size -> Font -> Color -> Signal SceneObject
+chatDisplay (Vector2 x y) (Size w h) font color = Signal $ \necro -> do
+    (chatVal,chatCont,chatIds) <- unSignal receiveChatMessage necro
+    metrics                    <- charMetrics font
+    let val                     = chatObject metrics ""
+    ref                        <- newIORef val
+    return (val,processEvent ref metrics chatCont, chatIds)
+    where
+        processEvent ref metrics chatCont event = chatCont event >>= go
+            where go (NoChange _) = readIORef ref >>= return . NoChange
+                  go (Change str) = do
+                      let val = chatObject metrics str
+                      writeIORef ref val
+                      return $ Change val
+
+        chatObject cm t = SceneObject (Vector3  x y 0) identity 1 (Model (rect w h) (vertexColored color)) [textObject cm t]
+        textObject cm t = SceneObject (Vector3  0 0 1) identity 1 (drawText (fitTextIntoBounds t (w,h) cm) font ambient) []
 
 slider :: Vector2 -> Size -> Color -> Signal (Gui Double)
 slider (Vector2 x y) (Size w h) color = Signal $ \necro -> do

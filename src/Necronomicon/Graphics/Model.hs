@@ -10,7 +10,7 @@ import qualified Data.IntMap as IntMap
 import qualified Data.Map as Map
 
 data Model = Model        Mesh   Material
-           | FontRenderer String Font (Texture -> Material) (Maybe (Double,Double))
+           | FontRenderer String Font (Texture -> Material)
            deriving (Show)
 
 instance Show (Texture -> Material) where

@@ -1,8 +1,9 @@
 module Necronomicon.FRP.Signal (
-    Signal (Signal),
-    Necro(Necro,inputCounter),
-    EventValue(Change,NoChange),
-    Event(Event),
+    -- sigTest,
+    Signal (..),
+    Necro(..),
+    EventValue(..),
+    Event(..),
     playPattern,
     play,
     playUntil,
@@ -86,6 +87,7 @@ module Necronomicon.FRP.Signal (
     textInput,
     unSignal,
     toggle,
+    receiveChatMessage,
     module Control.Applicative
     ) where
 
@@ -114,6 +116,7 @@ import           Necronomicon.Linear.Vector        (Vector2 (Vector2),
 import           Necronomicon.Patterns             (Pattern (..))
 import           Necronomicon.Runtime
 import           Necronomicon.UGen
+import           Necronomicon.Networking
 import           System.Random
 ------------------------------------------------------
 
@@ -139,7 +142,8 @@ data Necro        = Necro {
     globalDispatch :: TBQueue Event,
     inputCounter   :: IORef Int,
     sceneVar       :: TMVar SceneObject,
-    necroVars      :: IORef NecroVars
+    necroVars      :: NecroVars,
+    client         :: Client
     }
 newtype Signal a = Signal {unSignal :: Necro -> IO(a,Event -> IO (EventValue a),IntSet.IntSet)}
 
@@ -179,7 +183,6 @@ instance Applicative Signal where
         return (defaultValue,processState fCont gCont ref ids,ids)
         where
             processState fCont gCont ref ids event@(Event uid _) = case idGuard ids uid ref of
-            --TODO: Maybe lazy case statements are the best way to handle this!
                 Just r -> r
                 Nothing-> do
                     fValue <- fCont event
@@ -288,8 +291,8 @@ initWindow = GLFW.init >>= \initSuccessful -> if initSuccessful then window else
             --Windowed
             GLFW.createWindow 960 640 "Necronomicon" Nothing Nothing
             --Full screen
-            -- fullScreenOnMain <- GLFW.getPrimaryMonitor
-            -- GLFW.createWindow 1920 1080 "Necronomicon" fullScreenOnMain Nothing
+            --fullScreenOnMain <- GLFW.getPrimaryMonitor
+            --GLFW.createWindow 1920 1080 "Necronomicon" fullScreenOnMain Nothing
         window   = mkWindow >>= \w -> GLFW.makeContextCurrent w >> return w
 
 runSignal :: (Show a) => Signal a -> IO()
@@ -297,7 +300,6 @@ runSignal s = initWindow >>= \mw ->
     case mw of
         Nothing -> print "Error starting GLFW." >> return ()
         Just w  -> do
-            GL.texture GL.Texture2D GL.$= GL.Enabled
 
             print "Starting signal run time"
 
@@ -307,18 +309,23 @@ runSignal s = initWindow >>= \mw ->
             GLFW.setKeyCallback         w $ Just $ keyPressEvent   globalDispatch
             GLFW.setWindowSizeCallback  w $ Just $ dimensionsEvent globalDispatch
 
+            client <- withSocketsDo $ getArgs >>= startNetworking
+
+            threadDelay $ 16667
+
             inputCounterRef <- newIORef 1000
             sceneVar        <- atomically newEmptyTMVar
-            necroVars       <- mkNecroVars >>= \nVars -> runNecroState startNecronomicon nVars >>= \(_,nVars') -> newIORef nVars'
-            let necro = Necro globalDispatch inputCounterRef sceneVar necroVars
+            necroVars       <- mkNecroVars
+            runNecroState startNecronomicon necroVars
+            let necro = Necro globalDispatch inputCounterRef sceneVar necroVars client
             forkIO $ globalEventDispatch s necro
 
             threadDelay $ 16667
 
-            -- GL.doubleBuffer GL.$= True
-
+            --Start up openGL rendering loop
+            GL.texture GL.Texture2D GL.$= GL.Enabled
             resources <- newResources
-            render False w sceneVar resources necroVars
+            render False w sceneVar resources necroVars client
     where
         --event callbacks
         mousePressEvent eventNotify _ _ GLFW.MouseButtonState'Released _ = atomically $ (writeTBQueue eventNotify $ Event 1 $ toDyn False) `orElse` return ()
@@ -329,11 +336,12 @@ runSignal s = initWindow >>= \mw ->
         dimensionsEvent eventNotify _ x y                                = atomically $ writeTBQueue eventNotify $ Event 2 $ toDyn $ Vector2 (fromIntegral x) (fromIntegral y)
         mousePosEvent   eventNotify w x y                                = do
             (wx,wy) <- GLFW.getWindowSize w
-            let pos = ((x / fromIntegral wx) * 2 - 1,(y / fromIntegral wy) * (-2) + 1)
+            -- let pos = ((x / fromIntegral wx) * 2 - 1,(y / fromIntegral wy) * (-2) + 1)
+            let pos = (x / fromIntegral wx,y / fromIntegral wy)
             atomically $ (writeTBQueue eventNotify $ Event 0 $ toDyn pos) `orElse` return ()
 
-        render quit window sceneVar resources necroVarsRef
-            | quit      = readIORef necroVarsRef >>= runNecroState shutdownNecronomicon >> print "Qutting" >> return ()
+        render quit window sceneVar resources necroVars client
+            | quit      = quitClient client >> runNecroState shutdownNecronomicon necroVars >> print "Qutting" >> return ()
             | otherwise = do
                 GLFW.pollEvents
                 q          <- liftA (== GLFW.KeyState'Pressed) (GLFW.getKey window GLFW.Key'Q)
@@ -342,7 +350,7 @@ runSignal s = initWindow >>= \mw ->
                     Nothing -> return ()
                     Just s  -> renderGraphics window resources s
                 threadDelay $ 16667
-                render q window sceneVar resources necroVarsRef
+                render q window sceneVar resources necroVars client
 
 globalEventDispatch :: Show a => Signal a -> Necro -> IO()
 globalEventDispatch signal necro = do
@@ -354,6 +362,10 @@ globalEventDispatch signal necro = do
         case a of
             NoChange _ -> return ()
             Change  a' -> return () --print a'
+
+startNetworking :: [String] -> IO Client
+startNetworking (name : serverAddr : []) = startClient name serverAddr
+startNetworking _                        = print "You must give a user name and the server ip address" >> newClient "INCORRECT_COMMAND_ARGS"
 
 ---------------------------------------------
 -- Time
@@ -671,6 +683,9 @@ alt = isDown keyLAlt <|> isDown keyRAlt
 shift :: Signal Bool
 shift = isDown keyLShift <|> isDown keyRShift
 
+receiveChatMessage :: Signal String
+receiveChatMessage = input "" 3
+
 ---------------------------------------------
 -- Combinators
 ---------------------------------------------
@@ -975,8 +990,7 @@ playWhile synth shouldPlay = Signal $ \necro -> do
     let synthName       = "signalsSynth" ++ show counterValue
     ref                <- newIORef pValue
     synthRef           <- newIORef (Nothing :: Maybe Synth)
-    (_,newNecroVars)   <- readIORef (necroVars necro) >>= runNecroState (compileAndRunSynth synthName synth False False pValue synthRef)
-    writeIORef (necroVars necro) newNecroVars
+    runNecroState (compileAndRunSynth synthName synth False False pValue synthRef) (necroVars necro)
     return ((),processEvent ref pCont synthName synthRef (necroVars necro),ids)
     where
         processEvent ref pCont synthName synthRef necroVars event = do
@@ -988,24 +1002,15 @@ playWhile synth shouldPlay = Signal $ \necro -> do
                     case (isPlaying,shouldPlay) of
                         (True ,True)  -> return $ Change ()
                         (False,False) -> return $ Change ()
-                        (True ,False) -> do
-                            (_,newNecroVars) <- readIORef necroVars >>= runNecroState (compileAndRunSynth synthName synth True True False synthRef)
-                            writeIORef necroVars newNecroVars
-                            writeIORef ref False
-                            return $ Change ()
-                        (False,True)  -> do
-                            (_,newNecroVars) <- readIORef necroVars >>= runNecroState (compileAndRunSynth synthName synth True False True synthRef)
-                            writeIORef necroVars newNecroVars
-                            writeIORef ref True
-                            return $ Change ()
+                        (True ,False) -> runNecroState (compileAndRunSynth synthName synth True True False synthRef) necroVars >> return (Change ())
+                        (False,True)  -> runNecroState (compileAndRunSynth synthName synth True False True synthRef) necroVars >> return (Change ())
 
 play :: UGen -> Signal Bool -> Signal ()
 play synth sig = Signal $ \necro -> do
     (_,pCont,ids)    <- unSignal sig necro
     counterValue     <- readIORef (inputCounter necro) >>= \counterValue -> writeIORef (inputCounter necro) (counterValue + 1) >> return (counterValue + 1)
     let synthName     = "signalsSynth" ++ show counterValue
-    (_,newNecroVars) <- readIORef (necroVars necro) >>= runNecroState (compileSynthDef synthName synth)
-    writeIORef (necroVars necro) newNecroVars
+    runNecroState (compileSynthDef synthName synth) (necroVars necro)
     return ((),processEvent pCont synthName (necroVars necro),ids)
     where
         processEvent pCont synthName necroVars event = do
@@ -1013,19 +1018,16 @@ play synth sig = Signal $ \necro -> do
             case e of
                 NoChange _     -> return $ NoChange ()
                 Change   False -> return $ Change ()
-                Change   True  -> do
-                    readIORef necroVars >>= runNecroState (playSynth synthName 0) >>= \(_,newNecroVars) -> writeIORef necroVars newNecroVars
-                    return $ Change ()
+                Change   True  -> runNecroState (playSynth synthName 0) necroVars >> return (Change ())
 
 playUntil :: UGen -> Signal Bool -> Signal Bool -> Signal ()
 playUntil synth playSig stopSig = Signal $ \necro -> do
-    (_,pCont,pids)  <- unSignal playSig necro
-    (_,sCont,sids)  <- unSignal stopSig necro
-    counterValue    <- readIORef (inputCounter necro) >>= \counterValue -> writeIORef (inputCounter necro) (counterValue + 1) >> return (counterValue + 1)
-    let synthName    = "signalsSynth" ++ show counterValue
-    synthRef        <- newIORef (Nothing :: Maybe Synth)
-    (_,newNecroVars) <- readIORef (necroVars necro) >>= runNecroState (compileSynthDef synthName synth)
-    writeIORef (necroVars necro) newNecroVars
+    (_,pCont,pids)   <- unSignal playSig necro
+    (_,sCont,sids)   <- unSignal stopSig necro
+    counterValue     <- readIORef (inputCounter necro) >>= \counterValue -> writeIORef (inputCounter necro) (counterValue + 1) >> return (counterValue + 1)
+    let synthName     = "signalsSynth" ++ show counterValue
+    synthRef         <- newIORef (Nothing :: Maybe Synth)
+    runNecroState (compileSynthDef synthName synth) (necroVars necro)
     return ((),processEvent pCont sCont synthName synthRef (necroVars necro),IntSet.union pids sids)
     where
         processEvent pCont sCont synthName synthRef necroVars event = do
@@ -1033,16 +1035,8 @@ playUntil synth playSig stopSig = Signal $ \necro -> do
             s          <- sCont event
             maybeSynth <- readIORef synthRef
             case (p,s,maybeSynth) of
-                (Change True,_,Nothing)  -> do
-                    (synth',newNecroVars) <- readIORef necroVars >>= runNecroState (playSynth synthName 0)
-                    writeIORef necroVars newNecroVars
-                    writeIORef synthRef $ Just synth'
-                    return $ Change ()
-                (_,Change True,Just synth)  -> do
-                    (_,newNecroVars) <- readIORef necroVars >>= runNecroState (stopSynth synth)
-                    writeIORef necroVars newNecroVars
-                    writeIORef synthRef Nothing
-                    return $ Change ()
+                (Change True,_,Nothing)    -> runNecroState (playSynth synthName 0) necroVars >> return (Change ())
+                (_,Change True,Just synth) -> runNecroState (stopSynth synth)       necroVars >> return (Change ())
                 _   -> return $ NoChange ()
 
 compileAndRunSynth :: String -> UGen -> Bool -> Bool -> Bool -> IORef (Maybe Synth) -> Necronomicon ()
@@ -1060,16 +1054,267 @@ playPattern init playSig pattern = Signal $ \necro -> do
     counterValue        <- readIORef (inputCounter necro) >>= \counterValue -> writeIORef (inputCounter necro) (counterValue + 1) >> return (counterValue + 1)
     ref                 <- newIORef init
     let pdef             = pstream ("signalsPDef" ++ show counterValue) (pure $ liftIO . atomically . writeTBQueue (globalDispatch necro) . Event counterValue . toDyn) pattern
-    readIORef (necroVars necro) >>= runNecroState (setTempo 150) >>= \(_,newNecroVars) -> writeIORef (necroVars necro) newNecroVars
+    runNecroState (setTempo 150) (necroVars necro)
     return (init,processEvent pCont counterValue pdef (necroVars necro) ref,IntSet.insert counterValue pids)
     where
-        processEvent pCont counterValue pdef necroVarRef ref event@(Event uid e) = do
+        processEvent pCont counterValue pdef necroVars ref event@(Event uid e) = do
             p <- pCont event
             case (p,uid == counterValue,fromDynamic e) of
-                (Change True ,_,_) -> readIORef necroVarRef >>= runNecroState (runPDef pdef) >>= \(_,newNecroVars) -> writeIORef necroVarRef newNecroVars >> readIORef ref >>= return . NoChange
-                (Change False,_,_) -> readIORef necroVarRef >>= runNecroState (pstop   pdef) >>= \(_,newNecroVars) -> writeIORef necroVarRef newNecroVars >> readIORef ref >>= return . NoChange
+                (Change True ,_,_) -> runNecroState (runPDef pdef) necroVars >> readIORef ref >>= return . NoChange
+                (Change False,_,_) -> runNecroState (pstop   pdef) necroVars >> readIORef ref >>= return . NoChange
                 (_,True,Just v )   -> writeIORef ref v >> return (Change v)
                 _                  -> readIORef  ref >>= return . NoChange
 
--- nPrint :: (Show a) => a -> Necronomicon ()
--- nPrint = liftIO . print
+-------------------------------------------------------------------------------------------------
+-- Signals 5.0
+-------------------------------------------------------------------------------------------------
+{-
+newtype Signal' a = Signal' {unSignal' :: Necro -> IO (EventTree a)}
+
+-- Is this a comonad???
+treeVal :: EventTree a -> a
+treeVal (InputNode    val _    ) = val
+treeVal (EventTree  _ val _ _  ) = val
+treeVal (EventTree2 _ val _ _ _) = val
+
+treeIds :: EventTree a -> IntSet.IntSet
+treeIds (InputNode        _ ids) = ids
+treeIds (EventTree    _ _ _ ids) = ids
+treeIds (EventTree2 _ _ _ _ ids) = ids
+
+data EventTree a = Typeable a => InputNode  (a ->      IO a) a                             IntSet.IntSet
+                 | forall b.     EventTree  (b ->      IO a) a (EventTree b)               IntSet.IntSet
+                 | forall b c.   EventTree2 (b -> c -> IO a) a (EventTree b) (EventTree c) IntSet.IntSet
+
+instance (Show a) => Show (EventTree a) where
+    show (InputNode    val             ids) = "(InputNode "  ++ show val ++ " " ++ show ids ++ ")"
+    show (EventTree  _ val xTree       ids) = "(EventTree "  ++ show val ++ " " ++ show ids ++ " " ++ show "xTree" ++ ")"
+    show (EventTree2 _ val xTree yTree ids) = "(EventTree2 " ++ show val ++ " " ++ show ids ++ " " ++ show "xTree" ++ " " ++ show "yTree" ++ ")"
+
+traverseEventTree :: EventTree a -> Event -> IO (EventValue (EventTree a))
+
+traverseEventTree tree@(InputNode f val ids) event@(Event uid eval)
+    | IntSet.member uid ids, Just val' <- fromDynamic eval = f val' >>= val'' -> return . Change $ InputNode val'' ids
+    | otherwise                                            = return $ NoChange tree
+
+traverseEventTree tree@(EventTree f val xTree ids) event@(Event uid _)
+    | IntSet.member uid ids = traverseEventTree xTree event >>= eventF
+    | otherwise             = return $ NoChange tree
+    where
+        eventF (Change xTree') = f (treeVal xTree') >>= \val' -> return . Change $ EventTree f val' xTree' ids
+        eventF  _              = return $ NoChange tree
+
+traverseEventTree tree@(EventTree2 f val xTree yTree ids) event@(Event uid _)
+    | IntSet.member uid ids = traverseEventTree xTree event >>= \x -> traverseEventTree yTree event >>= \y -> eventF x y
+    | otherwise             = return $ NoChange tree
+    where
+        eventF (Change xTree') (Change yTree') = f (treeVal xTree') (treeVal yTree') >>= \val' -> return . Change $ EventTree2 f val' xTree' yTree' ids
+        eventF (NoChange _   ) (Change yTree') = f (treeVal xTree ) (treeVal yTree') >>= \val' -> return . Change $ EventTree2 f val' xTree  yTree' ids
+        eventF (Change xTree') (NoChange _   ) = f (treeVal xTree') (treeVal yTree ) >>= \val' -> return . Change $ EventTree2 f val' xTree' yTree  ids
+        eventF  _               _              = return $ NoChange tree
+
+instance Functor Signal' where
+    fmap f x = Signal' $ \necro -> unSignal' x necro >>= \xTree -> return $ EventTree (\x -> return $ f x) (f $ treeVal xTree) xTree (treeIds xTree)
+
+instance Applicative Signal' where
+    pure  a = Signal' $ \_ -> return $ EventTree undefined a undefined IntSet.empty
+    f <*> g = Signal' $ \necro -> do
+        fTree <- unSignal' f necro
+        gTree <- unSignal' g necro
+        return $ EventTree2 (\f g -> return $ f g) (treeVal fTree $ treeVal gTree) fTree gTree (IntSet.union (treeIds fTree) (treeIds gTree))
+
+runSignal' :: (Show a) => Signal' a -> IO()
+runSignal' s = initWindow >>= \mw ->
+    case mw of
+        Nothing -> print "Error starting GLFW." >> return ()
+        Just w  -> do
+            GL.texture GL.Texture2D GL.$= GL.Enabled
+
+            print "Starting signal run time"
+
+            globalDispatch <- atomically $ newTBQueue 100000
+            GLFW.setCursorPosCallback   w $ Just $ mousePosEvent   globalDispatch
+            GLFW.setMouseButtonCallback w $ Just $ mousePressEvent globalDispatch
+            GLFW.setKeyCallback         w $ Just $ keyPressEvent   globalDispatch
+            GLFW.setWindowSizeCallback  w $ Just $ dimensionsEvent globalDispatch
+
+            inputCounterRef <- newIORef 1000
+            sceneVar        <- atomically newEmptyTMVar
+            necroVars       <- mkNecroVars
+            runNecroState startNecronomicon necroVars
+            let necro = Necro globalDispatch inputCounterRef sceneVar necroVars
+            forkIO $ globalEventDispatch' s necro
+
+            threadDelay $ 16667
+
+            resources <- newResources
+            render False w sceneVar resources necroVars
+    where
+        --event callbacks
+        mousePressEvent eventNotify _ _ GLFW.MouseButtonState'Released _ = atomically $ (writeTBQueue eventNotify $ Event 1 $ toDyn False) `orElse` return ()
+        mousePressEvent eventNotify _ _ GLFW.MouseButtonState'Pressed  _ = atomically $ (writeTBQueue eventNotify $ Event 1 $ toDyn True ) `orElse` return ()
+        keyPressEvent   eventNotify _ k _ GLFW.KeyState'Pressed  _       = atomically $ (writeTBQueue eventNotify $ Event (glfwKeyToEventKey k) $ toDyn True)
+        keyPressEvent   eventNotify _ k _ GLFW.KeyState'Released _       = atomically $ (writeTBQueue eventNotify $ Event (glfwKeyToEventKey k) $ toDyn False)
+        keyPressEvent   eventNotify _ k _ _ _                            = return ()
+        dimensionsEvent eventNotify _ x y                                = atomically $ writeTBQueue eventNotify $ Event 2 $ toDyn $ Vector2 (fromIntegral x) (fromIntegral y)
+        mousePosEvent   eventNotify w x y                                = do
+            (wx,wy) <- GLFW.getWindowSize w
+            let pos = ((x / fromIntegral wx) * 2 - 1,(y / fromIntegral wy) * (-2) + 1)
+            atomically $ (writeTBQueue eventNotify $ Event 0 $ toDyn pos) `orElse` return ()
+
+        render quit window sceneVar resources necroVars
+            | quit      = runNecroState shutdownNecronomicon necroVars >> print "Qutting" >> return ()
+            | otherwise = do
+                GLFW.pollEvents
+                q          <- liftA (== GLFW.KeyState'Pressed) (GLFW.getKey window GLFW.Key'Q)
+                ms         <- atomically $ tryTakeTMVar sceneVar
+                case ms of
+                    Nothing -> return ()
+                    Just s  -> renderGraphics window resources s
+                threadDelay $ 16667
+                render q window sceneVar resources necroVars
+
+globalEventDispatch' :: Show a => Signal' a -> Necro -> IO()
+globalEventDispatch' signal necro = do
+    eventTree <- unSignal' signal necro
+    print $ treeVal eventTree
+    forever $ do
+        e <- atomically $ readTBQueue $ globalDispatch necro
+        t <- traverseEventTree eventTree e
+        case t of
+            NoChange _ -> return ()
+            Change  t' -> print $ treeVal t'
+
+input' :: Typeable a => a -> Int -> Signal' a
+input' a uid = Signal' . const . return . InputNode return a $ IntSet.insert uid IntSet.empty
+
+
+mousePos' :: Signal' (Double,Double)
+mousePos' = input' (0,0) 0
+
+sigTest :: IO ()
+sigTest = runSignal' tonsOfMouse
+
+tonsOfMouse :: Signal' (Double,Double)
+tonsOfMouse = tenThousandTest
+    where
+        tupleTest (x,y) (z,w) = (x+w,z-y)
+        test1           = tupleTest <~ mousePos'
+        tenTests        = test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ mousePos')))))))))
+        test2           = tupleTest <~ tenTests
+        hundredTests    = test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ mousePos')))))))))
+        test3           = tupleTest <~ hundredTests
+        thousandsTests  = test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ mousePos')))))))))
+        test4           = tupleTest <~ thousandsTests
+        tenThousandTest = test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ mousePos')))))))))
+
+genInputId :: Necro -> IO Int
+genInputId necro = do
+    prev_uid   <- readIORef $ inputCounter necro
+    let uid = prev_uid + 1
+    writeIORef (inputCounter necro) uid
+    return uid
+
+-------------
+-- Time 5.0
+-------------
+
+every' :: Time -> Signal' Time
+every' time = Signal' $ \necro -> do
+    uid <- genInputId necro
+    forkIO $ timer uid $ globalDispatch necro
+    return . InputNode return 0 $ IntSet.fromList [uid]
+    where
+        timer uid outBox = forever $ do
+            currentTime <- getCurrentTime
+            atomically   $ writeTBQueue outBox $ Event uid $ toDyn currentTime
+            threadDelay  $ floor $ time * 1000000
+            where
+                getCurrentTime = do
+                    currentTime <- GLFW.getTime
+                    case currentTime of
+                        Nothing -> return 0
+                        Just t  -> return t
+
+fps' :: Time -> Signal' Time
+fps' time = Signal' $ \necro -> do
+    uid <- genInputId necro
+    ref <- newIORef 0
+    forkIO $ timer ref uid $ globalDispatch necro
+    return . InputNode return 0 $ IntSet.fromList [uid]
+    where
+        timer ref uid outBox = forever $ do
+            lastTime    <- readIORef ref
+            currentTime <- getCurrentTime
+            let delta    = (currentTime - lastTime)
+            atomically   $ writeTBQueue outBox $ Event uid $ toDyn delta
+            writeIORef ref currentTime
+            threadDelay  $ floor $ (1.0 / time) * 1000000
+            where
+                getCurrentTime = do
+                    currentTime <- GLFW.getTime
+                    case currentTime of
+                        Nothing -> return 0
+                        Just t  -> return t
+
+
+----------------
+-- Input 5.0
+----------------
+textInput' :: Signal' Char
+textInput' = keysToCode <~ combine (map (input False) [100..134]) ~~ shift
+    where
+        keysToCode keysArray shiftDown = eventKeyToChar keysArray shiftDown
+            where
+                (keyDown,_) = foldr (\isDown (current,count) -> if isDown then (count,count + 1) else (current,count + 1)) (99,100) keysArray
+
+toggle :: Signal Bool -> Signal Bool
+toggle boolSignal = Signal $ \necro -> do
+    (bValue,boolCont,boolIds) <- unSignal boolSignal necro
+    boolRef <- newIORef bValue
+    return (bValue,processEvent boolRef boolCont boolIds,boolIds)
+    where
+        processEvent boolRef boolCont ids event@(Event uid _) = case idGuard ids uid boolRef of
+            Just r  -> r
+            Nothing -> boolCont event >>= \b -> case b of
+                Change True -> readIORef boolRef >>= \prevBool -> writeIORef boolRef (not prevBool) >> return (Change (not prevBool))
+                _           -> readIORef boolRef >>= return . NoChange
+
+mousePos :: Signal (Double,Double)
+mousePos = input (0,0) 0
+
+mouseClicks :: Signal ()
+mouseClicks = (\_ -> ()) <~ keepIf (\x -> x == False) True mouseDown
+
+mouseDown :: Signal Bool
+mouseDown = input False 1
+
+dimensions :: Signal Vector2
+dimensions = input (Vector2 960 640) 2
+
+isDown :: Key -> Signal Bool
+isDown = input False . glfwKeyToEventKey
+
+wasd :: Signal (Double,Double)
+wasd = go <~ isDown keyW ~~ isDown keyA ~~ isDown keyS ~~ isDown keyD
+    where
+        go w a s d = (((if d then 1 else 0) + (if a then (-1) else 0)),((if w then 1 else 0) + (if s then (-1) else 0)))
+
+enter :: Signal Bool
+enter = isDown keyEnter
+
+space :: Signal Bool
+space = isDown keySpace
+
+ctrl :: Signal Bool
+ctrl = isDown keyLCtrl <|> isDown keyRCtrl
+
+alt :: Signal Bool
+alt = isDown keyLAlt <|> isDown keyRAlt
+
+shift :: Signal Bool
+shift = isDown keyLShift <|> isDown keyRShift
+
+receiveChatMessage :: Signal String
+receiveChatMessage = input "" 3
+-}

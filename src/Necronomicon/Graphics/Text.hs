@@ -1,6 +1,5 @@
 module Necronomicon.Graphics.Text (drawText,
                                    renderFont,
-                                   drawBoundText,
                                    charMetrics,
                                    fitTextIntoBounds) where
 
@@ -54,10 +53,7 @@ fontFace ft fp = withCString fp $ \str ->
         peek ptr
 
 drawText :: String -> Font -> (NecroTex.Texture -> Material) -> Model
-drawText text font material = FontRenderer text font material Nothing
-
-drawBoundText :: String -> Font -> (NecroTex.Texture -> Material) -> (Double,Double) -> Model
-drawBoundText text font material bounds = FontRenderer text font material $ Just bounds
+drawText text font material = FontRenderer text font material
 
 loadFontAtlas :: Font -> IO LoadedFont
 loadFontAtlas font = do
@@ -156,14 +152,12 @@ fontScale :: Double
 fontScale = 1 / 1080
 
 --Change dynamic meshes to "load" their buffers the first time, so users don't have to supply them
-renderFont :: String -> Font -> (NecroTex.Texture -> Material) -> Maybe (Double,Double) -> Linear.Matrix4x4 -> Linear.Matrix4x4 -> Resources -> IO()
-renderFont text font material maybeBounds modelView proj resources = do
+renderFont :: String -> Font -> (NecroTex.Texture -> Material) -> Linear.Matrix4x4 -> Linear.Matrix4x4 -> Resources -> IO()
+renderFont text font material modelView proj resources = do
     loadedFont <- getFont resources font
     let characterMesh                       = textMesh (characters loadedFont) (atlasWidth loadedFont) (atlasHeight loadedFont)
         fontMesh                            = DynamicMesh (characterVertexBuffer loadedFont) (characterIndexBuffer loadedFont) vertices colors uvs indices
-        (vertices,colors,uvs,indices,_,_,_) = case maybeBounds of
-            Nothing -> foldl' characterMesh ([],[],[],[],0,0,0) text
-            Just  b -> foldl' characterMesh ([],[],[],[],0,0,0) text -- $ fitTextIntoBounds text b (characters loadedFont)
+        (vertices,colors,uvs,indices,_,_,_) = foldl' characterMesh ([],[],[],[],0,0,0) text
     drawMeshWithMaterial (material $ atlas loadedFont) fontMesh modelView proj resources
 
 textMesh :: Map.Map Char CharMetric ->
@@ -172,9 +166,9 @@ textMesh :: Map.Map Char CharMetric ->
             ([Linear.Vector3],[Color.Color],[Linear.Vector2],[Int],Int,Double,Double) ->
             Char ->
             ([Linear.Vector3],[Color.Color],[Linear.Vector2],[Int],Int,Double,Double)
-textMesh charMetrics aWidth aHeight (vertices,colors,uvs,indices,count,x,y) char = case char of
-    '\n' -> (vertices ,colors ,uvs ,indices ,count    ,0   ,y + aHeight * fontScale)
-    _    -> (vertices',colors',uvs',indices',count + 4,x+ax,y)
+textMesh charMetrics aWidth aHeight (vertices,colors,uvs,indices,count,x,y) char
+    | '\n' <- char = (vertices ,colors ,uvs ,indices ,count    ,0   ,y + aHeight * fontScale)
+    | otherwise    = (vertices',colors',uvs',indices',count + 4,x+ax,y)
     where
         charMetric = fromMaybe (CharMetric (toEnum 0) 0 0 0 0 0 0 0 0 0) $ Map.lookup char charMetrics
         w          = charWidth  charMetric * fontScale
@@ -229,10 +223,10 @@ splitCharIntoWords w cmetrics ((word,wordLength),words',totalLength) char
     | wordLength > w    = ( ([char],cAdvance), words' ++ [(word,wordLength)],                   totalLength + wordLength + cAdvance)
     | otherwise         = ((word ++ [char],wordLength + cAdvance), words' , totalLength)
     where
+        isWhiteSpace ' '  = True
+        isWhiteSpace '\n' = True
+        isWhiteSpace  _   = False
+
         cAdvance = case Map.lookup char cmetrics of
             Nothing -> 10
             Just m  -> advanceX m * fontScale
-        isWhiteSpace c = case c of
-            ' '  -> True
-            '\n' -> True
-            _    -> False

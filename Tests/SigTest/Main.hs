@@ -7,7 +7,7 @@ main = runSignal testChat
 testChat :: Signal ()
 testChat = gui [chatBox]
     where
-        chatBox = chat <| Vector2 0.2 0.25
+        chatBox = chat <| Vector2 0.0 0.15
                        <| Size 0.35 0.35
                        <| Font "OCRA.ttf" 16
                        <| gray 0.1
@@ -37,7 +37,7 @@ testShader = gui [so <~ mousePos,pure zLabel]
     where
         so (x,y) = SceneObject (Vector3 x y 0) identity 1 model []
         model    = Model (rect 0.2 0.2) (ambient (tga "Gas20.tga"))
-        zLabel   = label <| Vector2 (-1) 0
+        zLabel   = label <| Vector2 0.5 0.5
                          <| Font "OCRA.ttf" 20
                          <| white
                          <| "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris ipsum risus, luctus vel mollis non, hendrerit non mi. Sed at blandit ex. Donec aliquam pellentesque convallis. Integer in nisl ut ipsum dignissim vestibulum. Aenean porta nunc magna, id porttitor quam scelerisque non. Ut malesuada mi lectus, vitae finibus est lacinia nec. Nunc varius sodales porttitor. Nam faucibus tortor quis ullamcorper feugiat. Etiam mollis tellus mi, pretium consequat justo suscipit in. Etiam posuere placerat risus, eget efficitur nulla."
