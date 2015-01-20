@@ -309,7 +309,7 @@ runSignal s = initWindow >>= \mw ->
             GLFW.setKeyCallback         w $ Just $ keyPressEvent   globalDispatch
             GLFW.setWindowSizeCallback  w $ Just $ dimensionsEvent globalDispatch
 
-            client <- withSocketsDo $ getArgs >>= startNetworking
+            client <- withSocketsDo $ getArgs >>= startNetworking (chatEvent globalDispatch)
 
             threadDelay $ 16667
 
@@ -340,6 +340,9 @@ runSignal s = initWindow >>= \mw ->
             let pos = (x / fromIntegral wx,y / fromIntegral wy)
             atomically $ (writeTBQueue eventNotify $ Event 0 $ toDyn pos) `orElse` return ()
 
+        --Networking event callbacks
+        chatEvent eventNotify userName message = atomically $ (writeTBQueue eventNotify $ Event 3 $ toDyn (message)) `orElse` return ()
+
         render quit window sceneVar resources necroVars client
             | quit      = quitClient client >> runNecroState shutdownNecronomicon necroVars >> print "Qutting" >> return ()
             | otherwise = do
@@ -363,9 +366,9 @@ globalEventDispatch signal necro = do
             NoChange _ -> return ()
             Change  a' -> return () --print a'
 
-startNetworking :: [String] -> IO Client
-startNetworking (name : serverAddr : []) = startClient name serverAddr
-startNetworking _                        = print "You must give a user name and the server ip address" >> newClient "INCORRECT_COMMAND_ARGS"
+startNetworking :: (String -> String -> IO()) -> [String] -> IO Client
+startNetworking chatCallback (name : serverAddr : []) = startClient name serverAddr chatCallback
+startNetworking _ _                                   = print "You must give a user name and the server ip address" >> newClient "INCORRECT_COMMAND_ARGS"
 
 ---------------------------------------------
 -- Time

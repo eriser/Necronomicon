@@ -24,13 +24,13 @@ import Necronomicon.Networking.Message
 import System.Exit
 
 data Client = Client {
-    userName     :: String,
-    users        :: TVar [String],
-    connected    :: TVar Bool,
-    syncObjects  :: TVar (Map Int SyncObject),
-    outBox       :: TChan Message,
-    inBox        :: TChan Message,
-    shouldQuit   :: TVar QuitStatus
+    userName      :: String,
+    users          :: TVar [String],
+    connected      :: TVar Bool,
+    syncObjects    :: TVar (Map Int SyncObject),
+    outBox         :: TChan Message,
+    inBox          :: TChan Message,
+    shouldQuit     :: TVar QuitStatus
     }
 
 data QuitStatus = StillRunning
@@ -50,8 +50,8 @@ newClient name = do
     shouldQuit  <- atomically $ newTVar StillRunning
     return $ Client name users connected syncObjects outBox inBox shouldQuit
 
-startClient :: String -> String -> IO Client
-startClient name serverIPAddress = do
+startClient :: String -> String -> (String -> String -> IO()) -> IO Client
+startClient name serverIPAddress chatCallback = do
     print "Starting a client."
     client <- newClient name
     withSocketsDo (getSocket >>= handler client)
@@ -73,16 +73,15 @@ startClient name serverIPAddress = do
                 print "Logging in..."
                 atomically $ writeTChan (outBox client) $ Message "clientLogin" [toOSCString name]
 
-        oscFunctions =
-            insert "userList"         userList         $
-            insert "clientAliveReply" clientAliveReply $
-            insert "clientLoginReply" clientLoginReply $
-            insert "addSyncObject"    addSyncObject    $
-            insert "removeSyncObject" removeSyncObject $
-            insert "sync"             sync             $
-            insert "setSyncArg"       setSyncArg       $
-            insert "receiveChat"      receiveChat      $
-            Data.Map.empty
+        oscFunctions = insert "userList"         userList
+                     $ insert "clientAliveReply" clientAliveReply
+                     $ insert "clientLoginReply" clientLoginReply
+                     $ insert "addSyncObject"    addSyncObject
+                     $ insert "removeSyncObject" removeSyncObject
+                     $ insert "sync"             sync
+                     $ insert "setSyncArg"       setSyncArg
+                     $ insert "receiveChat"      (receiveChat chatCallback)
+                     $ Data.Map.empty
 
 testNetworking :: Client -> IO ()
 testNetworking client = forever $ do
@@ -246,9 +245,9 @@ setSyncArg (Int32 id : Int32 index : v : []) client = atomically (readTVar (sync
             newSyncObjects = Data.Map.insert (fromIntegral id) (setArg (fromIntegral index) (datumToArg v) so) sos
 setSyncArg _ _ = return ()
 
-receiveChat :: [Datum] -> Client -> IO ()
-receiveChat (ASCII_String name : ASCII_String msg : []) client = putStrLn $ "Chat - " ++ show name ++ ": " ++ show msg
-receiveChat _ _ = return ()
+receiveChat :: (String -> String -> IO()) -> [Datum] -> Client -> IO ()
+receiveChat chatCallback (ASCII_String name : ASCII_String msg : []) client = putStrLn ("Chat - " ++ show name ++ ": " ++ show msg) >> chatCallback (show name) (show msg)
+receiveChat _ _ _ = return ()
 
 
 ------------------------------
