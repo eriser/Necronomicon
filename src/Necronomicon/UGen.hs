@@ -206,11 +206,11 @@ infixl 1 +>
 -- UGen
 --------------------------------------------------------------------------------------
 data UGen = UGenNum Double
-          | UGenFunc String Calc [UGen]
+          | UGenFunc String CUGenFunc CUGenFunc CUGenFunc [UGen]
 
 instance Show UGen where
     show (UGenNum d) = show d
-    show (UGenFunc s _ us) = "(" ++ s ++ foldl (\acc u -> acc ++ " " ++ show u) "" us ++ ")"
+    show (UGenFunc s _ _ _ us) = "(" ++ s ++ foldl (\acc u -> acc ++ " " ++ show u) "" us ++ ")"
 
 instance Num UGen where
     (+)         = add
@@ -288,59 +288,68 @@ instance Floating [UGen] where
 -- UGenType Class
 --------------------------------------------------------------------------------------
 class (Show a, Num a, Fractional a) => UGenType a where
-    ugen :: String -> Calc -> [a] -> a
+    ugen :: String -> CUGenFunc -> CUGenFunc -> CUGenFunc -> [a] -> a
 
 instance UGenType UGen where
-    ugen name calc args = UGenFunc name calc args
+    ugen name calc constructor deconstructor args = UGenFunc name calc constructor deconstructor args
 
 instance UGenType [UGen] where
-    ugen name calc args = expand 0
+    ugen name calc constructor deconstructor args = expand 0
         where
             argsWithLengths = zip args $ map length args
             args'           = map (\(arg,len) -> if len <= 0 then ([UGenNum 0],1) else (arg,len)) argsWithLengths
             longest         = foldr (\(_,argLength) longest -> if argLength > longest then argLength else longest) 0 args'
             expand n
                 | n >= longest = []
-                | otherwise    = UGenFunc name calc (map (\(arg,length) -> arg !! mod n length) args') : expand (n + 1)
+                | otherwise    = UGenFunc name calc constructor deconstructor (map (\(arg,length) -> arg !! mod n length) args') : expand (n + 1)
 
 ----------------------------------------------------
 -- C imports
 ----------------------------------------------------
 
-foreign import ccall "&sin_calc" sinCalc :: Calc
+foreign import ccall "&null_constructor" nullConstructor :: CUGenFunc
+foreign import ccall "&null_deconstructor" nullDeconstructor :: CUGenFunc
+
+foreign import ccall "&sin_calc" sinCalc :: CUGenFunc
+foreign import ccall "&sin_constructor" sinConstructor :: CUGenFunc
+foreign import ccall "&sin_deconstructor" sinDeconstructor :: CUGenFunc
+
 sinOsc :: UGenType a => a -> a
-sinOsc freq = ugen "sinOsc" sinCalc [freq]
+sinOsc freq = ugen "sinOsc" sinCalc sinConstructor sinDeconstructor [freq]
 
 -- foreign import ccall "&delay_calc" delayCalc :: Calc
 -- delay :: UGen Double -> UGen Double -> UGen Double
 -- delay amount input = UGenTimeFunc delayCalc [amount] input
 
-foreign import ccall "&add_calc" addCalc :: Calc
+foreign import ccall "&add_calc" addCalc :: CUGenFunc
 add :: UGenType a => a -> a -> a
-add x y = ugen "add" addCalc [x, y]
+add x y = ugen "add" addCalc nullConstructor nullDeconstructor [x, y]
 
-foreign import ccall "&minus_calc" minusCalc :: Calc
+foreign import ccall "&minus_calc" minusCalc :: CUGenFunc
 minus :: UGenType a => a -> a -> a
-minus x y = ugen "minus" minusCalc [x, y]
+minus x y = ugen "minus" minusCalc nullConstructor nullDeconstructor [x, y]
 
-foreign import ccall "&mul_calc" mulCalc :: Calc
+foreign import ccall "&mul_calc" mulCalc :: CUGenFunc
 mul :: UGenType a => a -> a -> a
-mul x y = ugen "mul" mulCalc [x, y]
+mul x y = ugen "mul" mulCalc nullConstructor nullDeconstructor [x, y]
 
 gain :: UGenType a => a -> a -> a
 gain = mul
 
-foreign import ccall "&div_calc" divCalc :: Calc
+foreign import ccall "&div_calc" divCalc :: CUGenFunc
 udiv :: UGenType a => a -> a -> a
-udiv x y = ugen "udiv" divCalc [x, y]
+udiv x y = ugen "udiv" divCalc nullConstructor nullDeconstructor [x, y]
 
-foreign import ccall "&line_calc" lineCalc :: Calc
+foreign import ccall "&line_calc" lineCalc :: CUGenFunc
+foreign import ccall "&line_constructor" lineConstructor :: CUGenFunc
+foreign import ccall "&line_deconstructor" lineDeconstructor :: CUGenFunc
+
 line :: UGenType a => a -> a
-line length = ugen "line" lineCalc [length]
+line length = ugen "line" lineCalc lineConstructor lineDeconstructor [length]
 
-foreign import ccall "&out_calc" outCalc :: Calc
+foreign import ccall "&out_calc" outCalc :: CUGenFunc
 out :: UGenType a => a -> a -> a
-out channel input = ugen "out" outCalc [channel, input]
+out channel input = ugen "out" outCalc nullConstructor nullDeconstructor [channel, input]
 ----------------------------------------------------
 
 sinTest :: [UGen]
@@ -374,6 +383,12 @@ myCoolSynth3 = sin (880 + mod) |> gain 0.25
     where
         mod = sin (20 + sin 0.1 * 9) |> gain 80
 
+myCoolSynth4 :: UGen
+myCoolSynth4 = foldl (|>) (sin 0.3) (replicate 21 sin)
+
+simpleSine :: UGen
+simpleSine = sin 440 |> gain 0.3 |> out 1
+
 --------------------------------------------------------------------------------------
 -- SynthDefs
 --------------------------------------------------------------------------------------
@@ -382,25 +397,30 @@ printSynthDef :: String -> Necronomicon ()
 printSynthDef synthDefName = getSynthDef synthDefName >>= nPrint
 
 playSynth :: String -> CDouble -> Necronomicon Synth
--- playSynth synthDefName time = incrementNodeID >>= sendMessage . StartSynth synthDefName time >> return (Synth id)
-playSynth synthDefName time = incrementNodeID >>= \id -> sendMessage (StartSynth synthDefName time id) >> return (Synth id)
+playSynth synthDefName time = incrementNodeID >>= \id -> sendMessage (StartSynth synthDefName time id) >> return (Synth synthDefName id)
 
 stopSynth :: Synth -> Necronomicon ()
-stopSynth (Synth id) = sendMessage (StopSynth id)
+stopSynth (Synth _ id) = sendMessage (StopSynth id)
 
 compileSynthDef :: String -> UGen -> Necronomicon ()
 compileSynthDef name synthDef = liftIO (runCompileSynthDef name synthDef) >>= addSynthDef
 
-type UGenOutputTable = M.Map String (Ptr AudioSignal)
+data CompiledConstant = CompiledConstant { compiledConstantValue :: CDouble, compiledConstantWireIndex :: CUInt } deriving (Eq, Show)
+
+instance Ord CompiledConstant where
+    compare (CompiledConstant _ w1) (CompiledConstant _ w2) = compare w1 w2
+
+type UGenOutputTable = M.Map String CUInt
 
 data CompiledData = CompiledData {
     compiledUGenTable :: UGenOutputTable,
     compiledUGenGraph :: [CUGen],
-    compiledConstants :: [Ptr AudioSignal]
+    compiledConstants :: [CompiledConstant],
+    compiledWireIndex :: CUInt
 }
 
 mkCompiledData :: CompiledData
-mkCompiledData = CompiledData M.empty [] []
+mkCompiledData = CompiledData M.empty [] [] 0
 
 data Compiled a = Compiled { runCompile :: CompiledData -> IO (a, CompiledData) }
 
@@ -428,55 +448,81 @@ getGraph = Compiled (\c -> return (compiledUGenGraph c, c))
 setGraph :: [CUGen] -> Compiled ()
 setGraph graph = Compiled (\c -> return ((), c { compiledUGenGraph = graph } ))
 
-addUGen :: String -> CUGen -> Ptr AudioSignal -> Compiled ()
-addUGen key ugen outputPtr = do
+addUGen :: String -> CUGen -> CUInt -> Compiled ()
+addUGen key ugen wireIndex = do
     outputTable <- getTable
-    setTable (M.insert key outputPtr outputTable)
+    setTable (M.insert key wireIndex outputTable)
     ugenGraph <- getGraph
     setGraph (ugen : ugenGraph) -- work back to front to use cons over ++, reversed at the very end in runCompileSynthDef
 
-getConstants :: Compiled [Ptr AudioSignal]
+getConstants :: Compiled [CompiledConstant]
 getConstants = Compiled (\c -> return (compiledConstants c, c))
 
-setConstants :: [Ptr AudioSignal] -> Compiled ()
+setConstants :: [CompiledConstant] -> Compiled ()
 setConstants constants = Compiled (\c  -> return ((), c { compiledConstants = constants } ))
 
-addConstant :: String -> Ptr AudioSignal -> Compiled ()
-addConstant key constant = do
+addConstant :: String -> CompiledConstant -> Compiled ()
+addConstant key constant@(CompiledConstant _ wireIndex) = do
     outputTable <- getTable
-    setTable (M.insert key constant outputTable)
+    setTable (M.insert key wireIndex outputTable)
     constants <- getConstants
     setConstants (constant : constants)
 
+getWireIndex :: Compiled CUInt
+getWireIndex = Compiled (\c -> return (compiledWireIndex c, c))
+
+setWireIndex :: CUInt -> Compiled ()
+setWireIndex wire = Compiled (\c -> return ((), c { compiledWireIndex = wire }))
+
+nextWireIndex :: Compiled CUInt
+nextWireIndex = getWireIndex >>= \wire -> setWireIndex (wire + 1) >> return wire
+
+initializeWireBufs :: CUInt -> [CompiledConstant] -> IO (Ptr CDouble)
+initializeWireBufs numWires constants = print ("Wire Buffers: " ++ (show folded)) >> newArray folded
+    where
+        folded = snd $ foldl foldWires ((sort constants), []) [0..(numWires - 1)]
+        foldWires ([], ws) _ = ([], ws ++ zero)
+        foldWires (c@((CompiledConstant d ci):cs), ws) i
+            | ci == i = (cs, (ws ++ [d]))
+            | otherwise = (c, ws ++ zero)
+        zero = [0]
+
 runCompileSynthDef :: String -> UGen -> IO SynthDef
 runCompileSynthDef name ugen = do
-    (outputSignal, (CompiledData table revGraph constants)) <- runCompile (compileUGenGraphBranch ugen) mkCompiledData
+    (outputSignal, (CompiledData table revGraph constants numWires)) <- runCompile (compileUGenGraphBranch ugen) mkCompiledData
     print ("Total ugens: " ++ (show $ length revGraph))
     print ("Total constants: " ++ (show $ length constants))
+    print ("Num Wires: " ++ (show numWires))
     let graph = reverse revGraph
     compiledGraph <- newArray graph
-    return (SynthDef name outputSignal compiledGraph graph constants)
+    compiledWireBufs <- initializeWireBufs numWires constants
+    let cs = CSynthDef compiledGraph compiledWireBufs nullPtr nullPtr 0 0 (fromIntegral $ length graph) (fromIntegral numWires) 0
+    print cs
+    csynthDef <- new $ cs
+    return (SynthDef name csynthDef)
 
-compileUGenGraphBranch :: UGen -> Compiled (Ptr AudioSignal)
+compileUGenGraphBranch :: UGen -> Compiled CUInt
 compileUGenGraphBranch ugen = do
     let hashed = show ugen
     args <- compileUGenArgs ugen -- Compile argument input branches first to build up ugen cache table
     table <- getTable
     case M.lookup hashed table of -- Look to see if this ugen has been compiled already, if so return that ugen's output buffer
-        Just signalPtr -> return signalPtr
+        Just wireIndex -> return wireIndex
         Nothing -> compileUGen ugen args hashed
 
-compileUGenArgs :: UGen -> Compiled [Ptr AudioSignal]
-compileUGenArgs (UGenFunc _ _ inputs) = mapM (compileUGenGraphBranch) inputs
+compileUGenArgs :: UGen -> Compiled [CUInt]
+compileUGenArgs (UGenFunc _ _ _ _ inputs) = mapM (compileUGenGraphBranch) inputs
 compileUGenArgs (UGenNum _) = return []
 
-compileUGen :: UGen -> [Ptr AudioSignal] -> String -> Compiled (Ptr AudioSignal)
-compileUGen (UGenFunc _ calc _) args key = do
-    argsPtr <- liftIO (newArray args)
-    outputPtr <- liftIO (new zeroAudioSignal)
-    addUGen key (CUGen calc argsPtr outputPtr) outputPtr
-    return outputPtr
+-- To Do: Add multi-out ugen support
+compileUGen :: UGen -> [CUInt] -> String -> Compiled CUInt
+compileUGen (UGenFunc _ calc cons decn _) args key = do
+    inputs <- liftIO (newArray args)
+    wire <- nextWireIndex
+    wireBuf <- liftIO $ new wire
+    addUGen key (CUGen calc cons decn nullPtr inputs wireBuf) wire
+    return wire
 compileUGen (UGenNum d) _ key = do
-    signalPtr <- liftIO $ new (AudioSignal 0 (CDouble d))
-    addConstant key signalPtr
-    return signalPtr
+    wire <- nextWireIndex
+    addConstant key (CompiledConstant (CDouble d) wire)
+    return wire

@@ -396,11 +396,12 @@ type UGenOutputTable = M.Map String (Ptr AudioSignal)
 data CompiledData = CompiledData {
     compiledUGenTable :: UGenOutputTable,
     compiledUGenGraph :: [CUGen],
-    compiledConstants :: [Ptr AudioSignal]
+    compiledConstants :: [Ptr AudioSignal],
+    compiledWireIndexes :: [Int]
 }
 
 mkCompiledData :: CompiledData
-mkCompiledData = CompiledData M.empty [] []
+mkCompiledData = CompiledData M.empty [] [] []
 
 data Compiled a = Compiled { runCompile :: CompiledData -> IO (a, CompiledData) }
 
@@ -448,9 +449,22 @@ addConstant key constant = do
     constants <- getConstants
     setConstants (constant : constants)
 
+getWires :: Compiled [Int]
+getWires = Compiled (\c -> return (compiledWireIndexes c, c))
+
+setWires :: [Int] -> Compiled ()
+setWires wires = Compiled (\c -> return ((), c { compiledWireIndexes = wires }))
+
+nextWire :: Compiled Int
+nextWire = Compiled (\c -> let n = next c in return (head n, c { compiledWireIndexes = n }))
+    where
+        next c = getNext $ getWires c
+        getNext [] = [0]
+        getNext l@(w:ws) = (w + 1) : l
+
 runCompileSynthDef :: String -> UGen -> IO SynthDef
 runCompileSynthDef name ugen = do
-    (outputSignal, (CompiledData table revGraph constants)) <- runCompile (compileUGenGraphBranch ugen) mkCompiledData
+    (outputSignal, (CompiledData table revGraph constants wires)) <- runCompile (compileUGenGraphBranch ugen) mkCompiledData
     print ("Total ugens: " ++ (show $ length revGraph))
     print ("Total constants: " ++ (show $ length constants))
     let graph = reverse revGraph

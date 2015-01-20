@@ -16,14 +16,11 @@ import Sound.OSC.Time
 
 data SynthDef = SynthDef {
     synthDefName :: String,
-    synthDefOutput :: Ptr AudioSignal,
-    synthDefGraph :: Ptr CUGen,
-    synthDefUGens :: [CUGen],
-    synthDefConstants :: [Ptr AudioSignal]
+    synthDefCStruct :: Ptr CSynthDef
 } deriving (Show)
 
 type NodeID = CUInt
-data Synth = Synth NodeID
+data Synth = Synth String NodeID
 type SynthDefDict = M.Map String SynthDef
 
 data RunState = NecroOffline | NecroBooting | NecroQuitting | NecroRunning deriving (Show, Eq)
@@ -234,7 +231,7 @@ processMessages messages =  mapM_ (processMessage) messages
                else process m
         process m = case m of
             StartSynth name time id -> getSynthDef name >>= \maybeSynthDef -> case maybeSynthDef of
-                Just (SynthDef _ output graph ugens _) -> liftIO $ playSynthInRtRuntime time output graph id (fromIntegral $ length ugens)
+                Just (SynthDef _ csynthDef) -> liftIO $ playSynthInRtRuntime csynthDef id time
                 Nothing -> return ()
             StopSynth id -> liftIO $ stopSynthInRtRuntime id
             CollectSynthDef synthDef -> addSynthDef synthDef
@@ -377,7 +374,7 @@ getSynthDef :: String -> Necronomicon (Maybe SynthDef)
 getSynthDef name = getSynthDefs >>= \synthDefDict -> return $ M.lookup name synthDefDict
 
 addSynthDef :: SynthDef -> Necronomicon ()
-addSynthDef synthDef@(SynthDef name _ _ _ _) = getSynthDefsTVar >>= \synthDefsTVar ->
+addSynthDef synthDef@(SynthDef name _) = getSynthDefsTVar >>= \synthDefsTVar ->
     nAtomically (readTVar synthDefsTVar >>= \synthDefs -> writeTVar synthDefsTVar (M.insert name synthDef synthDefs))
 
 necronomiconEndSequence :: Necronomicon ()
@@ -416,49 +413,74 @@ freeSynthDefs :: Necronomicon ()
 freeSynthDefs = getSynthDefs >>= \synthDefs -> mapM_ (freeSynthDef) (M.elems synthDefs) >> setSynthDefs M.empty
 
 freeSynthDef :: SynthDef -> Necronomicon ()
-freeSynthDef (SynthDef _ _ graph ugens signals) = mapM_ (freeUGen) ugens >> mapM_ (nFree) signals >> nFree graph
-
-freeUGen :: CUGen -> Necronomicon ()
-freeUGen (CUGen calc inputs outputs) = nFree inputs >> nFree outputs
-
-data AudioSignal = AudioSignal CDouble CDouble deriving (Show)
-
-zeroAudioSignal :: AudioSignal
-zeroAudioSignal = AudioSignal 0 0
-
-instance Storable AudioSignal where
-    sizeOf _ = sizeOf (undefined :: CDouble) * 2
-    alignment _ = alignment (undefined :: CDouble)
-    peek ptr = do
-        amp <- peekByteOff ptr 0 :: IO CDouble
-        off <- peekByteOff ptr 8 :: IO CDouble
-        return (AudioSignal amp off) 
-    poke ptr (AudioSignal amp off) = do
-        pokeByteOff ptr 0 amp
-        pokeByteOff ptr 8 off
+freeSynthDef (SynthDef _ csynthDef) = liftIO $ freeCSynthDef csynthDef
         
-type Calc = FunPtr (Ptr (Ptr AudioSignal) -> Ptr AudioSignal -> ())
-data CUGen = CUGen Calc (Ptr (Ptr AudioSignal)) (Ptr AudioSignal) deriving (Show)
+type CUGenFunc = FunPtr (Ptr CUGen -> ())
+data CUGen = CUGen CUGenFunc CUGenFunc CUGenFunc (Ptr ()) (Ptr CUInt) (Ptr CUInt) deriving (Show)
 
 instance Storable CUGen where
-    sizeOf _ = sizeOf (undefined :: CDouble) * 3
+    sizeOf _ = sizeOf (undefined :: CDouble) * 6
     alignment _ = alignment (undefined :: CDouble)
     peek ptr = do
-        calc <- peekByteOff ptr 0 :: IO Calc
-        inputs <- peekByteOff ptr 8 :: IO (Ptr (Ptr AudioSignal))
-        outputs <- peekByteOff ptr 16 :: IO (Ptr AudioSignal)
-        return (CUGen calc inputs outputs)
-    poke ptr (CUGen calc inputs outputs) = do
-        pokeByteOff ptr 0 calc
-        pokeByteOff ptr 8 inputs
-        pokeByteOff ptr 16 outputs
+        calc  <- peekByteOff ptr 0  :: IO CUGenFunc
+        cons  <- peekByteOff ptr 8  :: IO CUGenFunc
+        decon <- peekByteOff ptr 16 :: IO CUGenFunc
+        dataS <- peekByteOff ptr 24 :: IO (Ptr ())
+        inpts <- peekByteOff ptr 32 :: IO (Ptr CUInt)
+        outs  <- peekByteOff ptr 40 :: IO (Ptr CUInt)
+        return (CUGen calc cons decon dataS inpts outs)
+    poke ptr (CUGen calc cons decon dataS inpts outs) = do
+        pokeByteOff ptr 0  calc
+        pokeByteOff ptr 8  cons
+        pokeByteOff ptr 16 decon
+        pokeByteOff ptr 24 dataS
+        pokeByteOff ptr 32 inpts
+        pokeByteOff ptr 40 outs
+
+data CSynthDef = CSynthDef {
+    csynthDefUGenGraph :: (Ptr CUGen),
+    csynthDegWireBufs :: (Ptr CDouble),
+    csynthDefPreviousNode :: (Ptr CSynthDef),
+    csynthDefNextNode :: (Ptr CSynthDef),
+    csynthDefKey :: CUInt,
+    csynthDefHash :: CUInt,
+    csynthDefNumUGens :: CUInt,
+    csynthDefNumWires :: CUInt,
+    csynthDefTime :: CUInt
+    } deriving (Show)
+
+instance Storable CSynthDef where
+    sizeOf _ = sizeOf (undefined :: CDouble) * 7
+    alignment _ = alignment (undefined :: CDouble)
+    peek ptr = do
+        ugenGrph <- peekByteOff ptr 0  :: IO (Ptr CUGen)
+        wireBufs <- peekByteOff ptr 8  :: IO (Ptr CDouble)
+        prevNode <- peekByteOff ptr 16 :: IO (Ptr CSynthDef)
+        nextNode <- peekByteOff ptr 24 :: IO (Ptr CSynthDef)
+        nodeKey  <- peekByteOff ptr 32 :: IO CUInt
+        nodeHash <- peekByteOff ptr 36 :: IO CUInt
+        numUGens <- peekByteOff ptr 40 :: IO CUInt
+        numWires <- peekByteOff ptr 44 :: IO CUInt
+        sampTime <- peekByteOff ptr 50 :: IO CUInt
+        return (CSynthDef ugenGrph wireBufs prevNode nextNode nodeKey nodeHash numUGens numWires sampTime)
+    poke ptr (CSynthDef ugenGrph wireBufs prevNode nextNode nodeKey nodeHash numUGens numWires sampTime) = do
+        pokeByteOff ptr 0  ugenGrph 
+        pokeByteOff ptr 8  wireBufs
+        pokeByteOff ptr 16 prevNode
+        pokeByteOff ptr 24 nextNode
+        pokeByteOff ptr 32 nodeKey
+        pokeByteOff ptr 36 nodeHash
+        pokeByteOff ptr 40 numUGens
+        pokeByteOff ptr 44 numWires
+        pokeByteOff ptr 50 sampTime
 
 foreign import ccall "start_rt_runtime" startRtRuntime :: IO ()
 foreign import ccall "handle_messages_in_nrt_fifo" handleNrtMessages :: IO ()
 foreign import ccall "shutdown_necronomicon" shutdownNecronomiconCRuntime :: IO ()
-foreign import ccall "play_synth" playSynthInRtRuntime :: CDouble -> Ptr AudioSignal -> Ptr CUGen -> CUInt -> CUInt -> IO ()
+foreign import ccall "play_synth" playSynthInRtRuntime :: Ptr CSynthDef -> NodeID -> CDouble -> IO ()
 foreign import ccall "stop_synth" stopSynthInRtRuntime :: NodeID -> IO ()
 foreign import ccall "get_running" getRtRunning :: IO Int
+foreign import ccall "free_synth_definition" freeCSynthDef :: Ptr CSynthDef -> IO ()
 
 nPrint :: (Show a) => a -> Necronomicon ()
 nPrint = liftIO . print
