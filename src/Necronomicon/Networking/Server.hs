@@ -1,4 +1,4 @@
-module Necronomicon.Networking.Server where
+module Necronomicon.Networking.Server (startServer,serverPort,clientPort) where
 
 import Prelude
 import qualified Data.ByteString as B
@@ -10,10 +10,10 @@ import System.Environment (getArgs)
 import Network.Socket hiding (send,recv,recvFrom,sendTo)
 import Network.Socket.ByteString
 import Control.Exception
-import Control.Monad (unless,join)
+import Control.Monad (unless,join,forever)
 import qualified Data.Map as Map
 
-import Necronomicon.Networking.User
+-- import Necronomicon.Networking.User
 import Necronomicon.Networking.Message
 import Sound.OSC.Core
 
@@ -23,12 +23,24 @@ import Necronomicon.Networking.SyncObject
 --Server data
 -----------------------------
 
+data User = User {
+    userSocket  :: Socket,
+    userAddress :: SockAddr,
+    userName    :: String,
+    userId      :: Int
+    } deriving (Show)
+
 data Server = Server {
-    users       :: Map.Map String User,
-    syncObjects :: Map.Map Int SyncObject,
-    score       :: Maybe Score,
-    section     :: Int
-   } deriving (Show)
+    users           :: TVar  (Map.Map SockAddr User),
+    syncObjects     :: TVar  (Map.Map Int SyncObject),
+    inBox           :: TChan (SockAddr,Message),
+    outBox          :: TChan (SockAddr,Message),
+    broadcastOutBox :: TChan  Message,
+    userIdCounter   :: TVar Int
+   }
+
+-- score       :: Maybe Score,
+-- section     :: Int
 
 serverPort :: String
 serverPort = "31337"
@@ -45,29 +57,35 @@ clientPort = "31338"
 --Main Loop
 -----------------------------
 
+newServer :: IO Server
+newServer = do
+    users           <- atomically $ newTVar Map.empty
+    syncObjects     <- atomically $ newTVar Map.empty
+    inBox           <- atomically $ newTChan
+    outBox          <- atomically $ newTChan
+    broadcastOutBox <- atomically $ newTChan
+    userIdCounter   <- atomically $ newTVar 0
+    return $ Server users syncObjects inBox outBox broadcastOutBox userIdCounter
+
 startServer :: IO()
-startServer = print "Starting a server." >> (withSocketsDo $ bracket getSocket sClose $ handler $ Server Map.empty testMap Nothing 0)
+startServer = print "Starting a server." >> (withSocketsDo $ bracket getSocket sClose $ handler)
     where
         hints = Just $ defaultHints {addrFlags = [AI_PASSIVE]}
 
         getSocket = do
             (serveraddr:_) <- getAddrInfo hints Nothing (Just serverPort)
-            sock <- socket (addrFamily serveraddr) Datagram defaultProtocol
-            bindSocket sock (addrAddress serveraddr) >> return sock
+            sock           <- socket (addrFamily serveraddr) Stream defaultProtocol
+            bindSocket sock (addrAddress serveraddr)
+            listen sock 5
+            return sock
 
-        handler s sock = do
-            server                     <- atomically $ newTVar s
-            broadcastMessageChannel    <- atomically $ newTChan
-            specificUserMessageChannel <- atomically $ newTChan
-            printChannel               <- atomically $ newTChan
-            incomingMessages           <- atomically $ newTChan
-            forkIO $ sendBroadcastMessages broadcastMessageChannel server sock
-            forkIO $ sendSpecificUserMessages specificUserMessageChannel sock
-            forkIO $ messageProcessor server incomingMessages broadcastMessageChannel specificUserMessageChannel sock oscFunctions
-            forkIO $ synchronize server broadcastMessageChannel
-            t <- time
-            forkIO $ scorePlayer server broadcastMessageChannel t 0.0
-            listener incomingMessages sock 
+        handler sock = do
+            server <- newServer
+            forkIO $ sendBroadcastMessages    server sock
+            forkIO $ sendSpecificUserMessages server sock
+            forkIO $ messageProcessor         server sock oscFunctions
+            forkIO $ synchronize              server
+            acceptLoop                        server sock
 
         oscFunctions =
             Map.insert "clientLogin"      clientLogin      $
@@ -84,6 +102,162 @@ foldrM f d []     = return d
 foldrM f d (x:xs) = (\z -> f x z) <<= foldrM f d xs
     where (<<=) = flip (>>=)
 
+synchronize :: Server -> IO()
+synchronize server = do
+    sos      <- atomically $ readTVar $ syncObjects server
+    print     $ Map.toList $ sos
+    putStrLn  ""
+    broadcast (toSynchronizationMsg sos) server
+    threadDelay 1000000
+
+acceptLoop :: Server -> Socket -> IO()
+acceptLoop server socket = forever $ do
+    (newUserSocket,newUserAddress) <- accept socket
+    putStrLn $ "Accepting connection from user at: " ++ show newUserAddress
+    atomically $ do
+        users' <- readTVar $ users server
+        uid    <- (readTVar $ userIdCounter server) >>= return . (+1)
+        writeTVar (users server) (Map.insert newUserAddress (User newUserSocket newUserAddress "saproling" uid) users')
+        writeTVar (userIdCounter server) uid
+    forkIO $ userListen newUserSocket newUserAddress server
+    return ()
+
+userListen :: Socket -> SockAddr -> Server -> IO()
+userListen socket addr server = do
+    conn <- isConnected socket
+    if not conn then return () else do
+        msg <- recv socket 4096
+        case decodeMessage msg of
+            Nothing -> userListen socket addr server
+            Just m  -> atomically (writeTChan (inBox server) (addr,m)) >> userListen socket addr server
+
+sendBroadcastMessages :: Server -> Socket -> IO()
+sendBroadcastMessages server socket = forever $ do
+    message <- atomically $ readTChan $ broadcastOutBox server
+    let encodedMessage = encodeMessage message
+    userList <- (atomically $ readTVar (users server)) >>= return . Map.toList
+    mapM_ (\(_,user) -> sendTo (userSocket user) encodedMessage (userAddress user)) userList
+
+sendSpecificUserMessages :: Server -> Socket -> IO()
+sendSpecificUserMessages server socket = forever $ do
+    (sa,m) <- atomically $ readTChan $ outBox server
+    sendTo socket (encodeMessage m) sa
+
+messageProcessor :: Server -> Socket -> Map.Map String ([Datum] -> User -> Server -> IO ()) -> IO()
+messageProcessor server socket oscFunctions = forever $ do
+    (sa,Message address datum) <- atomically $ readTChan $ inBox server
+    users'                     <- atomically $ readTVar  $ users server
+    case Map.lookup address oscFunctions of
+        Nothing -> print ("No oscFunction found with the address pattern: " ++ address)
+        Just f  -> case Map.lookup sa users' of
+            Nothing -> print ("Can't find a user with this ip address: " ++ show sa)
+            Just  u -> f datum u server
+
+------------------------------
+--OSC callbacks
+-----------------------------
+clientLogin :: [Datum] -> User -> Server -> IO ()
+clientLogin (ASCII_String n : []) user server = do
+    atomically $ readTVar (users server) >>= \users' -> writeTVar (users server) (Map.insert (userAddress user) user' users')
+    sendMessage user (Message "clientLoginReply" [Int32 1]) server
+    users' <- atomically $ readTVar $ users server
+    sendUserList server
+    print $ users'
+    print $ "User logged in: " ++ (userName user')
+    where
+        user' = User (userSocket user) (userAddress user) (C.unpack n) (userId user)
+clientLogin _ _ server = print "Mismatched arguments in clientLogin message."
+
+
+clientLogout :: [Datum] -> User -> Server -> IO ()
+clientLogout (ASCII_String n : []) user server = do
+    close      $ userSocket user
+    atomically $ readTVar (users server) >>= \users' -> writeTVar (users server) (Map.delete (userAddress user) users')
+    sendUserList server
+    users' <- atomically $ readTVar $ users server
+    print $ users'
+    print $ "User logged out: " ++ (userName user)
+
+clientLogout _ _ server = print "Mismatched arguments in clientLogout message."
+
+
+clientAlive :: [Datum] -> User -> Server -> IO ()
+clientAlive (ASCII_String n : Double clientTime : []) user server = time >>= \t -> sendMessage user (Message "clientAliveReply" [Double t,Double clientTime]) server
+clientAlive _ _ server = print "Mismatched arguments in clientAlive message."
+
+addSyncObject :: [Datum] -> User -> Server -> IO ()
+addSyncObject m user server = case messageToSync m of
+    Nothing                         -> return ()
+    Just (SyncObject 0 ty sty args) -> getId >>= \uid -> addToServer $ SyncObject uid ty sty args
+    Just so                         -> addToServer so
+    where
+        getId                     = atomically (readTVar $ syncObjects server) >>= return . createNewId . Map.toDescList
+        createNewId []            = 1
+        createNewId ((uid,_):sos) = uid + 1
+        addToServer so            = do
+            atomically $ readTVar (syncObjects server) >>= \sos -> writeTVar (syncObjects server) (Map.insert (objectID so) so sos)
+            broadcast (syncObjectMessage so) server
+            print "Received SyncObject: "
+            putStrLn ""
+            -- print server'
+            -- putStrLn ""
+
+removeSyncObject :: [Datum] -> User -> Server -> IO ()
+removeSyncObject (Int32 uid:[]) user server = do
+    sos <- atomically $ readTVar $ syncObjects server
+    if Map.member (fromIntegral uid) sos then return () else do
+        -- let server' = Server (users server) (Map.delete (fromIntegral id) $ syncObjects server) (score server) (section server)
+        atomically $ readTVar (syncObjects server) >>= \sos -> writeTVar (syncObjects server) (Map.delete (fromIntegral uid) sos)
+        broadcast (Message "removeSyncObject" (Int32 uid:[])) server
+        print "Removing SyncObject: "
+        putStrLn ""
+        -- print server'
+        -- putStrLn ""
+removeSyncObject _ _ server = return ()
+
+--Remember the locally set no latency for originator trick!
+setSyncArg :: [Datum] -> User -> Server -> IO ()
+setSyncArg (Int32 uid : Int32 index : v : []) user server = do
+    sos <- atomically $ readTVar (syncObjects server)
+    case Map.lookup (fromIntegral uid) sos of
+        Nothing -> return ()
+        Just so -> do
+            print "Set SyncArg: "
+            atomically $ writeTVar (syncObjects server) (Map.insert (fromIntegral uid) (setArg (fromIntegral index) (datumToArg v) so) sos)
+            broadcast (Message "setSyncArg" $ Int32 uid : Int32 index : v : []) server
+setSyncArg _ _ server = return ()
+
+receiveChat :: [Datum] -> User -> Server -> IO ()
+receiveChat (ASCII_String name : ASCII_String msg : []) user server = do
+    print name
+    print msg
+    broadcast (Message "receiveChat" $ ASCII_String name : ASCII_String msg : []) server
+receiveChat _ _ server = return ()
+
+
+------------------------------
+--Server Functions
+-----------------------------
+
+addUser :: User -> Server -> IO()
+addUser user server = atomically $ readTVar (users server) >>= \users' -> writeTVar (users server) (Map.insert (userAddress user) user users')
+
+removeUser :: User -> Server -> IO()
+removeUser user server = atomically $ readTVar (users server) >>= \users' -> writeTVar (users server) (Map.delete (userAddress user) users')
+
+sendUserList :: Server -> IO ()
+sendUserList server = do
+    users' <- atomically $ readTVar $ users server
+    broadcast (Message "userList" $ Prelude.map (\(_,u) -> toOSCString $ userName u) (Map.toList users')) server
+
+broadcast :: Message -> Server -> IO ()
+broadcast message server = atomically $ writeTChan (broadcastOutBox server) message
+
+sendMessage :: User -> Message -> Server -> IO ()
+sendMessage user message server = atomically $ writeTChan (outBox server) (userAddress user,message)
+
+
+{-
 scorePlayer :: TVar Server -> TChan Message -> Double -> Double -> IO()
 scorePlayer serverVar broadcastMessageChannel startTime goalTime = do
     server <- atomically $ readTVar serverVar
@@ -109,210 +283,16 @@ scorePlayer serverVar broadcastMessageChannel startTime goalTime = do
         event (AddObjectEvent so) server
             | Map.member (objectID so) (syncObjects server) = return server
             | otherwise = do
-                let server' = Server (users server) (Map.insert (objectID so) so $ syncObjects server) (score server) (section server) 
+                let server' = Server (users server) (Map.insert (objectID so) so $ syncObjects server) (score server) (section server)
                 atomically $ writeTChan broadcastMessageChannel $ syncObjectMessage so
                 return server'
         event (RemoveObjectEvent id) server
             | Map.member id (syncObjects server) = do
-                let server' = Server (users server) (Map.delete id $ syncObjects server) (score server) (section server) 
+                let server' = Server (users server) (Map.delete id $ syncObjects server) (score server) (section server)
                 atomically $ writeTChan broadcastMessageChannel $ removeMessage id
                 return server'
             | otherwise = return server
         event (SectionChangeEvent newSection) server
             | newSection <= section server = return server
             | otherwise = return $ Server (users server) (syncObjects server) (score server) newSection
-
-synchronize :: TVar Server -> TChan Message -> IO()
-synchronize s broadcastMessageChannel = do
-    server <- atomically $ readTVar s
-    print $ Map.toList $ syncObjects server
-    putStrLn ""
-    atomically $ writeTChan broadcastMessageChannel $ toSynchronizationMsg $ syncObjects server
-    threadDelay 1000000
-    synchronize s broadcastMessageChannel
-
-listener :: TChan (Message,SockAddr) -> Socket -> IO()
-listener incomingMessages ssock = do
-    (msg,sa) <- recvFrom ssock 4096
-    case decodeMessage msg of
-        Nothing -> listener incomingMessages ssock
-        Just m  -> do
-            atomically $ writeTChan incomingMessages (m,sa)
-            listener incomingMessages ssock
-
-sendBroadcastMessages :: TChan Message -> TVar Server -> Socket -> IO()
-sendBroadcastMessages broadcastMessageChannel server socket = do
-    message <- atomically $ readTChan broadcastMessageChannel
-    server' <- atomically $ readTVar server
-    let encodedMessage = encodeMessage message
-    let userList       = Map.toList $ users server'
-    mapM_ (\(_,u) -> sendTo socket encodedMessage $ sock u) userList
-    sendBroadcastMessages broadcastMessageChannel server socket
-    
-sendSpecificUserMessages :: TChan (SockAddr,Message) -> Socket -> IO()
-sendSpecificUserMessages specificUserMessageChannel socket = do
-    (sa,m) <- atomically $ readTChan specificUserMessageChannel
-    sendTo socket (encodeMessage m) sa
-    sendSpecificUserMessages specificUserMessageChannel socket
-
-messageProcessor :: TVar Server ->
-                    TChan (Message,SockAddr) ->
-                    TChan Message ->
-                    TChan (SockAddr,Message) ->
-                    Socket ->
-                    Map.Map String ([Datum] -> SockAddr -> TChan Message -> TChan (SockAddr,Message) -> Server -> IO Server) ->
-                    IO()
-messageProcessor server incomingMessages broadcastMessageChannel specificUserMessageChannel ssock oscFunctions = do
-    (m,sa) <- atomically $ readTChan incomingMessages
-    s      <- atomically $ readTVar server
-    s'     <- processOscMessage m oscFunctions sa broadcastMessageChannel specificUserMessageChannel s
-    atomically $ writeTVar server s'
-    messageProcessor server incomingMessages broadcastMessageChannel specificUserMessageChannel ssock oscFunctions
-
---Add bundle handling??
-processOscMessage :: Message ->
-                     Map.Map String ([Datum] -> SockAddr -> TChan Message -> TChan (SockAddr,Message) -> Server -> IO Server) ->
-                     SockAddr ->
-                     TChan Message ->
-                     TChan (SockAddr,Message) ->
-                     Server ->
-                     IO Server
-processOscMessage (Message address datum) oscFunctions sockAddr bm sm server =
-    case Map.lookup address oscFunctions of
-        Just f  -> f datum sockAddr bm sm server
-        Nothing -> print ("No oscFunction found with the address pattern: " ++ address) >> return server
-
-------------------------------
---OSC callbacks
------------------------------
-clientLogin :: [Datum] -> SockAddr -> TChan Message -> TChan (SockAddr,Message) -> Server -> IO Server
-clientLogin (ASCII_String n : []) sockAddr bm sm server
-    | Map.member userName (users server) = (sendUserMessage userName (Message "clientLoginReply" [Int32 0]) sm server ) >> return server
-    | otherwise = do
-            sendUserMessage userName (Message "clientLoginReply" [Int32 1]) sm server'
-            print $ users server'
-            print $ "User logged in: " ++ name user
-            sendUserList bm server'
-            return server'
-    where
-        userName = (C.unpack n)
-        user = User userName sockAddr
-        server' = addUser user server
-clientLogin _ _ _ _ server = print "Mismatched arguments in clientLogin message." >> return server
-
-
-clientLogout :: [Datum] -> SockAddr -> TChan Message -> TChan (SockAddr,Message) -> Server -> IO Server
-clientLogout (ASCII_String n : []) sockAddr bm sm server = do
-    sendUserList bm server'
-    print $ users server'
-    print $ "User logged out: " ++ name user
-    return server'
-    where
-        userName = (C.unpack n)
-        user     = User userName sockAddr
-        server'  = removeUser user server
-
-clientLogout _ _ _ _ server = print "Mismatched arguments in clientLogout message." >> return server
-
-
-clientAlive :: [Datum] -> SockAddr -> TChan Message -> TChan (SockAddr,Message) -> Server -> IO Server
-clientAlive (ASCII_String n : Double clientTime : []) sockAddr bm sm server
-        | Map.notMember userName (users server) = do
-            sendUserMessage userName (Message "clientLoginReply" [Int32 1]) sm server'
-            print $ users server'
-            print $ "User logged in: " ++ name user
-            sendUserList bm server'
-            return server'
-        | otherwise = do
-            t <- time
-            sendUserMessage (C.unpack n) (Message "clientAliveReply" [Double t,Double clientTime]) sm server
-            return server
-    where
-        userName = (C.unpack n)
-        user = User userName sockAddr
-        server' = addUser user server
-clientAlive _ _ _ _ server = print "Mismatched arguments in clientAlive message." >> return server
-
-addSyncObject :: [Datum] -> SockAddr -> TChan Message -> TChan (SockAddr,Message) -> Server -> IO Server
-addSyncObject m sockAddr bm sm server = case messageToSync m of
-    Nothing                         -> return server
-    Just (SyncObject 0 ty sty args) -> addToServer $ SyncObject (getId server) ty sty args
-    Just so                         -> addToServer so
-    where
-        getId                    = createNewId . Map.toDescList . syncObjects
-        createNewId []           = 1
-        createNewId ((id,_):sos) = id + 1
-        addToServer so           = do
-            let server' = Server (users server) (Map.insert (objectID so) so $ syncObjects server) (score server) (section server)
-            sendAllMessage (syncObjectMessage so) bm
-            print "Received SyncObject: "
-            putStrLn ""
-            print server'
-            putStrLn ""
-            return server'
-
-removeSyncObject :: [Datum] -> SockAddr -> TChan Message -> TChan (SockAddr,Message) -> Server -> IO Server
-removeSyncObject (Int32 id:[]) sockAddr bm sm server
-    | not $ Map.member (fromIntegral id) (syncObjects server) = return server
-    | otherwise = do
-        let server' = Server (users server) (Map.delete (fromIntegral id) $ syncObjects server) (score server) (section server)
-        sendAllMessage (Message "removeSyncObject" (Int32 id:[])) bm
-        print "Removing SyncObject: "
-        putStrLn ""
-        print server'
-        putStrLn ""
-        return server'
-removeSyncObject _ _ _ _ server = return server
-
---Remember the locally set no latency for originator trick!
-setSyncArg :: [Datum] -> SockAddr -> TChan Message -> TChan (SockAddr,Message) -> Server -> IO Server
-setSyncArg (Int32 id : Int32 index : v : []) sockAddr bm sm server = case Map.lookup (fromIntegral id) (syncObjects server) of
-    Nothing -> return server
-    Just so -> do
-        print "Set SyncArg: "
-        sendAllMessage (Message "setSyncArg" $ Int32 id : Int32 index : v : []) bm
-        return $ Server (users server) newSyncObjects (score server) (section server)
-        where
-            newSyncObjects = Map.insert (fromIntegral id) (setArg (fromIntegral index) (datumToArg v) so) $ syncObjects server
-setSyncArg _ _ _ _ server = return server
-
-receiveChat :: [Datum] -> SockAddr -> TChan Message -> TChan (SockAddr,Message) -> Server -> IO Server
-receiveChat (ASCII_String name : ASCII_String msg : []) sockAddr bm sm server = do
-    print name
-    print msg
-    sendAllMessage (Message "receiveChat" $ ASCII_String name : ASCII_String msg : []) bm
-    return server
-receiveChat _ _ _ _ server = return server
-        
-
-------------------------------
---Server Functions
------------------------------
-
-addUser :: User -> Server -> Server
-addUser user server = Server (Map.insert (name user) user $ users server) (syncObjects server) (score server) (section server)
-
-removeUser :: User -> Server -> Server
-removeUser user server
-    | sameUser user server = Server (Map.delete (name user) $ users server) (syncObjects server) (score server) (section server)
-    | otherwise            = server
-
-sendUserList :: TChan Message -> Server -> IO ()
-sendUserList bm s = sendAllMessage (Message "userList" $ Prelude.map (\(n,_) -> toOSCString n) (Map.toList $ users s)) bm
-
-sameUser :: User -> Server -> Bool
-sameUser (User userName sockAddr) server =
-    case Map.lookup userName (users server) of
-        Nothing -> False
-        Just u  -> sockAddr == (sock u)
-
-sendAllMessage :: Message -> TChan Message -> IO ()
-sendAllMessage message bm = atomically $ writeTChan bm message
-
-sendUserMessage :: String -> Message -> TChan (SockAddr,Message) -> Server -> IO ()
-sendUserMessage userName message sm server =
-    case Map.lookup userName (users server) of
-        Nothing   -> return ()
-        Just user -> atomically $ writeTChan sm (sock user,message)
-
-
+-}

@@ -24,13 +24,13 @@ import Necronomicon.Networking.Message
 import System.Exit
 
 data Client = Client {
-    userName      :: String,
-    users          :: TVar [String],
-    connected      :: TVar Bool,
-    syncObjects    :: TVar (Map Int SyncObject),
-    outBox         :: TChan Message,
-    inBox          :: TChan Message,
-    shouldQuit     :: TVar QuitStatus
+    userName    :: String,
+    users       :: TVar [String],
+    connected   :: TVar Bool,
+    syncObjects :: TVar (Map Int SyncObject),
+    outBox      :: TChan Message,
+    inBox       :: TChan Message,
+    shouldQuit  :: TVar QuitStatus
     }
 
 data QuitStatus = StillRunning
@@ -39,7 +39,7 @@ data QuitStatus = StillRunning
                 | DoneQuitting
 
 -- Clock synchronization!
-
+-- Server keeps like 10 - 20 line chat log?
 newClient :: String -> IO Client
 newClient name = do
     users       <- atomically $ newTVar []
@@ -57,12 +57,13 @@ startClient name serverIPAddress chatCallback = do
     withSocketsDo (getSocket >>= handler client)
     return client
     where
-        hints = Just $ defaultHints {addrSocketType = Datagram}
+        hints = Just $ defaultHints {addrSocketType = Stream}
 
         getSocket = do
             (serveraddr:_) <- getAddrInfo hints (Just serverIPAddress) (Just serverPort)
-            sock           <- socket (addrFamily serveraddr) Datagram defaultProtocol
-            connect sock (addrAddress serveraddr) >> return sock
+            sock           <- socket (addrFamily serveraddr) Stream defaultProtocol
+            connect sock (addrAddress serveraddr) 
+            return sock
 
         handler client sock = do
                 forkIO $ messageProcessor client oscFunctions

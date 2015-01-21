@@ -9,8 +9,8 @@ testChat = gui [chatBox]
     where
         chatBox = chat <| Vector2 0.0 0.0
                        <| Size 0.35 0.5
-                       <| Font "OCRA.ttf" 16
-                       <| gray 0.1
+                       <| Font "OCRA.ttf" 20
+                       <| gray 0.05
 
 testPattern :: Signal ()
 testPattern = gui [tri <~ pattern / 10 ]

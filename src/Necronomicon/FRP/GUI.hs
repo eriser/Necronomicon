@@ -65,27 +65,30 @@ chat (Vector2 x y) (Size w h) font color = addChild <~ textEditSignal textInput 
                           (Change char,_)     -> returnNewText textRef metrics $ t ++ [char]
 
         returnNewText r cm t = writeIORef r t >> (return . Change . background $ fitTextIntoBounds t (w,0.055) cm)
-        background         t = SceneObject (Vector3  0 ((h/2+0.2))  0) identity 1 (Model (rect w 0.055) (vertexColored color)) [textObject t]
-        textObject         t = SceneObject (Vector3  0 0  1) identity 1 (drawText t font ambient) []
+        background         t = SceneObject (Vector3  0 h 0) identity 1 (Model (rect w 0.055) (vertexColored color)) [textObject t]
+        -- chatBack             = SceneObject (Vector3  (-0.01) (-0.01) (-0.1)) identity 1 (Model (rect (w*1.05) (0.0675)) (vertexColored white)) []
+
+        textObject         t = SceneObject (Vector3  0 0 1) identity 1 (drawText t font ambient) []
         emptyObject          = PlainObject 0 identity 1 []
 
 chatDisplay :: Vector2 -> Size -> Font -> Color -> Signal SceneObject
 chatDisplay (Vector2 x y) (Size w h) font color = Signal $ \necro -> do
     (chatVal,chatCont,chatIds) <- unSignal receiveChatMessage necro
     metrics                    <- charMetrics font
-    let val                     = chatObject metrics ""
-    ref                        <- newIORef val
-    return (val,processEvent ref metrics chatCont, chatIds)
+    ref                        <- newIORef ""
+    return (chatObject metrics "",processEvent ref metrics chatCont, chatIds)
     where
         processEvent ref metrics chatCont event = chatCont event >>= go
-            where go (NoChange _) = readIORef ref >>= return . NoChange
+            where go (NoChange _) = readIORef ref >>= return . NoChange . chatObject metrics
                   go (Change str) = do
-                      let val = chatObject metrics str
+                      prevStr <- readIORef ref
+                      let val = prevStr ++ "\n" ++ str
                       writeIORef ref val
-                      return $ Change val
+                      return $ Change $ chatObject metrics val
 
-        chatObject cm t = SceneObject (Vector3  x y 0) identity 1 (Model (rect w h) (vertexColored color)) [textObject cm t]
+        chatObject cm t = SceneObject (Vector3  x y 0) identity 1 (Model (rect w h) (vertexColored black)) [textObject cm t]
         textObject cm t = SceneObject (Vector3  0 0 1) identity 1 (drawText (fitTextIntoBounds t (w,h) cm) font ambient) []
+        -- textObject cm t = SceneObject (Vector3  0 0 1) identity 1 (drawText t font ambient) []
 
 slider :: Vector2 -> Size -> Color -> Signal (Gui Double)
 slider (Vector2 x y) (Size w h) color = Signal $ \necro -> do
