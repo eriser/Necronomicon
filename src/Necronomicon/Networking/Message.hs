@@ -4,10 +4,7 @@ module Necronomicon.Networking.Message (toOSCString,
 
 import Prelude
 import Sound.OSC.Core (Message,ASCII,Datum,d_put,d_get)
-import qualified Data.ByteString as B
 import qualified Data.ByteString.Char8 as C
-
-type ASCII = C.ByteString
 
 toOSCString :: String -> Datum
 toOSCString = d_put . C.pack --ASCII_String . C.pack

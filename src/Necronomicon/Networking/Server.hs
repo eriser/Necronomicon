@@ -90,7 +90,7 @@ startServer = print "Starting a server." >> (withSocketsDo $ bracket getSocket s
             forkIO $ sendBroadcastMessages    server sock
             forkIO $ sendUserMessage          server sock
             forkIO $ messageProcessor         server sock oscFunctions
-            -- forkIO $ synchronize              server
+            forkIO $ synchronize              server
             acceptLoop                        server sock
 
         oscFunctions =
@@ -114,7 +114,8 @@ synchronize server = forever $ do
     print     $ Map.toList $ sos
     putStrLn  ""
     broadcast (toSynchronizationMsg sos) server
-    threadDelay 10000000
+    --Right now we sync every 30 seconds.....Perhaps optimistic, we shall see
+    threadDelay 30000000
 
 acceptLoop :: Server -> Socket -> IO()
 acceptLoop server socket = forever $ do
