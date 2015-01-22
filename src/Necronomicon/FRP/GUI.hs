@@ -84,6 +84,7 @@ chatDisplay (Vector2 x y) (Size w h) font color = Signal $ \necro -> do
                       prevStr <- readIORef ref
                       let val = prevStr ++ "\n" ++ str
                       writeIORef ref val
+                      print "chatDisplay"
                       return $ Change $ chatObject metrics val
 
         chatObject cm t = SceneObject (Vector3  x y 0) identity 1 (Model (rect w h) (vertexColored black)) [textObject cm t]

@@ -17,9 +17,10 @@ import qualified Data.Sequence as Seq
 
 import Necronomicon.Networking.SyncObject
 import Necronomicon.Networking.Server (clientPort,serverPort)
-import Necronomicon.Networking.User
 import Sound.OSC.Core
 import Necronomicon.Networking.Message
+
+import System.Random (randomRIO)
 
 import System.Exit
 
@@ -61,8 +62,10 @@ startClient name serverIPAddress chatCallback = do
 
         getSocket = do
             (serveraddr:_) <- getAddrInfo hints (Just serverIPAddress) (Just serverPort)
-            sock           <- socket (addrFamily serveraddr) Stream defaultProtocol
-            connect sock (addrAddress serveraddr) 
+            sock           <- socket AF_INET Stream defaultProtocol
+            -- setSocketOption sock KeepAlive 1
+            setSocketOption sock NoDelay   1
+            connect sock (addrAddress serveraddr)
             return sock
 
         handler client sock = do
@@ -73,6 +76,7 @@ startClient name serverIPAddress chatCallback = do
                 forkIO $ quitLoop         client sock
                 print "Logging in..."
                 atomically $ writeTChan (outBox client) $ Message "clientLogin" [toOSCString name]
+                -- forkIO $ testNetworking   client
 
         oscFunctions = insert "userList"         userList
                      $ insert "clientAliveReply" clientAliveReply
@@ -84,28 +88,36 @@ startClient name serverIPAddress chatCallback = do
                      $ insert "receiveChat"      (receiveChat chatCallback)
                      $ Data.Map.empty
 
+--WTF is going on
 testNetworking :: Client -> IO ()
 testNetworking client = forever $ do
-    atomically . writeTChan (outBox client) . syncObjectMessage . SyncObject 1 "ClientName" "" $ Seq.fromList [SyncString (userName client),SyncDouble 0]
-    threadDelay 1000000
-    atomically . writeTChan (outBox client) . setArgMessage 1 1 $ SyncDouble 666
-    threadDelay 1000000
-    atomically . writeTChan (outBox client) $ removeObjectMessage 1
-    threadDelay 1000000
+    -- print "Add SyncObject"
+    uid <- randomRIO (2,1000)
+    atomically . writeTChan (outBox client) . syncObjectMessage . SyncObject uid "ClientName" "" $ Seq.fromList [SyncString (userName client),SyncDouble 0]
+    threadDelay 100000
+    -- print "Set Arg Message"
+    atomically . writeTChan (outBox client) . setArgMessage uid 1 $ SyncDouble 666
+    threadDelay 100000
+    -- print "Remove SyncObject"
+    atomically . writeTChan (outBox client) $ removeObjectMessage uid
+    threadDelay 100000
+    -- print "Chat Message"
     atomically . writeTChan (outBox client) $ chatMessage (userName client) "This is a chat, motherfucker"
+    threadDelay 100000
+
 
 sendQuitOnExit :: String -> Socket -> SomeException -> IO()
 sendQuitOnExit name csock e = do
     let x = show (e :: SomeException)
     putStrLn $ "\nAborted: " ++ x
-    Control.Exception.catch (send csock $ encodeMessage $ Message "clientLogout" [toOSCString name]) (\e -> print (e :: IOException) >> return 0)
+    Control.Exception.catch (sendAll csock $ encodeMessage $ Message "clientLogout" [toOSCString name]) (\e -> print (e :: IOException) >> return ())
     exitSuccess
 
 quitLoop :: Client -> Socket -> IO()
 quitLoop client sock = do
     atomically $ readTVar   (shouldQuit client) >>= waitToQuit
     atomically $ writeTVar  (shouldQuit client) Quitting
-    Control.Exception.catch (send sock $ encodeMessage $ Message "clientLogout" [toOSCString (userName client)]) (\e -> print (e :: IOException) >> return 0)
+    Control.Exception.catch (sendAll sock $ encodeMessage $ Message "clientLogout" [toOSCString (userName client)]) (\e -> print (e :: IOException) >> return ())
     close sock
     atomically $ writeTVar  (shouldQuit client) DoneQuitting
     where
@@ -124,12 +136,13 @@ quitClient client = atomically (writeTVar (shouldQuit client) ShouldQuit) >> (at
 
 sender :: Client -> Socket -> IO()
 sender client sock = forever $ do
-    msg <- atomically $ readTChan (outBox client)
+    msg@(Message address _) <- atomically $ readTChan (outBox client)
     con <- isConnected sock
     case con of
         False -> return ()
         True  -> do
-            Control.Exception.catch (send sock $ encodeMessage msg) (\e -> print (e :: IOException) >> return 0)
+            -- putStrLn $ "Send: " ++ show address
+            Control.Exception.catch (sendAll sock $ encodeMessage msg) (\e -> print (e :: IOException) >> return ())
             return ()
 
 aliveLoop :: Client -> IO ()
@@ -146,7 +159,7 @@ listener client sock = forever $ do
     case con of
         False -> threadDelay 1000000
         True  -> do
-            (msg,d) <- Control.Exception.catch (recvFrom sock 4096) (\e -> print (e :: IOException) >> return (C.pack "",SockAddrUnix "127.0.0.1"))
+            msg <- Control.Exception.catch (recv sock 4096) (\e -> print (e :: IOException) >> return (C.pack ""))
             -- print "Message size: "
             -- print $ B.length msg
             case decodeMessage msg of
@@ -155,20 +168,13 @@ listener client sock = forever $ do
 
 messageProcessor :: Client -> Data.Map.Map String ([Datum] -> Client -> IO ()) -> IO()
 messageProcessor client oscFunctions = forever $ do
-    m <- atomically $ readTChan (inBox client)
-    processOscMessage m oscFunctions client
-    -- checkIfShouldQuit c'
-
-processOscMessage :: Message -> Data.Map.Map String ([Datum] -> Client -> IO ()) -> Client -> IO ()
-processOscMessage  (Message address datum) oscFunctions client =
+    (Message address datum) <- atomically $ readTChan (inBox client)
     case Data.Map.lookup address oscFunctions of
         Just f  -> f datum client
         Nothing -> print ("No oscFunction found with the address pattern: " ++ address)
 
 chatMessage :: String -> String -> Message
 chatMessage name msg = Message "receiveChat" [toOSCString name,toOSCString msg]
-
-
 
 ------------------------------
 --OSC callbacks
@@ -212,17 +218,18 @@ addSyncObject m client = case messageToSync m of
         atomically (readTVar (syncObjects client) >>= \sos -> writeTVar (syncObjects client) (insert (objectID so) so sos))
         print "Adding SyncObject: "
         putStrLn ""
-        -- print client'
+        print so
+        putStrLn ""
 
 removeSyncObject :: [Datum] -> Client -> IO ()
-removeSyncObject (Int32 id:[]) client = atomically (readTVar (syncObjects client)) >>= \sos -> case member (fromIntegral id) sos of
+removeSyncObject (Int32 uid:[]) client = atomically (readTVar (syncObjects client)) >>= \sos -> case member (fromIntegral uid) sos of
     False -> return ()
     True  -> do
-        atomically (writeTVar (syncObjects client) (delete (fromIntegral id) sos))
+        atomically (writeTVar (syncObjects client) (delete (fromIntegral uid) sos))
         print "Removing SyncObject: "
         putStrLn ""
-        -- print client'
-        -- putStrLn ""
+        print uid
+        putStrLn ""
 
 sync :: [Datum] -> Client -> IO ()
 sync m client = atomically (readTVar (syncObjects client) >>= \sos -> writeTVar (syncObjects client) (fromSynchronizationMsg m))
@@ -237,15 +244,16 @@ sync m client = atomically (readTVar (syncObjects client) >>= \sos -> writeTVar 
 
 --Remember the locally set no latency for originator trick!
 setSyncArg :: [Datum] -> Client -> IO ()
-setSyncArg (Int32 id : Int32 index : v : []) client = atomically (readTVar (syncObjects client)) >>= \sos -> case Data.Map.lookup (fromIntegral id) sos of
+setSyncArg (Int32 uid : Int32 index : v : []) client = atomically (readTVar (syncObjects client)) >>= \sos -> case Data.Map.lookup (fromIntegral uid) sos of
     Nothing -> return ()
     Just so -> do
-        print "Set SyncArg: "
+        putStrLn "Set SyncArg: "
         atomically $ writeTVar (syncObjects client) newSyncObjects
         where
-            newSyncObjects = Data.Map.insert (fromIntegral id) (setArg (fromIntegral index) (datumToArg v) so) sos
+            newSyncObjects = Data.Map.insert (fromIntegral uid) (setArg (fromIntegral index) (datumToArg v) so) sos
 setSyncArg _ _ = return ()
 
+--Fix lazy chat and we're ready to go!
 receiveChat :: (String -> String -> IO()) -> [Datum] -> Client -> IO ()
 receiveChat chatCallback (ASCII_String name : ASCII_String msg : []) client = putStrLn ("Chat - " ++ show name ++ ": " ++ show msg) >> chatCallback (C.unpack name) (C.unpack msg)
 receiveChat _ _ _ = return ()

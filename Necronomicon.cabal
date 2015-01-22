@@ -39,7 +39,6 @@ library
         Necronomicon.Networking.Server
         Necronomicon.Networking.SyncObject
         Necronomicon.Networking.Message
-        Necronomicon.Networking.User
         Necronomicon.Patterns
         Necronomicon.FRP
         Necronomicon.FRP.Signal

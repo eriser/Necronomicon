@@ -9,6 +9,7 @@ import Control.Concurrent.STM
 import System.Environment (getArgs)
 import Network.Socket hiding (send,recv,recvFrom,sendTo)
 import Network.Socket.ByteString
+import qualified Data.ByteString.Char8 as BC (null)
 import Control.Exception
 import Control.Monad (unless,join,forever)
 import qualified Data.Map as Map
@@ -26,15 +27,19 @@ import Necronomicon.Networking.SyncObject
 data User = User {
     userSocket  :: Socket,
     userAddress :: SockAddr,
+    userStopVar :: TMVar (),
     userName    :: String,
     userId      :: Int
     } deriving (Show)
+
+instance Show (TMVar ()) where
+    show _ = "userStopVar"
 
 data Server = Server {
     users           :: TVar  (Map.Map SockAddr User),
     syncObjects     :: TVar  (Map.Map Int SyncObject),
     inBox           :: TChan (SockAddr,Message),
-    outBox          :: TChan (SockAddr,Message),
+    outBox          :: TChan (User,Message),
     broadcastOutBox :: TChan  Message,
     userIdCounter   :: TVar Int
    }
@@ -70,21 +75,22 @@ newServer = do
 startServer :: IO()
 startServer = print "Starting a server." >> (withSocketsDo $ bracket getSocket sClose $ handler)
     where
-        hints = Just $ defaultHints {addrFlags = [AI_PASSIVE]}
+        hints = Just $ defaultHints {addrFlags = [AI_PASSIVE],addrSocketType = Stream}
 
         getSocket = do
             (serveraddr:_) <- getAddrInfo hints Nothing (Just serverPort)
-            sock           <- socket (addrFamily serveraddr) Stream defaultProtocol
+            sock           <- socket AF_INET Stream defaultProtocol
+
             bindSocket sock (addrAddress serveraddr)
-            listen sock 5
+            listen sock 3
             return sock
 
         handler sock = do
             server <- newServer
             forkIO $ sendBroadcastMessages    server sock
-            forkIO $ sendSpecificUserMessages server sock
+            forkIO $ sendUserMessage          server sock
             forkIO $ messageProcessor         server sock oscFunctions
-            forkIO $ synchronize              server
+            -- forkIO $ synchronize              server
             acceptLoop                        server sock
 
         oscFunctions =
@@ -103,50 +109,57 @@ foldrM f d (x:xs) = (\z -> f x z) <<= foldrM f d xs
     where (<<=) = flip (>>=)
 
 synchronize :: Server -> IO()
-synchronize server = do
+synchronize server = forever $ do
     sos      <- atomically $ readTVar $ syncObjects server
     print     $ Map.toList $ sos
     putStrLn  ""
     broadcast (toSynchronizationMsg sos) server
-    threadDelay 1000000
+    threadDelay 10000000
 
 acceptLoop :: Server -> Socket -> IO()
 acceptLoop server socket = forever $ do
     (newUserSocket,newUserAddress) <- accept socket
+    -- setSocketOption newUserSocket KeepAlive 1
+    setSocketOption newUserSocket NoDelay   1
     putStrLn $ "Accepting connection from user at: " ++ show newUserAddress
+    stopVar <- atomically newEmptyTMVar
     atomically $ do
-        users' <- readTVar $ users server
-        uid    <- (readTVar $ userIdCounter server) >>= return . (+1)
-        writeTVar (users server) (Map.insert newUserAddress (User newUserSocket newUserAddress "saproling" uid) users')
+        users'  <- readTVar $ users server
+        uid     <- (readTVar $ userIdCounter server) >>= return . (+1)
+        writeTVar (users server) (Map.insert newUserAddress (User newUserSocket newUserAddress stopVar "saproling" uid) users')
         writeTVar (userIdCounter server) uid
-    forkIO $ userListen newUserSocket newUserAddress server
+    forkIO $ userListen newUserSocket newUserAddress stopVar server
     return ()
 
-userListen :: Socket -> SockAddr -> Server -> IO()
-userListen socket addr server = do
-    conn <- isConnected socket
-    if not conn then return () else do
-        msg <- recv socket 4096
-        case decodeMessage msg of
-            Nothing -> userListen socket addr server
-            Just m  -> atomically (writeTChan (inBox server) (addr,m)) >> userListen socket addr server
+userListen :: Socket -> SockAddr -> TMVar () -> Server -> IO()
+userListen socket addr stopVar server = (isConnected socket >>= \conn -> (atomically $ isEmptyTMVar stopVar) >>= return . (&& conn)) >>= \connected -> if not connected
+    then putStrLn $ "userListen shutting down: " ++ show addr
+    else do
+        msg <- Control.Exception.catch (recv socket 4096) (\e -> putStrLn ("userListen: " ++ show (e :: IOException)) >> return (C.pack ""))
+        case (decodeMessage msg,BC.null msg) of
+            (_   ,True) -> print "Null message, quitting"   >> return ()
+            (Nothing,_) -> print "decodeMessage is Nothing" >> userListen socket addr stopVar server
+            (Just  m,_) -> atomically (writeTChan (inBox server) (addr,m)) >> userListen socket addr stopVar server
 
 sendBroadcastMessages :: Server -> Socket -> IO()
 sendBroadcastMessages server socket = forever $ do
     message <- atomically $ readTChan $ broadcastOutBox server
     let encodedMessage = encodeMessage message
     userList <- (atomically $ readTVar (users server)) >>= return . Map.toList
-    mapM_ (\(_,user) -> sendTo (userSocket user) encodedMessage (userAddress user)) userList
+    mapM_ (\(_,user) -> send' (userSocket user) encodedMessage) userList
+    where
+        send' s m = Control.Exception.catch (sendAll s m) (\e -> putStrLn ("sendBroadcastMessages: " ++ show (e :: IOException)) >> return ())
 
-sendSpecificUserMessages :: Server -> Socket -> IO()
-sendSpecificUserMessages server socket = forever $ do
-    (sa,m) <- atomically $ readTChan $ outBox server
-    sendTo socket (encodeMessage m) sa
+sendUserMessage :: Server -> Socket -> IO()
+sendUserMessage server socket = forever $ do
+    (user,m) <- atomically $ readTChan $ outBox server
+    Control.Exception.catch (sendAll (userSocket user) (encodeMessage m)) (\e -> putStrLn ("sendUserMessage: " ++ show (e :: IOException)) >> return ())
 
 messageProcessor :: Server -> Socket -> Map.Map String ([Datum] -> User -> Server -> IO ()) -> IO()
 messageProcessor server socket oscFunctions = forever $ do
     (sa,Message address datum) <- atomically $ readTChan $ inBox server
     users'                     <- atomically $ readTVar  $ users server
+    -- putStrLn $  "messageProcessor: " ++ show address
     case Map.lookup address oscFunctions of
         Nothing -> print ("No oscFunction found with the address pattern: " ++ address)
         Just f  -> case Map.lookup sa users' of
@@ -162,21 +175,22 @@ clientLogin (ASCII_String n : []) user server = do
     sendMessage user (Message "clientLoginReply" [Int32 1]) server
     users' <- atomically $ readTVar $ users server
     sendUserList server
-    print $ users'
     print $ "User logged in: " ++ (userName user')
+    print $ users'
     where
-        user' = User (userSocket user) (userAddress user) (C.unpack n) (userId user)
+        user' = User (userSocket user) (userAddress user) (userStopVar user) (C.unpack n) (userId user)
 clientLogin _ _ server = print "Mismatched arguments in clientLogin message."
 
 
 clientLogout :: [Datum] -> User -> Server -> IO ()
 clientLogout (ASCII_String n : []) user server = do
     close      $ userSocket user
+    atomically $ putTMVar (userStopVar user) ()
     atomically $ readTVar (users server) >>= \users' -> writeTVar (users server) (Map.delete (userAddress user) users')
     sendUserList server
     users' <- atomically $ readTVar $ users server
-    print $ users'
     print $ "User logged out: " ++ (userName user)
+    print $ users'
 
 clientLogout _ _ server = print "Mismatched arguments in clientLogout message."
 
@@ -187,7 +201,7 @@ clientAlive _ _ server = print "Mismatched arguments in clientAlive message."
 
 addSyncObject :: [Datum] -> User -> Server -> IO ()
 addSyncObject m user server = case messageToSync m of
-    Nothing                         -> return ()
+    Nothing                         -> print "Message to Sync is Nothing" >> return ()
     Just (SyncObject 0 ty sty args) -> getId >>= \uid -> addToServer $ SyncObject uid ty sty args
     Just so                         -> addToServer so
     where
@@ -197,7 +211,7 @@ addSyncObject m user server = case messageToSync m of
         addToServer so            = do
             atomically $ readTVar (syncObjects server) >>= \sos -> writeTVar (syncObjects server) (Map.insert (objectID so) so sos)
             broadcast (syncObjectMessage so) server
-            print "Received SyncObject: "
+            putStrLn $ "Received SyncObject: " ++ show so
             putStrLn ""
             -- print server'
             -- putStrLn ""
@@ -205,11 +219,11 @@ addSyncObject m user server = case messageToSync m of
 removeSyncObject :: [Datum] -> User -> Server -> IO ()
 removeSyncObject (Int32 uid:[]) user server = do
     sos <- atomically $ readTVar $ syncObjects server
-    if Map.member (fromIntegral uid) sos then return () else do
+    if not $ Map.member (fromIntegral uid) sos then return () else do
         -- let server' = Server (users server) (Map.delete (fromIntegral id) $ syncObjects server) (score server) (section server)
         atomically $ readTVar (syncObjects server) >>= \sos -> writeTVar (syncObjects server) (Map.delete (fromIntegral uid) sos)
         broadcast (Message "removeSyncObject" (Int32 uid:[])) server
-        print "Removing SyncObject: "
+        putStrLn $  "Removing SyncObject: " ++ show uid
         putStrLn ""
         -- print server'
         -- putStrLn ""
@@ -222,15 +236,13 @@ setSyncArg (Int32 uid : Int32 index : v : []) user server = do
     case Map.lookup (fromIntegral uid) sos of
         Nothing -> return ()
         Just so -> do
-            print "Set SyncArg: "
+            putStrLn $ "Set SyncArg: " ++ show uid
             atomically $ writeTVar (syncObjects server) (Map.insert (fromIntegral uid) (setArg (fromIntegral index) (datumToArg v) so) sos)
             broadcast (Message "setSyncArg" $ Int32 uid : Int32 index : v : []) server
 setSyncArg _ _ server = return ()
 
 receiveChat :: [Datum] -> User -> Server -> IO ()
-receiveChat (ASCII_String name : ASCII_String msg : []) user server = do
-    print name
-    print msg
+receiveChat (ASCII_String name : ASCII_String msg : []) user server = putStrLn ("Chat - " ++ show name ++ ": " ++ show msg) >>
     broadcast (Message "receiveChat" $ ASCII_String name : ASCII_String msg : []) server
 receiveChat _ _ server = return ()
 
@@ -254,7 +266,7 @@ broadcast :: Message -> Server -> IO ()
 broadcast message server = atomically $ writeTChan (broadcastOutBox server) message
 
 sendMessage :: User -> Message -> Server -> IO ()
-sendMessage user message server = atomically $ writeTChan (outBox server) (userAddress user,message)
+sendMessage user message server = atomically $ writeTChan (outBox server) (user,message)
 
 
 {-
