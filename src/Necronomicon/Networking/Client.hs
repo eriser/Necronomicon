@@ -25,6 +25,8 @@ import System.Random (randomRIO)
 
 import System.Exit
 
+import Debug.Trace
+
 data Client = Client {
     userName    :: String,
     users       :: TVar [String],
@@ -50,7 +52,7 @@ data RunStatus = Connecting
 
 startClient :: String -> String -> (String -> String -> IO()) -> IO Client
 startClient name serverIPAddress chatCallback = do
-    print "Starting a client."
+    putStrLn "Starting a client."
     client <- newClient name
     forkIO $ withSocketsDo $ startup client serverIPAddress chatCallback
     return client
@@ -65,11 +67,12 @@ newClient name = do
     return $ Client name users syncObjects outBox inBox runStatus
 
 --Setup all loops to recognize and die when disconnected
---Almost there.....got it some what working, need to walk through the steps and make it simpler I think
+--Almost there.....got it somewhat working, need to walk through the steps and make it simpler I think
 --Also print out exactly what is being killed and what is hanging.
 --All threads should die and restart accordingly
 startup :: Client -> String -> (String -> String -> IO()) -> IO()
 startup client serverIPAddress chatCallback = do
+    putStrLn "Setting up networking."
     (sock,serverAddr) <- getSocket
     connectionLoop            client sock serverAddr
     forkIO $ messageProcessor client sock (oscFunctions chatCallback)
@@ -88,6 +91,7 @@ startup client serverIPAddress chatCallback = do
             sock           <- socket AF_INET Stream defaultProtocol
             -- setSocketOption sock KeepAlive 1
             setSocketOption sock NoDelay   1
+            setSocketOption sock ReuseAddr   1
             return (sock,addrAddress serveraddr)
 
 connectionLoop :: Client -> Socket -> SockAddr -> IO()
@@ -107,25 +111,20 @@ connectionLoop client socket serverAddr = catch tryConnect onFailure
 checkForRestartLoop :: Client -> String -> (String -> String -> IO()) -> IO()
 checkForRestartLoop client serverIPAddress chatCallback = atomically (readTVar $ runStatus client) >>= go
     where
-        go Connecting   = threadDelay 2000000                           >> checkForRestartLoop client serverIPAddress chatCallback
-        go Running      = threadDelay 2000000                           >> checkForRestartLoop client serverIPAddress chatCallback
-        go Disconnected = putStrLn "Disconnected. Trying to restart..." >> startup client serverIPAddress chatCallback
-        go Quitting     = return ()
-        go DoneQuitting = return ()
-        go ShouldQuit   = return ()
+        go Connecting   = threadDelay 2000000                                                  >> checkForRestartLoop client serverIPAddress chatCallback
+        go Running      = threadDelay 2000000                                                  >> checkForRestartLoop client serverIPAddress chatCallback
+        go Disconnected = threadDelay 2000000 >> putStrLn "Disconnected. Trying to restart..." >> startup client serverIPAddress chatCallback
+        go _            = return ()
 
 
-stopLoopOnDisconnect :: Client -> Socket -> IO() -> IO ()
-stopLoopOnDisconnect client socket continuation = isConnected socket >>= \con -> case con of
+stopLoopOnDisconnect :: String -> Client -> Socket -> IO() -> IO ()
+stopLoopOnDisconnect uid client socket continuation = isConnected socket >>= \con -> case con of
     False -> atomically $ writeTVar (runStatus client) Disconnected >> return ()
     True  -> atomically (readTVar $ runStatus client) >>= go
     where
         go Connecting   = continuation
         go Running      = continuation
-        go Disconnected = return ()
-        go Quitting     = return ()
-        go DoneQuitting = return ()
-        go ShouldQuit   = return ()
+        go _            = putStrLn ("Stopping " ++ uid) >> return ()
 
 testNetworking :: Client -> IO()
 testNetworking client = forever $ do
@@ -146,6 +145,9 @@ sendQuitOnExit name csock e = do
     Control.Exception.catch (sendAll csock $ encodeMessage $ Message "clientLogout" [toOSCString name]) (\e -> print (e :: IOException) >> return ())
     exitSuccess
 
+--Maybe merge this with check for restart loop.
+--Instead becomes a check run status loop.
+--Callback for run status change.
 quitLoop :: Client -> Socket -> IO()
 quitLoop client sock = do
     disconnected <- atomically $ readTVar (runStatus client) >>= waitToQuit
@@ -157,10 +159,10 @@ quitLoop client sock = do
     where
         waitToQuit Connecting   = retry
         waitToQuit Running      = retry
-        waitToQuit Disconnected = return False
+        waitToQuit Disconnected = return True
         waitToQuit Quitting     = retry
         waitToQuit DoneQuitting = retry
-        waitToQuit ShouldQuit   = return True
+        waitToQuit ShouldQuit   = return False
 
 quitClient :: Client -> IO ()
 quitClient client = atomically (writeTVar (runStatus client) ShouldQuit) >> (atomically $ readTVar (runStatus client) >>= waitTillDone)
@@ -173,35 +175,41 @@ quitClient client = atomically (writeTVar (runStatus client) ShouldQuit) >> (ato
         waitTillDone DoneQuitting = return ()
 
 sender :: Client -> Socket -> IO()
-sender client sock = stopLoopOnDisconnect client sock $ do
+sender client sock = stopLoopOnDisconnect "sender" client sock $ do
     msg@(Message address _) <- atomically $ readTChan (outBox client)
     Control.Exception.catch (sendAll sock $ encodeMessage msg) (\e -> print (e :: IOException) >> return ())
     sender client sock
 
+--put into disconnect mode if too much time has passed
 aliveLoop :: Client -> Socket -> IO ()
-aliveLoop client sock = stopLoopOnDisconnect client sock $ do
+aliveLoop client sock = stopLoopOnDisconnect "aliveLoop" client sock $ do
     t <- time
     (atomically $ writeTChan (outBox client) $ Message "clientAlive" [toOSCString (userName client),Double t])
-    threadDelay 1000000
+    threadDelay 2000000
     aliveLoop client sock
 
 listener :: Client -> Socket -> IO()
-listener client sock = stopLoopOnDisconnect client sock $ do
+listener client sock = stopLoopOnDisconnect "listener" client sock $ do
     msg <- Control.Exception.catch (recv sock 4096) (\e -> print (e :: IOException) >> return (C.pack ""))
-    -- print "Message size: "
-    -- print $ B.length msg
     case (decodeMessage msg,BC.null msg) of
         (_   ,True) -> putStrLn "Server shut down" >> atomically (writeTVar (runStatus client) Disconnected) >> return ()
         (Nothing,_) -> listener client sock
         (Just  m,_) -> atomically (writeTChan (inBox client) m) >> listener client sock
 
 messageProcessor :: Client -> Socket -> Data.Map.Map String ([Datum] -> Client -> IO ()) -> IO()
-messageProcessor client sock oscFunctions = stopLoopOnDisconnect client sock $ do
-    (Message address datum) <- atomically $ readTChan (inBox client)
-    case Data.Map.lookup address oscFunctions of
-        Just f  -> f datum client
-        Nothing -> putStrLn ("No oscFunction found with the address pattern: " ++ address)
-    messageProcessor client sock oscFunctions
+messageProcessor client sock oscFunctions = atomically (checkForStatus `orElse` checkForMessage) >>= \maybeMessage -> case maybeMessage of
+    Right (Message address datum) -> case Data.Map.lookup address oscFunctions of
+        Just f  -> f datum client >> messageProcessor client sock oscFunctions
+        Nothing -> putStrLn ("No oscFunction found with the address pattern: " ++ address) >> messageProcessor client sock oscFunctions
+
+    Left _      -> putStrLn "Shutting down messageProcessor" >> return ()
+    where
+        -- This pattern works
+        checkForMessage = readTChan (inBox client)     >>= return . Right
+        checkForStatus  = readTVar  (runStatus client) >>= \status -> case status of
+            Connecting -> trace "retry" retry
+            Running    -> trace "retry" retry
+            _          -> return $ Left Nothing
 
 chatMessage :: String -> String -> Message
 chatMessage name msg = Message "receiveChat" [toOSCString name,toOSCString msg]

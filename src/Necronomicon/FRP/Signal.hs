@@ -309,7 +309,7 @@ runSignal s = initWindow >>= \mw ->
             GLFW.setKeyCallback         w $ Just $ keyPressEvent   globalDispatch
             GLFW.setWindowSizeCallback  w $ Just $ dimensionsEvent globalDispatch
 
-            client <- withSocketsDo $ getArgs >>= startNetworking (chatEvent globalDispatch)
+            client <- getArgs >>= startNetworking (chatEvent globalDispatch)
 
             threadDelay $ 16667
 

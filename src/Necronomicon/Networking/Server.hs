@@ -81,6 +81,7 @@ startServer = print "Starting a server." >> (withSocketsDo $ bracket getSocket s
             (serveraddr:_) <- getAddrInfo hints Nothing (Just serverPort)
             sock           <- socket AF_INET Stream defaultProtocol
 
+            setSocketOption sock ReuseAddr   1
             bindSocket sock (addrAddress serveraddr)
             listen sock 3
             return sock
