@@ -139,7 +139,7 @@ userListen socket addr stopVar server = (isConnected socket >>= \conn -> (atomic
     else do
         msg <- Control.Exception.catch (recv socket 4096) (\e -> putStrLn ("userListen: " ++ show (e :: IOException)) >> return (C.pack ""))
         case (decodeMessage msg,BC.null msg) of
-            (_   ,True) -> print "Null message, quitting"   >> return ()
+            (_   ,True) -> print "User disconnected. Shutting down userListen loop."
             (Nothing,_) -> print "decodeMessage is Nothing" >> userListen socket addr stopVar server
             (Just  m,_) -> atomically (writeTChan (inBox server) (addr,m)) >> userListen socket addr stopVar server
 
@@ -177,6 +177,8 @@ clientLogin (ASCII_String n : []) user server = do
     sendMessage user (Message "clientLoginReply" [Int32 1]) server
     users' <- atomically $ readTVar $ users server
     sendUserList server
+    sos    <- atomically $ readTVar $ syncObjects server
+    sendMessage user (toSynchronizationMsg sos) server
     print $ "User logged in: " ++ (userName user')
     print $ users'
     where
