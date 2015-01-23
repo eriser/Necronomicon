@@ -78,6 +78,7 @@ chatDisplay (Vector2 x y) (Size w h) font color = Signal $ \necro -> do
     ref                        <- newIORef ""
     return (chatObject metrics "",processEvent ref metrics chatCont, chatIds)
     where
+        --delete if too many lines
         processEvent ref metrics chatCont event = chatCont event >>= go
             where go (NoChange _) = readIORef ref >>= return . NoChange . chatObject metrics
                   go (Change str) = do

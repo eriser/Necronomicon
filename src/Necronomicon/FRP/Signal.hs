@@ -1,9 +1,8 @@
 module Necronomicon.FRP.Signal (
-    -- sigTest,
+    module Necronomicon.FRP.Event,
     Signal (..),
     Necro(..),
-    EventValue(..),
-    Event(..),
+    -- sigTest,
     playPattern,
     play,
     playUntil,
@@ -92,6 +91,7 @@ module Necronomicon.FRP.Signal (
     ) where
 
 ------------------------------------------------------
+import           Necronomicon.FRP.Event
 import           Control.Applicative
 import           Control.Concurrent
 import           Control.Concurrent.STM
@@ -136,8 +136,6 @@ infixl 4 <~,~~
 -------------------------
 -- Signals 4.0
 -------------------------
-data Event        = Event Int Dynamic
-data EventValue a = Change a | NoChange a deriving (Show)
 data Necro        = Necro {
     globalDispatch :: TBQueue Event,
     inputCounter   :: IORef Int,
@@ -309,7 +307,7 @@ runSignal s = initWindow >>= \mw ->
             GLFW.setKeyCallback         w $ Just $ keyPressEvent   globalDispatch
             GLFW.setWindowSizeCallback  w $ Just $ dimensionsEvent globalDispatch
 
-            client <- getArgs >>= startNetworking (chatEvent globalDispatch)
+            client <- getArgs >>= startNetworking globalDispatch
 
             threadDelay $ 16667
 
@@ -340,9 +338,6 @@ runSignal s = initWindow >>= \mw ->
             let pos = (x / fromIntegral wx,y / fromIntegral wy)
             atomically $ (writeTBQueue eventNotify $ Event 0 $ toDyn pos) `orElse` return ()
 
-        --Networking event callbacks
-        chatEvent eventNotify userName message = atomically $ (writeTBQueue eventNotify $ Event 3 $ toDyn (userName ++ ": " ++ message)) `orElse` return ()
-
         render quit window sceneVar resources necroVars client
             | quit      = quitClient client >> runNecroState shutdownNecronomicon necroVars >> print "Qutting" >> return ()
             | otherwise = do
@@ -366,9 +361,9 @@ globalEventDispatch signal necro = do
             NoChange _ -> return ()
             Change  a' -> return () --print a'
 
-startNetworking :: (String -> String -> IO()) -> [String] -> IO Client
-startNetworking chatCallback (name : serverAddr : []) = startClient name serverAddr chatCallback
-startNetworking _ _                                   = print "You must give a user name and the server ip address" >> newClient "INCORRECT_COMMAND_ARGS"
+startNetworking :: TBQueue Event -> [String] -> IO Client
+startNetworking globalDispatch (name : serverAddr : []) = startClient name serverAddr globalDispatch
+startNetworking _ _                                     = print "You must give a user name and the server ip address" >> newClient "INCORRECT_COMMAND_ARGS"
 
 ---------------------------------------------
 -- Time
@@ -444,9 +439,7 @@ input a uid = Signal $ \_ -> do
     where
         processState ref (Event uid' e) = do
             case uid == uid' of
-                False -> do
-                    v <- readIORef ref
-                    return $ NoChange v
+                False -> readIORef ref >>= return . NoChange
                 True  -> case fromDynamic e of
                     Nothing -> print "input type error" >> do
                         v <- readIORef ref
@@ -685,6 +678,10 @@ alt = isDown keyLAlt <|> isDown keyRAlt
 
 shift :: Signal Bool
 shift = isDown keyLShift <|> isDown keyRShift
+
+---------------------------------------------
+-- Network Events
+---------------------------------------------
 
 receiveChatMessage :: Signal String
 receiveChatMessage = input "" 3

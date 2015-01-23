@@ -1,31 +1,28 @@
 module Necronomicon.Networking.Client where
 
 import Prelude
-import qualified Data.ByteString as B
-import qualified Data.ByteString.Char8 as C
 
 import Control.Concurrent (forkIO,threadDelay)
 import Control.Concurrent.STM
 import System.Environment (getArgs)
 import Network.Socket hiding (send,recv,recvFrom,sendTo)
 import Network.Socket.ByteString
-import qualified Data.ByteString.Char8 as BC (null)
+import qualified Data.ByteString.Char8 as BC (null,unpack,pack)
 import Control.Exception
 import Control.Monad (unless,forever,(<=<))
 import System.CPUTime
 import Data.Map (insert,lookup,empty,Map,member,delete)
 import qualified Data.Sequence as Seq
 
+import Sound.OSC.Core
 import Necronomicon.Networking.SyncObject
 import Necronomicon.Networking.Server (clientPort,serverPort)
-import Sound.OSC.Core
 import Necronomicon.Networking.Message
-
+import Necronomicon.FRP.Event
 import System.Random (randomRIO)
-
 import System.Exit
-
 import Debug.Trace
+
 
 data Client = Client {
     userName    :: String,
@@ -50,23 +47,23 @@ data RunStatus = Connecting
 -- Clock synchronization!
 -- Server keeps like 10 - 20 line chat log?
 
-startClient :: String -> String -> (String -> String -> IO()) -> IO Client
-startClient name serverIPAddress chatCallback = do
+startClient :: String -> String -> TBQueue Event -> IO Client
+startClient name serverIPAddress globalDispatch = do
     putStrLn "Starting a client..."
     client <- newClient name
-    forkIO $ withSocketsDo $ startup client serverIPAddress chatCallback
+    forkIO $ withSocketsDo $ startup client serverIPAddress globalDispatch
     return client
 
 --Setup all loops to recognize and die when disconnected
 --Almost there.....got it somewhat working, need to walk through the steps and make it simpler I think
 --Also print out exactly what is being killed and what is hanging.
 --All threads should die and restart accordingly
-startup :: Client -> String -> (String -> String -> IO()) -> IO()
-startup client serverIPAddress chatCallback = do
+startup :: Client -> String -> TBQueue Event -> IO()
+startup client serverIPAddress globalDispatch = do
     putStrLn "Setting up networking..."
     (sock,serverAddr) <- getSocket
     connectionLoop            client sock serverAddr
-    forkIO $ messageProcessor client     (oscFunctions chatCallback)
+    forkIO $ messageProcessor client     (oscFunctions globalDispatch)
     forkIO $ listener         client sock
     forkIO $ aliveLoop        client
     forkIO $ sender           client sock
@@ -74,7 +71,7 @@ startup client serverIPAddress chatCallback = do
     putStrLn "Logging in..."
     atomically $ writeTChan (outBox client) $ Message "clientLogin" [toOSCString $ userName client]
     -- forkIO $ testNetworking   client
-    checkForRestartLoop client serverIPAddress chatCallback
+    checkForRestartLoop client serverIPAddress globalDispatch
     where
         hints     = Just $ defaultHints {addrSocketType = Stream}
         getSocket = do
@@ -114,7 +111,7 @@ aliveLoop client = time >>= \t -> executeIfConnected client (sendAliveMessage t)
 
 listener :: Client -> Socket -> IO()
 listener client sock = do --isConnected sock >>= \closed -> if closed then shutdown else do
-    msg <- Control.Exception.catch (recv sock 4096) (const (return (C.pack "")) <=< printError)
+    msg <- Control.Exception.catch (recv sock 4096) (const (return (BC.pack "")) <=< printError)
     case (decodeMessage msg,BC.null msg) of
         (_   ,True) -> shutdown
         (Nothing,_) -> putStrLn "Server disconnected" >> listener client sock
@@ -137,7 +134,7 @@ messageProcessor client oscFunctions = executeIfConnected client (readTChan $ in
 -----------------------------
 
 quitClient :: Client -> IO ()
-quitClient client = atomically (writeTVar (runStatus client) ShouldQuit) >> (atomically $ readTVar (runStatus client) >>= waitTillDone)
+quitClient client = atomically (writeTVar (runStatus client) ShouldQuit) >> atomically (readTVar (runStatus client) >>= waitTillDone)
     where
         waitTillDone Connecting   = retry
         waitTillDone Running      = retry
@@ -146,9 +143,9 @@ quitClient client = atomically (writeTVar (runStatus client) ShouldQuit) >> (ato
         waitTillDone ShouldQuit   = retry
         waitTillDone DoneQuitting = return ()
 
-checkForRestartLoop :: Client -> String -> (String -> String -> IO()) -> IO()
-checkForRestartLoop client serverIPAddress chatCallback = atomically (readTVar (runStatus client) >>= go) >>= \shouldRestart -> if shouldRestart
-    then threadDelay 2500000 >> putStrLn "Disconnected. Trying to restart..." >> startup client serverIPAddress chatCallback
+checkForRestartLoop :: Client -> String -> TBQueue Event -> IO()
+checkForRestartLoop client serverIPAddress globalDispatch = atomically (readTVar (runStatus client) >>= go) >>= \shouldRestart -> if shouldRestart
+    then threadDelay 2500000 >> putStrLn "Disconnected. Trying to restart..." >> startup client serverIPAddress globalDispatch
     else putStrLn "Shutting down checkForRestartLoop"
     where
         go Connecting   = retry
@@ -191,16 +188,16 @@ executeIfConnected client action = atomically (checkForStatus `orElse` checkForM
 ------------------------------
 --OSC Functions
 -----------------------------
-oscFunctions :: (String -> String -> IO()) -> Data.Map.Map String ([Datum] -> Client -> IO ())
-oscFunctions chatCallback = insert "userList"         userList
-             $ insert "clientAliveReply" clientAliveReply
-             $ insert "clientLoginReply" clientLoginReply
-             $ insert "addSyncObject"    addSyncObject
-             $ insert "removeSyncObject" removeSyncObject
-             $ insert "sync"             sync
-             $ insert "setSyncArg"       setSyncArg
-             $ insert "receiveChat"      (receiveChat chatCallback)
-             $ Data.Map.empty
+oscFunctions :: TBQueue Event -> Data.Map.Map String ([Datum] -> Client -> IO ())
+oscFunctions globalDispatch = insert "userList"         userList
+                            $ insert "clientAliveReply" clientAliveReply
+                            $ insert "clientLoginReply" clientLoginReply
+                            $ insert "addSyncObject"    addSyncObject
+                            $ insert "removeSyncObject" removeSyncObject
+                            $ insert "sync"             sync
+                            $ insert "setSyncArg"       setSyncArg
+                            $ insert "receiveChat"      (receiveChat globalDispatch)
+                            $ Data.Map.empty
 
 userList :: [Datum] -> Client -> IO ()
 userList d client = do
@@ -270,8 +267,10 @@ setSyncArg (Int32 uid : Int32 index : v : []) client = atomically (readTVar (syn
 setSyncArg _ _ = return ()
 
 --Fix lazy chat and we're ready to go!
-receiveChat :: (String -> String -> IO()) -> [Datum] -> Client -> IO ()
-receiveChat chatCallback (ASCII_String name : ASCII_String msg : []) client = putStrLn ("Chat - " ++ show name ++ ": " ++ show msg) >> chatCallback (C.unpack name) (C.unpack msg)
+receiveChat :: TBQueue Event -> [Datum] -> Client -> IO ()
+receiveChat globalDispatch (ASCII_String name : ASCII_String msg : []) client = putStrLn ("Chat - " ++ message) >> sendToGlobalDispatch globalDispatch 3 message
+    where
+        message = BC.unpack name ++ ": " ++ BC.unpack msg
 receiveChat _ _ _ = return ()
 
 ------------------------------
@@ -312,3 +311,7 @@ sendChatMessage chat client = atomically $ writeTChan (outBox client) $ chatMess
 
 chatMessage :: String -> String -> Message
 chatMessage name msg = Message "receiveChat" [toOSCString name,toOSCString msg]
+
+
+sendToGlobalDispatch :: Typeable a => TBQueue Event -> Int -> a -> IO()
+sendToGlobalDispatch globalDispatch uid x = atomically $ writeTBQueue globalDispatch $ Event uid $ toDyn x

@@ -20,6 +20,9 @@ import Sound.OSC.Core
 
 import Necronomicon.Networking.SyncObject
 
+--server-side user alive loops
+--Alive loops disconnect after period of time
+
 ------------------------------
 --Server data
 -----------------------------
@@ -103,11 +106,6 @@ startServer = print "Starting a server." >> (withSocketsDo $ bracket getSocket s
             Map.insert "setSyncArg"       setSyncArg       $
             Map.insert "receiveChat"      receiveChat      $
             Map.empty
-
-foldrM :: Monad m => (a -> b -> m b) -> b -> [a] -> m b
-foldrM f d []     = return d
-foldrM f d (x:xs) = (\z -> f x z) <<= foldrM f d xs
-    where (<<=) = flip (>>=)
 
 synchronize :: Server -> IO()
 synchronize server = forever $ do

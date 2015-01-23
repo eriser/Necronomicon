@@ -42,6 +42,7 @@ library
         Necronomicon.Patterns
         Necronomicon.FRP
         Necronomicon.FRP.Signal
+        Necronomicon.FRP.Event
         Necronomicon.FRP.GUI
         Necronomicon.Linear
         Necronomicon.Linear.Plane
