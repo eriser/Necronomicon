@@ -91,7 +91,7 @@ chatDisplay (Vector2 x y) (Size w h) font color = Signal $ \necro -> do
                       return $ Change $ chatObject metrics val
 
         chatObject cm t = SceneObject (Vector3  x y 0) identity 1 (Model (rect w h) (vertexColored black)) [textObject cm t]
-        textObject cm t = SceneObject (Vector3  0 0 1) identity 1 (drawText (fitTextIntoBounds t (w,h) cm) font ambient) []
+        textObject cm t = SceneObject (Vector3  0 (-0.05) 1) identity 1 (drawText (fitTextIntoBounds t (w * 0.95,h * 0.8) cm) font ambient) []
         -- textObject cm t = SceneObject (Vector3  0 0 1) identity 1 (drawText t font ambient) []
 
 slider :: Vector2 -> Size -> Color -> Signal (Gui Double)
