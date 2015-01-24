@@ -337,7 +337,7 @@ runSignal s = initWindow >>= \mw ->
             | quit      = quitClient client >> runNecroState shutdownNecronomicon necroVars >> print "Qutting" >> return ()
             | otherwise = do
                 GLFW.pollEvents
-                q          <- liftA (== GLFW.KeyState'Pressed) (GLFW.getKey window GLFW.Key'Q)
+                q          <- liftA (== GLFW.KeyState'Pressed) (GLFW.getKey window GLFW.Key'Escape)
                 ms         <- atomically $ tryTakeTMVar sceneVar
                 case ms of
                     Nothing -> return ()
