@@ -210,7 +210,8 @@ removeExtraLines rmvTop boundsHeight metrics (text,currentHeight) char = if rmvT
             | char == '\n' && currentHeight + cheight metrics <  boundsHeight = (text ++ [char],currentHeight + cheight metrics)
             | otherwise                                                       = (text ++ [char],currentHeight)
         removeExtraBottomLines
-            | char == '\n' && currentHeight + cheight metrics >= boundsHeight = (deleteFirstLine text ++ [char],currentHeight)
+            | currentHeight + cheight metrics >= boundsHeight                 = (deleteFirstLine text ++ [char],currentHeight - cheight metrics)
+            -- | char == '\n' && currentHeight + cheight metrics >= boundsHeight = (deleteFirstLine text ++ [char],currentHeight)
             | char == '\n' && currentHeight + cheight metrics <  boundsHeight = (text ++ [char],currentHeight + cheight metrics)
             | otherwise                                                       = (text ++ [char],currentHeight)
         deleteFirstLine s = s'
