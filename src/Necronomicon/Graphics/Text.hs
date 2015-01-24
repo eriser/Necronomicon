@@ -214,8 +214,9 @@ cheight metrics = case Map.lookup 'A' metrics of
 
 fitWordsIntoBounds :: Double -> TextWord -> TextWord -> TextWord
 fitWordsIntoBounds boundsWidth (text,currentWidth) (word,wordWidth)
-    | currentWidth + wordWidth < boundsWidth = (text ++ word ,currentWidth + wordWidth)
-    | otherwise                              = (text ++ "\n" ++ word,wordWidth)
+    | word == "\n"                            = (text ++ word ,0)
+    | currentWidth + wordWidth <= boundsWidth = (text ++ word ,currentWidth + wordWidth)
+    | otherwise                               = (text ++ "\n" ++ word,wordWidth)
 
 splitCharIntoWords :: Double -> Map.Map Char CharMetric -> (TextWord,[TextWord],Double) -> Char -> (TextWord,[TextWord],Double)
 splitCharIntoWords w cmetrics ((word,wordLength),words',totalLength) char
@@ -225,8 +226,11 @@ splitCharIntoWords w cmetrics ((word,wordLength),words',totalLength) char
     where
         isWhiteSpace ' '  = True
         isWhiteSpace '\n' = True
-        isWhiteSpace  _   = False
+        isWhiteSpace  _   = if char == toEnum 0
+            then True
+            else False
 
         cAdvance = case Map.lookup char cmetrics of
-            Nothing -> 10
             Just m  -> advanceX m * fontScale
+            Nothing -> 0
+-- preTrimExcessLines
