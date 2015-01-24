@@ -67,7 +67,7 @@ chat (Vector2 x y) (Size w h) font color = addChild <~ textEditSignal textInput 
                               then return . NoChange $ background t
                               else returnNewText textRef metrics $ t ++ [char]
 
-        returnNewText r cm t = writeIORef r t >> (return . Change . background $ fitTextIntoBounds t (w,0.055) cm)
+        returnNewText r cm t = writeIORef r t >> (return . Change . background $ fitTextIntoBounds True t (w,0.055) cm)
         background         t = SceneObject (Vector3  0 h 0) identity 1 (Model (rect w 0.055) (vertexColored color)) [textObject t]
         -- chatBack             = SceneObject (Vector3  (-0.01) (-0.01) (-0.1)) identity 1 (Model (rect (w*1.05) (0.0675)) (vertexColored white)) []
 
@@ -87,7 +87,7 @@ chatDisplay (Vector2 x y) (Size w h) font color = Signal $ \necro -> do
                   go (Change str) = do
                       prevStr <- readIORef ref
                       --   let val = prevStr ++ "\n" ++ str
-                      let val = (fitTextIntoBounds (prevStr ++ str ++ "\n\n") (w * 1.0,h * 0.9) metrics)
+                      let val = (fitTextIntoBounds False (prevStr ++ str ++ "\n\n") (w * 1.0,h * 0.75) metrics)
                       --   putStrLn $ "---------chat val------------"
                       --   putStrLn $ show val
                       writeIORef ref val

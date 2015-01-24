@@ -194,19 +194,31 @@ type TextWord = (String,Double)
 emptyWord :: TextWord
 emptyWord = ([],0)
 
-fitTextIntoBounds :: String -> (Double,Double) -> Map.Map Char CharMetric -> String
-fitTextIntoBounds text (w,h) cmetrics = finalText
+fitTextIntoBounds :: Bool -> String -> (Double,Double) -> Map.Map Char CharMetric -> String
+fitTextIntoBounds removeTopLines text (w,h) cmetrics = finalText
     where
-        (finalText  ,_)  = foldl' (removeExtraLines   h cmetrics) ([],cheight cmetrics) widthBound
-        (widthBound ,_)  = foldl' (fitWordsIntoBounds w)           emptyWord      (words' ++ [word])
         (word,words',_)  = foldl' (splitCharIntoWords w cmetrics) (emptyWord,[],0) text
+        (widthBound ,_)  = foldl' (fitWordsIntoBounds w)           emptyWord      (words' ++ [word])
+        (finalText  ,_)  = foldl' (removeExtraLines removeTopLines h cmetrics) ([],cheight cmetrics) widthBound
 
-removeExtraLines :: Double -> Map.Map Char CharMetric -> TextWord -> Char -> TextWord
-removeExtraLines boundsHeight metrics (text,currentHeight) char
-    | currentHeight + cheight metrics >= boundsHeight                 = (text,currentHeight)
-    | char == '\n' && currentHeight + cheight metrics >= boundsHeight = (text,currentHeight)
-    | char == '\n' && currentHeight + cheight metrics <  boundsHeight = (text ++ [char],currentHeight + cheight metrics)
-    | otherwise                                                       = (text ++ [char],currentHeight)
+removeExtraLines :: Bool -> Double -> Map.Map Char CharMetric -> TextWord -> Char -> TextWord
+removeExtraLines rmvTop boundsHeight metrics (text,currentHeight) char = if rmvTop then removeExtraTopLines else removeExtraBottomLines
+    where
+        removeExtraTopLines
+            | currentHeight + cheight metrics >= boundsHeight                 = (text,currentHeight)
+            | char == '\n' && currentHeight + cheight metrics >= boundsHeight = (text,currentHeight)
+            | char == '\n' && currentHeight + cheight metrics <  boundsHeight = (text ++ [char],currentHeight + cheight metrics)
+            | otherwise                                                       = (text ++ [char],currentHeight)
+        removeExtraBottomLines
+            | char == '\n' && currentHeight + cheight metrics >= boundsHeight = (deleteFirstLine text ++ [char],currentHeight)
+            | char == '\n' && currentHeight + cheight metrics <  boundsHeight = (text ++ [char],currentHeight + cheight metrics)
+            | otherwise                                                       = (text ++ [char],currentHeight)
+        deleteFirstLine s = s'
+            where
+                (_,s')                = foldl' go (False,[]) s
+                go (False,accum) '\n' = (True ,accum)
+                go (False,accum) _    = (False,accum)
+                go (True ,accum) char = (True ,accum ++ [char])
 
 cheight metrics = case Map.lookup 'A' metrics of
     Nothing -> 20 * fontScale
