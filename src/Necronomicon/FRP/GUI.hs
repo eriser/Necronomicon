@@ -9,6 +9,7 @@ module Necronomicon.FRP.GUI (Gui(..),
                              slider,
                              chat)where
 
+import           Debug.Trace
 import           Data.Dynamic
 import qualified Data.IntSet             as IntSet
 import           Data.IORef
@@ -62,7 +63,9 @@ chat (Vector2 x y) (Size w h) font color = addChild <~ textEditSignal textInput 
                           (NoChange _,_)      -> return . NoChange $ background t
                           (Change '\n',(_:_)) -> sendChatMessage t client >> returnNewText textRef metrics ""
                           (Change '\b',(_:_)) -> returnNewText textRef metrics $ init t
-                          (Change char,_)     -> returnNewText textRef metrics $ t ++ [char]
+                          (Change char,_)     -> if char == toEnum 0
+                              then return . NoChange $ background t
+                              else returnNewText textRef metrics $ t ++ [char]
 
         returnNewText r cm t = writeIORef r t >> (return . Change . background $ fitTextIntoBounds t (w,0.055) cm)
         background         t = SceneObject (Vector3  0 h 0) identity 1 (Model (rect w 0.055) (vertexColored color)) [textObject t]
@@ -85,7 +88,6 @@ chatDisplay (Vector2 x y) (Size w h) font color = Signal $ \necro -> do
                       prevStr <- readIORef ref
                       let val = prevStr ++ "\n" ++ str
                       writeIORef ref val
-                      print "chatDisplay"
                       return $ Change $ chatObject metrics val
 
         chatObject cm t = SceneObject (Vector3  x y 0) identity 1 (Model (rect w h) (vertexColored black)) [textObject cm t]

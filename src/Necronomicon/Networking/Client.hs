@@ -268,7 +268,8 @@ setSyncArg _ _ = return ()
 
 --Fix lazy chat and we're ready to go!
 receiveChat :: TBQueue Event -> [Datum] -> Client -> IO ()
-receiveChat globalDispatch (ASCII_String name : ASCII_String msg : []) client = putStrLn ("Chat - " ++ message) >> sendToGlobalDispatch globalDispatch 3 message
+receiveChat globalDispatch (ASCII_String name : ASCII_String msg : []) client = sendToGlobalDispatch globalDispatch 3 message
+    -- >> putStrLn ("Chat - " ++ message)
     where
         message = BC.unpack name ++ ": " ++ BC.unpack msg
 receiveChat _ _ _ = return ()

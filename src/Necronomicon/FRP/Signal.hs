@@ -166,12 +166,10 @@ instance  Functor Signal where
                             let newValue = f x
                             writeIORef ref newValue
                             return $ Change newValue
-                        NoChange _ -> do
-                            prev <- readIORef ref
-                            return $ NoChange prev
+                        _        -> readIORef ref >>= return . NoChange
 
 instance Applicative Signal where
-    pure a = Signal $ \_ -> return (a,\_ -> return $ NoChange a,IntSet.empty)
+    pure  a = Signal $ \_ -> return (a,\_ -> return $ NoChange a,IntSet.empty)
     f <*> g = Signal $ \necro -> do
         (defaultF,fCont,fIds) <- unSignal f necro
         (defaultG,gCont,gIds) <- unSignal g necro
@@ -181,24 +179,21 @@ instance Applicative Signal where
         return (defaultValue,processState fCont gCont ref ids,ids)
         where
             processState fCont gCont ref ids event@(Event uid _) = case idGuard ids uid ref of
-                Just r -> r
-                Nothing-> do
-                    fValue <- fCont event
-                    gValue <- gCont event
-                    case (fValue,gValue) of
-                        (Change f',Change g') -> do
-                            let newValue = f' g'
-                            writeIORef ref newValue
-                            return $ Change newValue
-                        (Change f',NoChange g') -> do
-                            let newValue = f' g'
-                            writeIORef ref newValue
-                            return $ Change newValue
-                        (NoChange f',Change g') -> do
-                            let newValue = f' g'
-                            writeIORef ref newValue
-                            return $ Change newValue
-                        _ -> readIORef ref >>= return . NoChange
+                Just  r -> r
+                Nothing -> fCont event >>= \fe -> gCont event >>= \ge -> case (fe,ge) of
+                    (Change f',Change g') -> do
+                        let newValue = f' g'
+                        writeIORef ref newValue
+                        return $ Change newValue
+                    (Change f',NoChange g') -> do
+                        let newValue = f' g'
+                        writeIORef ref newValue
+                        return $ Change newValue
+                    (NoChange f',Change g') -> do
+                        let newValue = f' g'
+                        writeIORef ref newValue
+                        return $ Change newValue
+                    _ -> readIORef ref >>= return . NoChange
 
 instance Alternative Signal where
     empty   = Signal $ \_ -> return (undefined,\_ -> return $ NoChange undefined,IntSet.empty)
@@ -612,14 +607,14 @@ eventKeyToChar k isShiftDown
 
     | k == 126 = '\n'
     | k == 127 = ' '
-    | k == 128 = ' '
-    | k == 129 = ' '
-    | k == 130 = ' '
-    | k == 131 = ' '
-    | k == 132 = ' '
-    | k == 133 = ' '
+    | k == 128 = toEnum 0
+    | k == 129 = toEnum 0
+    | k == 130 = toEnum 0
+    | k == 131 = toEnum 0
+    | k == 132 = toEnum 0
+    | k == 133 = toEnum 0
     | k == 134 = '\b'
-    | otherwise = ' '
+    | otherwise = toEnum 0
 
 textInput :: Signal Char
 textInput = Signal $ \necro -> do
@@ -977,7 +972,7 @@ render scene = Signal $ \necro -> do
             s <- sCont event
             case s of
                 NoChange _ -> return $ NoChange ()
-                Change   s -> atomically (tryPutTMVar sVar s) >> return (Change ())
+                Change   s -> atomically (putTMVar sVar s) >> return (Change ())
 
 ---------------------------------------------
 -- Sound
