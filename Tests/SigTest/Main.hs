@@ -9,7 +9,7 @@ testChat = gui [chatBox]
     where
         chatBox = chat <| Vector2 0.0 0.0
                        <| Size 0.4 0.75
-                       <| Font "OCRA.ttf" 20
+                       <| Font "OCRA.ttf" 24
                        <| gray 0.05
 
 testPattern :: Signal ()

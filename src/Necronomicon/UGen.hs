@@ -351,10 +351,7 @@ sinTest2 :: [UGen]
 sinTest2 = sin [0,10..100]
 
 sinTest3 :: [UGen]
-sinTest3 = sin [1, 2] |> sin
-                      |> gain (sin 13)
-                      |> gain 0.5
-                      |> out 0
+sinTest3 = sin [1, 2] |> sin |> gain (sin 13) |> gain 0.5 |> out 0
 
 mySynth :: UGen -> UGen
 mySynth freq = sin freq
