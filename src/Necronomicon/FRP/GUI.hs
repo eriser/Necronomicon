@@ -60,8 +60,8 @@ chat (Vector2 x y) (Size w h) font color = addChild <~ textEditSignal textInput 
                       t <- readIORef textRef
                       c <- inputCont event
                       case (c,t) of
-                          (NoChange _,_)      -> return . NoChange $ background t
-                          (Change '\n',(_:_)) -> sendChatMessage t client >> returnNewText textRef metrics ""
+                          (NoChange  _,_)      -> return . NoChange $ background t
+                          (Change '\n',_)     -> sendChatMessage t client >> returnNewText textRef metrics ""
                           (Change '\b',(_:_)) -> returnNewText textRef metrics $ init t
                           (Change char,_)     -> if char == toEnum 0
                               then return . NoChange $ background t
