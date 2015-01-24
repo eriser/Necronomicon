@@ -509,6 +509,27 @@ keySpace  = GLFW.Key'Space
 keyLShift = GLFW.Key'LeftShift
 keyRShift = GLFW.Key'RightShift
 keyBackspace = GLFW.Key'Backspace
+key0 = GLFW.Key'0
+key1 = GLFW.Key'1
+key2 = GLFW.Key'2
+key3 = GLFW.Key'3
+key4 = GLFW.Key'4
+key5 = GLFW.Key'5
+key6 = GLFW.Key'6
+key7 = GLFW.Key'7
+key8 = GLFW.Key'8
+key9 = GLFW.Key'9
+keyApostrophe   = GLFW.Key'Apostrophe
+keyComma        = GLFW.Key'Comma
+keyMinus        = GLFW.Key'Minus
+keyEqual        = GLFW.Key'Equal
+keyPeriod       = GLFW.Key'Period
+keySlash        = GLFW.Key'Slash
+keySemiColon    = GLFW.Key'Semicolon
+keyLeftBracket  = GLFW.Key'LeftBracket
+keyBackSlash    = GLFW.Key'Backslash
+keyRightBracket = GLFW.Key'RightBracket
+keyGraveAccent  = GLFW.Key'GraveAccent
 
 glfwKeyToEventKey :: GLFW.Key -> Int
 glfwKeyToEventKey k
@@ -547,7 +568,28 @@ glfwKeyToEventKey k
     | k == keyLShift= 132
     | k == keyRShift= 133
     | k == keyBackspace = 134
-    | otherwise     = -1
+    | k == key0 = 135
+    | k == key1 = 136
+    | k == key2 = 137
+    | k == key3 = 138
+    | k == key4 = 139
+    | k == key5 = 140
+    | k == key6 = 141
+    | k == key7 = 142
+    | k == key8 = 143
+    | k == key9 = 144
+    | k == keyApostrophe   = 145
+    | k == keyComma        = 146
+    | k == keyMinus        = 147
+    | k == keyEqual        = 148
+    | k == keyPeriod       = 149
+    | k == keySlash        = 150
+    | k == keySemiColon    = 151
+    | k == keyLeftBracket  = 152
+    | k == keyBackSlash    = 153
+    | k == keyRightBracket = 154
+    | k == keyGraveAccent  = 155
+    | otherwise            = -1
 
 eventKeyToChar :: Int -> Bool -> Char
 eventKeyToChar k isShiftDown
@@ -577,6 +619,27 @@ eventKeyToChar k isShiftDown
     | k == 123 && not isShiftDown = 'x'
     | k == 124 && not isShiftDown = 'y'
     | k == 125 && not isShiftDown = 'z'
+    | k == 135 && not isShiftDown = '0'
+    | k == 136 && not isShiftDown = '1'
+    | k == 137 && not isShiftDown = '2'
+    | k == 138 && not isShiftDown = '3'
+    | k == 139 && not isShiftDown = '4'
+    | k == 140 && not isShiftDown = '5'
+    | k == 141 && not isShiftDown = '6'
+    | k == 142 && not isShiftDown = '7'
+    | k == 143 && not isShiftDown = '8'
+    | k == 144 && not isShiftDown = '9'
+    | k == 145 && not isShiftDown = '\''
+    | k == 146 && not isShiftDown = ','
+    | k == 147 && not isShiftDown = '-'
+    | k == 148 && not isShiftDown = '='
+    | k == 149 && not isShiftDown = '.'
+    | k == 150 && not isShiftDown = '/'
+    | k == 151 && not isShiftDown = ';'
+    | k == 152 && not isShiftDown = '['
+    | k == 153 && not isShiftDown = '\\'
+    | k == 154 && not isShiftDown = ']'
+    | k == 154 && not isShiftDown = '`'
 
     | k == 100 && isShiftDown = 'A'
     | k == 101 && isShiftDown = 'B'
@@ -604,6 +667,27 @@ eventKeyToChar k isShiftDown
     | k == 123 && isShiftDown = 'X'
     | k == 124 && isShiftDown = 'Y'
     | k == 125 && isShiftDown = 'Z'
+    | k == 135 && isShiftDown = ')'
+    | k == 136 && isShiftDown = '!'
+    | k == 137 && isShiftDown = '@'
+    | k == 138 && isShiftDown = '#'
+    | k == 139 && isShiftDown = '$'
+    | k == 140 && isShiftDown = '%'
+    | k == 141 && isShiftDown = '^'
+    | k == 142 && isShiftDown = '&'
+    | k == 143 && isShiftDown = '*'
+    | k == 144 && isShiftDown = '('
+    | k == 145 && isShiftDown = '\"'
+    | k == 146 && isShiftDown = '<'
+    | k == 147 && isShiftDown = '_'
+    | k == 148 && isShiftDown = '+'
+    | k == 149 && isShiftDown = '>'
+    | k == 150 && isShiftDown = '?'
+    | k == 151 && isShiftDown = ':'
+    | k == 152 && isShiftDown = '{'
+    | k == 153 && isShiftDown = '|'
+    | k == 154 && isShiftDown = '}'
+    | k == 155 && isShiftDown = '~'
 
     | k == 126 = '\n'
     | k == 127 = ' '
@@ -620,9 +704,9 @@ textInput :: Signal Char
 textInput = Signal $ \necro -> do
     shiftRef <- newIORef False
     charRef  <- newIORef ' '
-    return (' ',processEvent shiftRef charRef,IntSet.fromList [100..134])
+    return (' ',processEvent shiftRef charRef,IntSet.fromList [100..155])
     where
-        processEvent shiftRef charRef (Event uid eval) = case (uid == 132 || uid == 133,uid >= 100 && uid <= 134,fromDynamic eval) of
+        processEvent shiftRef charRef (Event uid eval) = case (uid == 132 || uid == 133,uid >= 100 && uid <= 155,fromDynamic eval) of
             (True,_,Just isShiftDown) -> writeIORef shiftRef isShiftDown >> readIORef charRef >>= return . NoChange
             (_,True,Just True)        -> readIORef  shiftRef >>= return . Change . eventKeyToChar uid
             _                         -> readIORef  charRef  >>= return . NoChange
