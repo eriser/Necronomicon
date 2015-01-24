@@ -5,14 +5,17 @@ main :: IO ()
 main = runSignal testChat
 
 testChat :: Signal ()
-testChat = gui [chatBox]
+testChat = gui [chatBox,netBox]
     where
-        chatBox = chat <| Vector2 0.0 0.0
-                       <| Size 0.4 0.75
-                       <| Font "OCRA.ttf" 24
-                       <| gray 0.05
+        netBox  = netStat <| Vector2 1.1 0.0
+                          <| Size    0.2 0.03
+                          <| Font   "OCRA.ttf" 24
 
-testPattern :: Signal ()
+        chatBox = chat    <| Vector2 0.0 0.0
+                          <| Size    0.4 0.75
+                          <| Font   "OCRA.ttf" 24
+                          <| gray    0.05
+
 testPattern = gui [tri <~ pattern / 10 ]
     where
         tri y   = testTri (Vector3 0.5 y 0) identity
@@ -31,16 +34,6 @@ testSound2 = play lineSynth <| isDown keyS
 
 testSound3 :: Signal ()
 testSound3 = playUntil myCoolSynth2 (isDown keyP) (isDown keyS)
-
-testShader :: Signal ()
-testShader = gui [so <~ mousePos,pure zLabel]
-    where
-        so (x,y) = SceneObject (Vector3 x y 0) identity 1 model []
-        model    = Model (rect 0.2 0.2) (ambient (tga "Gas20.tga"))
-        zLabel   = label <| Vector2 0.5 0.5
-                         <| Font "OCRA.ttf" 20
-                         <| white
-                         <| "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris ipsum risus, luctus vel mollis non, hendrerit non mi. Sed at blandit ex. Donec aliquam pellentesque convallis. Integer in nisl ut ipsum dignissim vestibulum. Aenean porta nunc magna, id porttitor quam scelerisque non. Ut malesuada mi lectus, vitae finibus est lacinia nec. Nunc varius sodales porttitor. Nam faucibus tortor quis ullamcorper feugiat. Etiam mollis tellus mi, pretium consequat justo suscipit in. Etiam posuere placerat risus, eget efficitur nulla."
 
 testGUI :: Signal ()
 testGUI = gui [element vslider,element blueButton,pure zLabel,tri <~ input vslider]
@@ -80,81 +73,3 @@ simplexMesh = Mesh "simplex" vertices colors uvs indices
         colors   = map toColor  values
         uvs      = map toUV     values
         indices  = foldr (addIndices (round w)) [] [0..(length values)]
-
--- main :: IO()
--- main = runSignal $ needlessCrawlTest
--- main = runSignal $ enterTest <|> spaceTest <|> altTest <|> shiftTest <|> ctrlTest
-    -- where
-        -- enterTest = (\p -> if p then "Enter" else "") <~ enter
-        -- spaceTest = (\p -> if p then "Space" else "") <~ space
-        -- altTest   = (\p -> if p then "Alt"   else "") <~ alt
-        -- shiftTest = (\p -> if p then "Shift" else "") <~ shift
-        -- ctrlTest  = (\p -> if p then "Ctrl"  else "") <~ ctrl
-
--- main = runSignal $ countIf (\(x,_) -> x > 400) mousePos
--- main = runSignal $ dropRepeats $ isDown keyW <|> isDown keyA  <|> isDown keyS <|> isDown keyD
--- main = runSignal $ randFS $ fps 3
--- main = runSignal $ randS 100 666 $ fps 3
--- main = runSignal $ fps 1 - fps 3
--- main = runSignal $ fps 30
--- main = runSignal wasd
--- main = runSignal tonsOfMouseAndTime
--- main = runSignal $ isDown keyW <|> isDown keyA
--- main = runSignal $ (fst <~ mousePos) + (snd <~ mousePos)
--- main = runSignal $ dropIf (>10) 0 $ count mouseClicks
--- main = runSignal $ dropWhen (isDown keyW) mousePos
--- main = runSignal $ keepWhen (isDown keyW) mousePos
--- main = runSignal $ dropIf (\(x,y) -> x > 400) (0,0) mousePos
--- main = runSignal $ keepIf (\(x,y) -> x > 400) (0,0) mousePos
--- main = runSignal $ sampleOn (fps 3) mousePos
--- main = runSignal $ keepWhen ((\(x,_) -> x > 400) <~ mousePos) mousePos
--- main = runSignal $ every $ 2 * second
--- main = runSignal $ dropWhen ((\(x,_) -> x > 400) <~ mousePos) mousePos
--- main = runSignal $ sampleOn mouseClicks doubleMouse <|> mousePos
--- main = runSignal $ every second <|> fps 9.5
--- main = runSignal multiPlay
--- main = runSignal mousePos'
--- main = runSignal $ combine [pure (666,-666),mousePos,mousePos]
--- main = runSignal signals
--- main = runSignal $ p2 -- $ (p2 + lift snd p') - (p1 + lift fst p')
-    -- where
-        -- p' = foldp (\(x,y) (w,z) -> (x+w,y+z)) (0,0) mousePos
-        -- p1 = foldp' (\(x,y) (z,w) -> (x+w,z-y)) (0,0) mousePos'
-        -- p2 = foldp (+) 0 (snd <~ mousePos)
-        -- p3 = foldp (+) 0 (snd <~ mousePos)
-        -- p2 = (\a -> a + 0) <~ (snd <~ mousePos')
-
--- multiPlay :: Signal ()
--- multiPlay = playOn beat (isDown keyP) (isDown keyS)
-        -- <|> playOn beat (isDown keyA) (isDown keyS)
-        -- <|> playOn beat (isDown keyB) (isDown keyS)
-        -- <|> playOn beat (isDown keyC) (isDown keyS)
-        -- <|> playOn beat (isDown keyD) (isDown keyS)
-    -- where
-        -- beat = 0
-
-tonsOfMouseAndTime :: Signal (Double,Double)
-tonsOfMouseAndTime = tenThousandTest
-    where
-        tupleTest (x,y) (z,w) = (x+w,z-y)
-        test1           = tupleTest <~ mousePos
-        tenTests        = test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ mousePos)))))))))
-        test2           = tupleTest <~ tenTests
-        hundredTests    = test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ mousePos)))))))))
-        test3           = tupleTest <~ hundredTests
-        thousandsTests  = test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ mousePos)))))))))
-        test4           = tupleTest <~ thousandsTests
-        tenThousandTest = test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ mousePos)))))))))
-
-needlessCrawlTest :: Signal (Double,Double)
-needlessCrawlTest = tenThousandTest
-    where
-        tupleTest (x,y) (z,w) = (x+w,z-y)
-        test1           = tupleTest <~ pure (0,0)
-        tenTests        = test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ pure (0,0))))))))))
-        test2           = tupleTest <~ tenTests
-        hundredTests    = test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ pure (0,0))))))))))
-        test3           = tupleTest <~ hundredTests
-        thousandsTests  = test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ pure (0,0))))))))))
-        test4           = tupleTest <~ thousandsTests
-        tenThousandTest = test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ pure (0,0))))))))))

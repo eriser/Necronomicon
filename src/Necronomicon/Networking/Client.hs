@@ -22,6 +22,7 @@ import Necronomicon.FRP.Event
 import System.Random (randomRIO)
 import System.Exit
 import Debug.Trace
+import Data.Typeable
 
 
 data Client = Client {
@@ -39,6 +40,7 @@ data RunStatus = Connecting
                | ShouldQuit
                | Quitting
                | DoneQuitting
+               deriving (Show,Eq,Typeable)
 
 --fix lazy chat and chat in general
 --Create reconnection scheme in case of disconnection
@@ -62,16 +64,19 @@ startup :: Client -> String -> TBQueue Event -> IO()
 startup client serverIPAddress globalDispatch = do
     putStrLn "Setting up networking..."
     (sock,serverAddr) <- getSocket
+    sendToGlobalDispatch globalDispatch 4 Connecting
     connectionLoop            client sock serverAddr
     forkIO $ messageProcessor client     (oscFunctions globalDispatch)
     forkIO $ listener         client sock
     forkIO $ aliveLoop        client
     forkIO $ sender           client sock
-    forkIO $ quitLoop         client sock
+    -- forkIO $ quitLoop         client sock
     putStrLn "Logging in..."
     atomically $ writeTChan (outBox client) $ Message "clientLogin" [toOSCString $ userName client]
     -- forkIO $ testNetworking   client
-    checkForRestartLoop client serverIPAddress globalDispatch
+    -- checkForRestartLoop client serverIPAddress globalDispatch
+    sendToGlobalDispatch globalDispatch 4 Running
+    statusLoop client sock serverIPAddress globalDispatch Running
     where
         hints     = Just $ defaultHints {addrSocketType = Stream}
         getSocket = do
@@ -143,38 +148,23 @@ quitClient client = atomically (writeTVar (runStatus client) ShouldQuit) >> atom
         waitTillDone ShouldQuit   = retry
         waitTillDone DoneQuitting = return ()
 
-checkForRestartLoop :: Client -> String -> TBQueue Event -> IO()
-checkForRestartLoop client serverIPAddress globalDispatch = atomically (readTVar (runStatus client) >>= go) >>= \shouldRestart -> if shouldRestart
-    then threadDelay 2500000 >> putStrLn "Disconnected. Trying to restart..." >> startup client serverIPAddress globalDispatch
-    else putStrLn "Shutting down checkForRestartLoop"
-    where
-        go Connecting   = retry
-        go Running      = retry
-        go Disconnected = return True
-        go _            = return False
-
---Maybe merge this with check for restart loop.
---Instead becomes a check run status loop.
---Callback for run status change.
-quitLoop :: Client -> Socket -> IO()
-quitLoop client sock = do
-    disconnected <- atomically $ readTVar (runStatus client) >>= waitToQuit
-    if disconnected then return () else do
-        putStrLn "Quitting..."
-        atomically $ writeTVar  (runStatus client) Quitting
-        putStrLn "Sending quit message to server..."
-        Control.Exception.catch (sendAll sock $ encodeMessage $ Message "clientLogout" [toOSCString (userName client)]) printError
-        putStrLn "Closing socket..."
-        close sock
-        putStrLn "Done quitting..."
-        atomically $ writeTVar  (runStatus client) DoneQuitting
-    where
-        waitToQuit Connecting   = retry
-        waitToQuit Running      = retry
-        waitToQuit Disconnected = return True
-        waitToQuit Quitting     = retry
-        waitToQuit DoneQuitting = retry
-        waitToQuit ShouldQuit   = return False
+statusLoop :: Client -> Socket -> String -> TBQueue Event -> RunStatus -> IO()
+statusLoop client sock serverIPAddress globalDispatch status = do
+    status' <-atomically (readTVar (runStatus client) >>= \status' -> if status /= status' then return status' else retry)
+    sendToGlobalDispatch globalDispatch 4 status'
+    putStrLn ("Network status update: " ++ show status')
+    case status' of
+        Disconnected -> threadDelay 2500000 >> putStrLn "Disconnected. Trying to restart..." >> startup client serverIPAddress globalDispatch
+        ShouldQuit   -> do
+            putStrLn "Quitting..."
+            atomically $ writeTVar  (runStatus client) Quitting
+            putStrLn "Sending quit message to server..."
+            Control.Exception.catch (sendAll sock $ encodeMessage $ Message "clientLogout" [toOSCString (userName client)]) printError
+            putStrLn "Closing socket..."
+            close sock
+            putStrLn "Done quitting..."
+            atomically $ writeTVar  (runStatus client) DoneQuitting
+        _            -> statusLoop client sock serverIPAddress globalDispatch status'
 
 executeIfConnected :: Client -> STM a -> IO (Maybe a)
 executeIfConnected client action = atomically (checkForStatus `orElse` checkForMessage)

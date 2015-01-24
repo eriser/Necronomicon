@@ -7,7 +7,8 @@ module Necronomicon.FRP.GUI (Gui(..),
                              gui,
                              label,
                              slider,
-                             chat)where
+                             chat,
+                             netStat)where
 
 import           Debug.Trace
 import           Data.Dynamic
@@ -41,6 +42,17 @@ guiEvent ref v f = case fromDynamic v of
 
 label :: Vector2 -> Font -> Color -> String -> SceneObject
 label (Vector2 x y) font color text = SceneObject (Vector3 x y 0) identity 1 (drawText text font ambient) []
+
+--need widgets for network status and current users
+netStat :: Vector2 -> Size -> Font -> Signal SceneObject
+netStat (Vector2 x y) (Size w h) font = indicator <~ networkRunStatus
+    where
+        -- indicator Connecting   = background (RGB 0.15 0.15 0) "Connecting"
+        indicator Running      = background (RGB 0.0  0.15 0) "Running"
+        indicator Disconnected = background (RGB 0.25 0.00 0) "Disconnected"
+        indicator status       = background (RGB 0.15 0.15 0) $ show status
+        background c t = SceneObject (Vector3  x y 0) identity 1 (Model (rect w h) (vertexColored c)) [textObject t]
+        textObject   t = SceneObject (Vector3  0 0 1) identity 1 (drawText t font ambient) []
 
 chat :: Vector2 -> Size -> Font -> Color -> Signal SceneObject
 chat (Vector2 x y) (Size w h) font color = addChild <~ textEditSignal textInput (toggle $ lift2 (&&) ctrl $ isDown keyT) ~~ chatDisplay (Vector2 x y) (Size w h) font color

@@ -87,6 +87,8 @@ module Necronomicon.FRP.Signal (
     unSignal,
     toggle,
     receiveChatMessage,
+    networkRunStatus,
+    RunStatus(..),
     module Control.Applicative
     ) where
 
@@ -764,6 +766,9 @@ shift = isDown keyLShift <|> isDown keyRShift
 
 receiveChatMessage :: Signal String
 receiveChatMessage = input "" 3
+
+networkRunStatus :: Signal RunStatus
+networkRunStatus = input Connecting 4
 
 ---------------------------------------------
 -- Combinators
