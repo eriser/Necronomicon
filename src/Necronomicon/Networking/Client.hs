@@ -27,7 +27,7 @@ import Data.Typeable
 
 data Client = Client {
     userName    :: String,
-    users       :: TVar [String],
+    clientUsers :: TVar [String],
     syncObjects :: TVar (Map Int SyncObject),
     outBox      :: TChan Message,
     inBox       :: TChan Message,
@@ -70,13 +70,11 @@ startup client serverIPAddress globalDispatch = do
     forkIO $ listener         client sock
     forkIO $ aliveLoop        client
     forkIO $ sender           client sock
-    -- forkIO $ quitLoop         client sock
     putStrLn "Logging in..."
     atomically $ writeTChan (outBox client) $ Message "clientLogin" [toOSCString $ userName client]
-    -- forkIO $ testNetworking   client
-    -- checkForRestartLoop client serverIPAddress globalDispatch
     sendToGlobalDispatch globalDispatch 4 Running
     statusLoop client sock serverIPAddress globalDispatch Running
+    -- forkIO $ testNetworking   client
     where
         hints     = Just $ defaultHints {addrSocketType = Stream}
         getSocket = do
@@ -179,7 +177,7 @@ executeIfConnected client action = atomically (checkForStatus `orElse` checkForM
 --OSC Functions
 -----------------------------
 oscFunctions :: TBQueue Event -> Data.Map.Map String ([Datum] -> Client -> IO ())
-oscFunctions globalDispatch = insert "userList"         userList
+oscFunctions globalDispatch = insert "userList"         (userList globalDispatch)
                             $ insert "clientAliveReply" clientAliveReply
                             $ insert "clientLoginReply" clientLoginReply
                             $ insert "addSyncObject"    addSyncObject
@@ -189,10 +187,11 @@ oscFunctions globalDispatch = insert "userList"         userList
                             $ insert "receiveChat"      (receiveChat globalDispatch)
                             $ Data.Map.empty
 
-userList :: [Datum] -> Client -> IO ()
-userList d client = do
+userList :: TBQueue Event -> [Datum] -> Client -> IO ()
+userList globalDispatch d client = do
     putStrLn $ "Received user list:" ++ show userStringList
-    atomically $ writeTVar (users client) userStringList
+    atomically $ writeTVar (clientUsers client) userStringList
+    sendToGlobalDispatch globalDispatch 5 userStringList
     where
         userStringList = foldr addUserName [] d
         addUserName u us = case datumToString u of

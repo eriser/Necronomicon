@@ -147,6 +147,9 @@ addChild so1 so2 = _children_ (\cs -> so1 : cs) so2
 -- Scene functions
 -------------------------------------------------------------------------------------------------------------------
 
+emptyObject :: SceneObject
+emptyObject = PlainObject 0 identity 1 []
+
 root :: [SceneObject] -> SceneObject
 root = PlainObject 0 identity 1
 

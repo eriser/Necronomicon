@@ -89,6 +89,7 @@ module Necronomicon.FRP.Signal (
     receiveChatMessage,
     networkRunStatus,
     RunStatus(..),
+    users,
     module Control.Applicative
     ) where
 
@@ -769,6 +770,9 @@ receiveChatMessage = input "" 3
 
 networkRunStatus :: Signal RunStatus
 networkRunStatus = input Connecting 4
+
+users :: Signal [String]
+users = input [] 5
 
 ---------------------------------------------
 -- Combinators

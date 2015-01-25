@@ -5,16 +5,21 @@ main :: IO ()
 main = runSignal testChat
 
 testChat :: Signal ()
-testChat = gui [chatBox,netBox]
+testChat = gui [chatBox,netBox,users]
     where
-        netBox  = netStat <| Vector2 1.1 0.0
+        users   = userBox <| Vector2 0.0 0.945
+                          <| Size    0.0 0.055
+                          <| Font   "OCRA.ttf" 24
+                          <| vertexColored (gray 0.5)
+
+        netBox  = netStat <| Vector2 1.4 0.97
                           <| Size    0.2 0.03
                           <| Font   "OCRA.ttf" 24
 
         chatBox = chat    <| Vector2 0.0 0.0
                           <| Size    0.4 0.75
                           <| Font   "OCRA.ttf" 24
-                          <| gray    0.05
+                          <| vertexColored (gray 0.05)
 
 testPattern = gui [tri <~ pattern / 10 ]
     where

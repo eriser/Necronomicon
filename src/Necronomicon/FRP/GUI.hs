@@ -8,7 +8,8 @@ module Necronomicon.FRP.GUI (Gui(..),
                              label,
                              slider,
                              chat,
-                             netStat)where
+                             netStat,
+                             userBox)where
 
 import           Debug.Trace
 import           Data.Dynamic
@@ -43,19 +44,24 @@ guiEvent ref v f = case fromDynamic v of
 label :: Vector2 -> Font -> Color -> String -> SceneObject
 label (Vector2 x y) font color text = SceneObject (Vector3 x y 0) identity 1 (drawText text font ambient) []
 
+userBox :: Vector2 -> Size -> Font -> Material -> Signal SceneObject
+userBox (Vector2 x y) (Size w h) font material = textBox <~ users
+    where
+        textBox    us = SceneObject (Vector3  x y 0)  identity 1 (drawText (userString us) font ambient) []
+        userString us = "[ " ++ foldr (\u us'-> u ++ " " ++ us') [] us ++ "]"
+
 --need widgets for network status and current users
 netStat :: Vector2 -> Size -> Font -> Signal SceneObject
 netStat (Vector2 x y) (Size w h) font = indicator <~ networkRunStatus
     where
-        -- indicator Connecting   = background (RGB 0.15 0.15 0) "Connecting"
-        indicator Running      = background (RGB 0.0  0.15 0) "Running"
+        indicator Running      = emptyObject
         indicator Disconnected = background (RGB 0.25 0.00 0) "Disconnected"
         indicator status       = background (RGB 0.15 0.15 0) $ show status
-        background c t = SceneObject (Vector3  x y 0) identity 1 (Model (rect w h) (vertexColored c)) [textObject t]
-        textObject   t = SceneObject (Vector3  0 0 1) identity 1 (drawText t font ambient) []
+        background         c t = SceneObject (Vector3  x y 0) identity 1 (Model (rect w h) (vertexColored c)) [textObject t]
+        textObject           t = SceneObject (Vector3  0 0 1) identity 1 (drawText t font ambient) []
 
-chat :: Vector2 -> Size -> Font -> Color -> Signal SceneObject
-chat (Vector2 x y) (Size w h) font color = addChild <~ textEditSignal textInput (toggle $ lift2 (&&) ctrl $ isDown keyT) ~~ chatDisplay (Vector2 x y) (Size w h) font color
+chat :: Vector2 -> Size -> Font -> Material -> Signal SceneObject
+chat (Vector2 x y) (Size w h) font material = addChild <~ textEditSignal textInput (toggle $ lift2 (&&) ctrl $ isDown keyT) ~~ chatDisplay (Vector2 x y) (Size w h) font material
     where
         textEditSignal textInputSignal toggleSignal = Signal $ \necro -> do
             (_,inputCont,inIDs) <- unSignal textInputSignal necro
@@ -80,14 +86,11 @@ chat (Vector2 x y) (Size w h) font color = addChild <~ textEditSignal textInput 
                               else returnNewText textRef metrics $ t ++ [char]
 
         returnNewText r cm t = writeIORef r t >> (return . Change . background $ fitTextIntoBounds False t (w,0.055) cm)
-        background         t = SceneObject (Vector3  0 h 0) identity 1 (Model (rect w 0.055) (vertexColored color)) [textObject t]
-        -- chatBack             = SceneObject (Vector3  (-0.01) (-0.01) (-0.1)) identity 1 (Model (rect (w*1.05) (0.0675)) (vertexColored white)) []
-
+        background         t = SceneObject (Vector3  0 h 0) identity 1 (Model (rect w 0.055) material) [textObject t]
         textObject         t = SceneObject (Vector3  0 0 1) identity 1 (drawText t font ambient) []
-        emptyObject          = PlainObject 0 identity 1 []
 
-chatDisplay :: Vector2 -> Size -> Font -> Color -> Signal SceneObject
-chatDisplay (Vector2 x y) (Size w h) font color = Signal $ \necro -> do
+chatDisplay :: Vector2 -> Size -> Font -> Material -> Signal SceneObject
+chatDisplay (Vector2 x y) (Size w h) font material = Signal $ \necro -> do
     (chatVal,chatCont,chatIds) <- unSignal receiveChatMessage necro
     metrics                    <- charMetrics font
     ref                        <- newIORef ""
