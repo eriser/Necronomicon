@@ -74,8 +74,8 @@ startup client serverIPAddress globalDispatch = do
     sendToGlobalDispatch globalDispatch 4 Running
     -- forkIO $ sendLoginMessage client
     sendLoginMessage client
-    statusLoop client sock serverIPAddress globalDispatch Running
     -- forkIO $ testNetworking   client
+    statusLoop client sock serverIPAddress globalDispatch Running
     where
         hints     = Just $ defaultHints {addrSocketType = Stream}
         getSocket = do
@@ -280,13 +280,13 @@ testNetworking :: Client -> IO()
 testNetworking client = forever $ do
     uid <- randomRIO (2,1000)
     atomically $ writeTChan (outBox client) $ syncObjectMessage $ SyncObject uid "ClientName" "" $ Seq.fromList [SyncString (userName client),SyncDouble 0]
-    threadDelay 10000
+    threadDelay 1000
     atomically $ writeTChan (outBox client) $ setArgMessage uid 1 $ SyncDouble 666
-    threadDelay 10000
+    threadDelay 1000
     atomically $ writeTChan (outBox client) $ removeObjectMessage uid
-    threadDelay 10000
+    threadDelay 1000
     atomically $ writeTChan (outBox client) $ chatMessage (userName client) "This is a chat, motherfucker"
-    threadDelay 10000
+    threadDelay 1000
 
 newClient :: String -> IO Client
 newClient name = do

@@ -12,14 +12,6 @@ import Data.Word (Word16, Word8)
 import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString.Lazy  as B
 
-lengthOfMessageLength :: Int64
-lengthOfMessageLength = 2
-
-decodeTransLength :: B.ByteString -> Maybe Int64
-decodeTransLength bs = if B.length bs == lengthOfMessageLength
-    then Just $ fromIntegral (decode bs :: Word16)
-    else Nothing
-
 toOSCString :: String -> Datum
 toOSCString = d_put . C.pack --ASCII_String . C.pack
 
@@ -27,6 +19,14 @@ datumToString :: Datum -> Maybe String
 datumToString d = case d_get d of
     Just s  -> Just $ C.unpack s
     Nothing -> Nothing
+
+lengthOfMessageLength :: Int64
+lengthOfMessageLength = 2
+
+decodeTransLength :: B.ByteString -> Maybe Int64
+decodeTransLength bs = if B.length bs == lengthOfMessageLength
+    then Just $ fromIntegral (decode bs :: Word16)
+    else Nothing
 
 sendWithLength :: Socket -> B.ByteString -> IO()
 sendWithLength socket msg = do
