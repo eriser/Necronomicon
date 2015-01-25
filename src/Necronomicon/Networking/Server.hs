@@ -1,7 +1,7 @@
 module Necronomicon.Networking.Server (startServer,serverPort,clientPort) where
 
 import Prelude
-import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy  as B
 import qualified Data.ByteString.Char8 as C
 
 import Control.Concurrent (forkIO,threadDelay)
@@ -109,12 +109,17 @@ startServer = print "Starting a server." >> (withSocketsDo $ bracket getSocket s
 
 synchronize :: Server -> IO()
 synchronize server = forever $ do
-    sos      <- atomically $ readTVar $ syncObjects server
-    print     $ Map.toList $ sos
+    syncObjects' <- atomically $ readTVar $ syncObjects server
+    users'       <- atomically $ readTVar $ users       server
+    print     syncObjects'
     putStrLn  ""
-    broadcast (toSynchronizationMsg sos) server
-    --Right now we sync every 30 seconds.....Perhaps optimistic, we shall see
-    threadDelay 30000000
+    print     users'
+    putStrLn  ""
+
+    -- figure out the issue with sending multiple messages in a row
+    broadcast (toSynchronizationMsg syncObjects') server
+    broadcast (Message "userList" $ Prelude.map (\(_,u) -> toOSCString $ userName u) (Map.toList users')) server
+    threadDelay 10000000
 
 acceptLoop :: Server -> Socket -> IO()
 acceptLoop server socket = forever $ do
@@ -135,25 +140,28 @@ userListen :: Socket -> SockAddr -> TMVar () -> Server -> IO()
 userListen socket addr stopVar server = (isConnected socket >>= \conn -> (atomically $ isEmptyTMVar stopVar) >>= return . (&& conn)) >>= \connected -> if not connected
     then putStrLn $ "userListen shutting down: " ++ show addr
     else do
-        msg <- Control.Exception.catch (recv socket 4096) (\e -> putStrLn ("userListen: " ++ show (e :: IOException)) >> return (C.pack ""))
-        case (decodeMessage msg,BC.null msg) of
-            (_   ,True) -> print "User disconnected. Shutting down userListen loop."
-            (Nothing,_) -> print "decodeMessage is Nothing" >> userListen socket addr stopVar server
-            (Just  m,_) -> atomically (writeTChan (inBox server) (addr,m)) >> userListen socket addr stopVar server
+        maybeMsg <- Control.Exception.catch (receiveWithLength socket) (\e -> putStrLn ("userListen: " ++ show (e :: IOException)) >> return Nothing)
+        case maybeMsg of
+            Nothing -> print "Message has zero length. Shutting down userListen loop."
+            Just msg -> case (decodeMessage msg,B.null msg) of
+                (_   ,True) -> print "User disconnected. Shutting down userListen loop."
+                (Nothing,_) -> print "decodeMessage is Nothing" >> userListen socket addr stopVar server
+                (Just  m,_) -> atomically (writeTChan (inBox server) (addr,m)) >> userListen socket addr stopVar server
 
 sendBroadcastMessages :: Server -> Socket -> IO()
 sendBroadcastMessages server socket = forever $ do
+    -- figure out the issue with sending multiple messages in a row
     message <- atomically $ readTChan $ broadcastOutBox server
     let encodedMessage = encodeMessage message
     userList <- (atomically $ readTVar (users server)) >>= return . Map.toList
     mapM_ (\(_,user) -> send' (userSocket user) encodedMessage) userList
     where
-        send' s m = Control.Exception.catch (sendAll s m) (\e -> putStrLn ("sendBroadcastMessages: " ++ show (e :: IOException)) >> return ())
+        send' s m = Control.Exception.catch (sendWithLength s m) (\e -> putStrLn ("sendBroadcastMessages: " ++ show (e :: IOException)))
 
 sendUserMessage :: Server -> Socket -> IO()
 sendUserMessage server socket = forever $ do
     (user,m) <- atomically $ readTChan $ outBox server
-    Control.Exception.catch (sendAll (userSocket user) (encodeMessage m)) (\e -> putStrLn ("sendUserMessage: " ++ show (e :: IOException)) >> return ())
+    Control.Exception.catch (sendWithLength (userSocket user) (encodeMessage m)) (\e -> putStrLn ("sendUserMessage: " ++ show (e :: IOException)))
 
 messageProcessor :: Server -> Socket -> Map.Map String ([Datum] -> User -> Server -> IO ()) -> IO()
 messageProcessor server socket oscFunctions = forever $ do
@@ -173,8 +181,8 @@ clientLogin :: [Datum] -> User -> Server -> IO ()
 clientLogin (ASCII_String n : []) user server = do
     atomically $ readTVar (users server) >>= \users' -> writeTVar (users server) (Map.insert (userAddress user) user' users')
     sendMessage user (Message "clientLoginReply" [Int32 1]) server
-    users' <- atomically $ readTVar $ users server
     sendUserList server
+    users' <- atomically $ readTVar $ users server
     sos    <- atomically $ readTVar $ syncObjects server
     sendMessage user (toSynchronizationMsg sos) server
     print $ "User logged in: " ++ (userName user')

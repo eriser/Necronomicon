@@ -21,6 +21,8 @@ import Control.Monad.Trans
 import qualified Data.Map as M
 import Data.Monoid
 
+import Unsafe.Coerce
+
 {-
 -- import Prelude hiding (fromRational, sin, (+), (*), (/), (-))
 -- import qualified Prelude as P (fromRational, fromIntegral, sin,  (+), (*), (/),(-))
@@ -353,8 +355,17 @@ sinTest2 = sin [0,10..100]
 sinTest3 :: [UGen]
 sinTest3 = sin [1, 2] |> sin |> gain (sin 13) |> gain 0.5 |> out 0
 
+sinTest4 :: [UGen] -> [UGen]
+sinTest4 fs = sin [0,10..100] + sin fs
+
 mySynth :: UGen -> UGen
 mySynth freq = sin freq
+
+twoSins :: UGen -> UGen -> UGen
+twoSins f1 f2 = sin f1 + sin f2
+
+twoSinArrays :: [UGen] -> [UGen] -> [UGen]
+twoSinArrays f1 f2 = sin f1 + sin f2
 
 lineSynth :: UGen
 lineSynth = s 555.0 -- + (s 440.0 |> delay 0.15)
@@ -373,6 +384,7 @@ myCoolSynth3 :: UGen
 myCoolSynth3 = sin (880 + mod) |> gain 0.25
     where
         mod = sin (20 + sin 0.1 * 9) |> gain 80
+
 
 --------------------------------------------------------------------------------------
 -- SynthDefs

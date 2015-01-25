@@ -307,7 +307,7 @@ runSignal s = initWindow >>= \mw ->
 
             client <- getArgs >>= startNetworking globalDispatch
 
-            threadDelay $ 16667
+            -- threadDelay $ 16667
 
             inputCounterRef <- newIORef 1000
             sceneVar        <- atomically newEmptyTMVar
@@ -316,7 +316,7 @@ runSignal s = initWindow >>= \mw ->
             let necro = Necro globalDispatch inputCounterRef sceneVar necroVars client
             forkIO $ globalEventDispatch s necro
 
-            threadDelay $ 16667
+            -- threadDelay $ 16667
 
             --Start up openGL rendering loop
             GL.texture GL.Texture2D GL.$= GL.Enabled
@@ -1152,6 +1152,51 @@ playPattern init playSig pattern = Signal $ \necro -> do
                 (Change False,_,_) -> runNecroState (pstop   pdef) necroVars >> readIORef ref >>= return . NoChange
                 (_,True,Just v )   -> writeIORef ref v >> return (Change v)
                 _                  -> readIORef  ref >>= return . NoChange
+
+-- class PlayUGen a b | a -> b where
+    -- playUGen :: a -> b
+
+-- class Play a where
+    -- type PlayRet a :: *
+    -- playUGen :: a -> PlayUGenRet a
+
+-- instance PlayUGen UGen (UGen,[UGen]) where
+    -- playUGen f = (f,[])
+
+-- instance Play UGen where
+    -- type PlayRet UGen = (UGen,[Double])
+    -- playUGen f = (f,[])
+
+-- instance Play (UGen -> UGen) where
+    -- type PlayRet (UGen -> UGen) = (Double -> ((UGen -> UGen),[UGen]))
+    -- playUGen f = \u -> (f,[u])
+
+-- instance PlayUGen (UGen -> UGen -> UGen) (UGen -> UGen -> ((UGen -> UGen -> UGen),[UGen])) where
+    -- playUGen f = \u1 u2-> (f,[u1,u2])
+
+-- instance PlayUGen [UGen] ([UGen],[[UGen]]) where
+    -- playUGen f = (f,[])
+
+-- instance PlayUGen ([UGen] -> [UGen]) ([UGen] -> (([UGen] -> [UGen]),[[UGen]])) where
+    -- playUGen f = \u -> (f,[u])
+
+-- instance PlayUGen ([UGen] -> [UGen] -> [UGen]) ([UGen] -> [UGen] -> (([UGen] -> [UGen] -> [UGen]),[[UGen]])) where
+    -- playUGen f = \u u2 -> (f,[u,u2])
+
+-- noArgs    :: (UGen,[UGen])
+-- noArgs    = playUGen lineSynth
+
+-- oneArg    :: (UGen -> UGen,[UGen])
+-- oneArg    = playUGen mySynth lineSynth
+
+-- twoArgs   :: (UGen -> UGen -> UGen,[UGen])
+-- twoArgs   = playUGen twoSins (sin 440) lineSynth
+
+-- arrayUGen :: ([UGen] -> [UGen],[[UGen]])
+-- arrayUGen = playUGen sinTest4 sinTest
+
+-- twoArgsArrayUGen :: ([UGen] -> [UGen] -> [UGen],[[UGen]])
+-- twoArgsArrayUGen = playUGen twoSinArrays sinTest 440
 
 -------------------------------------------------------------------------------------------------
 -- Signals 5.0

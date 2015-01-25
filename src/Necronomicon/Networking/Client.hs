@@ -8,6 +8,7 @@ import System.Environment (getArgs)
 import Network.Socket hiding (send,recv,recvFrom,sendTo)
 import Network.Socket.ByteString
 import qualified Data.ByteString.Char8 as BC (null,unpack,pack)
+import qualified Data.ByteString.Lazy  as B  (null)
 import Control.Exception
 import Control.Monad (unless,forever,(<=<))
 import System.CPUTime
@@ -70,9 +71,9 @@ startup client serverIPAddress globalDispatch = do
     forkIO $ listener         client sock
     forkIO $ aliveLoop        client
     forkIO $ sender           client sock
-    putStrLn "Logging in..."
-    atomically $ writeTChan (outBox client) $ Message "clientLogin" [toOSCString $ userName client]
     sendToGlobalDispatch globalDispatch 4 Running
+    -- forkIO $ sendLoginMessage client
+    sendLoginMessage client
     statusLoop client sock serverIPAddress globalDispatch Running
     -- forkIO $ testNetworking   client
     where
@@ -84,6 +85,12 @@ startup client serverIPAddress globalDispatch = do
             setSocketOption sock NoDelay   1
             setSocketOption sock ReuseAddr   1
             return (sock,addrAddress serveraddr)
+
+sendLoginMessage :: Client -> IO()
+sendLoginMessage client = do
+    putStrLn "Logging in..."
+    -- threadDelay 1000000
+    atomically $ writeTChan (outBox client) $ Message "clientLogin" [toOSCString $ userName client]
 
 connectionLoop :: Client -> Socket -> SockAddr -> IO()
 connectionLoop client socket serverAddr = catch tryConnect onFailure
@@ -102,7 +109,7 @@ connectionLoop client socket serverAddr = catch tryConnect onFailure
 sender :: Client -> Socket -> IO()
 sender client sock = executeIfConnected client (readTChan $ outBox client) >>= \maybeMessage -> case maybeMessage of
     Nothing  -> putStrLn "Shutting down sender"
-    Just msg -> catch (sendAll sock $ encodeMessage msg) printError >> sender client sock
+    Just msg -> catch (sendWithLength sock $ encodeMessage msg) printError >> sender client sock
 
 --put into disconnect mode if too much time has passed
 aliveLoop :: Client -> IO ()
@@ -114,11 +121,13 @@ aliveLoop client = time >>= \t -> executeIfConnected client (sendAliveMessage t)
 
 listener :: Client -> Socket -> IO()
 listener client sock = do --isConnected sock >>= \closed -> if closed then shutdown else do
-    msg <- Control.Exception.catch (recv sock 4096) (const (return (BC.pack "")) <=< printError)
-    case (decodeMessage msg,BC.null msg) of
-        (_   ,True) -> shutdown
-        (Nothing,_) -> putStrLn "Server disconnected" >> listener client sock
-        (Just  m,_) -> atomically (writeTChan (inBox client) m) >> listener client sock
+    maybeMsg <- Control.Exception.catch (receiveWithLength sock) (const (return Nothing) <=< printError)
+    case maybeMsg of
+        Nothing -> putStrLn "Message has zero length." >> shutdown
+        Just msg -> case (decodeMessage msg,B.null msg) of
+            (_   ,True) -> shutdown
+            (Nothing,_) -> putStrLn "Didn't understand that message..." >> listener client sock
+            (Just  m,_) -> atomically (writeTChan (inBox client) m) >> listener client sock
     where
         shutdown = do
             putStrLn "Shutting down listener"
@@ -157,7 +166,7 @@ statusLoop client sock serverIPAddress globalDispatch status = do
             putStrLn "Quitting..."
             atomically $ writeTVar  (runStatus client) Quitting
             putStrLn "Sending quit message to server..."
-            Control.Exception.catch (sendAll sock $ encodeMessage $ Message "clientLogout" [toOSCString (userName client)]) printError
+            Control.Exception.catch (sendWithLength sock $ encodeMessage $ Message "clientLogout" [toOSCString (userName client)]) printError
             putStrLn "Closing socket..."
             close sock
             putStrLn "Done quitting..."
