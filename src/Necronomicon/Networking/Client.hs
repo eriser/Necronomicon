@@ -93,7 +93,7 @@ sendLoginMessage client = do
     atomically $ writeTChan (outBox client) $ Message "clientLogin" [toOSCString $ userName client]
 
 connectionLoop :: Client -> Socket -> SockAddr -> IO()
-connectionLoop client socket serverAddr = catch tryConnect onFailure
+connectionLoop client socket serverAddr = Control.Exception.catch tryConnect onFailure
     where
         tryConnect  = do
             putStrLn "trying connection..."
@@ -109,7 +109,7 @@ connectionLoop client socket serverAddr = catch tryConnect onFailure
 sender :: Client -> Socket -> IO()
 sender client sock = executeIfConnected client (readTChan $ outBox client) >>= \maybeMessage -> case maybeMessage of
     Nothing  -> putStrLn "Shutting down sender"
-    Just msg -> catch (sendWithLength sock $ encodeMessage msg) printError >> sender client sock
+    Just msg -> Control.Exception.catch (sendWithLength sock $ encodeMessage msg) printError >> sender client sock
 
 --put into disconnect mode if too much time has passed
 aliveLoop :: Client -> IO ()
