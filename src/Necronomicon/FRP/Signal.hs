@@ -451,6 +451,9 @@ createInput a necro = do
                         writeIORef ref v
                         return $ Change v
 
+getNextID :: Necro -> IO Int
+getNextID necro = readIORef (inputCounter necro) >>= \counterValue -> writeIORef (inputCounter necro) (counterValue + 1) >> return (counterValue + 1)
+
 --eventlist:
 type Key  = GLFW.Key
 keyA = GLFW.Key'A
@@ -1050,30 +1053,19 @@ render scene = Signal $ \necro -> do
 playWhile :: UGen -> Signal Bool -> Signal ()
 playWhile synth shouldPlay = Signal $ \necro -> do
     (pValue,pCont,ids) <- unSignal shouldPlay necro
-    counterValue       <- readIORef (inputCounter necro) >>= \counterValue -> writeIORef (inputCounter necro) (counterValue + 1) >> return (counterValue + 1)
-    let synthName       = "signalsSynth" ++ show counterValue
-    ref                <- newIORef pValue
-    synthRef           <- newIORef (Nothing :: Maybe Synth)
-    runNecroState (compileAndRunSynth synthName synth False False pValue synthRef) (necroVars necro)
-    return ((),processEvent ref pCont synthName synthRef (necroVars necro),ids)
+    synthName          <- getNextID necro >>= return . ("signalsSynth" ++) . show
+    synthRef           <- newIORef Nothing
+    runNecroState (compileAndRunSynth synthName synth False pValue synthRef) (necroVars necro)
+    return ((),processEvent pCont synthName synthRef (necroVars necro),ids)
     where
-        processEvent ref pCont synthName synthRef necroVars event = do
-            e <- pCont event
-            case e of
-                NoChange _         ->  return $ NoChange ()
-                Change  shouldPlay -> do
-                    isPlaying <- readIORef ref
-                    case (isPlaying,shouldPlay) of
-                        (True ,True)  -> return $ Change ()
-                        (False,False) -> return $ Change ()
-                        (True ,False) -> runNecroState (compileAndRunSynth synthName synth True True False synthRef) necroVars >> return (Change ())
-                        (False,True)  -> runNecroState (compileAndRunSynth synthName synth True False True synthRef) necroVars >> return (Change ())
+        processEvent pCont synthName synthRef necroVars event = pCont event >>= \e -> case e of
+            NoChange _        -> return $ NoChange ()
+            Change shouldPlay -> runNecroState (compileAndRunSynth synthName synth True shouldPlay synthRef) necroVars >>= \(e,_) -> return e
 
 play :: UGen -> Signal Bool -> Signal ()
 play synth sig = Signal $ \necro -> do
-    (_,pCont,ids)    <- unSignal sig necro
-    counterValue     <- readIORef (inputCounter necro) >>= \counterValue -> writeIORef (inputCounter necro) (counterValue + 1) >> return (counterValue + 1)
-    let synthName     = "signalsSynth" ++ show counterValue
+    (_,pCont,ids) <- unSignal sig necro
+    synthName     <- getNextID necro >>= return . ("signalsSynth" ++) . show
     runNecroState (compileSynthDef synthName synth) (necroVars necro)
     return ((),processEvent pCont synthName (necroVars necro),ids)
     where
@@ -1081,41 +1073,36 @@ play synth sig = Signal $ \necro -> do
             e <- pCont event
             case e of
                 NoChange _     -> return $ NoChange ()
-                Change   False -> return $ Change ()
+                Change   False -> return $ Change   ()
                 Change   True  -> runNecroState (playSynth synthName 0) necroVars >> return (Change ())
 
 playUntil :: UGen -> Signal Bool -> Signal Bool -> Signal ()
 playUntil synth playSig stopSig = Signal $ \necro -> do
-    (_,pCont,pids)   <- unSignal playSig necro
-    (_,sCont,sids)   <- unSignal stopSig necro
-    counterValue     <- readIORef (inputCounter necro) >>= \counterValue -> writeIORef (inputCounter necro) (counterValue + 1) >> return (counterValue + 1)
-    let synthName     = "signalsSynth" ++ show counterValue
-    synthRef         <- newIORef (Nothing :: Maybe Synth)
-    runNecroState (compileSynthDef synthName synth) (necroVars necro)
+    (pVal,pCont,pids) <- unSignal  playSig necro
+    (sVal,sCont,sids) <- unSignal  stopSig necro
+    synthName         <- getNextID necro >>= return . ("signalsSynth" ++) . show
+    synthRef          <- newIORef  Nothing
+    runNecroState (compileAndRunSynth synthName synth False (pVal && not sVal) synthRef) (necroVars necro)
     return ((),processEvent pCont sCont synthName synthRef (necroVars necro),IntSet.union pids sids)
     where
-        processEvent pCont sCont synthName synthRef necroVars event = do
-            p          <- pCont event
-            s          <- sCont event
-            maybeSynth <- readIORef synthRef
-            case (p,s,maybeSynth) of
-                (Change True,_,Nothing)    -> runNecroState (playSynth synthName 0) necroVars >> return (Change ())
-                (_,Change True,Just synth) -> runNecroState (stopSynth synth)       necroVars >> return (Change ())
-                _   -> return $ NoChange ()
+        processEvent pCont sCont synthName synthRef necroVars event = pCont event >>= \p -> sCont event >>= \s -> case (p,s) of
+            (Change True,_) -> runNecroState (compileAndRunSynth synthName synth True True  synthRef) necroVars >>= \(e,_) -> return e
+            (_,Change True) -> runNecroState (compileAndRunSynth synthName synth True False synthRef) necroVars >>= \(e,_) -> return e
+            _               -> return $ NoChange ()
 
-compileAndRunSynth :: String -> UGen -> Bool -> Bool -> Bool -> IORef (Maybe Synth) -> Necronomicon ()
-compileAndRunSynth synthName synth isCompiled isPlaying shouldPlay synthRef = do
+compileAndRunSynth :: String -> UGen -> Bool -> Bool -> IORef (Maybe Synth) -> Necronomicon (EventValue ())
+compileAndRunSynth synthName synth isCompiled shouldPlay synthRef = do
     if not isCompiled then compileSynthDef synthName synth else return ()
-    case (isPlaying,shouldPlay) of
-        (True ,True)  -> return ()
-        (False,False) -> return ()
-        (False,True)  -> playSynth synthName 0 >>= \s -> liftIO (writeIORef synthRef $ Just s) >> return ()
-        (True ,False) -> liftIO (readIORef synthRef) >>= \(Just synth) -> stopSynth synth >> liftIO (writeIORef synthRef Nothing) >> return ()
+    maybeSynth <- liftIO $ readIORef synthRef
+    case (maybeSynth,shouldPlay) of
+        (Nothing   ,True )  -> liftIO (print "play") >> playSynth synthName 0 >>= \s -> liftIO (writeIORef synthRef $ Just s) >> return (Change ())
+        (Just synth,False)  -> liftIO (print "stop") >> stopSynth synth       >>        liftIO (writeIORef synthRef  Nothing) >> return (Change ())
+        _                   -> return (NoChange ())
 
 playPattern :: (Show a,Typeable a) => a -> Signal Bool -> Pattern (Pattern a,Double) -> Signal a
 playPattern init playSig pattern = Signal $ \necro -> do
     (pValue,pCont,pids) <- unSignal playSig necro
-    counterValue        <- readIORef (inputCounter necro) >>= \counterValue -> writeIORef (inputCounter necro) (counterValue + 1) >> return (counterValue + 1)
+    counterValue        <- getNextID necro
     ref                 <- newIORef init
     let pdef             = pstream ("signalsPDef" ++ show counterValue) (pure $ liftIO . atomically . writeTBQueue (globalDispatch necro) . Event counterValue . toDyn) pattern
     runNecroState (setTempo 150) (necroVars necro)
