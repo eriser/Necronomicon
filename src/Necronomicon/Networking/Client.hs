@@ -71,7 +71,7 @@ startup client serverIPAddress globalDispatch = do
     time >>= \t -> atomically $ writeTVar (aliveTime client) t
     forkIO $ messageProcessor client     (oscFunctions globalDispatch)
     forkIO $ listener         client sock
-    forkIO $ aliveLoop        client
+    forkIO $ aliveLoop        client sock
     forkIO $ sender           client sock
     sendToGlobalDispatch globalDispatch 4 Running
     -- forkIO $ sendLoginMessage client
@@ -114,8 +114,8 @@ sender client sock = executeIfConnected client (readTChan $ outBox client) >>= \
     Just msg -> Control.Exception.catch (sendWithLength sock $ encodeMessage msg) printError >> sender client sock
 
 --put into disconnect mode if too much time has passed
-aliveLoop :: Client -> IO ()
-aliveLoop client = time >>= \t -> executeIfConnected client (sendAliveMessage t) >>= \cont -> case cont of
+aliveLoop :: Client -> Socket -> IO ()
+aliveLoop client sock = time >>= \t -> executeIfConnected client (sendAliveMessage t) >>= \cont -> case cont of
     Nothing -> putStrLn "Shutting down aliveLoop"
     Just () -> do
         currentTime   <- time
@@ -123,10 +123,11 @@ aliveLoop client = time >>= \t -> executeIfConnected client (sendAliveMessage t)
         let delta = currentTime - lastAliveTime
         -- putStrLn $ "Time since last alive message: " ++ show delta
         if delta < 6.5
-            then threadDelay 2000000 >> aliveLoop client
+            then threadDelay 2000000 >> aliveLoop client sock
             else do
                 putStrLn "Lost server alive messages! Shutting down."
                 atomically $ writeTVar (runStatus client) Disconnected
+                sClose sock
     where
         sendAliveMessage t = writeTChan (outBox client) $ Message "clientAlive" [toOSCString (userName client),Double t]
 
