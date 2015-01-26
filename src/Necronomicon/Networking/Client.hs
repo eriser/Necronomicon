@@ -131,19 +131,18 @@ aliveLoop client sock = time >>= \t -> executeIfConnected client (sendAliveMessa
     where
         sendAliveMessage t = writeTChan (outBox client) $ Message "clientAlive" [toOSCString (userName client),Double t]
 
+--Should this shutdown or keep up the loop???
+--Need alive loop to handle weird in between states
+--Send empty message on close
 listener :: Client -> Socket -> IO()
-listener client sock = do --isConnected sock >>= \closed -> if closed then shutdown else do
-    maybeMsg <- Control.Exception.catch (receiveWithLength sock) (const (return IncorrectLength) <=< printError)
-    case maybeMsg of
-        ShutdownMessage -> putStrLn "Message has zero length. Shutting down."  >> shutdown
-        --Should this shutdown or keep up the loop???
-        --Need alive loop to handle weird in between states
-        --Send empty message on close
-        IncorrectLength -> putStrLn "Message is incorrect length! Ignoring..." >> shutdown -- listener client sock
-        Receive     msg -> case (decodeMessage msg,B.null msg) of
-            (_   ,True) -> shutdown
-            (Nothing,_) -> putStrLn "Didn't understand that message..." >> listener client sock
-            (Just  m,_) -> atomically (writeTChan (inBox client) m)     >> listener client sock
+listener client sock = receiveWithLength sock >>= \maybeMsg -> case maybeMsg of
+    Exception     e -> putStrLn ("listener Exception: " ++ show e)         >> listener client sock
+    ShutdownMessage -> putStrLn "Message has zero length. Shutting down."  >> shutdown
+    IncorrectLength -> putStrLn "Message is incorrect length! Ignoring..." >> shutdown -- listener client sock
+    Receive     msg -> case (decodeMessage msg,B.null msg) of
+        (_   ,True) -> shutdown
+        (Nothing,_) -> putStrLn "Didn't understand that message..." >> listener client sock
+        (Just  m,_) -> atomically (writeTChan (inBox client) m)     >> listener client sock
     where
         shutdown = do
             putStrLn "Shutting down listener"

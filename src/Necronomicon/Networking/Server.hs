@@ -123,9 +123,12 @@ synchronize server = forever $ do
     currentTime <- time
     let users'' = Map.filter (\u -> (currentTime - aliveTime u < 6)) users'
     atomically $ writeTVar (users server) users''
+    mapM_ (sendRemoveMessage currentTime) $ Map.toList users''
     threadDelay 5000000
     where
-        -- removeDeadUsers user = if
+        sendRemoveMessage currentTime (_,user) = if currentTime - aliveTime user >= 6
+            then atomically $ putTMVar (userStopVar user) ()
+            else return ()
 
 acceptLoop :: Server -> Socket -> IO()
 acceptLoop server socket = forever $ do
@@ -151,8 +154,9 @@ userListen :: Socket -> SockAddr -> TMVar () -> Server -> IO()
 userListen socket addr stopVar server = (isConnected socket >>= \conn -> (atomically $ isEmptyTMVar stopVar) >>= return . (&& conn)) >>= \connected -> if not connected
     then putStrLn $ "userListen shutting down: " ++ show addr
     else do
-        maybeMsg <- Control.Exception.catch (receiveWithLength socket) (\e -> putStrLn ("userListen: " ++ show (e :: IOException)) >> return IncorrectLength)
+        maybeMsg <- receiveWithLength socket
         case maybeMsg of
+            Exception     e -> putStrLn ("userList Exception: " ++ show e) >> userListen socket addr stopVar server
             ShutdownMessage -> print "Message has zero length. Shutting down userListen loop."
             IncorrectLength -> print "Message is incorrect length! Ignoring..." -- >> userListen socket addr stopVar server
             Receive     msg -> case (decodeMessage msg,B.null msg) of
