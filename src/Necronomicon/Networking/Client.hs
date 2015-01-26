@@ -32,7 +32,8 @@ data Client = Client {
     syncObjects :: TVar (Map Int SyncObject),
     outBox      :: TChan Message,
     inBox       :: TChan Message,
-    runStatus   :: TVar RunStatus
+    runStatus   :: TVar RunStatus,
+    aliveTime   :: TVar Double
     }
 
 data RunStatus = Connecting
@@ -67,6 +68,7 @@ startup client serverIPAddress globalDispatch = do
     (sock,serverAddr) <- getSocket
     sendToGlobalDispatch globalDispatch 4 Connecting
     connectionLoop            client sock serverAddr
+    time >>= \t -> atomically $ writeTVar (aliveTime client) t
     forkIO $ messageProcessor client     (oscFunctions globalDispatch)
     forkIO $ listener         client sock
     forkIO $ aliveLoop        client
@@ -115,19 +117,32 @@ sender client sock = executeIfConnected client (readTChan $ outBox client) >>= \
 aliveLoop :: Client -> IO ()
 aliveLoop client = time >>= \t -> executeIfConnected client (sendAliveMessage t) >>= \cont -> case cont of
     Nothing -> putStrLn "Shutting down aliveLoop"
-    Just () -> threadDelay 2000000 >> aliveLoop client
+    Just () -> do
+        currentTime   <- time
+        lastAliveTime <- atomically $ readTVar (aliveTime client)
+        let delta = currentTime - lastAliveTime
+        -- putStrLn $ "Time since last alive message: " ++ show delta
+        if delta < 6.5
+            then threadDelay 2000000 >> aliveLoop client
+            else do
+                putStrLn "Lost server alive messages! Shutting down."
+                atomically $ writeTVar (runStatus client) Disconnected
     where
         sendAliveMessage t = writeTChan (outBox client) $ Message "clientAlive" [toOSCString (userName client),Double t]
 
 listener :: Client -> Socket -> IO()
 listener client sock = do --isConnected sock >>= \closed -> if closed then shutdown else do
-    maybeMsg <- Control.Exception.catch (receiveWithLength sock) (const (return Nothing) <=< printError)
+    maybeMsg <- Control.Exception.catch (receiveWithLength sock) (const (return IncorrectLength) <=< printError)
     case maybeMsg of
-        Nothing -> putStrLn "Message has zero length." >> shutdown
-        Just msg -> case (decodeMessage msg,B.null msg) of
+        ShutdownMessage -> putStrLn "Message has zero length. Shutting down."  >> shutdown
+        --Should this shutdown or keep up the loop???
+        --Need alive loop to handle weird in between states
+        --Send empty message on close
+        IncorrectLength -> putStrLn "Message is incorrect length! Ignoring..." >> shutdown -- listener client sock
+        Receive     msg -> case (decodeMessage msg,B.null msg) of
             (_   ,True) -> shutdown
             (Nothing,_) -> putStrLn "Didn't understand that message..." >> listener client sock
-            (Just  m,_) -> atomically (writeTChan (inBox client) m) >> listener client sock
+            (Just  m,_) -> atomically (writeTChan (inBox client) m)     >> listener client sock
     where
         shutdown = do
             putStrLn "Shutting down listener"
@@ -210,8 +225,9 @@ userList globalDispatch d client = do
 clientAliveReply :: [Datum] -> Client -> IO ()
 clientAliveReply (Double serverTime : Double clientSendTime : []) client = do
     currentTime      <- time
-    let estServerTime = serverTime + ((currentTime - clientSendTime) / 2)
-    let diffTime      = currentTime - estServerTime
+    atomically $ writeTVar (aliveTime client) currentTime
+    -- let estServerTime = serverTime + ((currentTime - clientSendTime) / 2)
+    -- let diffTime      = currentTime - estServerTime
     -- print $ "Client send time: " ++ show clientSendTime
     -- print $ "Server reply time: " ++ show serverTime
     -- print $ "Current client time: " ++ show currentTime
@@ -295,7 +311,8 @@ newClient name = do
     outBox      <- atomically $ newTChan
     inBox       <- atomically $ newTChan
     runStatus   <- atomically $ newTVar Connecting
-    return $ Client name users syncObjects outBox inBox runStatus
+    aliveTime   <- atomically $ newTVar 0
+    return $ Client name users syncObjects outBox inBox runStatus aliveTime
 
 printError :: IOException -> IO()
 printError e = print e

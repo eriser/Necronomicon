@@ -161,15 +161,10 @@ instance  Functor Signal where
         return (defaultValue,processState xCont ref ids,ids)
         where
             processState xCont ref ids event@(Event uid _) = case idGuard ids uid ref of
-                Just r -> r
-                Nothing-> do
-                    xValue <- xCont event
-                    case xValue of
-                        Change x -> do
-                            let newValue = f x
-                            writeIORef ref newValue
-                            return $ Change newValue
-                        _        -> readIORef ref >>= return . NoChange
+                Just r  -> r
+                Nothing -> xCont event >>= \xValue -> case xValue of
+                    Change x -> let newValue = f x in writeIORef ref newValue >> return (Change newValue)
+                    _        -> readIORef ref >>= return . NoChange
 
 instance Applicative Signal where
     pure  a = Signal $ \_ -> return (a,\_ -> return $ NoChange a,IntSet.empty)
@@ -184,19 +179,10 @@ instance Applicative Signal where
             processState fCont gCont ref ids event@(Event uid _) = case idGuard ids uid ref of
                 Just  r -> r
                 Nothing -> fCont event >>= \fe -> gCont event >>= \ge -> case (fe,ge) of
-                    (Change f',Change g') -> do
-                        let newValue = f' g'
-                        writeIORef ref newValue
-                        return $ Change newValue
-                    (Change f',NoChange g') -> do
-                        let newValue = f' g'
-                        writeIORef ref newValue
-                        return $ Change newValue
-                    (NoChange f',Change g') -> do
-                        let newValue = f' g'
-                        writeIORef ref newValue
-                        return $ Change newValue
-                    _ -> readIORef ref >>= return . NoChange
+                    (Change   f',Change   g') -> let newValue = f' g' in writeIORef ref newValue >> return (Change newValue)
+                    (Change   f',NoChange g') -> let newValue = f' g' in writeIORef ref newValue >> return (Change newValue)
+                    (NoChange f',Change   g') -> let newValue = f' g' in writeIORef ref newValue >> return (Change newValue)
+                    _                         -> readIORef ref >>= return . NoChange
 
 instance Alternative Signal where
     empty   = Signal $ \_ -> return (undefined,\_ -> return $ NoChange undefined,IntSet.empty)
@@ -206,21 +192,11 @@ instance Alternative Signal where
         ref <- newIORef defaultA
         return (defaultA,processState aCont bCont ref,IntSet.union aIds bIds)
         where
-            processState aCont bCont ref event = do
-                aValue <- aCont event
-                case aValue of
-                    Change a -> do
-                        writeIORef ref a
-                        return $ Change a
-                    NoChange _ -> do
-                        bValue <- bCont event
-                        case bValue of
-                            Change b -> do
-                                writeIORef ref b
-                                return $ Change b
-                            NoChange _ -> do
-                                v <- readIORef ref
-                                return $ NoChange v
+            processState aCont bCont ref event = aCont event >>= \aValue -> case aValue of
+                Change   a -> writeIORef ref a >> return (Change a)
+                NoChange _ -> bCont event >>= \bValue -> case bValue of
+                    Change   b -> writeIORef ref b >>  return  (Change b)
+                    NoChange _ -> readIORef  ref   >>= return . NoChange
 
 instance Num a => Num (Signal a) where
     (+)         = liftA2 (+)

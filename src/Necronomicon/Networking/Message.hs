@@ -24,7 +24,7 @@ lengthOfMessageLength :: Int64
 lengthOfMessageLength = 2
 
 decodeTransLength :: B.ByteString -> Maybe Int64
-decodeTransLength bs = if B.length bs == lengthOfMessageLength
+decodeTransLength bs = if B.length bs == lengthOfMessageLength || B.length bs == 0
     then Just $ fromIntegral (decode bs :: Word16)
     else Nothing
 
@@ -37,9 +37,13 @@ sendWithLength socket msg = do
     where
         messageLength  = fromIntegral $ B.length msg :: Word16
 
-receiveWithLength :: Socket -> IO (Maybe B.ByteString)
-receiveWithLength socket = recv socket lengthOfMessageLength >>= \len -> case decodeTransLength len of
-    Nothing -> return Nothing
+data Receive = Receive B.ByteString
+             | ShutdownMessage
+             | IncorrectLength
+
+receiveWithLength :: Socket -> IO Receive
+receiveWithLength socket = isConnected socket >>= \connected -> if not connected then return ShutdownMessage else recv socket lengthOfMessageLength >>= \len -> case decodeTransLength len of
+    Nothing -> return IncorrectLength
     Just len' -> if len' == 0
-        then return Nothing
-        else recv socket len' >>= return . Just
+        then return ShutdownMessage
+        else recv socket len' >>= return . Receive

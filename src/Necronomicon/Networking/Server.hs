@@ -32,7 +32,8 @@ data User = User {
     userAddress :: SockAddr,
     userStopVar :: TMVar (),
     userName    :: String,
-    userId      :: Int
+    userId      :: Int,
+    aliveTime   :: Double
     } deriving (Show)
 
 instance Show (TMVar ()) where
@@ -119,31 +120,42 @@ synchronize server = forever $ do
     -- figure out the issue with sending multiple messages in a row
     broadcast (toSynchronizationMsg syncObjects') server
     broadcast (Message "userList" $ Prelude.map (\(_,u) -> toOSCString $ userName u) (Map.toList users')) server
-    threadDelay 10000000
+    currentTime <- time
+    let users'' = Map.filter (\u -> (currentTime - aliveTime u < 6)) users'
+    atomically $ writeTVar (users server) users''
+    threadDelay 5000000
+    where
+        -- removeDeadUsers user = if
 
 acceptLoop :: Server -> Socket -> IO()
 acceptLoop server socket = forever $ do
     (newUserSocket,newUserAddress) <- accept socket
-    -- setSocketOption newUserSocket KeepAlive 1
-    setSocketOption newUserSocket NoDelay   1
-    putStrLn $ "Accepting connection from user at: " ++ show newUserAddress
-    stopVar <- atomically newEmptyTMVar
-    atomically $ do
-        users'  <- readTVar $ users server
-        uid     <- (readTVar $ userIdCounter server) >>= return . (+1)
-        writeTVar (users server) (Map.insert newUserAddress (User newUserSocket newUserAddress stopVar "saproling" uid) users')
-        writeTVar (userIdCounter server) uid
-    forkIO $ userListen newUserSocket newUserAddress stopVar server
-    return ()
+    users'  <- atomically $ readTVar $ users server
+    if Map.member newUserAddress users'
+        then return ()
+        else do
+            -- setSocketOption newUserSocket KeepAlive 1
+            setSocketOption newUserSocket NoDelay   1
+            putStrLn $ "Accepting connection from user at: " ++ show newUserAddress
+            stopVar <- atomically newEmptyTMVar
+            t       <- time
+            atomically $ do
+                users'  <- readTVar $ users server
+                uid     <- (readTVar $ userIdCounter server) >>= return . (+1)
+                writeTVar (users server) (Map.insert newUserAddress (User newUserSocket newUserAddress stopVar "saproling" uid t) users')
+                writeTVar (userIdCounter server) uid
+            forkIO $ userListen newUserSocket newUserAddress stopVar server
+            return ()
 
 userListen :: Socket -> SockAddr -> TMVar () -> Server -> IO()
 userListen socket addr stopVar server = (isConnected socket >>= \conn -> (atomically $ isEmptyTMVar stopVar) >>= return . (&& conn)) >>= \connected -> if not connected
     then putStrLn $ "userListen shutting down: " ++ show addr
     else do
-        maybeMsg <- Control.Exception.catch (receiveWithLength socket) (\e -> putStrLn ("userListen: " ++ show (e :: IOException)) >> return Nothing)
+        maybeMsg <- Control.Exception.catch (receiveWithLength socket) (\e -> putStrLn ("userListen: " ++ show (e :: IOException)) >> return IncorrectLength)
         case maybeMsg of
-            Nothing -> print "Message has zero length. Shutting down userListen loop."
-            Just msg -> case (decodeMessage msg,B.null msg) of
+            ShutdownMessage -> print "Message has zero length. Shutting down userListen loop."
+            IncorrectLength -> print "Message is incorrect length! Ignoring..." -- >> userListen socket addr stopVar server
+            Receive     msg -> case (decodeMessage msg,B.null msg) of
                 (_   ,True) -> print "User disconnected. Shutting down userListen loop."
                 (Nothing,_) -> print "decodeMessage is Nothing" >> userListen socket addr stopVar server
                 (Just  m,_) -> atomically (writeTChan (inBox server) (addr,m)) >> userListen socket addr stopVar server
@@ -179,6 +191,8 @@ messageProcessor server socket oscFunctions = forever $ do
 -----------------------------
 clientLogin :: [Datum] -> User -> Server -> IO ()
 clientLogin (ASCII_String n : []) user server = do
+    t <- time
+    let user' = User (userSocket user) (userAddress user) (userStopVar user) (C.unpack n) (userId user) t
     atomically $ readTVar (users server) >>= \users' -> writeTVar (users server) (Map.insert (userAddress user) user' users')
     sendMessage user (Message "clientLoginReply" [Int32 1]) server
     sendUserList server
@@ -187,8 +201,7 @@ clientLogin (ASCII_String n : []) user server = do
     sendMessage user (toSynchronizationMsg sos) server
     print $ "User logged in: " ++ (userName user')
     print $ users'
-    where
-        user' = User (userSocket user) (userAddress user) (userStopVar user) (C.unpack n) (userId user)
+
 clientLogin _ _ server = print "Mismatched arguments in clientLogin message."
 
 
@@ -206,7 +219,11 @@ clientLogout _ _ server = print "Mismatched arguments in clientLogout message."
 
 
 clientAlive :: [Datum] -> User -> Server -> IO ()
-clientAlive (ASCII_String n : Double clientTime : []) user server = time >>= \t -> sendMessage user (Message "clientAliveReply" [Double t,Double clientTime]) server
+clientAlive (ASCII_String n : Double clientTime : []) user server = do
+    t <- time
+    sendMessage user (Message "clientAliveReply" [Double t,Double clientTime]) server
+    let user' = User (userSocket user) (userAddress user) (userStopVar user) (C.unpack n) (userId user) t
+    atomically $ readTVar (users server) >>= \users' -> writeTVar (users server) (Map.insert (userAddress user) user' users')
 clientAlive _ _ server = print "Mismatched arguments in clientAlive message."
 
 addSyncObject :: [Datum] -> User -> Server -> IO ()
