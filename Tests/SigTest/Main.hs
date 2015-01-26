@@ -2,10 +2,10 @@ import Necronomicon
 import Data.Fixed (mod')
 
 main :: IO ()
-main = runSignal testSound
+main = runSignal <| testGUI <|> testSound
 
-testChat :: Signal ()
-testChat = gui [chatBox,netBox,users]
+testGUI :: Signal ()
+testGUI = gui [chatBox,netBox,users]
     where
         users   = userBox <| Vector2 0.0 0.945
                           <| Size    0.0 0.055
@@ -32,7 +32,7 @@ testPattern = gui [tri <~ pattern / 10 ]
 
 testSound :: Signal ()
 testSound = playWhile myCoolSynth2 (toggle <| isDown keyW)
-        -- <|> playWhile myCoolSynth3 (isDown keyA)
+        <|> playWhile myCoolSynth3 (toggle <| isDown keyA)
 
 testSound2 :: Signal ()
 testSound2 = play lineSynth <| isDown keyS

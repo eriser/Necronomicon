@@ -331,3 +331,6 @@ chatMessage name msg = Message "receiveChat" [toOSCString name,toOSCString msg]
 
 sendToGlobalDispatch :: Typeable a => TBQueue Event -> Int -> a -> IO()
 sendToGlobalDispatch globalDispatch uid x = atomically $ writeTBQueue globalDispatch $ Event uid $ toDyn x
+
+addSynthPlayObject :: Int -> Bool -> Client -> IO()
+addSynthPlayObject uid isPlaying client = atomically $ writeTChan (outBox client) $ syncObjectMessage $ SyncObject uid "synth" "" $ Seq.fromList [SyncInt $ if isPlaying then 1 else 0]
