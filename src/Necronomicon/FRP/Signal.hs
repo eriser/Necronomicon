@@ -103,7 +103,7 @@ import           Control.Monad.Trans               (liftIO)
 import           Data.Dynamic
 import           Data.Either
 import qualified Data.Fixed                        as F
-import qualified Data.IntMap.Strict                as IntMap
+import qualified Data.IntMap                       as IntMap
 import qualified Data.IntSet                       as IntSet
 import           Data.IORef
 import           Data.List                         (unzip3)
