@@ -240,12 +240,16 @@ addSyncObject m user server = case messageToSync m of
         createNewId []            = 1
         createNewId ((uid,_):sos) = uid + 1
         addToServer so            = do
-            atomically $ readTVar (syncObjects server) >>= \sos -> writeTVar (syncObjects server) (Map.insert (objectID so) so sos)
-            broadcast (syncObjectMessage so) server
-            putStrLn $ "Received SyncObject: " ++ show so
-            putStrLn ""
-            -- print server'
-            -- putStrLn ""
+            sos <- atomically $ readTVar (syncObjects server)
+            if Map.member (objectID so) sos
+                then putStrLn $ "Already contain object " ++ show (objectID so)
+                else do
+                    atomically $ writeTVar (syncObjects server) (Map.insert (objectID so) so sos)
+                    broadcast (syncObjectMessage so) server
+                    putStrLn $ "Received SyncObject: " ++ show so
+                    putStrLn ""
+                    -- print server'
+                    -- putStrLn ""
 
 removeSyncObject :: [Datum] -> User -> Server -> IO ()
 removeSyncObject (Int32 uid:[]) user server = do

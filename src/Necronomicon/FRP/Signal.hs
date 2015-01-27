@@ -85,7 +85,7 @@ module Necronomicon.FRP.Signal (
     textInput,
     unSignal,
     toggle,
-    to,
+    till,
     receiveChatMessage,
     networkRunStatus,
     RunStatus(..),
@@ -685,35 +685,6 @@ textInput = Signal $ \necro -> do
             (_,True,Just True)        -> readIORef  shiftRef >>= return . Change . eventKeyToChar uid
             _                         -> readIORef  charRef  >>= return . NoChange
 
-toggle :: Signal Bool -> Signal Bool
-toggle boolSignal = Signal $ \necro -> do
-    (bValue,boolCont,boolIds) <- unSignal boolSignal necro
-    boolRef <- newIORef bValue
-    return (bValue,processEvent boolRef boolCont boolIds,boolIds)
-    where
-        processEvent boolRef boolCont ids event@(Event uid _) = case idGuard ids uid boolRef of
-            Just r  -> r
-            Nothing -> boolCont event >>= \b -> case b of
-                Change True -> readIORef boolRef >>= \prevBool -> writeIORef boolRef (not prevBool) >> return (Change (not prevBool))
-                _           -> readIORef boolRef >>= return . NoChange
-
-to :: Signal Bool -> Signal Bool -> Signal Bool
-to sigA sigB = Signal $ \necro -> do
-    (aValue,aCont,aIds) <- unSignal sigA necro
-    (bValue,bCont,bIds) <- unSignal sigB necro
-    let ids = IntSet.union aIds bIds
-    boolRef <- newIORef aValue
-    return (aValue,processEvent boolRef aCont bCont ids,ids)
-    where
-        processEvent boolRef aCont bCont ids event@(Event uid _) = case idGuard ids uid boolRef of
-            Just r  -> r
-            Nothing -> aCont event >>= \a -> case a of
-                Change True -> writeIORef boolRef True >>  return (Change True)
-                _           -> bCont event >>= \b -> case b of
-                    Change True -> writeIORef boolRef False >>  return (Change False)
-                    _           -> readIORef boolRef        >>= return . NoChange
-
-
 mousePos :: Signal (Double,Double)
 mousePos = input (0,0) 0
 
@@ -1036,6 +1007,34 @@ randFS signal = Signal $ \necro -> do
                     r <- randomRIO (0,1)
                     writeIORef ref r
                     return $ Change r
+
+toggle :: Signal Bool -> Signal Bool
+toggle boolSignal = Signal $ \necro -> do
+    (bValue,boolCont,boolIds) <- unSignal boolSignal necro
+    boolRef <- newIORef bValue
+    return (bValue,processEvent boolRef boolCont boolIds,boolIds)
+    where
+        processEvent boolRef boolCont ids event@(Event uid _) = case idGuard ids uid boolRef of
+            Just r  -> r
+            Nothing -> boolCont event >>= \b -> case b of
+                Change True -> readIORef boolRef >>= \prevBool -> writeIORef boolRef (not prevBool) >> return (Change (not prevBool))
+                _           -> readIORef boolRef >>= return . NoChange
+
+till :: Signal Bool -> Signal Bool -> Signal Bool
+till sigA sigB = Signal $ \necro -> do
+    (aValue,aCont,aIds) <- unSignal sigA necro
+    (bValue,bCont,bIds) <- unSignal sigB necro
+    let ids = IntSet.union aIds bIds
+    boolRef <- newIORef aValue
+    return (aValue,processEvent boolRef aCont bCont ids,ids)
+    where
+        processEvent boolRef aCont bCont ids event@(Event uid _) = case idGuard ids uid boolRef of
+            Just r  -> r
+            Nothing -> aCont event >>= \a -> case a of
+                Change True -> writeIORef boolRef True >>  return (Change True)
+                _           -> bCont event >>= \b -> case b of
+                    Change True -> writeIORef boolRef False >>  return (Change False)
+                    _           -> readIORef boolRef        >>= return . NoChange
 
 -- execute :: IO a -> Signal a
 -- execute action = Signal $ \necro -> do

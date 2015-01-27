@@ -10,7 +10,7 @@ import qualified Data.Map as Map
 import qualified Data.Sequence as Seq
 import qualified Data.Foldable as F (toList)
 
-data SyncValue  = SyncString String | SyncFloat Float | SyncDouble Double | SyncInt Int deriving (Show)
+data SyncValue  = SyncString String | SyncFloat Float | SyncDouble Double | SyncInt Int deriving (Show,Eq)
 
 data SyncObject = SyncObject {
     objectID        :: Int,
@@ -51,7 +51,7 @@ datumToArg (Int32        v) = SyncInt    (fromIntegral v)
 
 syncObjectMessage :: SyncObject -> Message
 syncObjectMessage (SyncObject id t st as) = Message "addSyncObject" $ Int32 (fromIntegral id) : toOSCString t : toOSCString st : map argToDatum (F.toList as)
-        
+
 messageToSync :: [Datum] -> Maybe SyncObject
 messageToSync (Int32 id : ASCII_String otype : ASCII_String osubtype : args) = Just $ SyncObject (fromIntegral id) (C.unpack otype) (C.unpack osubtype) $ Seq.fromList $ map datumToArg args
 messageToSync _ = Nothing
@@ -90,5 +90,3 @@ testMap = Map.empty
         -- event4 = (20.0,[AddObjectEvent $ SyncObject 5 "t" "st" [SyncString "EventObject 5"],
                         -- RemoveObjectEvent 3,
                         -- RemoveObjectEvent 4])
-
-

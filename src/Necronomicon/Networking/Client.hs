@@ -12,9 +12,9 @@ import qualified Data.ByteString.Lazy  as B  (null)
 import Control.Exception
 import Control.Monad (unless,forever,(<=<))
 import System.CPUTime
-import Data.Map (insert,lookup,empty,Map,member,delete)
+import qualified Data.Map      as Map
 import qualified Data.Sequence as Seq
-
+import qualified Data.Foldable as Foldable (toList)
 import Sound.OSC.Core
 import Necronomicon.Networking.SyncObject
 import Necronomicon.Networking.Server (clientPort,serverPort)
@@ -29,7 +29,7 @@ import Data.Typeable
 data Client = Client {
     userName    :: String,
     clientUsers :: TVar [String],
-    syncObjects :: TVar (Map Int SyncObject),
+    syncObjects :: TVar (Map.Map Int SyncObject),
     outBox      :: TChan Message,
     inBox       :: TChan Message,
     runStatus   :: TVar RunStatus,
@@ -149,9 +149,9 @@ listener client sock = receiveWithLength sock >>= \maybeMsg -> case maybeMsg of
             atomically $ writeTVar (runStatus client) Disconnected
             close sock
 
-messageProcessor :: Client -> Data.Map.Map String ([Datum] -> Client -> IO ()) -> IO()
+messageProcessor :: Client -> Map.Map String ([Datum] -> Client -> IO ()) -> IO()
 messageProcessor client oscFunctions = executeIfConnected client (readTChan $ inBox client) >>= \maybeMessage -> case maybeMessage of
-    Just (Message address datum) -> case Data.Map.lookup address oscFunctions of
+    Just (Message address datum) -> case Map.lookup address oscFunctions of
         Just f  -> f datum client >> messageProcessor client oscFunctions
         Nothing -> putStrLn ("No oscFunction found with the address pattern: " ++ address) >> messageProcessor client oscFunctions
     Nothing     -> putStrLn "Shutting down messageProcessor"
@@ -200,16 +200,16 @@ executeIfConnected client action = atomically (checkForStatus `orElse` checkForM
 ------------------------------
 --OSC Functions
 -----------------------------
-oscFunctions :: TBQueue Event -> Data.Map.Map String ([Datum] -> Client -> IO ())
-oscFunctions globalDispatch = insert "userList"         (userList globalDispatch)
-                            $ insert "clientAliveReply" clientAliveReply
-                            $ insert "clientLoginReply" clientLoginReply
-                            $ insert "addSyncObject"    addSyncObject
-                            $ insert "removeSyncObject" removeSyncObject
-                            $ insert "sync"             sync
-                            $ insert "setSyncArg"       (setSyncArg  globalDispatch)
-                            $ insert "receiveChat"      (receiveChat globalDispatch)
-                            $ Data.Map.empty
+oscFunctions :: TBQueue Event -> Map.Map String ([Datum] -> Client -> IO ())
+oscFunctions globalDispatch = Map.insert "userList"         (userList globalDispatch)
+                            $ Map.insert "clientAliveReply" clientAliveReply
+                            $ Map.insert "clientLoginReply" clientLoginReply
+                            $ Map.insert "addSyncObject"    addSyncObject
+                            $ Map.insert "removeSyncObject" removeSyncObject
+                            $ Map.insert "sync"             (sync        globalDispatch)
+                            $ Map.insert "setSyncArg"       (setSyncArg  globalDispatch)
+                            $ Map.insert "receiveChat"      (receiveChat globalDispatch)
+                            $ Map.empty
 
 userList :: TBQueue Event -> [Datum] -> Client -> IO ()
 userList globalDispatch d client = do
@@ -247,44 +247,55 @@ addSyncObject :: [Datum] -> Client -> IO ()
 addSyncObject m client = case messageToSync m of
     Nothing -> return ()
     Just so -> do
-        atomically (readTVar (syncObjects client) >>= \sos -> writeTVar (syncObjects client) (insert (objectID so) so sos))
+        atomically (readTVar (syncObjects client) >>= \sos -> writeTVar (syncObjects client) (Map.insert (objectID so) so sos))
         putStrLn $ "Adding SyncObject: " ++ show so
 
 removeSyncObject :: [Datum] -> Client -> IO ()
-removeSyncObject (Int32 uid:[]) client = atomically (readTVar (syncObjects client)) >>= \sos -> case member (fromIntegral uid) sos of
+removeSyncObject (Int32 uid:[]) client = atomically (readTVar (syncObjects client)) >>= \sos -> case Map.member (fromIntegral uid) sos of
     False -> return ()
     True  -> do
-        atomically (writeTVar (syncObjects client) (delete (fromIntegral uid) sos))
+        atomically (writeTVar (syncObjects client) (Map.delete (fromIntegral uid) sos))
         putStrLn $ "Removing SyncObject: " ++ show uid
         putStrLn ""
 
-sync :: [Datum] -> Client -> IO ()
-sync m client = atomically (writeTVar (syncObjects client) (fromSynchronizationMsg m)) >> putStrLn "Server sync"
--- sync m client = do
-    -- print "Synchronizing: "
-    -- putStrLn ""
-    -- print client'
-    -- putStrLn ""
-    -- return client'
-    -- where
-        -- client' = Client (userName client) (users client) (shouldQuit client) $ fromSynchronizationMsg m
+sync :: TBQueue Event -> [Datum] -> Client -> IO ()
+sync globalDispatch m client = do
+    let newSyncObjects = fromSynchronizationMsg m
+    oldSyncObjects    <- atomically $ readTVar (syncObjects client)
+    mapM_ (sendMergeEvents oldSyncObjects) $ Map.toList newSyncObjects
+    atomically $ writeTVar (syncObjects client) newSyncObjects
+    putStrLn $ "Server sync. old objects size: " ++ show (Map.size oldSyncObjects) ++ ", new objects size: " ++ show (Map.size newSyncObjects)
+    where
+        sendDiffEvent (uid,newArg,oldArg) = if oldArg /= newArg then sendArgEvent globalDispatch uid newArg else return ()
+        sendMergeEvents oldSyncObjects (uid,syncObject) = case Map.lookup uid oldSyncObjects of
+            Just oldSyncObject -> mapM_ sendDiffEvent $ zip3 [uid..] (Foldable.toList $ objectArguments syncObject) $ (Foldable.toList $ objectArguments oldSyncObject) ++ map SyncInt [0..]
+            Nothing            -> mapM_ (\v -> sendArgEvent globalDispatch uid v) $ Foldable.toList $ objectArguments syncObject
 
 --Remember the locally set no latency for originator trick!
+
 setSyncArg :: TBQueue Event -> [Datum] -> Client -> IO ()
-setSyncArg globalDispatch (Int32 uid : Int32 index : v : []) client = atomically (readTVar (syncObjects client)) >>= \sos -> case Data.Map.lookup (fromIntegral uid) sos of
+setSyncArg globalDispatch (Int32 uid : Int32 index : v : []) client = atomically (readTVar (syncObjects client)) >>= \sos -> case Map.lookup (fromIntegral uid) sos of
     Nothing -> return ()
     Just so -> do
         putStrLn "Set SyncArg: "
         atomically $ writeTVar (syncObjects client) newSyncObjects
-        sendArgMessage v $ fromIntegral uid + fromIntegral index
+        sendDatumEvent globalDispatch (fromIntegral uid + fromIntegral index) v
         where
-            newSyncObjects = Data.Map.insert (fromIntegral uid) (setArg (fromIntegral index) (datumToArg v) so) sos
-            sendArgMessage (ASCII_String v) uid = sendToGlobalDispatch globalDispatch uid $ BC.unpack  v
-            sendArgMessage (Float        v) uid = sendToGlobalDispatch globalDispatch uid v
-            sendArgMessage (Double       v) uid = sendToGlobalDispatch globalDispatch uid v
-            sendArgMessage (Int32        v) uid = sendToGlobalDispatch globalDispatch uid (fromIntegral v :: Int)
-
+            newSyncObjects = Map.insert (fromIntegral uid) (setArg (fromIntegral index) (datumToArg v) so) sos
 setSyncArg _ _ _ = return ()
+
+
+sendDatumEvent :: TBQueue Event -> Int -> Datum -> IO ()
+sendDatumEvent globalDispatch uid (ASCII_String v) = sendToGlobalDispatch globalDispatch uid $ BC.unpack  v
+sendDatumEvent globalDispatch uid (Float        v) = sendToGlobalDispatch globalDispatch uid v
+sendDatumEvent globalDispatch uid (Double       v) = sendToGlobalDispatch globalDispatch uid v
+sendDatumEvent globalDispatch uid (Int32        v) = sendToGlobalDispatch globalDispatch uid (fromIntegral v :: Int)
+
+sendArgEvent :: TBQueue Event -> Int -> SyncValue -> IO ()
+sendArgEvent globalDispatch uid (SyncString v) = putStrLn ("Net Event: " ++ show uid) >> sendToGlobalDispatch globalDispatch uid v
+sendArgEvent globalDispatch uid (SyncFloat  v) = putStrLn ("Net Event: " ++ show uid) >> sendToGlobalDispatch globalDispatch uid v
+sendArgEvent globalDispatch uid (SyncDouble v) = putStrLn ("Net Event: " ++ show uid) >> sendToGlobalDispatch globalDispatch uid v
+sendArgEvent globalDispatch uid (SyncInt    v) = putStrLn ("Net Event: " ++ show uid) >> sendToGlobalDispatch globalDispatch uid v
 
 --Fix lazy chat and we're ready to go!
 receiveChat :: TBQueue Event -> [Datum] -> Client -> IO ()
@@ -313,7 +324,7 @@ testNetworking client = forever $ do
 newClient :: String -> IO Client
 newClient name = do
     users       <- atomically $ newTVar []
-    syncObjects <- atomically $ newTVar empty
+    syncObjects <- atomically $ newTVar Map.empty
     outBox      <- atomically $ newTChan
     inBox       <- atomically $ newTChan
     runStatus   <- atomically $ newTVar Connecting

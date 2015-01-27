@@ -24,7 +24,7 @@ testGUI = gui [chatBox,netBox,users]
 testSound :: Signal ()
 testSound = play myCoolSynth2 (isDown keyW)
         <|> play myCoolSynth3 (toggle <| isDown keyA)
-        <|> play myCoolSynth2 (isDown keyP `to` isDown keyS)
+        <|> play myCoolSynth2 (isDown keyP `till` isDown keyS)
         <|> oneShot lineSynth (isDown keyX)
 
 -- testPattern = gui [tri <~ pattern / 10 ]
