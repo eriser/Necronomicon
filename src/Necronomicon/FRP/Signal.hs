@@ -1070,7 +1070,6 @@ render scene = Signal $ \necro -> do
 ---------------------------------------------
 -- Sound
 ---------------------------------------------
-
 oneShot :: UGen -> Signal Bool -> Signal ()
 oneShot synth sig = Signal $ \necro -> do
     (pVal,pCont,ids) <- unSignal sig necro
@@ -1113,26 +1112,6 @@ playPattern init playSig pattern = Signal $ \necro -> do
                 (Change False,_,_) -> runNecroState (pstop   pdef) necroVars >> readIORef ref >>= return . NoChange
                 (_,True,Just v )   -> writeIORef ref v >> return (Change v)
                 _                  -> readIORef  ref >>= return . NoChange
-
-    -- play1 ::                (b -> a) -> Signal Bool -> Signal Bool -> Signal b -> Signal ()
-    -- play2 ::           (b -> b -> a) -> Signal Bool -> Signal Bool -> Signal b -> Signal b -> Signal ()
-    -- play3 ::      (b -> b -> b -> a) -> Signal Bool -> Signal Bool -> Signal b -> Signal b -> Signal b -> Signal ()
-    -- play4 :: (b -> b -> b -> b -> a) -> Signal Bool -> Signal Bool -> Signal b -> Signal b -> Signal b -> Signal b -> Signal ()
-
--- class Play a where
-    -- play0 :: a  -> Signal Bool -> Signal Bool -> Signal ()
-
-playStopSynth :: String -> Bool -> IORef (Maybe Synth) -> Necronomicon (EventValue ())
-playStopSynth synthName shouldPlay synthRef = do
-    maybeSynth <- liftIO $ readIORef synthRef
-    case (maybeSynth,shouldPlay) of
-        (Nothing   ,True )  -> liftIO (print "play") >> playSynth synthName 0 >>= \s -> liftIO (writeIORef synthRef $ Just s) >> return (Change ())
-        (Just synth,False)  -> liftIO (print "stop") >> stopSynth synth       >>        liftIO (writeIORef synthRef  Nothing) >> return (Change ())
-        _                   -> return (NoChange ())
-
-class Play a where
-    type PlayRet a :: *
-    play :: a -> Signal Bool -> Signal Bool -> PlayRet a
 
 playSynthN :: Dynamic -> Signal Bool -> Signal Bool -> [Signal Double] -> Signal ()
 playSynthN synth playSig stopSig argSigs = Signal $ \necro -> do
@@ -1223,34 +1202,21 @@ receiveNetArg synthRef event@(Event eid _) (cont,uid,ref) = if uid /= eid then r
         Nothing    -> return ()
         Just synth -> print "receiveNetArg....need Chad to update ugens for this to do anything."
 
+playStopSynth :: String -> Bool -> IORef (Maybe Synth) -> Necronomicon (EventValue ())
+playStopSynth synthName shouldPlay synthRef = do
+    maybeSynth <- liftIO $ readIORef synthRef
+    case (maybeSynth,shouldPlay) of
+        (Nothing   ,True )  -> liftIO (print "play") >> playSynth synthName 0 >>= \s -> liftIO (writeIORef synthRef $ Just s) >> return (Change ())
+        (Just synth,False)  -> liftIO (print "stop") >> stopSynth synth       >>        liftIO (writeIORef synthRef  Nothing) >> return (Change ())
+        _                   -> return (NoChange ())
+
+class Play a where
+    type PlayRet a :: *
+    play :: a -> Signal Bool -> Signal Bool -> PlayRet a
+
 instance Play UGen where
     type PlayRet UGen = Signal ()
-    play synth playSig stopSig = Signal $ \necro -> do
-
-        (pValue,pCont,pids) <- unSignal playSig necro
-        (sValue,sCont,sids) <- unSignal stopSig necro
-        uid                 <- getNextID necro
-        (_,netCont,_)       <- unSignal (input (0::Int) uid) necro
-        synthRef            <- newIORef Nothing
-
-        let defaultValue     = pValue && not sValue
-            ids              = IntSet.insert uid $ IntSet.union pids sids
-            synthName        = "sigsynth" ++ show uid
-            playFunc         = netPlaySynthObject (client necro) uid
-
-        runNecroState (compileAndRunSynth synthName synth False (pValue && not sValue) synthRef) (necroVars necro)
-        addSynthPlayObject (client necro) uid pValue []
-        return ((),processEvent pCont sCont netCont synthName synthRef (necroVars necro) playFunc,ids)
-        where
-            processEvent pCont sCont netCont synthName synthRef necroVars playFunc event = netCont event >>= \net -> case net of
-                Change netPlay -> runNecroState (compileAndRunSynth synthName synth True (netPlay == 1) synthRef) necroVars >>= \(e,_) -> return e
-                NoChange _     -> readIORef synthRef >>= \s -> case s of
-                    Nothing -> pCont event >>= \e -> case e of
-                        Change True -> playFunc True  >> runNecroState (compileAndRunSynth synthName synth True True synthRef) necroVars >>= \(e,_) -> return e
-                        _           -> return (NoChange ())
-                    Just _  -> sCont event >>= \e -> case e of
-                        Change True -> playFunc False >> runNecroState (compileAndRunSynth synthName synth True False synthRef) necroVars >>= \(e,_) -> return e
-                        _           -> return (NoChange ())
+    play synth playSig stopSig = playSynthN (toDyn synth) playSig stopSig []
 
 instance Play (UGen -> UGen) where
     type PlayRet (UGen -> UGen) = Signal Double -> Signal ()
@@ -1275,52 +1241,6 @@ instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
 instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
     type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
     play synth playSig stopSig x y z w p q = playSynthN (toDyn synth) playSig stopSig [x,y,z,w,p,q]
-
-
--- class PlayUGen a b | a -> b where
-    -- playUGen :: a -> b
-
--- class Play a where
-    -- type PlayRet a :: *
-    -- playUGen :: a -> PlayUGenRet a
-
--- instance PlayUGen UGen (UGen,[UGen]) where
-    -- playUGen f = (f,[])
-
--- instance Play UGen where
-    -- type PlayRet UGen = (UGen,[Double])
-    -- playUGen f = (f,[])
-
--- instance Play (UGen -> UGen) where
-    -- type PlayRet (UGen -> UGen) = (Double -> ((UGen -> UGen),[UGen]))
-    -- playUGen f = \u -> (f,[u])
-
--- instance PlayUGen (UGen -> UGen -> UGen) (UGen -> UGen -> ((UGen -> UGen -> UGen),[UGen])) where
-    -- playUGen f = \u1 u2-> (f,[u1,u2])
-
--- instance PlayUGen [UGen] ([UGen],[[UGen]]) where
-    -- playUGen f = (f,[])
-
--- instance PlayUGen ([UGen] -> [UGen]) ([UGen] -> (([UGen] -> [UGen]),[[UGen]])) where
-    -- playUGen f = \u -> (f,[u])
-
--- instance PlayUGen ([UGen] -> [UGen] -> [UGen]) ([UGen] -> [UGen] -> (([UGen] -> [UGen] -> [UGen]),[[UGen]])) where
-    -- playUGen f = \u u2 -> (f,[u,u2])
-
--- noArgs    :: (UGen,[UGen])
--- noArgs    = playUGen lineSynth
-
--- oneArg    :: (UGen -> UGen,[UGen])
--- oneArg    = playUGen mySynth lineSynth
-
--- twoArgs   :: (UGen -> UGen -> UGen,[UGen])
--- twoArgs   = playUGen twoSins (sin 440) lineSynth
-
--- arrayUGen :: ([UGen] -> [UGen],[[UGen]])
--- arrayUGen = playUGen sinTest4 sinTest
-
--- twoArgsArrayUGen :: ([UGen] -> [UGen] -> [UGen],[[UGen]])
--- twoArgsArrayUGen = playUGen twoSinArrays sinTest 440
 
 -------------------------------------------------------------------------------------------------
 -- Signals 5.0
