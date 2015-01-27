@@ -21,10 +21,12 @@ testGUI = gui [chatBox,netBox,users]
                           <| Font   "OCRA.ttf" 24
                           <| vertexColored (gray 0.05)
 
+-- Implement in terms of play until instead
+-- Networking the state works out better that way!
 testSound :: Signal ()
-testSound = play myCoolSynth2 (isDown keyW)
-        <|> play myCoolSynth3 (toggle <| isDown keyA)
-        <|> play myCoolSynth2 (isDown keyP `till` isDown keyS)
+testSound = play myCoolSynth2 (isDown keyW) (not <~ isDown keyW)
+        <|> play myCoolSynth3 (isDown keyA) (isDown keyA)
+        <|> play myCoolSynth2 (isDown keyP) (isDown keyS)
         <|> oneShot lineSynth (isDown keyX)
 
 -- testPattern = gui [tri <~ pattern / 10 ]

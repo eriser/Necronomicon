@@ -277,13 +277,11 @@ setSyncArg :: TBQueue Event -> [Datum] -> Client -> IO ()
 setSyncArg globalDispatch (Int32 uid : Int32 index : v : []) client = atomically (readTVar (syncObjects client)) >>= \sos -> case Map.lookup (fromIntegral uid) sos of
     Nothing -> return ()
     Just so -> do
-        putStrLn "Set SyncArg: "
         atomically $ writeTVar (syncObjects client) newSyncObjects
         sendDatumEvent globalDispatch (fromIntegral uid + fromIntegral index) v
         where
             newSyncObjects = Map.insert (fromIntegral uid) (setArg (fromIntegral index) (datumToArg v) so) sos
 setSyncArg _ _ _ = return ()
-
 
 sendDatumEvent :: TBQueue Event -> Int -> Datum -> IO ()
 sendDatumEvent globalDispatch uid (ASCII_String v) = sendToGlobalDispatch globalDispatch uid $ BC.unpack  v
@@ -292,10 +290,10 @@ sendDatumEvent globalDispatch uid (Double       v) = sendToGlobalDispatch global
 sendDatumEvent globalDispatch uid (Int32        v) = sendToGlobalDispatch globalDispatch uid (fromIntegral v :: Int)
 
 sendArgEvent :: TBQueue Event -> Int -> SyncValue -> IO ()
-sendArgEvent globalDispatch uid (SyncString v) = putStrLn ("Net Event: " ++ show uid) >> sendToGlobalDispatch globalDispatch uid v
-sendArgEvent globalDispatch uid (SyncFloat  v) = putStrLn ("Net Event: " ++ show uid) >> sendToGlobalDispatch globalDispatch uid v
-sendArgEvent globalDispatch uid (SyncDouble v) = putStrLn ("Net Event: " ++ show uid) >> sendToGlobalDispatch globalDispatch uid v
-sendArgEvent globalDispatch uid (SyncInt    v) = putStrLn ("Net Event: " ++ show uid) >> sendToGlobalDispatch globalDispatch uid v
+sendArgEvent globalDispatch uid (SyncString v) = sendToGlobalDispatch globalDispatch uid v
+sendArgEvent globalDispatch uid (SyncFloat  v) = sendToGlobalDispatch globalDispatch uid v
+sendArgEvent globalDispatch uid (SyncDouble v) = sendToGlobalDispatch globalDispatch uid v
+sendArgEvent globalDispatch uid (SyncInt    v) = sendToGlobalDispatch globalDispatch uid v
 
 --Fix lazy chat and we're ready to go!
 receiveChat :: TBQueue Event -> [Datum] -> Client -> IO ()

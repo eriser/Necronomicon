@@ -1071,23 +1071,33 @@ oneShot synth sig = Signal $ \necro -> do
             Change   False -> return $ Change   ()
             Change   True  -> writeIORef synthRef Nothing >> runNecroState (compileAndRunSynth synthName synth True True synthRef) necroVars >> return (Change ())
 
-play :: UGen -> Signal Bool -> Signal ()
-play synth shouldPlay = Signal $ \necro -> do
-    (pValue,pCont,ids) <- unSignal shouldPlay necro
-    uid                <- getNextID necro
-    (_,netCont,_)      <- unSignal (input (0::Int) uid) necro
-    let synthName       = "signalsSynth" ++ show uid
-    synthRef           <- newIORef Nothing
-    runNecroState (compileAndRunSynth synthName synth False pValue synthRef) (necroVars necro)
+play :: UGen -> Signal Bool -> Signal Bool -> Signal ()
+play synth playSig stopSig = Signal $ \necro -> do
+
+    (pValue,pCont,pids) <- unSignal playSig necro
+    (sValue,sCont,sids) <- unSignal stopSig necro
+    uid                 <- getNextID necro
+    (_,netCont,_)       <- unSignal (input (0::Int) uid) necro
+    synthRef            <- newIORef Nothing
+
+    let defaultValue     = pValue && not sValue
+        ids              = IntSet.insert uid $ IntSet.union pids sids
+        synthName        = "signalsSynth" ++ show uid
+        playFunc         = netPlaySynthObject (client necro) uid
+
+    runNecroState (compileAndRunSynth synthName synth False (pValue && not sValue) synthRef) (necroVars necro)
     addSynthPlayObject (client necro) uid pValue
-    let playFunc = netPlaySynthObject (client necro) uid
-    return ((),processEvent pCont netCont synthName synthRef (necroVars necro) playFunc,IntSet.insert uid ids)
+    return ((),processEvent pCont sCont netCont synthName synthRef (necroVars necro) playFunc,ids)
     where
-        processEvent pCont netCont synthName synthRef necroVars playFunc event = pCont event >>= \e -> case e of
-            Change shouldPlay -> playFunc shouldPlay >> runNecroState (compileAndRunSynth synthName synth True shouldPlay synthRef) necroVars >>= \(e,_) -> return e
-            NoChange _        -> netCont event >>= \net -> case net of
-                Change netPlay -> runNecroState (compileAndRunSynth synthName synth True (netPlay == 1) synthRef) necroVars >>= \(e,_) -> return e
-                NoChange _         -> return (NoChange ())
+        processEvent pCont sCont netCont synthName synthRef necroVars playFunc event = netCont event >>= \net -> case net of
+            Change netPlay -> runNecroState (compileAndRunSynth synthName synth True (netPlay == 1) synthRef) necroVars >>= \(e,_) -> return e
+            NoChange _     -> readIORef synthRef >>= \s -> case s of
+                Nothing -> pCont event >>= \e -> case e of
+                    Change True -> playFunc True  >> runNecroState (compileAndRunSynth synthName synth True True synthRef) necroVars >>= \(e,_) -> return e
+                    _           -> return (NoChange ())
+                Just _  -> sCont event >>= \e -> case e of
+                    Change True -> playFunc False >> runNecroState (compileAndRunSynth synthName synth True False synthRef) necroVars >>= \(e,_) -> return e
+                    _           -> return (NoChange ())
 
 compileAndRunSynth :: String -> UGen -> Bool -> Bool -> IORef (Maybe Synth) -> Necronomicon (EventValue ())
 compileAndRunSynth synthName synth isCompiled shouldPlay synthRef = do
