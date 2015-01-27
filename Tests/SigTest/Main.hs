@@ -2,7 +2,7 @@ import Necronomicon
 import Data.Fixed (mod')
 
 main :: IO ()
-main = runSignal <| testGUI <|> testSound
+main = runSignal <| testGUI <|> testSound2
 
 testGUI :: Signal ()
 testGUI = gui [chatBox,netBox,users]
@@ -24,10 +24,32 @@ testGUI = gui [chatBox,netBox,users]
 -- Implement in terms of play until instead
 -- Networking the state works out better that way!
 testSound :: Signal ()
-testSound = play myCoolSynth2 (isDown keyW) (not <~ isDown keyW)
+testSound = play myCoolSynth2 (isDown keyW) (isUp   keyW)
         <|> play myCoolSynth3 (isDown keyA) (isDown keyA)
         <|> play myCoolSynth2 (isDown keyP) (isDown keyS)
-        <|> oneShot lineSynth (isDown keyX)
+
+testSound2 :: Signal ()
+testSound2 = play noArgSynth  (isDown keyW) (isDown keyW)
+         <|> play oneArgSynth (isDown keyA) (isDown keyA) (fst <~ mousePos)
+         <|> play twoArgSynth (isDown keyS) (isDown keyS) 440 880
+         <|> play threeSynth  (isDown keyD) (isDown keyD) 440 880 66.6
+
+noArgSynth :: UGen
+noArgSynth = sin 0.1
+
+oneArgSynth :: UGen -> UGen
+oneArgSynth = sin
+
+twoArgSynth :: UGen -> UGen -> UGen
+twoArgSynth fx fy = sin fx + sin fy
+
+threeSynth :: UGen -> UGen -> UGen -> UGen
+threeSynth fx fy fz = sin fx + sin fy + sin fz
+
+--Need to create and test oneShot system....probably and advance feature
+-- <|> oneShot lineSynth (isDown keyX)
+
+
 
 -- testPattern = gui [tri <~ pattern / 10 ]
     -- where

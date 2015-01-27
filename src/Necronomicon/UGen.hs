@@ -20,8 +20,7 @@ import Necronomicon.Utility
 import Control.Monad.Trans
 import qualified Data.Map as M
 import Data.Monoid
-
-import Unsafe.Coerce
+import Data.Typeable
 
 {-
 -- import Prelude hiding (fromRational, sin, (+), (*), (/), (-))
@@ -209,6 +208,7 @@ infixl 1 +>
 --------------------------------------------------------------------------------------
 data UGen = UGenNum Double
           | UGenFunc String Calc [UGen]
+          deriving (Typeable)
 
 instance Show UGen where
     show (UGenNum d) = show d

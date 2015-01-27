@@ -346,8 +346,16 @@ chatMessage name msg = Message "receiveChat" [toOSCString name,toOSCString msg]
 sendToGlobalDispatch :: Typeable a => TBQueue Event -> Int -> a -> IO()
 sendToGlobalDispatch globalDispatch uid x = atomically $ writeTBQueue globalDispatch $ Event uid $ toDyn x
 
-addSynthPlayObject :: Client -> Int -> Bool -> IO()
-addSynthPlayObject client uid isPlaying  = atomically $ writeTChan (outBox client) $ syncObjectMessage $ SyncObject uid "synth" "" $ Seq.fromList [SyncInt $ if isPlaying then 1 else 0]
-
 netPlaySynthObject :: Client -> Int -> Bool -> IO()
 netPlaySynthObject client uid shouldPlay = atomically $ writeTChan (outBox client) $ setArgMessage uid 0 $ SyncInt $ if shouldPlay then 1 else 0
+
+addSynthPlayObject :: Client -> Int -> Bool -> [Double] -> IO()
+addSynthPlayObject client uid isPlaying args = atomically
+                                             $ writeTChan (outBox client)
+                                             $ syncObjectMessage
+                                             $ SyncObject uid "synth" ""
+                                             $ Seq.fromList
+                                             $ SyncInt (if isPlaying then 1 else 0) : map SyncDouble args
+
+sendSetArg :: Client -> Int -> Int -> SyncValue -> IO()
+sendSetArg client uid index v = atomically $ writeTChan (outBox client) $ setArgMessage uid index v
