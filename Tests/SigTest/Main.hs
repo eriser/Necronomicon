@@ -21,32 +21,28 @@ testGUI = gui [chatBox,netBox,users]
                           <| Font   "OCRA.ttf" 24
                           <| vertexColored (gray 0.05)
 
-testPattern = gui [tri <~ pattern / 10 ]
-    where
-        tri y   = testTri (Vector3 0.5 y 0) identity
-        pattern = playPattern 0 (isDown keyP)
-                  [lich| 0 [1 2] _ [3 [4 5]] 6
-                         0 [1 2] _ [3 [4 5]] 6
-                         0 [1 2] _ [3 [4 5]] 6
-                         0 [1 2] _ [3 [4 5]] 6 |]
-
 testSound :: Signal ()
-testSound = playWhile myCoolSynth2 (toggle <| isDown keyW)
-        <|> playWhile myCoolSynth3 (toggle <| isDown keyA)
+testSound = play myCoolSynth2 (isDown keyW)
+        <|> play myCoolSynth3 (toggle <| isDown keyA)
+        <|> play myCoolSynth2 (isDown keyP `to` isDown keyS)
+        <|> oneShot lineSynth (isDown keyX)
 
-testSound2 :: Signal ()
-testSound2 = play lineSynth <| isDown keyS
+-- testPattern = gui [tri <~ pattern / 10 ]
+    -- where
+        -- tri y   = testTri (Vector3 0.5 y 0) identity
+        -- pattern = playPattern 0 (isDown keyP)
+                --   [lich| 0 [1 2] _ [3 [4 5]] 6
+                        --  0 [1 2] _ [3 [4 5]] 6
+                        --  0 [1 2] _ [3 [4 5]] 6
+                        --  0 [1 2] _ [3 [4 5]] 6 |]
 
-testSound3 :: Signal ()
-testSound3 = playUntil myCoolSynth2 (isDown keyP) (isDown keyS)
-
-testGUI :: Signal ()
-testGUI = gui [element vslider,element blueButton,pure zLabel,tri <~ input vslider]
-    where
-        vslider    = slider (Vector2 0.50 0.5) (Size 0.03 0.30) (RGB 0.5 0.5 0.5)
-        tri y      = testTri(Vector3 0 (1-y) 0) identity
-        blueButton = button (Vector2 0.75 0.5) (Size 0.10 0.15) (RGB 0 0 1)
-        zLabel     = label  (Vector2 0.25 0.5) (Font "OCRA.ttf" 50) white "Zero"
+-- testGUI :: Signal ()
+-- testGUI = gui [element vslider,element blueButton,pure zLabel,tri <~ input vslider]
+    -- where
+        -- vslider    = slider (Vector2 0.50 0.5) (Size 0.03 0.30) (RGB 0.5 0.5 0.5)
+        -- tri y      = testTri(Vector3 0 (1-y) 0) identity
+        -- blueButton = button (Vector2 0.75 0.5) (Size 0.10 0.15) (RGB 0 0 1)
+        -- zLabel     = label  (Vector2 0.25 0.5) (Font "OCRA.ttf" 50) white "Zero"
 
 testScene :: Signal ()
 testScene = scene [pure cam,terrainSig]

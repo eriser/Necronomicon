@@ -273,14 +273,24 @@ setSyncArg (Int32 uid : Int32 index : v : []) user server = do
 setSyncArg _ _ server = return ()
 
 receiveChat :: [Datum] -> User -> Server -> IO ()
-receiveChat (ASCII_String name : ASCII_String msg : []) user server = putStrLn ("Chat - " ++ show name ++ ": " ++ show msg) >>
+receiveChat (ASCII_String name : ASCII_String msg : []) user server = do
+    putStrLn ("Chat - " ++ show name ++ ": " ++ show msg)
     broadcast (Message "receiveChat" $ ASCII_String name : ASCII_String msg : []) server
+    if msg == flushCommand then flush server else return ()
 receiveChat _ _ server = return ()
 
 
 ------------------------------
 --Server Functions
------------------------------
+------------------------------
+
+flushCommand :: C.ByteString
+flushCommand =  C.pack "necro flush"
+
+flush :: Server -> IO()
+flush server = do
+    atomically $ writeTVar (syncObjects server) $ Map.fromList []
+    broadcast  (toSynchronizationMsg $ Map.fromList []) server
 
 addUser :: User -> Server -> IO()
 addUser user server = atomically $ readTVar (users server) >>= \users' -> writeTVar (users server) (Map.insert (userAddress user) user users')
@@ -298,7 +308,6 @@ broadcast message server = atomically $ writeTChan (broadcastOutBox server) mess
 
 sendMessage :: User -> Message -> Server -> IO ()
 sendMessage user message server = atomically $ writeTChan (outBox server) (user,message)
-
 
 {-
 scorePlayer :: TVar Server -> TChan Message -> Double -> Double -> IO()

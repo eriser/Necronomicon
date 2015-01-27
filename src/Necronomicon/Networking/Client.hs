@@ -207,7 +207,7 @@ oscFunctions globalDispatch = insert "userList"         (userList globalDispatch
                             $ insert "addSyncObject"    addSyncObject
                             $ insert "removeSyncObject" removeSyncObject
                             $ insert "sync"             sync
-                            $ insert "setSyncArg"       setSyncArg
+                            $ insert "setSyncArg"       (setSyncArg  globalDispatch)
                             $ insert "receiveChat"      (receiveChat globalDispatch)
                             $ Data.Map.empty
 
@@ -270,15 +270,21 @@ sync m client = atomically (writeTVar (syncObjects client) (fromSynchronizationM
         -- client' = Client (userName client) (users client) (shouldQuit client) $ fromSynchronizationMsg m
 
 --Remember the locally set no latency for originator trick!
-setSyncArg :: [Datum] -> Client -> IO ()
-setSyncArg (Int32 uid : Int32 index : v : []) client = atomically (readTVar (syncObjects client)) >>= \sos -> case Data.Map.lookup (fromIntegral uid) sos of
+setSyncArg :: TBQueue Event -> [Datum] -> Client -> IO ()
+setSyncArg globalDispatch (Int32 uid : Int32 index : v : []) client = atomically (readTVar (syncObjects client)) >>= \sos -> case Data.Map.lookup (fromIntegral uid) sos of
     Nothing -> return ()
     Just so -> do
         putStrLn "Set SyncArg: "
         atomically $ writeTVar (syncObjects client) newSyncObjects
+        sendArgMessage v $ fromIntegral uid + fromIntegral index
         where
             newSyncObjects = Data.Map.insert (fromIntegral uid) (setArg (fromIntegral index) (datumToArg v) so) sos
-setSyncArg _ _ = return ()
+            sendArgMessage (ASCII_String v) uid = sendToGlobalDispatch globalDispatch uid $ BC.unpack  v
+            sendArgMessage (Float        v) uid = sendToGlobalDispatch globalDispatch uid v
+            sendArgMessage (Double       v) uid = sendToGlobalDispatch globalDispatch uid v
+            sendArgMessage (Int32        v) uid = sendToGlobalDispatch globalDispatch uid (fromIntegral v :: Int)
+
+setSyncArg _ _ _ = return ()
 
 --Fix lazy chat and we're ready to go!
 receiveChat :: TBQueue Event -> [Datum] -> Client -> IO ()
@@ -328,9 +334,11 @@ sendChatMessage chat client = atomically $ writeTChan (outBox client) $ chatMess
 chatMessage :: String -> String -> Message
 chatMessage name msg = Message "receiveChat" [toOSCString name,toOSCString msg]
 
-
 sendToGlobalDispatch :: Typeable a => TBQueue Event -> Int -> a -> IO()
 sendToGlobalDispatch globalDispatch uid x = atomically $ writeTBQueue globalDispatch $ Event uid $ toDyn x
 
-addSynthPlayObject :: Int -> Bool -> Client -> IO()
-addSynthPlayObject uid isPlaying client = atomically $ writeTChan (outBox client) $ syncObjectMessage $ SyncObject uid "synth" "" $ Seq.fromList [SyncInt $ if isPlaying then 1 else 0]
+addSynthPlayObject :: Client -> Int -> Bool -> IO()
+addSynthPlayObject client uid isPlaying  = atomically $ writeTChan (outBox client) $ syncObjectMessage $ SyncObject uid "synth" "" $ Seq.fromList [SyncInt $ if isPlaying then 1 else 0]
+
+netPlaySynthObject :: Client -> Int -> Bool -> IO()
+netPlaySynthObject client uid shouldPlay = atomically $ writeTChan (outBox client) $ setArgMessage uid 0 $ SyncInt $ if shouldPlay then 1 else 0
