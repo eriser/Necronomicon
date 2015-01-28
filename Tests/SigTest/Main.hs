@@ -2,7 +2,7 @@ import Necronomicon
 import Data.Fixed (mod')
 
 main :: IO ()
-main = runSignal <| testGUI <|> testSound2
+main = runSignal <| testGUI <|> testScene <|> testSound
 
 testGUI :: Signal ()
 testGUI = gui [chatBox,netBox,users]
@@ -30,7 +30,7 @@ testSound = play myCoolSynth2 (isDown keyW) (isUp   keyW)
 
 testSound2 :: Signal ()
 testSound2 = play noArgSynth  (isDown keyW) (isDown keyW)
-         <|> play oneArgSynth (isDown keyA) (isDown keyA) (fst <~ mousePos)
+         <|> play oneArgSynth (isDown keyA) (isDown keyA) (fst <~ mousePos) --Maybe the person who starts a player is the only person in control of it?
          <|> play twoArgSynth (isDown keyS) (isDown keyS) 440 880
          <|> play threeSynth  (isDown keyD) (isDown keyD) 440 880 66.6
 

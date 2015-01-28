@@ -12,6 +12,7 @@ module Necronomicon.FRP.Signal (
     -- play4,
     oneShot,
     render,
+    renderGUI,
     foldp,
     (<~),
     (~~),
@@ -119,7 +120,7 @@ import qualified Graphics.Rendering.OpenGL         as GL
 import qualified Graphics.UI.GLFW                  as GLFW
 import           Necronomicon.Graphics.Camera      (renderGraphics)
 import           Necronomicon.Graphics.Model       (Resources, newResources)
-import           Necronomicon.Graphics.SceneObject (SceneObject, root)
+import           Necronomicon.Graphics.SceneObject (SceneObject, root,emptyObject)
 import           Necronomicon.Linear.Vector        (Vector2 (Vector2),
                                                     Vector3 (Vector3))
 import           Necronomicon.Patterns             (Pattern (..))
@@ -149,6 +150,7 @@ data Necro        = Necro {
     globalDispatch :: TBQueue Event,
     inputCounter   :: IORef Int,
     sceneVar       :: TMVar SceneObject,
+    guiVar         :: TMVar SceneObject,
     necroVars      :: NecroVars,
     client         :: Client
     }
@@ -296,9 +298,10 @@ runSignal s = initWindow >>= \mw ->
 
             inputCounterRef <- newIORef 1000
             sceneVar        <- atomically newEmptyTMVar
+            guiVar          <- atomically newEmptyTMVar
             necroVars       <- mkNecroVars
             runNecroState startNecronomicon necroVars
-            let necro = Necro globalDispatch inputCounterRef sceneVar necroVars client
+            let necro = Necro globalDispatch inputCounterRef sceneVar guiVar necroVars client
             forkIO $ globalEventDispatch s necro
 
             -- threadDelay $ 16667
@@ -306,7 +309,7 @@ runSignal s = initWindow >>= \mw ->
             --Start up openGL rendering loop
             GL.texture GL.Texture2D GL.$= GL.Enabled
             resources <- newResources
-            render False w sceneVar resources necroVars client
+            render False w sceneVar guiVar emptyObject emptyObject resources necroVars client
     where
         --event callbacks
         mousePressEvent eventNotify _ _ GLFW.MouseButtonState'Released _ = atomically $ (writeTBQueue eventNotify $ Event 1 $ toDyn False) `orElse` return ()
@@ -321,17 +324,20 @@ runSignal s = initWindow >>= \mw ->
             let pos = (x / fromIntegral wx,y / fromIntegral wy)
             atomically $ (writeTBQueue eventNotify $ Event 0 $ toDyn pos) `orElse` return ()
 
-        render quit window sceneVar resources necroVars client
+        render quit window sceneVar guiVar prevScene prevGUI resources necroVars client
             | quit      = quitClient client >> runNecroState shutdownNecronomicon necroVars >> print "Qutting" >> return ()
             | otherwise = do
                 GLFW.pollEvents
                 q          <- liftA (== GLFW.KeyState'Pressed) (GLFW.getKey window GLFW.Key'Escape)
                 ms         <- atomically $ tryTakeTMVar sceneVar
-                case ms of
-                    Nothing -> return ()
-                    Just s  -> renderGraphics window resources s
+                mg         <- atomically $ tryTakeTMVar guiVar
+                (newScene,newGUI) <- case (ms,mg) of
+                    (Just  s,Just  g) -> renderGraphics window resources s          g       >> return (s,g)
+                    (Nothing,Just  g) -> renderGraphics window resources prevScene  g       >> return (prevScene,g)
+                    (Just  s,Nothing) -> renderGraphics window resources s          prevGUI >> return (s,prevGUI)
+                    (Nothing,Nothing) -> return (prevScene,prevGUI)
                 threadDelay $ 16667
-                render q window sceneVar resources necroVars client
+                render q window sceneVar guiVar newScene newGUI resources necroVars client
 
 globalEventDispatch :: Show a => Signal a -> Necro -> IO()
 globalEventDispatch signal necro = do
@@ -387,7 +393,7 @@ every time = Signal $ \necro -> do
                         Nothing -> return 0
                         Just t  -> return t
 
--- fpsWhen ?
+-- fpsWhen !!!!
 -- combined global timers?
 fps :: Time -> Signal Time
 fps time = Signal $ \necro -> do
@@ -711,7 +717,6 @@ isDown = input False . glfwKeyToEventKey
 
 isUp :: Key -> Signal Bool
 isUp k = not <~ isDown k
-
 
 wasd :: Signal (Double,Double)
 wasd = go <~ isDown keyW ~~ isDown keyA ~~ isDown keyS ~~ isDown keyD
@@ -1049,17 +1054,26 @@ till sigA sigB = Signal $ \necro -> do
                     Change True -> writeIORef boolRef False >>  return (Change False)
                     _           -> readIORef boolRef        >>= return . NoChange
 
--- execute :: IO a -> Signal a
--- execute action = Signal $ \necro -> do
-    -- a <- action
-    -- return (a,\_ -> return $ NoChange a,IntSet.empty)
-
 render :: Signal SceneObject -> Signal ()
 render scene = Signal $ \necro -> do
     (sValue,sCont,ids) <- unSignal scene necro
     -- atomically $ tryPutTMVar (sceneVar necro) sValue
     atomically $ putTMVar (sceneVar necro) sValue
+    -- atomically $ putTVar (sceneVar necro) sValue
     return ((),processEvent (sceneVar necro) sCont ids,ids)
+    where
+        processEvent sVar sCont ids event@(Event uid _) = if not $ IntSet.member uid ids then return (NoChange ()) else do
+            s <- sCont event
+            case s of
+                NoChange _ -> return $ NoChange ()
+                Change   s -> atomically (putTMVar sVar s) >> return (Change ())
+
+renderGUI :: Signal SceneObject -> Signal ()
+renderGUI scene = Signal $ \necro -> do
+    (sValue,sCont,ids) <- unSignal scene necro
+    -- atomically $ tryPutTMVar (sceneVar necro) sValue
+    atomically $ putTMVar (guiVar necro) sValue
+    return ((),processEvent (guiVar necro) sCont ids,ids)
     where
         processEvent sVar sCont ids event@(Event uid _) = if not $ IntSet.member uid ids then return (NoChange ()) else do
             s <- sCont event

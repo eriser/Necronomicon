@@ -49,15 +49,20 @@ renderCamera (w,h) view scene resources g = case _camera g of
 renderCameras :: (Int,Int) -> Matrix4x4 -> SceneObject -> Resources -> SceneObject -> IO ()
 renderCameras (w,h) view scene resources g = renderCamera (w,h) view scene resources g >>= \newView -> mapM_ (renderCameras (w,h) newView scene resources) (_children g)
 
-renderGraphics :: GLFW.Window -> Resources -> SceneObject -> IO ()
-renderGraphics window resources scene = do
+renderGraphics :: GLFW.Window -> Resources -> SceneObject -> SceneObject -> IO ()
+renderGraphics window resources scene gui = do
     GL.depthFunc     GL.$= Just GL.Less
     GL.blend         GL.$= GL.Enabled
     GL.blendBuffer 0 GL.$= GL.Enabled
     GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
 
     (w,h) <- GLFW.getWindowSize window
+
+    --render scene
     renderCameras (w,h) identity4 scene resources scene
+
+    --render gui
+    drawScene identity4 identity4 (orthoMatrix 0 (fromIntegral w / fromIntegral h) 1 0 (-1) 1) resources gui
 
     GLFW.swapBuffers window
     GLFW.pollEvents

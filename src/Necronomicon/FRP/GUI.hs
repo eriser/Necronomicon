@@ -32,9 +32,7 @@ element :: Signal (Gui a) -> Signal SceneObject
 element = lift $ \(Gui _ s) -> s
 
 gui :: [Signal SceneObject] -> Signal ()
-gui gs = render $ root <~ combine (pure cam : gs)
-    where
-        cam = orthoCamera 0 identity black
+gui gs = renderGUI $ root <~ combine gs
 
 guiEvent :: (Typeable a) => IORef (Gui b) -> Dynamic -> (a -> IO (EventValue (Gui b))) -> IO (EventValue (Gui b))
 guiEvent ref v f = case fromDynamic v of
