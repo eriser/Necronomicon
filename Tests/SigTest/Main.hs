@@ -10,7 +10,7 @@ testGUI = gui [chatBox,netBox,users]
         users   = userBox <| Vector2 0.0 0.945
                           <| Size    0.0 0.055
                           <| Font   "OCRA.ttf" 24
-                          <| vertexColored (gray 0.5)
+                          <| vertexColored (RGBA 0 0 0 0.25)
 
         netBox  = netStat <| Vector2 1.4 0.97
                           <| Size    0.2 0.03
@@ -19,7 +19,7 @@ testGUI = gui [chatBox,netBox,users]
         chatBox = chat    <| Vector2 0.0 0.0
                           <| Size    0.4 0.75
                           <| Font   "OCRA.ttf" 24
-                          <| vertexColored (gray 0.05)
+                          <| vertexColored (RGBA 1 1 1 0.1)
 
 -- Implement in terms of play until instead
 -- Networking the state works out better that way!

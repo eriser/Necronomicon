@@ -53,8 +53,8 @@ netStat :: Vector2 -> Size -> Font -> Signal SceneObject
 netStat (Vector2 x y) (Size w h) font = indicator <~ networkRunStatus
     where
         indicator Running      = emptyObject
-        indicator Disconnected = background (RGB 0.25 0.00 0) "Disconnected"
-        indicator status       = background (RGB 0.15 0.15 0) $ show status
+        indicator Disconnected = background (RGBA 1 0.00 0 0.5) "Disconnected"
+        indicator status       = background (RGBA 0.75 0.5 0 0.5) $ show status
         background         c t = SceneObject (Vector3  x y 0) identity 1 (Model (rect w h) (vertexColored c)) [textObject t]
         textObject           t = SceneObject (Vector3  0 0 1) identity 1 (drawText t font ambient) []
 
@@ -103,7 +103,7 @@ chatDisplay (Vector2 x y) (Size w h) font material = Signal $ \necro -> do
                       writeIORef ref val
                       return $ Change $ chatObject val
 
-        chatObject t = SceneObject (Vector3  x y 0) identity 1 (Model (rect w h) (vertexColored black)) [textObject t]
+        chatObject t = SceneObject (Vector3  x y 0) identity 1 (Model (rect w h) (vertexColored (RGBA 0 0 0 0))) [textObject t]
         textObject t = SceneObject (Vector3  0 0 1) identity 1 (drawText t font ambient) []
 
 slider :: Vector2 -> Size -> Color -> Signal (Gui Double)

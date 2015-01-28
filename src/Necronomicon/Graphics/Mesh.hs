@@ -45,15 +45,16 @@ tri triSize color = Mesh (show triSize ++ "tri") vertices colors uvs indices
         indices  = [0,1,2]
 
 vertexColored :: Color -> Material
-vertexColored (RGB r g b) = Material draw
+vertexColored (RGBA r g b a) = Material draw
     where
         draw mesh modelView proj resources = do
             (program,baseColor:mv:pr:_,attributes)                     <- getShader resources vertexColoredShader
             (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:_) <- getMesh   resources mesh
 
             GL.currentProgram    GL.$= Just program
-            GL.uniform baseColor GL.$= (GL.Vertex3 (realToFrac r) (realToFrac g) (realToFrac b) :: GL.Vertex3 GL.GLfloat)
+            GL.uniform baseColor GL.$= (GL.Vertex4 (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a) :: GL.Vertex4 GL.GLfloat)
             bindThenDraw mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad]) numIndices
+vertexColored (RGB r g b) = vertexColored (RGBA r g b 1)
 
 ambient :: Texture -> Material
 ambient tex = Material draw
