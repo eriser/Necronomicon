@@ -86,7 +86,7 @@ simplexMesh = Mesh "simplex" vertices colors uvs indices
         (scale,vscale)   = (1 / 6,3)
         values           = [(x,simplex 16 (x / w) (y / h),y) | (x,y) <- [(mod' n w,fromIntegral . floor $ n / h) | n <- [0..w*h]]]
 
-        toVertex (x,y,z) = Vector3 (x*scale) (y*vscale) (z*scale)
+        toVertex (x,y,z) = Vector3 (x*scale*3) (y*vscale) (z*scale*3)
         toColor  (x,y,z) = RGBA    (x / w) (y * 0.75 + 0.35) (z / h) 0.25
         toUV     (x,y,_) = Vector2 (x / w) (y / h)
 
