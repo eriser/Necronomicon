@@ -29,6 +29,7 @@ module Necronomicon.FRP.Signal (
     count,
     countIf,
     wasd,
+    arrows,
     dimensions,
     mouseDown,
     mousePos,
@@ -520,6 +521,11 @@ keyBackSlash    = GLFW.Key'Backslash
 keyRightBracket = GLFW.Key'RightBracket
 keyGraveAccent  = GLFW.Key'GraveAccent
 
+keyUp    = GLFW.Key'Up
+keyDown  = GLFW.Key'Down
+keyLeft  = GLFW.Key'Left
+keyRight = GLFW.Key'Right
+
 glfwKeyToEventKey :: GLFW.Key -> Int
 glfwKeyToEventKey k
     | k == keyA = 100
@@ -578,6 +584,10 @@ glfwKeyToEventKey k
     | k == keyBackSlash    = 153
     | k == keyRightBracket = 154
     | k == keyGraveAccent  = 155
+    | k == keyUp           = 152
+    | k == keyDown         = 153
+    | k == keyLeft         = 154
+    | k == keyRight        = 155
     | otherwise            = -1
 
 eventKeyToChar :: Int -> Bool -> Char
@@ -720,6 +730,11 @@ isUp k = not <~ isDown k
 
 wasd :: Signal (Double,Double)
 wasd = go <~ isDown keyW ~~ isDown keyA ~~ isDown keyS ~~ isDown keyD
+    where
+        go w a s d = (((if d then 1 else 0) + (if a then (-1) else 0)),((if w then 1 else 0) + (if s then (-1) else 0)))
+
+arrows :: Signal (Double,Double)
+arrows = go <~ isDown keyUp ~~ isDown keyLeft ~~ isDown keyDown ~~ isDown keyRight
     where
         go w a s d = (((if d then 1 else 0) + (if a then (-1) else 0)),((if w then 1 else 0) + (if s then (-1) else 0)))
 
