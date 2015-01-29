@@ -4,14 +4,15 @@ import Prelude
 import Network.Socket hiding (send,recv,recvFrom,sendTo)
 import Network.Socket.ByteString.Lazy
 import Sound.OSC.Core
-import Data.Binary (encode,decode)
+import Data.Binary (Binary,encode,decode,get,put,getWord8)
 import Data.Int    (Int64)
 import Control.Monad (when)
-import Data.Word (Word16)
+import Data.Word (Word8,Word16)
 import Data.Bits ((.|.),(.&.),shift)
 import Control.Exception
 import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString.Lazy  as B
+import Necronomicon.Linear.Vector (Vector2(..),Vector3(..),Vector4(..))
 
 toOSCString :: String -> Datum
 toOSCString = d_put . C.pack --ASCII_String . C.pack
@@ -89,3 +90,37 @@ receiveWithLength socket = Control.Exception.catch trySend onFailure
                 then return ShutdownMessage
                 else recv socket len' >>= return . Receive
         onFailure e = return $ Exception e
+
+-------------------------------------------------------------------
+-- Networking 3.0
+-------------------------------------------------------------------
+
+data Binary a => NetworkSignal a = NetworkSignal Word16 a
+
+-- netSignalValue :: Binary a => a -> NetSignalValue a
+-- netSignalValue x = undefined
+
+-- sendNetSignal :: Binary a => Word16 -> a -> IO()
+-- sendNetSignal x = undefined
+
+instance (Binary a) => Binary (NetworkSignal a) where
+    put (NetworkSignal w v) = put w >> put v
+    get = get >>= \w -> get >>= \v -> return (NetworkSignal w v)
+
+instance Binary Vector2 where
+    put (Vector2 x y) = put x >> put y
+    get = get >>= \x -> get >>= \y -> return (Vector2 x y)
+
+instance Binary Vector3 where
+    put (Vector3 x y z) = put x >> put y >> put z
+    get = get >>= \x -> get >>= \y -> get >>= \z -> return (Vector3 x y z)
+
+instance Binary Vector4 where
+    put (Vector4 x y z w) = put x >> put y >> put z >> put w
+    get = get >>= \x -> get >>= \y -> get >>= \z -> get >>= \w -> return (Vector4 x y z w)
+
+
+sendNetSignal :: Binary a => Int -> a -> IO()
+sendNetSignal uid x = do
+    let encodedMessage = encode (NetworkSignal (fromIntegral uid) x)
+    return ()
