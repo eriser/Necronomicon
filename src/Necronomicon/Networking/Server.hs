@@ -44,7 +44,7 @@ data Server = Server {
     syncObjects     :: TVar  (Map.Map Int SyncObject),
     inBox           :: TChan (SockAddr,Message),
     outBox          :: TChan (User,Message),
-    broadcastOutBox :: TChan  Message,
+    broadcastOutBox :: TChan (Maybe SockAddr,Message),
     userIdCounter   :: TVar Int
    }
 
@@ -118,8 +118,8 @@ synchronize server = forever $ do
     putStrLn  ""
 
     -- figure out the issue with sending multiple messages in a row
-    broadcast (toSynchronizationMsg syncObjects') server
-    broadcast (Message "userList" $ Prelude.map (\(_,u) -> toOSCString $ userName u) (Map.toList users')) server
+    broadcast (Nothing,toSynchronizationMsg syncObjects') server
+    broadcast (Nothing,Message "userList" $ Prelude.map (\(_,u) -> toOSCString $ userName u) (Map.toList users')) server
     currentTime <- time
     let users'' = Map.filter (\u -> (currentTime - aliveTime u < 6)) users'
     atomically $ writeTVar (users server) users''
@@ -166,11 +166,12 @@ userListen socket addr stopVar server = (isConnected socket >>= \conn -> (atomic
 
 sendBroadcastMessages :: Server -> Socket -> IO()
 sendBroadcastMessages server socket = forever $ do
-    -- figure out the issue with sending multiple messages in a row
-    message <- atomically $ readTChan $ broadcastOutBox server
+    (maybeNoBounceback,message) <- atomically $ readTChan $ broadcastOutBox server
     let encodedMessage = encodeMessage message
     userList <- (atomically $ readTVar (users server)) >>= return . Map.toList
-    mapM_ (\(_,user) -> send' (userSocket user) encodedMessage) userList
+    case maybeNoBounceback of
+        Nothing -> mapM_ (\(_,user) -> send' (userSocket user) encodedMessage) userList
+        Just sa -> mapM_ (\(_,user) -> if userAddress user /= sa then send' (userSocket user) encodedMessage else return ()) userList
     where
         send' s m = Control.Exception.catch (sendWithLength s m) (\e -> putStrLn ("sendBroadcastMessages: " ++ show (e :: IOException)))
 
@@ -245,7 +246,7 @@ addSyncObject m user server = case messageToSync m of
                 then putStrLn $ "Already contain object " ++ show (objectID so)
                 else do
                     atomically $ writeTVar (syncObjects server) (Map.insert (objectID so) so sos)
-                    broadcast (syncObjectMessage so) server
+                    broadcast (Nothing,syncObjectMessage so) server
                     putStrLn $ "Received SyncObject: " ++ show so
                     putStrLn ""
                     -- print server'
@@ -257,7 +258,7 @@ removeSyncObject (Int32 uid:[]) user server = do
     if not $ Map.member (fromIntegral uid) sos then return () else do
         -- let server' = Server (users server) (Map.delete (fromIntegral id) $ syncObjects server) (score server) (section server)
         atomically $ readTVar (syncObjects server) >>= \sos -> writeTVar (syncObjects server) (Map.delete (fromIntegral uid) sos)
-        broadcast (Message "removeSyncObject" (Int32 uid:[])) server
+        broadcast (Nothing,Message "removeSyncObject" (Int32 uid:[])) server
         putStrLn $  "Removing SyncObject: " ++ show uid
         putStrLn ""
         -- print server'
@@ -271,15 +272,15 @@ setSyncArg (Int32 uid : Int32 index : v : []) user server = do
     case Map.lookup (fromIntegral uid) sos of
         Nothing -> return ()
         Just so -> do
-            putStrLn $ "Set SyncArg: " ++ show uid
+            -- putStrLn $ "Set SyncArg: " ++ show uid
             atomically $ writeTVar (syncObjects server) (Map.insert (fromIntegral uid) (setArg (fromIntegral index) (datumToArg v) so) sos)
-            broadcast (Message "setSyncArg" $ Int32 uid : Int32 index : v : []) server
+            broadcast (Just $ userAddress user,Message "setSyncArg" $ Int32 uid : Int32 index : v : []) server
 setSyncArg _ _ server = return ()
 
 receiveChat :: [Datum] -> User -> Server -> IO ()
 receiveChat (ASCII_String name : ASCII_String msg : []) user server = do
     putStrLn ("Chat - " ++ show name ++ ": " ++ show msg)
-    broadcast (Message "receiveChat" $ ASCII_String name : ASCII_String msg : []) server
+    broadcast (Nothing,Message "receiveChat" $ ASCII_String name : ASCII_String msg : []) server
     if msg == flushCommand then flush server else return ()
 receiveChat _ _ server = return ()
 
@@ -294,7 +295,7 @@ flushCommand =  C.pack "necro flush"
 flush :: Server -> IO()
 flush server = do
     atomically $ writeTVar (syncObjects server) $ Map.fromList []
-    broadcast  (toSynchronizationMsg $ Map.fromList []) server
+    broadcast  (Nothing,toSynchronizationMsg $ Map.fromList []) server
 
 addUser :: User -> Server -> IO()
 addUser user server = atomically $ readTVar (users server) >>= \users' -> writeTVar (users server) (Map.insert (userAddress user) user users')
@@ -305,9 +306,9 @@ removeUser user server = atomically $ readTVar (users server) >>= \users' -> wri
 sendUserList :: Server -> IO ()
 sendUserList server = do
     users' <- atomically $ readTVar $ users server
-    broadcast (Message "userList" $ Prelude.map (\(_,u) -> toOSCString $ userName u) (Map.toList users')) server
+    broadcast (Nothing,Message "userList" $ Prelude.map (\(_,u) -> toOSCString $ userName u) (Map.toList users')) server
 
-broadcast :: Message -> Server -> IO ()
+broadcast :: (Maybe SockAddr,Message) -> Server -> IO ()
 broadcast message server = atomically $ writeTChan (broadcastOutBox server) message
 
 sendMessage :: User -> Message -> Server -> IO ()
