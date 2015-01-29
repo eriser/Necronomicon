@@ -359,3 +359,6 @@ addSynthPlayObject client uid isPlaying args = atomically
 
 sendSetArg :: Client -> Int -> Int -> SyncValue -> IO()
 sendSetArg client uid index v = atomically $ writeTChan (outBox client) $ setArgMessage uid index v
+
+sendAddSyncObject :: Client -> SyncObject -> IO()
+sendAddSyncObject client syncObject = atomically $ writeTChan (outBox client) $ syncObjectMessage syncObject

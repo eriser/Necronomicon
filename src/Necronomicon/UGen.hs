@@ -21,7 +21,7 @@ import Control.Monad.Trans
 import qualified Data.Map as M
 import Data.Monoid
 import Data.Typeable
-
+import Control.Category ((>>>))
 {-
 -- import Prelude hiding (fromRational, sin, (+), (*), (/), (-))
 -- import qualified Prelude as P (fromRational, fromIntegral, sin,  (+), (*), (/),(-))
@@ -353,7 +353,7 @@ sinTest2 :: [UGen]
 sinTest2 = sin [0,10..100]
 
 sinTest3 :: [UGen]
-sinTest3 = sin [1, 2] |> sin |> gain (sin 13) |> gain 0.5 |> out 0
+sinTest3 = sin [1, 2] |> sin >>> gain (sin 13) >>> gain 0.5 >>> out 0
 
 sinTest4 :: [UGen] -> [UGen]
 sinTest4 fs = sin [0,10..100] + sin fs

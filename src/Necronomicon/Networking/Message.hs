@@ -4,10 +4,10 @@ import Prelude
 import Network.Socket hiding (send,recv,recvFrom,sendTo)
 import Network.Socket.ByteString.Lazy
 import Sound.OSC.Core
--- import Data.Binary (Binary,encode,decode)
-import Data.Int    (Int32,Int64)
+import Data.Binary (encode,decode)
+import Data.Int    (Int64)
 import Control.Monad (when)
-import Data.Word (Word16, Word8)
+import Data.Word (Word16)
 import Data.Bits ((.|.),(.&.),shift)
 import Control.Exception
 import qualified Data.ByteString.Char8 as C
@@ -26,7 +26,8 @@ lengthOfMessageLength = 2
 
 decodeTransLength :: B.ByteString -> Maybe Int64
 decodeTransLength bs = if B.length bs == lengthOfMessageLength || B.length bs == 0
-    then Just $ fromIntegral (decodeWord16 bs)
+    -- then Just $ fromIntegral (decodeWord16 bs)
+    then Just $ fromIntegral (decode bs :: Word16)
     else Nothing
 
 encodeWord16 :: Word16 -> B.ByteString
@@ -68,7 +69,8 @@ sendWithLength socket msg = Control.Exception.catch trySend onFailure
             -- putStrLn $ "Decoded: "         ++ show decoded
             -- putStrLn $ "Decoded==Length: " ++ show (decoded == messageLength)
 
-            sendAll socket $ encodeWord16 messageLength
+            -- sendAll socket $ encodeWord16 messageLength
+            sendAll socket $ encode messageLength
             bytes <- send socket msg
             when (fromIntegral bytes /= messageLength) $ putStrLn "SEND ERROR: Disagreement in bytes sent"
         onFailure e = print (e :: IOException)
