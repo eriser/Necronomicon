@@ -13,6 +13,7 @@ import Control.Exception
 import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString.Lazy  as B
 import Necronomicon.Linear.Vector (Vector2(..),Vector3(..),Vector4(..))
+import Necronomicon.FRP.Event
 
 toOSCString :: String -> Datum
 toOSCString = d_put . C.pack --ASCII_String . C.pack
@@ -119,8 +120,13 @@ instance Binary Vector4 where
     put (Vector4 x y z w) = put x >> put y >> put z >> put w
     get = get >>= \x -> get >>= \y -> get >>= \z -> get >>= \w -> return (Vector4 x y z w)
 
-
 sendNetSignal :: Binary a => Int -> a -> IO()
 sendNetSignal uid x = do
     let encodedMessage = encode (NetworkSignal (fromIntegral uid) x)
     return ()
+
+messageToEvent :: B.ByteString -> Event
+messageToEvent message = undefined
+    -- Event uid $ toDyn v
+    -- where
+        -- (NetworkSignal uid v) = decode message
