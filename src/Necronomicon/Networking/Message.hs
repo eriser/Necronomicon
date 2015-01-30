@@ -180,7 +180,7 @@ instance Binary NetValue where
         16 -> (get ::Get [Vector4])      >>= return . NetVec4List
 
 instance Binary NetMessage where
-    put (Chat            n m) = put (0 ::Word8) >> put n >> put n
+    put (Chat            n m) = put (0 ::Word8) >> put n >> put m
     put (AddNetSignal  uid s) = put (1 ::Word8) >> put (fromIntegral uid ::Int32) >> put s
     put (RemoveNetSignal uid) = put (2 ::Word8) >> put (fromIntegral uid ::Int32)
     put (SetNetSignal  uid s) = put (3 ::Word8) >> put (fromIntegral uid ::Int32) >> put s
