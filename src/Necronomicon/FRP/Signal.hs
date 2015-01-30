@@ -1306,7 +1306,7 @@ playSynthN synth playSig stopSig argSigs = Signal $ \necro -> do
     argRefs               <- mapM newIORef aValues
 
     --Net Values
-    (_,netPlayCont,_)     <- unSignal (input (0::Int) uid) necro
+    (_,netPlayCont,_)     <- unSignal (input False uid) necro
     (_,netArgConts,_)     <- fmap unzip3 $ mapM (\(v,uid') -> unSignal (input v uid') necro) $ zip aValues uids
 
     --Pure Values
@@ -1351,7 +1351,7 @@ playSynthN synth playSig stopSig argSigs = Signal $ \necro -> do
         processEvent pCont sCont args netPlayCont synthName synthRef netArgs necroVars client uid ids event@(Event eid _) = if not $ IntSet.member eid ids
             then return $ NoChange ()
             else netPlayCont event >>= \net -> case net of
-                Change netPlay -> runNecroState (playStopSynth synthName (netPlay == 1) synthRef) necroVars >>= \(e,_) -> return e --Play/Stop event from the network
+                Change netPlay -> runNecroState (playStopSynth synthName netPlay synthRef) necroVars >>= \(e,_) -> return e --Play/Stop event from the network
                 NoChange     _ -> readIORef synthRef >>= \s -> case s of
                     Just s  -> sCont event >>= \e -> case e of --There is a synth playing
                         Change True  -> sendSetNetSignal client (uid,NetBool False) >> runNecroState (playStopSynth synthName False synthRef) necroVars >>= \(e,_) -> return e --Stop an already running synth

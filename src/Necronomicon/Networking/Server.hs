@@ -15,12 +15,14 @@ import Control.Monad (unless,join,forever)
 import qualified Data.Map as Map
 import qualified Data.IntMap as IntMap
 import Data.Binary (encode,decode)
+import Necronomicon.Linear.Vector
 
 -- import Necronomicon.Networking.User
 import Necronomicon.Networking.Message
 import Sound.OSC.Core
 
 import Necronomicon.Networking.SyncObject
+import qualified Data.Sequence as Seq
 
 ------------------------------
 --Server data
@@ -101,6 +103,7 @@ synchronize server = forever $ do
     -- figure out the issue with sending multiple messages in a row
     broadcast (Nothing,encode $ SyncNetSignals netSignals') server
     broadcast (Nothing,encode $ UserList $ Prelude.map (\(_,u) -> userName u) (Map.toList users')) server
+
     currentTime <- time
     let users'' = Map.filter (\u -> (currentTime - aliveTime u < 6)) users'
     atomically $ writeTVar (users server) users''
