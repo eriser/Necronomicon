@@ -4,8 +4,8 @@ import Prelude
 import Network.Socket hiding (send,recv,recvFrom,sendTo)
 import Network.Socket.ByteString.Lazy
 import Sound.OSC.Core
-import Data.Binary (Binary,encode,decode,get,put,getWord8)
-import Data.Int    (Int64)
+import Data.Binary (Binary,encode,decode,get,put,getWord8,Get)
+import Data.Int    (Int32,Int64)
 import Control.Monad (when)
 import Data.Word (Word8,Word16)
 import Data.Bits ((.|.),(.&.),shift)
@@ -14,6 +14,7 @@ import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString.Lazy  as B
 import Necronomicon.Linear.Vector (Vector2(..),Vector3(..),Vector4(..))
 import Necronomicon.FRP.Event
+import qualified Data.IntMap as IntMap
 
 toOSCString :: String -> Datum
 toOSCString = d_put . C.pack --ASCII_String . C.pack
@@ -91,42 +92,186 @@ receiveWithLength socket = Control.Exception.catch trySend onFailure
                 then return ShutdownMessage
                 else recv socket len' >>= return . Receive
         onFailure e = return $ Exception e
-
 -------------------------------------------------------------------
 -- Networking 3.0
 -------------------------------------------------------------------
 
-data Binary a => NetworkSignal a = NetworkSignal Word16 a
-
--- netSignalValue :: Binary a => a -> NetSignalValue a
--- netSignalValue x = undefined
-
--- sendNetSignal :: Binary a => Word16 -> a -> IO()
--- sendNetSignal x = undefined
-
-instance (Binary a) => Binary (NetworkSignal a) where
-    put (NetworkSignal w v) = put w >> put v
-    get = get >>= \w -> get >>= \v -> return (NetworkSignal w v)
-
 instance Binary Vector2 where
-    put (Vector2 x y) = put x >> put y
-    get = get >>= \x -> get >>= \y -> return (Vector2 x y)
+    put (Vector2 x y)     = put (realToFrac x::Float) >> put (realToFrac y::Float)
+    get = (get ::Get Float) >>= \x -> (get ::Get Float) >>= \y -> return (Vector2 (realToFrac x) (realToFrac y))
 
 instance Binary Vector3 where
-    put (Vector3 x y z) = put x >> put y >> put z
-    get = get >>= \x -> get >>= \y -> get >>= \z -> return (Vector3 x y z)
+    put (Vector3 x y z)   = put (realToFrac x ::Float) >> put (realToFrac y ::Float) >> put (realToFrac z::Float)
+    get =(get ::Get Float) >>= \x -> (get ::Get Float) >>= \y -> (get ::Get Float) >>= \z -> return (Vector3 (realToFrac x) (realToFrac y) (realToFrac z))
 
 instance Binary Vector4 where
-    put (Vector4 x y z w) = put x >> put y >> put z >> put w
-    get = get >>= \x -> get >>= \y -> get >>= \z -> get >>= \w -> return (Vector4 x y z w)
+    put (Vector4 x y z w) = put (realToFrac x ::Float) >> put (realToFrac y ::Float) >> put (realToFrac z::Float) >> put (realToFrac w::Float)
+    get =(get ::Get Float) >>= \x -> (get ::Get Float) >>= \y -> (get ::Get Float) >>= \z -> (get ::Get Float) >>= \w -> return (Vector4 (realToFrac x) (realToFrac y) (realToFrac z) (realToFrac w))
 
-sendNetSignal :: Binary a => Int -> a -> IO()
-sendNetSignal uid x = do
-    let encodedMessage = encode (NetworkSignal (fromIntegral uid) x)
-    return ()
+data NetValue = NetInt         Int
+              | NetDouble      Double
+              | NetBool        Bool
+              | NetString      C.ByteString
+              | NetVec2        Vector2
+              | NetVec3        Vector3
+              | NetVec4        Vector4
 
-messageToEvent :: B.ByteString -> Event
-messageToEvent message = undefined
-    -- Event uid $ toDyn v
-    -- where
-        -- (NetworkSignal uid v) = decode message
+              | NetTupInt     (Int,Int)
+              | NetTupDouble  (Double,Double)
+              | NetTupBool    (Bool,Bool)
+
+              | NetIntList    [Int]
+              | NetDoubleList [Double]
+              | NetBoolList   [Bool]
+              | NetStringList [C.ByteString]
+              | NetVec2List   [Vector2]
+              | NetVec3List   [Vector3]
+              | NetVec4List   [Vector4]
+              deriving (Show,Eq)
+
+data NetMessage = Chat            C.ByteString C.ByteString
+                | AddNetSignal    Int NetValue
+                | RemoveNetSignal Int
+                | SetNetSignal    Int NetValue
+                | Alive
+                | UserList        [C.ByteString]
+                | Login            C.ByteString
+                | Logout           C.ByteString
+                | SyncNetSignals  (IntMap.IntMap NetValue)
+                | EmptyMessage
+                deriving (Show)
+
+instance Binary NetValue where
+    put (NetInt        v) = put (0  ::Word8) >> put (fromIntegral v ::Int32)
+    put (NetDouble     v) = put (1  ::Word8) >> put (realToFrac   v ::Float)
+    put (NetBool       v) = put (2  ::Word8) >> put v
+    put (NetString     v) = put (3  ::Word8) >> put v
+    put (NetVec2       v) = put (4  ::Word8) >> put v
+    put (NetVec3       v) = put (5  ::Word8) >> put v
+    put (NetVec4       v) = put (6  ::Word8) >> put v
+    put (NetTupInt     v) = put (7  ::Word8) >> put ((fromIntegral (fst v),fromIntegral (snd v)) ::(Int32,Int32))
+    put (NetTupDouble  v) = put (8  ::Word8) >> put ((realToFrac (fst v),realToFrac (snd v)) ::(Float,Float))
+    put (NetTupBool    v) = put (9  ::Word8) >> put v
+    put (NetIntList    v) = put (10 ::Word8) >> put (fmap fromIntegral v ::[Int])
+    put (NetDoubleList v) = put (11 ::Word8) >> put (fmap realToFrac   v ::[Float])
+    put (NetBoolList   v) = put (12 ::Word8) >> put v
+    put (NetStringList v) = put (13 ::Word8) >> put v
+    put (NetVec2List   v) = put (14 ::Word8) >> put v
+    put (NetVec3List   v) = put (15 ::Word8) >> put v
+    put (NetVec4List   v) = put (16 ::Word8) >> put v
+
+    get = (get :: Get Word8) >>= \t -> case t of
+        0  -> (get ::Get Int32)          >>= return . NetInt        . fromIntegral
+        1  -> (get ::Get Float)          >>= return . NetDouble     . realToFrac
+        2  -> (get ::Get Bool)           >>= return . NetBool
+        3  -> (get ::Get C.ByteString)   >>= return . NetString
+        4  -> (get ::Get Vector2)        >>= return . NetVec2
+        5  -> (get ::Get Vector3)        >>= return . NetVec3
+        6  -> (get ::Get Vector4)        >>= return . NetVec4
+        7  -> (get ::Get (Int32,Int32))  >>= return . NetTupInt     . \(x,y) -> (fromIntegral x,fromIntegral y)
+        8  -> (get ::Get (Float,Float))  >>= return . NetTupDouble  . \(x,y) -> (realToFrac x,realToFrac y)
+        9  -> (get ::Get (Bool,Bool))    >>= return . NetTupBool
+        10 -> (get ::Get [Int32])        >>= return . NetIntList    . map fromIntegral
+        11 -> (get ::Get [Float])        >>= return . NetDoubleList . map realToFrac
+        12 -> (get ::Get [Bool])         >>= return . NetBoolList
+        13 -> (get ::Get [C.ByteString]) >>= return . NetStringList
+        14 -> (get ::Get [Vector2])      >>= return . NetVec2List
+        15 -> (get ::Get [Vector3])      >>= return . NetVec3List
+        16 -> (get ::Get [Vector4])      >>= return . NetVec4List
+
+instance Binary NetMessage where
+    put (Chat            n m) = put (0 ::Word8) >> put n >> put n
+    put (AddNetSignal  uid s) = put (1 ::Word8) >> put (fromIntegral uid ::Int32) >> put s
+    put (RemoveNetSignal uid) = put (2 ::Word8) >> put (fromIntegral uid ::Int32)
+    put (SetNetSignal  uid s) = put (3 ::Word8) >> put (fromIntegral uid ::Int32) >> put s
+    put  Alive                = put (4 ::Word8)
+    put (UserList         ul) = put (5 ::Word8) >> put ul
+    put (Login             n) = put (6 ::Word8) >> put n
+    put (Logout            n) = put (7 ::Word8) >> put n
+    put (SyncNetSignals   ss) = put (8 ::Word8) >> put ss
+
+    get = (get ::Get Word8) >>= \ t -> case t of
+        0 -> get >>= \name -> get >>= \message -> return (Chat name message)
+        1 -> (get ::Get Int32) >>= \uid -> get >>= \s -> return (AddNetSignal (fromIntegral uid) s)
+        2 -> (get ::Get Int32) >>= return . RemoveNetSignal . fromIntegral
+        3 -> (get ::Get Int32) >>= \uid -> get >>= \s -> return (SetNetSignal (fromIntegral uid) s)
+        4 -> return Alive
+        5 -> (get ::Get [C.ByteString]) >>= return . UserList
+        6 -> (get ::Get  C.ByteString ) >>= return . Login
+        7 -> (get ::Get  C.ByteString ) >>= return . Logout
+        8 -> (get ::Get (IntMap.IntMap NetValue)) >>= return . SyncNetSignals
+        _ -> return EmptyMessage
+
+netValToDyn :: NetValue -> Dynamic
+netValToDyn (NetInt        v) = toDyn v
+netValToDyn (NetDouble     v) = toDyn v
+netValToDyn (NetBool       v) = toDyn v
+netValToDyn (NetString     v) = toDyn v
+netValToDyn (NetVec2       v) = toDyn v
+netValToDyn (NetVec3       v) = toDyn v
+netValToDyn (NetVec4       v) = toDyn v
+netValToDyn (NetTupInt     v) = toDyn v
+netValToDyn (NetTupDouble  v) = toDyn v
+netValToDyn (NetTupBool    v) = toDyn v
+netValToDyn (NetIntList    v) = toDyn v
+netValToDyn (NetDoubleList v) = toDyn v
+netValToDyn (NetBoolList   v) = toDyn v
+netValToDyn (NetStringList v) = toDyn v
+netValToDyn (NetVec2List   v) = toDyn v
+netValToDyn (NetVec3List   v) = toDyn v
+netValToDyn (NetVec3List   v) = toDyn v
+
+
+class (Typeable a,Eq a) => Networkable a where
+    toNetVal :: a -> NetValue
+
+instance Networkable Int where
+    toNetVal = NetInt
+
+instance Networkable Double where
+    toNetVal = NetDouble
+
+instance Networkable Bool where
+    toNetVal = NetBool
+
+instance Networkable C.ByteString where
+    toNetVal = NetString
+
+instance Networkable Vector2 where
+    toNetVal = NetVec2
+
+instance Networkable Vector3 where
+    toNetVal = NetVec3
+
+instance Networkable Vector4 where
+    toNetVal = NetVec4
+
+instance Networkable (Int,Int) where
+    toNetVal = NetTupInt
+
+instance Networkable (Double,Double) where
+    toNetVal = NetTupDouble
+
+instance Networkable (Bool,Bool) where
+    toNetVal = NetTupBool
+
+instance Networkable [Int] where
+    toNetVal = NetIntList
+
+instance Networkable [Double] where
+    toNetVal = NetDoubleList
+
+instance Networkable [Bool] where
+    toNetVal = NetBoolList
+
+instance Networkable [C.ByteString] where
+    toNetVal = NetStringList
+
+instance Networkable [Vector2] where
+    toNetVal = NetVec2List
+
+instance Networkable [Vector3] where
+    toNetVal = NetVec3List
+
+instance Networkable [Vector4] where
+    toNetVal = NetVec4List

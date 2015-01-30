@@ -6,13 +6,14 @@ import Control.Concurrent (forkIO,threadDelay)
 import Control.Concurrent.STM
 import System.Environment (getArgs)
 import Network.Socket hiding (send,recv,recvFrom,sendTo)
-import Network.Socket.ByteString
-import qualified Data.ByteString.Char8 as BC (null,unpack,pack)
+import Network.Socket.ByteString.Lazy
+import qualified Data.ByteString.Char8 as C (null,unpack,pack)
 import qualified Data.ByteString.Lazy  as B  (null)
 import Control.Exception
 import Control.Monad (unless,forever,(<=<))
 import System.CPUTime
 import qualified Data.Map      as Map
+import qualified Data.IntMap   as IntMap
 import qualified Data.Sequence as Seq
 import qualified Data.Foldable as Foldable (toList)
 import Sound.OSC.Core
@@ -24,14 +25,14 @@ import System.Random (randomRIO)
 import System.Exit
 import Debug.Trace
 import Data.Typeable
-
+import Data.Binary (encode,decode)
 
 data Client = Client {
     userName    :: String,
     clientUsers :: TVar [String],
-    syncObjects :: TVar (Map.Map Int SyncObject),
-    outBox      :: TChan Message,
-    inBox       :: TChan Message,
+    netSignals  :: TVar (IntMap.IntMap NetValue),
+    outBox      :: TChan NetMessage,
+    inBox       :: TChan NetMessage,
     runStatus   :: TVar RunStatus,
     aliveTime   :: TVar Double
     }
@@ -66,14 +67,14 @@ startup :: Client -> String -> TBQueue Event -> IO()
 startup client serverIPAddress globalDispatch = do
     putStrLn "Setting up networking..."
     (sock,serverAddr) <- getSocket
-    sendToGlobalDispatch globalDispatch 4 Connecting
+    sendToGlobalDispatch globalDispatch 4 (toDyn Connecting)
     connectionLoop            client sock serverAddr
     time >>= \t -> atomically $ writeTVar (aliveTime client) t
-    forkIO $ messageProcessor client     (oscFunctions globalDispatch)
+    forkIO $ messageProcessor client globalDispatch
     forkIO $ listener         client sock
     forkIO $ aliveLoop        client sock
     forkIO $ sender           client sock
-    sendToGlobalDispatch globalDispatch 4 Running
+    sendToGlobalDispatch globalDispatch 4 (toDyn Running)
     -- forkIO $ sendLoginMessage client
     sendLoginMessage client
     -- forkIO $ testNetworking   client
@@ -92,7 +93,7 @@ sendLoginMessage :: Client -> IO()
 sendLoginMessage client = do
     putStrLn "Logging in..."
     -- threadDelay 1000000
-    atomically $ writeTChan (outBox client) $ Message "clientLogin" [toOSCString $ userName client]
+    atomically $ writeTChan (outBox client) $ Login (C.pack $ userName client)
 
 connectionLoop :: Client -> Socket -> SockAddr -> IO()
 connectionLoop client socket serverAddr = Control.Exception.catch tryConnect onFailure
@@ -111,7 +112,7 @@ connectionLoop client socket serverAddr = Control.Exception.catch tryConnect onF
 sender :: Client -> Socket -> IO()
 sender client sock = executeIfConnected client (readTChan $ outBox client) >>= \maybeMessage -> case maybeMessage of
     Nothing  -> putStrLn "Shutting down sender"
-    Just msg -> Control.Exception.catch (sendWithLength sock $ encodeMessage msg) printError >> sender client sock
+    Just msg -> Control.Exception.catch (sendWithLength sock $ encode msg) printError >> sender client sock
 
 --put into disconnect mode if too much time has passed
 aliveLoop :: Client -> Socket -> IO ()
@@ -129,7 +130,7 @@ aliveLoop client sock = time >>= \t -> executeIfConnected client (sendAliveMessa
                 atomically $ writeTVar (runStatus client) Disconnected
                 sClose sock
     where
-        sendAliveMessage t = writeTChan (outBox client) $ Message "clientAlive" [toOSCString (userName client),Double t]
+        sendAliveMessage t = writeTChan (outBox client) Alive
 
 --Should this shutdown or keep up the loop???
 --Need alive loop to handle weird in between states
@@ -139,22 +140,19 @@ listener client sock = receiveWithLength sock >>= \maybeMsg -> case maybeMsg of
     Exception     e -> putStrLn ("listener Exception: " ++ show e)         >> listener client sock
     ShutdownMessage -> putStrLn "Message has zero length. Shutting down."  >> shutdown
     IncorrectLength -> putStrLn "Message is incorrect length! Ignoring..." >> shutdown -- listener client sock
-    Receive     msg -> case (decodeMessage msg,B.null msg) of
-        (_   ,True) -> shutdown
-        (Nothing,_) -> putStrLn "Didn't understand that message..." >> listener client sock
-        (Just  m,_) -> atomically (writeTChan (inBox client) m)     >> listener client sock
+    Receive     msg -> if B.null msg
+        then shutdown
+        else atomically (writeTChan (inBox client) (decode msg)) >> listener client sock
     where
         shutdown = do
             putStrLn "Shutting down listener"
             atomically $ writeTVar (runStatus client) Disconnected
             close sock
 
-messageProcessor :: Client -> Map.Map String ([Datum] -> Client -> IO ()) -> IO()
-messageProcessor client oscFunctions = executeIfConnected client (readTChan $ inBox client) >>= \maybeMessage -> case maybeMessage of
-    Just (Message address datum) -> case Map.lookup address oscFunctions of
-        Just f  -> f datum client >> messageProcessor client oscFunctions
-        Nothing -> putStrLn ("No oscFunction found with the address pattern: " ++ address) >> messageProcessor client oscFunctions
-    Nothing     -> putStrLn "Shutting down messageProcessor"
+messageProcessor :: Client -> TBQueue Event -> IO()
+messageProcessor client globalDispatch = executeIfConnected client (readTChan $ inBox client) >>= \maybeMessage -> case maybeMessage of
+    Just m  -> parseMessage m client globalDispatch >> messageProcessor client globalDispatch
+    Nothing -> putStrLn "Shutting down messageProcessor"
 
 ------------------------------
 --Quitting And Restarting
@@ -173,7 +171,7 @@ quitClient client = atomically (writeTVar (runStatus client) ShouldQuit) >> atom
 statusLoop :: Client -> Socket -> String -> TBQueue Event -> RunStatus -> IO()
 statusLoop client sock serverIPAddress globalDispatch status = do
     status' <-atomically (readTVar (runStatus client) >>= \status' -> if status /= status' then return status' else retry)
-    sendToGlobalDispatch globalDispatch 4 status'
+    sendToGlobalDispatch globalDispatch 4 (toDyn status')
     putStrLn ("Network status update: " ++ show status')
     case status' of
         Disconnected -> threadDelay 2500000 >> putStrLn "Disconnected. Trying to restart..." >> startup client serverIPAddress globalDispatch
@@ -181,7 +179,7 @@ statusLoop client sock serverIPAddress globalDispatch status = do
             putStrLn "Quitting..."
             atomically $ writeTVar  (runStatus client) Quitting
             putStrLn "Sending quit message to server..."
-            Control.Exception.catch (sendWithLength sock $ encodeMessage $ Message "clientLogout" [toOSCString (userName client)]) printError
+            Control.Exception.catch (sendWithLength sock $ encode $ Logout (C.pack $ userName client)) printError
             putStrLn "Closing socket..."
             close sock
             putStrLn "Done quitting..."
@@ -198,167 +196,100 @@ executeIfConnected client action = atomically (checkForStatus `orElse` checkForM
             _          -> return Nothing
 
 ------------------------------
---OSC Functions
------------------------------
-oscFunctions :: TBQueue Event -> Map.Map String ([Datum] -> Client -> IO ())
-oscFunctions globalDispatch = Map.insert "userList"         (userList globalDispatch)
-                            $ Map.insert "clientAliveReply" clientAliveReply
-                            $ Map.insert "clientLoginReply" clientLoginReply
-                            $ Map.insert "addSyncObject"    addSyncObject
-                            $ Map.insert "removeSyncObject" removeSyncObject
-                            $ Map.insert "sync"             (sync        globalDispatch)
-                            $ Map.insert "setSyncArg"       (setSyncArg  globalDispatch)
-                            $ Map.insert "receiveChat"      (receiveChat globalDispatch)
-                            $ Map.empty
-
-userList :: TBQueue Event -> [Datum] -> Client -> IO ()
-userList globalDispatch d client = do
+--Message parsing
+------------------------------
+parseMessage :: NetMessage -> Client -> TBQueue Event -> IO()
+parseMessage (UserList ul) client globalDispatch = do
     putStrLn $ "Received user list:" ++ show userStringList
     atomically $ writeTVar (clientUsers client) userStringList
-    sendToGlobalDispatch globalDispatch 5 userStringList
+    sendToGlobalDispatch globalDispatch 5 (toDyn userStringList)
     where
-        userStringList = foldr addUserName [] d
-        addUserName u us = case datumToString u of
-            Just u' -> u': us
-            Nothing -> us
+        userStringList = map C.unpack ul
 
-clientAliveReply :: [Datum] -> Client -> IO ()
-clientAliveReply (Double serverTime : Double clientSendTime : []) client = do
-    currentTime      <- time
+parseMessage Alive client _ = do
+    currentTime  <- time
     atomically $ writeTVar (aliveTime client) currentTime
-    -- let estServerTime = serverTime + ((currentTime - clientSendTime) / 2)
-    -- let diffTime      = currentTime - estServerTime
-    -- print $ "Client send time: " ++ show clientSendTime
-    -- print $ "Server reply time: " ++ show serverTime
-    -- print $ "Current client time: " ++ show currentTime
-    -- print $ "Estimated current server time: " ++ show estServerTime
-    -- print $ "Difference between current time and estimated server time: " ++ show diffTime
-    -- print $ "Server is alive."
-    return ()
-clientAliveReply _  _ = return ()
 
-clientLoginReply :: [Datum] -> Client -> IO ()
-clientLoginReply (Int32 s:[]) client
-    | s == 1    = putStrLn "Succesfully logged in."
-    | otherwise = putStrLn "Couldn't log in to server!"
-clientLoginReply _  _  = return ()
+parseMessage (Login _) _ _ = putStrLn "Succesfully logged in."
 
-addSyncObject :: [Datum] -> Client -> IO ()
-addSyncObject m client = case messageToSync m of
-    Nothing -> return ()
-    Just so -> do
-        atomically (readTVar (syncObjects client) >>= \sos -> writeTVar (syncObjects client) (Map.insert (objectID so) so sos))
-        putStrLn $ "Adding SyncObject: " ++ show so
+parseMessage (AddNetSignal uid netVal) client _ = do
+    atomically (readTVar (netSignals client) >>= \sig -> writeTVar (netSignals client) (IntMap.insert uid netVal sig))
+    putStrLn $ "Adding NetSignal: " ++ show (uid,netVal)
 
-removeSyncObject :: [Datum] -> Client -> IO ()
-removeSyncObject (Int32 uid:[]) client = atomically (readTVar (syncObjects client)) >>= \sos -> case Map.member (fromIntegral uid) sos of
-    False -> return ()
-    True  -> do
-        atomically (writeTVar (syncObjects client) (Map.delete (fromIntegral uid) sos))
-        putStrLn $ "Removing SyncObject: " ++ show uid
-        putStrLn ""
+parseMessage (SetNetSignal uid netVal) client globalDispatch = do
+    sendToGlobalDispatch globalDispatch uid $ netValToDyn netVal
+    atomically $ readTVar (netSignals client) >>= \sigs -> writeTVar (netSignals client) (IntMap.insert uid netVal sigs)
+    putStrLn $ "Setting NetSignal : " ++ show (uid,netVal)
 
-sync :: TBQueue Event -> [Datum] -> Client -> IO ()
-sync globalDispatch m client = do
-    let newSyncObjects = fromSynchronizationMsg m
-    oldSyncObjects    <- atomically $ readTVar (syncObjects client)
-    mapM_ (sendMergeEvents oldSyncObjects) $ Map.toList newSyncObjects
-    atomically $ writeTVar (syncObjects client) newSyncObjects
-    putStrLn $ "Server sync. old objects size: " ++ show (Map.size oldSyncObjects) ++ ", new objects size: " ++ show (Map.size newSyncObjects)
+parseMessage (SyncNetSignals netVals) client globalDispatch = do
+    oldNetSignals <- atomically $ readTVar (netSignals client)
+    mapM_ (sendMergeEvents oldNetSignals) $ IntMap.toList netVals
+    atomically $ writeTVar (netSignals client) netVals
+    putStrLn $ "Server sync. old signals size: " ++ show (IntMap.size oldNetSignals) ++ ", new signals size: " ++ show (IntMap.size netVals)
     where
-        sendDiffEvent (uid,newArg,oldArg) = if oldArg /= newArg then sendArgEvent globalDispatch uid newArg else return ()
-        sendMergeEvents oldSyncObjects (uid,syncObject) = case Map.lookup uid oldSyncObjects of
-            Just oldSyncObject -> mapM_ sendDiffEvent $ zip3 [uid..] (Foldable.toList $ objectArguments syncObject) $ (Foldable.toList $ objectArguments oldSyncObject) ++ map SyncInt [0..]
-            Nothing            -> mapM_ (\v -> sendArgEvent globalDispatch uid v) $ Foldable.toList $ objectArguments syncObject
+        sendMergeEvents oldNetSignals (uid,netVal) = case IntMap.lookup uid oldNetSignals of
+            Nothing     -> sendToGlobalDispatch globalDispatch uid $ netValToDyn netVal
+            Just oldVal -> if netVal /= oldVal
+                then sendToGlobalDispatch globalDispatch uid $ netValToDyn netVal
+                else return ()
 
---Remember the locally set no latency for originator trick!
-
-setSyncArg :: TBQueue Event -> [Datum] -> Client -> IO ()
-setSyncArg globalDispatch (Int32 uid : Int32 index : v : []) client = atomically (readTVar (syncObjects client)) >>= \sos -> case Map.lookup (fromIntegral uid) sos of
-    Nothing -> return ()
-    Just so -> do
-        atomically $ writeTVar (syncObjects client) newSyncObjects
-        sendDatumEvent globalDispatch (fromIntegral uid + fromIntegral index) v
-        where
-            newSyncObjects = Map.insert (fromIntegral uid) (setArg (fromIntegral index) (datumToArg v) so) sos
-setSyncArg _ _ _ = return ()
-
-sendDatumEvent :: TBQueue Event -> Int -> Datum -> IO ()
-sendDatumEvent globalDispatch uid (ASCII_String v) = sendToGlobalDispatch globalDispatch uid $ BC.unpack  v
-sendDatumEvent globalDispatch uid (Float        v) = sendToGlobalDispatch globalDispatch uid v
-sendDatumEvent globalDispatch uid (Double       v) = sendToGlobalDispatch globalDispatch uid v
-sendDatumEvent globalDispatch uid (Int32        v) = sendToGlobalDispatch globalDispatch uid (fromIntegral v :: Int)
-
-sendArgEvent :: TBQueue Event -> Int -> SyncValue -> IO ()
-sendArgEvent globalDispatch uid (SyncString v) = sendToGlobalDispatch globalDispatch uid v
-sendArgEvent globalDispatch uid (SyncFloat  v) = sendToGlobalDispatch globalDispatch uid v
-sendArgEvent globalDispatch uid (SyncDouble v) = sendToGlobalDispatch globalDispatch uid v
-sendArgEvent globalDispatch uid (SyncInt    v) = sendToGlobalDispatch globalDispatch uid v
-
---Fix lazy chat and we're ready to go!
-receiveChat :: TBQueue Event -> [Datum] -> Client -> IO ()
-receiveChat globalDispatch (ASCII_String name : ASCII_String msg : []) client = sendToGlobalDispatch globalDispatch 3 message
-    -- >> putStrLn ("Chat - " ++ message)
+parseMessage (Chat name msg) client globalDispatch = sendToGlobalDispatch globalDispatch 3 message
     where
-        message = BC.unpack name ++ ": " ++ BC.unpack msg
-receiveChat _ _ _ = return ()
+        message = toDyn (C.unpack name ++ ": " ++ C.unpack msg)
+
+parseMessage EmptyMessage        _ _ = putStrLn "Empty message received!?"
+parseMessage (RemoveNetSignal _) _ _ = putStrLn "Really no reason to remove net signals now is there?"
+parseMessage _                   _ _ = putStrLn "Didn't recognize that message!?"
 
 ------------------------------
 -- Utility
 -----------------------------
 
-testNetworking :: Client -> IO()
-testNetworking client = forever $ do
-    uid <- randomRIO (2,1000)
-    atomically $ writeTChan (outBox client) $ syncObjectMessage $ SyncObject uid "ClientName" "" $ Seq.fromList [SyncString (userName client),SyncDouble 0]
-    threadDelay 1000
-    atomically $ writeTChan (outBox client) $ setArgMessage uid 1 $ SyncDouble 666
-    threadDelay 1000
-    atomically $ writeTChan (outBox client) $ removeObjectMessage uid
-    threadDelay 1000
-    atomically $ writeTChan (outBox client) $ chatMessage (userName client) "This is a chat, motherfucker"
-    threadDelay 1000
+-- testNetworking :: Client -> IO()
+-- testNetworking client = forever $ do
+    -- uid <- randomRIO (2,1000)
+    -- atomically $ writeTChan (outBox client) $ syncObjectMessage $ SyncObject uid "ClientName" "" $ Seq.fromList [SyncString (userName client),SyncDouble 0]
+    -- threadDelay 1000
+    -- atomically $ writeTChan (outBox client) $ setArgMessage uid 1 $ SyncDouble 666
+    -- threadDelay 1000
+    -- atomically $ writeTChan (outBox client) $ removeObjectMessage uid
+    -- threadDelay 1000
+    -- atomically $ writeTChan (outBox client) $ sendChatMessage client "This is a chat, motherfucker"
+    -- threadDelay 1000
 
 newClient :: String -> IO Client
 newClient name = do
     users       <- atomically $ newTVar []
-    syncObjects <- atomically $ newTVar Map.empty
+    netSignals  <- atomically $ newTVar IntMap.empty
     outBox      <- atomically $ newTChan
     inBox       <- atomically $ newTChan
     runStatus   <- atomically $ newTVar Connecting
     aliveTime   <- atomically $ newTVar 0
-    return $ Client name users syncObjects outBox inBox runStatus aliveTime
+    return $ Client name users netSignals outBox inBox runStatus aliveTime
 
 printError :: IOException -> IO()
 printError e = print e
-
 
 ------------------------------
 -- API
 -----------------------------
 
 sendChatMessage :: String -> Client -> IO()
-sendChatMessage chat client = atomically $ writeTChan (outBox client) $ chatMessage (userName client) chat
+sendChatMessage chat client = atomically $ writeTChan (outBox client) $ Chat (C.pack $ userName client) (C.pack chat)
 
-chatMessage :: String -> String -> Message
-chatMessage name msg = Message "receiveChat" [toOSCString name,toOSCString msg]
+sendToGlobalDispatch :: TBQueue Event -> Int -> Dynamic -> IO()
+sendToGlobalDispatch globalDispatch uid x = atomically $ writeTBQueue globalDispatch $ Event uid x
 
-sendToGlobalDispatch :: Typeable a => TBQueue Event -> Int -> a -> IO()
-sendToGlobalDispatch globalDispatch uid x = atomically $ writeTBQueue globalDispatch $ Event uid $ toDyn x
+-- netPlaySynthObject :: Client -> Int -> Bool -> IO()
+-- netPlaySynthObject client uid shouldPlay = atomically $ writeTChan (outBox client) $ SetNetSignal uid $ NetBool shouldPlay
 
-netPlaySynthObject :: Client -> Int -> Bool -> IO()
-netPlaySynthObject client uid shouldPlay = atomically $ writeTChan (outBox client) $ setArgMessage uid 0 $ SyncInt $ if shouldPlay then 1 else 0
+addSynthPlayObject :: Client -> Int -> Bool -> [(Int,Double)] -> IO()
+addSynthPlayObject client uid isPlaying args = atomically $ do
+    writeTChan (outBox client) $ AddNetSignal uid $ NetBool isPlaying
+    mapM_ (\(uid,v) -> writeTChan (outBox client) . AddNetSignal uid $ NetDouble v) args
 
-addSynthPlayObject :: Client -> Int -> Bool -> [Double] -> IO()
-addSynthPlayObject client uid isPlaying args = atomically
-                                             $ writeTChan (outBox client)
-                                             $ syncObjectMessage
-                                             $ SyncObject uid "synth" ""
-                                             $ Seq.fromList
-                                             $ SyncInt (if isPlaying then 1 else 0) : map SyncDouble args
+sendSetNetSignal :: Client -> (Int,NetValue) -> IO()
+sendSetNetSignal client (uid,v) = atomically $ writeTChan (outBox client) $ SetNetSignal uid v
 
-sendSetArg :: Client -> Int -> Int -> SyncValue -> IO()
-sendSetArg client uid index v = atomically $ writeTChan (outBox client) $ setArgMessage uid index v
-
-sendAddSyncObject :: Client -> SyncObject -> IO()
-sendAddSyncObject client syncObject = atomically $ writeTChan (outBox client) $ syncObjectMessage syncObject
+sendAddNetSignal :: Client -> (Int,NetValue) -> IO()
+sendAddNetSignal client (uid,netVal) = atomically $ writeTChan (outBox client) $ AddNetSignal uid netVal
