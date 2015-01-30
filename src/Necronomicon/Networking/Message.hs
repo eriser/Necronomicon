@@ -191,7 +191,7 @@ instance Binary NetMessage where
     put (SyncNetSignals   ss) = put (8 ::Word8) >> put ss
 
     get = (get ::Get Word8) >>= \ t -> case t of
-        0 -> get >>= \name -> get >>= \message -> return (Chat name message)
+        0 ->  get >>= \name -> get >>= \message -> return (Chat name message)
         1 -> (get ::Get Int32) >>= \uid -> get >>= \s -> return (AddNetSignal (fromIntegral uid) s)
         2 -> (get ::Get Int32) >>= return . RemoveNetSignal . fromIntegral
         3 -> (get ::Get Int32) >>= \uid -> get >>= \s -> return (SetNetSignal (fromIntegral uid) s)

@@ -311,7 +311,7 @@ runSignal s = initWindow >>= \mw ->
             -- threadDelay $ 16667
 
             --Start up openGL rendering loop
-            GL.texture GL.Texture2D GL.$= GL.Enabled
+            -- GL.doubleBuffer GL.$= True
             resources <- newResources
             render False w sceneVar guiVar emptyObject emptyObject resources necroVars client
     where

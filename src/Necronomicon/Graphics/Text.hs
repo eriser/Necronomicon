@@ -28,13 +28,7 @@ import qualified Necronomicon.Graphics.Texture                       as NecroTex
 import qualified Necronomicon.Linear                                 as Linear
 import           Paths_Necronomicon
 
-newBoundTexUnit :: Int -> IO TextureObject
-newBoundTexUnit u = do
-    [tex] <- genObjectNames 1
-    texture Texture2D        $= Enabled
-    activeTexture            $= TextureUnit (fromIntegral u)
-    textureBinding Texture2D $= Just tex
-    return tex
+
 
 runFreeType :: IO FT_Error -> IO ()
 runFreeType m = do
@@ -66,7 +60,7 @@ loadFontAtlas font = do
     cmetrics <- mapM (getCharMetrics ff) [32..128]
     let (atlasWidth',atlasHeight') = foldr (\metric (w,h) -> (w + charWidth metric + 1, max h (charHeight metric))) (0,0) cmetrics
 
-    atlasTexture <- newBoundTexUnit 0
+    atlasTexture <- NecroTex.newBoundTexUnit 0
     rowAlignment Unpack $= 1
 
     let tsize = TextureSize2D (floor atlasWidth') (floor atlasHeight')

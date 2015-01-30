@@ -9,6 +9,7 @@ import           Necronomicon.Graphics.Color
 import           Necronomicon.Graphics.Mesh
 import           Necronomicon.Graphics.Model
 import           Necronomicon.Graphics.SceneObject
+import           Necronomicon.Graphics.Texture
 import           Necronomicon.Linear
 import           Prelude
 ----------------------------------------------------------
@@ -67,3 +68,15 @@ renderGraphics window resources scene gui = do
     GLFW.swapBuffers window
     GLFW.pollEvents
     -- GL.flush
+
+
+---------------------------------------
+-- Full screen Post-Rendering Effects
+---------------------------------------
+initPostEffect :: (Double,Double) -> IO()
+initPostEffect dimensions = do
+    tex <- newBoundTexUnit 0
+    GL.textureFilter   GL.Texture2D      GL.$= ((GL.Linear', Nothing), GL.Linear')
+    GL.textureWrapMode GL.Texture2D GL.S GL.$= (GL.Repeated, GL.ClampToEdge)
+    GL.textureWrapMode GL.Texture2D GL.T GL.$= (GL.Repeated, GL.ClampToEdge)
+    return ()

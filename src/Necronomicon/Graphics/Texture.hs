@@ -13,3 +13,11 @@ instance Show (IO GL.TextureObject) where
 
 tga :: String -> Texture
 tga path = Texture path $ loadTextureFromTGA path
+
+newBoundTexUnit :: Int -> IO GL.TextureObject
+newBoundTexUnit u = do
+    [tex] <- GL.genObjectNames 1
+    GL.texture        GL.Texture2D GL.$= GL.Enabled
+    GL.activeTexture               GL.$= GL.TextureUnit (fromIntegral u)
+    GL.textureBinding GL.Texture2D GL.$= Just tex
+    return tex
