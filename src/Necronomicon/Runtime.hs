@@ -16,15 +16,26 @@ import Sound.OSC.Time
 
 data SynthDef = SynthDef {
     synthDefName :: String,
+    synthDefNumArgs :: Int,
     synthDefCStruct :: Ptr CSynthDef
 } deriving (Show)
 
 type NodeID = CUInt
-data Synth = Synth String NodeID
+data Synth = Synth NodeID SynthDef deriving (Show)
 type SynthDefDict = M.Map String SynthDef
 
-data RunState = NecroOffline | NecroBooting | NecroQuitting | NecroRunning deriving (Show, Eq)
-data RuntimeMessage = StartSynth String CDouble NodeID | StopSynth NodeID | CollectSynthDef SynthDef | ShutdownNrt
+data RunState = NecroOffline
+              | NecroBooting
+              | NecroQuitting
+              | NecroRunning deriving (Show, Eq)
+
+data RuntimeMessage = StartSynth SynthDef [CDouble] NodeID CDouble
+                    | SetSynthArg Synth CUInt CDouble
+                    | SetSynthArgs Synth [CDouble]
+                    | StopSynth NodeID
+                    | CollectSynthDef SynthDef
+                    | ShutdownNrt
+                      
 type RunTimeMailbox = TChan RuntimeMessage
 
 instance Show (Time -> Int -> Necronomicon (Maybe Double)) where
@@ -222,6 +233,32 @@ collectMailbox mailBox = liftIO $ collectWorker mailBox []
                 Nothing -> return messages
                 Just message -> collectWorker mailBox (message : messages)
 
+clipSynthArgs :: String -> NodeID -> [CDouble] -> Int -> Necronomicon [CDouble]
+clipSynthArgs name id args numArgs = if length args > numArgs
+                         then nPrint clipString >> return (take numArgs args)
+                         else return args
+    where
+        clipString = "Too many arguments passed to node (" ++ (show id) ++ ", " ++ name ++ "), truncating to " ++ (show numArgs) ++ "."
+
+processStartSynth :: SynthDef -> [CDouble] -> NodeID -> CDouble -> Necronomicon ()
+processStartSynth (SynthDef name numArgs csynthDef) args id time = clipSynthArgs name id args numArgs >>= \clippedArgs ->
+    liftIO $ withArray clippedArgs (play . fromIntegral $ length clippedArgs)
+    where
+        play num ptrArgs = playSynthInRtRuntime csynthDef ptrArgs num id time
+
+processSetSynthArg :: Synth -> CUInt -> CDouble -> Necronomicon ()
+processSetSynthArg (Synth id (SynthDef name numArgs _)) argIndex arg = clipArgIndex >>= \argIndex -> liftIO $ setSynthArgInRtRuntime id arg argIndex
+    where
+        cNumArgs = fromIntegral numArgs
+        clipArgIndex = if argIndex >= cNumArgs
+                          then nPrint clipString >> return (cNumArgs - 1)
+                          else return argIndex
+        clipString = "Argument index " ++ (show argIndex) ++ " is too high for node (" ++ (show id) ++ ", " ++ name ++ "), clipping to " ++ (show (numArgs - 1)) ++ "."
+                                  
+processSetSynthArgs :: Synth -> [CDouble] -> Necronomicon ()
+processSetSynthArgs (Synth id (SynthDef name numArgs _)) args = clipSynthArgs name id args numArgs >>= \clippedArgs ->
+    liftIO $ withArray clippedArgs (\ptrArgs -> liftIO $ setSynthArgsInRtRuntime id ptrArgs (fromIntegral $ length clippedArgs))
+
 processMessages :: [RuntimeMessage] -> Necronomicon ()
 processMessages messages =  mapM_ (processMessage) messages
     where
@@ -230,9 +267,9 @@ processMessages messages =  mapM_ (processMessage) messages
                then return ()
                else process m
         process m = case m of
-            StartSynth name time id -> getSynthDef name >>= \maybeSynthDef -> case maybeSynthDef of
-                Just (SynthDef _ csynthDef) -> liftIO $ playSynthInRtRuntime csynthDef id time
-                Nothing -> return ()
+            StartSynth synthDef args id time -> processStartSynth synthDef args id time 
+            SetSynthArg synth argIndex arg -> processSetSynthArg synth argIndex arg 
+            SetSynthArgs synth args -> processSetSynthArgs synth args
             StopSynth id -> liftIO $ stopSynthInRtRuntime id
             CollectSynthDef synthDef -> addSynthDef synthDef
             ShutdownNrt -> necronomiconEndSequence
@@ -374,7 +411,7 @@ getSynthDef :: String -> Necronomicon (Maybe SynthDef)
 getSynthDef name = getSynthDefs >>= \synthDefDict -> return $ M.lookup name synthDefDict
 
 addSynthDef :: SynthDef -> Necronomicon ()
-addSynthDef synthDef@(SynthDef name _) = getSynthDefsTVar >>= \synthDefsTVar ->
+addSynthDef synthDef@(SynthDef name _ _) = getSynthDefsTVar >>= \synthDefsTVar ->
     nAtomically (readTVar synthDefsTVar >>= \synthDefs -> writeTVar synthDefsTVar (M.insert name synthDef synthDefs))
 
 necronomiconEndSequence :: Necronomicon ()
@@ -413,7 +450,7 @@ freeSynthDefs :: Necronomicon ()
 freeSynthDefs = getSynthDefs >>= \synthDefs -> mapM_ (freeSynthDef) (M.elems synthDefs) >> setSynthDefs M.empty
 
 freeSynthDef :: SynthDef -> Necronomicon ()
-freeSynthDef (SynthDef _ csynthDef) = liftIO $ freeCSynthDef csynthDef
+freeSynthDef (SynthDef _ _ csynthDef) = liftIO $ freeCSynthDef csynthDef
         
 type CUGenFunc = FunPtr (Ptr CUGen -> ())
 data CUGen = CUGen CUGenFunc CUGenFunc CUGenFunc (Ptr ()) (Ptr CUInt) (Ptr CUInt) deriving (Show)
@@ -474,10 +511,14 @@ instance Storable CSynthDef where
         pokeByteOff ptr 44 numWires
         pokeByteOff ptr 50 sampTime
 
+type CSynth = CSynthDef -- A running C Synth is structurally identical to a C SynthDef
+
 foreign import ccall "start_rt_runtime" startRtRuntime :: IO ()
 foreign import ccall "handle_messages_in_nrt_fifo" handleNrtMessages :: IO ()
 foreign import ccall "shutdown_necronomicon" shutdownNecronomiconCRuntime :: IO ()
-foreign import ccall "play_synth" playSynthInRtRuntime :: Ptr CSynthDef -> NodeID -> CDouble -> IO ()
+foreign import ccall "play_synth" playSynthInRtRuntime :: Ptr CSynthDef -> Ptr CDouble -> CUInt -> NodeID -> CDouble -> IO ()
+foreign import ccall "send_set_synth_arg" setSynthArgInRtRuntime :: NodeID -> CDouble -> CUInt -> IO ()
+foreign import ccall "send_set_synth_args" setSynthArgsInRtRuntime :: NodeID -> Ptr CDouble -> CUInt -> IO ()
 foreign import ccall "stop_synth" stopSynthInRtRuntime :: NodeID -> IO ()
 foreign import ccall "get_running" getRtRunning :: IO Int
 foreign import ccall "free_synth_definition" freeCSynthDef :: Ptr CSynthDef -> IO ()

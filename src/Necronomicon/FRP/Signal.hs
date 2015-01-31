@@ -968,7 +968,7 @@ render scene = Signal $ \necro -> do
 -- Sound
 ---------------------------------------------
 
-playWhile :: UGen -> Signal Bool -> Signal ()
+playWhile :: UGenType a => a -> Signal Bool -> Signal ()
 playWhile synth shouldPlay = Signal $ \necro -> do
     (pValue,pCont,ids) <- unSignal shouldPlay necro
     counterValue       <- readIORef (inputCounter necro) >>= \counterValue -> writeIORef (inputCounter necro) (counterValue + 1) >> return (counterValue + 1)
@@ -999,7 +999,7 @@ playWhile synth shouldPlay = Signal $ \necro -> do
                             writeIORef ref True
                             return $ Change ()
 
-play :: UGen -> Signal Bool -> Signal ()
+play :: UGenType a => a -> Signal Bool -> Signal ()
 play synth sig = Signal $ \necro -> do
     (_,pCont,ids)    <- unSignal sig necro
     counterValue     <- readIORef (inputCounter necro) >>= \counterValue -> writeIORef (inputCounter necro) (counterValue + 1) >> return (counterValue + 1)
@@ -1014,10 +1014,10 @@ play synth sig = Signal $ \necro -> do
                 NoChange _     -> return $ NoChange ()
                 Change   False -> return $ Change ()
                 Change   True  -> do
-                    readIORef necroVars >>= runNecroState (playSynth synthName 0) >>= \(_,newNecroVars) -> writeIORef necroVars newNecroVars
+                    readIORef necroVars >>= runNecroState (playSynth synthName []) >>= \(_,newNecroVars) -> writeIORef necroVars newNecroVars
                     return $ Change ()
 
-playUntil :: UGen -> Signal Bool -> Signal Bool -> Signal ()
+playUntil :: UGenType a => a -> Signal Bool -> Signal Bool -> Signal ()
 playUntil synth playSig stopSig = Signal $ \necro -> do
     (_,pCont,pids)  <- unSignal playSig necro
     (_,sCont,sids)  <- unSignal stopSig necro
@@ -1034,7 +1034,7 @@ playUntil synth playSig stopSig = Signal $ \necro -> do
             maybeSynth <- readIORef synthRef
             case (p,s,maybeSynth) of
                 (Change True,_,Nothing)  -> do
-                    (synth',newNecroVars) <- readIORef necroVars >>= runNecroState (playSynth synthName 0)
+                    (synth',newNecroVars) <- readIORef necroVars >>= runNecroState (playSynth synthName [])
                     writeIORef necroVars newNecroVars
                     writeIORef synthRef $ Just synth'
                     return $ Change ()
@@ -1045,13 +1045,13 @@ playUntil synth playSig stopSig = Signal $ \necro -> do
                     return $ Change ()
                 _   -> return $ NoChange ()
 
-compileAndRunSynth :: String -> UGen -> Bool -> Bool -> Bool -> IORef (Maybe Synth) -> Necronomicon ()
+compileAndRunSynth :: UGenType a => String -> a -> Bool -> Bool -> Bool -> IORef (Maybe Synth) -> Necronomicon ()
 compileAndRunSynth synthName synth isCompiled isPlaying shouldPlay synthRef = do
     if not isCompiled then compileSynthDef synthName synth else return ()
     case (isPlaying,shouldPlay) of
         (True ,True)  -> return ()
         (False,False) -> return ()
-        (False,True)  -> playSynth synthName 0 >>= \s -> liftIO (writeIORef synthRef $ Just s) >> return ()
+        (False,True)  -> playSynth synthName [] >>= \s -> liftIO (writeIORef synthRef $ Just s) >> return ()
         (True ,False) -> liftIO (readIORef synthRef) >>= \(Just synth) -> stopSynth synth >> liftIO (writeIORef synthRef Nothing) >> return ()
 
 playPattern :: (Show a,Typeable a) => a -> Signal Bool -> Pattern (Pattern a,Double) -> Signal a

@@ -1,6 +1,6 @@
 /*
-  Necronomicon - Deterministic Audio Engine
-  Copyright 2014 - Chad McKinney and Curtis McKinney
+  Necronomicon
+  Copyright 2014-2015 Chad McKinney and Curtis McKinney
 */
 
 #include <stdio.h>
@@ -14,12 +14,13 @@
 #include <unistd.h>
 #endif
 #include <jack/jack.h>
+#include <time.h>
 
 #include "Necronomicon.h"
 
-////////////////////
+/////////////////////
 // Constants
-////////////////////
+/////////////////////
 
 #ifndef M_PI
 #define M_PI 3.1415926535897932384626433832795028841971693993751058209749445923078164062L
@@ -27,8 +28,6 @@
 
 const double TWO_PI = M_PI * 2;
 const double RECIP_TWO_PI =  1.0 / (M_PI * 2);
-const double SAMPLE_RATE = 44100;
-const double RECIP_SAMPLE_RATE = 1.0 / 44100.0;
 unsigned int DOUBLE_SIZE = sizeof(double);
 unsigned int UINT_SIZE = sizeof(unsigned int);
 
@@ -36,12 +35,13 @@ unsigned int UINT_SIZE = sizeof(unsigned int);
 double RECIP_TABLE_SIZE = 1.0 / (double) TABLE_SIZE;
 double sine_table[TABLE_SIZE];
 
+double SAMPLE_RATE = 44100;
+double RECIP_SAMPLE_RATE = 1.0 / 44100.0;
 double TABLE_MUL_RECIP_SAMPLE_RATE = TABLE_SIZE * (1.0 / 44100.0);
-double TABLE_SIZE_MUL_RECIP_TWO_PI = TABLE_SIZE * (1.0 / (M_PI*2));
 
-////////////////////
+/////////////////////
 // Hashing
-////////////////////
+/////////////////////
 
 typedef union
 {
@@ -57,18 +57,32 @@ const unsigned long SEED = 0x811C9DC5; // 2166136261
 #define HASH_KEY_PRIV(key) (FNV1A(key.bytes[3], FNV1A(key.bytes[2], FNV1A(key.bytes[1], FNV1A(key.bytes[0], SEED)))))
 #define HASH_KEY(key) ((unsigned int) HASH_KEY_PRIV(((four_bytes) key)))
 
-////////////////////
+/////////////////////
 // Global Mutables
-////////////////////
+/////////////////////
 
 double* _necronomicon_buses = NULL;
 unsigned int num_audio_buses = 1024;
 unsigned int last_audio_bus_index = 1023;
 unsigned int num_audio_buses_bytes;
-unsigned int absolute_time = 0;
+unsigned int num_synths = 0;
 
 /////////////////////
-// SynthDef structs
+// Time
+/////////////////////
+
+typedef struct
+{
+	time_t tv_sec;  /* seconds */
+    long   tv_nsec; /* nanoseconds */
+} timespec;
+
+timespec current_time;
+
+unsigned int current_sample_time = 0;
+
+/////////////////////
+// SynthDef
 /////////////////////
 
 struct ugen;
@@ -80,8 +94,8 @@ struct ugen
 	void (*constructor)(ugen* u);
 	void (*deconstructor)(ugen* u);
 	void* data; // ugen defined data structure
-	unsigned int* inputs; // indexes to the graph wire buffer
-	unsigned int* outputs; // indexes to the graph wire buffer
+	unsigned int* inputs; // indexes to the parent synth's ugen wire buffer
+	unsigned int* outputs; // indexes to the parent synth's ugen wire buffer
 };
 
 unsigned int UGEN_SIZE = sizeof(ugen);
@@ -95,7 +109,7 @@ typedef struct synth_node synth_node;
 
 struct synth_node
 {
-	ugen* ugen_graph; // Synth Graph
+	ugen* ugen_graph; // UGen Graph
 	double* ugen_wires; // UGen output wire buffers
 	synth_node* previous; // Previous node, used in synth_list for the scheduler
 	synth_node* next; // Next node, used in the synth_list for the scheduler
@@ -112,13 +126,34 @@ const unsigned int NODE_POINTER_SIZE = sizeof(synth_node*);
 
 void free_synth_definition(synth_node* synth_definition)
 {
+	unsigned int i;
+	unsigned int num_ugens = synth_definition->num_ugens;
+	for (i = 0; i < num_ugens; ++i)
+	{
+		ugen* u = &synth_definition->ugen_graph[i];
+		free(u->inputs);
+		free(u->outputs);
+	}
+
 	free(synth_definition->ugen_graph);
 	free(synth_definition);
-	/* FREE inputs and outputs here!!!!!!!!!!!!!!!!!!!!*/
 }
 
-synth_node* new_synth(synth_node* synth_definition, unsigned int node_id, unsigned int time)
+synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned int num_arguments, unsigned int node_id, unsigned int time)
 {
+	unsigned int i;
+
+	/*
+	printf("synth_definition->ugen_wires: [");
+	for (i = 0; i < synth_definition->num_wires; ++i)
+	{
+		printf("%f,", synth_definition->ugen_wires[i]);
+	}
+
+	printf("]\n");
+
+	puts("Building synth");*/
+	
 	synth_node* synth = malloc(NODE_SIZE);
 	synth->previous = NULL;
 	synth->next = NULL;
@@ -134,29 +169,43 @@ synth_node* new_synth(synth_node* synth_definition, unsigned int node_id, unsign
 	ugen* ugen_graph = synth->ugen_graph;
 	memcpy(ugen_graph, synth_definition->ugen_graph, size_ugens);
 
-	unsigned int i;
-	for(i = 0; i < num_ugens; ++i)
+	// unsigned int i;
+	for (i = 0; i < num_ugens; ++i)
 	{
 		ugen* graph_node = &ugen_graph[i];
 		graph_node->constructor(graph_node);
 	}
 	
 	unsigned int size_wires = synth->num_wires * DOUBLE_SIZE;
-	synth->ugen_wires = malloc(size_wires);
-	memcpy(synth->ugen_wires, synth_definition->ugen_wires, size_wires);
+	double* ugen_wires = malloc(size_wires);
+	synth->ugen_wires = ugen_wires;
+	memcpy(ugen_wires, synth_definition->ugen_wires, size_wires);
 
+	for (i = 0; i < num_arguments; ++i)
+	{
+		ugen_wires[i] = arguments[i];
+	}
+
+	/*
+	printf("synth->ugen_wires: [");
+	for (i = 0; i < synth->num_wires; ++i)
+	{
+		printf("%f,", synth->ugen_wires[i]);
+	}
+
+	printf("]\n");*/
+	
 	return synth;
 }
 
 void free_synth(synth_node* synth)
 {
-	printf("free_synth %p\n", synth);
 	if (synth)
 	{
 		ugen* ugen_graph = synth->ugen_graph;
 		unsigned int num_ugens = synth->num_ugens;
 		unsigned int i;
-		for(i = 0; i < num_ugens; ++i)
+		for (i = 0; i < num_ugens; ++i)
 		{
 			ugen* graph_node = &ugen_graph[i];
 			graph_node->deconstructor(graph_node);
@@ -173,7 +222,7 @@ void process_synth(synth_node* synth)
 	ugen* ugen_graph = synth->ugen_graph;
 	unsigned int num_ugens = synth->num_ugens;
 	unsigned int i;
-	for(i = 0; i < num_ugens; ++i)
+	for (i = 0; i < num_ugens; ++i)
 	{
 		ugen* graph_node = &ugen_graph[i];
 		graph_node->calc(graph_node);
@@ -199,41 +248,6 @@ void initialize_wave_tables()
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // UGens
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-/*
-void sin_calc(audio_signal** inputs, audio_signal* outputs)
-{
-	audio_signal freq = *(inputs[0]);
-
-    //sin function version
-	// double amplitude = sin(freq.offset * TWO_PI * time * RECIP_SAMPLE_RATE + freq.amplitude);
-
-	//look up table version
-	double rawIndex = freq.offset * TABLE_MUL_RECIP_SAMPLE_RATE * current_time + (freq.amplitude * TABLE_SIZE_MUL_RECIP_TWO_PI);
-	unsigned char index1 = rawIndex;
-	unsigned char index2 = index1+1;
-	double amp1 = sine_table[index1];
-	double amp2 = sine_table[index2];
-	double delta = rawIndex - ((long) rawIndex);
-	double amplitude = amp1 + delta * (amp2 - amp1);
-
-	audio_signal output = { amplitude, 0 };
-	outputs[0] = output;
-}
-
-void delay_calc(audio_signal** inputs, audio_signal* outputs)
-{
-	audio_signal delay_time_sig = *(inputs[0]);
-	double delayed_time = current_time - (delay_time_sig.offset * (double) SAMPLE_RATE) - (delay_time_sig.amplitude * RECIP_TWO_PI * (double) SAMPLE_RATE);
-	push_time(delayed_time);
-}
-
-void time_warp_calc(audio_signal** inputs, audio_signal* outputs)
-{
-	audio_signal mod_time_sig = *(inputs[0]);
-	double modded_time = mod_time_sig.offset * current_time + (mod_time_sig.amplitude * (double) SAMPLE_RATE);
-	push_time(modded_time);
-	}*/
 
 void add_calc(ugen* u)
 {
@@ -284,7 +298,7 @@ void negate_calc(ugen* u)
 
 void line_constructor(ugen* u)
 {
-	u->data = malloc(UINT_SIZE); // Phase accumulator
+	u->data = malloc(UINT_SIZE); // Line time 
 	*((unsigned int*) u->data) = 0;
 }
 
@@ -302,7 +316,6 @@ void line_calc(ugen* u)
 
 	if (line_time >= length)
 	{
-		printf("length: %d, line_time: %u\n", length, line_time);
 		try_schedule_current_synth_for_removal();
 	}
 
@@ -327,18 +340,26 @@ void sin_deconstructor(ugen* u)
 }
 
 void sin_calc(ugen* u)
-{
+{	
 	double freq = UGEN_IN(u, 0);
 	double phase = *((double*) u->data);
-	*((double*) u->data) = phase + 1;
-	UGEN_OUT(u, 0, sin(freq * TWO_PI * phase * RECIP_SAMPLE_RATE));
+	
+	unsigned char index1 = phase;
+	unsigned char index2 = index1 + 1;
+	double amp1 = sine_table[index1];
+	double amp2 = sine_table[index2];
+	double delta = phase - ((long) phase);
+	double amplitude = amp1 + delta * (amp2 - amp1);
+
+	*((double*) u->data) = phase + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
+	UGEN_OUT(u, 0, amplitude);
 }
 
 void out_calc(ugen* u)
 {
 	// Constrain bus index to the correct range
 	unsigned int bus_index = fmax(0, fmin(last_audio_bus_index, UGEN_IN(u, 0)));
-	_necronomicon_buses[bus_index] = UGEN_IN(u, 1);
+	_necronomicon_buses[bus_index] += UGEN_IN(u, 1);
 }
 
 void print_ugen(ugen* ugen)
@@ -371,11 +392,12 @@ typedef enum
 	IGNORE,
 	START_SYNTH,
 	STOP_SYNTH,
-	SET_SYNTH,
 	FREE_SYNTH, // Free synth memory
 	SHUTDOWN,
 	PRINT
 } message_type;
+
+const char* message_map[] = { "IGNORE", "START_SYNTH", "STOP_SYNTH", "FREE_SYNTH", "SHUTDOWN", "PRINT" };
 
 typedef struct
 {
@@ -572,7 +594,6 @@ node_id_fifo new_removal_fifo()
 
 void removal_fifo_free()
 {
-	puts("REMOVAL_FIFO_FREE() FUNCTION CALL!");
 	assert(removal_fifo);
 	free(removal_fifo);
 	removal_fifo = NULL;
@@ -591,7 +612,6 @@ void removal_fifo_free()
 
 const unsigned int MAX_SYNTHS = 8192;
 const unsigned int HASH_TABLE_SIZE_MASK = 8191;
-unsigned int num_synths = 0;
 
 typedef synth_node** hash_table;
 hash_table synth_table = NULL;
@@ -727,7 +747,6 @@ void doubly_linked_list_free(doubly_linked_list list)
 {
 	while (list)
 	{
-		printf("doubly_linked_list_free: %p\n", list);
 		synth_node* next = list->next;
 		free_synth(list);
 		list = next;
@@ -758,28 +777,31 @@ void add_synth(synth_node* node)
 
 void remove_synth(synth_node* node)
 {
-	printf("remove_synth: %p\n", node);
 	if (node)
 	{
 		synth_list = doubly_linked_list_remove(synth_list, node);
-		message msg = { node, FREE_SYNTH };
-		NRT_FIFO_PUSH(msg); // Send ugen to NRT thread for free
+
+		message msg;
+		msg.arg.node = node;
+		msg.type = FREE_SYNTH;
+		
+		NRT_FIFO_PUSH(msg); // Send ugen to NRT thread for freeing 
 	}
 }
 
 void remove_synth_by_id(unsigned int id)
 {
 	synth_node* node = hash_table_remove(synth_table, id);
-	printf("remove_synth_by_id: %p\n", node);
 	remove_synth(node);
 }
 
 // Iterate over the scheduled list and add synths if they are ready. Stop as soon as we find a synth that isn't ready.
 void add_scheduled_synths()
 {
+	
 	while (scheduled_list_read_index != scheduled_list_write_index)
 	{
-		if (SCHEDULED_LIST_PEEK_TIME() <= absolute_time)
+		if (SCHEDULED_LIST_PEEK_TIME() <= current_sample_time)
 		{
 			synth_node* node = SCHEDULED_LIST_POP();
 			add_synth(node);
@@ -809,7 +831,6 @@ void remove_scheduled_synths()
 
 void try_schedule_current_synth_for_removal()
 {
-	puts("try_schedule_current_synth_for_removal");
 	if (_necronomicon_current_node && (removal_fifo_size < REMOVAL_FIFO_SIZE_MASK))
 	{
 		++removal_fifo_size;
@@ -821,7 +842,6 @@ void shutdown_rt_runtime(); // Forward declaration
 
 void handle_rt_message(message msg)
 {
-	printf("handle_rt_message: %i\n", msg.type);
 	switch (msg.type)
 	{
 	case START_SYNTH:
@@ -829,8 +849,6 @@ void handle_rt_message(message msg)
 		break;
 	case STOP_SYNTH:
 		remove_synth_by_id(msg.arg.node_id);
-		break;
-	case SET_SYNTH: // To Do: ADD THIS FUNCTIONALITY!
 		break;
 	case SHUTDOWN:
 		shutdown_rt_runtime();
@@ -861,7 +879,6 @@ void handle_messages_in_rt_fifo()
 // NRT thread Synth Node Handling
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-
 void handle_nrt_message(message msg)
 {
 	switch(msg.type)
@@ -887,18 +904,51 @@ void handle_messages_in_nrt_fifo()
 	}
 }
 
-
-void play_synth(synth_node* synth_definition, unsigned int node_id, double time)
+void play_synth(synth_node* synth_definition, double* arguments, unsigned int num_arguments, unsigned int node_id, double time)
 {
-	message msg = { new_synth(synth_definition, node_id, time * SAMPLE_RATE), START_SYNTH };
+	time = time * SAMPLE_RATE;
+	synth_node* synth = new_synth(synth_definition, arguments, num_arguments, node_id, time);
+
+	message msg;
+	msg.arg.node = synth;
+	msg.type = START_SYNTH;
 	RT_FIFO_PUSH(msg);
 }
 
 void stop_synth(unsigned int id)
 {
-	message msg = { NULL, STOP_SYNTH };
+	message msg;
 	msg.arg.node_id = id;
+	msg.type = STOP_SYNTH;
 	RT_FIFO_PUSH(msg);
+}
+
+void send_set_synth_arg(unsigned int id, double argument, unsigned int arg_index)
+{
+	synth_node* synth = hash_table_lookup(synth_table, id);
+	if (synth)
+	{
+		synth->ugen_wires[arg_index] = argument;
+	}
+
+	else
+	{
+		printf("Node ID not found: %u\n", id);
+	}
+}
+
+void send_set_synth_args(unsigned int id, double* arguments, unsigned int num_arguments)
+{
+	synth_node* synth = hash_table_lookup(synth_table, id);
+	if (synth)
+	{
+		memcpy(synth->ugen_wires, arguments, num_arguments * DOUBLE_SIZE);
+	}
+
+	else
+	{
+		printf("Node ID not found: %u\n", id);
+	}
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -911,6 +961,7 @@ jack_client_t* client;
 
 void init_rt_thread()
 {
+	assert(client);
 	assert(necronomicon_running == false);
 	assert(synth_table == NULL);
 	assert(rt_fifo == NULL);
@@ -918,6 +969,10 @@ void init_rt_thread()
 	assert(synth_list == NULL);
 	assert(removal_fifo == NULL);
 	assert(_necronomicon_buses == NULL);
+
+	SAMPLE_RATE = jack_get_sample_rate(client);
+	RECIP_SAMPLE_RATE = 1.0 / SAMPLE_RATE;
+	TABLE_MUL_RECIP_SAMPLE_RATE = TABLE_SIZE * RECIP_SAMPLE_RATE;
 	
 	synth_table = hash_table_new();
 	rt_fifo = new_message_fifo();
@@ -935,7 +990,7 @@ void init_rt_thread()
 	assert(nrt_fifo == NULL);
 	nrt_fifo = new_message_fifo();
 	
-	absolute_time = 0;
+	current_sample_time = 0;
 	necronomicon_running = true;
 }
 
@@ -950,12 +1005,10 @@ void clear_synth_list()
 void shutdown_rt_thread()
 {
 	assert(nrt_fifo != NULL);
-
 	clear_synth_list();
 	handle_messages_in_rt_fifo();
 	handle_messages_in_nrt_fifo();
 	
-	puts("nrt_fifo_free");
 	nrt_fifo_free();
 	nrt_fifo = NULL;
 
@@ -965,18 +1018,11 @@ void shutdown_rt_thread()
 	assert(removal_fifo != NULL);
 	assert(_necronomicon_buses != NULL);
 	
-	puts("hash_table_free");
 	hash_table_free(synth_table);
-	puts("rt_fifo_free");
 	rt_fifo_free();
-	puts("scheduled_list_free");
 	scheduled_list_free();
-	puts("doubly_linked_list_free");
 	doubly_linked_list_free(synth_list);
-	puts("removal_fifo_free");
 	removal_fifo_free();
-
-	puts("free _necronomicon_buses");
 	free(_necronomicon_buses);
 
 	synth_table = NULL;
@@ -1038,7 +1084,7 @@ int process(jack_nframes_t nframes, void* arg)
 		out1[i] = _necronomicon_buses[1];
 		
 		remove_scheduled_synths(); // Remove any synths that are scheduled for removal and send them to the NRT thread FIFO queue for freeing.
-        absolute_time += 1;
+        current_sample_time += 1;
     }
 
 	return 0;
@@ -1047,7 +1093,6 @@ int process(jack_nframes_t nframes, void* arg)
 void start_rt_runtime()
 {
 	puts("Necronomicon audio engine booting...");
-	init_rt_thread();
 
 	const char** ports;
 	const char* client_name = "Necronomicon";
@@ -1068,6 +1113,8 @@ void start_rt_runtime()
 		exit (1);
 	}
 
+	init_rt_thread();
+	
 	if (status & JackServerStarted)
 		fprintf (stderr, "JACK server started\n");
 
