@@ -18,7 +18,8 @@ data Camera = Camera {
     _fov        :: Double,
     _near       :: Double,
     _far        :: Double,
-    _clearColor :: Color
+    _clearColor :: Color,
+    _fx         :: [PostRenderingFX]
     } deriving (Show)
 
 fov_ :: Double -> Camera -> Camera

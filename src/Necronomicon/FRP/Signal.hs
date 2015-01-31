@@ -7,11 +7,6 @@ module Necronomicon.FRP.Signal (
     foldn,
     playPattern,
     play,
-    -- play0,
-    -- play1,
-    -- play2,
-    -- play3,
-    -- play4,
     oneShot,
     render,
     renderGUI,
@@ -1453,7 +1448,7 @@ instance (Show a) => Show (EventTree a) where
 traverseEventTree :: EventTree a -> Event -> IO (EventValue (EventTree a))
 
 traverseEventTree tree@(InputNode f val ids) event@(Event uid eval)
-    | IntSet.member uid ids, Just val' <- fromDynamic eval = f val' >>= val'' -> return . Change $ InputNode val'' ids
+    | IntSet.member uid ids, Just val' <- fromDynamic eval = f val' >>= \val'' -> return . Change $ InputNode val'' ids
     | otherwise                                            = return $ NoChange tree
 
 traverseEventTree tree@(EventTree f val xTree ids) event@(Event uid _)

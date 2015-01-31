@@ -30,7 +30,7 @@ testSound = play myCoolSynth2 (isDown keyW) (isUp   keyW)
 
 testSound2 :: Signal ()
 testSound2 = play noArgSynth  (isDown keyW) (isDown keyW)
-         <|> play oneArgSynth (isDown keyA) (isDown keyA) (fst <~ mousePos) --Maybe the person who starts a player is the only person in control of it?
+         <|> play oneArgSynth (isDown keyA) (isDown keyA) (fst <~ mousePos)
          <|> play twoArgSynth (isDown keyS) (isDown keyS) 440 880
          <|> play threeSynth  (isDown keyD) (isDown keyD) 440 880 66.6
 
@@ -46,7 +46,7 @@ twoArgSynth fx fy = sin fx + sin fy
 threeSynth :: UGen -> UGen -> UGen -> UGen
 threeSynth fx fy fz = sin fx + sin fy + sin fz
 
---Need to create and test oneShot system....probably and advance feature
+--Need to create and test oneShot system....probably an advance feature
 -- <|> oneShot lineSynth (isDown keyX)
 
 
@@ -72,7 +72,7 @@ testScene :: Signal ()
 testScene = scene [pure cam,terrainSig]
     where
         move (x,y) z a = Vector3 (x*z*a) (y*z*a) 0
-        cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black
+        cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [PostRenderingFX "Glow" ambient]
         terrain pos    = SceneObject pos identity 1 (Model simplexMesh $ vertexColored (RGBA 1 1 1 0.35)) []
         terrainSig     = terrain <~ foldn (+) 0 (lift3 move arrows (fps 20) 5)
 
