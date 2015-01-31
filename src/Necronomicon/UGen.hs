@@ -114,17 +114,20 @@ instance Floating [UGen] where
 class UGenType a where
     ugen :: String -> CUGenFunc -> CUGenFunc -> CUGenFunc -> [a] -> a
     consume :: a -> Int -> Compiled ([UGen], Int) -- used during compiling to correctly handle synth argument compilation
+    incrementArgWithChannels :: Int -> a -> a -- Used to increase arguments with number of channels. Used with In/Out UGens
     toUGenList :: a -> [UGen]
 
 -- Used during compiling to compile synth arguments.
 instance (UGenType b) => UGenType (UGen -> b)  where
     ugen _ _ _ _ _ = undefined -- SHOULD NEVER BE REACHED
     toUGenList _ = undefined -- SHOULD NEVER BE REACHED
+    incrementArgWithChannels _ _ = undefined -- SHOULD NEVER BE REACHED
     consume f i = compileSynthArg i >>= \arg -> consume (f arg) (i + 1)
 
 instance UGenType UGen where
     ugen name calc constructor deconstructor args = UGenFunc name calc constructor deconstructor args
     toUGenList u = [u]
+    incrementArgWithChannels _ u = u
     consume u i = return (toUGenList u, i)
 
 instance UGenType [UGen] where
@@ -136,6 +139,16 @@ instance UGenType [UGen] where
             expand n
                 | n >= longest = []
                 | otherwise    = UGenFunc name calc constructor deconstructor (map (\(arg,length) -> arg !! mod n length) args') : expand (n + 1)
+    incrementArgWithChannels incrementedArgIndex ugens = map (incrementUGenChannels) (zip ugens [0..])
+        where
+            incrementUGenChannels (n@(UGenNum _), channelOffset) = n
+            incrementUGenChannels (UGenFunc n f c d args, channelOffset) = UGenFunc n f c d . map incrementSelectedArg $ zip args [0..]
+                where
+                    incrementSelectedArg (u, argIndex) = if argIndex == incrementedArgIndex then increment u else u 
+                    increment (UGenNum n) = UGenNum $ n + channelOffset
+                    increment ugenFunc = if channelOffset == 0
+                                             then ugenFunc
+                                             else ugenFunc + (UGenNum channelOffset)
     toUGenList u = u
     consume u i = return (u, i)
 
@@ -185,7 +198,7 @@ line length = ugen "line" lineCalc lineConstructor lineDeconstructor [length]
 
 foreign import ccall "&out_calc" outCalc :: CUGenFunc
 out :: UGenType a => a -> a -> a
-out channel input = ugen "out" outCalc nullConstructor nullDeconstructor [channel, input]
+out channel input = incrementArgWithChannels 0 $ ugen "out" outCalc nullConstructor nullDeconstructor [channel, input]
 ----------------------------------------------------
 
 sinTest :: [UGen]
@@ -222,8 +235,8 @@ myCoolSynth3 = sin (880 + mod) |> gain 0.25
 myCoolSynth4 :: UGen
 myCoolSynth4 = foldl (|>) (sin 0.3) (replicate 21 sin)
 
-simpleSine :: UGen -> UGen
-simpleSine freq = sin (freq * (sin 13 * 0.5 + 0.5)) |> gain 0.1 |> out 0
+simpleSine :: UGen -> [UGen]
+simpleSine freq = sin [freq, (freq * (sin 13 * 0.5 + 0.5))] |> gain 0.1 |> out 0
 
 --------------------------------------------------------------------------------------
 -- SynthDefs
@@ -363,7 +376,8 @@ runCompileSynthDef name ugenFunc = do
     print ("Total ugens: " ++ (show $ length revGraph))
     print ("Total constants: " ++ (show $ length constants))
     print ("Num Wires: " ++ (show numWires))
-    let graph = drop numArgs $ reverse revGraph -- Don't actually compile the arg ugen, it shouldn't be evaluated at run time
+    -- Don't actually compile the arg ugens, they shouldn't be evaluated at run time. Instead they're controlled from the Haskell side.
+    let graph = drop numArgs $ reverse revGraph -- Reverse the revGraph because we've been using cons during compilation.
     compiledGraph <- newArray graph
     compiledWireBufs <- initializeWireBufs numWires constants
     let cs = CSynthDef compiledGraph compiledWireBufs nullPtr nullPtr 0 0 (fromIntegral $ length graph) (fromIntegral numWires) 0

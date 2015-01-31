@@ -62,8 +62,8 @@ const unsigned long SEED = 0x811C9DC5; // 2166136261
 /////////////////////
 
 double* _necronomicon_buses = NULL;
-unsigned int num_audio_buses = 1024;
-unsigned int last_audio_bus_index = 1023;
+unsigned int num_audio_buses = 256;
+unsigned int last_audio_bus_index = 255;
 unsigned int num_audio_buses_bytes;
 unsigned int num_synths = 0;
 
@@ -358,7 +358,7 @@ void sin_calc(ugen* u)
 void out_calc(ugen* u)
 {
 	// Constrain bus index to the correct range
-	unsigned int bus_index = fmax(0, fmin(last_audio_bus_index, UGEN_IN(u, 0)));
+	unsigned char bus_index = UGEN_IN(u, 0);
 	_necronomicon_buses[bus_index] += UGEN_IN(u, 1);
 }
 
