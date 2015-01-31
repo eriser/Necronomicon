@@ -49,25 +49,6 @@ threeSynth fx fy fz = sin fx + sin fy + sin fz
 --Need to create and test oneShot system....probably an advance feature
 -- <|> oneShot lineSynth (isDown keyX)
 
-
-
--- testPattern = gui [tri <~ pattern / 10 ]
-    -- where
-        -- tri y   = testTri (Vector3 0.5 y 0) identity
-        -- pattern = playPattern 0 (isDown keyP)
-                --   [lich| 0 [1 2] _ [3 [4 5]] 6
-                        --  0 [1 2] _ [3 [4 5]] 6
-                        --  0 [1 2] _ [3 [4 5]] 6
-                        --  0 [1 2] _ [3 [4 5]] 6 |]
-
--- testGUI :: Signal ()
--- testGUI = gui [element vslider,element blueButton,pure zLabel,tri <~ input vslider]
-    -- where
-        -- vslider    = slider (Vector2 0.50 0.5) (Size 0.03 0.30) (RGB 0.5 0.5 0.5)
-        -- tri y      = testTri(Vector3 0 (1-y) 0) identity
-        -- blueButton = button (Vector2 0.75 0.5) (Size 0.10 0.15) (RGB 0 0 1)
-        -- zLabel     = label  (Vector2 0.25 0.5) (Font "OCRA.ttf" 50) white "Zero"
-
 testScene :: Signal ()
 testScene = scene [pure cam,terrainSig]
     where

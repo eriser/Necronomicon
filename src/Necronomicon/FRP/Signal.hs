@@ -718,7 +718,7 @@ mouseDown :: Signal Bool
 mouseDown = input False 1
 
 dimensions :: Signal Vector2
-dimensions = input (Vector2 960 640) 2
+dimensions = input (Vector2 1280 768) 2
 
 isDown :: Key -> Signal Bool
 isDown = input False . glfwKeyToEventKey
