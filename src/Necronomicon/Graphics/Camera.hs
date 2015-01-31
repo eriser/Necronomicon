@@ -164,18 +164,4 @@ getPostFX resources dim fx@(PostRenderingFX name _) = readIORef (postRenderRef r
     Just loadedFX -> return loadedFX
 
 glow :: PostRenderingFX
-glow = PostRenderingFX "glow" $ \tex -> Material (drawGlow tex)
-    where
-        drawGlow tex mesh modelView proj resources = do
-
-            GL.blend         GL.$= GL.Enabled
-            GL.blendBuffer 0 GL.$= GL.Enabled
-            GL.blendFunc     GL.$= (GL.One,GL.One)
-
-            blurDraw mesh modelView proj resources
-            ambientDraw mesh modelView proj resources
-
-            GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
-            where
-                (Material blurDraw   ) = blur tex
-                (Material ambientDraw) = ambient tex
+glow = PostRenderingFX "glow" blur
