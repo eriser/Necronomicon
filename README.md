@@ -1,4 +1,4 @@
 Necronomicon
 ============
 
-Deterministic Audio Engine
+Haskell based Audio and Graphics Engine

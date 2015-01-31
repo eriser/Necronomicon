@@ -17,18 +17,26 @@ import Sound.OSC.Time
 
 data SynthDef = SynthDef {
     synthDefName :: String,
-    synthDefOutput :: Ptr AudioSignal,
-    synthDefGraph :: Ptr CUGen,
-    synthDefUGens :: [CUGen],
-    synthDefConstants :: [Ptr AudioSignal]
+    synthDefNumArgs :: Int,
+    synthDefCStruct :: Ptr CSynthDef
 } deriving (Show)
 
 type NodeID = CUInt
-data Synth = Synth NodeID
+data Synth = Synth NodeID SynthDef deriving (Show)
 type SynthDefDict = M.Map String SynthDef
 
-data RunState = NecroOffline | NecroBooting | NecroQuitting | NecroRunning deriving (Show, Eq)
-data RuntimeMessage = StartSynth String CDouble NodeID | StopSynth NodeID | CollectSynthDef SynthDef | ShutdownNrt
+data RunState = NecroOffline
+              | NecroBooting
+              | NecroQuitting
+              | NecroRunning deriving (Show, Eq)
+
+data RuntimeMessage = StartSynth SynthDef [CDouble] NodeID CDouble
+                    | SetSynthArg Synth CUInt CDouble
+                    | SetSynthArgs Synth [CDouble]
+                    | StopSynth NodeID
+                    | CollectSynthDef SynthDef
+                    | ShutdownNrt
+                      
 type RunTimeMailbox = TChan RuntimeMessage
 
 instance Show (Time -> Int -> Necronomicon (Maybe Double)) where
@@ -226,6 +234,32 @@ collectMailbox mailBox = liftIO $ collectWorker mailBox []
                 Nothing -> return messages
                 Just message -> collectWorker mailBox (message : messages)
 
+clipSynthArgs :: String -> NodeID -> [CDouble] -> Int -> Necronomicon [CDouble]
+clipSynthArgs name id args numArgs = if length args > numArgs
+                         then nPrint clipString >> return (take numArgs args)
+                         else return args
+    where
+        clipString = "Too many arguments passed to node (" ++ (show id) ++ ", " ++ name ++ "), truncating to " ++ (show numArgs) ++ "."
+
+processStartSynth :: SynthDef -> [CDouble] -> NodeID -> CDouble -> Necronomicon ()
+processStartSynth (SynthDef name numArgs csynthDef) args id time = clipSynthArgs name id args numArgs >>= \clippedArgs ->
+    liftIO $ withArray clippedArgs (play . fromIntegral $ length clippedArgs)
+    where
+        play num ptrArgs = playSynthInRtRuntime csynthDef ptrArgs num id time
+
+processSetSynthArg :: Synth -> CUInt -> CDouble -> Necronomicon ()
+processSetSynthArg (Synth id (SynthDef name numArgs _)) argIndex arg = clipArgIndex >>= \argIndex -> liftIO $ setSynthArgInRtRuntime id arg argIndex
+    where
+        cNumArgs = fromIntegral numArgs
+        clipArgIndex = if argIndex >= cNumArgs
+                          then nPrint clipString >> return (cNumArgs - 1)
+                          else return argIndex
+        clipString = "Argument index " ++ (show argIndex) ++ " is too high for node (" ++ (show id) ++ ", " ++ name ++ "), clipping to " ++ (show (numArgs - 1)) ++ "."
+                                  
+processSetSynthArgs :: Synth -> [CDouble] -> Necronomicon ()
+processSetSynthArgs (Synth id (SynthDef name numArgs _)) args = clipSynthArgs name id args numArgs >>= \clippedArgs ->
+    liftIO $ withArray clippedArgs (\ptrArgs -> liftIO $ setSynthArgsInRtRuntime id ptrArgs (fromIntegral $ length clippedArgs))
+
 processMessages :: [RuntimeMessage] -> Necronomicon ()
 processMessages messages =  mapM_ (processMessage) messages
     where
@@ -234,9 +268,9 @@ processMessages messages =  mapM_ (processMessage) messages
                then return ()
                else process m
         process m = case m of
-            StartSynth name time id -> getSynthDef name >>= \maybeSynthDef -> case maybeSynthDef of
-                Just (SynthDef _ output graph ugens _) -> liftIO $ playSynthInRtRuntime time output graph id (fromIntegral $ length ugens)
-                Nothing -> return ()
+            StartSynth synthDef args id time -> processStartSynth synthDef args id time 
+            SetSynthArg synth argIndex arg -> processSetSynthArg synth argIndex arg 
+            SetSynthArgs synth args -> processSetSynthArgs synth args
             StopSynth id -> liftIO $ stopSynthInRtRuntime id
             CollectSynthDef synthDef -> addSynthDef synthDef
             ShutdownNrt -> necronomiconEndSequence
@@ -378,7 +412,7 @@ getSynthDef :: String -> Necronomicon (Maybe SynthDef)
 getSynthDef name = getSynthDefs >>= \synthDefDict -> return $ M.lookup name synthDefDict
 
 addSynthDef :: SynthDef -> Necronomicon ()
-addSynthDef synthDef@(SynthDef name _ _ _ _) = getSynthDefsTVar >>= \synthDefsTVar ->
+addSynthDef synthDef@(SynthDef name _ _) = getSynthDefsTVar >>= \synthDefsTVar ->
     nAtomically (readTVar synthDefsTVar >>= \synthDefs -> writeTVar synthDefsTVar (M.insert name synthDef synthDefs))
 
 necronomiconEndSequence :: Necronomicon ()
@@ -417,49 +451,78 @@ freeSynthDefs :: Necronomicon ()
 freeSynthDefs = getSynthDefs >>= \synthDefs -> mapM_ (freeSynthDef) (M.elems synthDefs) >> setSynthDefs M.empty
 
 freeSynthDef :: SynthDef -> Necronomicon ()
-freeSynthDef (SynthDef _ _ graph ugens signals) = mapM_ (freeUGen) ugens >> mapM_ (nFree) signals >> nFree graph
-
-freeUGen :: CUGen -> Necronomicon ()
-freeUGen (CUGen calc inputs outputs) = nFree inputs >> nFree outputs
-
-data AudioSignal = AudioSignal CDouble CDouble deriving (Show)
-
-zeroAudioSignal :: AudioSignal
-zeroAudioSignal = AudioSignal 0 0
-
-instance Storable AudioSignal where
-    sizeOf _ = sizeOf (undefined :: CDouble) * 2
-    alignment _ = alignment (undefined :: CDouble)
-    peek ptr = do
-        amp <- peekByteOff ptr 0 :: IO CDouble
-        off <- peekByteOff ptr 8 :: IO CDouble
-        return (AudioSignal amp off)
-    poke ptr (AudioSignal amp off) = do
-        pokeByteOff ptr 0 amp
-        pokeByteOff ptr 8 off
-
-type Calc = FunPtr (Ptr (Ptr AudioSignal) -> Ptr AudioSignal -> ())
-data CUGen = CUGen Calc (Ptr (Ptr AudioSignal)) (Ptr AudioSignal) deriving (Show)
+freeSynthDef (SynthDef _ _ csynthDef) = liftIO $ freeCSynthDef csynthDef
+        
+type CUGenFunc = FunPtr (Ptr CUGen -> ())
+data CUGen = CUGen CUGenFunc CUGenFunc CUGenFunc (Ptr ()) (Ptr CUInt) (Ptr CUInt) deriving (Show)
 
 instance Storable CUGen where
-    sizeOf _ = sizeOf (undefined :: CDouble) * 3
+    sizeOf _ = sizeOf (undefined :: CDouble) * 6
     alignment _ = alignment (undefined :: CDouble)
     peek ptr = do
-        calc <- peekByteOff ptr 0 :: IO Calc
-        inputs <- peekByteOff ptr 8 :: IO (Ptr (Ptr AudioSignal))
-        outputs <- peekByteOff ptr 16 :: IO (Ptr AudioSignal)
-        return (CUGen calc inputs outputs)
-    poke ptr (CUGen calc inputs outputs) = do
-        pokeByteOff ptr 0 calc
-        pokeByteOff ptr 8 inputs
-        pokeByteOff ptr 16 outputs
+        calc  <- peekByteOff ptr 0  :: IO CUGenFunc
+        cons  <- peekByteOff ptr 8  :: IO CUGenFunc
+        decon <- peekByteOff ptr 16 :: IO CUGenFunc
+        dataS <- peekByteOff ptr 24 :: IO (Ptr ())
+        inpts <- peekByteOff ptr 32 :: IO (Ptr CUInt)
+        outs  <- peekByteOff ptr 40 :: IO (Ptr CUInt)
+        return (CUGen calc cons decon dataS inpts outs)
+    poke ptr (CUGen calc cons decon dataS inpts outs) = do
+        pokeByteOff ptr 0  calc
+        pokeByteOff ptr 8  cons
+        pokeByteOff ptr 16 decon
+        pokeByteOff ptr 24 dataS
+        pokeByteOff ptr 32 inpts
+        pokeByteOff ptr 40 outs
+
+data CSynthDef = CSynthDef {
+    csynthDefUGenGraph :: (Ptr CUGen),
+    csynthDegWireBufs :: (Ptr CDouble),
+    csynthDefPreviousNode :: (Ptr CSynthDef),
+    csynthDefNextNode :: (Ptr CSynthDef),
+    csynthDefKey :: CUInt,
+    csynthDefHash :: CUInt,
+    csynthDefNumUGens :: CUInt,
+    csynthDefNumWires :: CUInt,
+    csynthDefTime :: CUInt
+    } deriving (Show)
+
+instance Storable CSynthDef where
+    sizeOf _ = sizeOf (undefined :: CDouble) * 7
+    alignment _ = alignment (undefined :: CDouble)
+    peek ptr = do
+        ugenGrph <- peekByteOff ptr 0  :: IO (Ptr CUGen)
+        wireBufs <- peekByteOff ptr 8  :: IO (Ptr CDouble)
+        prevNode <- peekByteOff ptr 16 :: IO (Ptr CSynthDef)
+        nextNode <- peekByteOff ptr 24 :: IO (Ptr CSynthDef)
+        nodeKey  <- peekByteOff ptr 32 :: IO CUInt
+        nodeHash <- peekByteOff ptr 36 :: IO CUInt
+        numUGens <- peekByteOff ptr 40 :: IO CUInt
+        numWires <- peekByteOff ptr 44 :: IO CUInt
+        sampTime <- peekByteOff ptr 50 :: IO CUInt
+        return (CSynthDef ugenGrph wireBufs prevNode nextNode nodeKey nodeHash numUGens numWires sampTime)
+    poke ptr (CSynthDef ugenGrph wireBufs prevNode nextNode nodeKey nodeHash numUGens numWires sampTime) = do
+        pokeByteOff ptr 0  ugenGrph 
+        pokeByteOff ptr 8  wireBufs
+        pokeByteOff ptr 16 prevNode
+        pokeByteOff ptr 24 nextNode
+        pokeByteOff ptr 32 nodeKey
+        pokeByteOff ptr 36 nodeHash
+        pokeByteOff ptr 40 numUGens
+        pokeByteOff ptr 44 numWires
+        pokeByteOff ptr 50 sampTime
+
+type CSynth = CSynthDef -- A running C Synth is structurally identical to a C SynthDef
 
 foreign import ccall "start_rt_runtime" startRtRuntime :: IO ()
 foreign import ccall "handle_messages_in_nrt_fifo" handleNrtMessages :: IO ()
 foreign import ccall "shutdown_necronomicon" shutdownNecronomiconCRuntime :: IO ()
-foreign import ccall "play_synth" playSynthInRtRuntime :: CDouble -> Ptr AudioSignal -> Ptr CUGen -> CUInt -> CUInt -> IO ()
+foreign import ccall "play_synth" playSynthInRtRuntime :: Ptr CSynthDef -> Ptr CDouble -> CUInt -> NodeID -> CDouble -> IO ()
+foreign import ccall "send_set_synth_arg" setSynthArgInRtRuntime :: NodeID -> CDouble -> CUInt -> IO ()
+foreign import ccall "send_set_synth_args" setSynthArgsInRtRuntime :: NodeID -> Ptr CDouble -> CUInt -> IO ()
 foreign import ccall "stop_synth" stopSynthInRtRuntime :: NodeID -> IO ()
 foreign import ccall "get_running" getRtRunning :: IO Int
+foreign import ccall "free_synth_definition" freeCSynthDef :: Ptr CSynthDef -> IO ()
 
 nPrint :: (Show a) => a -> Necronomicon ()
 nPrint = liftIO . print
