@@ -66,12 +66,9 @@ renderCamera (w,h) view scene resources g = case _camera g of
                 GL.depthFunc     GL.$= Nothing
                 GL.blend         GL.$= GL.Disabled
                 GL.blendBuffer 0 GL.$= GL.Disabled
-                -- GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
-
 
                 GL.clearColor GL.$= GL.Color4 (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a)
                 GL.clear [GL.ColorBuffer,GL.DepthBuffer]
-                -- glDisable gl_DEPTH_TEST
                 postFX <- getPostFX resources (fromIntegral w,fromIntegral h) fx
                 let (Material draw) = postRenderMaterial postFX (Texture [] . return .GL.TextureObject $ postRenderTex postFX)
                 draw (rect 1 1) identity4 (orthoMatrix 0 1 0 1 (-1) 1) resources
@@ -167,18 +164,23 @@ getPostFX resources dim fx@(PostRenderingFX name _) = readIORef (postRenderRef r
     Just loadedFX -> return loadedFX
 
 glow :: PostRenderingFX
-glow = PostRenderingFX "glow" ambient -- $ \tex -> Material (draw tex)
+glow = PostRenderingFX "glow" $ \tex -> Material (drawGlow tex)
     where
-        draw tex mesh modelView proj resources = do
-            (program,texu:mv:pr:_,attributes)                                <- getShader  resources ambientShader
-            (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh    resources mesh
-            -- texture                                                          <- getTexture resources tex
+        drawGlow tex mesh modelView proj resources = do
 
-            GL.currentProgram  GL.$= Just program
-            -- GL.activeTexture   GL.$= GL.TextureUnit 0
-            -- GL.textureBinding  GL.Texture2D GL.$= Just texture
-            -- GL.uniform texu    GL.$= GL.TextureUnit 0
+            GL.depthFunc     GL.$= Nothing
+            GL.blend         GL.$= GL.Enabled
+            GL.blendBuffer 0 GL.$= GL.Enabled
+            GL.blendFunc     GL.$= (GL.One,GL.One)
 
-            GL.blendFunc       GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
-            bindThenDraw mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
-            GL.blendFunc       GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
+            blurDraw mesh modelView proj resources
+            ambientDraw mesh modelView proj resources
+            -- blurDraw mesh modelView proj resources
+
+            GL.depthFunc     GL.$= Just GL.Less
+            GL.blend         GL.$= GL.Enabled
+            GL.blendBuffer 0 GL.$= GL.Enabled
+            GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
+            where
+                (Material blurDraw   ) = blur tex
+                (Material ambientDraw) = ambient tex

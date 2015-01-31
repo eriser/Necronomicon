@@ -107,6 +107,20 @@ colorTest tex = Material draw
             GL.uniform texu    GL.$= GL.TextureUnit 0
             bindThenDraw mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
 
+blur :: Texture -> Material
+blur tex = Material draw
+    where
+        draw mesh modelView proj resources = do
+            (program,texu:mv:pr:_,attributes)                                <- getShader  resources blurShader
+            (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh    resources mesh
+            texture                                                          <- getTexture resources tex
+
+            GL.currentProgram  GL.$= Just program
+            GL.activeTexture   GL.$= GL.TextureUnit 0
+            GL.textureBinding  GL.Texture2D GL.$= Just texture
+            GL.uniform texu    GL.$= GL.TextureUnit 0
+            bindThenDraw mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
+
 getShader :: Resources -> Shader -> IO LoadedShader
 getShader resources sh = readIORef (shadersRef resources) >>= \shaders ->
     case IntMap.lookup (key sh) shaders of
@@ -196,3 +210,11 @@ colorTestShader     = shader
                       ["position","in_color","in_uv"]
                       (loadVertexShader   "ambient-vert.glsl")
                       (loadFragmentShader "colorTest-frag.glsl")
+
+blurShader          :: Shader
+blurShader          = shader
+                      "blur"
+                      ["tex","modelView","proj"]
+                      ["position","in_color","in_uv"]
+                      (loadVertexShader   "ambient-vert.glsl")
+                      (loadFragmentShader "blur-frag.glsl")
