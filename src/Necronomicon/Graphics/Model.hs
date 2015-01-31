@@ -56,9 +56,11 @@ data LoadedFont = LoadedFont{
 
 data PostRenderingFX = PostRenderingFX String (Texture -> Material) deriving (Show)
 
+instance Show ((Double,Double) -> Material) where
+    show _ = "((Double,Double) -> Material)"
+
 data LoadedPostRenderingFX = LoadedPostRenderingFX {
     postRenderName        :: String,
-    postRendererMesh      :: (GL.BufferObject,GL.BufferObject,LoadedMesh),
     postRenderMaterial    :: (Texture -> Material),
     postRenderDimensions  :: (Double,Double),
     postRenderTex         :: GL.GLuint,

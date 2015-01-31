@@ -14,7 +14,9 @@ import           Necronomicon.Graphics.Texture
 import           Necronomicon.Graphics.BufferObject
 import           Necronomicon.Linear
 import           Foreign
-import qualified Data.ByteString.Char8                   as C
+import qualified Data.ByteString.Char8             as C
+import           Data.IORef
+import qualified Data.Map                          as Map
 ----------------------------------------------------------
 
 orthoCamera :: Vector3 -> Quaternion -> Color -> [PostRenderingFX] -> SceneObject
@@ -36,6 +38,16 @@ renderCamera (w,h) view scene resources g = case _camera g of
                 RGB  r g b   -> (r,g,b,1.0)
                 RGBA r g b a -> (r,g,b,a)
 
+        --If we have anye post-rendering fx let's bind their fbo
+        case _fx c of
+            []   -> return ()
+            fx:_ -> getPostFX resources (fromIntegral w,fromIntegral h) fx >>= \postFX -> glBindFramebuffer gl_FRAMEBUFFER (postRenderFBO postFX)
+
+        GL.depthFunc     GL.$= Just GL.Less
+        GL.blend         GL.$= GL.Enabled
+        GL.blendBuffer 0 GL.$= GL.Enabled
+        GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
+
         GL.clearColor GL.$= GL.Color4 (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a)
         GL.clear [GL.ColorBuffer,GL.DepthBuffer]
 
@@ -46,6 +58,29 @@ renderCamera (w,h) view scene resources g = case _camera g of
             0 -> drawScene identity4 (invert newView) (orthoMatrix 0 ratio 1 0 (-1) 1) resources scene
             _ -> drawScene identity4 (invert newView) (perspMatrix (_fov c) ratio (_near c) (_far c))      resources scene
 
+        --If we have any post-render fx let's switch back to main fbo and draw scene texture
+        case _fx c of
+            []   -> return ()
+            fx:_ -> do
+                glBindFramebuffer gl_FRAMEBUFFER 0
+                GL.depthFunc     GL.$= Nothing
+                GL.blend         GL.$= GL.Disabled
+                GL.blendBuffer 0 GL.$= GL.Disabled
+                -- GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
+
+
+                GL.clearColor GL.$= GL.Color4 (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a)
+                GL.clear [GL.ColorBuffer,GL.DepthBuffer]
+                -- glDisable gl_DEPTH_TEST
+                postFX <- getPostFX resources (fromIntegral w,fromIntegral h) fx
+                let (Material draw) = postRenderMaterial postFX (Texture [] . return .GL.TextureObject $ postRenderTex postFX)
+                draw (rect 1 1) identity4 (orthoMatrix 0 1 0 1 (-1) 1) resources
+
+                GL.depthFunc     GL.$= Just GL.Less
+                GL.blend         GL.$= GL.Enabled
+                GL.blendBuffer 0 GL.$= GL.Enabled
+                GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
+
         return $ newView
     where
         newView = view .*. (trsMatrix (_position g) (_rotation g) 1)
@@ -55,11 +90,6 @@ renderCameras (w,h) view scene resources g = renderCamera (w,h) view scene resou
 
 renderGraphics :: GLFW.Window -> Resources -> SceneObject -> SceneObject -> IO ()
 renderGraphics window resources scene gui = do
-    GL.depthFunc     GL.$= Just GL.Less
-    GL.blend         GL.$= GL.Enabled
-    GL.blendBuffer 0 GL.$= GL.Enabled
-    GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
-
     (w,h) <- GLFW.getWindowSize window
 
     --render scene
@@ -110,14 +140,10 @@ loadPostFX (PostRenderingFX name material) (w,h) = do
 
     glBindFramebuffer gl_FRAMEBUFFER 0
 
-    vbuf:_ <- GL.genObjectNames 1
-    ibuf:_ <- GL.genObjectNames 1
-    mesh   <- loadMesh $ dynRect w (w/h) vbuf ibuf
+    return $ LoadedPostRenderingFX name material (w,h) fboTexture rboDepth fbo status
 
-    return $ LoadedPostRenderingFX name (vbuf,ibuf,mesh) material (w,h) fboTexture rboDepth fbo status
-
-maybeReshape :: LoadedPostRenderingFX -> (Double,Double) -> IO LoadedPostRenderingFX
-maybeReshape post dim@(w,h) = if postRenderDimensions post == dim then return post else do
+maybeReshape :: LoadedPostRenderingFX -> (Double,Double) -> IO (Maybe LoadedPostRenderingFX)
+maybeReshape post dim@(w,h) = if postRenderDimensions post == dim then return Nothing else do
     glBindTexture gl_TEXTURE_2D $ postRenderTex post
     glTexImage2D  gl_TEXTURE_2D 0 (fromIntegral gl_RGBA) (floor w) (floor h) 0 gl_RGBA gl_UNSIGNED_BYTE nullPtr
     glBindTexture gl_TEXTURE_2D 0
@@ -126,13 +152,33 @@ maybeReshape post dim@(w,h) = if postRenderDimensions post == dim then return po
     glRenderbufferStorage gl_RENDERBUFFER gl_DEPTH_COMPONENT16 (floor w) (floor h)
     glBindRenderbuffer    gl_RENDERBUFFER 0
 
-    let (vbuf,ibuf,_) = postRendererMesh post
-    mesh <- loadMesh $ dynRect w (w/h) vbuf ibuf
-
-    return $ post{postRendererMesh = (vbuf,ibuf,mesh),postRenderDimensions = dim}
+    return $ Just post{postRenderDimensions = dim}
 
 freePostFX :: LoadedPostRenderingFX -> IO()
 freePostFX post = do
     with (postRenderRBO post) $ glDeleteRenderbuffers 1
     with (postRenderTex post) $ glDeleteTextures      1
     with (postRenderFBO post) $ glDeleteFramebuffers  1
+
+--Take into account reshape
+getPostFX :: Resources -> (Double,Double) -> PostRenderingFX -> IO LoadedPostRenderingFX
+getPostFX resources dim fx@(PostRenderingFX name _) = readIORef (postRenderRef resources) >>= \effects -> case Map.lookup name effects of
+    Nothing       -> loadPostFX fx dim >>= \loadedFX -> (writeIORef (postRenderRef resources) $ Map.insert name loadedFX effects) >> return loadedFX
+    Just loadedFX -> return loadedFX
+
+glow :: PostRenderingFX
+glow = PostRenderingFX "glow" ambient -- $ \tex -> Material (draw tex)
+    where
+        draw tex mesh modelView proj resources = do
+            (program,texu:mv:pr:_,attributes)                                <- getShader  resources ambientShader
+            (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh    resources mesh
+            -- texture                                                          <- getTexture resources tex
+
+            GL.currentProgram  GL.$= Just program
+            -- GL.activeTexture   GL.$= GL.TextureUnit 0
+            -- GL.textureBinding  GL.Texture2D GL.$= Just texture
+            -- GL.uniform texu    GL.$= GL.TextureUnit 0
+
+            GL.blendFunc       GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
+            bindThenDraw mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
+            GL.blendFunc       GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)

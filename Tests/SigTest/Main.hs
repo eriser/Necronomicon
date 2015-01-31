@@ -72,9 +72,9 @@ testScene :: Signal ()
 testScene = scene [pure cam,terrainSig]
     where
         move (x,y) z a = Vector3 (x*z*a) (y*z*a) 0
-        cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [PostRenderingFX "Glow" ambient]
+        cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
         terrain pos    = SceneObject pos identity 1 (Model simplexMesh $ vertexColored (RGBA 1 1 1 0.35)) []
-        terrainSig     = terrain <~ foldn (+) 0 (lift3 move arrows (fps 20) 5)
+        terrainSig     = terrain <~ foldn (+) 0 (lift3 move arrows (fps 30) 5)
 
 testTri :: Vector3 -> Quaternion -> SceneObject
 testTri pos r = SceneObject pos r 1 (Model (tri 0.3 white) $ vertexColored white) []

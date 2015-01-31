@@ -200,7 +200,7 @@ executeIfConnected client action = atomically (checkForStatus `orElse` checkForM
 ------------------------------
 parseMessage :: NetMessage -> Client -> TBQueue Event -> IO()
 parseMessage (UserList ul) client globalDispatch = do
-    putStrLn $ "Received user list:" ++ show userStringList
+    -- putStrLn $ "Received user list:" ++ show userStringList
     atomically $ writeTVar (clientUsers client) userStringList
     sendToGlobalDispatch globalDispatch 5 (toDyn userStringList)
     where
@@ -219,13 +219,13 @@ parseMessage (AddNetSignal uid netVal) client _ = do
 parseMessage (SetNetSignal uid netVal) client globalDispatch = do
     sendToGlobalDispatch globalDispatch uid $ netValToDyn netVal
     atomically $ readTVar (netSignals client) >>= \sigs -> writeTVar (netSignals client) (IntMap.insert uid netVal sigs)
-    putStrLn $ "Setting NetSignal : " ++ show (uid,netVal)
+    -- putStrLn $ "Setting NetSignal : " ++ show (uid,netVal)
 
 parseMessage (SyncNetSignals netVals) client globalDispatch = do
     oldNetSignals <- atomically $ readTVar (netSignals client)
     mapM_ (sendMergeEvents oldNetSignals) $ IntMap.toList netVals
     atomically $ writeTVar (netSignals client) netVals
-    putStrLn $ "Server sync. old signals size: " ++ show (IntMap.size oldNetSignals) ++ ", new signals size: " ++ show (IntMap.size netVals)
+    -- putStrLn $ "Server sync. old signals size: " ++ show (IntMap.size oldNetSignals) ++ ", new signals size: " ++ show (IntMap.size netVals)
     where
         sendMergeEvents oldNetSignals (uid,netVal) = case IntMap.lookup uid oldNetSignals of
             Nothing     -> sendToGlobalDispatch globalDispatch uid $ netValToDyn netVal
