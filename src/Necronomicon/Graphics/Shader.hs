@@ -64,8 +64,6 @@ loadVertexShader path = VertexShader load
        load = do
            resources <- getDataFileName ""
            putStrLn $ "loadVertexShader: " ++ path
-           putStrLn $ "resources path: " ++ resources
-           putStrLn $ "final path: " ++ resources ++ "shaders/" ++ path
            shaderPath <- BS.readFile $ resources ++ "shaders/" ++ path
            loadShaderBS path GL.VertexShader shaderPath
 

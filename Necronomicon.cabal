@@ -20,7 +20,7 @@ library
     Include-Dirs: 		c_lib
     Install-Includes:	Necronomicon.h
     ghc-options:        -threaded -O3 -Wall
-    default-extensions: FlexibleInstances MultiParamTypeClasses ForeignFunctionInterface QuasiQuotes TemplateHaskell DeriveDataTypeable BangPatterns TypeFamilies GADTs
+    default-extensions: LambdaCase FlexibleInstances MultiParamTypeClasses ForeignFunctionInterface QuasiQuotes TemplateHaskell DeriveDataTypeable TypeFamilies BangPatterns
 
     exposed-modules:
         Necronomicon
@@ -39,10 +39,10 @@ library
         Necronomicon.Networking.Server
         Necronomicon.Networking.SyncObject
         Necronomicon.Networking.Message
-        Necronomicon.Networking.User
         Necronomicon.Patterns
         Necronomicon.FRP
         Necronomicon.FRP.Signal
+        Necronomicon.FRP.Event
         Necronomicon.FRP.GUI
         Necronomicon.Linear
         Necronomicon.Linear.Plane
@@ -84,7 +84,8 @@ library
         OpenGL           >= 2.8,
         OpenGLRaw        >= 1.5.0,
         mtl              >= 2.1.3.0,
-        freetype2        >= 0.1.1
+        freetype2        >= 0.1.1,
+        binary           >= 0.7.0
 
 executable PatternTest
     main-is:          Main.hs

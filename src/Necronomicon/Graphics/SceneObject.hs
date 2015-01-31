@@ -140,9 +140,15 @@ _children_ f (SceneObject  p r s m cs) = SceneObject  p r s m (f cs)
 _children_ f (CameraObject p r s c cs) = CameraObject p r s c (f cs)
 _children_ f (PlainObject  p r s   cs) = PlainObject  p r s   (f cs)
 
+addChild :: SceneObject -> SceneObject -> SceneObject
+addChild so1 so2 = _children_ (\cs -> so1 : cs) so2
+
 -------------------------------------------------------------------------------------------------------------------
 -- Scene functions
 -------------------------------------------------------------------------------------------------------------------
+
+emptyObject :: SceneObject
+emptyObject = PlainObject 0 identity 1 []
 
 root :: [SceneObject] -> SceneObject
 root = PlainObject 0 identity 1
@@ -151,10 +157,10 @@ drawScene :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> SceneObject -> 
 drawScene world view proj resources g = draw world view proj resources g >>= \newWorld -> mapM_ (drawScene newWorld view proj resources) (_children g)
 
 draw :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> SceneObject -> IO Matrix4x4
-draw world view proj resources g = case _model g of
-    Just    (Model        mesh     material             ) -> drawMeshWithMaterial material        mesh modelView proj resources >> return newWorld
-    Just    (FontRenderer text font material maybeBounds) -> renderFont text font material maybeBounds modelView proj resources >> return newWorld
-    Nothing                                -> return newWorld
+draw world view proj resources g
+    | Just (Model mesh material )            <- _model g = drawMeshWithMaterial material mesh modelView proj resources >> return newWorld
+    | Just (FontRenderer text font material) <- _model g = renderFont text font material      modelView proj resources >> return newWorld
+    | otherwise                                          = return newWorld
     where
         newWorld  = world    .*. (trsMatrix (_position g) (_rotation g) (_scale g))
         modelView = newWorld .*. view

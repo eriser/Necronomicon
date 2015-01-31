@@ -1,12 +1,12 @@
 #version 130
 uniform mat4 modelView,proj;
-uniform vec3 baseColor;
+uniform vec4 baseColor;
 
 in  vec3 position,in_color;
-out vec3 color;
+out vec4 color;
 
 void main()
 {
-    color       = in_color * baseColor;
+    color       = vec4(in_color,1.0) * baseColor;
     gl_Position = vec4(position,1.0) * modelView * proj;
 }

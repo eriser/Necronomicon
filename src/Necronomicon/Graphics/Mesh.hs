@@ -31,31 +31,30 @@ import qualified Graphics.Rendering.OpenGL.Raw      as GLRaw (glUniformMatrix4fv
 rect :: Double -> Double -> Mesh
 rect w h = Mesh (show w ++ show h ++ "rect") vertices colors uvs indices
     where
-        hw       = w * 0.5
-        hh       = h * 0.5
-        vertices = [Vector3 (-hw) (-hh) 0,Vector3 hw (-hh) 0,Vector3 (-hw) hh 0,Vector3 hw hh 0]
+        vertices = [Vector3 0 0 0,Vector3 w 0 0,Vector3 0 h 0,Vector3 w h 0]
         colors   = [white,white,white,white]
-        uvs      = [Vector2 0 1,Vector2 1 1,Vector2 0 0,Vector2 1 0]
+        uvs      = [Vector2 0 0,Vector2 1 0,Vector2 0 1,Vector2 1 1]
         indices  = [2,0,1,3,2,1]
 
 tri :: Double -> Color -> Mesh
 tri triSize color = Mesh (show triSize ++ "tri") vertices colors uvs indices
     where
-        vertices = [Vector3 (-triSize) (-triSize) 0, Vector3 triSize (-triSize) 0, Vector3 0 triSize 0]
+        vertices = [Vector3 0 0 0, Vector3 triSize 0 0, Vector3 0 triSize 0]
         colors   = [color,color,color]
-        uvs      = [Vector2 1 1,Vector2 0 0,Vector2 0 1]
+        uvs      = [Vector2 0 0,Vector2 1 0,Vector2 0 1]
         indices  = [0,1,2]
 
 vertexColored :: Color -> Material
-vertexColored (RGB r g b) = Material draw
+vertexColored (RGBA r g b a) = Material draw
     where
         draw mesh modelView proj resources = do
             (program,baseColor:mv:pr:_,attributes)                     <- getShader resources vertexColoredShader
             (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:_) <- getMesh   resources mesh
 
             GL.currentProgram    GL.$= Just program
-            GL.uniform baseColor GL.$= (GL.Vertex3 (realToFrac r) (realToFrac g) (realToFrac b) :: GL.Vertex3 GL.GLfloat)
+            GL.uniform baseColor GL.$= (GL.Vertex4 (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a) :: GL.Vertex4 GL.GLfloat)
             bindThenDraw mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad]) numIndices
+vertexColored (RGB r g b) = vertexColored (RGBA r g b 1)
 
 ambient :: Texture -> Material
 ambient tex = Material draw

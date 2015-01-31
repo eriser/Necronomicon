@@ -11,7 +11,8 @@ import Control.Monad.Trans
 import qualified Necronomicon.Util.PriorityQueue as PQ
 import Necronomicon.Patterns
 import Necronomicon.Util.Functions
-import qualified Data.Map.Strict as M
+-- import qualified Data.Map.Strict as M
+import qualified Data.Map as M
 import Sound.OSC.Time
 
 data SynthDef = SynthDef {
@@ -46,7 +47,7 @@ data PDef = PDef {
     pdefPattern :: Pattern (Time -> Int -> Necronomicon (Maybe Double))
 } deriving (Show)
 
-data ScheduledPdef = ScheduledPdef { 
+data ScheduledPdef = ScheduledPdef {
     scheduledPDefName :: String,
     scheduledPDefLastTime :: Double,
     scheduledPDefNextTime :: Double,
@@ -78,14 +79,14 @@ pstream name func layout = PDef name (PSeq (PVal pfunc) (plength layout))
                   _ -> return (Just d)
               _ -> return Nothing
 
-pbind :: String -> Pattern (Necronomicon ()) -> Pattern Double -> PDef 
+pbind :: String -> Pattern (Necronomicon ()) -> Pattern Double -> PDef
 pbind name values durs = PDef name (PVal pfunc)
     where
         pfunc _ iteration = case collapse durs (fromIntegral iteration) of
             PVal d -> case collapse values (fromIntegral iteration) of
                 PVal f -> f >> return (Just d)
                 _ -> return Nothing
-            _ -> return Nothing 
+            _ -> return Nothing
 
 data PRunTimeMessage = PlayPattern PDef | StopPattern PDef
 type PRunTimeMailbox = TChan PRunTimeMessage
@@ -123,7 +124,7 @@ prGetTVar getter = Necronomicon (\n -> return (getter n, n))
 
 prGet :: (NecroVars -> TVar a) -> Necronomicon a
 prGet getter = prGetTVar getter >>= \tvar -> nAtomically (readTVar tvar)
-    
+
 getNrtThreadID :: Necronomicon ThreadId
 getNrtThreadID = prGet necroNrtThreadID
 
@@ -224,7 +225,7 @@ shutdownNecronomicon = do
 
 sendMessage :: RuntimeMessage -> Necronomicon ()
 sendMessage message = getMailBox >>= \mailBox -> nAtomically $ writeTChan mailBox message
-    
+
 collectMailbox :: TChan a -> Necronomicon [a]
 collectMailbox mailBox = liftIO $ collectWorker mailBox []
     where
@@ -387,7 +388,7 @@ handleScheduledPatterns nextTime = getPatternQueue >>= \(pqueue, pmap) -> handle
                                            waitTime = secondsToMicro $ scaledDur * 0.1
                                    Nothing -> handlePattern q' m nextT changed
                                _ -> handlePattern q' m nextT changed
-                
+
 startPatternScheduler :: Necronomicon ()
 startPatternScheduler = do
     liftIO waitForRTStarted

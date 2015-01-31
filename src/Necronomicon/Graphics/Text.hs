@@ -1,10 +1,11 @@
 module Necronomicon.Graphics.Text (drawText,
                                    renderFont,
-                                   drawBoundText) where
+                                   charMetrics,
+                                   fitTextIntoBounds) where
 
-import           Debug.Trace
 import           Control.Monad
 import           Data.IORef
+import           Data.List                                           (foldl')
 import           Data.Maybe                                          (fromMaybe)
 import           Foreign
 import           Foreign.C.String
@@ -17,7 +18,7 @@ import           Graphics.Rendering.FreeType.Internal.Library
 import           Graphics.Rendering.FreeType.Internal.PrimitiveTypes
 import           Graphics.Rendering.OpenGL                           hiding (bitmap)
 import           Graphics.Rendering.OpenGL.Raw.Core31                (gl_TEXTURE_2D,glTexParameteri,gl_RED)
-import           Graphics.Rendering.OpenGL.Raw.EXT.TextureSwizzle    (gl_TEXTURE_SWIZZLE_R,gl_TEXTURE_SWIZZLE_G,gl_TEXTURE_SWIZZLE_B,gl_TEXTURE_SWIZZLE_A)
+import           Graphics.Rendering.OpenGL.Raw.EXT.TextureSwizzle    (gl_TEXTURE_SWIZZLE_G,gl_TEXTURE_SWIZZLE_B,gl_TEXTURE_SWIZZLE_A)
 
 import qualified Data.Map                                            as Map
 
@@ -27,13 +28,7 @@ import qualified Necronomicon.Graphics.Texture                       as NecroTex
 import qualified Necronomicon.Linear                                 as Linear
 import           Paths_Necronomicon
 
-newBoundTexUnit :: Int -> IO TextureObject
-newBoundTexUnit u = do
-    [tex] <- genObjectNames 1
-    texture Texture2D        $= Enabled
-    activeTexture            $= TextureUnit (fromIntegral u)
-    textureBinding Texture2D $= Just tex
-    return tex
+
 
 runFreeType :: IO FT_Error -> IO ()
 runFreeType m = do
@@ -52,10 +47,7 @@ fontFace ft fp = withCString fp $ \str ->
         peek ptr
 
 drawText :: String -> Font -> (NecroTex.Texture -> Material) -> Model
-drawText text font material = FontRenderer text font material Nothing
-
-drawBoundText :: String -> Font -> (NecroTex.Texture -> Material) -> (Double,Double) -> Model
-drawBoundText text font material bounds = FontRenderer text font material $ Just bounds
+drawText text font material = FontRenderer text font material
 
 loadFontAtlas :: Font -> IO LoadedFont
 loadFontAtlas font = do
@@ -68,7 +60,7 @@ loadFontAtlas font = do
     cmetrics <- mapM (getCharMetrics ff) [32..128]
     let (atlasWidth',atlasHeight') = foldr (\metric (w,h) -> (w + charWidth metric + 1, max h (charHeight metric))) (0,0) cmetrics
 
-    atlasTexture <- newBoundTexUnit 0
+    atlasTexture <- NecroTex.newBoundTexUnit 0
     rowAlignment Unpack $= 1
 
     let tsize = TextureSize2D (floor atlasWidth') (floor atlasHeight')
@@ -134,6 +126,16 @@ getCharMetrics ff char = do
 createCharMap :: Double -> CharMetric -> (Double,Map.Map Char CharMetric) -> (Double,Map.Map Char CharMetric)
 createCharMap w charMetric (x,charMap) = (x + charWidth charMetric + 1,Map.insert (character charMetric) (charMetric{charTX = x / w}) charMap)
 
+charMetrics :: Font -> IO (Map.Map Char CharMetric)
+charMetrics font = do
+    putStrLn $ "loadFontAtlas: " ++ fontKey font
+    fontPath <- getDataFileName ""
+    ft <- freeType
+    ff <- fontFace ft $ fontPath ++ "fonts/" ++ fontKey font
+    runFreeType $ ft_Set_Pixel_Sizes ff (fromIntegral $ fontSize font) 0
+    metrics <- mapM (getCharMetrics ff) [32..128]
+    return $ foldr (\cm -> Map.insert (character cm) cm) Map.empty metrics
+
 getFont :: Resources -> Font -> IO LoadedFont
 getFont resources font = readIORef (fontsRef resources) >>= \fonts ->
     case Map.lookup (fontKey font) fonts of
@@ -141,17 +143,15 @@ getFont resources font = readIORef (fontsRef resources) >>= \fonts ->
         Just font' -> return font'
 
 fontScale :: Double
-fontScale = 2 / 1080
+fontScale = 1 / 1080
 
 --Change dynamic meshes to "load" their buffers the first time, so users don't have to supply them
-renderFont :: String -> Font -> (NecroTex.Texture -> Material) -> Maybe (Double,Double) -> Linear.Matrix4x4 -> Linear.Matrix4x4 -> Resources -> IO()
-renderFont text font material maybeBounds modelView proj resources = do
+renderFont :: String -> Font -> (NecroTex.Texture -> Material) -> Linear.Matrix4x4 -> Linear.Matrix4x4 -> Resources -> IO()
+renderFont text font material modelView proj resources = do
     loadedFont <- getFont resources font
     let characterMesh                       = textMesh (characters loadedFont) (atlasWidth loadedFont) (atlasHeight loadedFont)
         fontMesh                            = DynamicMesh (characterVertexBuffer loadedFont) (characterIndexBuffer loadedFont) vertices colors uvs indices
-        (vertices,colors,uvs,indices,_,_,_) = case maybeBounds of
-            Nothing -> foldl characterMesh ([],[],[],[],0,0,0) text
-            Just  b -> foldl characterMesh ([],[],[],[],0,0,0) $ fitTextIntoBounds text b (characters loadedFont)
+        (vertices,colors,uvs,indices,_,_,_) = foldl' characterMesh ([],[],[],[],0,0,0) text
     drawMeshWithMaterial (material $ atlas loadedFont) fontMesh modelView proj resources
 
 textMesh :: Map.Map Char CharMetric ->
@@ -160,9 +160,9 @@ textMesh :: Map.Map Char CharMetric ->
             ([Linear.Vector3],[Color.Color],[Linear.Vector2],[Int],Int,Double,Double) ->
             Char ->
             ([Linear.Vector3],[Color.Color],[Linear.Vector2],[Int],Int,Double,Double)
-textMesh charMetrics aWidth aHeight (vertices,colors,uvs,indices,count,x,y) char = case char of
-    '\n' -> (vertices ,colors ,uvs ,indices ,count    ,0   ,y - aHeight * fontScale)
-    _    -> (vertices',colors',uvs',indices',count + 4,x+ax,y)
+textMesh charMetrics aWidth aHeight (vertices,colors,uvs,indices,count,x,y) char
+    | '\n' <- char = (vertices ,colors ,uvs ,indices ,count    ,0   ,y + aHeight * fontScale)
+    | otherwise    = (vertices',colors',uvs',indices',count + 4,x+ax,y)
     where
         charMetric = fromMaybe (CharMetric (toEnum 0) 0 0 0 0 0 0 0 0 0) $ Map.lookup char charMetrics
         w          = charWidth  charMetric * fontScale
@@ -172,10 +172,10 @@ textMesh charMetrics aWidth aHeight (vertices,colors,uvs,indices,count,x,y) char
         ax         = advanceX   charMetric * fontScale
         tx         = charTX     charMetric
 
-        vertices'  = Linear.Vector3 (l+x)   (y + t     - aHeight * fontScale) 0  :
-                     Linear.Vector3 (l+x+w) (y + t     - aHeight * fontScale) 0  :
-                     Linear.Vector3 (l+x)   (y + t - h - aHeight * fontScale) 0  :
-                     Linear.Vector3 (l+x+w) (y + t - h - aHeight * fontScale) 0  : vertices
+        vertices'  = Linear.Vector3 (l+x)   (y - t     + aHeight * fontScale) 0  :
+                     Linear.Vector3 (l+x+w) (y - t     + aHeight * fontScale) 0  :
+                     Linear.Vector3 (l+x)   (y - t + h + aHeight * fontScale) 0  :
+                     Linear.Vector3 (l+x+w) (y - t + h + aHeight * fontScale) 0  : vertices
         colors'    = Color.white : Color.white : Color.white : Color.white : colors
         uvs'       = Linear.Vector2 (tx                                   ) 0 :
                      Linear.Vector2 (tx + (charWidth  charMetric) / aWidth) 0 :
@@ -188,29 +188,56 @@ type TextWord = (String,Double)
 emptyWord :: TextWord
 emptyWord = ([],0)
 
-fitTextIntoBounds :: String -> (Double,Double) -> Map.Map Char CharMetric -> String
-fitTextIntoBounds text (w,_) cmetrics = finalText
+fitTextIntoBounds :: Bool -> String -> (Double,Double) -> Map.Map Char CharMetric -> String
+fitTextIntoBounds removeTopLines text (w,h) cmetrics = finalText
     where
-        (finalText,_)    = foldl (fitWordsIntoBounds w characterPadding) emptyWord (word:words')
-        (word,words',_)  = foldr (splitCharIntoWords cmetrics) (emptyWord,[],0) text
-        characterPadding = case Map.lookup ' ' cmetrics of
-            Nothing -> 0
-            Just cm -> advanceX cm * fontScale
+        (word,words',_)  = foldl' (splitCharIntoWords w cmetrics) (emptyWord,[],0) text
+        (widthBound ,_)  = foldl' (fitWordsIntoBounds w)           emptyWord      (words' ++ [word])
+        (finalText  ,_)  = foldl' (removeExtraLines removeTopLines h cmetrics) ([],cheight cmetrics) widthBound
 
-fitWordsIntoBounds :: Double -> Double -> TextWord -> TextWord -> TextWord
-fitWordsIntoBounds boundsWidth constant (text,currentWidth) (word,wordWidth) = if currentWidth + wordWidth < boundsWidth
-    then (text ++ word ,currentWidth + wordWidth)
-    else (text ++ word ++ "\n",0)
-
-splitCharIntoWords :: Map.Map Char CharMetric -> Char -> (TextWord,[TextWord],Double) -> (TextWord,[TextWord],Double)
-splitCharIntoWords cmetrics char ((word,wordLength),words',totalLength) = if isWhiteSpace char
-    then ( ([char],cAdvance) , (word,wordLength) : words' , totalLength + wordLength + cAdvance)
-    else ((char : word,wordLength + cAdvance), words' , totalLength)
+removeExtraLines :: Bool -> Double -> Map.Map Char CharMetric -> TextWord -> Char -> TextWord
+removeExtraLines rmvTop boundsHeight metrics (text,currentHeight) char = if rmvTop then removeExtraTopLines else removeExtraBottomLines
     where
+        removeExtraTopLines
+            | currentHeight + cheight metrics >= boundsHeight                 = (text,currentHeight)
+            | char == '\n' && currentHeight + cheight metrics >= boundsHeight = (text,currentHeight)
+            | char == '\n' && currentHeight + cheight metrics <  boundsHeight = (text ++ [char],currentHeight + cheight metrics)
+            | otherwise                                                       = (text ++ [char],currentHeight)
+        removeExtraBottomLines
+            | currentHeight + cheight metrics >= boundsHeight                 = (deleteFirstLine text ++ [char],currentHeight - cheight metrics)
+            -- | char == '\n' && currentHeight + cheight metrics >= boundsHeight = (deleteFirstLine text ++ [char],currentHeight)
+            | char == '\n' && currentHeight + cheight metrics <  boundsHeight = (text ++ [char],currentHeight + cheight metrics)
+            | otherwise                                                       = (text ++ [char],currentHeight)
+        deleteFirstLine s = s'
+            where
+                (_,s')                = foldl' go (False,[]) s
+                go (False,accum) '\n' = (True ,accum)
+                go (False,accum) _    = (False,accum)
+                go (True ,accum) char = (True ,accum ++ [char])
+
+cheight metrics = case Map.lookup 'A' metrics of
+    Nothing -> 20 * fontScale
+    Just cm -> charHeight cm * fontScale
+
+fitWordsIntoBounds :: Double -> TextWord -> TextWord -> TextWord
+fitWordsIntoBounds boundsWidth (text,currentWidth) (word,wordWidth)
+    | word == "\n"                            = (text ++ word ,0)
+    | currentWidth + wordWidth <= boundsWidth = (text ++ word ,currentWidth + wordWidth)
+    | otherwise                               = (text ++ "\n" ++ word,wordWidth)
+
+splitCharIntoWords :: Double -> Map.Map Char CharMetric -> (TextWord,[TextWord],Double) -> Char -> (TextWord,[TextWord],Double)
+splitCharIntoWords w cmetrics ((word,wordLength),words',totalLength) char
+    | isWhiteSpace char = ( ([],0),            words' ++ [(word,wordLength),([char],cAdvance)], totalLength + wordLength + cAdvance)
+    | wordLength > w    = ( ([char],cAdvance), words' ++ [(word,wordLength)],                   totalLength + wordLength + cAdvance)
+    | otherwise         = ((word ++ [char],wordLength + cAdvance), words' , totalLength)
+    where
+        isWhiteSpace ' '  = True
+        isWhiteSpace '\n' = True
+        isWhiteSpace  _   = if char == toEnum 0
+            then True
+            else False
+
         cAdvance = case Map.lookup char cmetrics of
-            Nothing -> 10
-            Just m  -> advanceX m * fontScale * 1.05
-        isWhiteSpace c = case c of
-            ' '  -> True
-            '\n' -> True
-            _    -> False
+            Just m  -> advanceX m * fontScale
+            Nothing -> 0
+-- preTrimExcessLines

@@ -2,61 +2,79 @@ import Necronomicon
 import Data.Fixed (mod')
 
 main :: IO ()
-main = runSignal testChat
-
-testChat :: Signal ()
-testChat = gui [chatBox]
-    where
-        chatBox = chat <| Vector2 0 0
-                       <| Size 1 0.25
-                       <| Font "OCRA.ttf" 26
-                       <| gray 0.1
-
-testPattern :: Signal ()
-testPattern = gui [tri <~ pattern / 10 ]
-    where
-        tri y   = testTri (Vector3 0.5 y 0) identity
-        pattern = playPattern 0 (isDown keyP)
-                  [lich| 0 [1 2] _ [3 [4 5]] 6
-                         0 [1 2] _ [3 [4 5]] 6
-                         0 [1 2] _ [3 [4 5]] 6
-                         0 [1 2] _ [3 [4 5]] 6 |]
-
-testSound :: Signal ()
-testSound = playWhile myCoolSynth2 (isDown keyW)
-        <|> playWhile myCoolSynth3 (isDown keyA)
-
-testSound2 :: Signal ()
-testSound2 = play lineSynth <| isDown keyS
-
-testSound3 :: Signal ()
-testSound3 = playUntil myCoolSynth2 (isDown keyP) (isDown keyS)
-
-testShader :: Signal ()
-testShader = gui [so <~ mousePos,pure zLabel]
-    where
-        so (x,y) = SceneObject (Vector3 x y 0) identity 1 model []
-        model    = Model (rect 0.2 0.2) (ambient (tga "Gas20.tga"))
-        zLabel   = label <| Vector2 (-1) 0
-                         <| Font "OCRA.ttf" 20
-                         <| white
-                         <| "Lorem ipsum dolor sit amet, consectetur adipiscing elit. Mauris ipsum risus, luctus vel mollis non, hendrerit non mi. Sed at blandit ex. Donec aliquam pellentesque convallis. Integer in nisl ut ipsum dignissim vestibulum. Aenean porta nunc magna, id porttitor quam scelerisque non. Ut malesuada mi lectus, vitae finibus est lacinia nec. Nunc varius sodales porttitor. Nam faucibus tortor quis ullamcorper feugiat. Etiam mollis tellus mi, pretium consequat justo suscipit in. Etiam posuere placerat risus, eget efficitur nulla."
+main = runSignal <| testGUI <|> testScene <|> testSound
 
 testGUI :: Signal ()
-testGUI = gui [element vslider,element blueButton,pure zLabel,tri <~ input vslider]
+testGUI = gui [chatBox,netBox,users]
     where
-        vslider    = slider (Vector2 0.50 0.5) (Size 0.03 0.30) (RGB 0.5 0.5 0.5)
-        tri y      = testTri(Vector3 0 (1-y) 0) identity
-        blueButton = button (Vector2 0.75 0.5) (Size 0.10 0.15) (RGB 0 0 1)
-        zLabel     = label  (Vector2 0.25 0.5) (Font "OCRA.ttf" 50) white "Zero"
+        users   = userBox <| Vector2 0.0 0.945
+                          <| Size    0.0 0.055
+                          <| Font   "OCRA.ttf" 24
+                          <| vertexColored (RGBA 0 0 0 0.25)
+
+        netBox  = netStat <| Vector2 1.4 0.97
+                          <| Size    0.2 0.03
+                          <| Font   "OCRA.ttf" 24
+
+        chatBox = chat    <| Vector2 0.0 0.0
+                          <| Size    0.4 0.75
+                          <| Font   "OCRA.ttf" 24
+                          <| vertexColored (RGBA 1 1 1 0.1)
+
+-- Implement in terms of play until instead
+-- Networking the state works out better that way!
+testSound :: Signal ()
+testSound = play myCoolSynth2 (isDown keyW) (isUp   keyW)
+        <|> play myCoolSynth3 (isDown keyA) (isDown keyA)
+        <|> play myCoolSynth2 (isDown keyP) (isDown keyS)
+
+testSound2 :: Signal ()
+testSound2 = play noArgSynth  (isDown keyW) (isDown keyW)
+         <|> play oneArgSynth (isDown keyA) (isDown keyA) (fst <~ mousePos) --Maybe the person who starts a player is the only person in control of it?
+         <|> play twoArgSynth (isDown keyS) (isDown keyS) 440 880
+         <|> play threeSynth  (isDown keyD) (isDown keyD) 440 880 66.6
+
+noArgSynth :: UGen
+noArgSynth = sin 0.1
+
+oneArgSynth :: UGen -> UGen
+oneArgSynth = sin
+
+twoArgSynth :: UGen -> UGen -> UGen
+twoArgSynth fx fy = sin fx + sin fy
+
+threeSynth :: UGen -> UGen -> UGen -> UGen
+threeSynth fx fy fz = sin fx + sin fy + sin fz
+
+--Need to create and test oneShot system....probably and advance feature
+-- <|> oneShot lineSynth (isDown keyX)
+
+
+
+-- testPattern = gui [tri <~ pattern / 10 ]
+    -- where
+        -- tri y   = testTri (Vector3 0.5 y 0) identity
+        -- pattern = playPattern 0 (isDown keyP)
+                --   [lich| 0 [1 2] _ [3 [4 5]] 6
+                        --  0 [1 2] _ [3 [4 5]] 6
+                        --  0 [1 2] _ [3 [4 5]] 6
+                        --  0 [1 2] _ [3 [4 5]] 6 |]
+
+-- testGUI :: Signal ()
+-- testGUI = gui [element vslider,element blueButton,pure zLabel,tri <~ input vslider]
+    -- where
+        -- vslider    = slider (Vector2 0.50 0.5) (Size 0.03 0.30) (RGB 0.5 0.5 0.5)
+        -- tri y      = testTri(Vector3 0 (1-y) 0) identity
+        -- blueButton = button (Vector2 0.75 0.5) (Size 0.10 0.15) (RGB 0 0 1)
+        -- zLabel     = label  (Vector2 0.25 0.5) (Font "OCRA.ttf" 50) white "Zero"
 
 testScene :: Signal ()
 testScene = scene [pure cam,terrainSig]
     where
         move (x,y) z a = Vector3 (x*z*a) (y*z*a) 0
         cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black
-        terrain pos    = SceneObject pos identity 1 (Model simplexMesh $ vertexColored white) []
-        terrainSig     = terrain <~ foldp (+) 0 (lift3 move wasd (fps 30) 5)
+        terrain pos    = SceneObject pos identity 1 (Model simplexMesh $ vertexColored (RGBA 1 1 1 0.35)) []
+        terrainSig     = terrain <~ foldn (+) 0 (lift3 move arrows (fps 20) 5)
 
 testTri :: Vector3 -> Quaternion -> SceneObject
 testTri pos r = SceneObject pos r 1 (Model (tri 0.3 white) $ vertexColored white) []
@@ -68,7 +86,7 @@ simplexMesh = Mesh "simplex" vertices colors uvs indices
         (scale,vscale)   = (1 / 6,3)
         values           = [(x,simplex 16 (x / w) (y / h),y) | (x,y) <- [(mod' n w,fromIntegral . floor $ n / h) | n <- [0..w*h]]]
 
-        toVertex (x,y,z) = Vector3 (x*scale) (y*vscale) (z*scale)
+        toVertex (x,y,z) = Vector3 (x*scale*3) (y*vscale) (z*scale*3)
         toColor  (x,y,z) = RGBA    (x / w) (y * 0.75 + 0.35) (z / h) 0.25
         toUV     (x,y,_) = Vector2 (x / w) (y / h)
 
@@ -80,81 +98,3 @@ simplexMesh = Mesh "simplex" vertices colors uvs indices
         colors   = map toColor  values
         uvs      = map toUV     values
         indices  = foldr (addIndices (round w)) [] [0..(length values)]
-
--- main :: IO()
--- main = runSignal $ needlessCrawlTest
--- main = runSignal $ enterTest <|> spaceTest <|> altTest <|> shiftTest <|> ctrlTest
-    -- where
-        -- enterTest = (\p -> if p then "Enter" else "") <~ enter
-        -- spaceTest = (\p -> if p then "Space" else "") <~ space
-        -- altTest   = (\p -> if p then "Alt"   else "") <~ alt
-        -- shiftTest = (\p -> if p then "Shift" else "") <~ shift
-        -- ctrlTest  = (\p -> if p then "Ctrl"  else "") <~ ctrl
-
--- main = runSignal $ countIf (\(x,_) -> x > 400) mousePos
--- main = runSignal $ dropRepeats $ isDown keyW <|> isDown keyA  <|> isDown keyS <|> isDown keyD
--- main = runSignal $ randFS $ fps 3
--- main = runSignal $ randS 100 666 $ fps 3
--- main = runSignal $ fps 1 - fps 3
--- main = runSignal $ fps 30
--- main = runSignal wasd
--- main = runSignal tonsOfMouseAndTime
--- main = runSignal $ isDown keyW <|> isDown keyA
--- main = runSignal $ (fst <~ mousePos) + (snd <~ mousePos)
--- main = runSignal $ dropIf (>10) 0 $ count mouseClicks
--- main = runSignal $ dropWhen (isDown keyW) mousePos
--- main = runSignal $ keepWhen (isDown keyW) mousePos
--- main = runSignal $ dropIf (\(x,y) -> x > 400) (0,0) mousePos
--- main = runSignal $ keepIf (\(x,y) -> x > 400) (0,0) mousePos
--- main = runSignal $ sampleOn (fps 3) mousePos
--- main = runSignal $ keepWhen ((\(x,_) -> x > 400) <~ mousePos) mousePos
--- main = runSignal $ every $ 2 * second
--- main = runSignal $ dropWhen ((\(x,_) -> x > 400) <~ mousePos) mousePos
--- main = runSignal $ sampleOn mouseClicks doubleMouse <|> mousePos
--- main = runSignal $ every second <|> fps 9.5
--- main = runSignal multiPlay
--- main = runSignal mousePos'
--- main = runSignal $ combine [pure (666,-666),mousePos,mousePos]
--- main = runSignal signals
--- main = runSignal $ p2 -- $ (p2 + lift snd p') - (p1 + lift fst p')
-    -- where
-        -- p' = foldp (\(x,y) (w,z) -> (x+w,y+z)) (0,0) mousePos
-        -- p1 = foldp' (\(x,y) (z,w) -> (x+w,z-y)) (0,0) mousePos'
-        -- p2 = foldp (+) 0 (snd <~ mousePos)
-        -- p3 = foldp (+) 0 (snd <~ mousePos)
-        -- p2 = (\a -> a + 0) <~ (snd <~ mousePos')
-
--- multiPlay :: Signal ()
--- multiPlay = playOn beat (isDown keyP) (isDown keyS)
-        -- <|> playOn beat (isDown keyA) (isDown keyS)
-        -- <|> playOn beat (isDown keyB) (isDown keyS)
-        -- <|> playOn beat (isDown keyC) (isDown keyS)
-        -- <|> playOn beat (isDown keyD) (isDown keyS)
-    -- where
-        -- beat = 0
-
-tonsOfMouseAndTime :: Signal (Double,Double)
-tonsOfMouseAndTime = tenThousandTest
-    where
-        tupleTest (x,y) (z,w) = (x+w,z-y)
-        test1           = tupleTest <~ mousePos
-        tenTests        = test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ mousePos)))))))))
-        test2           = tupleTest <~ tenTests
-        hundredTests    = test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ mousePos)))))))))
-        test3           = tupleTest <~ hundredTests
-        thousandsTests  = test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ mousePos)))))))))
-        test4           = tupleTest <~ thousandsTests
-        tenThousandTest = test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ mousePos)))))))))
-
-needlessCrawlTest :: Signal (Double,Double)
-needlessCrawlTest = tenThousandTest
-    where
-        tupleTest (x,y) (z,w) = (x+w,z-y)
-        test1           = tupleTest <~ pure (0,0)
-        tenTests        = test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ (test1 ~~ pure (0,0))))))))))
-        test2           = tupleTest <~ tenTests
-        hundredTests    = test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ (test2 ~~ pure (0,0))))))))))
-        test3           = tupleTest <~ hundredTests
-        thousandsTests  = test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ (test3 ~~ pure (0,0))))))))))
-        test4           = tupleTest <~ thousandsTests
-        tenThousandTest = test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ (test4 ~~ pure (0,0))))))))))

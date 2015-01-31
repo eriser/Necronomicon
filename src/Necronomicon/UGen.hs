@@ -20,6 +20,8 @@ import Necronomicon.Utility
 import Control.Monad.Trans
 import qualified Data.Map as M
 import Data.Monoid
+import Data.Typeable
+import Control.Category ((>>>))
 
 (+>) :: UGenType a => a -> (a -> a) -> a
 (+>) a f = add a (f a)
@@ -30,6 +32,7 @@ infixl 1 +>
 --------------------------------------------------------------------------------------
 data UGen = UGenNum Double
           | UGenFunc String CUGenFunc CUGenFunc CUGenFunc [UGen]
+          deriving (Typeable)
 
 instance Show UGen where
     show (UGenNum d) = show d
@@ -209,16 +212,22 @@ sinTest2 :: [UGen]
 sinTest2 = sin [0,10..100]
 
 sinTest3 :: [UGen]
-sinTest3 = sin [1, 2] |> sin |> gain (sin 13) |> gain 0.5 |> out 0
+sinTest3 = sin [1, 2] |> sin >>> gain (sin 13) >>> gain 0.5 >>> out 0
+
+sinTest4 :: [UGen] -> [UGen]
+sinTest4 fs = sin [0,10..100] + sin fs
 
 mySynth :: UGen -> UGen
 mySynth freq = sin freq
 
 lineSynth :: UGen -> UGen -> UGen
-lineSynth freq outBus = s freq |> out outBus -- + (s 440.0 |> delay 0.15)
-    where
-        s f = sin f * l * 0.2
-        l = line 0.3
+lineSynth freq outBus = sin freq * line 1 |> gain 0.1 >>> out outBus
+
+twoSins :: UGen -> UGen -> UGen
+twoSins f1 f2 = sin f1 + sin f2
+
+twoSinArrays :: [UGen] -> [UGen] -> [UGen]
+twoSinArrays f1 f2 = sin f1 + sin f2
 
 -- myCoolSynth2 = foldl (|>) (sin 0.3) (replicate 21 sin)
 
