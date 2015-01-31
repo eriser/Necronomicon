@@ -168,18 +168,13 @@ glow = PostRenderingFX "glow" $ \tex -> Material (drawGlow tex)
     where
         drawGlow tex mesh modelView proj resources = do
 
-            GL.depthFunc     GL.$= Nothing
             GL.blend         GL.$= GL.Enabled
             GL.blendBuffer 0 GL.$= GL.Enabled
             GL.blendFunc     GL.$= (GL.One,GL.One)
 
             blurDraw mesh modelView proj resources
             ambientDraw mesh modelView proj resources
-            -- blurDraw mesh modelView proj resources
 
-            GL.depthFunc     GL.$= Just GL.Less
-            GL.blend         GL.$= GL.Enabled
-            GL.blendBuffer 0 GL.$= GL.Enabled
             GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
             where
                 (Material blurDraw   ) = blur tex
