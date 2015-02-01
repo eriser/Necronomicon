@@ -47,9 +47,6 @@ twoArgSynth fx fy = sin fx + sin fy |> gain 0.1 >>> out 0
 threeSynth :: UGen -> UGen -> UGen -> UGen
 threeSynth fx fy fz = sin fx + sin fy + sin fz |> gain 0.1 >>> out 0
 
---Need to create and test oneShot system....probably an advance feature
--- <|> oneShot lineSynth (isDown keyX)
-
 testScene :: Signal ()
 testScene = scene [pure cam,terrainSig]
     where

@@ -784,9 +784,9 @@ foldn f bInit a = Signal $ \necro -> do
     where
         processState cont ref netCont client netid ids event@(Event uid _) = case idGuard ids uid ref of
             Just r -> r
-            _      -> netCont event >>= \case
+            _      -> netCont event >>= \n -> case n of
                 Change v -> writeIORef ref v >> return (Change v)
-                _        -> cont event >>= \case
+                _        -> cont event >>= \c -> case c of
                     NoChange _ -> readIORef ref >>= return . NoChange
                     Change   v -> do
                         prev <- readIORef ref
@@ -807,118 +807,12 @@ netsignal sig = Signal $ \necro -> do
     where
         processEvent cont netCont ref client netid ids event@(Event uid _) = case idGuard ids uid ref of
             Just r -> r
-            _      -> cont event >>= \case
+            _      -> cont event >>= \c -> case c of
                 Change v -> (readIORef ref >>= \prev -> if v /= prev then sendSetNetSignal client (netid,toNetVal v) else return ()) >> writeIORef ref v >> return (Change v)
-                _        -> netCont event >>= \case
+                _        -> netCont event >>= \n -> case n of
                     Change v -> writeIORef ref v >>  return (Change v)
                     _        -> readIORef  ref   >>= return . NoChange
-{-
-instance NetSignal Bool where
-    netsignal sig = Signal $ \necro -> do
-        (val,cont,sids) <- unSignal sig necro
-        ref             <- newIORef val
-        netid           <- getNextID necro
-        (_,netCont,_)   <- unSignal (input (if val then 1 else 0 ::Int) netid) necro
-        let ids          = IntSet.insert netid sids
-        sendAddSyncObject (client necro) $ SyncObject netid "netsig" "" (Seq.fromList [SyncInt $ if val then 1 else 0])
-        return (val,processEvent cont netCont ref (client necro) netid ids,ids)
-        where
-            processEvent cont netCont ref client netid ids event@(Event uid _) = case idGuard ids uid ref of
-                Just r -> r
-                _      -> cont event >>= \case
-                    Change v -> (readIORef ref >>= \prev -> if v /= prev then sendSetArg client netid 0 (SyncInt $ if v then 1 else 0) else return ()) >> writeIORef ref v >> return (Change v)
-                    _        -> netCont event >>= \case
-                        Change v -> writeIORef ref (v==1) >>  return (Change $ v == 1)
-                        _        -> readIORef  ref        >>= return . NoChange
 
-instance NetSignal (Double,Double) where
-    netsignal sig = Signal $ \necro -> do
-        (val,cont,sids) <- unSignal sig necro
-        ref             <- newIORef val
-        netid1          <- getNextID necro
-        netid2          <- getNextID necro
-        (_,netCont1,_)  <- unSignal (input (fst val) netid1) necro
-        (_,netCont2,_)  <- unSignal (input (snd val) netid2) necro
-        let ids          = IntSet.insert netid2 $ IntSet.insert netid1 sids
-        sendAddSyncObject (client necro) $ SyncObject netid1 "netsig" "" (Seq.fromList [SyncDouble (fst val),SyncDouble (snd val)])
-        return (val,processEvent cont netCont1 netCont2 ref (client necro) netid1 ids,ids)
-        where
-            processEvent cont netCont1 netCont2 ref client netid1 ids event@(Event uid _) = case idGuard ids uid ref of
-                Just r -> r
-                _      -> cont event >>= \case
-                    Change v -> (readIORef ref >>= \prev -> if v /= prev then sendSetArg client netid1 0 (SyncDouble (fst v)) >> sendSetArg client netid1 1 (SyncDouble (snd v)) else return ()) >> writeIORef ref v >> return (Change v)
-                    _        -> netCont1 event >>= \case
-                        Change v -> readIORef ref >>= \(_,v2) -> writeIORef ref (v,v2) >>  return (Change (v,v2))
-                        _        -> netCont2 event >>= \case
-                            Change v -> readIORef ref >>= \(v1,_) -> writeIORef ref (v1,v) >>  return (Change (v1,v))
-                            _        -> readIORef ref >>= return . NoChange
-
-
-instance NetSignal Vector3 where
-    foldn f bInit@(Vector3 x y z) a = Signal $ \necro -> do
-        (val,cont,sids) <- unSignal a necro
-        ref             <- newIORef bInit
-        netid           <- getNextID necro
-        netid2          <- getNextID necro
-        netid3          <- getNextID necro
-        (_,netCont,_)   <- unSignal (input x netid)  necro
-        (_,netCont2,_)  <- unSignal (input y netid2) necro
-        (_,netCont3,_)  <- unSignal (input z netid3) necro
-        let ids          = IntSet.insert netid2 $ IntSet.insert netid sids
-        sendAddSyncObject (client necro) $ SyncObject netid "foldn" "" (Seq.fromList [SyncDouble x,SyncDouble y,SyncDouble z])
-        return (f val bInit,processState cont ref netCont netCont2 netCont3 (client necro) netid ids,ids)
-        where
-            processState cont ref netCont netCont2 netCont3 client netid ids event@(Event uid _) = case idGuard ids uid ref of
-                Just r -> r
-                _      -> netCont event >>= \case
-                    Change v -> readIORef ref >>= \(Vector3 _ py pz) -> writeIORef ref (Vector3 v py pz) >> return (Change (Vector3 v py pz))
-                    _        -> netCont2 event >>= \case
-                        Change v -> readIORef ref >>= \(Vector3 px _ pz) -> writeIORef ref (Vector3 px v pz) >> return (Change (Vector3 px v pz))
-                        _        -> netCont3 event >>= \case
-                            Change v -> readIORef ref >>= \(Vector3 px py _) -> writeIORef ref (Vector3 px py v) >> return (Change (Vector3 px py v))
-                            _        -> cont event >>= \case
-                                NoChange _ -> readIORef ref >>= return . NoChange
-                                Change   v -> readIORef ref >>= \prev -> let new@(Vector3 x y z) = f v prev in if new == prev
-                                    then return (NoChange new)
-                                    else do
-                                        sendSetArg client netid 0 (SyncDouble x)
-                                        sendSetArg client netid 1 (SyncDouble y)
-                                        sendSetArg client netid 2 (SyncDouble z)
-                                        writeIORef ref new
-                                        return (Change new)
-
-    netsignal sig = Signal $ \necro -> do
-        (val@(Vector3 x y z),cont,sids) <- unSignal sig necro
-        ref             <- newIORef val
-        netid1          <- getNextID necro
-        netid2          <- getNextID necro
-        netid3          <- getNextID necro
-        (_,netCont1,_)  <- unSignal (input x netid1) necro
-        (_,netCont2,_)  <- unSignal (input y netid2) necro
-        (_,netCont3,_)  <- unSignal (input y netid3) necro
-        let ids          = IntSet.insert netid2 $ IntSet.insert netid1 sids
-        sendAddSyncObject (client necro) $ SyncObject netid1 "netsig" "" (Seq.fromList [SyncDouble x,SyncDouble y,SyncDouble z])
-        return (val,processEvent cont netCont1 netCont2 netCont3 ref (client necro) netid1 ids,ids)
-        where
-            processEvent cont netCont1 netCont2 netCont3 ref client netid1 ids event@(Event uid _) = case idGuard ids uid ref of
-                Just r -> r
-                _      -> netCont1 event >>= \case
-                    Change v -> readIORef ref >>= \(Vector3 _ py pz) -> writeIORef ref (Vector3 v py pz) >> return (Change (Vector3 v py pz))
-                    _        -> netCont2 event >>= \case
-                        Change v -> readIORef ref >>= \(Vector3 px _ pz) -> writeIORef ref (Vector3 px v pz) >> return (Change (Vector3 px v pz))
-                        _        -> netCont3 event >>= \case
-                            Change v -> readIORef ref >>= \(Vector3 px py _) -> writeIORef ref (Vector3 px py v) >> return (Change (Vector3 px py v))
-                            _        -> cont event >>= \case
-                                NoChange _ -> readIORef ref >>= return . NoChange
-                                Change   v -> readIORef ref >>= \prev@(Vector3 x y z) -> if v == prev
-                                    then return (NoChange v)
-                                    else do
-                                        sendSetArg client netid1 0 (SyncDouble x)
-                                        sendSetArg client netid1 1 (SyncDouble y)
-                                        sendSetArg client netid1 2 (SyncDouble y)
-                                        writeIORef ref v
-                                        return (Change v)
--}
 ---------------------------------------------
 -- Combinators
 ---------------------------------------------
