@@ -25,15 +25,18 @@ testGUI = gui [chatBox,netBox,users]
 -- Implement in terms of play until instead
 -- Networking the state works out better that way!
 testSound :: Signal ()
-testSound = play myCoolSynth2 (isDown keyW) (isUp   keyW)
-        <|> play myCoolSynth3 (isDown keyA) (isDown keyA)
-        <|> play myCoolSynth2 (isDown keyP) (isDown keyS)
+testSound = play (isDown keyW) (isUp   keyW) myCoolSynth2
+        <|> play (isDown keyA) (isDown keyA) myCoolSynth3
+        <|> play (isDown keyP) (isDown keyS) myCoolSynth2
 
 testSound2 :: Signal ()
-testSound2 = play noArgSynth  (isDown keyW) (isDown keyW)
-         <|> play oneArgSynth (isDown keyA) (isDown keyA) (scale 100 1000 <~ mouseX)
-         <|> play twoArgSynth (isDown keyS) (isDown keyS) (scale 100 1000 <~ mouseX) (scale 100 1000 <~ mouseY)
-         <|> play threeSynth  (isDown keyD) (isDown keyD) 440 880 66.6
+testSound2 = play (isDown keyW) (isDown keyW) noArgSynth
+         <|> play (isDown keyA) (isDown keyA) oneArgSynth (mouseX ~> scale 100 1000)
+         <|> play (isDown keyS) (isDown keyS) twoArgSynth (mouseX ~> scale 100 1000) (mouseY ~> scale 100 1000)
+         <|> play (isDown keyD) (isDown keyD) threeSynth  440 880 66.6
+
+
+testCompile = \(a:b:[]) -> [a,b]
 
 noArgSynth :: UGen
 noArgSynth = sin 0.1 |> out 0
@@ -42,7 +45,7 @@ oneArgSynth :: UGen -> UGen
 oneArgSynth = sin >>> gain 0.25 >>> out 0
 
 twoArgSynth :: UGen -> UGen -> [UGen]
-twoArgSynth fx fy = sin [fx,fy] |> scale 1 0.5 >>> gain 0.1 >>> out 0
+twoArgSynth fx fy = sin [fx,fy] |> gain 0.1 >>> out 0
 
 threeSynth :: UGen -> UGen -> UGen -> UGen
 threeSynth fx fy fz = sin fx + sin fy + sin fz |> gain 0.1 >>> out 0
@@ -54,6 +57,8 @@ testScene = scene [pure cam,terrainSig]
         cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
         terrain pos    = SceneObject pos identity 1 (Model simplexMesh $ vertexColored (RGBA 1 1 1 0.35)) []
         terrainSig     = terrain <~ foldn (+) 0 (lift3 move arrows (fps 30) 5)
+        -- terrainSig     = terrain <~ playPattern 0 (isDown keyP) (isDown keyP)
+            -- [lich| [0 1 2 3] [4 5 6 7] [6 0 5 0] [4 0 3 0] |]
 
 testTri :: Vector3 -> Quaternion -> SceneObject
 testTri pos r = SceneObject pos r 1 (Model (tri 0.3 white) $ vertexColored white) []

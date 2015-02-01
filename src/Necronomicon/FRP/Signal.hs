@@ -1181,22 +1181,44 @@ compileAndRunSynth synthName synth isCompiled shouldPlay synthRef = do
         init = do
             compileSynthDef synthName synth
 
-playPattern :: (Show a,Typeable a) => a -> Signal Bool -> Pattern (Pattern a,Double) -> Signal a
-playPattern init playSig pattern = Signal $ \necro -> do
+playPattern :: (Show a,Typeable a) => a -> Signal Bool -> Signal Bool -> Pattern (Pattern a,Double) -> Signal a
+playPattern init playSig stopSig pattern = Signal $ \necro -> do
+
+    --Signal Values
     (pValue,pCont,pids) <- unSignal playSig necro
-    counterValue        <- getNextID necro
+    (sValue,sCont,sids) <- unSignal playSig necro
+    uid                 <- getNextID necro
+    nid                 <- getNextID necro
     ref                 <- newIORef init
-    let pdef             = pstream ("signalsPDef" ++ show counterValue) (pure $ liftIO . atomically . writeTBQueue (globalDispatch necro) . Event counterValue . toDyn) pattern
+    playRef             <- newIORef False
+
+    --Net Values
+    (_,netPlayCont,_)     <- unSignal (input False nid) necro
+
+    --pure Values
+    let pdef             = pstream ("sigPattern" ++ show uid) (pure $ liftIO . atomically . writeTBQueue (globalDispatch necro) . Event uid . toDyn) pattern
+        ids              = IntSet.insert nid $ IntSet.insert uid $ IntSet.union sids pids
+
     runNecroState (setTempo 150) (necroVars necro)
-    return (init,processEvent pCont counterValue pdef (necroVars necro) ref,IntSet.insert counterValue pids)
+    sendAddNetSignal (client necro) (nid,NetBool False)
+    return (init,processEvent pCont sCont netPlayCont uid nid pdef (client necro) (necroVars necro) ref playRef ids,ids)
     where
-        processEvent pCont counterValue pdef necroVars ref event@(Event uid e) = do
-            p <- pCont event
-            case (p,uid == counterValue,fromDynamic e) of
-                (Change True ,_,_) -> runNecroState (runPDef pdef) necroVars >> readIORef ref >>= return . NoChange
-                (Change False,_,_) -> runNecroState (pstop   pdef) necroVars >> readIORef ref >>= return . NoChange
-                (_,True,Just v )   -> writeIORef ref v >> return (Change v)
-                _                  -> readIORef  ref >>= return . NoChange
+        processEvent pCont sCont netPlayCont uid nid pdef client necroVars ref playRef ids event@(Event eid e) = case idGuard ids eid ref of
+            Just  r -> r
+            Nothing -> if eid == uid
+                then case fromDynamic e of
+                    Just v -> writeIORef ref v >> return (Change v)
+                    _      -> print "dynamic casting error in playPattern" >> readIORef ref >>= return . NoChange
+                else netPlayCont event >>= \net -> case net of
+                    Change True  -> print "net play" >> runNecroState (runPDef pdef) necroVars >> writeIORef playRef True  >> readIORef ref >>= return . NoChange
+                    Change False -> print "net stop" >> runNecroState (pstop   pdef) necroVars >> writeIORef playRef False >> readIORef ref >>= return . NoChange
+                    _            -> readIORef playRef >>= \play -> if play
+                        then sCont event >>= \s -> case s of
+                            Change True -> print "stop" >> sendSetNetSignal client (nid,NetBool False) >> runNecroState (pstop   pdef) necroVars >> writeIORef playRef False >> readIORef ref >>= return . NoChange
+                            _           -> readIORef ref >>= return . NoChange
+                        else pCont event >>= \p -> case p of
+                            Change True -> print "play" >> sendSetNetSignal client (nid,NetBool True ) >> runNecroState (runPDef pdef) necroVars >> writeIORef playRef True  >> readIORef ref >>= return . NoChange
+                            _           -> readIORef ref >>= return . NoChange
 
 playSynthN :: UGenType a => a -> Signal Bool -> Signal Bool -> [Signal Double] -> Signal ()
 playSynthN synth playSig stopSig argSigs = Signal $ \necro -> do
@@ -1283,63 +1305,63 @@ playStopSynth synthName netArgs shouldPlay synthRef = do
 
 class Play a where
     type PlayRet a :: *
-    play :: a -> Signal Bool -> Signal Bool -> PlayRet a
+    play :: Signal Bool -> Signal Bool -> a -> PlayRet a
 
 instance Play UGen where
     type PlayRet UGen = Signal ()
-    play synth playSig stopSig = playSynthN synth playSig stopSig []
+    play playSig stopSig synth = playSynthN synth playSig stopSig []
 
 instance Play (UGen -> UGen) where
     type PlayRet (UGen -> UGen) = Signal Double -> Signal ()
-    play synth playSig stopSig x = playSynthN synth playSig stopSig [x]
+    play playSig stopSig synth x = playSynthN synth playSig stopSig [x]
 
 instance Play (UGen -> UGen -> UGen) where
     type PlayRet (UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal ()
-    play synth playSig stopSig x y = playSynthN synth playSig stopSig [x,y]
+    play playSig stopSig synth x y = playSynthN synth playSig stopSig [x,y]
 
 instance Play (UGen -> UGen -> UGen -> UGen) where
     type PlayRet (UGen -> UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal Double -> Signal ()
-    play synth playSig stopSig x y z = playSynthN synth playSig stopSig [x,y,z]
+    play playSig stopSig synth x y z = playSynthN synth playSig stopSig [x,y,z]
 
 instance Play (UGen -> UGen -> UGen -> UGen -> UGen) where
     type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
-    play synth playSig stopSig x y z w = playSynthN synth playSig stopSig [x,y,z,w]
+    play playSig stopSig synth x y z w = playSynthN synth playSig stopSig [x,y,z,w]
 
 instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
     type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
-    play synth playSig stopSig x y z w p = playSynthN synth playSig stopSig [x,y,z,w,p]
+    play playSig stopSig synth x y z w p = playSynthN synth playSig stopSig [x,y,z,w,p]
 
 instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
     type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
-    play synth playSig stopSig x y z w p q = playSynthN synth playSig stopSig [x,y,z,w,p,q]
+    play playSig stopSig synth x y z w p q = playSynthN synth playSig stopSig [x,y,z,w,p,q]
 
 instance Play [UGen] where
     type PlayRet [UGen] = Signal ()
-    play synth playSig stopSig = playSynthN synth playSig stopSig []
+    play playSig stopSig synth = playSynthN synth playSig stopSig []
 
 instance Play (UGen -> [UGen]) where
     type PlayRet (UGen -> [UGen]) = Signal Double -> Signal ()
-    play synth playSig stopSig x = playSynthN synth playSig stopSig [x]
+    play playSig stopSig synth x = playSynthN synth playSig stopSig [x]
 
 instance Play (UGen -> UGen -> [UGen]) where
     type PlayRet (UGen -> UGen -> [UGen]) = Signal Double -> Signal Double -> Signal ()
-    play synth playSig stopSig x y = playSynthN synth playSig stopSig [x,y]
+    play playSig stopSig synth x y = playSynthN synth playSig stopSig [x,y]
 
 instance Play (UGen -> UGen -> UGen -> [UGen]) where
     type PlayRet (UGen -> UGen -> UGen -> [UGen]) = Signal Double -> Signal Double -> Signal Double -> Signal ()
-    play synth playSig stopSig x y z = playSynthN synth playSig stopSig [x,y,z]
+    play playSig stopSig synth x y z = playSynthN synth playSig stopSig [x,y,z]
 
 instance Play (UGen -> UGen -> UGen -> UGen -> [UGen]) where
     type PlayRet (UGen -> UGen -> UGen -> UGen -> [UGen]) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
-    play synth playSig stopSig x y z w = playSynthN synth playSig stopSig [x,y,z,w]
+    play playSig stopSig synth x y z w = playSynthN synth playSig stopSig [x,y,z,w]
 
 instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> [UGen]) where
     type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> [UGen]) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
-    play synth playSig stopSig x y z w p = playSynthN synth playSig stopSig [x,y,z,w,p]
+    play playSig stopSig synth x y z w p = playSynthN synth playSig stopSig [x,y,z,w,p]
 
 instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> [UGen]) where
     type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> [UGen]) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
-    play synth playSig stopSig x y z w p q = playSynthN synth playSig stopSig [x,y,z,w,p,q]
+    play playSig stopSig synth x y z w p q = playSynthN synth playSig stopSig [x,y,z,w,p,q]
 
 
 -------------------------------------------------------------------------------------------------

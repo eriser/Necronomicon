@@ -17,7 +17,7 @@ import Debug.Trace
 
 import Data.Typeable
 import Data.Data
-import Data.Tree 
+import Data.Tree
 
 import qualified Necronomicon.Patterns as NP
 
@@ -90,7 +90,7 @@ parseRest = return ParsecRest <* char '_'
 
 parseRawAtom :: Parser String
 parseRawAtom = (:) <$> letter <*> many (letter <|> digit)
-            
+
 parseRawNumber :: Parser Double
 parseRawNumber = do
     first <- optionMaybe $ (char '-')
@@ -99,7 +99,7 @@ parseRawNumber = do
     case first of
         Just f  -> return . read $ f:d
         Nothing -> return . read $ d
-        
+
 parseNumber :: Parser (ParsecPattern Double)
 parseNumber = ParsecValue <$> parseRawNumber
 
@@ -124,7 +124,7 @@ parseSynthChordTuples = ParsecChord <$> (between (char '(' *> spaces) (spaces *>
 
 parseSynthPattern :: Parser (ParsecPattern String)
 parseSynthPattern = ParsecValue <$> parseRawAtom
-        
+
 
 ---------------------------
 -- FunctionPattern parsing
@@ -174,12 +174,12 @@ parseRawFunction = between (char '(' *> spaces) (spaces *> char ')') (try leftSe
 -- instance ParsecPatternExpression (ParsecPattern Double) where
     -- parsecPatternToQExpr (ParsecValue d) = do
         -- name <- getName "Note"
-        -- name' <- getName "Necronomicon.Patterns.Leaf" 
+        -- name' <- getName "Necronomicon.Patterns.Leaf"
         -- return $ AppE (ConE name') $ AppE (ConE name) (LitE . RationalL $ toRational d)
 
     -- parsecPatternToQExpr ParsecRest = do
         -- name <- getName "Rest"
-        -- name' <- getName "Necronomicon.Patterns.Leaf" 
+        -- name' <- getName "Necronomicon.Patterns.Leaf"
         -- return $ AppE (ConE name') $ ConE name
 
     -- parsecPatternToQExpr (ParsecList ps) = do
@@ -189,7 +189,7 @@ parseRawFunction = between (char '(' *> spaces) (spaces *> char ')') (try leftSe
 
     -- parsecPatternToQExpr (ParsecChord ds) = do
         -- name <- getName "Chord"
-        -- name' <- getName "Necronomicon.Patterns.Leaf" 
+        -- name' <- getName "Necronomicon.Patterns.Leaf"
         -- return $ AppE (ConE name) (ListE $ map (LitE . RationalL . toRational) ds)
 
     -- parsecPatternToQExpr (ErrorParsec e) = fail e
@@ -197,12 +197,12 @@ parseRawFunction = between (char '(' *> spaces) (spaces *> char ')') (try leftSe
 -- instance ParsecPatternExpression (ParsecPattern String) where
     -- parsecPatternToQExpr (ParsecValue s) = do
         -- name <- getName "Note"
-        -- name' <- getName "Necronomicon.Patterns.Leaf" 
+        -- name' <- getName "Necronomicon.Patterns.Leaf"
         -- return $ AppE (ConE name') $ AppE (ConE name) (LitE $ StringL s)
 
     -- parsecPatternToQExpr ParsecRest = do
         -- name <- getName "Rest"
-        -- name' <- getName "Necronomicon.Patterns.Leaf" 
+        -- name' <- getName "Necronomicon.Patterns.Leaf"
         -- return $ AppE (ConE name') $ ConE name
 
     -- parsecPatternToQExpr (ParsecList ps) = do
@@ -212,7 +212,7 @@ parseRawFunction = between (char '(' *> spaces) (spaces *> char ')') (try leftSe
 
     -- parsecPatternToQExpr (ParsecChord ds) = do
         -- name <- getName "Chord"
-        -- name' <- getName "Necronomicon.Patterns.Leaf" 
+        -- name' <- getName "Necronomicon.Patterns.Leaf"
         -- return $ AppE (ConE name') $ AppE (ConE name) (ListE $ map (LitE . StringL) ds)
 
     -- parsecPatternToQExpr (ErrorParsec e) = fail e
@@ -220,7 +220,7 @@ parseRawFunction = between (char '(' *> spaces) (spaces *> char ')') (try leftSe
 -- instance ParsecPatternExpression (ParsecPattern Exp) where
     -- parsecPatternToQExpr (ParsecValue s) = do
         -- name <- getName "Note"
-        -- name' <- getName "Necronomicon.Patterns.Leaf" 
+        -- name' <- getName "Necronomicon.Patterns.Leaf"
         -- return $ AppE (ConE name') $ AppE (ConE name) s
 
     -- parsecPatternToQExpr (ParsecList ps) = do
@@ -230,7 +230,7 @@ parseRawFunction = between (char '(' *> spaces) (spaces *> char ')') (try leftSe
 
     -- parsecPatternToQExpr (ParsecChord fs) = do
         -- name <- getName "Chord"
-        -- name' <- getName "Necronomicon.Patterns.Leaf" 
+        -- name' <- getName "Necronomicon.Patterns.Leaf"
         -- return $ AppE (ConE name') $ AppE (ConE name) (ListE fs)
 
     -- parsecPatternToQExpr (ErrorParsec e) = fail e
@@ -245,6 +245,7 @@ parseRawFunction = between (char '(' *> spaces) (spaces *> char ')') (try leftSe
             -- Nothing -> mkName a
     -- return $ VarE name'
 
+--Don't think this can handle negative numbers right now. Oops....
 layoutToPattern :: ParsecPattern a -> NP.Pattern (NP.Pattern a,Double)
 layoutToPattern (ParsecValue a) = NP.PVal (NP.PVal a,1)
 layoutToPattern  ParsecRest     = NP.PVal (NP.PNothing,1)
@@ -293,4 +294,3 @@ getValueName s = do
     return $ case name of
         Just n  -> n
         Nothing -> mkName s
-
