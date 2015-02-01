@@ -31,6 +31,8 @@ module Necronomicon.FRP.Signal (
     dimensions,
     mouseDown,
     mousePos,
+    mouseX,
+    mouseY,
     runSignal,
     mouseClicks,
     every,
@@ -717,6 +719,12 @@ textInput = Signal $ \necro -> do
 mousePos :: Signal (Double,Double)
 mousePos = input (0,0) 0
 
+mouseX :: Signal Double
+mouseX = fst <~ mousePos
+
+mouseY :: Signal Double
+mouseY = snd <~ mousePos
+
 mouseClicks :: Signal ()
 mouseClicks = (\_ -> ()) <~ keepIf (\x -> x == False) True mouseDown
 
@@ -1304,6 +1312,35 @@ instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
 instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
     type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
     play synth playSig stopSig x y z w p q = playSynthN synth playSig stopSig [x,y,z,w,p,q]
+
+instance Play [UGen] where
+    type PlayRet [UGen] = Signal ()
+    play synth playSig stopSig = playSynthN synth playSig stopSig []
+
+instance Play (UGen -> [UGen]) where
+    type PlayRet (UGen -> [UGen]) = Signal Double -> Signal ()
+    play synth playSig stopSig x = playSynthN synth playSig stopSig [x]
+
+instance Play (UGen -> UGen -> [UGen]) where
+    type PlayRet (UGen -> UGen -> [UGen]) = Signal Double -> Signal Double -> Signal ()
+    play synth playSig stopSig x y = playSynthN synth playSig stopSig [x,y]
+
+instance Play (UGen -> UGen -> UGen -> [UGen]) where
+    type PlayRet (UGen -> UGen -> UGen -> [UGen]) = Signal Double -> Signal Double -> Signal Double -> Signal ()
+    play synth playSig stopSig x y z = playSynthN synth playSig stopSig [x,y,z]
+
+instance Play (UGen -> UGen -> UGen -> UGen -> [UGen]) where
+    type PlayRet (UGen -> UGen -> UGen -> UGen -> [UGen]) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    play synth playSig stopSig x y z w = playSynthN synth playSig stopSig [x,y,z,w]
+
+instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> [UGen]) where
+    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> [UGen]) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    play synth playSig stopSig x y z w p = playSynthN synth playSig stopSig [x,y,z,w,p]
+
+instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> [UGen]) where
+    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> [UGen]) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    play synth playSig stopSig x y z w p q = playSynthN synth playSig stopSig [x,y,z,w,p,q]
+
 
 -------------------------------------------------------------------------------------------------
 -- Signals 5.0
