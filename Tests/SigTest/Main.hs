@@ -1,8 +1,9 @@
 import Necronomicon
 import Data.Fixed (mod')
+import Control.Arrow
 
 main :: IO ()
-main = runSignal <| testGUI <|> testScene <|> testSound
+main = runSignal <| testGUI <|> testScene <|> testSound2
 
 testGUI :: Signal ()
 testGUI = gui [chatBox,netBox,users]
@@ -30,21 +31,21 @@ testSound = play myCoolSynth2 (isDown keyW) (isUp   keyW)
 
 testSound2 :: Signal ()
 testSound2 = play noArgSynth  (isDown keyW) (isDown keyW)
-         <|> play oneArgSynth (isDown keyA) (isDown keyA) (fst <~ mousePos)
+         <|> play oneArgSynth (isDown keyA) (isDown keyA) (mousePos ~> \(x,_) -> x * 1000 + 100)
          <|> play twoArgSynth (isDown keyS) (isDown keyS) 440 880
          <|> play threeSynth  (isDown keyD) (isDown keyD) 440 880 66.6
 
 noArgSynth :: UGen
-noArgSynth = sin 0.1
+noArgSynth = sin 0.1 |> out 0
 
 oneArgSynth :: UGen -> UGen
-oneArgSynth = sin
+oneArgSynth = sin >>> gain 0.25 >>> out 0
 
 twoArgSynth :: UGen -> UGen -> UGen
-twoArgSynth fx fy = sin fx + sin fy
+twoArgSynth fx fy = sin fx + sin fy |> gain 0.1 >>> out 0
 
 threeSynth :: UGen -> UGen -> UGen -> UGen
-threeSynth fx fy fz = sin fx + sin fy + sin fz
+threeSynth fx fy fz = sin fx + sin fy + sin fz |> gain 0.1 >>> out 0
 
 --Need to create and test oneShot system....probably an advance feature
 -- <|> oneShot lineSynth (isDown keyX)

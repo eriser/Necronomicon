@@ -21,7 +21,7 @@ import Control.Monad.Trans
 import qualified Data.Map as M
 import Data.Monoid
 import Data.Typeable
-import Control.Category ((>>>))
+import Control.Arrow
 
 (+>) :: UGenType a => a -> (a -> a) -> a
 (+>) a f = add a (f a)
@@ -113,7 +113,7 @@ instance Floating [UGen] where
 --------------------------------------------------------------------------------------
 -- UGenType Class
 --------------------------------------------------------------------------------------
-    
+
 class UGenType a where
     ugen :: String -> CUGenFunc -> CUGenFunc -> CUGenFunc -> [a] -> a
     consume :: a -> Int -> Compiled ([UGen], Int) -- used during compiling to correctly handle synth argument compilation
@@ -147,7 +147,7 @@ instance UGenType [UGen] where
             incrementUGenChannels (n@(UGenNum _), channelOffset) = n
             incrementUGenChannels (UGenFunc n f c d args, channelOffset) = UGenFunc n f c d . map incrementSelectedArg $ zip args [0..]
                 where
-                    incrementSelectedArg (u, argIndex) = if argIndex == incrementedArgIndex then increment u else u 
+                    incrementSelectedArg (u, argIndex) = if argIndex == incrementedArgIndex then increment u else u
                     increment (UGenNum n) = UGenNum $ n + channelOffset
                     increment ugenFunc = if channelOffset == 0
                                              then ugenFunc

@@ -13,6 +13,7 @@ module Necronomicon.FRP.Signal (
     foldp,
     (<~),
     (~~),
+    (~>),
     -- (=<~),
     -- execute,
     enter,
@@ -135,10 +136,15 @@ import           System.Random
 (~~) :: Applicative f => f (a -> b) -> f a -> f b
 (~~) = (<*>)
 
+(~>) :: Functor f => f a -> (a -> b) -> f b
+(~>) = flip fmap
+
 constant :: a -> Signal a
 constant = pure
 
 infixl 4 <~,~~
+
+infixr 4 ~>
 
 -- maybe revert to global timer system?
 
@@ -1311,11 +1317,11 @@ playSynthN synth playSig stopSig argSigs = Signal $ \necro -> do
         synthName          = "sigsynth" ++ show uid
         args               = zip3 aConts      uids argRefs
         netArgs            = zip3 netArgConts uids argRefs
-        
+
     compiled <- runNecroState (compileSynthDef synthName synth) (necroVars necro) >> return True
 
     --Send AddSynth message to the out box to be sent when convenient, Then return this monster of a continuation
-    if not compiled then print "playSynthN Casting error" >> return ((),\_ -> return $ NoChange (),IntSet.empty) else do
+    if not compiled then print "playSynthN compiling error" >> return ((),\_ -> return $ NoChange (),IntSet.empty) else do
         -- addSynthPlayObject (client necro) uid False aValues
         sendAddNetSignal (client necro) (uid,NetBool False)
         mapM_ (\(uid',v) -> sendAddNetSignal (client necro) (uid',NetDouble v)) $ zip uids aValues
@@ -1324,45 +1330,53 @@ playSynthN synth playSig stopSig argSigs = Signal $ \necro -> do
         processEvent pCont sCont args netPlayCont synthName synthRef netArgs necroVars client uid ids event@(Event eid _) = if not $ IntSet.member eid ids
             then return $ NoChange ()
             else netPlayCont event >>= \net -> case net of
-                Change netPlay -> runNecroState (playStopSynth synthName netPlay synthRef) necroVars >>= \(e,_) -> return e --Play/Stop event from the network
+                Change netPlay -> runNecroState (playStopSynth synthName netArgs netPlay synthRef) necroVars >>= \(e,_) -> return e --Play/Stop event from the network
                 NoChange     _ -> readIORef synthRef >>= \s -> case s of
                     Just s  -> sCont event >>= \e -> case e of --There is a synth playing
-                        Change True  -> sendSetNetSignal client (uid,NetBool False) >> runNecroState (playStopSynth synthName False synthRef) necroVars >>= \(e,_) -> return e --Stop an already running synth
+                        Change True  -> sendSetNetSignal client (uid,NetBool False) >> runNecroState (playStopSynth synthName netArgs False synthRef) necroVars >>= \(e,_) -> return e --Stop an already running synth
                         Change False -> return $ NoChange ()
-                        _            -> mapM_ (receiveNetArg synthRef event) netArgs >> mapM_ (localArgUpdate synthRef client uid event) args >> return (NoChange ()) --Argument continuations
+                        _            -> mapM_ (receiveNetArg synthRef necroVars uid event) netArgs >> mapM_ (localArgUpdate synthRef client necroVars uid event) args >> return (NoChange ()) --Argument continuations
 
                     Nothing -> pCont event >>= \e -> case e of --There is not a synth playing
                         Change True  -> do
                             mapM_ (\(_,uid',ref) -> readIORef ref >>= \v -> sendSetNetSignal client (uid',toNetVal v)) netArgs --Send set arg messages first, to make sure we are on same page
-                            sendSetNetSignal client (uid,NetBool True) >> runNecroState (playStopSynth synthName True synthRef) necroVars >>= \(e,_) -> return e --Play an already stopped synth
+                            sendSetNetSignal client (uid,NetBool True) >> runNecroState (playStopSynth synthName netArgs True synthRef) necroVars >>= \(e,_) -> return e --Play an already stopped synth
                         Change False -> return $ NoChange ()
-                        _            -> mapM_ (receiveNetArg synthRef event) netArgs >> mapM_ (localArgUpdate synthRef client uid event) args >> return (NoChange ()) --Argument continuations
+                        _            -> mapM_ (receiveNetArg synthRef necroVars uid event) netArgs >> mapM_ (localArgUpdate synthRef client necroVars uid event) args >> return (NoChange ()) --Argument continuations
 
+third :: (a,b,c) -> c
+third (a,b,c) = c
 
 --Check for Local argument updates, write to arg ref, and if a synth is playing modify the synth, then send changes to the network
-localArgUpdate :: IORef (Maybe Synth) -> Client -> Int -> Event -> ((Event -> IO (EventValue Double)),Int,IORef Double) -> IO()
-localArgUpdate synthRef client uid event@(Event eid _) (cont,uid',ref) = cont event >>= \argValue -> case argValue of
+localArgUpdate :: IORef (Maybe Synth) -> Client -> NecroVars -> Int -> Event -> ((Event -> IO (EventValue Double)),Int,IORef Double) -> IO()
+localArgUpdate synthRef client necroVars uid event@(Event eid _) (cont,uid',ref) = cont event >>= \argValue -> case argValue of
     NoChange _ -> return ()
     Change   v -> writeIORef ref v >> readIORef synthRef >>= \maybeSynth -> case maybeSynth of
         Nothing    -> return ()
         Just synth -> do
             sendSetNetSignal client (uid',toNetVal v)
-            print "localArgUpdate....need Chad to update ugens for this to do anything."
+            runNecroState (setSynthArg synth (uid'-uid - 1) v) necroVars
+            -- print "localArgUpdate....."
+            return ()
 
 --Receive an argument update from the network, write it to the arg ref, then if the synth is playing modify the synth
-receiveNetArg :: IORef (Maybe Synth) -> Event -> ((Event -> IO (EventValue Double)),Int,IORef Double) -> IO()
-receiveNetArg synthRef event@(Event eid _) (cont,uid,ref) = if uid /= eid then return () else cont event >>= \argValue -> case argValue of
+receiveNetArg :: IORef (Maybe Synth) -> NecroVars -> Int -> Event -> ((Event -> IO (EventValue Double)),Int,IORef Double) -> IO()
+receiveNetArg synthRef necroVars uid event@(Event eid _) (cont,uid',ref) = if uid' /= eid then return () else cont event >>= \argValue -> case argValue of
     NoChange _ -> return ()
     Change   v -> writeIORef ref v >> readIORef synthRef >>= \maybeSynth -> case maybeSynth of
         Nothing    -> return ()
-        Just synth -> print "receiveNetArg....need Chad to update ugens for this to do anything."
+        Just synth -> do
+            runNecroState (setSynthArg synth (uid'-uid - 1) v) necroVars
+            -- print "receiveNetArg....."
+            return ()
 
-playStopSynth :: String -> Bool -> IORef (Maybe Synth) -> Necronomicon (EventValue ())
-playStopSynth synthName shouldPlay synthRef = do
+playStopSynth :: String -> [((Event -> IO (EventValue Double)),Int,IORef Double)] -> Bool -> IORef (Maybe Synth) -> Necronomicon (EventValue ())
+playStopSynth synthName netArgs shouldPlay synthRef = do
     maybeSynth <- liftIO $ readIORef synthRef
+    args       <- liftIO $ mapM (\(_,_,r) -> readIORef r) netArgs
     case (maybeSynth,shouldPlay) of
-        (Nothing   ,True )  -> liftIO (print "play") >> playSynth synthName [{- PUT ARGS HERE! -}] >>= \s -> liftIO (writeIORef synthRef $ Just s) >> return (Change ())
-        (Just synth,False)  -> liftIO (print "stop") >> stopSynth synth                            >>        liftIO (writeIORef synthRef  Nothing) >> return (Change ())
+        (Nothing   ,True )  -> liftIO (print "play") >> playSynth synthName args >>= \s -> liftIO (writeIORef synthRef $ Just s) >> return (Change ())
+        (Just synth,False)  -> liftIO (print "stop") >> stopSynth synth          >>        liftIO (writeIORef synthRef  Nothing) >> return (Change ())
         _                   -> return (NoChange ())
 
 class Play a where
