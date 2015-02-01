@@ -31,8 +31,8 @@ testSound = play myCoolSynth2 (isDown keyW) (isUp   keyW)
 
 testSound2 :: Signal ()
 testSound2 = play noArgSynth  (isDown keyW) (isDown keyW)
-         <|> play oneArgSynth (isDown keyA) (isDown keyA) (mouseX ~> \x -> x * 1000 + 100)
-         <|> play twoArgSynth (isDown keyS) (isDown keyS) (mouseX ~> \x -> x * 1000 + 100) (mouseY ~> \x -> x * 1000 + 100)
+         <|> play oneArgSynth (isDown keyA) (isDown keyA) (scale 100 1000 <~ mouseX)
+         <|> play twoArgSynth (isDown keyS) (isDown keyS) (scale 100 1000 <~ mouseX) (scale 100 1000 <~ mouseY)
          <|> play threeSynth  (isDown keyD) (isDown keyD) 440 880 66.6
 
 noArgSynth :: UGen
@@ -42,7 +42,7 @@ oneArgSynth :: UGen -> UGen
 oneArgSynth = sin >>> gain 0.25 >>> out 0
 
 twoArgSynth :: UGen -> UGen -> [UGen]
-twoArgSynth fx fy = sin [fx,fy] |> gain 0.1 >>> out 0
+twoArgSynth fx fy = sin [fx,fy] |> scale 1 0.5 >>> gain 0.1 >>> out 0
 
 threeSynth :: UGen -> UGen -> UGen -> UGen
 threeSynth fx fy fz = sin fx + sin fy + sin fz |> gain 0.1 >>> out 0

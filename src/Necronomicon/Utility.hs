@@ -1,11 +1,13 @@
-module Necronomicon.Utility (hash, (|>), (<|)) where
+module Necronomicon.Utility (hash,
+                             (|>),
+                             (<|),
+                             scale,
+                             linlin,
+                             range) where
 
 import Prelude
 import Data.Bits
--- import Data.Int
--- import Data.Word
 import Data.List (foldl')
--- import Foreign.C
 
 class Hashable a where
     hash :: a -> Int
@@ -32,3 +34,19 @@ infixl 0 |>
 a <| b = a b
 
 infixl 0 <|
+
+
+------------------------------------------------------------
+-- Generally useful numeric functions
+------------------------------------------------------------
+linlin :: (Floating a,Fractional a) => a -> a -> a -> a -> a -> a
+linlin imin imax omin omax input = ((input - imin) * outRange / inRange) + imin
+    where
+        inRange  = imax - imin
+        outRange = omax - omin
+
+scale :: (Floating a,Fractional a) => a -> a -> a -> a
+scale offset range input = input * range + offset
+
+range :: (Floating a,Fractional a) => a -> a -> a -> a
+range = linlin (-1) 1
