@@ -11,21 +11,28 @@ playSynths = mapM_ (\i -> playSynthAt "LineSynth" [i * 110, fromIntegral $ mod (
 
 engineTest :: Necronomicon ()
 engineTest = do
+    {-
     compileSynthDef "LineSynth" (lineSynth)
     playSynths
     printSynthDef "LineSynth"
     nThreadDelay 2000000
+    -}
+    compileSynthDef "LoopSynth" loopSynth
+    runningLoopSynth <- playSynth "LoopSynth" []
+    nPrint "Waiting for user input..."
+    _ <- liftIO $ getLine
+    stopSynth runningLoopSynth
+    {-
     compileSynthDef "SimpleSine" simpleSine
     printSynthDef "SimpleSine"
     simpleSineSynth <- playSynth "SimpleSine" [440]
     nPrint simpleSineSynth
     nSleep 0.05
-    mapM_ (\freq -> setSynthArg simpleSineSynth 0 freq >> nThreadDelay 50) [20,20.25..5000]
+    mapM_ (\freq -> setSynthArg simpleSineSynth 0 freq >> nThreadDelay 50) [20,22..5000]
     nPrint "Waiting for user input..."
     _ <- liftIO $ getLine
     stopSynth simpleSineSynth
-    nPrint "Waiting for user input..."
-    _ <- liftIO $ getLine
+    -}
     return ()
 
 main :: IO ()
