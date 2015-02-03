@@ -36,14 +36,14 @@ testSound2 = play (isDown keyW) (isDown keyW) noArgSynth
          <|> play (isDown keyD) (isDown keyD) threeSynth  440 880 66.6
 
 
-testCompile = \(a:b:[]) -> [a,b]
-
 noArgSynth :: UGen
 noArgSynth = sin 0.1 |> out 0
 
 oneArgSynth :: UGen -> [UGen]
+-- oneArgSynth f = syncsaw [f,f] (saw 400) |> gain 0.25 >>> out 0
+oneArgSynth f = saw [f,f] |> gain 0.25 >>> out 0
 -- oneArgSynth f = lfpulse [f,f] 0 |> gain 0.25 >>> out 0
-oneArgSynth f = lfsaw [f,f] 0 |> gain 0.25 >>> out 0
+-- oneArgSynth f = lfsaw [f,f] 0 |> gain 0.25 >>> out 0
 
 twoArgSynth :: UGen -> UGen -> [UGen]
 twoArgSynth fx fy = sin [fx,fy] |> gain 0.1 >>> out 0

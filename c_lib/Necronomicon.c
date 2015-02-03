@@ -23,6 +23,8 @@
 // Constants
 /////////////////////
 
+typedef enum { false, true } bool;
+
 #ifndef M_PI
 #define M_PI 3.1415926535897932384626433832795028841971693993751058209749445923078164062L
 #endif
@@ -236,6 +238,7 @@ void process_synth(synth_node* synth)
 void null_deconstructor(ugen* u) {} // Does nothing
 void null_constructor(ugen* u) { u->data = NULL; }
 void try_schedule_current_synth_for_removal(); // Forward declaration
+bool minBLEP_Init(); //Curtis: MinBlep initialization Forward declaration
 
 void initialize_wave_tables()
 {
@@ -244,6 +247,9 @@ void initialize_wave_tables()
 	{
 		sine_table[i] = sin(TWO_PI * (((double) i) / ((double) TABLE_SIZE)));
 	}
+
+	//Curtis: Needed to initialize minblep table.
+	bool minblepInitialized = minBLEP_Init();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -373,7 +379,6 @@ void print_ugen(ugen* ugen)
 // Scheduler
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-typedef enum { false, true } bool;
 const unsigned int MAX_FIFO_MESSAGES = 2048;
 const unsigned int FIFO_SIZE_MASK = 2047;
 
@@ -1507,6 +1512,7 @@ void accumulator_deconstructor(ugen* u)
 	free(u->data);
 }
 
+//LFOS
 double RECIP_CHAR_RANGE = 1.0 / 255.0;
 void lfsaw_calc(ugen* u)
 {
@@ -1514,7 +1520,6 @@ void lfsaw_calc(ugen* u)
 	double phaseArg = UGEN_IN(u, 1);
 	double phase    = *((double*) u->data);
 
-	// double amplitude = WAVE_TABLE_AMPLITUDE(phase,saw_table);
 	//Branchless and table-less saw
 	double        amp1      = ((double)((char)phase));
 	double        amp2      = ((double)(((char)phase)+1));
@@ -1531,10 +1536,195 @@ void lfpulse_calc(ugen* u)
 	double phaseArg = UGEN_IN(u, 1);
 	double phase    = *((double*) u->data);
 
-	//double amplitude = WAVE_TABLE_AMPLITUDE(phase,square_table);
 	//Branchless and table-less square
 	double amplitude = 1 | (((char)phase) >> (sizeof(char) * CHAR_BIT - 1));
 
 	*((double*) u->data) = phase + phaseArg + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
+	UGEN_OUT(u, 0, amplitude);
+}
+
+//---------------------------------------------
+//MinBlep Bandwidth-limited Saw and Square
+//---------------------------------------------
+
+#define KTABLE 64 // BLEP table oversampling factor
+
+typedef struct
+{
+	double *lpTable;
+	int     c;
+} minbleptable_t;
+
+typedef struct
+{
+	double  output;
+	double  phase;
+	double *buffer;      // circular output buffer
+	int     cBuffer;	 // buffer size
+	int     iBuffer;	 // current buffer position
+	int     nInit;		 // amount of initialized entries
+	double  prevSyncAmp; //For hardsync
+} minblep;
+
+minbleptable_t gMinBLEP;
+
+bool minBLEP_Init()
+{
+	// load table
+	FILE *fp=fopen("/home/casiosk1/code/minblep_osc/minblep.mat","rb");
+	unsigned int iSize;
+
+	if (!fp) return false;
+
+	fseek(fp,0x134,SEEK_SET);
+
+	fread(&iSize,sizeof(int),1,fp);
+	gMinBLEP.c=iSize/sizeof(double);
+
+	gMinBLEP.lpTable=(double*)malloc(iSize);
+	if (!gMinBLEP.lpTable) return false;
+
+	fread(gMinBLEP.lpTable,iSize,1,fp);
+
+	fclose(fp);
+
+	return true;
+}
+
+void minBLEP_Free()
+{
+	free(gMinBLEP.lpTable);
+}
+
+void minblep_constructor(ugen* u)
+{
+	minblep* mb     = malloc(sizeof(minblep));
+	mb->output      = 0.0;
+	mb->phase       = 0.0;
+	mb->cBuffer     = gMinBLEP.c/KTABLE;
+	mb->buffer      = (double*)malloc(sizeof(double) * mb->cBuffer);
+	mb->iBuffer     = 0;
+	mb->nInit       = 0;
+	mb->prevSyncAmp = 0;
+	u->data         = mb;
+}
+
+void minblep_deconstructor(ugen* u)
+{
+	minblep* mb = (minblep*) u->data;
+	// free(mb->buffer);
+	free(u->data);
+}
+
+// add impulse into buffer
+inline void add_blep(minblep* mb, double offset, double amp)
+{
+	int    i;
+	double *out       = mb->buffer  + mb->iBuffer;
+	double *in        = gMinBLEP.lpTable + (int) (KTABLE*offset);
+	double frac       = fmod(KTABLE*offset,1.0);
+	int    cBLEP      = (gMinBLEP.c / KTABLE) - 1;
+	double *bufferEnd = mb->buffer  + mb->cBuffer;
+	double f;
+
+	// add
+	for(i=0; i < mb->nInit; i++, in += KTABLE, out++)
+	{
+		if(out >= bufferEnd)
+			out = mb->buffer;
+
+		f = LERP(in[0],in[1],frac);
+		*out += amp * (1-f);
+	}
+
+	// copy
+	for(; i < cBLEP; i++, in += KTABLE, out++)
+	{
+		if(out >= bufferEnd)
+			out = mb->buffer;
+
+		f = LERP(in[0],in[1],frac);
+		*out = amp*(1-f);
+	}
+
+	mb->nInit = cBLEP;
+}
+
+void saw_calc(ugen* u)
+{
+	double   freq      = UGEN_IN(u, 0) * RECIP_SAMPLE_RATE;
+	// double   pwm       = UGEN_IN(u, 1);
+	minblep* mb        = (minblep*) u->data;
+	double   amplitude = 0.0;
+
+	// create waveform
+	mb->phase = mb->phase + freq;
+
+	// add BLEP at end of waveform
+	if (mb->phase >= 1)
+	{
+		mb->phase  = mb->phase - 1.0;
+		mb->output = 0.0;
+		add_blep(mb, mb->phase/freq,1.0);
+	}
+
+	// add BLEP in middle of wavefor for squarewave
+	// if (!mb->output && mb->phase > pwm && mb->type==OT_SQUARE)
+	// {
+		// mb->v=1.0;
+		// osc_AddBLEP(mb, (mb->p-mb->fPWM)/fs,-1.0);
+	// }
+
+	// sample value
+	// if (mb->type==OT_SAW)
+		// v=mb->p;
+	// else
+		// v=mb->v;
+
+	amplitude = mb->phase;
+
+	// add BLEP buffer contents
+	if(mb->nInit)
+	{
+		amplitude += mb->buffer[mb->iBuffer];
+		mb->nInit--;
+		if(++mb->iBuffer >= mb->cBuffer)
+			mb->iBuffer=0;
+	}
+
+	UGEN_OUT(u, 0, amplitude);
+}
+
+void syncsaw_calc(ugen* u)
+{
+	double   freq      = UGEN_IN(u, 0) * RECIP_SAMPLE_RATE;
+	double   sync      = UGEN_IN(u, 1);
+	minblep* mb        = (minblep*) u->data;
+	double   amplitude = 0.0;
+
+	// create waveform
+	mb->phase = mb->phase + freq;
+
+	// add BLEP at end of waveform
+	if (mb->phase >= 1 || (mb->prevSyncAmp <= 0 && sync > 0))
+	{
+		mb->phase  = mb->phase - 1.0;
+		mb->output = 0.0;
+		add_blep(mb, mb->phase/freq,1.0);
+	}
+
+	amplitude = mb->phase;
+
+	// add BLEP buffer contents
+	if(mb->nInit)
+	{
+		amplitude += mb->buffer[mb->iBuffer];
+		mb->nInit--;
+		if(++mb->iBuffer >= mb->cBuffer)
+			mb->iBuffer=0;
+	}
+
+	mb->prevSyncAmp = sync;
+
 	UGEN_OUT(u, 0, amplitude);
 }

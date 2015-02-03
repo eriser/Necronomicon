@@ -216,6 +216,17 @@ foreign import ccall "&lfpulse_calc" lfpulseCalc :: CUGenFunc
 lfpulse :: UGenType a => a -> a -> a
 lfpulse freq phase = ugen "lfpulse" lfpulseCalc accumulatorConstructor accumulatorDeconstructor [freq,phase]
 
+foreign import ccall "&minblep_constructor"   minblepConstructor   :: CUGenFunc
+foreign import ccall "&minblep_deconstructor" minblepDeconstructor :: CUGenFunc
+
+foreign import ccall "&saw_calc" sawCalc :: CUGenFunc
+saw :: UGenType a => a -> a
+saw freq = ugen "saw" sawCalc minblepConstructor minblepDeconstructor [freq]
+
+foreign import ccall "&syncsaw_calc" syncSawCalc :: CUGenFunc
+syncsaw :: UGenType a => a -> a -> a
+syncsaw freq master = ugen "syncsaw" syncSawCalc minblepConstructor minblepDeconstructor [freq,master]
+
 ----------------------------------------------------
 
 sinTest :: [UGen]
