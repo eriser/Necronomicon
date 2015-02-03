@@ -32,7 +32,7 @@ testSound = play (isDown keyW) (isUp   keyW) myCoolSynth2
 testSound2 :: Signal ()
 testSound2 = play (isDown keyW) (isDown keyW) noArgSynth
          <|> play (isDown keyA) (isDown keyA) oneArgSynth (mouseX ~> scale 20 1000)
-         <|> play (isDown keyS) (isDown keyS) twoArgSynth (mouseX ~> scale 100 1000) (mouseY ~> scale 100 1000)
+         <|> play (isDown keyS) (isDown keyS) twoArgSynth (mouseX ~> scale 100 1000) (mouseY ~> scale 0.01 0.99)
          <|> play (isDown keyD) (isDown keyD) threeSynth  440 880 66.6
 
 
@@ -40,13 +40,16 @@ noArgSynth :: UGen
 noArgSynth = sin 0.1 |> out 0
 
 oneArgSynth :: UGen -> [UGen]
+oneArgSynth f = syncpulse [f,f] 0.5 (saw 400) |> gain 0.25 >>> out 0
 -- oneArgSynth f = syncsaw [f,f] (saw 400) |> gain 0.25 >>> out 0
-oneArgSynth f = saw [f,f] |> gain 0.25 >>> out 0
+-- oneArgSynth f = syncsaw [f,f] (saw 400) |> gain 0.25 >>> out 0
+-- oneArgSynth f = saw [f,f] |> gain 0.25 >>> out 0
 -- oneArgSynth f = lfpulse [f,f] 0 |> gain 0.25 >>> out 0
 -- oneArgSynth f = lfsaw [f,f] 0 |> gain 0.25 >>> out 0
 
 twoArgSynth :: UGen -> UGen -> [UGen]
-twoArgSynth fx fy = sin [fx,fy] |> gain 0.1 >>> out 0
+twoArgSynth f pw = pulse [f,f] [pw,pw] |> gain 0.1 >>> out 0
+-- twoArgSynth fx fy = sin [fx,fy] |> gain 0.1 >>> out 0
 
 threeSynth :: UGen -> UGen -> UGen -> UGen
 threeSynth fx fy fz = sin fx + sin fy + sin fz |> gain 0.1 >>> out 0

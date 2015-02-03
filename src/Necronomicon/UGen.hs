@@ -223,9 +223,18 @@ foreign import ccall "&saw_calc" sawCalc :: CUGenFunc
 saw :: UGenType a => a -> a
 saw freq = ugen "saw" sawCalc minblepConstructor minblepDeconstructor [freq]
 
+foreign import ccall "&square_calc" squareCalc :: CUGenFunc
+pulse :: UGenType a => a -> a -> a
+pulse freq pw = ugen "pulse" squareCalc minblepConstructor minblepDeconstructor [freq,pw]
+
 foreign import ccall "&syncsaw_calc" syncSawCalc :: CUGenFunc
 syncsaw :: UGenType a => a -> a -> a
 syncsaw freq master = ugen "syncsaw" syncSawCalc minblepConstructor minblepDeconstructor [freq,master]
+
+foreign import ccall "&syncsquare_calc" syncSquareCalc :: CUGenFunc
+syncpulse :: UGenType a => a -> a -> a -> a
+syncpulse freq pw master = ugen "syncpulse" syncSquareCalc minblepConstructor minblepDeconstructor [freq,pw,master]
+
 
 ----------------------------------------------------
 

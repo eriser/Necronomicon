@@ -1491,7 +1491,13 @@ void test_doubly_linked_list()
 // Curtis: New UGens
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#define LERP(a,b,d) (a+d*(b-a))
+#define LERP(A,B,D) (A+D*(B-A))
+#define CLAMP(V,MIN,MAX) \
+({\
+	double result = V < MIN ? MIN : V; \
+	result        = V > MAX ? MAX : V; \
+	result; \
+})
 
 #define WAVE_TABLE_AMPLITUDE(phase,table) \
 ({ \
@@ -1695,6 +1701,45 @@ void saw_calc(ugen* u)
 	UGEN_OUT(u, 0, amplitude);
 }
 
+void square_calc(ugen* u)
+{
+	double   freq      = UGEN_IN(u, 0) * RECIP_SAMPLE_RATE;
+	double   pwm       = CLAMP(UGEN_IN(u, 1),0,1) * 0.5;
+	minblep* mb        = (minblep*) u->data;
+	double   amplitude = 0.0;
+
+	// create waveform
+	mb->phase = mb->phase + freq;
+
+	// add BLEP at end of waveform
+	if (mb->phase >= 1)
+	{
+		mb->phase  = mb->phase - 1.0;
+		mb->output = 0.0;
+		add_blep(mb, mb->phase/freq,1.0);
+	}
+
+	// add BLEP in middle of wavefor for squarewave
+	if(!mb->output && mb->phase > pwm)
+	{
+		mb->output = 1.0;
+		add_blep(mb, (mb->phase - pwm) / freq,-1.0);
+	}
+
+	amplitude = mb->output;
+
+	// add BLEP buffer contents
+	if(mb->nInit)
+	{
+		amplitude += mb->buffer[mb->iBuffer];
+		mb->nInit--;
+		if(++mb->iBuffer >= mb->cBuffer)
+			mb->iBuffer=0;
+	}
+
+	UGEN_OUT(u, 0, amplitude);
+}
+
 void syncsaw_calc(ugen* u)
 {
 	double   freq      = UGEN_IN(u, 0) * RECIP_SAMPLE_RATE;
@@ -1725,6 +1770,56 @@ void syncsaw_calc(ugen* u)
 	}
 
 	mb->prevSyncAmp = sync;
+	UGEN_OUT(u, 0, amplitude);
+}
 
+
+void syncsquare_calc(ugen* u)
+{
+	double   freq      = UGEN_IN(u, 0) * RECIP_SAMPLE_RATE;
+	double   pwm       = CLAMP(UGEN_IN(u, 1),0,1) * 0.5;
+	double   sync      = UGEN_IN(u, 2);
+	minblep* mb        = (minblep*) u->data;
+	double   amplitude = 0.0;
+
+	// create waveform
+	mb->phase = mb->phase + freq;
+
+	// add BLEP at end of waveform
+	if (mb->phase >= 1)
+	{
+		mb->phase  = mb->phase - 1.0;
+		mb->output = 0.0;
+		add_blep(mb, mb->phase/freq,1.0);
+	}
+
+	// add BLEP in middle of wavefor for squarewave
+	if(!mb->output && mb->phase > pwm)
+	{
+		mb->output = 1.0;
+		add_blep(mb, (mb->phase - pwm) / freq,-1.0);
+	}
+
+	// add BLEP at hard sync
+	//Have to detect this better and determine the incoming frequence!
+	if(mb->prevSyncAmp <= 0 && sync > 0)
+	{
+		mb->phase  = mb->phase - 1.0;
+		mb->output = 0.0;
+		add_blep(mb, mb->phase/freq,1.0);
+	}
+
+	amplitude = mb->output;
+
+	// add BLEP buffer contents
+	if(mb->nInit)
+	{
+		amplitude += mb->buffer[mb->iBuffer];
+		mb->nInit--;
+		if(++mb->iBuffer >= mb->cBuffer)
+			mb->iBuffer=0;
+	}
+
+	mb->prevSyncAmp = sync;
 	UGEN_OUT(u, 0, amplitude);
 }
