@@ -1486,6 +1486,8 @@ void test_doubly_linked_list()
 // Curtis: New UGens
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#define LERP(a,b,d) (a+d*(b-a))
+
 #define WAVE_TABLE_AMPLITUDE(phase,table) \
 ({ \
 	double amp1  = table[(unsigned char)phase]; \
@@ -1508,29 +1510,31 @@ void accumulator_deconstructor(ugen* u)
 double RECIP_CHAR_RANGE = 1.0 / 255.0;
 void lfsaw_calc(ugen* u)
 {
-	double freq = UGEN_IN(u, 0);
-	double phase = *((double*) u->data);
+	double freq     = UGEN_IN(u, 0);
+	double phaseArg = UGEN_IN(u, 1);
+	double phase    = *((double*) u->data);
 
 	// double amplitude = WAVE_TABLE_AMPLITUDE(phase,saw_table);
 	//Branchless and table-less saw
-	double        amp1      = ((double)((char)phase));     //* RECIP_CHAR_RANGE;
-	double        amp2      = ((double)(((char)phase)+1)); //* RECIP_CHAR_RANGE;
+	double        amp1      = ((double)((char)phase));
+	double        amp2      = ((double)(((char)phase)+1));
 	double        delta     = phase - ((long) phase);
-	double        amplitude = (amp1 + delta * (amp2 - amp1)) * RECIP_CHAR_RANGE;
+	double        amplitude = LERP(amp1,amp2,delta) * RECIP_CHAR_RANGE;
 
-	*((double*) u->data) = phase + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
+	*((double*) u->data) = phase + phaseArg + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
 	UGEN_OUT(u, 0, amplitude);
 }
 
 void lfpulse_calc(ugen* u)
 {
-	double freq = UGEN_IN(u, 0);
-	double phase = *((double*) u->data);
+	double freq     = UGEN_IN(u, 0);
+	double phaseArg = UGEN_IN(u, 1);
+	double phase    = *((double*) u->data);
 
 	//double amplitude = WAVE_TABLE_AMPLITUDE(phase,square_table);
 	//Branchless and table-less square
 	double amplitude = 1 | (((char)phase) >> (sizeof(char) * CHAR_BIT - 1));
 
-	*((double*) u->data) = phase + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
+	*((double*) u->data) = phase + phaseArg + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
 	UGEN_OUT(u, 0, amplitude);
 }

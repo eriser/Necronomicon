@@ -209,13 +209,12 @@ foreign import ccall "&accumulator_constructor" accumulatorConstructor :: CUGenF
 foreign import ccall "&accumulator_deconstructor" accumulatorDeconstructor :: CUGenFunc
 
 foreign import ccall "&lfsaw_calc" lfsawCalc :: CUGenFunc
-lfsaw :: UGenType a => a -> a
-lfsaw freq = ugen "lfsaw" lfsawCalc accumulatorConstructor accumulatorDeconstructor [freq]
+lfsaw :: UGenType a => a -> a -> a
+lfsaw freq phase = ugen "lfsaw" lfsawCalc accumulatorConstructor accumulatorDeconstructor [freq,phase]
 
 foreign import ccall "&lfpulse_calc" lfpulseCalc :: CUGenFunc
-lfpulse :: UGenType a => a -> a
-lfpulse freq = ugen "lfpulse" lfpulseCalc accumulatorConstructor accumulatorDeconstructor [freq]
-
+lfpulse :: UGenType a => a -> a -> a
+lfpulse freq phase = ugen "lfpulse" lfpulseCalc accumulatorConstructor accumulatorDeconstructor [freq,phase]
 
 ----------------------------------------------------
 
