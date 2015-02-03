@@ -202,6 +202,21 @@ line length = ugen "line" lineCalc lineConstructor lineDeconstructor [length]
 foreign import ccall "&out_calc" outCalc :: CUGenFunc
 out :: UGenType a => a -> a -> a
 out channel input = incrementArgWithChannels 0 $ ugen "out" outCalc nullConstructor nullDeconstructor [channel, input]
+
+
+--Curtis: New UGens
+foreign import ccall "&accumulator_constructor" accumulatorConstructor :: CUGenFunc
+foreign import ccall "&accumulator_deconstructor" accumulatorDeconstructor :: CUGenFunc
+
+foreign import ccall "&lfsaw_calc" lfsawCalc :: CUGenFunc
+lfsaw :: UGenType a => a -> a
+lfsaw freq = ugen "lfsaw" lfsawCalc accumulatorConstructor accumulatorDeconstructor [freq]
+
+foreign import ccall "&lfpulse_calc" lfpulseCalc :: CUGenFunc
+lfpulse :: UGenType a => a -> a
+lfpulse freq = ugen "lfpulse" lfpulseCalc accumulatorConstructor accumulatorDeconstructor [freq]
+
+
 ----------------------------------------------------
 
 sinTest :: [UGen]

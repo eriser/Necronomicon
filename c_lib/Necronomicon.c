@@ -15,6 +15,7 @@
 #endif
 #include <jack/jack.h>
 #include <time.h>
+#include <limits.h>
 
 #include "Necronomicon.h"
 
@@ -153,7 +154,7 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 	printf("]\n");
 
 	puts("Building synth");*/
-	
+
 	synth_node* synth = malloc(NODE_SIZE);
 	synth->previous = NULL;
 	synth->next = NULL;
@@ -162,7 +163,7 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 	synth->num_ugens = synth_definition->num_ugens;
 	synth->num_wires = synth_definition->num_wires;
 	synth->time = time;
-	
+
 	unsigned int num_ugens = synth_definition->num_ugens;
 	unsigned int size_ugens = synth_definition->num_ugens * UGEN_SIZE;
 	synth->ugen_graph = malloc(size_ugens);
@@ -175,7 +176,7 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 		ugen* graph_node = &ugen_graph[i];
 		graph_node->constructor(graph_node);
 	}
-	
+
 	unsigned int size_wires = synth->num_wires * DOUBLE_SIZE;
 	double* ugen_wires = malloc(size_wires);
 	synth->ugen_wires = ugen_wires;
@@ -194,7 +195,7 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 	}
 
 	printf("]\n");*/
-	
+
 	return synth;
 }
 
@@ -277,7 +278,7 @@ void abs_calc(ugen* u)
 void signum_calc(ugen* u)
 {
 	double value = UGEN_IN(u, 0);
-	
+
 	if (value > 0)
 	{
 		value = 1;
@@ -298,7 +299,7 @@ void negate_calc(ugen* u)
 
 void line_constructor(ugen* u)
 {
-	u->data = malloc(UINT_SIZE); // Line time 
+	u->data = malloc(UINT_SIZE); // Line time
 	*((unsigned int*) u->data) = 0;
 }
 
@@ -306,7 +307,7 @@ void line_deconstructor(ugen* u)
 {
 	free(u->data);
 }
-		
+
 // To do: Give this range parameters
 void line_calc(ugen* u)
 {
@@ -340,10 +341,10 @@ void sin_deconstructor(ugen* u)
 }
 
 void sin_calc(ugen* u)
-{	
+{
 	double freq = UGEN_IN(u, 0);
 	double phase = *((double*) u->data);
-	
+
 	unsigned char index1 = phase;
 	unsigned char index2 = index1 + 1;
 	double amp1 = sine_table[index1];
@@ -784,8 +785,8 @@ void remove_synth(synth_node* node)
 		message msg;
 		msg.arg.node = node;
 		msg.type = FREE_SYNTH;
-		
-		NRT_FIFO_PUSH(msg); // Send ugen to NRT thread for freeing 
+
+		NRT_FIFO_PUSH(msg); // Send ugen to NRT thread for freeing
 	}
 }
 
@@ -798,7 +799,7 @@ void remove_synth_by_id(unsigned int id)
 // Iterate over the scheduled list and add synths if they are ready. Stop as soon as we find a synth that isn't ready.
 void add_scheduled_synths()
 {
-	
+
 	while (scheduled_list_read_index != scheduled_list_write_index)
 	{
 		if (SCHEDULED_LIST_PEEK_TIME() <= current_sample_time)
@@ -973,23 +974,23 @@ void init_rt_thread()
 	SAMPLE_RATE = jack_get_sample_rate(client);
 	RECIP_SAMPLE_RATE = 1.0 / SAMPLE_RATE;
 	TABLE_MUL_RECIP_SAMPLE_RATE = TABLE_SIZE * RECIP_SAMPLE_RATE;
-	
+
 	synth_table = hash_table_new();
 	rt_fifo = new_message_fifo();
 	scheduled_node_list = new_node_list();
-	removal_fifo = new_removal_fifo();	
+	removal_fifo = new_removal_fifo();
 
 	last_audio_bus_index = num_audio_buses - 1;
 	num_audio_buses_bytes = num_audio_buses * DOUBLE_SIZE;
 	_necronomicon_buses = malloc(num_audio_buses_bytes);
 	clear_necronomicon_buses();
-	
+
 	initialize_wave_tables();
 	_necronomicon_current_node = NULL;
-	
+
 	assert(nrt_fifo == NULL);
 	nrt_fifo = new_message_fifo();
-	
+
 	current_sample_time = 0;
 	necronomicon_running = true;
 }
@@ -1008,7 +1009,7 @@ void shutdown_rt_thread()
 	clear_synth_list();
 	handle_messages_in_rt_fifo();
 	handle_messages_in_nrt_fifo();
-	
+
 	nrt_fifo_free();
 	nrt_fifo = NULL;
 
@@ -1017,7 +1018,7 @@ void shutdown_rt_thread()
 	assert(scheduled_node_list != NULL);
 	assert(removal_fifo != NULL);
 	assert(_necronomicon_buses != NULL);
-	
+
 	hash_table_free(synth_table);
 	rt_fifo_free();
 	scheduled_list_free();
@@ -1082,7 +1083,7 @@ int process(jack_nframes_t nframes, void* arg)
 
 		out0[i] = _necronomicon_buses[0];
 		out1[i] = _necronomicon_buses[1];
-		
+
 		remove_scheduled_synths(); // Remove any synths that are scheduled for removal and send them to the NRT thread FIFO queue for freeing.
         current_sample_time += 1;
     }
@@ -1114,7 +1115,7 @@ void start_rt_runtime()
 	}
 
 	init_rt_thread();
-	
+
 	if (status & JackServerStarted)
 		fprintf (stderr, "JACK server started\n");
 
@@ -1198,7 +1199,7 @@ synth_node* new_test_synth(unsigned int time)
 {
 	ugen test_ugen = { &sin_calc, &sin_constructor, &sin_deconstructor, NULL, NULL, NULL };
 	test_ugen.constructor(&test_ugen);
-	
+
 	synth_node* test_synth = malloc(NODE_SIZE);
 	test_synth->ugen_graph = malloc(UGEN_SIZE);
 	test_synth->ugen_wires = malloc(DOUBLE_SIZE);
@@ -1479,4 +1480,57 @@ void test_doubly_linked_list()
 	}
 
 	doubly_linked_list_free(synth_list);
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Curtis: New UGens
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#define WAVE_TABLE_AMPLITUDE(phase,table) \
+({ \
+	double amp1  = table[(unsigned char)phase]; \
+	double amp2  = table[(unsigned char)(phase+1)]; \
+	double delta = phase - ((long) phase); \
+	amp1 + delta * (amp2 - amp1); \
+})
+
+void accumulator_constructor(ugen* u)
+{
+	u->data = malloc(DOUBLE_SIZE); // Phase accumulator
+	*((double*) u->data) = 0.0f;
+}
+
+void accumulator_deconstructor(ugen* u)
+{
+	free(u->data);
+}
+
+double RECIP_CHAR_RANGE = 1.0 / 255.0;
+void lfsaw_calc(ugen* u)
+{
+	double freq = UGEN_IN(u, 0);
+	double phase = *((double*) u->data);
+
+	// double amplitude = WAVE_TABLE_AMPLITUDE(phase,saw_table);
+	//Branchless and table-less saw
+	double        amp1      = ((double)((char)phase));     //* RECIP_CHAR_RANGE;
+	double        amp2      = ((double)(((char)phase)+1)); //* RECIP_CHAR_RANGE;
+	double        delta     = phase - ((long) phase);
+	double        amplitude = (amp1 + delta * (amp2 - amp1)) * RECIP_CHAR_RANGE;
+
+	*((double*) u->data) = phase + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
+	UGEN_OUT(u, 0, amplitude);
+}
+
+void lfpulse_calc(ugen* u)
+{
+	double freq = UGEN_IN(u, 0);
+	double phase = *((double*) u->data);
+
+	//double amplitude = WAVE_TABLE_AMPLITUDE(phase,square_table);
+	//Branchless and table-less square
+	double amplitude = 1 | (((char)phase) >> (sizeof(char) * CHAR_BIT - 1));
+
+	*((double*) u->data) = phase + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
+	UGEN_OUT(u, 0, amplitude);
 }
