@@ -12,6 +12,7 @@ data-files:
     textures/*.tga
     fonts/*.ttf
     shaders/*.glsl
+    misc/minblep.mat
 
 library
     default-language:   Haskell2010
