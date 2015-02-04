@@ -1860,10 +1860,10 @@ void rand_deconstructor(ugen* u)
 
 void rand_calc(ugen* u)
 {
-	double  min   = UGEN_IN(u,0);
-	double  range = UGEN_IN(u,1) - min;
+	// double  min   = UGEN_IN(u,0);
+	// double  range = UGEN_IN(u,1) - min;
 	rand_t* rand  = (rand_t*) u->data;
-	double  amp   = rand->value0 * range + min;
+	double  amp   = rand->value0;// * range + min;
 
 	UGEN_OUT(u,0,amp);
 }
@@ -1871,8 +1871,8 @@ void rand_calc(ugen* u)
 void lfnoiseN_calc(ugen* u)
 {
 	double  freq  = UGEN_IN(u,0);
-	double  min   = UGEN_IN(u,1);
-	double  range = UGEN_IN(u,2) - min;
+	// double  min   = UGEN_IN(u,1);
+	// double  range = UGEN_IN(u,2) - min;
 	rand_t* rand  = (rand_t*) u->data;
 
 	if(rand->phase + RECIP_SAMPLE_RATE * freq >= 1.0)
@@ -1885,7 +1885,7 @@ void lfnoiseN_calc(ugen* u)
 		rand->phase = rand->phase + RECIP_SAMPLE_RATE * freq;
 	}
 
-	double  amp = rand->value0 * range + min;
+	double  amp = rand->value0;// * range + min;
 
 	UGEN_OUT(u, 0, amp);
 }
@@ -1893,8 +1893,8 @@ void lfnoiseN_calc(ugen* u)
 void lfnoiseL_calc(ugen* u)
 {
 	double  freq  = UGEN_IN(u,0);
-	double  min   = UGEN_IN(u,1);
-	double  range = UGEN_IN(u,2) - min;
+	// double  min   = UGEN_IN(u,1);
+	// double  range = UGEN_IN(u,2) - min;
 	rand_t* rand  = (rand_t*) u->data;
 
 	if(rand->phase + RECIP_SAMPLE_RATE * freq >= 1.0)
@@ -1908,7 +1908,7 @@ void lfnoiseL_calc(ugen* u)
 		rand->phase = rand->phase + RECIP_SAMPLE_RATE * freq;
 	}
 
-	double amp = LERP(rand->value1,rand->value0,rand->phase) * range + min;
+	double amp = LERP(rand->value1,rand->value0,rand->phase);// * range + min;
 
 	UGEN_OUT(u, 0, amp);
 }
@@ -1916,8 +1916,8 @@ void lfnoiseL_calc(ugen* u)
 void lfnoiseC_calc(ugen* u)
 {
 	double  freq  = UGEN_IN(u,0);
-	double  min   = UGEN_IN(u,1);
-	double  range = UGEN_IN(u,2) - min;
+	// double  min   = UGEN_IN(u,1);
+	// double  range = UGEN_IN(u,2) - min;
 	rand_t* rand  = (rand_t*) u->data;
 
 	if(rand->phase + RECIP_SAMPLE_RATE * freq >= 1.0)
@@ -1933,7 +1933,57 @@ void lfnoiseC_calc(ugen* u)
 		rand->phase = rand->phase + RECIP_SAMPLE_RATE * freq;
 	}
 
-	double amp = CUBIC_INTERP(rand->value3,rand->value2,rand->value1,rand->value0,rand->phase) * range + min;
+	double amp = CUBIC_INTERP(rand->value3,rand->value2,rand->value1,rand->value0,rand->phase);// * range + min;
 
 	UGEN_OUT(u, 0, amp);
+}
+
+void range_calc(ugen* u)
+{
+	double min   = UGEN_IN(u,0);
+	double range = UGEN_IN(u,1) - min;
+	double in    = UGEN_IN(u,2);
+	double amp   = (in * range) + min;
+
+	UGEN_OUT(u, 0, amp);
+}
+
+//===================================
+// RBJ Filters, Audio EQ Cookbook
+//===================================
+
+typedef struct
+{
+	double n1;
+	double n2;
+} biquad_t;
+
+void biquad_contrustor(ugen* u)
+{
+	biquad_t* biquad = malloc(sizeof(biquad_t));
+	biquad->n1       = 0;
+	biquad->n2       = 0;
+	u->data          = biquad;
+}
+
+void lpf_calc(ugen* u)
+{
+	double freq = UGEN_IN(u,0);
+	double gain = UGEN_IN(u,1);
+	double q    = UGEN_IN(u,2);
+
+	double a    = sqrt(pow(10,(gain/40)));
+	double w0   = 2 * M_PI * freq * RECIP_SAMPLE_RATE;
+
+	// cos(w0) ???
+    // sin(w0) ???
+
+	double alpha = sin(w0) / (2 * q);
+
+    double b0 = (1 - cos(w0))/2;
+    double b1 =  1 - cos(w0);
+    double b2 = (1 - cos(w0))/2;
+    double a0 =  1 + alpha;
+    double a1 = -2*cos(w0);
+    double a2 =  1 - alpha;
 }

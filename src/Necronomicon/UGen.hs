@@ -239,20 +239,25 @@ foreign import ccall "&rand_constructor"   randConstructor   :: CUGenFunc
 foreign import ccall "&rand_deconstructor" randDeconstructor :: CUGenFunc
 
 foreign import ccall "&rand_calc" randCalc :: CUGenFunc
-random :: UGenType a => a -> a -> a
-random low high = ugen "random" randCalc randConstructor randDeconstructor [low,high]
+random :: UGenType a => a
+random = ugen "random" randCalc randConstructor randDeconstructor []
 
 foreign import ccall "&lfnoiseN_calc" lfnoiseNCalc :: CUGenFunc
-noise0 :: UGenType a => a -> a -> a -> a
-noise0 freq low high = ugen "noiseN" lfnoiseNCalc randConstructor randDeconstructor [freq,low,high]
+noise0 :: UGenType a => a -> a
+noise0 freq = ugen "noiseN" lfnoiseNCalc randConstructor randDeconstructor [freq]
 
 foreign import ccall "&lfnoiseL_calc" lfnoiseLCalc :: CUGenFunc
-noise1 :: UGenType a => a -> a -> a -> a
-noise1 freq low high = ugen "noiseL" lfnoiseLCalc randConstructor randDeconstructor [freq,low,high]
+noise1 :: UGenType a => a -> a
+noise1 freq = ugen "noiseL" lfnoiseLCalc randConstructor randDeconstructor [freq]
 
 foreign import ccall "&lfnoiseC_calc" lfnoiseCCalc :: CUGenFunc
-noise2 :: UGenType a => a -> a -> a -> a
-noise2 freq low high = ugen "noiseC" lfnoiseCCalc randConstructor randDeconstructor [freq,low,high]
+noise2 :: UGenType a => a -> a
+noise2 freq = ugen "noiseC" lfnoiseCCalc randConstructor randDeconstructor [freq]
+
+foreign import ccall "&range_calc" rangeCalc :: CUGenFunc
+range :: UGenType a => a -> a -> a -> a
+range low high input = ugen "noiseC" rangeCalc nullConstructor nullDeconstructor [low,high,input]
+
 
 ----------------------------------------------------
 

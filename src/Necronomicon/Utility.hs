@@ -2,8 +2,7 @@ module Necronomicon.Utility (hash,
                              (|>),
                              (<|),
                              scale,
-                             linlin,
-                             range) where
+                             linlin) where
 
 import Prelude
 import Data.Bits
@@ -48,5 +47,5 @@ linlin imin imax omin omax input = ((input - imin) * outRange / inRange) + imin
 scale :: (Floating a,Fractional a) => a -> a -> a -> a
 scale offset range input = input * range + offset
 
-range :: (Floating a,Fractional a) => a -> a -> a -> a
-range = linlin (-1) 1
+-- range :: (Floating a,Fractional a) => a -> a -> a -> a
+-- range = linlin (-1) 1

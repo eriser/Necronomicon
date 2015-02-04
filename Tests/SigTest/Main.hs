@@ -35,12 +35,11 @@ testSound2 = play (isDown keyW) (isDown keyW) noArgSynth
          <|> play (isDown keyS) (isDown keyS) twoArgSynth (mouseX ~> scale 100 3000) (mouseY ~> scale 0.01 0.99)
          <|> play (isDown keyD) (isDown keyD) threeSynth  440 880 66.6
 
-
 noArgSynth :: UGen
 noArgSynth = sin 0.1 |> out 0
 
 oneArgSynth :: UGen -> [UGen]
-oneArgSynth f = saw (noise2 3 200 800) |> gain 0.25 >>> out 0
+oneArgSynth f = saw (noise2 3 |> range 200 800) |> gain 0.25 >>> out 0
 -- oneArgSynth f = syncpulse [f,f] 0.5 (saw 400) |> gain 0.25 >>> out 0
 -- oneArgSynth f = syncsaw [f,f] (saw 400) |> gain 0.25 >>> out 0
 -- oneArgSynth f = syncsaw [f,f] (saw 400) |> gain 0.25 >>> out 0
