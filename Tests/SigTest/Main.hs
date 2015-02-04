@@ -40,7 +40,7 @@ noArgSynth :: UGen
 noArgSynth = sin 0.1 |> out 0
 
 oneArgSynth :: UGen -> [UGen]
-oneArgSynth f = saw (noise1 3 200 800) |> gain 0.25 >>> out 0
+oneArgSynth f = saw (noise2 3 200 800) |> gain 0.25 >>> out 0
 -- oneArgSynth f = syncpulse [f,f] 0.5 (saw 400) |> gain 0.25 >>> out 0
 -- oneArgSynth f = syncsaw [f,f] (saw 400) |> gain 0.25 >>> out 0
 -- oneArgSynth f = syncsaw [f,f] (saw 400) |> gain 0.25 >>> out 0

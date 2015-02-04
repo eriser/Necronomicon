@@ -1828,7 +1828,7 @@ void syncsquare_calc(ugen* u)
 	double delta2 = DELTA * DELTA;  \
 	double a0     = D - C - A + B;  \
 	double a1     = A - B - a0;     \
-	double a2     = B - A;          \
+	double a2     = C - A;          \
 	a0 * DELTA * delta2 + a1 * delta2 + a2 * DELTA + B; \
 })
 #define RAND_RANGE(MIN,MAX) ( ((double)random() / (double) RAND_MAX) * (MAX - MIN) + MIN )
