@@ -235,6 +235,24 @@ foreign import ccall "&syncsquare_calc" syncSquareCalc :: CUGenFunc
 syncpulse :: UGenType a => a -> a -> a -> a
 syncpulse freq pw master = ugen "syncpulse" syncSquareCalc minblepConstructor minblepDeconstructor [freq,pw,master]
 
+foreign import ccall "&rand_constructor"   randConstructor   :: CUGenFunc
+foreign import ccall "&rand_deconstructor" randDeconstructor :: CUGenFunc
+
+foreign import ccall "&rand_calc" randCalc :: CUGenFunc
+random :: UGenType a => a -> a -> a
+random low high = ugen "random" randCalc randConstructor randDeconstructor [low,high]
+
+foreign import ccall "&lfnoiseN_calc" lfnoiseNCalc :: CUGenFunc
+noise0 :: UGenType a => a -> a -> a -> a
+noise0 freq low high = ugen "noiseN" lfnoiseNCalc randConstructor randDeconstructor [freq,low,high]
+
+foreign import ccall "&lfnoiseL_calc" lfnoiseLCalc :: CUGenFunc
+noise1 :: UGenType a => a -> a -> a -> a
+noise1 freq low high = ugen "noiseL" lfnoiseLCalc randConstructor randDeconstructor [freq,low,high]
+
+foreign import ccall "&lfnoiseC_calc" lfnoiseCCalc :: CUGenFunc
+noise2 :: UGenType a => a -> a -> a -> a
+noise2 freq low high = ugen "noiseC" lfnoiseCCalc randConstructor randDeconstructor [freq,low,high]
 
 ----------------------------------------------------
 

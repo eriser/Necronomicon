@@ -1773,7 +1773,6 @@ void syncsaw_calc(ugen* u)
 	UGEN_OUT(u, 0, amplitude);
 }
 
-
 void syncsquare_calc(ugen* u)
 {
 	double   freq      = UGEN_IN(u, 0) * RECIP_SAMPLE_RATE;
@@ -1822,4 +1821,119 @@ void syncsquare_calc(ugen* u)
 
 	mb->prevSyncAmp = sync;
 	UGEN_OUT(u, 0, amplitude);
+}
+
+#define CUBIC_INTERP(A,B,C,D,DELTA) \
+({                                  \
+	double delta2 = DELTA * DELTA;  \
+	double a0     = D - C - A + B;  \
+	double a1     = A - B - a0;     \
+	double a2     = B - A;          \
+	a0 * DELTA * delta2 + a1 * delta2 + a2 * DELTA + B; \
+})
+#define RAND_RANGE(MIN,MAX) ( ((double)random() / (double) RAND_MAX) * (MAX - MIN) + MIN )
+
+typedef struct
+{
+	double phase;
+	double value0;
+	double value1;
+	double value2;
+	double value3;
+} rand_t;
+
+void rand_constructor(ugen* u)
+{
+	rand_t* rand = malloc(sizeof(rand_t));
+	rand->value0 = RAND_RANGE(0,1);
+	rand->value1 = 0;
+	rand->value2 = 0;
+	rand->value3 = 0;
+	rand->phase  = 0;
+	u->data      = rand;
+}
+
+void rand_deconstructor(ugen* u)
+{
+	free(u->data);
+}
+
+void rand_calc(ugen* u)
+{
+	double  min   = UGEN_IN(u,0);
+	double  range = UGEN_IN(u,1) - min;
+	rand_t* rand  = (rand_t*) u->data;
+	double  amp   = rand->value0 * range + min;
+
+	UGEN_OUT(u,0,amp);
+}
+
+void lfnoiseN_calc(ugen* u)
+{
+	double  freq  = UGEN_IN(u,0);
+	double  min   = UGEN_IN(u,1);
+	double  range = UGEN_IN(u,2) - min;
+	rand_t* rand  = (rand_t*) u->data;
+
+	if(rand->phase + RECIP_SAMPLE_RATE * freq >= 1.0)
+	{
+		rand->phase  = fmod(rand->phase + RECIP_SAMPLE_RATE * freq,1.0);
+		rand->value0 = RAND_RANGE(0,1);
+	}
+	else
+	{
+		rand->phase = rand->phase + RECIP_SAMPLE_RATE * freq;
+	}
+
+	double  amp = rand->value0 * range + min;
+
+	UGEN_OUT(u, 0, amp);
+}
+
+void lfnoiseL_calc(ugen* u)
+{
+	double  freq  = UGEN_IN(u,0);
+	double  min   = UGEN_IN(u,1);
+	double  range = UGEN_IN(u,2) - min;
+	rand_t* rand  = (rand_t*) u->data;
+
+	if(rand->phase + RECIP_SAMPLE_RATE * freq >= 1.0)
+	{
+		rand->phase  = fmod(rand->phase + RECIP_SAMPLE_RATE * freq,1.0);
+		rand->value1 = rand->value0;
+		rand->value0 = RAND_RANGE(0,1);
+	}
+	else
+	{
+		rand->phase = rand->phase + RECIP_SAMPLE_RATE * freq;
+	}
+
+	double amp = LERP(rand->value1,rand->value0,rand->phase) * range + min;
+
+	UGEN_OUT(u, 0, amp);
+}
+
+void lfnoiseC_calc(ugen* u)
+{
+	double  freq  = UGEN_IN(u,0);
+	double  min   = UGEN_IN(u,1);
+	double  range = UGEN_IN(u,2) - min;
+	rand_t* rand  = (rand_t*) u->data;
+
+	if(rand->phase + RECIP_SAMPLE_RATE * freq >= 1.0)
+	{
+		rand->phase  = fmod(rand->phase + RECIP_SAMPLE_RATE * freq,1.0);
+		rand->value3 = rand->value2;
+		rand->value2 = rand->value1;
+		rand->value1 = rand->value0;
+		rand->value0 = RAND_RANGE(0,1);
+	}
+	else
+	{
+		rand->phase = rand->phase + RECIP_SAMPLE_RATE * freq;
+	}
+
+	double amp = CUBIC_INTERP(rand->value3,rand->value2,rand->value1,rand->value0,rand->phase) * range + min;
+
+	UGEN_OUT(u, 0, amp);
 }
