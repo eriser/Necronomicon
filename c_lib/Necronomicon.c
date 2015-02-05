@@ -2196,3 +2196,15 @@ void highshelf_calc(ugen* u)
 
 	UGEN_OUT(u,0,out);
 }
+
+void lag_calc(ugen* u)
+{
+	double lagTime = UGEN_IN(u,0);
+	double input   = UGEN_IN(u,1);
+	double z       = *((double*) u->data);
+    double a       = exp((-2 * M_PI) / (lagTime * SAMPLE_RATE));
+    double b       = 1.0f - a;
+	z              = (input * b) + (z * a);
+	*((double*) u->data) = z;
+	UGEN_OUT(u,0,z);
+}

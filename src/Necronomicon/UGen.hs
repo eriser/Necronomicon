@@ -290,6 +290,10 @@ foreign import ccall "&highshelf_calc" highshelfCalc :: CUGenFunc
 highshelf :: UGenType a => a -> a -> a -> a -> a
 highshelf freq gain slope input = ugen "highshelf" highshelfCalc biquadConstructor biquadDeconstructor [freq,gain,slope,input]
 
+foreign import ccall "&lag_calc" lagCalc :: CUGenFunc
+lag :: UGenType a => a -> a -> a
+lag timeLag input = ugen "lagCalc" lagCalc accumulatorConstructor accumulatorDeconstructor [timeLag,input]
+
 ----------------------------------------------------
 
 sinTest :: [UGen]

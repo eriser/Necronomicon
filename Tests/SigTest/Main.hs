@@ -39,7 +39,7 @@ noArgSynth :: UGen
 noArgSynth = sin 0.1 |> out 0
 
 oneArgSynth :: UGen -> [UGen]
-oneArgSynth f = saw 40 |> lpf [f,f] 0 3 >>> gain 0.25 >>> out 0
+oneArgSynth f = saw 40 |> lpf (lag 6 [f,f]) 0 3 >>> gain 0.25 >>> out 0
 -- oneArgSynth f = saw 40 |> highshelf [f,f] (6) 6 >>> gain 0.25 >>> out 0
 -- oneArgSynth f = saw 40 |> lowshelf[f,f] 6 6 >>> gain 0.25 >>> out 0
 -- oneArgSynth f = saw 110 |> peakEQ [f,f] 12 0.3 >>> gain 0.25 >>> out 0
@@ -55,7 +55,7 @@ oneArgSynth f = saw 40 |> lpf [f,f] 0 3 >>> gain 0.25 >>> out 0
 -- oneArgSynth f = lfsaw [f,f] 0 |> gain 0.25 >>> out 0
 
 twoArgSynth :: UGen -> UGen -> [UGen]
-twoArgSynth f ff = saw [f,f] |> lpf [ff,ff] 0 3 >>> gain 0.25 >>> out 0
+twoArgSynth f ff = saw (lag 1 [f,f]) |> lpf (lag 1 [ff,ff]) 0 3 >>> gain 0.25 >>> out 0
 -- twoArgSynth f pw = pulse [f,f] [pw,pw] |> gain 0.1 >>> out 0
 -- twoArgSynth fx fy = sin [fx,fy] |> gain 0.1 >>> out 0
 
