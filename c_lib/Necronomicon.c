@@ -2116,12 +2116,12 @@ void peakEQ_calc(ugen* u)
     double sn    = sin(omega);
 	double alpha = sn * sinh(1 / (2 * q));
 
-	double b0 =  1 + alpha*a;
-    double b1 = -2*cs;
-    double b2 =  1 - alpha*a;
-    double a0 =  1 + alpha/a;
-    double a1 = -2*cs;
-    double a2 =  1 - alpha/a;
+	double b0    =  1 + alpha*a;
+    double b1    = -2*cs;
+    double b2    =  1 - alpha*a;
+    double a0    =  1 + alpha/a;
+    double a1    = -2*cs;
+    double a2    =  1 - alpha/a;
 
 	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi->x1,bi->x2,bi->y1,bi->y2);
 
@@ -2148,12 +2148,12 @@ void lowshelf_calc(ugen* u)
     double sn    = sin(omega);
 	double beta  = sqrt( (pow(a,2) + 1) / slope - pow((a-1),2) );
 
-	double b0 =    a*( (a+1) - (a-1)*cs + beta*sn );
-    double b1 =  2*a*( (a-1) - (a+1)*cs           );
-    double b2 =    a*( (a+1) - (a-1)*cs - beta*sn );
-    double a0 =        (a+1) + (a-1)*cs + beta*sn;
-    double a1 =   -2*( (a-1) + (a+1)*cs           );
-    double a2 =        (a+1) + (a-1)*cs - beta*sn;
+	double b0    =    a*( (a+1) - (a-1)*cs + beta*sn );
+    double b1    =  2*a*( (a-1) - (a+1)*cs           );
+    double b2    =    a*( (a+1) - (a-1)*cs - beta*sn );
+    double a0    =        (a+1) + (a-1)*cs + beta*sn;
+    double a1    =   -2*( (a-1) + (a+1)*cs           );
+    double a2    =        (a+1) + (a-1)*cs - beta*sn;
 
 	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi->x1,bi->x2,bi->y1,bi->y2);
 
@@ -2180,12 +2180,12 @@ void highshelf_calc(ugen* u)
     double sn    = sin(omega);
 	double beta  = sqrt( (pow(a,2) + 1) / slope - pow((a-1),2) );
 
-	double b0 =    a*( (a+1) + (a-1)*cs + beta*sn );
-    double b1 = -2*a*( (a-1) + (a+1)*cs           );
-    double b2 =    a*( (a+1) + (a-1)*cs - beta*sn );
-    double a0 =        (a+1) - (a-1)*cs + beta*sn;
-    double a1 =    2*( (a-1) - (a+1)*cs           );
-    double a2 =        (a+1) - (a-1)*cs - beta*sn;
+	double b0    =    a*( (a+1) + (a-1)*cs + beta*sn );
+    double b1    = -2*a*( (a-1) + (a+1)*cs           );
+    double b2    =    a*( (a+1) + (a-1)*cs - beta*sn );
+    double a0    =        (a+1) - (a-1)*cs + beta*sn;
+    double a1    =    2*( (a-1) - (a+1)*cs           );
+    double a2    =        (a+1) - (a-1)*cs - beta*sn;
 
 	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi->x1,bi->x2,bi->y1,bi->y2);
 
