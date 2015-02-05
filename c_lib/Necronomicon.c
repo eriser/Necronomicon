@@ -1954,36 +1954,245 @@ void range_calc(ugen* u)
 
 typedef struct
 {
-	double n1;
-	double n2;
+	double x1;
+	double x2;
+	double y1;
+	double y2;
 } biquad_t;
 
-void biquad_contrustor(ugen* u)
+void biquad_constructor(ugen* u)
 {
 	biquad_t* biquad = malloc(sizeof(biquad_t));
-	biquad->n1       = 0;
-	biquad->n2       = 0;
+	biquad->x1       = 0;
+	biquad->x2       = 0;
+	biquad->y1       = 0;
+	biquad->y2       = 0;
 	u->data          = biquad;
 }
 
+void biquad_deconstructor(ugen* u)
+{
+	free(u->data);
+}
+
+#define BIQUAD(B0,B1,B2,A0,A1,A2,X,X1,X2,Y1,Y2) ( (B0/A0)*X + (B1/A0)*X1 + (B2/A0)*X2 - (A1/A0)*Y1 - (A2/A0)*Y2 )
+
 void lpf_calc(ugen* u)
 {
-	double freq = UGEN_IN(u,0);
-	double gain = UGEN_IN(u,1);
-	double q    = UGEN_IN(u,2);
+	double freq  = UGEN_IN(u,0);
+	double gain  = UGEN_IN(u,1);
+	double q     = UGEN_IN(u,2);
+	double in    = UGEN_IN(u,3);
 
-	double a    = sqrt(pow(10,(gain/40)));
-	double w0   = 2 * M_PI * freq * RECIP_SAMPLE_RATE;
+	biquad_t* bi = (biquad_t*) u->data;
 
-	// cos(w0) ???
-    // sin(w0) ???
+	double omega = 2 * M_PI * freq * RECIP_SAMPLE_RATE;
+	double cs    = cos(omega);
+    double sn    = sin(omega);
+	double alpha = sn * sinh(1 / (2 * q));
 
-	double alpha = sin(w0) / (2 * q);
+    double b0    = (1 - cs)/2;
+    double b1    =  1 - cs;
+    double b2    = (1 - cs)/2;
+    double a0    =  1 + alpha;
+    double a1    = -2*cs;
+    double a2    =  1 - alpha;
 
-    double b0 = (1 - cos(w0))/2;
-    double b1 =  1 - cos(w0);
-    double b2 = (1 - cos(w0))/2;
-    double a0 =  1 + alpha;
-    double a1 = -2*cos(w0);
-    double a2 =  1 - alpha;
+	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi->x1,bi->x2,bi->y1,bi->y2);
+
+	bi->y2 = bi->y1;
+	bi->y1 = out;
+	bi->x2 = bi->x1;
+	bi->x1 = in;
+
+	UGEN_OUT(u,0,out);
+}
+
+void hpf_calc(ugen* u)
+{
+	double freq  = UGEN_IN(u,0);
+	double gain  = UGEN_IN(u,1);
+	double q     = UGEN_IN(u,2);
+	double in    = UGEN_IN(u,3);
+
+	biquad_t* bi = (biquad_t*) u->data;
+
+	double omega = 2 * M_PI * freq * RECIP_SAMPLE_RATE;
+	double cs    = cos(omega);
+    double sn    = sin(omega);
+	double alpha = sn * sinh(1 / (2 * q));
+
+	double b0    = (1 + cs)/2;
+    double b1    = -1 - cs;
+    double b2    = (1 + cs)/2;
+    double a0    =  1 + alpha;
+    double a1    = -2*cs;
+    double a2    =  1 - alpha;
+
+	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi->x1,bi->x2,bi->y1,bi->y2);
+
+	bi->y2 = bi->y1;
+	bi->y1 = out;
+	bi->x2 = bi->x1;
+	bi->x1 = in;
+
+	UGEN_OUT(u,0,out);
+}
+
+void bpf_calc(ugen* u)
+{
+	double freq  = UGEN_IN(u,0);
+	double gain  = UGEN_IN(u,1);
+	double q     = UGEN_IN(u,2);
+	double in    = UGEN_IN(u,3);
+
+	biquad_t* bi = (biquad_t*) u->data;
+
+	double omega = 2 * M_PI * freq * RECIP_SAMPLE_RATE;
+	double cs    = cos(omega);
+    double sn    = sin(omega);
+	double alpha = sn * sinh(1 / (2 * q));
+
+	double b0    =  alpha;
+    double b1    =  0;
+    double b2    = -alpha;
+    double a0    =  1 + alpha;
+    double a1    = -2*cs;
+    double a2    =  1 - alpha;
+
+	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi->x1,bi->x2,bi->y1,bi->y2);
+
+	bi->y2 = bi->y1;
+	bi->y1 = out;
+	bi->x2 = bi->x1;
+	bi->x1 = in;
+
+	UGEN_OUT(u,0,out);
+}
+
+void notch_calc(ugen* u)
+{
+	double freq  = UGEN_IN(u,0);
+	double gain  = UGEN_IN(u,1);
+	double q     = UGEN_IN(u,2);
+	double in    = UGEN_IN(u,3);
+
+	biquad_t* bi = (biquad_t*) u->data;
+
+	double omega = 2 * M_PI * freq * RECIP_SAMPLE_RATE;
+	double cs    = cos(omega);
+    double sn    = sin(omega);
+	double alpha = sn * sinh(1 / (2 * q));
+
+	double b0    =  1;
+    double b1    = -2*cs;
+    double b2    =  1;
+    double a0    =  1 + alpha;
+    double a1    = -2*cs;
+    double a2    =  1 - alpha;
+
+	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi->x1,bi->x2,bi->y1,bi->y2);
+
+	bi->y2 = bi->y1;
+	bi->y1 = out;
+	bi->x2 = bi->x1;
+	bi->x1 = in;
+
+	UGEN_OUT(u,0,out);
+}
+
+void peakEQ_calc(ugen* u)
+{
+	double freq  = UGEN_IN(u,0);
+	double gain  = UGEN_IN(u,1);
+	double q     = UGEN_IN(u,2);
+	double in    = UGEN_IN(u,3);
+
+	biquad_t* bi = (biquad_t*) u->data;
+
+	double a     = pow(10,(gain/40));
+	double omega = 2 * M_PI * freq * RECIP_SAMPLE_RATE;
+	double cs    = cos(omega);
+    double sn    = sin(omega);
+	double alpha = sn * sinh(1 / (2 * q));
+
+	double b0 =  1 + alpha*a;
+    double b1 = -2*cs;
+    double b2 =  1 - alpha*a;
+    double a0 =  1 + alpha/a;
+    double a1 = -2*cs;
+    double a2 =  1 - alpha/a;
+
+	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi->x1,bi->x2,bi->y1,bi->y2);
+
+	bi->y2 = bi->y1;
+	bi->y1 = out;
+	bi->x2 = bi->x1;
+	bi->x1 = in;
+
+	UGEN_OUT(u,0,out);
+}
+
+void lowshelf_calc(ugen* u)
+{
+	double freq  = UGEN_IN(u,0);
+	double gain  = UGEN_IN(u,1);
+	double slope = UGEN_IN(u,2);
+	double in    = UGEN_IN(u,3);
+
+	biquad_t* bi = (biquad_t*) u->data;
+
+	double a     = pow(10,(gain/40));
+	double omega = 2 * M_PI * freq * RECIP_SAMPLE_RATE;
+	double cs    = cos(omega);
+    double sn    = sin(omega);
+	double beta  = sqrt( (pow(a,2) + 1) / slope - pow((a-1),2) );
+
+	double b0 =    a*( (a+1) - (a-1)*cs + beta*sn );
+    double b1 =  2*a*( (a-1) - (a+1)*cs           );
+    double b2 =    a*( (a+1) - (a-1)*cs - beta*sn );
+    double a0 =        (a+1) + (a-1)*cs + beta*sn;
+    double a1 =   -2*( (a-1) + (a+1)*cs           );
+    double a2 =        (a+1) + (a-1)*cs - beta*sn;
+
+	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi->x1,bi->x2,bi->y1,bi->y2);
+
+	bi->y2 = bi->y1;
+	bi->y1 = out;
+	bi->x2 = bi->x1;
+	bi->x1 = in;
+
+	UGEN_OUT(u,0,out);
+}
+
+void highshelf_calc(ugen* u)
+{
+	double freq  = UGEN_IN(u,0);
+	double gain  = UGEN_IN(u,1);
+	double slope = UGEN_IN(u,2);
+	double in    = UGEN_IN(u,3);
+
+	biquad_t* bi = (biquad_t*) u->data;
+
+	double a     = pow(10,(gain/40));
+	double omega = 2 * M_PI * freq * RECIP_SAMPLE_RATE;
+	double cs    = cos(omega);
+    double sn    = sin(omega);
+	double beta  = sqrt( (pow(a,2) + 1) / slope - pow((a-1),2) );
+
+	double b0 =    a*( (a+1) + (a-1)*cs + beta*sn );
+    double b1 = -2*a*( (a-1) + (a+1)*cs           );
+    double b2 =    a*( (a+1) + (a-1)*cs - beta*sn );
+    double a0 =        (a+1) - (a-1)*cs + beta*sn;
+    double a1 =    2*( (a-1) - (a+1)*cs           );
+    double a2 =        (a+1) - (a-1)*cs - beta*sn;
+
+	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi->x1,bi->x2,bi->y1,bi->y2);
+
+	bi->y2 = bi->y1;
+	bi->y1 = out;
+	bi->x2 = bi->x1;
+	bi->x1 = in;
+
+	UGEN_OUT(u,0,out);
 }

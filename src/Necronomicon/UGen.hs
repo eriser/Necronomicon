@@ -203,8 +203,7 @@ foreign import ccall "&out_calc" outCalc :: CUGenFunc
 out :: UGenType a => a -> a -> a
 out channel input = incrementArgWithChannels 0 $ ugen "out" outCalc nullConstructor nullDeconstructor [channel, input]
 
-
---Curtis: New UGens
+--oscillators
 foreign import ccall "&accumulator_constructor" accumulatorConstructor :: CUGenFunc
 foreign import ccall "&accumulator_deconstructor" accumulatorDeconstructor :: CUGenFunc
 
@@ -235,6 +234,7 @@ foreign import ccall "&syncsquare_calc" syncSquareCalc :: CUGenFunc
 syncpulse :: UGenType a => a -> a -> a -> a
 syncpulse freq pw master = ugen "syncpulse" syncSquareCalc minblepConstructor minblepDeconstructor [freq,pw,master]
 
+--randomness
 foreign import ccall "&rand_constructor"   randConstructor   :: CUGenFunc
 foreign import ccall "&rand_deconstructor" randDeconstructor :: CUGenFunc
 
@@ -258,6 +258,37 @@ foreign import ccall "&range_calc" rangeCalc :: CUGenFunc
 range :: UGenType a => a -> a -> a -> a
 range low high input = ugen "noiseC" rangeCalc nullConstructor nullDeconstructor [low,high,input]
 
+--filters
+foreign import ccall "&biquad_constructor"   biquadConstructor   :: CUGenFunc
+foreign import ccall "&biquad_deconstructor" biquadDeconstructor :: CUGenFunc
+
+foreign import ccall "&lpf_calc" lpfCalc :: CUGenFunc
+lpf :: UGenType a => a -> a -> a -> a -> a
+lpf freq gain q input = ugen "lpf" lpfCalc biquadConstructor biquadDeconstructor [freq,gain,q,input]
+
+foreign import ccall "&hpf_calc" hpfCalc :: CUGenFunc
+hpf :: UGenType a => a -> a -> a -> a -> a
+hpf freq gain q input = ugen "hpf" hpfCalc biquadConstructor biquadDeconstructor [freq,gain,q,input]
+
+foreign import ccall "&bpf_calc" bpfCalc :: CUGenFunc
+bpf :: UGenType a => a -> a -> a -> a -> a
+bpf freq gain q input = ugen "bpf" bpfCalc biquadConstructor biquadDeconstructor [freq,gain,q,input]
+
+foreign import ccall "&notch_calc" notchCalc :: CUGenFunc
+notch :: UGenType a => a -> a -> a -> a -> a
+notch freq gain q input = ugen "notch" notchCalc biquadConstructor biquadDeconstructor [freq,gain,q,input]
+
+foreign import ccall "&peakEQ_calc" peakEQCalc :: CUGenFunc
+peakEQ :: UGenType a => a -> a -> a -> a -> a
+peakEQ freq gain q input = ugen "peakEQ" peakEQCalc biquadConstructor biquadDeconstructor [freq,gain,q,input]
+
+foreign import ccall "&notch_calc" lowshelfCalc :: CUGenFunc
+lowshelf :: UGenType a => a -> a -> a -> a -> a
+lowshelf freq gain slope input = ugen "lowshelf" lowshelfCalc biquadConstructor biquadDeconstructor [freq,gain,slope,input]
+
+foreign import ccall "&highshelf_calc" highshelfCalc :: CUGenFunc
+highshelf :: UGenType a => a -> a -> a -> a -> a
+highshelf freq gain slope input = ugen "highshelf" highshelfCalc biquadConstructor biquadDeconstructor [freq,gain,slope,input]
 
 ----------------------------------------------------
 

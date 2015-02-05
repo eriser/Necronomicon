@@ -31,15 +31,22 @@ testSound = play (isDown keyW) (isUp   keyW) myCoolSynth2
 
 testSound2 :: Signal ()
 testSound2 = play (isDown keyW) (isDown keyW) noArgSynth
-         <|> play (isDown keyA) (isDown keyA) oneArgSynth (mouseX ~> scale 20  1000)
-         <|> play (isDown keyS) (isDown keyS) twoArgSynth (mouseX ~> scale 100 3000) (mouseY ~> scale 0.01 0.99)
+         <|> play (isDown keyA) (isDown keyA) oneArgSynth (mouseX ~> scale 20  10000)
+         <|> play (isDown keyS) (isDown keyS) twoArgSynth (mouseX ~> scale 100 3000) (mouseY ~> scale 20 10000)
          <|> play (isDown keyD) (isDown keyD) threeSynth  440 880 66.6
 
 noArgSynth :: UGen
 noArgSynth = sin 0.1 |> out 0
 
 oneArgSynth :: UGen -> [UGen]
-oneArgSynth f = saw (noise2 3 |> range 200 800) |> gain 0.25 >>> out 0
+oneArgSynth f = saw 40 |> lpf [f,f] 0 3 >>> gain 0.25 >>> out 0
+-- oneArgSynth f = saw 40 |> highshelf [f,f] (-6) 6 >>> gain 0.25 >>> out 0
+-- oneArgSynth f = saw 40 |> lowshelf[f,f] 6 6 >>> gain 0.25 >>> out 0
+-- oneArgSynth f = saw 110 |> peakEQ [f,f] 12 0.3 >>> gain 0.25 >>> out 0
+-- oneArgSynth f = saw 220 |> notch [f,f] 0 3 >>> gain 0.25 >>> out 0
+-- oneArgSynth f = saw 220 |> bpf [f,f] 0 3 >>> gain 0.25 >>> out 0
+-- oneArgSynth f = saw 220 |> hpf [f,f] 0 3 >>> gain 0.25 >>> out 0
+-- oneArgSynth f = saw (noise2 3 |> range 200 800) |> gain 0.25 >>> out 0
 -- oneArgSynth f = syncpulse [f,f] 0.5 (saw 400) |> gain 0.25 >>> out 0
 -- oneArgSynth f = syncsaw [f,f] (saw 400) |> gain 0.25 >>> out 0
 -- oneArgSynth f = syncsaw [f,f] (saw 400) |> gain 0.25 >>> out 0
@@ -48,7 +55,8 @@ oneArgSynth f = saw (noise2 3 |> range 200 800) |> gain 0.25 >>> out 0
 -- oneArgSynth f = lfsaw [f,f] 0 |> gain 0.25 >>> out 0
 
 twoArgSynth :: UGen -> UGen -> [UGen]
-twoArgSynth f pw = pulse [f,f] [pw,pw] |> gain 0.1 >>> out 0
+twoArgSynth f ff = saw [f,f] |> lpf [ff,ff] 0 3 >>> gain 0.25 >>> out 0
+-- twoArgSynth f pw = pulse [f,f] [pw,pw] |> gain 0.1 >>> out 0
 -- twoArgSynth fx fy = sin [fx,fy] |> gain 0.1 >>> out 0
 
 threeSynth :: UGen -> UGen -> UGen -> UGen
