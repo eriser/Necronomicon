@@ -2208,3 +2208,69 @@ void lag_calc(ugen* u)
 	*((double*) u->data) = z;
 	UGEN_OUT(u,0,z);
 }
+
+typedef struct
+{
+	double* zs;//Delayed Samples for Filtering
+} zeroDelayFilter_t;
+
+void zeroDelayFilter_constructor(ugen* u)
+{
+	zeroDelayFilter_t* zerodft = malloc(sizeof(zeroDelayFilter_t));
+	zerodft->zs                = malloc(sizeof(double) * 3);
+	zerodft->zs[0]             = 0;
+	zerodft->zs[1]             = 0;
+	zerodft->zs[2]             = 0;
+	u->data                    = zerodft;
+}
+
+void zeroDelayFilter_deconstructor(ugen* u)
+{
+	zeroDelayFilter_t* zerodft = (zeroDelayFilter_t*) u->data;
+	free(zerodft->zs);
+	free(zerodft);
+}
+
+#define PREWARP(F,SI) ((2 / SI) * tan((F * SI) / 2))
+
+#define ZERO_DELAY(X,G,Z)  (X * G + (X * G + Z))
+
+void zeroDelayOnePole_calc(ugen* u)
+{
+	double freq                = UGEN_IN(u,0);
+	double x                   = UGEN_IN(u,1);
+	zeroDelayFilter_t* zerodft = (zeroDelayFilter_t*)u->data;
+
+	double warped              = PREWARP(freq,RECIP_SAMPLE_RATE);
+	double g                   = warped / (warped + 1);
+	double y                   = x * g + zerodft->zs[0];
+	zerodft->zs[0]             = ZERO_DELAY(x-y,g,zerodft->zs[0]);
+
+	UGEN_OUT(u,0,y);
+}
+
+//Figure out reaktor order of operations
+//Break out the trapezoidal shit to a fucking macro. fuck.
+void zeroDelayLPMS20(ugen* u)
+{
+	// double freq                = UGEN_IN(u,0);
+	// double x                   = UGEN_IN(u,1);
+	// double resonance           = UGEN_IN(u,1);
+	// zeroDelayFilter_t* zerodft = (zeroDelayFilter_t*)u->data;
+
+	// double warped              = (2 / RECIP_SAMPLE_RATE) * tan((freq * RECIP_SAMPLE_RATE) / 2);
+	// double g                   = warped / (warped + 1)
+	// double k                   = 2 * resonance;
+
+	// double ky                  = 0; //This is the end of the second chunk
+
+	// double s1                  = zerodft->s1;
+	// double y1                  = ((x - ky) * g + s1);
+	// zerodft->s1                = (x-y1) * g + s;
+
+	// double s2                  = zerodft->s2;
+	// double y2                  = (x * g + s1);
+	// zerodft->s2                = (x-y2) * g + s;
+
+	// UGEN_OUT(u,0,y);
+}
