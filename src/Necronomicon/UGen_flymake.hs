@@ -34,7 +34,7 @@ data UGen = UGenNum Double
           | UGenFunc UGenUnit CUGenFunc CUGenFunc CUGenFunc [UGen]
           deriving (Typeable)
 
-data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Out | AuxIn | Poll | LocalIn Int | LocalOut Int Int | Arg Int deriving (Show)
+data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Out | AuxIn | Poll | LocalIn Int | LocalOut Int | Arg Int deriving (Show)
 
 instance Show UGen where
     show (UGenNum d) = show d
@@ -228,23 +228,31 @@ localIn busNum = UGenFunc (LocalIn busNum) nullFunPtr nullConstructor nullDecons
 
 foreign import ccall "&local_out_calc" localOutCalc :: CUGenFunc
 localOut :: Int -> [UGen] -> [UGen]
-localOut busNum input = ugen (LocalOut busNum busNum) localOutCalc nullConstructor nullDeconstructor [input]
+localOut busNum input = foldr (\((UGenFunc (LocalOut feedBus) f c d is), i) acc -> UGenFunc (LocalOut (feedBus + i)) f c d is : acc) [] $ zip lOut [0..]
+    where
+        lOut = ugen (LocalOut busNum) localOutCalc nullConstructor nullDeconstructor [input]
 
 feedback :: (UGenType b) => (UGen -> b) -> [UGen]
-feedback f = map (setNumBuses (length feedbackOuts)) feedbackOuts
+feedback f = expand . localOut 0 $ output
     where
-        feedbackOuts = expand . localOut 0 $ output
         (output, numInputs) = prFeedback f 0
         -- Pad with extra localOut buses if numInputs is larger than numOutputs
         expand arr = arr ++ (foldl (\acc i -> acc ++ (localOut i [0])) [] (drop (length arr) [0..(numInputs - 1)]))
-        setNumBuses numBuses (UGenFunc (LocalOut busNum _) f c d a) = UGenFunc (LocalOut busNum numBuses) f c d a
 ----------------------------------------------------
 
 loopSynth :: [UGen]
-loopSynth = feedback (\input input2 -> [sin (420 + ((input2 * 0.5 + 0.5) * 400)), input + (sin 13)] |> gain 0.49) |> poll >>> gain 0.3 >>> out 0
+loopSynth = feedback (\input input2 -> [sin (420 + ((input2 * 0.5 + 0.5) * 400)) + input2, input + (sin (333 + (input * 0.5 + 0.5) * 333))] |> gain 0.49) |> poll >>> gain 0.3 >>> out 0
 
 nestedLoopSynth :: [UGen]
 nestedLoopSynth = feedback (\input -> [input + sin (13 + (input * 10))] + feedback (\input2 -> input + input2) |> gain 0.9) |> gain 0.3 >>> out 0
+
+
+loopSynthForever :: UGenType a => a
+loopSynthForever = Feedback (\localIn0 locaIn1 ... locaInN -> [localIn0, localIn1 + 2] |> gain 0 >>> out 0)
+
+loopSynth = feed + feed |> out 0
+    where
+        feed = feedback (\input -> input)
 
 sinTest :: [UGen]
 sinTest = sin [1,2,3] + 1 + [] --sin [1,2] + sin [444,555,666] + sin 100 + 1 |> gain 0.5
@@ -330,20 +338,19 @@ data CompiledConstant = CompiledConstant { compiledConstantValue :: CDouble, com
 instance Ord CompiledConstant where
     compare (CompiledConstant _ w1) (CompiledConstant _ w2) = compare w1 w2
 
-type CompiledFeedback = [CUInt]
-
 type UGenOutputTable = M.Map String CUInt
+type CompiledFeedback = M.Map Int CUInt
 
 data CompiledData = CompiledData {
     compiledUGenTable :: UGenOutputTable,
     compiledUGenGraph :: [CUGen],
     compiledConstants :: [CompiledConstant],
     compiledWireIndex :: CUInt,
-    compiledFeedbackStack :: [CompiledFeedback] -- List of lists of wire indexes
+    compiledFeedWires :: CompiledFeedback -- List of feedback wire indexes. Pushed/Popped during compilation
 }
 
 mkCompiledData :: CompiledData
-mkCompiledData = CompiledData M.empty [] [] 0 []
+mkCompiledData = CompiledData M.empty [] [] 0 M.empty
 
 data Compiled a = Compiled { runCompile :: CompiledData -> IO (a, CompiledData) }
 
@@ -391,29 +398,20 @@ addConstant key constant@(CompiledConstant _ wireIndex) = do
     constants <- getConstants
     setConstants (constant : constants)
 
-getCompiledFeedbackStack :: Compiled [CompiledFeedback]
-getCompiledFeedbackStack = Compiled (\c -> return (compiledFeedbackStack c, c))
+getCompiledFeedWires :: Compiled CompiledFeedback
+getCompiledFeedWires = Compiled (\c -> return (compiledFeedWires c, c))
 
-setCompiledFeedbackStack :: [CompiledFeedback] -> Compiled ()
-setCompiledFeedbackStack compiledFeedbackStack = Compiled (\c -> return ((), c { compiledFeedbackStack = compiledFeedbackStack }))
+setCompiledFeedWires :: CompiledFeedback -> Compiled ()
+setCompiledFeedWires compiledFeedWires = Compiled (\c -> return ((), c { compiledFeedWires = compiledFeedWires }))
 
-pushCompiledFeedbackStack :: CompiledFeedback -> Compiled ()
-pushCompiledFeedbackStack compiledFeedback = getCompiledFeedbackStack >>= \compiledFeedbackStack -> setCompiledFeedbackStack (compiledFeedback : compiledFeedbackStack) 
+getOrPushCompiledFeedWire :: Int -> Compiled CUInt
+getOrPushCompiledFeedWire feedBus = getCompiledFeedWires >>= \compiledFeedWires ->
+    case M.lookup feedBus compiledFeedWires of
+        Nothing -> nextWireIndex >>= \wire -> setCompiledFeedWires (M.insert feedBus wire compiledFeedWires) >> return wire
+        Just wire -> return wire
 
-popCompiledFeedbackStack :: Compiled ()
-popCompiledFeedbackStack = getCompiledFeedbackStack >>= \compiledFeedbackStack -> setCompiledFeedbackStack $ pop compiledFeedbackStack
-    where
-        pop [] = []
-        pop fs = tail fs
-
-peekCompiledFeedbackStack :: Compiled (Maybe CompiledFeedback)
-peekCompiledFeedbackStack = getCompiledFeedbackStack >>= \compiledFeedbackStack -> return $ top compiledFeedbackStack
-    where
-        top [] = Nothing
-        top fs = Just $ head fs
-
-addCompiledFeedbackWire :: CUInt -> Compiled ()
-addCompiledFeedbackWire wire = getCompiledFeedbackStack >>= \(f:fs) -> setCompiledFeedbackStack ((f ++ [wire]) : fs) 
+popCompiledFeedWire :: Int -> Compiled ()
+popCompiledFeedWire feedBus = getCompiledFeedWires >>= \compiledFeedWires -> setCompiledFeedWires $ M.delete feedBus compiledFeedWires
 
 getWireIndex :: Compiled CUInt
 getWireIndex = Compiled (\c -> return (compiledWireIndex c, c))
@@ -464,8 +462,23 @@ compileSynthArgsAndUGenGraph ugenFunc = consume ugenFunc 0 >>= \(ugenList, numAr
 compileUGenGraphList :: [UGen] -> Compiled ()
 compileUGenGraphList ugenList = mapM_ (\u -> compileUGenGraphBranch u) ugenList
 
+-- THIS ISNT QUITE RIGHT. NEED A BETTER WAY OF CHECKING/ASSIGNING FEEDBACK WIRES TO PREVENT DUPLICATION/ASYNCHRONICITY
 compileUGenGraphBranch :: UGen -> Compiled CUInt
-compileUGenGraphBranch ugen@(UGenFunc (LocalOut busNum numBuses) calc cons decn _) = do
+compileUGenGraphBranch ugen@(UGenFunc (LocalOut feedBus) calc cons decn _) = do
+    let hashed = show ugen
+    table <- getTable
+    let lookupLocalOut = M.lookup hashed table 
+    wire <- case lookupLocalOut of -- Look to see if this ugen has been compiled already, if so return that ugen's output buffer
+        Just wireIndex -> liftIO (print "lookupLocalOutA -> FOUND!") >> return wireIndex
+        Nothing -> getOrPushCompiledFeedWire feedBus >>= \w -> liftIO (print ("compileUGenBranch LocalOut: " ++ "(LocalOut " ++ show feedBus ++ ") " ++ show w)) >> return w 
+    
+    case lookupLocalOut of -- Look to see if this ugen has been compiled already, if so return that ugen's output buffer
+        Nothing -> compileUGenArgs ugen >>= \args -> compileUGen ugen args hashed >> liftIO (print ("Pop compiledFeedWire: (LocalOut " ++ (show feedBus) ++ ")")) >> popCompiledFeedWire feedBus
+        Just _  -> liftIO $ print "lookupLocalOutB -> FOUND!"
+    
+    return wire
+
+{-compileUGenGraphBranch ugen@(UGenFunc (LocalOut busNum numBuses) calc cons decn _) = do
     table <- getTable
     let hashed = show ugen
     let hashLookup = M.lookup hashed table
@@ -497,11 +510,13 @@ compileUGenGraphBranch ugen@(UGenFunc (LocalOut busNum numBuses) calc cons decn 
         then popCompiledFeedbackStack
         else return ()
     return wire
+    
 compileUGenGraphBranch ugen@(UGenFunc (LocalIn busNum) calc cons decn _) = do
     maybeFeedbackWires <- peekCompiledFeedbackStack
     case maybeFeedbackWires of
         Just feedbackWires -> liftIO (print ("FOUND LOCAL BUS: " ++ show busNum ++ " -> " ++ (show $ feedbackWires !! busNum))) >> return (feedbackWires !! busNum)
         Nothing -> liftIO (print ("Unable to find local bus " ++ show busNum  ++ " during ugen compilation.")) >> nextWireIndex
+    -}
 compileUGenGraphBranch ugen = do
     let hashed = show ugen
     args <- compileUGenArgs ugen -- Compile argument input branches first to build up ugen cache table
@@ -516,8 +531,18 @@ compileUGenArgs (UGenNum _) = return []
 
 -- To Do: Add multi-out ugen support
 compileUGen :: UGen -> [CUInt] -> String -> Compiled CUInt
+compileUGen (UGenFunc (LocalIn feedBus) _ _ _ _) args key = do
+    wire <- getOrPushCompiledFeedWire feedBus
+    getCompiledFeedWires >>= \wires -> liftIO (print ("LocalIn: " ++ show wires))
+    return wire
+compileUGen (UGenFunc (LocalOut feedBus) calc cons decn _) args key = do
+    inputs <- liftIO (newArray args)
+    wire <- getOrPushCompiledFeedWire feedBus
+    getCompiledFeedWires >>= \wires -> liftIO (print ("LocalOut: " ++ show wires))
+    wireBuf <- liftIO $ new wire
+    addUGen key (CUGen calc cons decn nullPtr inputs wireBuf) wire
+    return wire
 compileUGen (UGenFunc _ calc cons decn _) args key = do
-    liftIO $ print ("compileUGen args: " ++ (show args))
     inputs <- liftIO (newArray args)
     wire <- nextWireIndex
     wireBuf <- liftIO $ new wire
