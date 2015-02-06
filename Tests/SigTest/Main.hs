@@ -1,8 +1,9 @@
 import Necronomicon
 import Data.Fixed (mod')
+import Control.Arrow
 
 main :: IO ()
-main = runSignal <| testGUI <|> testScene <|> testSound
+main = runSignal <| testGUI <|> testScene <|> testSound2
 
 testGUI :: Signal ()
 testGUI = gui [chatBox,netBox,users]
@@ -24,57 +25,52 @@ testGUI = gui [chatBox,netBox,users]
 -- Implement in terms of play until instead
 -- Networking the state works out better that way!
 testSound :: Signal ()
-testSound = play myCoolSynth2 (isDown keyW) (isUp   keyW)
-        <|> play myCoolSynth3 (isDown keyA) (isDown keyA)
-        <|> play myCoolSynth2 (isDown keyP) (isDown keyS)
+testSound = play (isDown keyW) (isUp   keyW) myCoolSynth2
+        <|> play (isDown keyA) (isDown keyA) myCoolSynth3
+        <|> play (isDown keyP) (isDown keyS) myCoolSynth2
 
 testSound2 :: Signal ()
-testSound2 = play noArgSynth  (isDown keyW) (isDown keyW)
-         <|> play oneArgSynth (isDown keyA) (isDown keyA) (fst <~ mousePos) --Maybe the person who starts a player is the only person in control of it?
-         <|> play twoArgSynth (isDown keyS) (isDown keyS) 440 880
-         <|> play threeSynth  (isDown keyD) (isDown keyD) 440 880 66.6
+testSound2 = play (isDown keyW) (isDown keyW) noArgSynth
+         <|> play (isDown keyA) (isDown keyA) oneArgSynth (mouseX ~> scale 20  10000)
+         <|> play (isDown keyS) (isDown keyS) twoArgSynth (mouseX ~> scale 100 3000) (mouseY ~> scale 20 10000)
+         <|> play (isDown keyD) (isDown keyD) threeSynth  440 880 66.6
 
 noArgSynth :: UGen
-noArgSynth = sin 0.1
+noArgSynth = sin 0.1 |> out 0
 
-oneArgSynth :: UGen -> UGen
-oneArgSynth = sin
+oneArgSynth :: UGen -> [UGen]
+oneArgSynth f = saw 40 |> lpf (lag 6 [f,f]) 0 3 >>> gain 0.25 >>> out 0
+-- oneArgSynth f = saw 40 |> highshelf [f,f] (6) 6 >>> gain 0.25 >>> out 0
+-- oneArgSynth f = saw 40 |> lowshelf[f,f] 6 6 >>> gain 0.25 >>> out 0
+-- oneArgSynth f = saw 110 |> peakEQ [f,f] 12 0.3 >>> gain 0.25 >>> out 0
+-- oneArgSynth f = saw 220 |> notch [f,f] 0 3 >>> gain 0.25 >>> out 0
+-- oneArgSynth f = saw 220 |> bpf [f,f] 0 3 >>> gain 0.25 >>> out 0
+-- oneArgSynth f = saw 220 |> hpf [f,f] 0 3 >>> gain 0.25 >>> out 0
+-- oneArgSynth f = saw (noise2 3 |> range 200 800) |> gain 0.25 >>> out 0
+-- oneArgSynth f = syncpulse [f,f] 0.5 (saw 400) |> gain 0.25 >>> out 0
+-- oneArgSynth f = syncsaw [f,f] (saw 400) |> gain 0.25 >>> out 0
+-- oneArgSynth f = syncsaw [f,f] (saw 400) |> gain 0.25 >>> out 0
+-- oneArgSynth f = saw [f,f] |> gain 0.25 >>> out 0
+-- oneArgSynth f = lfpulse [f,f] 0 |> gain 0.25 >>> out 0
+-- oneArgSynth f = lfsaw [f,f] 0 |> gain 0.25 >>> out 0
 
-twoArgSynth :: UGen -> UGen -> UGen
-twoArgSynth fx fy = sin fx + sin fy
+twoArgSynth :: UGen -> UGen -> [UGen]
+twoArgSynth f ff = saw (lag 1 [f,f]) |> lpf (lag 1 [ff,ff]) 0 3 >>> gain 0.25 >>> out 0
+-- twoArgSynth f pw = pulse [f,f] [pw,pw] |> gain 0.1 >>> out 0
+-- twoArgSynth fx fy = sin [fx,fy] |> gain 0.1 >>> out 0
 
 threeSynth :: UGen -> UGen -> UGen -> UGen
-threeSynth fx fy fz = sin fx + sin fy + sin fz
-
---Need to create and test oneShot system....probably and advance feature
--- <|> oneShot lineSynth (isDown keyX)
-
-
-
--- testPattern = gui [tri <~ pattern / 10 ]
-    -- where
-        -- tri y   = testTri (Vector3 0.5 y 0) identity
-        -- pattern = playPattern 0 (isDown keyP)
-                --   [lich| 0 [1 2] _ [3 [4 5]] 6
-                        --  0 [1 2] _ [3 [4 5]] 6
-                        --  0 [1 2] _ [3 [4 5]] 6
-                        --  0 [1 2] _ [3 [4 5]] 6 |]
-
--- testGUI :: Signal ()
--- testGUI = gui [element vslider,element blueButton,pure zLabel,tri <~ input vslider]
-    -- where
-        -- vslider    = slider (Vector2 0.50 0.5) (Size 0.03 0.30) (RGB 0.5 0.5 0.5)
-        -- tri y      = testTri(Vector3 0 (1-y) 0) identity
-        -- blueButton = button (Vector2 0.75 0.5) (Size 0.10 0.15) (RGB 0 0 1)
-        -- zLabel     = label  (Vector2 0.25 0.5) (Font "OCRA.ttf" 50) white "Zero"
+threeSynth fx fy fz = sin fx + sin fy + sin fz |> gain 0.1 >>> out 0
 
 testScene :: Signal ()
 testScene = scene [pure cam,terrainSig]
     where
         move (x,y) z a = Vector3 (x*z*a) (y*z*a) 0
-        cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black
+        cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
         terrain pos    = SceneObject pos identity 1 (Model simplexMesh $ vertexColored (RGBA 1 1 1 0.35)) []
-        terrainSig     = terrain <~ foldn (+) 0 (lift3 move arrows (fps 20) 5)
+        terrainSig     = terrain <~ foldn (+) 0 (lift3 move arrows (fps 30) 5)
+        -- terrainSig     = terrain <~ playPattern 0 (isDown keyP) (isDown keyP)
+            -- [lich| [0 1 2 3] [4 5 6 7] [6 0 5 0] [4 0 3 0] |]
 
 testTri :: Vector3 -> Quaternion -> SceneObject
 testTri pos r = SceneObject pos r 1 (Model (tri 0.3 white) $ vertexColored white) []

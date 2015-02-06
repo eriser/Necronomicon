@@ -15,12 +15,15 @@
 #endif
 #include <jack/jack.h>
 #include <time.h>
+#include <limits.h>
 
 #include "Necronomicon.h"
 
 /////////////////////
 // Constants
 /////////////////////
+
+typedef enum { false, true } bool;
 
 #ifndef M_PI
 #define M_PI 3.1415926535897932384626433832795028841971693993751058209749445923078164062L
@@ -155,7 +158,7 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 	printf("]\n");
 
 	puts("Building synth");*/
-	
+
 	synth_node* synth = malloc(NODE_SIZE);
 	synth->previous = NULL;
 	synth->next = NULL;
@@ -214,7 +217,7 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 	}
 
 	printf("]\n");*/
-	
+
 	return synth;
 }
 
@@ -259,6 +262,7 @@ void process_synth(synth_node* synth)
 void null_deconstructor(ugen* u) {} // Does nothing
 void null_constructor(ugen* u) { u->data = NULL; }
 void try_schedule_current_synth_for_removal(); // Forward declaration
+bool minBLEP_Init(); //Curtis: MinBlep initialization Forward declaration
 
 void initialize_wave_tables()
 {
@@ -267,13 +271,15 @@ void initialize_wave_tables()
 	{
 		sine_table[i] = sin(TWO_PI * (((double) i) / ((double) TABLE_SIZE)));
 	}
+
+	//Curtis: Needed to initialize minblep table.
+	bool minblepInitialized = minBLEP_Init();
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Scheduler
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-typedef enum { false, true } bool;
 const unsigned int MAX_FIFO_MESSAGES = 2048;
 const unsigned int FIFO_SIZE_MASK = 2047;
 
@@ -687,8 +693,8 @@ void remove_synth(synth_node* node)
 		message msg;
 		msg.arg.node = node;
 		msg.type = FREE_SYNTH;
-		
-		NRT_FIFO_PUSH(msg); // Send ugen to NRT thread for freeing 
+
+		NRT_FIFO_PUSH(msg); // Send ugen to NRT thread for freeing
 	}
 }
 
@@ -701,7 +707,7 @@ void remove_synth_by_id(unsigned int id)
 // Iterate over the scheduled list and add synths if they are ready. Stop as soon as we find a synth that isn't ready.
 void add_scheduled_synths()
 {
-	
+
 	while (scheduled_list_read_index != scheduled_list_write_index)
 	{
 		if (SCHEDULED_LIST_PEEK_TIME() <= current_sample_time)
@@ -879,23 +885,23 @@ void init_rt_thread()
 	SAMPLE_RATE = jack_get_sample_rate(client);
 	RECIP_SAMPLE_RATE = 1.0 / SAMPLE_RATE;
 	TABLE_MUL_RECIP_SAMPLE_RATE = TABLE_SIZE * RECIP_SAMPLE_RATE;
-	
+
 	synth_table = hash_table_new();
 	rt_fifo = new_message_fifo();
 	scheduled_node_list = new_node_list();
-	removal_fifo = new_removal_fifo();	
+	removal_fifo = new_removal_fifo();
 
 	last_audio_bus_index = num_audio_buses - 1;
 	num_audio_buses_bytes = num_audio_buses * DOUBLE_SIZE;
 	_necronomicon_buses = malloc(num_audio_buses_bytes);
 	clear_necronomicon_buses();
-	
+
 	initialize_wave_tables();
 	_necronomicon_current_node = NULL;
-	
+
 	assert(nrt_fifo == NULL);
 	nrt_fifo = new_message_fifo();
-	
+
 	current_sample_time = 0;
 	necronomicon_running = true;
 }
@@ -914,7 +920,7 @@ void shutdown_rt_thread()
 	clear_synth_list();
 	handle_messages_in_rt_fifo();
 	handle_messages_in_nrt_fifo();
-	
+
 	nrt_fifo_free();
 	nrt_fifo = NULL;
 
@@ -923,7 +929,7 @@ void shutdown_rt_thread()
 	assert(scheduled_node_list != NULL);
 	assert(removal_fifo != NULL);
 	assert(_necronomicon_buses != NULL);
-	
+
 	hash_table_free(synth_table);
 	rt_fifo_free();
 	scheduled_list_free();
@@ -988,7 +994,7 @@ int process(jack_nframes_t nframes, void* arg)
 
 		out0[i] = _necronomicon_buses[0];
 		out1[i] = _necronomicon_buses[1];
-		
+
 		remove_scheduled_synths(); // Remove any synths that are scheduled for removal and send them to the NRT thread FIFO queue for freeing.
         current_sample_time += 1;
     }
@@ -1020,7 +1026,7 @@ void start_rt_runtime()
 	}
 
 	init_rt_thread();
-	
+
 	if (status & JackServerStarted)
 		fprintf (stderr, "JACK server started\n");
 
@@ -1275,7 +1281,7 @@ synth_node* new_test_synth(unsigned int time)
 {
 	ugen test_ugen = { &sin_calc, &sin_constructor, &sin_deconstructor, NULL, NULL, NULL };
 	test_ugen.constructor(&test_ugen);
-	
+
 	synth_node* test_synth = malloc(NODE_SIZE);
 	test_synth->ugen_graph = malloc(UGEN_SIZE);
 	test_synth->ugen_wires = malloc(DOUBLE_SIZE);
@@ -1558,4 +1564,792 @@ void test_doubly_linked_list()
 	}
 
 	doubly_linked_list_free(synth_list);
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// Curtis: New UGens
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#define LERP(A,B,D) (A+D*(B-A))
+#define CLAMP(V,MIN,MAX) \
+({\
+	double result = V < MIN ? MIN : V; \
+	result        = V > MAX ? MAX : V; \
+	result; \
+})
+
+#define WAVE_TABLE_AMPLITUDE(phase,table) \
+({ \
+	double amp1  = table[(unsigned char)phase]; \
+	double amp2  = table[(unsigned char)(phase+1)]; \
+	double delta = phase - ((long) phase); \
+	amp1 + delta * (amp2 - amp1); \
+})
+
+void accumulator_constructor(ugen* u)
+{
+	u->data = malloc(DOUBLE_SIZE); // Phase accumulator
+	*((double*) u->data) = 0.0f;
+}
+
+void accumulator_deconstructor(ugen* u)
+{
+	free(u->data);
+}
+
+//LFOS
+double RECIP_CHAR_RANGE = 1.0 / 255.0;
+void lfsaw_calc(ugen* u)
+{
+	double freq     = UGEN_IN(u, 0);
+	double phaseArg = UGEN_IN(u, 1);
+	double phase    = *((double*) u->data);
+
+	//Branchless and table-less saw
+	double        amp1      = ((double)((char)phase));
+	double        amp2      = ((double)(((char)phase)+1));
+	double        delta     = phase - ((long) phase);
+	double        amplitude = LERP(amp1,amp2,delta) * RECIP_CHAR_RANGE;
+
+	*((double*) u->data) = phase + phaseArg + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
+	UGEN_OUT(u, 0, amplitude);
+}
+
+void lfpulse_calc(ugen* u)
+{
+	double freq     = UGEN_IN(u, 0);
+	double phaseArg = UGEN_IN(u, 1);
+	double phase    = *((double*) u->data);
+
+	//Branchless and table-less square
+	double amplitude = 1 | (((char)phase) >> (sizeof(char) * CHAR_BIT - 1));
+
+	*((double*) u->data) = phase + phaseArg + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
+	UGEN_OUT(u, 0, amplitude);
+}
+
+//---------------------------------------------
+//MinBlep Bandwidth-limited Saw and Square
+//---------------------------------------------
+
+#define KTABLE 64 // BLEP table oversampling factor
+
+typedef struct
+{
+	double *lpTable;
+	int     c;
+} minbleptable_t;
+
+typedef struct
+{
+	double  output;
+	double  phase;
+	double *buffer;      // circular output buffer
+	int     cBuffer;	 // buffer size
+	int     iBuffer;	 // current buffer position
+	int     nInit;		 // amount of initialized entries
+	double  prevSyncAmp; //For hardsync
+} minblep;
+
+minbleptable_t gMinBLEP;
+
+bool minBLEP_Init()
+{
+	// load table
+	FILE *fp=fopen("/home/casiosk1/code/minblep_osc/minblep.mat","rb");
+	unsigned int iSize;
+
+	if (!fp) return false;
+
+	fseek(fp,0x134,SEEK_SET);
+
+	fread(&iSize,sizeof(int),1,fp);
+	gMinBLEP.c=iSize/sizeof(double);
+
+	gMinBLEP.lpTable=(double*)malloc(iSize);
+	if (!gMinBLEP.lpTable) return false;
+
+	fread(gMinBLEP.lpTable,iSize,1,fp);
+
+	fclose(fp);
+
+	return true;
+}
+
+void minBLEP_Free()
+{
+	free(gMinBLEP.lpTable);
+}
+
+void minblep_constructor(ugen* u)
+{
+	minblep* mb     = malloc(sizeof(minblep));
+	mb->output      = 0.0;
+	mb->phase       = 0.0;
+	mb->cBuffer     = gMinBLEP.c/KTABLE;
+	mb->buffer      = (double*)malloc(sizeof(double) * mb->cBuffer);
+	mb->iBuffer     = 0;
+	mb->nInit       = 0;
+	mb->prevSyncAmp = 0;
+	u->data         = mb;
+}
+
+void minblep_deconstructor(ugen* u)
+{
+	minblep* mb = (minblep*) u->data;
+	// free(mb->buffer);
+	free(u->data);
+}
+
+// add impulse into buffer
+inline void add_blep(minblep* mb, double offset, double amp)
+{
+	int    i;
+	double *out       = mb->buffer  + mb->iBuffer;
+	double *in        = gMinBLEP.lpTable + (int) (KTABLE*offset);
+	double frac       = fmod(KTABLE*offset,1.0);
+	int    cBLEP      = (gMinBLEP.c / KTABLE) - 1;
+	double *bufferEnd = mb->buffer  + mb->cBuffer;
+	double f;
+
+	// add
+	for(i=0; i < mb->nInit; i++, in += KTABLE, out++)
+	{
+		if(out >= bufferEnd)
+			out = mb->buffer;
+
+		f = LERP(in[0],in[1],frac);
+		*out += amp * (1-f);
+	}
+
+	// copy
+	for(; i < cBLEP; i++, in += KTABLE, out++)
+	{
+		if(out >= bufferEnd)
+			out = mb->buffer;
+
+		f = LERP(in[0],in[1],frac);
+		*out = amp*(1-f);
+	}
+
+	mb->nInit = cBLEP;
+}
+
+void saw_calc(ugen* u)
+{
+	double   freq      = UGEN_IN(u, 0) * RECIP_SAMPLE_RATE;
+	// double   pwm       = UGEN_IN(u, 1);
+	minblep* mb        = (minblep*) u->data;
+	double   amplitude = 0.0;
+
+	// create waveform
+	mb->phase = mb->phase + freq;
+
+	// add BLEP at end of waveform
+	if (mb->phase >= 1)
+	{
+		mb->phase  = mb->phase - 1.0;
+		mb->output = 0.0;
+		add_blep(mb, mb->phase/freq,1.0);
+	}
+
+	// add BLEP in middle of wavefor for squarewave
+	// if (!mb->output && mb->phase > pwm && mb->type==OT_SQUARE)
+	// {
+		// mb->v=1.0;
+		// osc_AddBLEP(mb, (mb->p-mb->fPWM)/fs,-1.0);
+	// }
+
+	// sample value
+	// if (mb->type==OT_SAW)
+		// v=mb->p;
+	// else
+		// v=mb->v;
+
+	amplitude = mb->phase;
+
+	// add BLEP buffer contents
+	if(mb->nInit)
+	{
+		amplitude += mb->buffer[mb->iBuffer];
+		mb->nInit--;
+		if(++mb->iBuffer >= mb->cBuffer)
+			mb->iBuffer=0;
+	}
+
+	UGEN_OUT(u, 0, amplitude);
+}
+
+void square_calc(ugen* u)
+{
+	double   freq      = UGEN_IN(u, 0) * RECIP_SAMPLE_RATE;
+	double   pwm       = CLAMP(UGEN_IN(u, 1),0,1) * 0.5;
+	minblep* mb        = (minblep*) u->data;
+	double   amplitude = 0.0;
+
+	// create waveform
+	mb->phase = mb->phase + freq;
+
+	// add BLEP at end of waveform
+	if (mb->phase >= 1)
+	{
+		mb->phase  = mb->phase - 1.0;
+		mb->output = 0.0;
+		add_blep(mb, mb->phase/freq,1.0);
+	}
+
+	// add BLEP in middle of wavefor for squarewave
+	if(!mb->output && mb->phase > pwm)
+	{
+		mb->output = 1.0;
+		add_blep(mb, (mb->phase - pwm) / freq,-1.0);
+	}
+
+	amplitude = mb->output;
+
+	// add BLEP buffer contents
+	if(mb->nInit)
+	{
+		amplitude += mb->buffer[mb->iBuffer];
+		mb->nInit--;
+		if(++mb->iBuffer >= mb->cBuffer)
+			mb->iBuffer=0;
+	}
+
+	UGEN_OUT(u, 0, amplitude);
+}
+
+void syncsaw_calc(ugen* u)
+{
+	double   freq      = UGEN_IN(u, 0) * RECIP_SAMPLE_RATE;
+	double   sync      = UGEN_IN(u, 1);
+	minblep* mb        = (minblep*) u->data;
+	double   amplitude = 0.0;
+
+	// create waveform
+	mb->phase = mb->phase + freq;
+
+	// add BLEP at end of waveform
+	if (mb->phase >= 1 || (mb->prevSyncAmp <= 0 && sync > 0))
+	{
+		mb->phase  = mb->phase - 1.0;
+		mb->output = 0.0;
+		add_blep(mb, mb->phase/freq,1.0);
+	}
+
+	amplitude = mb->phase;
+
+	// add BLEP buffer contents
+	if(mb->nInit)
+	{
+		amplitude += mb->buffer[mb->iBuffer];
+		mb->nInit--;
+		if(++mb->iBuffer >= mb->cBuffer)
+			mb->iBuffer=0;
+	}
+
+	mb->prevSyncAmp = sync;
+	UGEN_OUT(u, 0, amplitude);
+}
+
+void syncsquare_calc(ugen* u)
+{
+	double   freq      = UGEN_IN(u, 0) * RECIP_SAMPLE_RATE;
+	double   pwm       = CLAMP(UGEN_IN(u, 1),0,1) * 0.5;
+	double   sync      = UGEN_IN(u, 2);
+	minblep* mb        = (minblep*) u->data;
+	double   amplitude = 0.0;
+
+	// create waveform
+	mb->phase = mb->phase + freq;
+
+	// add BLEP at end of waveform
+	if (mb->phase >= 1)
+	{
+		mb->phase  = mb->phase - 1.0;
+		mb->output = 0.0;
+		add_blep(mb, mb->phase/freq,1.0);
+	}
+
+	// add BLEP in middle of wavefor for squarewave
+	if(!mb->output && mb->phase > pwm)
+	{
+		mb->output = 1.0;
+		add_blep(mb, (mb->phase - pwm) / freq,-1.0);
+	}
+
+	// add BLEP at hard sync
+	//Have to detect this better and determine the incoming frequence!
+	if(mb->prevSyncAmp <= 0 && sync > 0)
+	{
+		mb->phase  = mb->phase - 1.0;
+		mb->output = 0.0;
+		add_blep(mb, mb->phase/freq,1.0);
+	}
+
+	amplitude = mb->output;
+
+	// add BLEP buffer contents
+	if(mb->nInit)
+	{
+		amplitude += mb->buffer[mb->iBuffer];
+		mb->nInit--;
+		if(++mb->iBuffer >= mb->cBuffer)
+			mb->iBuffer=0;
+	}
+
+	mb->prevSyncAmp = sync;
+	UGEN_OUT(u, 0, amplitude);
+}
+
+#define CUBIC_INTERP(A,B,C,D,DELTA) \
+({                                  \
+	double delta2 = DELTA * DELTA;  \
+	double a0     = D - C - A + B;  \
+	double a1     = A - B - a0;     \
+	double a2     = C - A;          \
+	a0 * DELTA * delta2 + a1 * delta2 + a2 * DELTA + B; \
+})
+#define RAND_RANGE(MIN,MAX) ( ((double)random() / (double) RAND_MAX) * (MAX - MIN) + MIN )
+
+typedef struct
+{
+	double phase;
+	double value0;
+	double value1;
+	double value2;
+	double value3;
+} rand_t;
+
+void rand_constructor(ugen* u)
+{
+	rand_t* rand = malloc(sizeof(rand_t));
+	rand->value0 = RAND_RANGE(0,1);
+	rand->value1 = 0;
+	rand->value2 = 0;
+	rand->value3 = 0;
+	rand->phase  = 0;
+	u->data      = rand;
+}
+
+void rand_deconstructor(ugen* u)
+{
+	free(u->data);
+}
+
+void rand_calc(ugen* u)
+{
+	// double  min   = UGEN_IN(u,0);
+	// double  range = UGEN_IN(u,1) - min;
+	rand_t* rand  = (rand_t*) u->data;
+	double  amp   = rand->value0;// * range + min;
+
+	UGEN_OUT(u,0,amp);
+}
+
+void lfnoiseN_calc(ugen* u)
+{
+	double  freq  = UGEN_IN(u,0);
+	// double  min   = UGEN_IN(u,1);
+	// double  range = UGEN_IN(u,2) - min;
+	rand_t* rand  = (rand_t*) u->data;
+
+	if(rand->phase + RECIP_SAMPLE_RATE * freq >= 1.0)
+	{
+		rand->phase  = fmod(rand->phase + RECIP_SAMPLE_RATE * freq,1.0);
+		rand->value0 = RAND_RANGE(0,1);
+	}
+	else
+	{
+		rand->phase = rand->phase + RECIP_SAMPLE_RATE * freq;
+	}
+
+	double  amp = rand->value0;// * range + min;
+
+	UGEN_OUT(u, 0, amp);
+}
+
+void lfnoiseL_calc(ugen* u)
+{
+	double  freq  = UGEN_IN(u,0);
+	// double  min   = UGEN_IN(u,1);
+	// double  range = UGEN_IN(u,2) - min;
+	rand_t* rand  = (rand_t*) u->data;
+
+	if(rand->phase + RECIP_SAMPLE_RATE * freq >= 1.0)
+	{
+		rand->phase  = fmod(rand->phase + RECIP_SAMPLE_RATE * freq,1.0);
+		rand->value1 = rand->value0;
+		rand->value0 = RAND_RANGE(0,1);
+	}
+	else
+	{
+		rand->phase = rand->phase + RECIP_SAMPLE_RATE * freq;
+	}
+
+	double amp = LERP(rand->value1,rand->value0,rand->phase);// * range + min;
+
+	UGEN_OUT(u, 0, amp);
+}
+
+void lfnoiseC_calc(ugen* u)
+{
+	double  freq  = UGEN_IN(u,0);
+	// double  min   = UGEN_IN(u,1);
+	// double  range = UGEN_IN(u,2) - min;
+	rand_t* rand  = (rand_t*) u->data;
+
+	if(rand->phase + RECIP_SAMPLE_RATE * freq >= 1.0)
+	{
+		rand->phase  = fmod(rand->phase + RECIP_SAMPLE_RATE * freq,1.0);
+		rand->value3 = rand->value2;
+		rand->value2 = rand->value1;
+		rand->value1 = rand->value0;
+		rand->value0 = RAND_RANGE(0,1);
+	}
+	else
+	{
+		rand->phase = rand->phase + RECIP_SAMPLE_RATE * freq;
+	}
+
+	double amp = CUBIC_INTERP(rand->value3,rand->value2,rand->value1,rand->value0,rand->phase);// * range + min;
+
+	UGEN_OUT(u, 0, amp);
+}
+
+void range_calc(ugen* u)
+{
+	double min   = UGEN_IN(u,0);
+	double range = UGEN_IN(u,1) - min;
+	double in    = UGEN_IN(u,2);
+	double amp   = (in * range) + min;
+
+	UGEN_OUT(u, 0, amp);
+}
+
+//===================================
+// RBJ Filters, Audio EQ Cookbook
+//===================================
+
+typedef struct
+{
+	double x1;
+	double x2;
+	double y1;
+	double y2;
+} biquad_t;
+
+void biquad_constructor(ugen* u)
+{
+	biquad_t* biquad = malloc(sizeof(biquad_t));
+	biquad->x1       = 0;
+	biquad->x2       = 0;
+	biquad->y1       = 0;
+	biquad->y2       = 0;
+	u->data          = biquad;
+}
+
+void biquad_deconstructor(ugen* u)
+{
+	free(u->data);
+}
+
+#define BIQUAD(B0,B1,B2,A0,A1,A2,X,X1,X2,Y1,Y2) ( (B0/A0)*X + (B1/A0)*X1 + (B2/A0)*X2 - (A1/A0)*Y1 - (A2/A0)*Y2 )
+
+void lpf_calc(ugen* u)
+{
+	double freq  = UGEN_IN(u,0);
+	double gain  = UGEN_IN(u,1);
+	double q     = UGEN_IN(u,2);
+	double in    = UGEN_IN(u,3);
+
+	biquad_t* bi = (biquad_t*) u->data;
+
+	double omega = 2 * M_PI * freq * RECIP_SAMPLE_RATE;
+	double cs    = cos(omega);
+    double sn    = sin(omega);
+	double alpha = sn * sinh(1 / (2 * q));
+
+    double b0    = (1 - cs)/2;
+    double b1    =  1 - cs;
+    double b2    = (1 - cs)/2;
+    double a0    =  1 + alpha;
+    double a1    = -2*cs;
+    double a2    =  1 - alpha;
+
+	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi->x1,bi->x2,bi->y1,bi->y2);
+
+	bi->y2 = bi->y1;
+	bi->y1 = out;
+	bi->x2 = bi->x1;
+	bi->x1 = in;
+
+	UGEN_OUT(u,0,out);
+}
+
+void hpf_calc(ugen* u)
+{
+	double freq  = UGEN_IN(u,0);
+	double gain  = UGEN_IN(u,1);
+	double q     = UGEN_IN(u,2);
+	double in    = UGEN_IN(u,3);
+
+	biquad_t* bi = (biquad_t*) u->data;
+
+	double omega = 2 * M_PI * freq * RECIP_SAMPLE_RATE;
+	double cs    = cos(omega);
+    double sn    = sin(omega);
+	double alpha = sn * sinh(1 / (2 * q));
+
+	double b0    = (1 + cs)/2;
+    double b1    = -1 - cs;
+    double b2    = (1 + cs)/2;
+    double a0    =  1 + alpha;
+    double a1    = -2*cs;
+    double a2    =  1 - alpha;
+
+	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi->x1,bi->x2,bi->y1,bi->y2);
+
+	bi->y2 = bi->y1;
+	bi->y1 = out;
+	bi->x2 = bi->x1;
+	bi->x1 = in;
+
+	UGEN_OUT(u,0,out);
+}
+
+void bpf_calc(ugen* u)
+{
+	double freq  = UGEN_IN(u,0);
+	double gain  = UGEN_IN(u,1);
+	double q     = UGEN_IN(u,2);
+	double in    = UGEN_IN(u,3);
+
+	biquad_t* bi = (biquad_t*) u->data;
+
+	double omega = 2 * M_PI * freq * RECIP_SAMPLE_RATE;
+	double cs    = cos(omega);
+    double sn    = sin(omega);
+	double alpha = sn * sinh(1 / (2 * q));
+
+	double b0    =  alpha;
+    double b1    =  0;
+    double b2    = -alpha;
+    double a0    =  1 + alpha;
+    double a1    = -2*cs;
+    double a2    =  1 - alpha;
+
+	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi->x1,bi->x2,bi->y1,bi->y2);
+
+	bi->y2 = bi->y1;
+	bi->y1 = out;
+	bi->x2 = bi->x1;
+	bi->x1 = in;
+
+	UGEN_OUT(u,0,out);
+}
+
+void notch_calc(ugen* u)
+{
+	double freq  = UGEN_IN(u,0);
+	double gain  = UGEN_IN(u,1);
+	double q     = UGEN_IN(u,2);
+	double in    = UGEN_IN(u,3);
+
+	biquad_t* bi = (biquad_t*) u->data;
+
+	double omega = 2 * M_PI * freq * RECIP_SAMPLE_RATE;
+	double cs    = cos(omega);
+    double sn    = sin(omega);
+	double alpha = sn * sinh(1 / (2 * q));
+
+	double b0    =  1;
+    double b1    = -2*cs;
+    double b2    =  1;
+    double a0    =  1 + alpha;
+    double a1    = -2*cs;
+    double a2    =  1 - alpha;
+
+	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi->x1,bi->x2,bi->y1,bi->y2);
+
+	bi->y2 = bi->y1;
+	bi->y1 = out;
+	bi->x2 = bi->x1;
+	bi->x1 = in;
+
+	UGEN_OUT(u,0,out);
+}
+
+void peakEQ_calc(ugen* u)
+{
+	double freq  = UGEN_IN(u,0);
+	double gain  = UGEN_IN(u,1);
+	double q     = UGEN_IN(u,2);
+	double in    = UGEN_IN(u,3);
+
+	biquad_t* bi = (biquad_t*) u->data;
+
+	double a     = pow(10,(gain/40));
+	double omega = 2 * M_PI * freq * RECIP_SAMPLE_RATE;
+	double cs    = cos(omega);
+    double sn    = sin(omega);
+	double alpha = sn * sinh(1 / (2 * q));
+
+	double b0    =  1 + alpha*a;
+    double b1    = -2*cs;
+    double b2    =  1 - alpha*a;
+    double a0    =  1 + alpha/a;
+    double a1    = -2*cs;
+    double a2    =  1 - alpha/a;
+
+	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi->x1,bi->x2,bi->y1,bi->y2);
+
+	bi->y2 = bi->y1;
+	bi->y1 = out;
+	bi->x2 = bi->x1;
+	bi->x1 = in;
+
+	UGEN_OUT(u,0,out);
+}
+
+void lowshelf_calc(ugen* u)
+{
+	double freq  = UGEN_IN(u,0);
+	double gain  = UGEN_IN(u,1);
+	double slope = UGEN_IN(u,2);
+	double in    = UGEN_IN(u,3);
+
+	biquad_t* bi = (biquad_t*) u->data;
+
+	double a     = pow(10,(gain/40));
+	double omega = 2 * M_PI * freq * RECIP_SAMPLE_RATE;
+	double cs    = cos(omega);
+    double sn    = sin(omega);
+	double beta  = sqrt( (pow(a,2) + 1) / slope - pow((a-1),2) );
+
+	double b0    =    a*( (a+1) - (a-1)*cs + beta*sn );
+    double b1    =  2*a*( (a-1) - (a+1)*cs           );
+    double b2    =    a*( (a+1) - (a-1)*cs - beta*sn );
+    double a0    =        (a+1) + (a-1)*cs + beta*sn;
+    double a1    =   -2*( (a-1) + (a+1)*cs           );
+    double a2    =        (a+1) + (a-1)*cs - beta*sn;
+
+	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi->x1,bi->x2,bi->y1,bi->y2);
+
+	bi->y2 = bi->y1;
+	bi->y1 = out;
+	bi->x2 = bi->x1;
+	bi->x1 = in;
+
+	UGEN_OUT(u,0,out);
+}
+
+void highshelf_calc(ugen* u)
+{
+	double freq  = UGEN_IN(u,0);
+	double gain  = UGEN_IN(u,1);
+	double slope = UGEN_IN(u,2);
+	double in    = UGEN_IN(u,3);
+
+	biquad_t* bi = (biquad_t*) u->data;
+
+	double a     = pow(10,(gain/40));
+	double omega = 2 * M_PI * freq * RECIP_SAMPLE_RATE;
+	double cs    = cos(omega);
+    double sn    = sin(omega);
+	double beta  = sqrt( (pow(a,2) + 1) / slope - pow((a-1),2) );
+
+	double b0    =    a*( (a+1) + (a-1)*cs + beta*sn );
+    double b1    = -2*a*( (a-1) + (a+1)*cs           );
+    double b2    =    a*( (a+1) + (a-1)*cs - beta*sn );
+    double a0    =        (a+1) - (a-1)*cs + beta*sn;
+    double a1    =    2*( (a-1) - (a+1)*cs           );
+    double a2    =        (a+1) - (a-1)*cs - beta*sn;
+
+	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi->x1,bi->x2,bi->y1,bi->y2);
+
+	bi->y2 = bi->y1;
+	bi->y1 = out;
+	bi->x2 = bi->x1;
+	bi->x1 = in;
+
+	UGEN_OUT(u,0,out);
+}
+
+void lag_calc(ugen* u)
+{
+	double lagTime = UGEN_IN(u,0);
+	double input   = UGEN_IN(u,1);
+	double z       = *((double*) u->data);
+    double a       = exp((-2 * M_PI) / (lagTime * SAMPLE_RATE));
+    double b       = 1.0f - a;
+	z              = (input * b) + (z * a);
+	*((double*) u->data) = z;
+	UGEN_OUT(u,0,z);
+}
+
+typedef struct
+{
+	double* zs;//Delayed Samples for Filtering
+} zeroDelayFilter_t;
+
+void zeroDelayFilter_constructor(ugen* u)
+{
+	zeroDelayFilter_t* zerodft = malloc(sizeof(zeroDelayFilter_t));
+	zerodft->zs                = malloc(sizeof(double) * 3);
+	zerodft->zs[0]             = 0;
+	zerodft->zs[1]             = 0;
+	zerodft->zs[2]             = 0;
+	u->data                    = zerodft;
+}
+
+void zeroDelayFilter_deconstructor(ugen* u)
+{
+	zeroDelayFilter_t* zerodft = (zeroDelayFilter_t*) u->data;
+	free(zerodft->zs);
+	free(zerodft);
+}
+
+#define PREWARP(F,SI) ((2 / SI) * tan((F * SI) / 2))
+
+#define ZERO_DELAY(X,G,Z)  (X * G + (X * G + Z))
+
+void zeroDelayOnePole_calc(ugen* u)
+{
+	double freq                = UGEN_IN(u,0);
+	double x                   = UGEN_IN(u,1);
+	zeroDelayFilter_t* zerodft = (zeroDelayFilter_t*)u->data;
+
+	double warped              = PREWARP(freq,RECIP_SAMPLE_RATE);
+	double g                   = warped / (warped + 1);
+	double y                   = x * g + zerodft->zs[0];
+	zerodft->zs[0]             = ZERO_DELAY(x-y,g,zerodft->zs[0]);
+
+	UGEN_OUT(u,0,y);
+}
+
+//Figure out reaktor order of operations
+//Break out the trapezoidal shit to a fucking macro. fuck.
+void zeroDelayLPMS20(ugen* u)
+{
+	// double freq                = UGEN_IN(u,0);
+	// double x                   = UGEN_IN(u,1);
+	// double resonance           = UGEN_IN(u,1);
+	// zeroDelayFilter_t* zerodft = (zeroDelayFilter_t*)u->data;
+
+	// double warped              = (2 / RECIP_SAMPLE_RATE) * tan((freq * RECIP_SAMPLE_RATE) / 2);
+	// double g                   = warped / (warped + 1)
+	// double k                   = 2 * resonance;
+
+	// double ky                  = 0; //This is the end of the second chunk
+
+	// double s1                  = zerodft->s1;
+	// double y1                  = ((x - ky) * g + s1);
+	// zerodft->s1                = (x-y1) * g + s;
+
+	// double s2                  = zerodft->s2;
+	// double y2                  = (x * g + s1);
+	// zerodft->s2                = (x-y2) * g + s;
+
+	// UGEN_OUT(u,0,y);
 }

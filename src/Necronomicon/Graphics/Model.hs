@@ -27,31 +27,55 @@ newtype Material = Material {drawMeshWithMaterial :: (Mesh -> Matrix4x4 -> Matri
 instance Show Material where
     show _ = "Material"
 
-data    CharMetric = CharMetric{character             :: Char,
-                                advanceX              :: Double,
-                                advanceY              :: Double,
-                                bearingX              :: Double,
-                                bearingY              :: Double,
-                                charWidth             :: Double,
-                                charHeight            :: Double,
-                                charLeft              :: Double,
-                                charTop               :: Double,
-                                charTX                :: Double} deriving (Show)
+data CharMetric = CharMetric{
+    character             :: Char,
+    advanceX              :: Double,
+    advanceY              :: Double,
+    bearingX              :: Double,
+    bearingY              :: Double,
+    charWidth             :: Double,
+    charHeight            :: Double,
+    charLeft              :: Double,
+    charTop               :: Double,
+    charTX                :: Double
+    } deriving (Show)
 
-data    Font       = Font      {fontKey               :: String,
-                                fontSize              :: Int} deriving (Show)
+data Font = Font{
+    fontKey               :: String,
+    fontSize              :: Int
+    } deriving (Show)
 
-data    LoadedFont = LoadedFont{atlas                 :: Texture,
-                                atlasWidth            :: Double,
-                                atlasHeight           :: Double,
-                                characters            :: Map.Map Char CharMetric,
-                                characterVertexBuffer :: GL.BufferObject,
-                                characterIndexBuffer  :: GL.BufferObject} deriving (Show)
+data LoadedFont = LoadedFont{
+    atlas                 :: Texture,
+    atlasWidth            :: Double,
+    atlasHeight           :: Double,
+    characters            :: Map.Map Char CharMetric,
+    characterVertexBuffer :: GL.BufferObject,
+    characterIndexBuffer  :: GL.BufferObject
+    } deriving (Show)
 
-data    Resources  = Resources {shadersRef            :: IORef (IntMap.IntMap LoadedShader),
-                                texturesRef           :: IORef (Map.Map String GL.TextureObject),
-                                meshesRef             :: IORef (Map.Map String LoadedMesh),
-                                fontsRef              :: IORef (Map.Map String LoadedFont)}
+data PostRenderingFX = PostRenderingFX String (Texture -> Material) deriving (Show)
+
+instance Show ((Double,Double) -> Material) where
+    show _ = "((Double,Double) -> Material)"
+
+data LoadedPostRenderingFX = LoadedPostRenderingFX {
+    postRenderName        :: String,
+    postRenderMaterial    :: (Texture -> Material),
+    postRenderDimensions  :: (Double,Double),
+    postRenderTex         :: GL.GLuint,
+    postRenderRBO         :: GL.GLuint,
+    postRenderFBO         :: GL.GLuint,
+    status                :: GL.GLenum
+    }
+
+data Resources  = Resources {
+    shadersRef            :: IORef (IntMap.IntMap LoadedShader),
+    texturesRef           :: IORef (Map.Map String GL.TextureObject),
+    meshesRef             :: IORef (Map.Map String LoadedMesh),
+    fontsRef              :: IORef (Map.Map String LoadedFont),
+    postRenderRef         :: IORef (Map.Map String LoadedPostRenderingFX)
+    }
 
 instance Show Resources where
     show _ = "Resources"
@@ -62,8 +86,9 @@ newResources = do
     tmap <- newIORef Map.empty
     mmap <- newIORef Map.empty
     mapf <- newIORef Map.empty
-    return $ Resources smap tmap mmap mapf
+    pmap <- newIORef Map.empty
+    return $ Resources smap tmap mmap mapf pmap
 
 meshKey :: Mesh -> String
-meshKey (Mesh       mKey _ _ _ _    ) = mKey
-meshKey _                             = []
+meshKey (Mesh mKey _ _ _ _) = mKey
+meshKey _                   = []

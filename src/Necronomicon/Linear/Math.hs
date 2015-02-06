@@ -23,7 +23,7 @@ log2 = log 2
 
 --Generic Math functions
 radToDeg :: Double -> Double
-radToDeg r = (r * 360) / twoPi 
+radToDeg r = (r * 360) / twoPi
 
 linearInterpolation :: Double -> Double -> Double -> Double
 linearInterpolation from to delta = (1-delta) * from + delta * to;
@@ -34,9 +34,8 @@ toGLDouble = realToFrac
 nearZero :: Double -> Bool
 nearZero v = v < epsilon
 
-linlin :: Double -> Double -> Double -> Double -> Double -> Double
-linlin inMin inMax outMin outMax val
-    | val <= inMin = outMin
-    | val >= inMax = outMax
-    | otherwise    = (((val - inMin) / (inMax - inMin)) * (outMax - outMin)) + outMin
-
+-- linlin :: Double -> Double -> Double -> Double -> Double -> Double
+-- linlin inMin inMax outMin outMax val
+    -- | val <= inMin = outMin
+    -- | val >= inMax = outMax
+    -- | otherwise    = (((val - inMin) / (inMax - inMin)) * (outMax - outMin)) + outMin

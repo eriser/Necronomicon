@@ -17,9 +17,6 @@ import Sound.OSC.Time
 import qualified Data.Fixed as F
 import Necronomicon.Util.Functions
 
-(~>) :: a -> (a -> b) -> b
-(~>) a f = f a
-
 type Time = Double
 
 data Pattern a = PGen (Time -> Pattern a)
@@ -42,7 +39,7 @@ plength (PSeq _ l) = l
 plength _ = 1
 
 instance Functor Pattern where
-    fmap _ PNothing = PNothing 
+    fmap _ PNothing = PNothing
     fmap f (PVal x) = PVal (f x)
     fmap f (PGen x) = PGen (\t -> fmap f (x t))
     fmap f (PSeq p _) = fmap f p
@@ -119,7 +116,7 @@ lookAhead :: Int
 lookAhead = 5000 -- 10 milliseconds
 
 -- Picoseconds
--- scheduleAhead :: Integer 
+-- scheduleAhead :: Integer
 -- scheduleAhead = 50000000000 -- 10 milliseconds
 
 -- Seconds
@@ -171,7 +168,7 @@ daemon s p = (\t -> 0)
 wrapResize :: [a] -> [b] -> [a]
 wrapResize [] _ = []
 wrapResize _ [] = []
-wrapResize xs ys = foldl (\acc i -> acc ++ [xs !! (mod i (length xs))]) [] [0..(length ys - 1)] 
+wrapResize xs ys = foldl (\acc i -> acc ++ [xs !! (mod i (length xs))]) [] [0..(length ys - 1)]
 
 --------------------------
 -- Pattern Functions
@@ -215,7 +212,7 @@ ptree (PVal tree@(Node _ tlength)) = PSeq (PGen (collapseTree tree)) tlength
 
 pforever :: [Pattern a] -> Pattern a
 pforever [PNothing] = PNothing
-pforever patterns = PSeq (PGen timeSeq) (floor inf) -- We really need an Integer Infinity here. 
+pforever patterns = PSeq (PGen timeSeq) (floor inf) -- We really need an Integer Infinity here.
             where
                 timeSeq t = (collapse (patterns !! (floor t)) t)
 
@@ -395,7 +392,7 @@ instance Num a => Num (Pattern a) where
     (+) = padd
     (*) = pmul
     (-) = pminus
-    negate = pnegate 
+    negate = pnegate
     abs = pabs
     signum = psignum
     fromInteger = pfromInteger
@@ -534,7 +531,7 @@ pcompare :: (Ord a) => Pattern a -> Pattern a -> Ordering
 pcompare a b = case (compare) <$> a <*> b of
     PVal x -> x
     _ -> EQ
-    
+
 pmax :: (Ord a) => Pattern a -> Pattern a -> Pattern a
 pmax a b = (max) <$> a <*> b
 

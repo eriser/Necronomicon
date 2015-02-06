@@ -19,6 +19,7 @@ import           Necronomicon.FRP.Signal
 import           Necronomicon.Graphics
 import           Necronomicon.Linear
 import           Necronomicon.Util       (loadTextureFromTGA)
+import           Necronomicon.Utility    (linlin)
 import           Prelude
 import           Necronomicon.Networking (sendChatMessage)
 
