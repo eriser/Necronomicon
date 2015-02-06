@@ -2209,31 +2209,46 @@ void lag_calc(ugen* u)
 	UGEN_OUT(u,0,z);
 }
 
+//=====================
+// Zero delay filters
+//=====================
+
 typedef struct
 {
-	double* zs;//Delayed Samples for Filtering
+	double* ss;//Delayed Samples for Filtering
 } zeroDelayFilter_t;
 
 void zeroDelayFilter_constructor(ugen* u)
 {
 	zeroDelayFilter_t* zerodft = malloc(sizeof(zeroDelayFilter_t));
-	zerodft->zs                = malloc(sizeof(double) * 3);
-	zerodft->zs[0]             = 0;
-	zerodft->zs[1]             = 0;
-	zerodft->zs[2]             = 0;
+	zerodft->ss                = malloc(sizeof(double) * 3);
+	zerodft->ss[0]             = 0;
+	zerodft->ss[1]             = 0;
+	zerodft->ss[2]             = 0;
 	u->data                    = zerodft;
 }
 
 void zeroDelayFilter_deconstructor(ugen* u)
 {
 	zeroDelayFilter_t* zerodft = (zeroDelayFilter_t*) u->data;
-	free(zerodft->zs);
+	free(zerodft->ss);
 	free(zerodft);
 }
 
 #define PREWARP(F,SI) ((2 / SI) * tan((F * SI) / 2))
 
-#define ZERO_DELAY(X,G,Z)  (X * G + (X * G + Z))
+#define ZERO_DELAY(X,G,S)  (X * G + (X * G + S))
+
+inline double zERO_DELAY_ONE_POLE(double X,double G,double* SS,int I)
+{
+	double Y   = X * G + SS[I];
+	double XmY = X - Y;
+	SS[I]      = ZERO_DELAY(XmY,G,SS[I]);
+	return Y;
+}
+
+//Consider different shaping functions
+#define SOFT_CLIP(X,AMOUNT) (atan(X*AMOUNT)/M_PI)
 
 void zeroDelayOnePole_calc(ugen* u)
 {
@@ -2243,34 +2258,34 @@ void zeroDelayOnePole_calc(ugen* u)
 
 	double warped              = PREWARP(freq,RECIP_SAMPLE_RATE);
 	double g                   = warped / (warped + 1);
-	double y                   = x * g + zerodft->zs[0];
-	zerodft->zs[0]             = ZERO_DELAY(x-y,g,zerodft->zs[0]);
+	double y                   = zERO_DELAY_ONE_POLE(x,g,zerodft->ss,0);
 
 	UGEN_OUT(u,0,y);
 }
 
-//Figure out reaktor order of operations
-//Break out the trapezoidal shit to a fucking macro. fuck.
-void zeroDelayLPMS20(ugen* u)
+//Add wave shaper once this is confirmed to work.
+//Consider adding a base level amount of noise (a small amount).
+void zeroDelayLPMS20_calc(ugen* u)
 {
-	// double freq                = UGEN_IN(u,0);
-	// double x                   = UGEN_IN(u,1);
-	// double resonance           = UGEN_IN(u,1);
-	// zeroDelayFilter_t* zerodft = (zeroDelayFilter_t*)u->data;
+	double freq                = UGEN_IN(u,0);
+	double resonance           = UGEN_IN(u,1);
+	double distortion          = UGEN_IN(u,2);
+	double x                   = UGEN_IN(u,3);
+	zeroDelayFilter_t* zerodft = (zeroDelayFilter_t*)u->data;
 
-	// double warped              = (2 / RECIP_SAMPLE_RATE) * tan((freq * RECIP_SAMPLE_RATE) / 2);
-	// double g                   = warped / (warped + 1)
-	// double k                   = 2 * resonance;
+	double warped              = PREWARP(freq,RECIP_SAMPLE_RATE);
+	double g                   = warped / (warped + 1);
+	double k                   = 2 * resonance;
+	double s1                  = zerodft->ss[0];
+	double s2                  = zerodft->ss[1];
 
-	// double ky                  = 0; //This is the end of the second chunk
+	double gSqr                = g*g;
+	double y                   = (((gSqr * x) + (g * s1)) + s2) * ((gSqr * k) - (g * k) + 1);
+	// double ky                  = SOFT_CLIP(k * y,distortion);
+	double ky                  = k * y;
 
-	// double s1                  = zerodft->s1;
-	// double y1                  = ((x - ky) * g + s1);
-	// zerodft->s1                = (x-y1) * g + s;
+	double y1                  = zERO_DELAY_ONE_POLE(x  - ky,g,zerodft->ss,0);
+	double y2                  = zERO_DELAY_ONE_POLE(y1 + ky,g,zerodft->ss,1);
 
-	// double s2                  = zerodft->s2;
-	// double y2                  = (x * g + s1);
-	// zerodft->s2                = (x-y2) * g + s;
-
-	// UGEN_OUT(u,0,y);
+	UGEN_OUT(u,0,y);
 }

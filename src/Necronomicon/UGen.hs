@@ -294,6 +294,17 @@ foreign import ccall "&lag_calc" lagCalc :: CUGenFunc
 lag :: UGenType a => a -> a -> a
 lag timeLag input = ugen "lagCalc" lagCalc accumulatorConstructor accumulatorDeconstructor [timeLag,input]
 
+foreign import ccall "&zeroDelayFilter_constructor"   zeroDelayFilterConstructor   :: CUGenFunc
+foreign import ccall "&zeroDelayFilter_deconstructor" zeroDelayFilterDeconstructor :: CUGenFunc
+
+foreign import ccall "&zeroDelayOnePole_calc" zeroDelayOnePoleCalc :: CUGenFunc
+onePoleMS20 :: UGenType a => a -> a -> a
+onePoleMS20 freq input = ugen "onePoleMS20" zeroDelayOnePoleCalc zeroDelayFilterConstructor zeroDelayFilterDeconstructor [freq,input]
+
+foreign import ccall "&zeroDelayLPMS20_calc" zeroDelayLPMS20Calc :: CUGenFunc
+lpfMS20 :: UGenType a => a -> a -> a -> a -> a
+lpfMS20 freq reson dist input = ugen "lpfMS20" zeroDelayLPMS20Calc zeroDelayFilterConstructor zeroDelayFilterDeconstructor [freq,reson,dist,input]
+
 ----------------------------------------------------
 
 sinTest :: [UGen]
