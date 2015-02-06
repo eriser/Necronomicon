@@ -114,12 +114,14 @@ struct synth_node
 {
 	ugen* ugen_graph; // UGen Graph
 	double* ugen_wires; // UGen output wire buffers
+	double* local_buses; // local buses used for feedback
 	synth_node* previous; // Previous node, used in synth_list for the scheduler
 	synth_node* next; // Next node, used in the synth_list for the scheduler
 	unsigned int key; // Node ID, used to look up synths in the synth hash table
 	unsigned int hash; // Cached hash of the node id for the synth hash table
 	unsigned int num_ugens;
 	unsigned int num_wires;
+	unsigned int num_buses; // number of local buses, used for feedback
 	unsigned int time; // scheduled time, in samples
 };
 
@@ -166,19 +168,20 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 	synth->num_wires = synth_definition->num_wires;
 	synth->time = time;
 
+	// UGens
 	unsigned int num_ugens = synth_definition->num_ugens;
 	unsigned int size_ugens = synth_definition->num_ugens * UGEN_SIZE;
 	synth->ugen_graph = malloc(size_ugens);
 	ugen* ugen_graph = synth->ugen_graph;
 	memcpy(ugen_graph, synth_definition->ugen_graph, size_ugens);
 
-	// unsigned int i;
 	for (i = 0; i < num_ugens; ++i)
 	{
 		ugen* graph_node = &ugen_graph[i];
 		graph_node->constructor(graph_node);
 	}
 
+	// Wires
 	unsigned int size_wires = synth->num_wires * DOUBLE_SIZE;
 	double* ugen_wires = malloc(size_wires);
 	synth->ugen_wires = ugen_wires;
@@ -187,6 +190,23 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 	for (i = 0; i < num_arguments; ++i)
 	{
 		ugen_wires[i] = arguments[i];
+	}
+
+	// Local buses
+	unsigned int num_buses = synth_definition->num_buses;
+	if (num_buses > 0)
+	{
+		synth->num_buses = num_buses;
+		unsigned int size_buses = num_buses * DOUBLE_SIZE;
+		double* local_buses = malloc(size_buses);
+		synth->local_buses = local_buses;
+		memset(local_buses, 0, size_buses);
+	}
+
+	else
+	{
+		synth->local_buses = NULL;
+		synth->num_buses = 0;
 	}
 
 	/*
@@ -216,6 +236,10 @@ void free_synth(synth_node* synth)
 
 		free(ugen_graph);
 		free(synth->ugen_wires);
+
+		if (synth->local_buses)
+			free(synth->local_buses);
+		
 		free(synth);
 	}
 }
@@ -253,129 +277,6 @@ void initialize_wave_tables()
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// UGens
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-void add_calc(ugen* u)
-{
-	UGEN_OUT(u, 0, UGEN_IN(u, 0) + UGEN_IN(u, 1));
-}
-
-void minus_calc(ugen* u)
-{
-	UGEN_OUT(u, 0, UGEN_IN(u, 0) - UGEN_IN(u, 1));
-}
-
-void mul_calc(ugen* u)
-{
-	UGEN_OUT(u, 0, UGEN_IN(u, 0) * UGEN_IN(u, 1));
-}
-
-void div_calc(ugen* u)
-{
-	UGEN_OUT(u, 0, UGEN_IN(u, 0) / UGEN_IN(u, 1));
-}
-
-void abs_calc(ugen* u)
-{
-	UGEN_OUT(u, 0, abs(UGEN_IN(u, 0)));
-}
-
-void signum_calc(ugen* u)
-{
-	double value = UGEN_IN(u, 0);
-
-	if (value > 0)
-	{
-		value = 1;
-	}
-
-	else if (value < 0)
-	{
-		value = -1;
-	}
-
-	UGEN_OUT(u, 0, value);
-}
-
-void negate_calc(ugen* u)
-{
-	UGEN_OUT(u, 0, -(UGEN_IN(u, 0)));
-}
-
-void line_constructor(ugen* u)
-{
-	u->data = malloc(UINT_SIZE); // Line time
-	*((unsigned int*) u->data) = 0;
-}
-
-void line_deconstructor(ugen* u)
-{
-	free(u->data);
-}
-
-// To do: Give this range parameters
-void line_calc(ugen* u)
-{
-	double length = UGEN_IN(u, 0) * SAMPLE_RATE;
-	unsigned int line_time = *((unsigned int*) u->data);
-	double output = 0;
-
-	if (line_time >= length)
-	{
-		try_schedule_current_synth_for_removal();
-	}
-
-	else
-	{
-		output = fmax(0, 1 - (line_time / length));
-		*((unsigned int*) u->data) = line_time + 1;
-	}
-
-	UGEN_OUT(u, 0, output);
-}
-
-void sin_constructor(ugen* u)
-{
-	u->data = malloc(DOUBLE_SIZE); // Phase accumulator
-	*((double*) u->data) = 0;
-}
-
-void sin_deconstructor(ugen* u)
-{
-	free(u->data);
-}
-
-void sin_calc(ugen* u)
-{
-	double freq = UGEN_IN(u, 0);
-	double phase = *((double*) u->data);
-
-	unsigned char index1 = phase;
-	unsigned char index2 = index1 + 1;
-	double amp1 = sine_table[index1];
-	double amp2 = sine_table[index2];
-	double delta = phase - ((long) phase);
-	double amplitude = amp1 + delta * (amp2 - amp1);
-
-	*((double*) u->data) = phase + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
-	UGEN_OUT(u, 0, amplitude);
-}
-
-void out_calc(ugen* u)
-{
-	// Constrain bus index to the correct range
-	unsigned char bus_index = UGEN_IN(u, 0);
-	_necronomicon_buses[bus_index] += UGEN_IN(u, 1);
-}
-
-void print_ugen(ugen* ugen)
-{
-	puts("(UGen");
-	printf(" (Calc %p)\n", ugen->calc);
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Scheduler
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -391,6 +292,7 @@ typedef union
 	synth_node* node;
 	unsigned int node_id;
 	const char* string;
+	double number;
 } message_arg;
 
 typedef enum
@@ -400,10 +302,11 @@ typedef enum
 	STOP_SYNTH,
 	FREE_SYNTH, // Free synth memory
 	SHUTDOWN,
-	PRINT
+	PRINT,
+	PRINT_NUMBER
 } message_type;
 
-const char* message_map[] = { "IGNORE", "START_SYNTH", "STOP_SYNTH", "FREE_SYNTH", "SHUTDOWN", "PRINT" };
+const char* message_map[] = { "IGNORE", "START_SYNTH", "STOP_SYNTH", "FREE_SYNTH", "SHUTDOWN", "PRINT", "PRINT_NUMBER" };
 
 typedef struct
 {
@@ -895,6 +798,9 @@ void handle_nrt_message(message msg)
 	case PRINT:
 		puts(msg.arg.string);
 		break;
+	case PRINT_NUMBER:
+		printf("poll: %f\n", msg.arg.number);
+		break;
 	default:
 		break;
 	}
@@ -1195,6 +1101,177 @@ void shutdown_necronomicon()
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+// UGens
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+void add_calc(ugen* u)
+{
+	UGEN_OUT(u, 0, UGEN_IN(u, 0) + UGEN_IN(u, 1));
+}
+
+void minus_calc(ugen* u)
+{
+	UGEN_OUT(u, 0, UGEN_IN(u, 0) - UGEN_IN(u, 1));
+}
+
+void mul_calc(ugen* u)
+{
+	UGEN_OUT(u, 0, UGEN_IN(u, 0) * UGEN_IN(u, 1));
+}
+
+void div_calc(ugen* u)
+{
+	UGEN_OUT(u, 0, UGEN_IN(u, 0) / UGEN_IN(u, 1));
+}
+
+void abs_calc(ugen* u)
+{
+	UGEN_OUT(u, 0, abs(UGEN_IN(u, 0)));
+}
+
+void signum_calc(ugen* u)
+{
+	double value = UGEN_IN(u, 0);
+	
+	if (value > 0)
+	{
+		value = 1;
+	}
+
+	else if (value < 0)
+	{
+		value = -1;
+	}
+
+	UGEN_OUT(u, 0, value);
+}
+
+void negate_calc(ugen* u)
+{
+	UGEN_OUT(u, 0, -(UGEN_IN(u, 0)));
+}
+
+void line_constructor(ugen* u)
+{
+	u->data = malloc(UINT_SIZE); // Line time 
+	*((unsigned int*) u->data) = 0;
+}
+
+void line_deconstructor(ugen* u)
+{
+	free(u->data);
+}
+		
+// To do: Give this range parameters
+void line_calc(ugen* u)
+{
+	double length = UGEN_IN(u, 0) * SAMPLE_RATE;
+	unsigned int line_time = *((unsigned int*) u->data);
+	double output = 0;
+
+	if (line_time >= length)
+	{
+		try_schedule_current_synth_for_removal();
+	}
+
+	else
+	{
+		output = fmax(0, 1 - (line_time / length));
+		*((unsigned int*) u->data) = line_time + 1;
+	}
+
+	UGEN_OUT(u, 0, output);
+}
+
+void sin_constructor(ugen* u)
+{
+	u->data = malloc(DOUBLE_SIZE); // Phase accumulator
+	*((double*) u->data) = 0;
+}
+
+void sin_deconstructor(ugen* u)
+{
+	free(u->data);
+}
+
+void sin_calc(ugen* u)
+{	
+	double freq = UGEN_IN(u, 0);
+	double phase = *((double*) u->data);
+	
+	unsigned char index1 = phase;
+	unsigned char index2 = index1 + 1;
+	double amp1 = sine_table[index1];
+	double amp2 = sine_table[index2];
+	double delta = phase - ((long) phase);
+	double amplitude = amp1 + delta * (amp2 - amp1);
+
+	*((double*) u->data) = phase + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
+	UGEN_OUT(u, 0, amplitude);
+}
+
+void local_out_calc(ugen* u)
+{
+	UGEN_OUT(u, 0, UGEN_IN(u, 0));
+}
+
+void out_calc(ugen* u)
+{
+	// Constrain bus index to the correct range
+	unsigned char bus_index = UGEN_IN(u, 0);
+	_necronomicon_buses[bus_index] += UGEN_IN(u, 1);
+}
+
+void in_calc(ugen* u)
+{
+	// Constrain bus index to the correct range
+	unsigned char bus_index = UGEN_IN(u, 0);
+	UGEN_OUT(u, 0, _necronomicon_buses[bus_index]);
+}
+
+void poll_constructor(ugen* u)
+{
+	unsigned int* count_buffer = (unsigned int*) malloc(sizeof(unsigned int));
+	*count_buffer = 0;
+	u->data = count_buffer;
+}
+
+
+void poll_calc(ugen* u)
+{
+	unsigned int* count_buffer = (unsigned int*) u->data;
+	unsigned int count = *count_buffer;
+
+	if (count >= SAMPLE_RATE)
+	{
+		double input = UGEN_IN(u, 0);
+		message msg;
+		msg.arg.number = input;
+		msg.type = PRINT_NUMBER;
+		NRT_FIFO_PUSH(msg);
+		count = 0;
+	}
+
+	else
+	{
+		count += 10;
+	}
+
+	*count_buffer = count;
+}
+
+void poll_deconstructor(ugen* u)
+{
+	free(u->data);
+}
+
+void print_ugen(ugen* ugen)
+{
+	puts("(UGen");
+	printf(" (Calc %p)\n", ugen->calc);
+}
+
+////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Tests
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
@@ -1208,12 +1285,14 @@ synth_node* new_test_synth(unsigned int time)
 	synth_node* test_synth = malloc(NODE_SIZE);
 	test_synth->ugen_graph = malloc(UGEN_SIZE);
 	test_synth->ugen_wires = malloc(DOUBLE_SIZE);
+	test_synth->local_buses = malloc(DOUBLE_SIZE);
 	test_synth->previous = NULL;
 	test_synth->next = NULL;
 	test_synth->key = 0;
 	test_synth->hash = 0;
 	test_synth->num_ugens = 1;
 	test_synth->num_wires = 1;
+	test_synth->num_buses = 1;
 	test_synth->time = time;
 
 	test_synth->ugen_graph[0] = test_ugen;
