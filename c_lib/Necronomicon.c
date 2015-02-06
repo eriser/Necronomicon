@@ -239,7 +239,7 @@ void free_synth(synth_node* synth)
 
 		if (synth->local_buses)
 			free(synth->local_buses);
-		
+
 		free(synth);
 	}
 }
@@ -1002,9 +1002,11 @@ int process(jack_nframes_t nframes, void* arg)
 	return 0;
 }
 
-void start_rt_runtime()
+const char* RESOUCES_PATH;
+void start_rt_runtime(const char* resources_path)
 {
-	puts("Necronomicon audio engine booting...");
+	puts("Necronomicon audio engine booting");
+	RESOUCES_PATH = resources_path;
 
 	const char** ports;
 	const char* client_name = "Necronomicon";
@@ -1132,7 +1134,7 @@ void abs_calc(ugen* u)
 void signum_calc(ugen* u)
 {
 	double value = UGEN_IN(u, 0);
-	
+
 	if (value > 0)
 	{
 		value = 1;
@@ -1153,7 +1155,7 @@ void negate_calc(ugen* u)
 
 void line_constructor(ugen* u)
 {
-	u->data = malloc(UINT_SIZE); // Line time 
+	u->data = malloc(UINT_SIZE); // Line time
 	*((unsigned int*) u->data) = 0;
 }
 
@@ -1161,7 +1163,7 @@ void line_deconstructor(ugen* u)
 {
 	free(u->data);
 }
-		
+
 // To do: Give this range parameters
 void line_calc(ugen* u)
 {
@@ -1195,10 +1197,10 @@ void sin_deconstructor(ugen* u)
 }
 
 void sin_calc(ugen* u)
-{	
+{
 	double freq = UGEN_IN(u, 0);
 	double phase = *((double*) u->data);
-	
+
 	unsigned char index1 = phase;
 	unsigned char index2 = index1 + 1;
 	double amp1 = sine_table[index1];
@@ -1656,7 +1658,11 @@ minbleptable_t gMinBLEP;
 bool minBLEP_Init()
 {
 	// load table
-	FILE *fp=fopen("/home/casiosk1/code/minblep_osc/minblep.mat","rb");
+	const char* blep_table = "/misc/minblep.mat";
+	char path_to_blep_table[strlen(RESOUCES_PATH) + strlen(blep_table)];
+	strcat(path_to_blep_table,RESOUCES_PATH);
+	strcat(path_to_blep_table,blep_table);
+	FILE *fp=fopen(path_to_blep_table,"rb");
 	unsigned int iSize;
 
 	if (!fp) return false;

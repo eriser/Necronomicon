@@ -14,6 +14,7 @@ import Necronomicon.Util.Functions
 -- import qualified Data.Map.Strict as M
 import qualified Data.Map as M
 import Sound.OSC.Time
+import Paths_Necronomicon
 
 data SynthDef = SynthDef {
     synthDefName :: String,
@@ -36,7 +37,7 @@ data RuntimeMessage = StartSynth SynthDef [CDouble] NodeID CDouble
                     | StopSynth NodeID
                     | CollectSynthDef SynthDef
                     | ShutdownNrt
-                      
+
 type RunTimeMailbox = TChan RuntimeMessage
 
 instance Show (Time -> Int -> Necronomicon (Maybe Double)) where
@@ -212,7 +213,8 @@ runNecronomicon func = do
 startNecronomicon :: Necronomicon ()
 startNecronomicon = do
     setRunning NecroBooting
-    liftIO startRtRuntime
+    -- liftIO (getDataFileName "" >>= withCString (startRtRuntime))
+    liftIO (getDataFileName "" >>= (flip withCString) (startRtRuntime))
     startNrtRuntime
     startPatternScheduler
     waitForRunningStatus NecroRunning
@@ -255,7 +257,7 @@ processSetSynthArg (Synth id (SynthDef name numArgs _)) argIndex arg = clipArgIn
                           then nPrint clipString >> return (cNumArgs - 1)
                           else return argIndex
         clipString = "Argument index " ++ (show argIndex) ++ " is too high for node (" ++ (show id) ++ ", " ++ name ++ "), clipping to " ++ (show (numArgs - 1)) ++ "."
-                                  
+
 processSetSynthArgs :: Synth -> [CDouble] -> Necronomicon ()
 processSetSynthArgs (Synth id (SynthDef name numArgs _)) args = clipSynthArgs name id args numArgs >>= \clippedArgs ->
     liftIO $ withArray clippedArgs (\ptrArgs -> liftIO $ setSynthArgsInRtRuntime id ptrArgs (fromIntegral $ length clippedArgs))
@@ -268,8 +270,8 @@ processMessages messages =  mapM_ (processMessage) messages
                then return ()
                else process m
         process m = case m of
-            StartSynth synthDef args id time -> processStartSynth synthDef args id time 
-            SetSynthArg synth argIndex arg -> processSetSynthArg synth argIndex arg 
+            StartSynth synthDef args id time -> processStartSynth synthDef args id time
+            SetSynthArg synth argIndex arg -> processSetSynthArg synth argIndex arg
             SetSynthArgs synth args -> processSetSynthArgs synth args
             StopSynth id -> liftIO $ stopSynthInRtRuntime id
             CollectSynthDef synthDef -> addSynthDef synthDef
@@ -452,7 +454,7 @@ freeSynthDefs = getSynthDefs >>= \synthDefs -> mapM_ (freeSynthDef) (M.elems syn
 
 freeSynthDef :: SynthDef -> Necronomicon ()
 freeSynthDef (SynthDef _ _ csynthDef) = liftIO $ freeCSynthDef csynthDef
-        
+
 type CUGenFunc = FunPtr (Ptr CUGen -> ())
 data CUGen = CUGen CUGenFunc CUGenFunc CUGenFunc (Ptr ()) (Ptr CUInt) (Ptr CUInt) deriving (Show)
 
@@ -475,7 +477,7 @@ instance Storable CUGen where
         pokeByteOff ptr 32 inpts
         pokeByteOff ptr 40 outs
 
-data CSynthDef = CSynthDef {                 
+data CSynthDef = CSynthDef {
     csynthDefUGenGraph :: Ptr CUGen,
     csynthDefWireBufs :: Ptr CDouble,
     csynthDefLocalBuses :: Ptr CDouble,
@@ -506,7 +508,7 @@ instance Storable CSynthDef where
         sampTime <- peekByteOff ptr 60 :: IO CUInt
         return (CSynthDef ugenGrph wireBufs locBuses prevNode nextNode nodeKey nodeHash numUGens numWires numBuses sampTime)
     poke ptr (CSynthDef ugenGrph wireBufs locBuses prevNode nextNode nodeKey nodeHash numUGens numWires numBuses sampTime) = do
-        pokeByteOff ptr 0  ugenGrph 
+        pokeByteOff ptr 0  ugenGrph
         pokeByteOff ptr 8  wireBufs
         pokeByteOff ptr 16 locBuses
         pokeByteOff ptr 24 prevNode
@@ -520,7 +522,7 @@ instance Storable CSynthDef where
 
 type CSynth = CSynthDef -- A running C Synth is structurally identical to a C SynthDef
 
-foreign import ccall "start_rt_runtime" startRtRuntime :: IO ()
+foreign import ccall "start_rt_runtime" startRtRuntime :: CString -> IO ()
 foreign import ccall "handle_messages_in_nrt_fifo" handleNrtMessages :: IO ()
 foreign import ccall "shutdown_necronomicon" shutdownNecronomiconCRuntime :: IO ()
 foreign import ccall "play_synth" playSynthInRtRuntime :: Ptr CSynthDef -> Ptr CDouble -> CUInt -> NodeID -> CDouble -> IO ()

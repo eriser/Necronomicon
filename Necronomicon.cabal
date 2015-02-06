@@ -12,6 +12,7 @@ data-files:
     textures/*.tga
     fonts/*.ttf
     shaders/*.glsl
+    samples/*.wav
     misc/minblep.mat
 
 library
