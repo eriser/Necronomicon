@@ -36,7 +36,9 @@ data UGen = UGenNum Double
 
 data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Out | AuxIn | Poll | LFSaw | LFPulse | Saw | Pulse
               | SyncSaw | SyncPulse | Random | NoiseN | NoiseL | NoiseC | Range | LPF | HPF | BPF | Notch | AllPass | PeakEQ
-              | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int | LPFMS20 | OnePoleMS20 deriving (Show)
+              | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int | LPFMS20 | OnePoleMS20
+              | Clip | SoftClip | Poly3 | TanH | SinDist | Wrap
+              deriving (Show)
 
 instance Show UGen where
     show (UGenNum d) = show d
@@ -68,7 +70,7 @@ instance Floating UGen where
     -- logBase = liftA2 logBase
     -- sqrt    = liftA sqrt
     -- tan     = liftA tan
-    -- tanh    = liftA tanh
+    tanh    = tanhDist 1
     -- sinh    = liftA sinh
     -- cosh    = liftA cosh
     -- asinh   = liftA asinh
@@ -107,7 +109,7 @@ instance Floating [UGen] where
     -- logBase = liftA2 logBase
     -- sqrt    = liftA sqrt
     -- tan     = liftA tan
-    -- tanh    = liftA tanh
+    tanh    = tanhDist 1
     -- sinh    = liftA sinh
     -- cosh    = liftA cosh
     -- asinh   = liftA asinh
@@ -346,6 +348,31 @@ onePoleMS20 freq input = ugen OnePoleMS20 zeroDelayOnePoleCalc zeroDelayFilterCo
 foreign import ccall "&zeroDelayLPMS20_calc" zeroDelayLPMS20Calc :: CUGenFunc
 lpfMS20 :: UGenType a => a -> a -> a -> a -> a
 lpfMS20 freq reson dist input = ugen LPFMS20 zeroDelayLPMS20Calc zeroDelayFilterConstructor zeroDelayFilterDeconstructor [freq,reson,dist,input]
+
+--Distortions
+foreign import ccall "&clip_calc" clipCalc :: CUGenFunc
+clip :: UGenType a => a -> a -> a
+clip amount input = ugen Clip clipCalc nullConstructor nullDeconstructor [amount,input]
+
+foreign import ccall "&softclip_calc" softclipCalc :: CUGenFunc
+softclip :: UGenType a => a -> a -> a
+softclip amount input = ugen SoftClip softclipCalc nullConstructor nullDeconstructor [amount,input]
+
+foreign import ccall "&poly3_calc" poly3Calc :: CUGenFunc
+poly3 :: UGenType a => a -> a -> a
+poly3 amount input = ugen Poly3 poly3Calc nullConstructor nullDeconstructor [amount,input]
+
+foreign import ccall "&tanh_calc" tanhCalc :: CUGenFunc
+tanhDist :: UGenType a => a -> a -> a
+tanhDist amount input = ugen TanH tanhCalc nullConstructor nullDeconstructor [amount,input]
+
+foreign import ccall "&sinDist_calc" sinDistCalc :: CUGenFunc
+sinDist :: UGenType a => a -> a -> a
+sinDist amount input = ugen SinDist sinDistCalc nullConstructor nullDeconstructor [amount,input]
+
+foreign import ccall "&wrap_calc" wrapCalc :: CUGenFunc
+wrap :: UGenType a => a -> a -> a
+wrap amount input = ugen Wrap wrapCalc nullConstructor nullDeconstructor [amount,input]
 
 ----------------------------------------------------
 

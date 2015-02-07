@@ -2401,3 +2401,70 @@ void zeroDelayLPMS20_calc(ugen* u)
 
 	UGEN_OUT(u,0,y);
 }
+
+//============================================
+// Distortion
+//============================================
+
+#define HARD_CLIP(X,AMOUNT) (CLAMP(X*AMOUNT,-1.0,1.0))
+#define POLY3_DIST(X,AMOUNT) (1.5 * X - 0.5 * pow(X,3))
+#define TANH_DIST(X,AMOUNT) (tanh(X*AMOUNT))
+#define SIN_DIST(X,AMOUNT) (sin(X*AMOUNT)/M_PI)
+#define WRAP(X,AMOUNT)       \
+({                           \
+	double x   = X * AMOUNT; \
+	double ret = x;          \
+	if(x >= 1)               \
+		ret = x - 2;         \
+	else if(x < -1)          \
+		ret = x + 2;         \
+	ret;                     \
+})
+
+void clip_calc(ugen* u)
+{
+	double amount = UGEN_IN(u,0);
+	double x      = UGEN_IN(u,1);
+	double y      = HARD_CLIP(x,amount);
+	UGEN_OUT(u,0,y);
+}
+
+void softclip_calc(ugen* u)
+{
+	double amount = UGEN_IN(u,0);
+	double x      = UGEN_IN(u,1);
+	double y      = SOFT_CLIP(x,amount);
+	UGEN_OUT(u,0,y);
+}
+
+void poly3_calc(ugen* u)
+{
+	double amount = UGEN_IN(u,0);
+	double x      = UGEN_IN(u,1);
+	double y      = POLY3_DIST(x,amount);
+	UGEN_OUT(u,0,y);
+}
+
+void tanh_calc(ugen* u)
+{
+	double amount = UGEN_IN(u,0);
+	double x      = UGEN_IN(u,1);
+	double y      = TANH_DIST(x,amount);
+	UGEN_OUT(u,0,y);
+}
+
+void sinDist_calc(ugen* u)
+{
+	double amount = UGEN_IN(u,0);
+	double x      = UGEN_IN(u,1);
+	double y      = SIN_DIST(x,amount);
+	UGEN_OUT(u,0,y);
+}
+
+void wrap_calc(ugen* u)
+{
+	double amount = UGEN_IN(u,0);
+	double x      = UGEN_IN(u,1);
+	double y      = WRAP(x,amount);
+	UGEN_OUT(u,0,y);
+}
