@@ -128,6 +128,57 @@ struct synth_node
 synth_node* _necronomicon_current_node = NULL;
 const unsigned int NODE_SIZE = sizeof(synth_node);
 const unsigned int NODE_POINTER_SIZE = sizeof(synth_node*);
+synth_node* free_synths = NULL;
+int num_free_synths = 0;
+const unsigned int max_free_synths = 128;
+
+synth_node* malloc_synth()
+{
+	if (num_free_synths > 0)
+	{
+		synth_node* synth = free_synths;
+		free_synths = synth->next;
+		--num_free_synths;
+		return synth;
+	}
+
+	return malloc(NODE_SIZE);
+}
+
+void free_synth(synth_node* synth)
+{
+	if (synth)
+	{
+		ugen* ugen_graph = synth->ugen_graph;
+		unsigned int num_ugens = synth->num_ugens;
+		unsigned int i;
+		for (i = 0; i < num_ugens; ++i)
+		{
+			ugen* graph_node = &ugen_graph[i];
+			graph_node->deconstructor(graph_node);
+		}
+
+		free(ugen_graph);
+		free(synth->ugen_wires);
+
+		if (synth->local_buses)
+			free(synth->local_buses);
+
+
+		if (num_free_synths < max_free_synths)
+		{
+			// Push the synth on to the free list
+			synth->next = free_synths;
+			free_synths = synth;
+			++num_free_synths;
+		}
+
+		else
+		{
+			free(synth);
+		}
+	}
+}
 
 void free_synth_definition(synth_node* synth_definition)
 {
@@ -159,7 +210,7 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 
 	puts("Building synth");*/
 
-	synth_node* synth = malloc(NODE_SIZE);
+	synth_node* synth = malloc_synth();
 	synth->previous = NULL;
 	synth->next = NULL;
 	synth->key = node_id;
@@ -219,29 +270,6 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 	printf("]\n");*/
 
 	return synth;
-}
-
-void free_synth(synth_node* synth)
-{
-	if (synth)
-	{
-		ugen* ugen_graph = synth->ugen_graph;
-		unsigned int num_ugens = synth->num_ugens;
-		unsigned int i;
-		for (i = 0; i < num_ugens; ++i)
-		{
-			ugen* graph_node = &ugen_graph[i];
-			graph_node->deconstructor(graph_node);
-		}
-
-		free(ugen_graph);
-		free(synth->ugen_wires);
-
-		if (synth->local_buses)
-			free(synth->local_buses);
-
-		free(synth);
-	}
 }
 
 void process_synth(synth_node* synth)
@@ -937,6 +965,17 @@ void shutdown_rt_thread()
 	removal_fifo_free();
 	free(_necronomicon_buses);
 
+	if (free_synths)
+	{
+		unsigned int i;
+		for (i = 0; i < num_free_synths; ++i)
+		{
+			synth_node* synth = free_synths;
+			free_synths = synth->next;
+			free(synth);
+		}
+	}
+	
 	synth_table = NULL;
 	rt_fifo = NULL;
 	_necronomicon_current_node = NULL;
