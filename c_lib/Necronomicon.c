@@ -2104,9 +2104,8 @@ void biquad_deconstructor(ugen* u)
 void lpf_calc(ugen* u)
 {
 	double freq  = UGEN_IN(u,0);
-	double gain  = UGEN_IN(u,1);
-	double q     = UGEN_IN(u,2);
-	double in    = UGEN_IN(u,3);
+	double q     = UGEN_IN(u,1);
+	double in    = UGEN_IN(u,2);
 
 	biquad_t* bi = (biquad_t*) u->data;
 
@@ -2135,9 +2134,8 @@ void lpf_calc(ugen* u)
 void hpf_calc(ugen* u)
 {
 	double freq  = UGEN_IN(u,0);
-	double gain  = UGEN_IN(u,1);
-	double q     = UGEN_IN(u,2);
-	double in    = UGEN_IN(u,3);
+	double q     = UGEN_IN(u,1);
+	double in    = UGEN_IN(u,2);
 
 	biquad_t* bi = (biquad_t*) u->data;
 
@@ -2166,9 +2164,8 @@ void hpf_calc(ugen* u)
 void bpf_calc(ugen* u)
 {
 	double freq  = UGEN_IN(u,0);
-	double gain  = UGEN_IN(u,1);
-	double q     = UGEN_IN(u,2);
-	double in    = UGEN_IN(u,3);
+	double q     = UGEN_IN(u,1);
+	double in    = UGEN_IN(u,2);
 
 	biquad_t* bi = (biquad_t*) u->data;
 
@@ -2214,6 +2211,36 @@ void notch_calc(ugen* u)
     double a0    =  1 + alpha;
     double a1    = -2*cs;
     double a2    =  1 - alpha;
+
+	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi->x1,bi->x2,bi->y1,bi->y2);
+
+	bi->y2 = bi->y1;
+	bi->y1 = out;
+	bi->x2 = bi->x1;
+	bi->x1 = in;
+
+	UGEN_OUT(u,0,out);
+}
+
+void allpass_calc(ugen* u)
+{
+	double freq  = UGEN_IN(u,0);
+	double q     = UGEN_IN(u,1);
+	double in    = UGEN_IN(u,2);
+
+	biquad_t* bi = (biquad_t*) u->data;
+
+	double omega = 2 * M_PI * freq * RECIP_SAMPLE_RATE;
+	double cs    = cos(omega);
+    double sn    = sin(omega);
+	double alpha = sn * sinh(1 / (2 * q));
+
+	double b0    =   1 - alpha;
+    double b1    =  -2*cs;
+    double b2    =   1 + alpha;
+    double a0    =   1 + alpha;
+    double a1    =  -2*cs;
+    double a2    =   1 - alpha;
 
 	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi->x1,bi->x2,bi->y1,bi->y2);
 
@@ -2411,5 +2438,72 @@ void zeroDelayLPMS20_calc(ugen* u)
 	double y1                  = zERO_DELAY_ONE_POLE(x  - ky,g,zerodft->ss,0);
 	double y2                  = zERO_DELAY_ONE_POLE(y1 + ky,g,zerodft->ss,1);
 
+	UGEN_OUT(u,0,y);
+}
+
+//============================================
+// Distortion
+//============================================
+
+#define HARD_CLIP(X,AMOUNT) (CLAMP(X*AMOUNT,-1.0,1.0))
+#define POLY3_DIST(X,AMOUNT) (1.5 * X - 0.5 * pow(X,3))
+#define TANH_DIST(X,AMOUNT) (tanh(X*AMOUNT))
+#define SIN_DIST(X,AMOUNT) (sin(X*AMOUNT)/M_PI)
+#define WRAP(X,AMOUNT)       \
+({                           \
+	double x   = X * AMOUNT; \
+	double ret = x;          \
+	if(x >= 1)               \
+		ret = x - 2;         \
+	else if(x < -1)          \
+		ret = x + 2;         \
+	ret;                     \
+})
+
+void clip_calc(ugen* u)
+{
+	double amount = UGEN_IN(u,0);
+	double x      = UGEN_IN(u,1);
+	double y      = HARD_CLIP(x,amount);
+	UGEN_OUT(u,0,y);
+}
+
+void softclip_calc(ugen* u)
+{
+	double amount = UGEN_IN(u,0);
+	double x      = UGEN_IN(u,1);
+	double y      = SOFT_CLIP(x,amount);
+	UGEN_OUT(u,0,y);
+}
+
+void poly3_calc(ugen* u)
+{
+	double amount = UGEN_IN(u,0);
+	double x      = UGEN_IN(u,1);
+	double y      = POLY3_DIST(x,amount);
+	UGEN_OUT(u,0,y);
+}
+
+void tanh_calc(ugen* u)
+{
+	double amount = UGEN_IN(u,0);
+	double x      = UGEN_IN(u,1);
+	double y      = TANH_DIST(x,amount);
+	UGEN_OUT(u,0,y);
+}
+
+void sinDist_calc(ugen* u)
+{
+	double amount = UGEN_IN(u,0);
+	double x      = UGEN_IN(u,1);
+	double y      = SIN_DIST(x,amount);
+	UGEN_OUT(u,0,y);
+}
+
+void wrap_calc(ugen* u)
+{
+	double amount = UGEN_IN(u,0);
+	double x      = UGEN_IN(u,1);
+	double y      = WRAP(x,amount);
 	UGEN_OUT(u,0,y);
 }
