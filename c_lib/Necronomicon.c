@@ -1582,6 +1582,22 @@ void test_doubly_linked_list()
 	result; \
 })
 
+
+#define HARD_CLIP(X,AMOUNT) (CLAMP(X*AMOUNT,-1.0,1.0))
+#define POLY3_DIST(X,AMOUNT) (1.5 * X - 0.5 * pow(X,3))
+#define TANH_DIST(X,AMOUNT) (tanh(X*AMOUNT))
+#define SIN_DIST(X,AMOUNT) (sin(X*AMOUNT)/M_PI)
+#define WRAP(X,AMOUNT)       \
+({                           \
+	double x   = X * AMOUNT; \
+	double ret = x;          \
+	if(x >= 1)               \
+		ret = x - 2;         \
+	else if(x < -1)          \
+		ret = x + 2;         \
+	ret;                     \
+})
+
 #define WAVE_TABLE_AMPLITUDE(phase,table) \
 ({ \
 	double amp1  = table[(unsigned char)phase]; \
@@ -1648,6 +1664,7 @@ typedef struct
 {
 	double  output;
 	double  phase;
+	double  masterPhase;
 	double *buffer;      // circular output buffer
 	int     cBuffer;	 // buffer size
 	int     iBuffer;	 // current buffer position
@@ -1694,6 +1711,7 @@ void minblep_constructor(ugen* u)
 	minblep* mb     = malloc(sizeof(minblep));
 	mb->output      = 0.0;
 	mb->phase       = 0.0;
+	mb->masterPhase = 0.0;
 	mb->cBuffer     = gMinBLEP.c/KTABLE;
 	mb->buffer      = (double*)malloc(sizeof(double) * mb->cBuffer);
 	mb->iBuffer     = 0;
@@ -1912,6 +1930,57 @@ void syncsquare_calc(ugen* u)
 
 	mb->prevSyncAmp = sync;
 	UGEN_OUT(u, 0, amplitude);
+}
+
+void syncosc_calc(ugen* u)
+{
+	double   slaveFreq  = UGEN_IN(u,0);
+	int      slaveWave  = (int)UGEN_IN(u,1);
+	double   pwm        = CLAMP(UGEN_IN(u, 2),0,1) * 0.5;
+	double   masterFreq = UGEN_IN(u,3);
+	minblep* mb         = (minblep*) u->data;
+	double   y          = 0.0;
+	double   freqN      = slaveFreq * RECIP_SAMPLE_RATE;
+
+	// create waveform
+	mb->phase       = mb->phase + freqN;
+	mb->masterPhase = WRAP(mb->masterPhase + (masterFreq * RECIP_SAMPLE_RATE) * 1.0,1.0);
+
+	// add BLEP at end of waveform
+	if(mb->phase >= 1)
+	{
+		mb->phase  = mb->phase - 1.0;
+		mb->output = 0.0;
+		add_blep(mb, mb->phase/freqN,1.0);
+	}
+
+	// add BLEP in middle of wavefor for squarewave
+	else if(slaveWave && !mb->output && mb->phase > pwm)
+	{
+		mb->output = 1.0;
+		add_blep(mb, (mb->phase - pwm) / freqN,-1.0);
+	}
+
+	else if(mb->prevSyncAmp <= 0 && mb->masterPhase > 0)
+	{
+		mb->phase  = mb->masterPhase * (slaveFreq / masterFreq);
+		mb->output = mb->masterPhase * (slaveFreq / masterFreq);
+		add_blep(mb, mb->phase/freqN,1.0);
+	}
+
+	y = mb->output;
+
+	// add BLEP buffer contents
+	if(mb->nInit)
+	{
+		y += mb->buffer[mb->iBuffer];
+		mb->nInit--;
+		if(++mb->iBuffer >= mb->cBuffer)
+			mb->iBuffer=0;
+	}
+
+	mb->prevSyncAmp = mb->masterPhase;
+	UGEN_OUT(u, 0, y);
 }
 
 #define CUBIC_INTERP(A,B,C,D,DELTA) \
@@ -2451,21 +2520,6 @@ void zeroDelayLPMS20_calc(ugen* u)
 //============================================
 // Distortion
 //============================================
-
-#define HARD_CLIP(X,AMOUNT) (CLAMP(X*AMOUNT,-1.0,1.0))
-#define POLY3_DIST(X,AMOUNT) (1.5 * X - 0.5 * pow(X,3))
-#define TANH_DIST(X,AMOUNT) (tanh(X*AMOUNT))
-#define SIN_DIST(X,AMOUNT) (sin(X*AMOUNT)/M_PI)
-#define WRAP(X,AMOUNT)       \
-({                           \
-	double x   = X * AMOUNT; \
-	double ret = x;          \
-	if(x >= 1)               \
-		ret = x - 2;         \
-	else if(x < -1)          \
-		ret = x + 2;         \
-	ret;                     \
-})
 
 void clip_calc(ugen* u)
 {
