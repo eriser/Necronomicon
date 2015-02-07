@@ -2065,9 +2065,8 @@ void biquad_deconstructor(ugen* u)
 void lpf_calc(ugen* u)
 {
 	double freq  = UGEN_IN(u,0);
-	double gain  = UGEN_IN(u,1);
-	double q     = UGEN_IN(u,2);
-	double in    = UGEN_IN(u,3);
+	double q     = UGEN_IN(u,1);
+	double in    = UGEN_IN(u,2);
 
 	biquad_t* bi = (biquad_t*) u->data;
 
@@ -2096,9 +2095,8 @@ void lpf_calc(ugen* u)
 void hpf_calc(ugen* u)
 {
 	double freq  = UGEN_IN(u,0);
-	double gain  = UGEN_IN(u,1);
-	double q     = UGEN_IN(u,2);
-	double in    = UGEN_IN(u,3);
+	double q     = UGEN_IN(u,1);
+	double in    = UGEN_IN(u,2);
 
 	biquad_t* bi = (biquad_t*) u->data;
 
@@ -2127,9 +2125,8 @@ void hpf_calc(ugen* u)
 void bpf_calc(ugen* u)
 {
 	double freq  = UGEN_IN(u,0);
-	double gain  = UGEN_IN(u,1);
-	double q     = UGEN_IN(u,2);
-	double in    = UGEN_IN(u,3);
+	double q     = UGEN_IN(u,1);
+	double in    = UGEN_IN(u,2);
 
 	biquad_t* bi = (biquad_t*) u->data;
 
@@ -2175,6 +2172,36 @@ void notch_calc(ugen* u)
     double a0    =  1 + alpha;
     double a1    = -2*cs;
     double a2    =  1 - alpha;
+
+	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi->x1,bi->x2,bi->y1,bi->y2);
+
+	bi->y2 = bi->y1;
+	bi->y1 = out;
+	bi->x2 = bi->x1;
+	bi->x1 = in;
+
+	UGEN_OUT(u,0,out);
+}
+
+void allpass_calc(ugen* u)
+{
+	double freq  = UGEN_IN(u,0);
+	double q     = UGEN_IN(u,1);
+	double in    = UGEN_IN(u,2);
+
+	biquad_t* bi = (biquad_t*) u->data;
+
+	double omega = 2 * M_PI * freq * RECIP_SAMPLE_RATE;
+	double cs    = cos(omega);
+    double sn    = sin(omega);
+	double alpha = sn * sinh(1 / (2 * q));
+
+	double b0    =   1 - alpha;
+    double b1    =  -2*cs;
+    double b2    =   1 + alpha;
+    double a0    =   1 + alpha;
+    double a1    =  -2*cs;
+    double a2    =   1 - alpha;
 
 	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi->x1,bi->x2,bi->y1,bi->y2);
 
