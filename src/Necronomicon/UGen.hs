@@ -35,7 +35,7 @@ data UGen = UGenNum Double
           deriving (Typeable)
 
 data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Out | AuxIn | Poll | LFSaw | LFPulse | Saw | Pulse
-              | SyncSaw | SyncPulse | Random | NoiseN | NoiseL | NoiseC | Range | LPF | HPF | BPF | Notch | AllPass | PeakEQ
+              | SyncSaw | SyncPulse | Random | NoiseN | NoiseL | NoiseC | URandom | Range | LPF | HPF | BPF | Notch | AllPass | PeakEQ
               | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int | LPFMS20 | OnePoleMS20
               | Clip | SoftClip | Poly3 | TanH | SinDist | Wrap
               deriving (Show)
@@ -297,6 +297,13 @@ noise2 freq = ugen NoiseC lfnoiseCCalc randConstructor randDeconstructor [freq]
 foreign import ccall "&range_calc" rangeCalc :: CUGenFunc
 range :: UGenType a => a -> a -> a -> a
 range low high input = ugen Range rangeCalc nullConstructor nullDeconstructor [low,high,input]
+
+foreign import ccall "&urand_constructor"   urandConstructor   :: CUGenFunc
+foreign import ccall "&urand_deconstructor" urandDeconstructor :: CUGenFunc
+
+foreign import ccall "&urand_calc" urandCalc :: CUGenFunc
+urandom :: UGenType a => a
+urandom = ugen URandom urandCalc urandConstructor urandDeconstructor []
 
 --filters
 foreign import ccall "&biquad_constructor"   biquadConstructor   :: CUGenFunc
