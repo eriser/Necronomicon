@@ -1899,7 +1899,7 @@ void syncsquare_calc(ugen* u)
 	if (mb->phase >= 1)
 	{
 		mb->phase  = mb->phase - 1.0;
-		mb->output = 0.0;
+		mb->output = -1.0;
 		add_blep(mb, mb->phase/freq,1.0);
 	}
 
@@ -1913,7 +1913,7 @@ void syncsquare_calc(ugen* u)
 	if(mb->prevSyncAmp < 0 && sync > 0)
 	{
 		mb->phase  = 0.0;
-		mb->output = 0.0;
+		mb->output = 1.0;
 		add_blep(mb, mb->phase/freq,1.0);
 	}
 
@@ -1950,7 +1950,7 @@ void syncosc_calc(ugen* u)
 	if(mb->phase >= 1)
 	{
 		mb->phase  = mb->phase - 1.0;
-		mb->output = 0.0;
+		mb->output = -1.0;
 		add_blep(mb, mb->phase/freqN,1.0);
 	}
 
@@ -1964,11 +1964,17 @@ void syncosc_calc(ugen* u)
 	else if(mb->prevSyncAmp <= 0 && mb->masterPhase > 0)
 	{
 		mb->phase  = mb->masterPhase * (slaveFreq / masterFreq);
-		mb->output = mb->masterPhase * (slaveFreq / masterFreq);
+		if(!slaveWave)
+			mb->output = mb->masterPhase * (slaveFreq / masterFreq);
+		else
+			mb->output = -1.0;
 		add_blep(mb, mb->phase/freqN,1.0);
 	}
 
-	y = mb->output;
+	if(!slaveWave)
+		y = mb->phase;
+	else
+		y = mb->output;
 
 	// add BLEP buffer contents
 	if(mb->nInit)
