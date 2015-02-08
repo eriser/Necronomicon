@@ -69,6 +69,7 @@ unsigned int num_audio_buses = 256;
 unsigned int last_audio_bus_index = 255;
 unsigned int num_audio_buses_bytes;
 unsigned int num_synths = 0;
+FILE* devurandom = NULL;
 
 /////////////////////
 // Time
@@ -331,6 +332,7 @@ void initialize_wave_tables()
 
 	// Needed to initialize minblep table.
 	bool minblepInitialized = minBLEP_Init();
+	devurandom = fopen ("/dev/urandom","r");
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -1690,6 +1692,22 @@ void test_doubly_linked_list()
 	result; \
 })
 
+
+#define HARD_CLIP(X,AMOUNT) (CLAMP(X*AMOUNT,-1.0,1.0))
+#define POLY3_DIST(X,AMOUNT) (1.5 * X - 0.5 * pow(X,3))
+#define TANH_DIST(X,AMOUNT) (tanh(X*AMOUNT))
+#define SIN_DIST(X,AMOUNT) (sin(X*AMOUNT)/M_PI)
+#define WRAP(X,AMOUNT)       \
+({                           \
+	double x   = X * AMOUNT; \
+	double ret = x;          \
+	if(x >= 1)               \
+		ret = x - 2;         \
+	else if(x < -1)          \
+		ret = x + 2;         \
+	ret;                     \
+})
+
 #define WAVE_TABLE_AMPLITUDE(phase,table) \
 ({ \
 	double amp1  = table[(unsigned char)phase]; \
@@ -1756,6 +1774,7 @@ typedef struct
 {
 	double  output;
 	double  phase;
+	double  masterPhase;
 	double *buffer;      // circular output buffer
 	int     cBuffer;	 // buffer size
 	int     iBuffer;	 // current buffer position
@@ -1802,6 +1821,7 @@ void minblep_constructor(ugen* u)
 	minblep* mb     = malloc(sizeof(minblep));
 	mb->output      = 0.0;
 	mb->phase       = 0.0;
+	mb->masterPhase = 0.0;
 	mb->cBuffer     = gMinBLEP.c/KTABLE;
 	mb->buffer      = (double*)malloc(sizeof(double) * mb->cBuffer);
 	mb->iBuffer     = 0;
@@ -1946,9 +1966,15 @@ void syncsaw_calc(ugen* u)
 	mb->phase = mb->phase + freq;
 
 	// add BLEP at end of waveform
-	if (mb->phase >= 1 || (mb->prevSyncAmp <= 0 && sync > 0))
+	if (mb->phase >= 1)
 	{
 		mb->phase  = mb->phase - 1.0;
+		mb->output = 0.0;
+		add_blep(mb, mb->phase/freq,1.0);
+	}
+	else if(mb->prevSyncAmp < 0 && sync > 0)
+	{
+		mb->phase  = 0.0;
 		mb->output = 0.0;
 		add_blep(mb, mb->phase/freq,1.0);
 	}
@@ -1983,7 +2009,7 @@ void syncsquare_calc(ugen* u)
 	if (mb->phase >= 1)
 	{
 		mb->phase  = mb->phase - 1.0;
-		mb->output = 0.0;
+		mb->output = -1.0;
 		add_blep(mb, mb->phase/freq,1.0);
 	}
 
@@ -1994,12 +2020,10 @@ void syncsquare_calc(ugen* u)
 		add_blep(mb, (mb->phase - pwm) / freq,-1.0);
 	}
 
-	// add BLEP at hard sync
-	//Have to detect this better and determine the incoming frequence!
-	if(mb->prevSyncAmp <= 0 && sync > 0)
+	if(mb->prevSyncAmp < 0 && sync > 0)
 	{
-		mb->phase  = mb->phase - 1.0;
-		mb->output = 0.0;
+		mb->phase  = 0.0;
+		mb->output = 1.0;
 		add_blep(mb, mb->phase/freq,1.0);
 	}
 
@@ -2016,6 +2040,63 @@ void syncsquare_calc(ugen* u)
 
 	mb->prevSyncAmp = sync;
 	UGEN_OUT(u, 0, amplitude);
+}
+
+void syncosc_calc(ugen* u)
+{
+	double   slaveFreq  = UGEN_IN(u,0);
+	int      slaveWave  = (int)UGEN_IN(u,1);
+	double   pwm        = CLAMP(UGEN_IN(u, 2),0,1) * 0.5;
+	double   masterFreq = UGEN_IN(u,3);
+	minblep* mb         = (minblep*) u->data;
+	double   y          = 0.0;
+	double   freqN      = slaveFreq * RECIP_SAMPLE_RATE;
+
+	// create waveform
+	mb->phase       = mb->phase + freqN;
+	mb->masterPhase = WRAP(mb->masterPhase + (masterFreq * RECIP_SAMPLE_RATE) * 1.0,1.0);
+
+	// add BLEP at end of waveform
+	if(mb->phase >= 1)
+	{
+		mb->phase  = mb->phase - 1.0;
+		mb->output = -1.0;
+		add_blep(mb, mb->phase/freqN,1.0);
+	}
+
+	// add BLEP in middle of wavefor for squarewave
+	else if(slaveWave && !mb->output && mb->phase > pwm)
+	{
+		mb->output = 1.0;
+		add_blep(mb, (mb->phase - pwm) / freqN,-1.0);
+	}
+
+	else if(mb->prevSyncAmp <= 0 && mb->masterPhase > 0)
+	{
+		mb->phase  = mb->masterPhase * (slaveFreq / masterFreq);
+		if(!slaveWave)
+			mb->output = mb->masterPhase * (slaveFreq / masterFreq);
+		else
+			mb->output = -1.0;
+		add_blep(mb, mb->phase/freqN,1.0);
+	}
+
+	if(!slaveWave)
+		y = mb->phase;
+	else
+		y = mb->output;
+
+	// add BLEP buffer contents
+	if(mb->nInit)
+	{
+		y += mb->buffer[mb->iBuffer];
+		mb->nInit--;
+		if(++mb->iBuffer >= mb->cBuffer)
+			mb->iBuffer=0;
+	}
+
+	mb->prevSyncAmp = mb->masterPhase;
+	UGEN_OUT(u, 0, y);
 }
 
 #define CUBIC_INTERP(A,B,C,D,DELTA) \
@@ -2055,8 +2136,6 @@ void rand_deconstructor(ugen* u)
 
 void rand_calc(ugen* u)
 {
-	// double  min   = UGEN_IN(u,0);
-	// double  range = UGEN_IN(u,1) - min;
 	rand_t* rand  = (rand_t*) u->data;
 	double  amp   = rand->value0;// * range + min;
 
@@ -2066,8 +2145,6 @@ void rand_calc(ugen* u)
 void lfnoiseN_calc(ugen* u)
 {
 	double  freq  = UGEN_IN(u,0);
-	// double  min   = UGEN_IN(u,1);
-	// double  range = UGEN_IN(u,2) - min;
 	rand_t* rand  = (rand_t*) u->data;
 
 	if(rand->phase + RECIP_SAMPLE_RATE * freq >= 1.0)
@@ -2088,8 +2165,6 @@ void lfnoiseN_calc(ugen* u)
 void lfnoiseL_calc(ugen* u)
 {
 	double  freq  = UGEN_IN(u,0);
-	// double  min   = UGEN_IN(u,1);
-	// double  range = UGEN_IN(u,2) - min;
 	rand_t* rand  = (rand_t*) u->data;
 
 	if(rand->phase + RECIP_SAMPLE_RATE * freq >= 1.0)
@@ -2111,8 +2186,6 @@ void lfnoiseL_calc(ugen* u)
 void lfnoiseC_calc(ugen* u)
 {
 	double  freq  = UGEN_IN(u,0);
-	// double  min   = UGEN_IN(u,1);
-	// double  range = UGEN_IN(u,2) - min;
 	rand_t* rand  = (rand_t*) u->data;
 
 	if(rand->phase + RECIP_SAMPLE_RATE * freq >= 1.0)
@@ -2142,6 +2215,54 @@ void range_calc(ugen* u)
 
 	UGEN_OUT(u, 0, amp);
 }
+
+//  /dev/urandom
+
+typedef union {
+  double d;
+  char   bytes[8];
+} rand_double_t;
+
+typedef struct
+{
+	double        phase;
+	rand_double_t value0;
+	rand_double_t value1;
+	rand_double_t value2;
+	rand_double_t value3;
+	// FILE*         file;
+} urand_t;
+
+
+void urand_constructor(ugen* u)
+{
+	urand_t* rand  = malloc(sizeof(urand_t));
+
+	fgets(rand->value0.bytes,8,devurandom);
+	rand->value0.d = fmod(rand->value0.d,2) - 1;
+
+	printf("urandom: %f",rand->value0.d);
+
+	rand->value1.d = 0;
+	rand->value2.d = 0;
+	rand->value3.d = 0;
+	rand->phase    = 0;
+	u->data        = rand;
+}
+
+void urand_deconstructor(ugen* u)
+{
+	urand_t* rand = (urand_t*)u->data;
+	// fclose(rand->file);
+	free(u->data);
+}
+
+void urand_calc(ugen* u)
+{
+	rand_t* rand = (rand_t*) u->data;
+	UGEN_OUT(u,0,rand->value0);
+}
+
 
 //===================================
 // RBJ Filters, Audio EQ Cookbook
@@ -2515,21 +2636,6 @@ void zeroDelayLPMS20_calc(ugen* u)
 //============================================
 // Distortion
 //============================================
-
-#define HARD_CLIP(X,AMOUNT) (CLAMP(X*AMOUNT,-1.0,1.0))
-#define POLY3_DIST(X,AMOUNT) (1.5 * X - 0.5 * pow(X,3))
-#define TANH_DIST(X,AMOUNT) (tanh(X*AMOUNT))
-#define SIN_DIST(X,AMOUNT) (sin(X*AMOUNT)/M_PI)
-#define WRAP(X,AMOUNT)       \
-({                           \
-	double x   = X * AMOUNT; \
-	double ret = x;          \
-	if(x >= 1)               \
-		ret = x - 2;         \
-	else if(x < -1)          \
-		ret = x + 2;         \
-	ret;                     \
-})
 
 void clip_calc(ugen* u)
 {
