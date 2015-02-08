@@ -10,7 +10,7 @@ playSynths :: Necronomicon ()
 playSynths = mapM_ (\i -> playSynthAt "LineSynth" [i * 110, fromIntegral $ mod (floor i) 2] (i * 0.25)) [0.0..20.0]
 
 delaySynth :: UGen -> UGen -> UGen
-delaySynth freq delayTime = s |> delayN 1 (lag 0.5 delayTime) >>> add s >>> gain 0.25 >>> out 0
+delaySynth freq delayTime = s |> delayN 1 (lag 0.5 delayTime) >>> add s >>> gain 0.1 >>> out 0
     where
         s = lag 0.1 freq |> sin
 
