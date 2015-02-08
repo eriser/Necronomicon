@@ -85,7 +85,7 @@ timespec current_time;
 unsigned int current_sample_time = 0;
 
 /////////////////////
-// SynthDef
+// UGen
 /////////////////////
 
 struct ugen;
@@ -97,15 +97,82 @@ struct ugen
 	void (*constructor)(ugen* u);
 	void (*deconstructor)(ugen* u);
 	void* data; // ugen defined data structure
+	double* constructor_args; // arguments passed in for use during construction
 	unsigned int* inputs; // indexes to the parent synth's ugen wire buffer
 	unsigned int* outputs; // indexes to the parent synth's ugen wire buffer
 };
 
-unsigned int UGEN_SIZE = sizeof(ugen);
+const unsigned int UGEN_SIZE = sizeof(ugen);
+const unsigned int UGEN_POINTER_SIZE = sizeof(ugen*);
 
 typedef void (*ugen_constructor)(ugen* u);
 typedef void (*ugen_deconstructor)(ugen* u);
 typedef void (*calc_func)(ugen* u);
+
+/////////////////////
+// Sample Buffer
+/////////////////////
+
+struct sample_buffer;
+typedef struct sample_buffer sample_buffer;
+
+struct sample_buffer
+{
+	double* samples;
+	sample_buffer* next_buffer; // used for free list
+	unsigned int num_samples;
+	unsigned int num_samples_mask; // used with power of 2 sized buffers
+};
+
+const unsigned int SAMPLE_BUFFER_SIZE = sizeof(sample_buffer);
+const unsigned int SAMPLE_BUFFER_POINTER_SIZE = sizeof(sample_buffer*);
+
+sample_buffer* buffer_free_list = NULL;
+
+unsigned int next_power_of_two(unsigned int v)
+{
+	--v;
+	v |= v >> 1;
+	v |= v >> 2;
+	v |= v >> 4;
+	v |= v >> 8;
+	v |= v >> 16;
+	return ++v;
+}
+
+// Note: this will return a sample buffer with a number of samples equal to the next power of two higher than the requested amount
+sample_buffer* acquire_sample_buffer(unsigned int num_samples)
+{
+	unsigned int pow_two_num_samples = next_power_of_two(num_samples);
+	sample_buffer* buffer;
+
+	if (buffer_free_list == NULL)
+	{
+		buffer = malloc(SAMPLE_BUFFER_SIZE);
+	}
+
+	else
+	{
+		buffer = buffer_free_list;
+		buffer_free_list = buffer->next_buffer;
+	}
+
+	buffer->samples = calloc(pow_two_num_samples, DOUBLE_SIZE);
+	buffer->num_samples = pow_two_num_samples;
+	buffer->num_samples_mask = pow_two_num_samples - 1;
+	return buffer;
+}
+
+void release_sample_buffer(sample_buffer* buffer)
+{
+	free(buffer->samples);
+	buffer->next_buffer = buffer_free_list;
+	buffer_free_list = buffer; // Push on to the buffer free list
+}
+
+////////////////////////
+// SynthDef/Synth Node
+////////////////////////
 
 struct synth_node;
 typedef struct synth_node synth_node;
@@ -114,14 +181,12 @@ struct synth_node
 {
 	ugen* ugen_graph; // UGen Graph
 	double* ugen_wires; // UGen output wire buffers
-	double* local_buses; // local buses used for feedback
 	synth_node* previous; // Previous node, used in synth_list for the scheduler
 	synth_node* next; // Next node, used in the synth_list for the scheduler
 	unsigned int key; // Node ID, used to look up synths in the synth hash table
 	unsigned int hash; // Cached hash of the node id for the synth hash table
 	unsigned int num_ugens;
 	unsigned int num_wires;
-	unsigned int num_buses; // number of local buses, used for feedback
 	unsigned int time; // scheduled time, in samples
 };
 
@@ -136,6 +201,7 @@ synth_node* malloc_synth()
 {
 	if (num_free_synths > 0)
 	{
+		// Pop a synth off the synth free list
 		synth_node* synth = free_synths;
 		free_synths = synth->next;
 		--num_free_synths;
@@ -161,10 +227,6 @@ void free_synth(synth_node* synth)
 		free(ugen_graph);
 		free(synth->ugen_wires);
 
-		if (synth->local_buses)
-			free(synth->local_buses);
-
-
 		if (num_free_synths < max_free_synths)
 		{
 			// Push the synth on to the free list
@@ -189,6 +251,9 @@ void free_synth_definition(synth_node* synth_definition)
 		ugen* u = &synth_definition->ugen_graph[i];
 		free(u->inputs);
 		free(u->outputs);
+
+		if (u->constructor_args)
+			free(u->constructor_args);
 	}
 
 	free(synth_definition->ugen_graph);
@@ -199,17 +264,6 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 {
 	unsigned int i;
 
-	/*
-	printf("synth_definition->ugen_wires: [");
-	for (i = 0; i < synth_definition->num_wires; ++i)
-	{
-		printf("%f,", synth_definition->ugen_wires[i]);
-	}
-
-	printf("]\n");
-
-	puts("Building synth");*/
-
 	synth_node* synth = malloc_synth();
 	synth->previous = NULL;
 	synth->next = NULL;
@@ -218,7 +272,7 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 	synth->num_ugens = synth_definition->num_ugens;
 	synth->num_wires = synth_definition->num_wires;
 	synth->time = time;
-
+	
 	// UGens
 	unsigned int num_ugens = synth_definition->num_ugens;
 	unsigned int size_ugens = synth_definition->num_ugens * UGEN_SIZE;
@@ -226,6 +280,7 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 	ugen* ugen_graph = synth->ugen_graph;
 	memcpy(ugen_graph, synth_definition->ugen_graph, size_ugens);
 
+	
 	for (i = 0; i < num_ugens; ++i)
 	{
 		ugen* graph_node = &ugen_graph[i];
@@ -242,32 +297,6 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 	{
 		ugen_wires[i] = arguments[i];
 	}
-
-	// Local buses
-	unsigned int num_buses = synth_definition->num_buses;
-	if (num_buses > 0)
-	{
-		synth->num_buses = num_buses;
-		unsigned int size_buses = num_buses * DOUBLE_SIZE;
-		double* local_buses = malloc(size_buses);
-		synth->local_buses = local_buses;
-		memset(local_buses, 0, size_buses);
-	}
-
-	else
-	{
-		synth->local_buses = NULL;
-		synth->num_buses = 0;
-	}
-
-	/*
-	printf("synth->ugen_wires: [");
-	for (i = 0; i < synth->num_wires; ++i)
-	{
-		printf("%f,", synth->ugen_wires[i]);
-	}
-
-	printf("]\n");*/
 
 	return synth;
 }
@@ -300,7 +329,7 @@ void initialize_wave_tables()
 		sine_table[i] = sin(TWO_PI * (((double) i) / ((double) TABLE_SIZE)));
 	}
 
-	//Curtis: Needed to initialize minblep table.
+	// Needed to initialize minblep table.
 	bool minblepInitialized = minBLEP_Init();
 }
 
@@ -909,7 +938,7 @@ void init_rt_thread()
 	assert(synth_list == NULL);
 	assert(removal_fifo == NULL);
 	assert(_necronomicon_buses == NULL);
-
+	
 	SAMPLE_RATE = jack_get_sample_rate(client);
 	RECIP_SAMPLE_RATE = 1.0 / SAMPLE_RATE;
 	TABLE_MUL_RECIP_SAMPLE_RATE = TABLE_SIZE * RECIP_SAMPLE_RATE;
@@ -957,7 +986,7 @@ void shutdown_rt_thread()
 	assert(scheduled_node_list != NULL);
 	assert(removal_fifo != NULL);
 	assert(_necronomicon_buses != NULL);
-
+	
 	hash_table_free(synth_table);
 	rt_fifo_free();
 	scheduled_list_free();
@@ -965,6 +994,13 @@ void shutdown_rt_thread()
 	removal_fifo_free();
 	free(_necronomicon_buses);
 
+	while (buffer_free_list)
+	{
+		sample_buffer* next_buffer = buffer_free_list->next_buffer;
+		free(buffer_free_list);
+		buffer_free_list = next_buffer;
+	}
+	
 	if (free_synths)
 	{
 		unsigned int i;
@@ -1277,7 +1313,6 @@ void poll_constructor(ugen* u)
 	u->data = count_buffer;
 }
 
-
 void poll_calc(ugen* u)
 {
 	unsigned int* count_buffer = (unsigned int*) u->data;
@@ -1306,6 +1341,44 @@ void poll_deconstructor(ugen* u)
 	free(u->data);
 }
 
+typedef struct
+{
+	sample_buffer* buffer;
+	unsigned int write_index;
+} delay_data;
+
+const unsigned int DELAY_DATA_SIZE = sizeof(delay_data);
+
+void delay_constructor(ugen* u)
+{
+	u->data = malloc(DELAY_DATA_SIZE);
+	delay_data data = { acquire_sample_buffer(u->constructor_args[0] * SAMPLE_RATE), 0 };
+	*((delay_data*) u->data) = data;
+}
+
+void delay_deconstructor(ugen* u)
+{
+	release_sample_buffer(((delay_data*) u->data)->buffer);
+	free(u->data);
+}
+
+void delayN_calc(ugen* u)
+{
+	delay_data* data = ((delay_data*) u->data);
+	sample_buffer* buffer = data->buffer;
+	unsigned int write_index = data->write_index;
+	unsigned int num_samples_mask = buffer->num_samples_mask;
+
+	unsigned int delay_time = UGEN_IN(u, 0) * SAMPLE_RATE;
+	double x = UGEN_IN(u, 1);
+
+	double y = buffer->samples[(write_index - delay_time) & num_samples_mask];
+	
+	buffer->samples[write_index] = x;
+	data->write_index = (write_index + 1) & num_samples_mask;
+	UGEN_OUT(u, 0, y);
+}
+
 void print_ugen(ugen* ugen)
 {
 	puts("(UGen");
@@ -1326,14 +1399,12 @@ synth_node* new_test_synth(unsigned int time)
 	synth_node* test_synth = malloc(NODE_SIZE);
 	test_synth->ugen_graph = malloc(UGEN_SIZE);
 	test_synth->ugen_wires = malloc(DOUBLE_SIZE);
-	test_synth->local_buses = malloc(DOUBLE_SIZE);
 	test_synth->previous = NULL;
 	test_synth->next = NULL;
 	test_synth->key = 0;
 	test_synth->hash = 0;
 	test_synth->num_ugens = 1;
 	test_synth->num_wires = 1;
-	test_synth->num_buses = 1;
 	test_synth->time = time;
 
 	test_synth->ugen_graph[0] = test_ugen;

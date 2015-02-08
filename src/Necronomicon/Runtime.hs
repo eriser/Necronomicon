@@ -456,69 +456,65 @@ freeSynthDef :: SynthDef -> Necronomicon ()
 freeSynthDef (SynthDef _ _ csynthDef) = liftIO $ freeCSynthDef csynthDef
 
 type CUGenFunc = FunPtr (Ptr CUGen -> ())
-data CUGen = CUGen CUGenFunc CUGenFunc CUGenFunc (Ptr ()) (Ptr CUInt) (Ptr CUInt) deriving (Show)
+data CUGen = CUGen CUGenFunc CUGenFunc CUGenFunc (Ptr ()) (Ptr CDouble) (Ptr CUInt) (Ptr CUInt) deriving (Show)
 
 instance Storable CUGen where
-    sizeOf _ = sizeOf (undefined :: CDouble) * 6
+    sizeOf _ = sizeOf (undefined :: CDouble) * 7
     alignment _ = alignment (undefined :: CDouble)
     peek ptr = do
         calc  <- peekByteOff ptr 0  :: IO CUGenFunc
         cons  <- peekByteOff ptr 8  :: IO CUGenFunc
         decon <- peekByteOff ptr 16 :: IO CUGenFunc
         dataS <- peekByteOff ptr 24 :: IO (Ptr ())
-        inpts <- peekByteOff ptr 32 :: IO (Ptr CUInt)
-        outs  <- peekByteOff ptr 40 :: IO (Ptr CUInt)
-        return (CUGen calc cons decon dataS inpts outs)
-    poke ptr (CUGen calc cons decon dataS inpts outs) = do
+        cArgs <- peekByteOff ptr 32 :: IO (Ptr CDouble)
+        inpts <- peekByteOff ptr 40 :: IO (Ptr CUInt)
+        outs  <- peekByteOff ptr 48 :: IO (Ptr CUInt)
+        return (CUGen calc cons decon dataS cArgs inpts outs)
+    poke ptr (CUGen calc cons decon dataS cArgs inpts outs) = do
         pokeByteOff ptr 0  calc
         pokeByteOff ptr 8  cons
         pokeByteOff ptr 16 decon
         pokeByteOff ptr 24 dataS
-        pokeByteOff ptr 32 inpts
-        pokeByteOff ptr 40 outs
+        pokeByteOff ptr 32 cArgs
+        pokeByteOff ptr 40 inpts
+        pokeByteOff ptr 48 outs
 
 data CSynthDef = CSynthDef {
     csynthDefUGenGraph :: Ptr CUGen,
     csynthDefWireBufs :: Ptr CDouble,
-    csynthDefLocalBuses :: Ptr CDouble,
     csynthDefPreviousNode :: Ptr CSynthDef,
     csynthDefNextNode :: Ptr CSynthDef,
     csynthDefKey :: CUInt,
     csynthDefHash :: CUInt,
     csynthDefNumUGens :: CUInt,
     csynthDefNumWires :: CUInt,
-    csynthDefNumBuses :: CUInt,
     csynthDefTime :: CUInt
 } deriving (Show)
 
 instance Storable CSynthDef where
-    sizeOf _ = sizeOf (undefined :: CDouble) * 8
+    sizeOf _ = sizeOf (undefined :: CDouble) * 7
     alignment _ = alignment (undefined :: CDouble)
     peek ptr = do
         ugenGrph <- peekByteOff ptr 0  :: IO (Ptr CUGen)
         wireBufs <- peekByteOff ptr 8  :: IO (Ptr CDouble)
-        locBuses <- peekByteOff ptr 16 :: IO (Ptr CDouble)
-        prevNode <- peekByteOff ptr 24 :: IO (Ptr CSynthDef)
-        nextNode <- peekByteOff ptr 32 :: IO (Ptr CSynthDef)
-        nodeKey  <- peekByteOff ptr 40 :: IO CUInt
-        nodeHash <- peekByteOff ptr 44 :: IO CUInt
-        numUGens <- peekByteOff ptr 48 :: IO CUInt
-        numWires <- peekByteOff ptr 52 :: IO CUInt
-        numBuses <- peekByteOff ptr 56 :: IO CUInt
-        sampTime <- peekByteOff ptr 60 :: IO CUInt
-        return (CSynthDef ugenGrph wireBufs locBuses prevNode nextNode nodeKey nodeHash numUGens numWires numBuses sampTime)
-    poke ptr (CSynthDef ugenGrph wireBufs locBuses prevNode nextNode nodeKey nodeHash numUGens numWires numBuses sampTime) = do
+        prevNode <- peekByteOff ptr 16 :: IO (Ptr CSynthDef)
+        nextNode <- peekByteOff ptr 24 :: IO (Ptr CSynthDef)
+        nodeKey  <- peekByteOff ptr 32 :: IO CUInt
+        nodeHash <- peekByteOff ptr 36 :: IO CUInt
+        numUGens <- peekByteOff ptr 40 :: IO CUInt
+        numWires <- peekByteOff ptr 44 :: IO CUInt
+        sampTime <- peekByteOff ptr 48 :: IO CUInt
+        return (CSynthDef ugenGrph wireBufs prevNode nextNode nodeKey nodeHash numUGens numWires sampTime)
+    poke ptr (CSynthDef ugenGrph wireBufs prevNode nextNode nodeKey nodeHash numUGens numWires sampTime) = do
         pokeByteOff ptr 0  ugenGrph
         pokeByteOff ptr 8  wireBufs
-        pokeByteOff ptr 16 locBuses
-        pokeByteOff ptr 24 prevNode
-        pokeByteOff ptr 32 nextNode
-        pokeByteOff ptr 40 nodeKey
-        pokeByteOff ptr 44 nodeHash
-        pokeByteOff ptr 48 numUGens
-        pokeByteOff ptr 52 numWires
-        pokeByteOff ptr 56 numBuses
-        pokeByteOff ptr 60 sampTime
+        pokeByteOff ptr 16 prevNode
+        pokeByteOff ptr 24 nextNode
+        pokeByteOff ptr 32 nodeKey
+        pokeByteOff ptr 36 nodeHash
+        pokeByteOff ptr 40 numUGens
+        pokeByteOff ptr 44 numWires
+        pokeByteOff ptr 48 sampTime
 
 type CSynth = CSynthDef -- A running C Synth is structurally identical to a C SynthDef
 

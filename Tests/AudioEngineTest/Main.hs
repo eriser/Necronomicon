@@ -9,14 +9,21 @@ import Control.Monad.Trans
 playSynths :: Necronomicon ()
 playSynths = mapM_ (\i -> playSynthAt "LineSynth" [i * 110, fromIntegral $ mod (floor i) 2] (i * 0.25)) [0.0..20.0]
 
+delaySynth :: UGen -> UGen -> UGen
+delaySynth freq delayTime = s |> delayN 1 (lag 0.5 delayTime) >>> add s >>> gain 0.25 >>> out 0
+    where
+        s = lag 0.1 freq |> sin
+
 engineTest :: Necronomicon ()
 engineTest = do
-    {-
     compileSynthDef "LineSynth" (lineSynth)
     playSynths
     printSynthDef "LineSynth"
-    nThreadDelay 2000000
-    -}
+    compileSynthDef "delaySynth" delaySynth
+    runningDelaySynth <- playSynth "delaySynth" []
+    nPrint "Waiting for user input..."
+    _ <- liftIO $ getLine
+    stopSynth runningDelaySynth
     compileSynthDef "LoopSynth" loopSynth
     runningLoopSynth <- playSynth "LoopSynth" []
     nPrint "Waiting for user input..."
@@ -36,4 +43,8 @@ engineTest = do
     return ()
 
 main :: IO ()
-main = runNecronomicon engineTest
+main = runSignal
+       <|  play (isDown keyA) (isDown keyA) delaySynth (mouseX ~> scale 20  10000) mouseY
+       <|> play (isDown keyW) (isDown keyW) loopSynth
+       <|> play (isDown keyD) (isDown keyD) simpleSine 440
+-- main = runNecronomicon engineTest

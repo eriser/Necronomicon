@@ -37,7 +37,7 @@ data UGen = UGenNum Double
 data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Out | AuxIn | Poll | LFSaw | LFPulse | Saw | Pulse
               | SyncSaw | SyncPulse | Random | NoiseN | NoiseL | NoiseC | Range | LPF | HPF | BPF | Notch | AllPass | PeakEQ
               | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int | LPFMS20 | OnePoleMS20
-              | Clip | SoftClip | Poly3 | TanH | SinDist | Wrap
+              | Clip | SoftClip | Poly3 | TanH | SinDist | Wrap | DelayN Double
               deriving (Show)
 
 instance Show UGen where
@@ -374,6 +374,12 @@ foreign import ccall "&wrap_calc" wrapCalc :: CUGenFunc
 wrap :: UGenType a => a -> a -> a
 wrap amount input = ugen Wrap wrapCalc nullConstructor nullDeconstructor [amount,input]
 
+foreign import ccall "&delay_constructor" delayConstructor :: CUGenFunc
+foreign import ccall "&delay_deconstructor" delayDeconstructor :: CUGenFunc
+foreign import ccall "&delayN_calc" delayNCalc :: CUGenFunc
+
+delayN :: UGenType a => Double -> a -> a -> a
+delayN maxDelayTime delayTime input = ugen (DelayN maxDelayTime) delayNCalc delayConstructor delayDeconstructor [delayTime, input] 
 ----------------------------------------------------
 
 loopSynth :: [UGen]
@@ -471,19 +477,23 @@ data CompiledConstant = CompiledConstant { compiledConstantValue :: CDouble, com
 instance Ord CompiledConstant where
     compare (CompiledConstant _ w1) (CompiledConstant _ w2) = compare w1 w2
 
+data LocalBuf = LocalBuf Int Int
+
 type UGenOutputTable = M.Map String CUInt
 type CompiledFeedback = M.Map Int CUInt
+type CompiledLocalBuffers = [LocalBuf]
 
 data CompiledData = CompiledData {
     compiledUGenTable :: UGenOutputTable,
     compiledUGenGraph :: [CUGen],
     compiledConstants :: [CompiledConstant],
     compiledWireIndex :: CUInt,
-    compiledFeedWires :: CompiledFeedback -- List of feedback wire indexes. Pushed/Popped during compilation
+    compiledFeedWires :: CompiledFeedback, -- Dictionary of feedback wire indexes
+    compiledLocalBufs :: CompiledLocalBuffers
 }
 
 mkCompiledData :: CompiledData
-mkCompiledData = CompiledData M.empty [] [] 0 M.empty
+mkCompiledData = CompiledData M.empty [] [] 0 M.empty []
 
 data Compiled a = Compiled { runCompile :: CompiledData -> IO (a, CompiledData) }
 
@@ -570,7 +580,7 @@ compileSynthArg argIndex = let arg = (synthArgument argIndex) in compileUGen arg
 
 runCompileSynthDef :: UGenType a => String -> a -> IO SynthDef
 runCompileSynthDef name ugenFunc = do
-    (numArgs, (CompiledData table revGraph constants numWires _)) <- runCompile (compileSynthArgsAndUGenGraph ugenFunc) mkCompiledData
+    (numArgs, (CompiledData table revGraph constants numWires _ localBufs)) <- runCompile (compileSynthArgsAndUGenGraph ugenFunc) mkCompiledData
     print ("table: " ++ (show table))
     print ("Total ugens: " ++ (show $ length revGraph))
     print ("Total constants: " ++ (show $ length constants))
@@ -579,9 +589,7 @@ runCompileSynthDef name ugenFunc = do
     let graph = drop numArgs $ reverse revGraph -- Reverse the revGraph because we've been using cons during compilation.
     compiledGraph <- newArray graph
     compiledWireBufs <- initializeWireBufs numWires constants
-    let compiledBuses = nullPtr -- UPDATE THESE!!!!!!!!!!!!!!!!!!!
-    let numBuses = 0 -- UPDATE THESE!!!!!!!!!!!!!!!!!!!
-    let cs = CSynthDef compiledGraph compiledWireBufs compiledBuses nullPtr nullPtr 0 0 (fromIntegral $ length graph) (fromIntegral numWires) (fromIntegral numBuses) 0
+    let cs = CSynthDef compiledGraph compiledWireBufs nullPtr nullPtr 0 0 (fromIntegral $ length graph) (fromIntegral numWires) 0
     print cs
     csynthDef <- new $ cs
     return (SynthDef name numArgs csynthDef)
@@ -605,26 +613,29 @@ compileUGenArgs :: UGen -> Compiled [CUInt]
 compileUGenArgs (UGenFunc _ _ _ _ inputs) = mapM (compileUGenGraphBranch) inputs
 compileUGenArgs (UGenNum _) = return []
 
+compileUGenWithConstructorArgs :: UGen -> Ptr CDouble -> [CUInt] -> String -> Compiled CUInt 
+compileUGenWithConstructorArgs (UGenFunc _ calc cons decn _) conArgs args key = do
+    inputs <- liftIO (newArray args)
+    wire <- nextWireIndex
+    wireBuf <- liftIO $ new wire
+    addUGen key (CUGen calc cons decn nullPtr conArgs inputs wireBuf) wire
+    return wire
+
 -- To Do: Add multi-out ugen support
 compileUGen :: UGen -> [CUInt] -> String -> Compiled CUInt
 compileUGen (UGenFunc (LocalIn feedBus) _ _ _ _) args key = do
     wire <- getOrAddCompiledFeedWire feedBus
-    getCompiledFeedWires >>= \wires -> liftIO (print ("LocalIn: " ++ show wires))
     return wire
 compileUGen (UGenFunc (LocalOut feedBus) calc cons decn _) args key = do
     inputs <- liftIO (newArray args)
     wire <- getOrAddCompiledFeedWire feedBus
-    getCompiledFeedWires >>= \wires -> liftIO (print ("LocalOut: " ++ show wires))
     wireBuf <- liftIO $ new wire
-    addUGen key (CUGen calc cons decn nullPtr inputs wireBuf) wire
-    return wire
-compileUGen (UGenFunc _ calc cons decn _) args key = do
-    inputs <- liftIO (newArray args)
-    wire <- nextWireIndex
-    wireBuf <- liftIO $ new wire
-    addUGen key (CUGen calc cons decn nullPtr inputs wireBuf) wire
+    addUGen key (CUGen calc cons decn nullPtr nullPtr inputs wireBuf) wire
     return wire
 compileUGen (UGenNum d) _ key = do
     wire <- nextWireIndex
     addConstant key (CompiledConstant (CDouble d) wire)
     return wire
+compileUGen ugen@(UGenFunc (DelayN maxDelayTime) _ _ _ _) args key = liftIO (new $ CDouble maxDelayTime) >>= \maxDelayTimePtr ->
+    compileUGenWithConstructorArgs ugen maxDelayTimePtr args key
+compileUGen ugen args key = compileUGenWithConstructorArgs ugen nullPtr args key
