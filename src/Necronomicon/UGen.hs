@@ -390,7 +390,7 @@ foreign import ccall "&delay_deconstructor" delayDeconstructor :: CUGenFunc
 foreign import ccall "&delayN_calc" delayNCalc :: CUGenFunc
 
 delayN :: UGenType a => Double -> a -> a -> a
-delayN maxDelayTime delayTime input = ugen (DelayN maxDelayTime) delayNCalc delayConstructor delayDeconstructor [delayTime, input] 
+delayN maxDelayTime delayTime input = ugen (DelayN maxDelayTime) delayNCalc delayConstructor delayDeconstructor [delayTime, input]
 ----------------------------------------------------
 
 loopSynth :: [UGen]
@@ -624,7 +624,7 @@ compileUGenArgs :: UGen -> Compiled [CUInt]
 compileUGenArgs (UGenFunc _ _ _ _ inputs) = mapM (compileUGenGraphBranch) inputs
 compileUGenArgs (UGenNum _) = return []
 
-compileUGenWithConstructorArgs :: UGen -> Ptr CDouble -> [CUInt] -> String -> Compiled CUInt 
+compileUGenWithConstructorArgs :: UGen -> Ptr CDouble -> [CUInt] -> String -> Compiled CUInt
 compileUGenWithConstructorArgs (UGenFunc _ calc cons decn _) conArgs args key = do
     inputs <- liftIO (newArray args)
     wire <- nextWireIndex
