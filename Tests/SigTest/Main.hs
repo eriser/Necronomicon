@@ -39,7 +39,7 @@ noArgSynth :: UGen
 noArgSynth = sin 0.1 |> out 0
 
 oneArgSynth :: UGen -> [UGen]
-oneArgSynth f = saw 40 >>> lpf (lag 6 [f,f]) 6 +> delayN 1 1 >>> gain 0.5 >>> out 0
+oneArgSynth f = saw 40 |> lpf (lag 6 [f,f]) 6 +> delayN 1.0 1.0 |> gain 0.5 |> out 0
 
 -- oneArgSynth f = saw 80 |> onePoleMS20 [f,f] >>> gain 0.25 >>> out 0
 -- oneArgSynth f = saw 80 |> lpfMS20 [f,f] 1 1 >>> gain 0.25 >>> out 0
@@ -58,7 +58,7 @@ oneArgSynth f = saw 40 >>> lpf (lag 6 [f,f]) 6 +> delayN 1 1 >>> gain 0.5 >>> ou
 -- oneArgSynth f = lfsaw [f,f] 0 |> gain 0.25 >>> out 0
 
 twoArgSynth :: UGen -> UGen -> [UGen]
-twoArgSynth f ff = feedback s >>> gain 0.25 >>> out 0
+twoArgSynth f ff = feedback s |> gain 0.25 |> out 0
     where
         s i = syncosc [f + (i * 1000),f + (i * 500)] 0 0 [ff,ff]
 -- twoArgSynth f ff = syncosc [f,f] 0 0 [ff,ff] |> gain 0.25 >>> out 0
