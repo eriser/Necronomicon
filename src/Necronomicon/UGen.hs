@@ -24,8 +24,8 @@ import Data.Typeable
 import Control.Arrow
 
 (+>) :: UGenType a => a -> (a -> a) -> a
-(+>) a f = add a (f a)
-infixl 1 +>
+(+>) a f = f a |> add a
+infixl 0 +>
 
 --------------------------------------------------------------------------------------
 -- UGen
@@ -37,7 +37,7 @@ data UGen = UGenNum Double
 data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Out | AuxIn | Poll | LFSaw | LFPulse | Saw | Pulse
               | SyncSaw | SyncPulse | SyncOsc | Random | NoiseN | NoiseL | NoiseC | URandom | Range | LPF | HPF | BPF | Notch | AllPass | PeakEQ
               | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int | LPFMS20 | OnePoleMS20
-              | Clip | SoftClip | Poly3 | TanH | SinDist | Wrap | DelayN Double
+              | Clip | SoftClip | Poly3 | TanH | SinDist | Wrap | DelayN Double | Negate
               deriving (Show)
 
 instance Show UGen where
@@ -48,7 +48,7 @@ instance Num UGen where
     (+)         = add
     (*)         = mul
     (-)         = minus
-    negate      = mul (-1)
+    negate      = unegate
     -- abs         = liftA abs
     -- signum      = liftA signum
     fromInteger = UGenNum . fromInteger
@@ -200,6 +200,10 @@ gain = mul
 foreign import ccall "&div_calc" divCalc :: CUGenFunc
 udiv :: UGenType a => a -> a -> a
 udiv x y = ugen Div divCalc nullConstructor nullDeconstructor [x, y]
+
+foreign import ccall "&negate_calc" negateCalc :: CUGenFunc
+unegate :: UGenType a => a -> a
+unegate x = ugen Negate negateCalc nullConstructor nullDeconstructor [x]
 
 foreign import ccall "&line_calc" lineCalc :: CUGenFunc
 foreign import ccall "&line_constructor" lineConstructor :: CUGenFunc
