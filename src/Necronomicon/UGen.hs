@@ -37,7 +37,7 @@ data UGen = UGenNum Double
 data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Out | AuxIn | Poll | LFSaw | LFPulse | Saw | Pulse
               | SyncSaw | SyncPulse | SyncOsc | Random | NoiseN | NoiseL | NoiseC | URandom | Range | LPF | HPF | BPF | Notch | AllPass | PeakEQ
               | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int | LPFMS20 | OnePoleMS20
-              | Clip | SoftClip | Poly3 | TanH | SinDist | Wrap | DelayN Double
+              | Clip | SoftClip | Poly3 | TanH | SinDist | Wrap | DelayN Double | FreeVerb
               deriving (Show)
 
 instance Show UGen where
@@ -391,6 +391,14 @@ foreign import ccall "&delayN_calc" delayNCalc :: CUGenFunc
 
 delayN :: UGenType a => Double -> a -> a -> a
 delayN maxDelayTime delayTime input = ugen (DelayN maxDelayTime) delayNCalc delayConstructor delayDeconstructor [delayTime, input]
+
+foreign import ccall "&freeverb_constructor" freeverbConstructor :: CUGenFunc
+foreign import ccall "&freeverb_deconstructor" freeverbDeconstructor :: CUGenFunc
+foreign import ccall "&freeverb_calc" freeverbCalc :: CUGenFunc
+
+freeverb :: UGenType a => a -> a -> a -> a -> a
+freeverb mix roomSize damp input = ugen FreeVerb freeverbCalc freeverbConstructor freeverbDeconstructor [mix,roomSize,damp,input]
+
 ----------------------------------------------------
 
 loopSynth :: [UGen]
@@ -650,3 +658,22 @@ compileUGen (UGenNum d) _ key = do
 compileUGen ugen@(UGenFunc (DelayN maxDelayTime) _ _ _ _) args key = liftIO (new $ CDouble maxDelayTime) >>= \maxDelayTimePtr ->
     compileUGenWithConstructorArgs ugen maxDelayTimePtr args key
 compileUGen ugen args key = compileUGenWithConstructorArgs ugen nullPtr args key
+
+
+------------------------------------------
+-- Testing Functions
+------------------------------------------
+makeAndStartNecro :: IO NecroVars
+makeAndStartNecro = do
+    necroVars <- mkNecroVars
+    runNecroState startNecronomicon necroVars
+    return necroVars
+
+testSynth :: UGenType a => a -> [Double] -> NecroVars -> IO Synth
+testSynth synth args necroVars = do
+    runNecroState (compileSynthDef "testSynth" synth) necroVars
+    (synth,_) <- runNecroState (playSynth "testSynth" args) necroVars
+    return synth
+
+stopTestSynth :: Synth -> NecroVars -> IO()
+stopTestSynth synth necroVars = runNecroState (stopSynth synth) necroVars >> return ()

@@ -39,7 +39,20 @@ noArgSynth :: UGen
 noArgSynth = sin 0.1 |> out 0
 
 oneArgSynth :: UGen -> [UGen]
-oneArgSynth f = saw 40 |> lpf (lag 6 [f,f]) 6 +> delayN 1.0 1.0 |> gain 0.5 |> out 0
+oneArgSynth f = saw 40 |> lpf (lag 6 [f,f]) 6 |> freeverb 0.85 1.0 0.95 |> gain 0.5 |> out 0
+-- oneArgSynth f = saw 40 |> lpf (lag 6 [f,f]) 6 +> delayN 1.0 1.0 |> gain 0.5 |> out 0
+
+{-
+let oneArgSynth f = (saw 40 |> lpf (lag 6 [f,f]) 6 +> delayN 1.0 1.0 |> gain 0.5 |> out 0) :: UGen -> [UGen]
+
+necro <- makeAndStartNecro
+
+
+let mySynth = saw >>> out 0 :: UGen -> UGen
+synth <- testSynth mySynth [440] necro
+synth <- testSynth oneArgSynth [440] necro
+stopTestSynth synth necro
+-}
 
 -- oneArgSynth f = saw 80 |> onePoleMS20 [f,f] >>> gain 0.25 >>> out 0
 -- oneArgSynth f = saw 80 |> lpfMS20 [f,f] 1 1 >>> gain 0.25 >>> out 0

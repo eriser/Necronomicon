@@ -273,7 +273,7 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 	synth->num_ugens = synth_definition->num_ugens;
 	synth->num_wires = synth_definition->num_wires;
 	synth->time = time;
-	
+
 	// UGens
 	unsigned int num_ugens = synth_definition->num_ugens;
 	unsigned int size_ugens = synth_definition->num_ugens * UGEN_SIZE;
@@ -281,7 +281,7 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 	ugen* ugen_graph = synth->ugen_graph;
 	memcpy(ugen_graph, synth_definition->ugen_graph, size_ugens);
 
-	
+
 	for (i = 0; i < num_ugens; ++i)
 	{
 		ugen* graph_node = &ugen_graph[i];
@@ -940,7 +940,7 @@ void init_rt_thread()
 	assert(synth_list == NULL);
 	assert(removal_fifo == NULL);
 	assert(_necronomicon_buses == NULL);
-	
+
 	SAMPLE_RATE = jack_get_sample_rate(client);
 	RECIP_SAMPLE_RATE = 1.0 / SAMPLE_RATE;
 	TABLE_MUL_RECIP_SAMPLE_RATE = TABLE_SIZE * RECIP_SAMPLE_RATE;
@@ -988,7 +988,7 @@ void shutdown_rt_thread()
 	assert(scheduled_node_list != NULL);
 	assert(removal_fifo != NULL);
 	assert(_necronomicon_buses != NULL);
-	
+
 	hash_table_free(synth_table);
 	rt_fifo_free();
 	scheduled_list_free();
@@ -1002,7 +1002,7 @@ void shutdown_rt_thread()
 		free(buffer_free_list);
 		buffer_free_list = next_buffer;
 	}
-	
+
 	if (free_synths)
 	{
 		unsigned int i;
@@ -1013,7 +1013,7 @@ void shutdown_rt_thread()
 			free(synth);
 		}
 	}
-	
+
 	synth_table = NULL;
 	rt_fifo = NULL;
 	_necronomicon_current_node = NULL;
@@ -1375,7 +1375,7 @@ void delayN_calc(ugen* u)
 	double x = UGEN_IN(u, 1);
 
 	double y = buffer->samples[(write_index - delay_time) & num_samples_mask];
-	
+
 	buffer->samples[write_index] = x;
 	data->write_index = (write_index + 1) & num_samples_mask;
 	UGEN_OUT(u, 0, y);
@@ -2682,5 +2682,121 @@ void wrap_calc(ugen* u)
 	double amount = UGEN_IN(u,0);
 	double x      = UGEN_IN(u,1);
 	double y      = WRAP(x,amount);
+	UGEN_OUT(u,0,y);
+}
+
+//======================================
+// Reverberation
+//======================================
+
+typedef struct
+{
+	delay_data* combFilterDelays;
+	delay_data* allpassDelays;
+} freeverb_data;
+
+void freeverb_constructor(ugen* u)
+{
+	freeverb_data* freeverb       = malloc(sizeof(freeverb_data));
+	freeverb->combFilterDelays    = malloc(sizeof(delay_data) * 8);
+	freeverb->allpassDelays       = malloc(sizeof(delay_data) * 4);
+
+	delay_data data0 = { acquire_sample_buffer(1557), 0 };
+	freeverb->combFilterDelays[0] = data0;
+	delay_data data1 = { acquire_sample_buffer(1617), 0 };
+	freeverb->combFilterDelays[1] = data1;
+	delay_data data2 = { acquire_sample_buffer(1491), 0 };
+	freeverb->combFilterDelays[2] = data2;
+	delay_data data3 = { acquire_sample_buffer(1422), 0 };
+	freeverb->combFilterDelays[3] = data3;
+	delay_data data4 = { acquire_sample_buffer(1277), 0 };
+	freeverb->combFilterDelays[4] = data4;
+	delay_data data5 = { acquire_sample_buffer(1356), 0 };
+	freeverb->combFilterDelays[5] = data5;
+	delay_data data6 = { acquire_sample_buffer(1188), 0 };
+	freeverb->combFilterDelays[6] = data6;
+	delay_data data7 = { acquire_sample_buffer(1116), 0 };
+	freeverb->combFilterDelays[7] = data7;
+
+	delay_data data8 = { acquire_sample_buffer(225), 0 };
+	freeverb->allpassDelays[0]    = data8;
+	delay_data data9 = { acquire_sample_buffer(556), 0 };
+	freeverb->allpassDelays[1]    = data9;
+	delay_data data10 = { acquire_sample_buffer(441), 0 };
+	freeverb->allpassDelays[2]    = data10;
+	delay_data data11 = { acquire_sample_buffer(341), 0 };
+	freeverb->allpassDelays[3]    = data11;
+
+	u->data                       = freeverb;
+}
+
+void freeverb_deconstructor(ugen* u)
+{
+	freeverb_data* freeverb = (freeverb_data*) u->data;
+	int i;
+	for(i=0;i<8;++i)
+		release_sample_buffer(freeverb->combFilterDelays[i].buffer);
+	for(i=0;i<4;++i)
+		release_sample_buffer(freeverb->allpassDelays[i].buffer);
+	free(u->data);
+}
+
+//Should the delayed signal in this be x or y or x + y???
+#define COMB_FILTER(X,R,D,T,DATA,I)                                                          \
+({                                                                                           \
+	double         damp             = D * 1.0;                                               \
+	double         roomSize         = R * 0.30 + 0.7;                                        \
+	sample_buffer* buffer           = DATA[I].buffer;                                        \
+	unsigned int   write_index      = DATA[I].write_index;                                   \
+	unsigned int   num_samples_mask = buffer->num_samples_mask;                              \
+	unsigned int   n                = T;                                                     \
+	double         zn               = buffer->samples[(write_index - n) & num_samples_mask]; \
+	double         z1               = buffer->samples[(write_index - 1) & num_samples_mask]; \
+	double         y                = zn / (1 - roomSize * ((1-damp) / (1-damp * z1)) * zn); \
+	buffer->samples[write_index]    = x + y;                                                 \
+	DATA[I].write_index             = (write_index + 1) & num_samples_mask;                  \
+	x + y;                                                                                   \
+})
+
+#define ALLPASS_FEEDBACK(X,G,T,DATA,I)                                                       \
+({                                                                                           \
+    sample_buffer* buffer           = DATA[I].buffer;                                        \
+    unsigned int   write_index      = DATA[I].write_index;                                   \
+    unsigned int   num_samples_mask = buffer->num_samples_mask;                              \
+    unsigned int   n                = T;                                                     \
+    double         zn               = buffer->samples[(write_index - n) & num_samples_mask]; \
+    double         y                = (-1 + (1 + G) * zn) / (1 - G * zn);                    \
+    buffer->samples[write_index]    = x + y;                                                 \
+	DATA[I].write_index             = (write_index + 1) & num_samples_mask;                  \
+	x + y;                                                                                   \
+})
+
+
+void freeverb_calc(ugen* u)
+{
+	freeverb_data* data     = ((freeverb_data*) u->data);
+	double         mix      = CLAMP(UGEN_IN(u, 0),0,1);
+	double         roomSize = CLAMP(UGEN_IN(u, 1),0,1);
+	double         damp     = CLAMP(UGEN_IN(u, 2),0,1);
+	double         x        = CLAMP(UGEN_IN(u, 3),0,1);
+
+	double         cf0      = COMB_FILTER(x,roomSize,damp,1557,data->combFilterDelays,0);
+	double         cf1      = COMB_FILTER(x,roomSize,damp,1617,data->combFilterDelays,1);
+	double         cf2      = COMB_FILTER(x,roomSize,damp,1491,data->combFilterDelays,2);
+	double         cf3      = COMB_FILTER(x,roomSize,damp,1422,data->combFilterDelays,3);
+	double         cf4      = COMB_FILTER(x,roomSize,damp,1277,data->combFilterDelays,4);
+	double         cf5      = COMB_FILTER(x,roomSize,damp,1356,data->combFilterDelays,5);
+	double         cf6      = COMB_FILTER(x,roomSize,damp,1188,data->combFilterDelays,6);
+	double         cf7      = COMB_FILTER(x,roomSize,damp,1116,data->combFilterDelays,7);
+
+	double         cfy      = cf0 + cf1 + cf2 + cf3 + cf3 + cf5 + cf6 + cf7;
+
+    double         ap0      = ALLPASS_FEEDBACK(cfy,0.75,225,data->allpassDelays,0);
+	double         ap1      = ALLPASS_FEEDBACK(ap1,0.75,556,data->allpassDelays,1);
+	double         ap2      = ALLPASS_FEEDBACK(ap2,0.75,441,data->allpassDelays,2);
+	double         ap3      = ALLPASS_FEEDBACK(ap3,0.75,341,data->allpassDelays,3);
+
+    double         y        = (x * (1 - mix)) + (x * ap3 * mix);
+
 	UGEN_OUT(u,0,y);
 }
