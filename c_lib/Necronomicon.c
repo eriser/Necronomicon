@@ -2796,7 +2796,7 @@ void freeverb_calc(ugen* u)
 	double         ap2      = ALLPASS_FEEDBACK(ap2,0.75,441,data->allpassDelays,2);
 	double         ap3      = ALLPASS_FEEDBACK(ap3,0.75,341,data->allpassDelays,3);
 
-    double         y        = (x * (1 - mix)) + (x * ap3 * mix);
+    double         y        = (x * (1 - mix)) + (ap3 * mix * 0.25);
 
 	UGEN_OUT(u,0,y);
 }
