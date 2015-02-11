@@ -77,9 +77,10 @@ stopTestSynth synth necro
 -- oneArgSynth f = lfsaw [f,f] 0 |> gain 0.25 >>> out 0
 
 twoArgSynth :: UGen -> UGen -> [UGen]
-twoArgSynth f ff = feedback s |> gain 0.25 |> out 0
-    where
-        s i = syncosc [f + (i * 1000),f + (i * 500)] 0 0 [ff,ff]
+twoArgSynth f ff = feedback (\i -> syncosc [f + (i * 1000),f + (i * 500)] 0 0 [ff,ff])
+                |> gain 0.25
+                |> out 0
+
 -- twoArgSynth f ff = syncosc [f,f] 0 0 [ff,ff] |> gain 0.25 >>> out 0
 -- twoArgSynth f ff = syncpulse [f,f] 0.5 (lfsaw [ff * 0.25,ff * 0.25] 0) |> lpf (lag 1 [ff,ff]) 3 >>> gain 0.25 >>> out 0
 -- twoArgSynth f ff = saw (lag 1 [f,f]) |> lpf (lag 1 [ff,ff]) 3 >>> gain 0.25 >>> out 0
