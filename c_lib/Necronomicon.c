@@ -1733,7 +1733,7 @@ void lfsaw_calc(ugen* u)
 {
 	double freq     = UGEN_IN(u, 0);
 	double phaseArg = UGEN_IN(u, 1);
-	double phase    = *((double*) u->data);
+	double phase    = *((double*) u->data) + phaseArg;
 
 	//Branchless and table-less saw
 	double        amp1      = ((double)((char)phase));
@@ -1741,7 +1741,7 @@ void lfsaw_calc(ugen* u)
 	double        delta     = phase - ((long) phase);
 	double        amplitude = LERP(amp1,amp2,delta) * RECIP_CHAR_RANGE;
 
-	*((double*) u->data) = phase + phaseArg + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
+	*((double*) u->data) = phase - phaseArg + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
 	UGEN_OUT(u, 0, amplitude);
 }
 
@@ -1749,12 +1749,12 @@ void lfpulse_calc(ugen* u)
 {
 	double freq     = UGEN_IN(u, 0);
 	double phaseArg = UGEN_IN(u, 1);
-	double phase    = *((double*) u->data);
+	double phase    = *((double*) u->data) + phaseArg;
 
 	//Branchless and table-less square
 	double amplitude = 1 | (((char)phase) >> (sizeof(char) * CHAR_BIT - 1));
 
-	*((double*) u->data) = phase + phaseArg + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
+	*((double*) u->data) = phase - phaseArg + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
 	UGEN_OUT(u, 0, amplitude);
 }
 
@@ -2107,6 +2107,11 @@ void syncosc_calc(ugen* u)
 	double a2     = C - A;          \
 	a0 * DELTA * delta2 + a1 * delta2 + a2 * DELTA + B; \
 })
+
+//==========================================
+// Randomness
+//==========================================
+
 #define RAND_RANGE(MIN,MAX) ( ((double)random() / (double) RAND_MAX) * (MAX - MIN) + MIN )
 
 typedef struct
@@ -2273,6 +2278,22 @@ void urand_calc(ugen* u)
 	UGEN_OUT(u,0,rand->value0);
 }
 
+void impulse_calc(ugen* u)
+{
+	double freqN  = UGEN_IN(u,0) * RECIP_SAMPLE_RATE;
+	double offset = UGEN_IN(u,1);
+	double phase  = *((double*) u->data) + offset;
+	double y      = 0;
+
+	if(phase + freqN >= 1)
+	{
+		y = 1;
+	}
+
+	(*(double*)u->data) = fmod(phase + freqN - offset,1);
+
+	UGEN_OUT(u,0,y);
+}
 
 //===================================
 // RBJ Filters, Audio EQ Cookbook

@@ -35,7 +35,7 @@ data UGen = UGenNum Double
           deriving (Typeable)
 
 data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Out | AuxIn | Poll | LFSaw | LFPulse | Saw | Pulse
-              | SyncSaw | SyncPulse | SyncOsc | Random | NoiseN | NoiseL | NoiseC | URandom | Range | LPF | HPF | BPF | Notch | AllPass | PeakEQ
+              | SyncSaw | SyncPulse | SyncOsc | Random | NoiseN | NoiseL | NoiseC | URandom | Impulse | Range |ExpRange | LPF | HPF | BPF | Notch | AllPass | PeakEQ
               | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int | LPFMS20 | OnePoleMS20
               | Clip | SoftClip | Poly3 | TanH | SinDist | Wrap | DelayN Double | FreeVerb
               deriving (Show)
@@ -255,6 +255,10 @@ foreign import ccall "&lfpulse_calc" lfpulseCalc :: CUGenFunc
 lfpulse :: UGenType a => a -> a -> a
 lfpulse freq phase = ugen LFPulse lfpulseCalc accumulatorConstructor accumulatorDeconstructor [freq,phase]
 
+foreign import ccall "&impulse_calc" impulseCalc :: CUGenFunc
+impulse :: UGenType a => a -> a -> a
+impulse freq phase = ugen Impulse impulseCalc accumulatorConstructor accumulatorDeconstructor [freq,phase]
+
 foreign import ccall "&minblep_constructor"   minblepConstructor   :: CUGenFunc
 foreign import ccall "&minblep_deconstructor" minblepDeconstructor :: CUGenFunc
 
@@ -301,6 +305,10 @@ noise2 freq = ugen NoiseC lfnoiseCCalc randConstructor randDeconstructor [freq]
 foreign import ccall "&range_calc" rangeCalc :: CUGenFunc
 range :: UGenType a => a -> a -> a -> a
 range low high input = ugen Range rangeCalc nullConstructor nullDeconstructor [low,high,input]
+
+foreign import ccall "&exprange_calc" exprangeCalc :: CUGenFunc
+exprange :: UGenType a => a -> a -> a -> a
+exprange low high input = ugen ExpRange exprangeCalc nullConstructor nullDeconstructor [low,high,input]
 
 foreign import ccall "&urand_constructor"   urandConstructor   :: CUGenFunc
 foreign import ccall "&urand_deconstructor" urandDeconstructor :: CUGenFunc
