@@ -39,7 +39,7 @@ noArgSynth :: UGen
 noArgSynth = sin 0.1 |> out 0
 
 oneArgSynth :: UGen -> [UGen]
-oneArgSynth f = saw 40 |> lpf (lag 6 [f,f]) 6 |> freeverb 0.25 0.95 0.95 |> gain 0.5 |> out 0
+oneArgSynth f = saw (noise2 3 |> range 40 1000) |> gain (sin 0.1 |> range 0.5 1.0) |> lpf (lag 6 [f,f]) 6 |> freeverb 0.25 0.95 0.95 |> gain 0.5 |> out 0
 -- oneArgSynth f = saw 40 |> lpf (lag 6 [f,f]) 6 +> delayN 1.0 1.0 |> gain 0.5 |> out 0
 
 {-
