@@ -2210,8 +2210,18 @@ void range_calc(ugen* u)
 {
 	double min   = UGEN_IN(u,0);
 	double range = UGEN_IN(u,1) - min;
-	double in    = UGEN_IN(u,2);
+	double in    = CLAMP(UGEN_IN(u,2),-1,1) * 0.5 + 0.5;
 	double amp   = (in * range) + min;
+
+	UGEN_OUT(u, 0, amp);
+}
+
+void exprange_calc(ugen* u)
+{
+	double min   = UGEN_IN(u,0);
+	double range = UGEN_IN(u,1) - min;
+	double in    = CLAMP(UGEN_IN(u,2),-1,1) * 0.5 + 0.5;
+	double amp   = (pow(range,in)) + min;
 
 	UGEN_OUT(u, 0, amp);
 }

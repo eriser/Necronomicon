@@ -663,6 +663,7 @@ compileUGen ugen args key = compileUGenWithConstructorArgs ugen nullPtr args key
 ------------------------------------------
 -- Testing Functions
 ------------------------------------------
+
 makeAndStartNecro :: IO NecroVars
 makeAndStartNecro = do
     necroVars <- mkNecroVars
@@ -677,3 +678,11 @@ testSynth synth args necroVars = do
 
 stopTestSynth :: Synth -> NecroVars -> IO()
 stopTestSynth synth necroVars = runNecroState (stopSynth synth) necroVars >> return ()
+
+------------------------------------------
+-- Experimental
+------------------------------------------
+
+-- data UGenType a => SynthGen a = SynthGen {synthGenName :: String, synthGenUGen :: a}
+-- synthGen :: UGenType a => String -> Int -> a -> a
+-- synthGen name outBus input = SynthGen name (out outBus input)

@@ -39,12 +39,12 @@ noArgSynth :: UGen
 noArgSynth = sin 0.1 |> out 0
 
 oneArgSynth :: UGen -> [UGen]
-oneArgSynth f = saw  (noise2 3 |> range 40 1000)
-             |> gain (sin 0.35 |> range 0.5 1.0)
-             |> lpf  (lag 6 [f,f]) 6
+oneArgSynth f = saw      (noise2 3 |> range 40 1000)
+             |> gain     (sin 0.35 |> range 0.5 1.0)
+             |> lpf      (lag 6 [f,f]) 6
              |> freeverb 1.0 0.95 0.95
-             |> gain 0.1
-             |> out 0
+             |> gain     0.1
+             |> out      0
 
 -- oneArgSynth f = saw 40 |> lpf (lag 6 [f,f]) 6 +> delayN 1.0 1.0 |> gain 0.5 |> out 0
 
@@ -78,8 +78,8 @@ stopTestSynth synth necro
 
 twoArgSynth :: UGen -> UGen -> [UGen]
 twoArgSynth f ff = feedback (\i -> syncosc [f + (i * 1000),f + (i * 500)] 0 0 [ff,ff])
-                |> gain 0.25
-                |> out 0
+                |> gain (line 0.5 |> gain 0.1)
+                |> out  0
 
 -- twoArgSynth f ff = syncosc [f,f] 0 0 [ff,ff] |> gain 0.25 >>> out 0
 -- twoArgSynth f ff = syncpulse [f,f] 0.5 (lfsaw [ff * 0.25,ff * 0.25] 0) |> lpf (lag 1 [ff,ff]) 3 >>> gain 0.25 >>> out 0
