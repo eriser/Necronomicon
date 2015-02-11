@@ -260,13 +260,16 @@ foreign import ccall "&impulse_calc" impulseCalc :: CUGenFunc
 impulse :: UGenType a => a -> a -> a
 impulse freq phase = ugen Impulse impulseCalc accumulatorConstructor accumulatorDeconstructor [freq,phase]
 
+foreign import ccall "&dust_constructor"   dustConstructor   :: CUGenFunc
+foreign import ccall "&dust_deconstructor" dustDeconstructor :: CUGenFunc
+
 foreign import ccall "&dust_calc" dustCalc :: CUGenFunc
 dust :: UGenType a => a -> a
-dust density = ugen Dust dustCalc accumulatorConstructor accumulatorDeconstructor [density]
+dust density = ugen Dust dustCalc dustConstructor dustDeconstructor [density]
 
 foreign import ccall "&dust2_calc" dust2Calc :: CUGenFunc
 dust2 :: UGenType a => a -> a
-dust2 density = ugen Dust2 dust2Calc accumulatorConstructor accumulatorDeconstructor [density]
+dust2 density = ugen Dust2 dust2Calc dustConstructor dustDeconstructor [density]
 
 foreign import ccall "&minblep_constructor"   minblepConstructor   :: CUGenFunc
 foreign import ccall "&minblep_deconstructor" minblepDeconstructor :: CUGenFunc

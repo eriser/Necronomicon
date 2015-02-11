@@ -2295,34 +2295,67 @@ void impulse_calc(ugen* u)
 	UGEN_OUT(u,0,y);
 }
 
+typedef struct
+{
+	double phase;
+	double period;
+} dust_t;
+
+void dust_constructor(ugen* u)
+{
+	dust_t* dust = malloc(sizeof(dust_t));
+	dust->phase  = 0;
+	dust->period = -1;
+	u->data = dust;
+}
+
+void dust_deconstructor(ugen* u)
+{
+	free(u->data);
+}
+
 void dust_calc(ugen* u)
 {
-	double density = UGEN_IN(u,0) * RECIP_SAMPLE_RATE;
-	double phase   = *((double*) u->data) + RAND_RANGE(0,density * 2);
+	dust_t* dust   = (dust_t*)u->data;
+	double density = UGEN_IN(u,0);
 	double y       = 0;
 
-	if(phase >= 1)
-	{
-		y = RAND_RANGE(-1,1);
-	}
+	if(dust->period == -1)
+		dust->period = RAND_RANGE(0,2);
 
-	(*(double*)u->data) = fmod(phase,1);
+	if(dust->phase + density * RECIP_SAMPLE_RATE >= dust->period)
+	{
+		y            = RAND_RANGE(-1,1);
+		dust->phase  = 0;
+		dust->period = RAND_RANGE(0,2);
+	}
+	else
+	{
+		dust->phase = dust->phase + density  * RECIP_SAMPLE_RATE;
+	}
 
 	UGEN_OUT(u,0,y);
 }
 
 void dust2_calc(ugen* u)
 {
-	double density = UGEN_IN(u,0) * RECIP_SAMPLE_RATE;
-	double phase   = *((double*) u->data) + RAND_RANGE(0,density * 2);
+	dust_t* dust   = (dust_t*)u->data;
+	double density = UGEN_IN(u,0);
 	double y       = 0;
 
-	if(phase >= 1)
-	{
-		y = RAND_RANGE(0,1);
-	}
+	if(dust->period == -1)
+		dust->period = RAND_RANGE(0,2);
 
-	(*(double*)u->data) = fmod(phase,1);
+	if(dust->phase + density * RECIP_SAMPLE_RATE >= dust->period)
+	{
+		y            = RAND_RANGE(0,1);
+		dust->phase  = 0;
+		dust->period = RAND_RANGE(0,2);
+	}
+	else
+	{
+		dust->phase = dust->phase + RECIP_SAMPLE_RATE;
+	}
 
 	UGEN_OUT(u,0,y);
 }

@@ -36,7 +36,7 @@ testSound2 = play (isDown keyW) (isDown keyW) noArgSynth
          <|> play (isDown keyD) (isDown keyD) threeSynth  440 880 66.6
 
 noArgSynth :: UGen
-noArgSynth = dust 2 |> out 0
+noArgSynth = dust 10 |> out 0
 -- noArgSynth = impulse 2 0.5 |> out 0
 
 oneArgSynth :: UGen -> [UGen]
