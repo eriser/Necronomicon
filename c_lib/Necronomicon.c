@@ -2692,6 +2692,7 @@ void wrap_calc(ugen* u)
 typedef struct
 {
 	delay_data* combFilterDelays;
+	double*     combz1s;
 	delay_data* allpassDelays;
 } freeverb_data;
 
@@ -2699,6 +2700,7 @@ void freeverb_constructor(ugen* u)
 {
 	freeverb_data* freeverb       = malloc(sizeof(freeverb_data));
 	freeverb->combFilterDelays    = malloc(sizeof(delay_data) * 8);
+	freeverb->combz1s             = malloc(sizeof(double) * 8);
 	freeverb->allpassDelays       = malloc(sizeof(delay_data) * 4);
 
 	delay_data data0 = { acquire_sample_buffer(1557), 0 };
@@ -2718,6 +2720,15 @@ void freeverb_constructor(ugen* u)
 	delay_data data7 = { acquire_sample_buffer(1116), 0 };
 	freeverb->combFilterDelays[7] = data7;
 
+	freeverb->combz1s[0] = 0;
+	freeverb->combz1s[1] = 0;
+	freeverb->combz1s[2] = 0;
+	freeverb->combz1s[3] = 0;
+	freeverb->combz1s[4] = 0;
+	freeverb->combz1s[5] = 0;
+	freeverb->combz1s[6] = 0;
+	freeverb->combz1s[7] = 0;
+
 	delay_data data8 = { acquire_sample_buffer(225), 0 };
 	freeverb->allpassDelays[0]    = data8;
 	delay_data data9 = { acquire_sample_buffer(556), 0 };
@@ -2735,40 +2746,41 @@ void freeverb_deconstructor(ugen* u)
 	freeverb_data* freeverb = (freeverb_data*) u->data;
 	int i;
 	for(i=0;i<8;++i)
+	{
 		release_sample_buffer(freeverb->combFilterDelays[i].buffer);
+		// free(freeverb->combz1s);
+	}
 	for(i=0;i<4;++i)
 		release_sample_buffer(freeverb->allpassDelays[i].buffer);
 	free(u->data);
 }
 
 //Should the delayed signal in this be x or y or x + y???
-#define COMB_FILTER(X,R,D,T,DATA,I)                                                          \
+#define COMB_FILTER(X,R,D,N,DATA,ZS,I)                                                       \
 ({                                                                                           \
-	double         damp             = D * 1.0;                                               \
-	double         roomSize         = R * 0.30 + 0.7;                                        \
 	sample_buffer* buffer           = DATA[I].buffer;                                        \
 	unsigned int   write_index      = DATA[I].write_index;                                   \
 	unsigned int   num_samples_mask = buffer->num_samples_mask;                              \
-	unsigned int   n                = T;                                                     \
-	double         zn               = buffer->samples[(write_index - n) & num_samples_mask]; \
-	double         z1               = buffer->samples[(write_index - 1) & num_samples_mask]; \
-	double         y                = zn / (1 - roomSize * ((1-damp) / (1-damp * z1)) * zn); \
-	buffer->samples[write_index]    = x + y;                                                 \
+	double         damp1            = D * 0.4;                                               \
+	double         damp2            = 1 - damp1;                                             \
+	double         feedback         = R * 0.28 + 0.7;                                        \
+	double         output           = buffer->samples[write_index];                          \
+	ZS[I]                           = output * damp2 + ZS[I] * damp1;                        \
+	buffer->samples[write_index]    = X + ZS[I] * feedback;                                  \
 	DATA[I].write_index             = (write_index + 1) & num_samples_mask;                  \
-	x + y;                                                                                   \
+	output;                                                                                  \
 })
 
-#define ALLPASS_FEEDBACK(X,G,T,DATA,I)                                                       \
+#define ALLPASS_FEEDBACK(X,F,N,DATA,I)                                                       \
 ({                                                                                           \
     sample_buffer* buffer           = DATA[I].buffer;                                        \
     unsigned int   write_index      = DATA[I].write_index;                                   \
     unsigned int   num_samples_mask = buffer->num_samples_mask;                              \
-    unsigned int   n                = T;                                                     \
-    double         zn               = buffer->samples[(write_index - n) & num_samples_mask]; \
-    double         y                = (-1 + (1 + G) * zn) / (1 - G * zn);                    \
-    buffer->samples[write_index]    = x + y;                                                 \
+    double         bufout           = buffer->samples[write_index];                          \
+	double         output           = -X + bufout;                                           \
+    buffer->samples[write_index]    = X + bufout * F;                                        \
 	DATA[I].write_index             = (write_index + 1) & num_samples_mask;                  \
-	x + y;                                                                                   \
+	output;                                                                                  \
 })
 
 
@@ -2780,23 +2792,23 @@ void freeverb_calc(ugen* u)
 	double         damp     = CLAMP(UGEN_IN(u, 2),0,1);
 	double         x        = CLAMP(UGEN_IN(u, 3),0,1);
 
-	double         cf0      = COMB_FILTER(x,roomSize,damp,1557,data->combFilterDelays,0);
-	double         cf1      = COMB_FILTER(x,roomSize,damp,1617,data->combFilterDelays,1);
-	double         cf2      = COMB_FILTER(x,roomSize,damp,1491,data->combFilterDelays,2);
-	double         cf3      = COMB_FILTER(x,roomSize,damp,1422,data->combFilterDelays,3);
-	double         cf4      = COMB_FILTER(x,roomSize,damp,1277,data->combFilterDelays,4);
-	double         cf5      = COMB_FILTER(x,roomSize,damp,1356,data->combFilterDelays,5);
-	double         cf6      = COMB_FILTER(x,roomSize,damp,1188,data->combFilterDelays,6);
-	double         cf7      = COMB_FILTER(x,roomSize,damp,1116,data->combFilterDelays,7);
+	double         cf0      = COMB_FILTER(x,roomSize,damp,1557,data->combFilterDelays,data->combz1s,0);
+	double         cf1      = COMB_FILTER(x,roomSize,damp,1617,data->combFilterDelays,data->combz1s,1);
+	double         cf2      = COMB_FILTER(x,roomSize,damp,1491,data->combFilterDelays,data->combz1s,2);
+	double         cf3      = COMB_FILTER(x,roomSize,damp,1422,data->combFilterDelays,data->combz1s,3);
+	double         cf4      = COMB_FILTER(x,roomSize,damp,1277,data->combFilterDelays,data->combz1s,4);
+	double         cf5      = COMB_FILTER(x,roomSize,damp,1356,data->combFilterDelays,data->combz1s,5);
+	double         cf6      = COMB_FILTER(x,roomSize,damp,1188,data->combFilterDelays,data->combz1s,6);
+	double         cf7      = COMB_FILTER(x,roomSize,damp,1116,data->combFilterDelays,data->combz1s,7);
 
 	double         cfy      = cf0 + cf1 + cf2 + cf3 + cf3 + cf5 + cf6 + cf7;
 
-    double         ap0      = ALLPASS_FEEDBACK(cfy,0.75,225,data->allpassDelays,0);
-	double         ap1      = ALLPASS_FEEDBACK(ap1,0.75,556,data->allpassDelays,1);
-	double         ap2      = ALLPASS_FEEDBACK(ap2,0.75,441,data->allpassDelays,2);
-	double         ap3      = ALLPASS_FEEDBACK(ap3,0.75,341,data->allpassDelays,3);
+    double         ap0      = ALLPASS_FEEDBACK(cfy,0.5,225,data->allpassDelays,0);
+	double         ap1      = ALLPASS_FEEDBACK(ap0,0.5,556,data->allpassDelays,1);
+	double         ap2      = ALLPASS_FEEDBACK(ap1,0.5,441,data->allpassDelays,2);
+	double         ap3      = ALLPASS_FEEDBACK(ap2,0.5,341,data->allpassDelays,3);
 
-    double         y        = (x * (1 - mix)) + (ap3 * mix * 0.25);
+    double         y        = ((x * (1 - mix)) + (ap3 * mix * 1.0) ) * 0.015f;
 
 	UGEN_OUT(u,0,y);
 }
