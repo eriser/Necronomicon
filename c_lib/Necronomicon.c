@@ -1733,7 +1733,7 @@ void lfsaw_calc(ugen* u)
 {
 	double freq     = UGEN_IN(u, 0);
 	double phaseArg = UGEN_IN(u, 1);
-	double phase    = *((double*) u->data) + phaseArg;
+	double phase    = *((double*) u->data);
 
 	//Branchless and table-less saw
 	double        amp1      = ((double)((char)phase));
@@ -1741,7 +1741,7 @@ void lfsaw_calc(ugen* u)
 	double        delta     = phase - ((long) phase);
 	double        amplitude = LERP(amp1,amp2,delta) * RECIP_CHAR_RANGE;
 
-	*((double*) u->data) = phase - phaseArg + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
+	*((double*) u->data) = phase + phaseArg + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
 	UGEN_OUT(u, 0, amplitude);
 }
 
@@ -1749,12 +1749,12 @@ void lfpulse_calc(ugen* u)
 {
 	double freq     = UGEN_IN(u, 0);
 	double phaseArg = UGEN_IN(u, 1);
-	double phase    = *((double*) u->data) + phaseArg;
+	double phase    = *((double*) u->data);
 
 	//Branchless and table-less square
 	double amplitude = 1 | (((char)phase) >> (sizeof(char) * CHAR_BIT - 1));
 
-	*((double*) u->data) = phase - phaseArg + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
+	*((double*) u->data) = phase + phaseArg + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
 	UGEN_OUT(u, 0, amplitude);
 }
 
@@ -2282,7 +2282,7 @@ void impulse_calc(ugen* u)
 {
 	double freqN  = UGEN_IN(u,0) * RECIP_SAMPLE_RATE;
 	double offset = UGEN_IN(u,1);
-	double phase  = *((double*) u->data) + offset;
+	double phase  = *((double*) u->data);
 	double y      = 0;
 
 	if(phase + freqN >= 1)
@@ -2290,7 +2290,39 @@ void impulse_calc(ugen* u)
 		y = 1;
 	}
 
-	(*(double*)u->data) = fmod(phase + freqN - offset,1);
+	(*(double*)u->data) = fmod(phase + freqN,1);
+
+	UGEN_OUT(u,0,y);
+}
+
+void dust_calc(ugen* u)
+{
+	double density = UGEN_IN(u,0) * RECIP_SAMPLE_RATE;
+	double phase   = *((double*) u->data) + RAND_RANGE(0,density * 2);
+	double y       = 0;
+
+	if(phase >= 1)
+	{
+		y = RAND_RANGE(-1,1);
+	}
+
+	(*(double*)u->data) = fmod(phase,1);
+
+	UGEN_OUT(u,0,y);
+}
+
+void dust2_calc(ugen* u)
+{
+	double density = UGEN_IN(u,0) * RECIP_SAMPLE_RATE;
+	double phase   = *((double*) u->data) + RAND_RANGE(0,density * 2);
+	double y       = 0;
+
+	if(phase >= 1)
+	{
+		y = RAND_RANGE(0,1);
+	}
+
+	(*(double*)u->data) = fmod(phase,1);
 
 	UGEN_OUT(u,0,y);
 }

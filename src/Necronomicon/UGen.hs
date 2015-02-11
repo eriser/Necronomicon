@@ -35,7 +35,7 @@ data UGen = UGenNum Double
           deriving (Typeable)
 
 data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Out | AuxIn | Poll | LFSaw | LFPulse | Saw | Pulse
-              | SyncSaw | SyncPulse | SyncOsc | Random | NoiseN | NoiseL | NoiseC | URandom | Impulse | Range |ExpRange | LPF | HPF | BPF | Notch | AllPass | PeakEQ
+              | SyncSaw | SyncPulse | SyncOsc | Random | NoiseN | NoiseL | NoiseC | URandom | Dust | Dust2 | Impulse | Range |ExpRange | LPF | HPF | BPF | Notch | AllPass | PeakEQ
               | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int | LPFMS20 | OnePoleMS20
               | Clip | SoftClip | Poly3 | TanH | SinDist | Wrap | DelayN Double | FreeVerb
               deriving (Show)
@@ -244,6 +244,7 @@ feedback f = expand . localOut 0 $ output
         expand arr = arr ++ (foldl (\acc i -> acc ++ (localOut i [0])) [] (drop (length arr) [0..(numInputs - 1)]))
 
 --oscillators
+--dictionary passing style ugens?
 foreign import ccall "&accumulator_constructor" accumulatorConstructor :: CUGenFunc
 foreign import ccall "&accumulator_deconstructor" accumulatorDeconstructor :: CUGenFunc
 
@@ -258,6 +259,14 @@ lfpulse freq phase = ugen LFPulse lfpulseCalc accumulatorConstructor accumulator
 foreign import ccall "&impulse_calc" impulseCalc :: CUGenFunc
 impulse :: UGenType a => a -> a -> a
 impulse freq phase = ugen Impulse impulseCalc accumulatorConstructor accumulatorDeconstructor [freq,phase]
+
+foreign import ccall "&dust_calc" dustCalc :: CUGenFunc
+dust :: UGenType a => a -> a
+dust density = ugen Dust dustCalc accumulatorConstructor accumulatorDeconstructor [density]
+
+foreign import ccall "&dust2_calc" dust2Calc :: CUGenFunc
+dust2 :: UGenType a => a -> a
+dust2 density = ugen Dust2 dust2Calc accumulatorConstructor accumulatorDeconstructor [density]
 
 foreign import ccall "&minblep_constructor"   minblepConstructor   :: CUGenFunc
 foreign import ccall "&minblep_deconstructor" minblepDeconstructor :: CUGenFunc
