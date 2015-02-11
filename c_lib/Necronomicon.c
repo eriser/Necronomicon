@@ -2755,6 +2755,8 @@ void freeverb_deconstructor(ugen* u)
 	free(u->data);
 }
 
+const double fixed_gain = 0.015;
+
 //Should the delayed signal in this be x or y or x + y???
 #define COMB_FILTER(X,R,D,N,DATA,ZS,I)                                                       \
 ({                                                                                           \
@@ -2766,7 +2768,7 @@ void freeverb_deconstructor(ugen* u)
 	double         feedback         = R * 0.28 + 0.7;                                        \
 	double         y                = buffer->samples[write_index];                          \
 	ZS[I]                           = y * damp2 + ZS[I] * damp1;                             \
-	buffer->samples[write_index]    = X + ZS[I] * feedback;                                  \
+	buffer->samples[write_index]    = (X * fixed_gain) + ZS[I] * feedback;                   \
 	DATA[I].write_index             = (write_index + 1) & num_samples_mask;                  \
 	y;                                                                                       \
 })
@@ -2808,7 +2810,7 @@ void freeverb_calc(ugen* u)
 	double         ap2      = ALLPASS_FEEDBACK(ap1,0.5,441,data->allpassDelays,2);
 	double         ap3      = ALLPASS_FEEDBACK(ap2,0.5,341,data->allpassDelays,3);
 
-    double         y        = ((x * (1 - mix)) + (ap3 * mix * 1.0) ) * 0.015f;
+    double         y        = (x * (1 - mix)) + (ap3 * mix * 1.0);
 
 	UGEN_OUT(u,0,y);
 }
