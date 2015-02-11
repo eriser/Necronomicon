@@ -2764,11 +2764,11 @@ void freeverb_deconstructor(ugen* u)
 	double         damp1            = D * 0.4;                                               \
 	double         damp2            = 1 - damp1;                                             \
 	double         feedback         = R * 0.28 + 0.7;                                        \
-	double         output           = buffer->samples[write_index];                          \
-	ZS[I]                           = output * damp2 + ZS[I] * damp1;                        \
+	double         y                = buffer->samples[write_index];                          \
+	ZS[I]                           = y * damp2 + ZS[I] * damp1;                             \
 	buffer->samples[write_index]    = X + ZS[I] * feedback;                                  \
 	DATA[I].write_index             = (write_index + 1) & num_samples_mask;                  \
-	output;                                                                                  \
+	y;                                                                                       \
 })
 
 #define ALLPASS_FEEDBACK(X,F,N,DATA,I)                                                       \
@@ -2777,10 +2777,10 @@ void freeverb_deconstructor(ugen* u)
     unsigned int   write_index      = DATA[I].write_index;                                   \
     unsigned int   num_samples_mask = buffer->num_samples_mask;                              \
     double         bufout           = buffer->samples[write_index];                          \
-	double         output           = -X + bufout;                                           \
+	double         y                = -X + bufout;                                           \
     buffer->samples[write_index]    = X + bufout * F;                                        \
 	DATA[I].write_index             = (write_index + 1) & num_samples_mask;                  \
-	output;                                                                                  \
+	y;                                                                                       \
 })
 
 
