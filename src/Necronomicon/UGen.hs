@@ -167,10 +167,7 @@ instance UGenType [UGen] where
     toUGenList us = us
     consume us i = return (us, i)
     prFeedback us i = (us, i)
-    uappend us us' = us ++ foldl (\acc u -> acc ++ [replicate longest u]) [] us'
-        where
-
-            longest = foldr (\u longest -> if length u > longest then length us else longest) 0 us
+    uappend us us' = us ++ map (: []) us'
 
 ----------------------------------------------------
 -- UGen Bindings
