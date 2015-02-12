@@ -227,10 +227,15 @@ foreign import ccall "&env_calc" envCalc          :: CUGenFunc
 env :: UGenType a => [Double] -> [Double] -> a -> a -> a
 env values durations curve x = ugen Env envCalc lineConstructor lineDeconstructor args
     where
-        args = [curve,x]
-            `uappend` [UGenNum $ foldr (+) 0 durations, UGenNum . fromIntegral $ length values,UGenNum . fromIntegral $ length durations]
+        valuesLength    = length values
+        durationsLength = length durations
+        args            = [curve,x]
+            `uappend` [(\(len,_) -> UGenNum len) $ findDuration (0.0,0), UGenNum (fromIntegral valuesLength),UGenNum (fromIntegral durationsLength)]
             `uappend` fmap UGenNum values
             `uappend` fmap UGenNum durations
+        findDuration (len,count)
+            | count > valuesLength = (len,count)
+            | otherwise            = findDuration (len + (durations !! (mod count durationsLength)),count + 1)
 
 foreign import ccall "&out_calc" outCalc :: CUGenFunc
 out :: UGenType a => a -> a -> a
