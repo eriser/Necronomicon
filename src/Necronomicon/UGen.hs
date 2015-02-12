@@ -34,7 +34,7 @@ data UGen = UGenNum Double
           | UGenFunc UGenUnit CUGenFunc CUGenFunc CUGenFunc [UGen]
           deriving (Typeable)
 
-data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Out | AuxIn | Poll | LFSaw | LFPulse | Saw | Pulse
+data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Env | Out | AuxIn | Poll | LFSaw | LFPulse | Saw | Pulse
               | SyncSaw | SyncPulse | SyncOsc | Random | NoiseN | NoiseL | NoiseC | URandom | Dust | Dust2 | Impulse | Range |ExpRange | LPF | HPF | BPF | Notch | AllPass | PeakEQ
               | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int | LPFMS20 | OnePoleMS20
               | Clip | SoftClip | Poly3 | TanH | SinDist | Wrap | DelayN Double | FreeVerb
@@ -126,6 +126,8 @@ class UGenType a where
     toUGenList :: a -> [UGen]
     consume :: a -> Int -> Compiled ([UGen], Int) -- used during compiling to correctly handle synth argument compilation
     prFeedback :: a -> Int -> ([UGen], Int)
+    uappend :: [a] -> [UGen] -> [a]
+
 
 instance (UGenType b) => UGenType (UGen -> b)  where
     ugen _ _ _ _ _ = undefined -- Should never be reached
@@ -133,6 +135,7 @@ instance (UGenType b) => UGenType (UGen -> b)  where
     toUGenList u = undefined -- Should neverbe reached
     consume f i = compileSynthArg i >>= \arg -> consume (f arg) (i + 1)
     prFeedback f i = prFeedback (f $ localIn i) (i + 1)
+    uappend us _ = us
 
 instance UGenType UGen where
     ugen name calc constructor deconstructor args = UGenFunc name calc constructor deconstructor args
@@ -140,6 +143,7 @@ instance UGenType UGen where
     toUGenList u = [u]
     consume u i = return ([u], i)
     prFeedback u i = ([u], i)
+    uappend us us' = us ++ us'
 
 instance UGenType [UGen] where
     ugen name calc constructor deconstructor args = expand 0
@@ -163,6 +167,7 @@ instance UGenType [UGen] where
     toUGenList us = us
     consume us i = return (us, i)
     prFeedback us i = (us, i)
+    uappend us us' = us ++ [us']
 
 ----------------------------------------------------
 -- UGen Bindings
@@ -211,6 +216,18 @@ line length = ugen Line lineCalc lineConstructor lineDeconstructor [length]
 foreign import ccall "&perc_calc" percCalc :: CUGenFunc
 perc :: UGenType a => a -> a -> a -> a -> a
 perc length peak curve x = ugen Perc percCalc lineConstructor lineDeconstructor [length,peak,curve,x]
+
+-- foreign import ccall "&env_constructor"   envConstructor   :: CUGenFunc
+-- foreign import ccall "&env_deconstructor" envDeconstructor :: CUGenFunc
+foreign import ccall "&env_calc" envCalc          :: CUGenFunc
+
+env :: UGenType a => [Double] -> [Double] -> a -> a -> a
+env values durations curve x = ugen Env envCalc lineConstructor lineDeconstructor (traceShow ([UGenNum $ foldr (+) 0 durations, UGenNum . fromIntegral $ length values,UGenNum . fromIntegral $ length durations] `uappend` fmap UGenNum values `uappend` fmap UGenNum durations) args)
+    where
+        args = [curve,x]
+            `uappend` [UGenNum $ foldr (+) 0 durations, UGenNum . fromIntegral $ length values,UGenNum . fromIntegral $ length durations]
+            `uappend` fmap UGenNum values
+            `uappend` fmap UGenNum durations
 
 foreign import ccall "&out_calc" outCalc :: CUGenFunc
 out :: UGenType a => a -> a -> a

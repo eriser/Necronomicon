@@ -1294,6 +1294,91 @@ void perc_calc(ugen* u)
 	UGEN_OUT(u, 0, y);
 }
 
+#define OFF_INDEX(OFFSET,INDEX,ARRAY)
+
+void env_calc(ugen* u)
+{
+	double       curve      = UGEN_IN(u, 0);
+	double       x          = UGEN_IN(u, 1);
+	double       length     = UGEN_IN(u, 2) * SAMPLE_RATE;
+	int          valsLength = (int) UGEN_IN(u, 3);
+	int          dursLength = (int) UGEN_IN(u, 4);
+	int          valsOffset = 5;
+	int          dursOffset = 6 + valsLength;
+	unsigned int line_time  = *((unsigned int*) u->data);
+	double       line_timed = (double) line_time / (double)length;
+	double       y          = 0;
+
+	if(valsLength == 0 || dursLength == 0)
+	{
+		// printf("curve: %f\n",UGEN_IN(u, 0));
+		// printf("x: %f\n",UGEN_IN(u, 1));
+		// printf("length: %f\n",UGEN_IN(u, 2));
+		// printf("valsLength: %f\n",UGEN_IN(u, 3));
+		// printf("dursLength: %f\n",UGEN_IN(u, 4));
+		// printf("line_time: %f\n",line_time);
+		// printf("line_timed: %f\n",line_timed);
+		// printf("Vals or durs length 0.\n");
+		// if(valsLength == 0)
+			// printf("Vals length 0.\n");
+
+		// if(dursLength == 0)
+			// printf("Durs length 0.\n");
+
+		UGEN_OUT(u,0,0);
+	}
+	else
+	{
+		double currentDuration   = 0;
+		double nextDuration      = 0;
+
+		double curTotalDuration  = 0;
+		double nextTotalDuration = 0;
+
+		double currentValue      = 0;
+		double nextValue         = 0;
+
+		int i;
+	    for(i=0;i<valsLength - 1;++i)
+	    {
+	    	currentDuration   = UGEN_IN(u,(i     % dursLength)+dursOffset);
+			nextDuration      = UGEN_IN(u,(i + 1 % dursLength)+dursOffset);
+
+	    	curTotalDuration += currentDuration;
+	    	nextTotalDuration = curTotalDuration + nextDuration;
+
+			currentValue      = UGEN_IN(u, i                  +valsOffset);
+			nextValue         = UGEN_IN(u,(i + 1 % valsLength)+valsOffset);
+
+	    	if(nextTotalDuration > line_timed)
+	    		break;
+	    }
+
+	    //Wtf is with negative values?
+    	if(curve < 0)
+	    {
+	    	curve = 1 / ((curve * -1) + 1);
+	    }
+	    else
+	    {
+	    	curve = curve + 1;
+	    }
+
+	    if(line_time >= length)
+		{
+			try_schedule_current_synth_for_removal();
+		}
+	    else
+	    {
+			double delta               = pow((line_timed - curTotalDuration) / (nextTotalDuration - curTotalDuration), curve);
+			y                          = ((1-delta) * currentValue + delta * nextValue) * x;
+	    	*((unsigned int*) u->data) = line_time + 1;
+	    }
+
+		UGEN_OUT(u, 0, y);
+	}
+}
+
 void sin_constructor(ugen* u)
 {
 	u->data = malloc(DOUBLE_SIZE); // Phase accumulator
