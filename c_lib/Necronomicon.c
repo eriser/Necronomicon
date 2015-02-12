@@ -1311,7 +1311,6 @@ void env_calc(ugen* u)
 
 	if(valsLength == 0 || dursLength == 0)
 	{
-		printf("Vals or durs length 0.\n");
 		if(valsLength == 0)
 			printf("Vals length 0.\n");
 
@@ -1322,25 +1321,6 @@ void env_calc(ugen* u)
 	}
 	else
 	{
-		// printf("curve: %f\n",UGEN_IN(u, 0));
-		// printf("x: %f\n",UGEN_IN(u, 1));
-		// printf("length: %f\n",UGEN_IN(u, 2));
-		// printf("valsLength: %f\n",UGEN_IN(u, 3));
-		// printf("dursLength: %f\n",UGEN_IN(u, 4));
-		// printf("line_time: %f\n",line_time);
-		// printf("line_timed: %f\n",line_timed);
-
-		// int i;
-		// for(i=0;i<valsLength;++i)
-	    // {
-			// printf("vals %f: %f\n",i,UGEN_IN(u, i+valsOffset));
-		// }
-
-		// for(i=0;i<dursLength;++i)
-		// {
-			// printf("durs %f: %f\n",i,UGEN_IN(u, i+dursOffset));
-		// }
-
 		double currentDuration   = 0;
 		double nextDuration      = 0;
 
@@ -1366,35 +1346,20 @@ void env_calc(ugen* u)
 	    		break;
 	    }
 
-	    //Wtf is with negative values?
-    	if(curve < 0)
-	    {
-	    	curve = 1 / ((curve * -1) + 1);
-	    }
-	    else
-	    {
-	    	curve = curve + 1;
-	    }
-
 	    if(line_time >= length)
 		{
 			try_schedule_current_synth_for_removal();
 		}
 	    else
 	    {
-			// printf("curTotalDuration: %f\n",curTotalDuration);
-			// printf("line_timed: %f\n",line_timed);
-			// printf("line_timed - curTotalDuration: %f\n",(line_timed - curTotalDuration));
-			// printf("nextDuration: %f\n",nextDuration);
-			// printf("line_timed - curTotalDuration: %f\n",(line_timed - curTotalDuration));
-			// printf("delta: %f\n",(line_timed - curTotalDuration) / nextDuration);
-			// double delta               = (line_timed - curTotalDuration) / nextDuration;
+			if(curve < 0)
+		    	curve = 1 / ((curve * -1) + 1);
+		    else
+		    	curve = curve + 1;
+
 			double delta               = pow((line_timed - curTotalDuration) / (nextTotalDuration - curTotalDuration), curve);
 			y                          = ((1-delta) * currentValue + delta * nextValue) * x;
 	    	*((unsigned int*) u->data) = line_time + 1;
-
-			// printf("currentValue: %f\n",currentValue);
-			// printf("nextValue: %f\n",nextValue);
 	    }
 
 		UGEN_OUT(u, 0, y);
