@@ -80,7 +80,7 @@ stopTestSynth synth necro
 -- oneArgSynth f = lfsaw [f,f] 0 |> gain 0.25 >>> out 0
 
 twoArgSynth :: UGen -> UGen -> [UGen]
-twoArgSynth f ff = sin [f,ff] |> env [0,1,1,0] [1] 0 >>> out  0
+twoArgSynth f ff = sin [f,ff] |> env [0,1,1,0] [3,1,3] 0 >>> out  0
 -- twoArgSynth f ff = feedback sig |> perc 5 0.1 16.0 >>> out  0
 -- twoArgSynth f ff = feedback sig |> env [0,1,1,0] [3,1,3] 0 >>> out  0
     -- where

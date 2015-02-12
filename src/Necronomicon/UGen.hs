@@ -234,8 +234,8 @@ env values durations curve x = ugen Env envCalc lineConstructor lineDeconstructo
             `uappend` fmap UGenNum values
             `uappend` fmap UGenNum durations
         findDuration (len,count)
-            | count > valuesLength = (len,count)
-            | otherwise            = findDuration (len + (durations !! (mod count durationsLength)),count + 1)
+            | count >= valuesLength -1 = (len,count)
+            | otherwise                = findDuration (len + (durations !! (mod count durationsLength)),count + 1)
 
 foreign import ccall "&out_calc" outCalc :: CUGenFunc
 out :: UGenType a => a -> a -> a
