@@ -34,7 +34,7 @@ data UGen = UGenNum Double
           | UGenFunc UGenUnit CUGenFunc CUGenFunc CUGenFunc [UGen]
           deriving (Typeable)
 
-data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Out | AuxIn | Poll | LFSaw | LFPulse | Saw | Pulse
+data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Out | AuxIn | Poll | LFSaw | LFPulse | Saw | Pulse
               | SyncSaw | SyncPulse | SyncOsc | Random | NoiseN | NoiseL | NoiseC | URandom | Dust | Dust2 | Impulse | Range |ExpRange | LPF | HPF | BPF | Notch | AllPass | PeakEQ
               | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int | LPFMS20 | OnePoleMS20
               | Clip | SoftClip | Poly3 | TanH | SinDist | Wrap | DelayN Double | FreeVerb
@@ -207,6 +207,10 @@ foreign import ccall "&line_deconstructor" lineDeconstructor :: CUGenFunc
 
 line :: UGenType a => a -> a
 line length = ugen Line lineCalc lineConstructor lineDeconstructor [length]
+
+foreign import ccall "&perc_calc" percCalc :: CUGenFunc
+perc :: UGenType a => a -> a -> a -> a -> a
+perc length peak curve x = ugen Perc percCalc lineConstructor lineDeconstructor [length,peak,curve,x]
 
 foreign import ccall "&out_calc" outCalc :: CUGenFunc
 out :: UGenType a => a -> a -> a

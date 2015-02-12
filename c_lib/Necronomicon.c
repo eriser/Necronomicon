@@ -1262,6 +1262,38 @@ void line_calc(ugen* u)
 	UGEN_OUT(u, 0, output);
 }
 
+void perc_calc(ugen* u)
+{
+	double       length    = UGEN_IN(u, 0) * SAMPLE_RATE;
+	double       peak      = UGEN_IN(u, 1);
+	double       curve     = UGEN_IN(u, 2);
+	double       x         = UGEN_IN(u, 3);
+	unsigned int line_time = *((unsigned int*) u->data);
+	double       y         = 0;
+
+	//Wtf is with negative values?
+	if(curve < 0)
+	{
+		curve = 1 / ((curve * -1) + 1);
+	}
+	else
+	{
+		curve = curve + 1;
+	}
+
+	if(line_time >= length)
+	{
+		try_schedule_current_synth_for_removal();
+	}
+	else
+	{
+		y = pow(fmax(0, 1 - (line_time / length)),curve) * x * peak;
+		*((unsigned int*) u->data) = line_time + 1;
+	}
+
+	UGEN_OUT(u, 0, y);
+}
+
 void sin_constructor(ugen* u)
 {
 	u->data = malloc(DOUBLE_SIZE); // Phase accumulator
