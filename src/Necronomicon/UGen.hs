@@ -167,7 +167,10 @@ instance UGenType [UGen] where
     toUGenList us = us
     consume us i = return (us, i)
     prFeedback us i = (us, i)
-    uappend us us' = us ++ [us']
+    uappend us us' = us ++ foldl (\acc u -> acc ++ [replicate longest u]) [] us'
+        where
+
+            longest = foldr (\u longest -> if length u > longest then length us else longest) 0 us
 
 ----------------------------------------------------
 -- UGen Bindings
@@ -222,7 +225,7 @@ perc length peak curve x = ugen Perc percCalc lineConstructor lineDeconstructor 
 foreign import ccall "&env_calc" envCalc          :: CUGenFunc
 
 env :: UGenType a => [Double] -> [Double] -> a -> a -> a
-env values durations curve x = ugen Env envCalc lineConstructor lineDeconstructor (traceShow ([UGenNum $ foldr (+) 0 durations, UGenNum . fromIntegral $ length values,UGenNum . fromIntegral $ length durations] `uappend` fmap UGenNum values `uappend` fmap UGenNum durations) args)
+env values durations curve x = ugen Env envCalc lineConstructor lineDeconstructor args
     where
         args = [curve,x]
             `uappend` [UGenNum $ foldr (+) 0 durations, UGenNum . fromIntegral $ length values,UGenNum . fromIntegral $ length durations]

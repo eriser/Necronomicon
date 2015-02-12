@@ -1304,12 +1304,23 @@ void env_calc(ugen* u)
 	int          valsLength = (int) UGEN_IN(u, 3);
 	int          dursLength = (int) UGEN_IN(u, 4);
 	int          valsOffset = 5;
-	int          dursOffset = 6 + valsLength;
+	int          dursOffset = 5 + valsLength;
 	unsigned int line_time  = *((unsigned int*) u->data);
-	double       line_timed = (double) line_time / (double)length;
+	double       line_timed = (double) line_time * RECIP_SAMPLE_RATE;
 	double       y          = 0;
 
 	if(valsLength == 0 || dursLength == 0)
+	{
+		printf("Vals or durs length 0.\n");
+		if(valsLength == 0)
+			printf("Vals length 0.\n");
+
+		if(dursLength == 0)
+			printf("Durs length 0.\n");
+
+		UGEN_OUT(u,0,0);
+	}
+	else
 	{
 		// printf("curve: %f\n",UGEN_IN(u, 0));
 		// printf("x: %f\n",UGEN_IN(u, 1));
@@ -1318,17 +1329,18 @@ void env_calc(ugen* u)
 		// printf("dursLength: %f\n",UGEN_IN(u, 4));
 		// printf("line_time: %f\n",line_time);
 		// printf("line_timed: %f\n",line_timed);
-		// printf("Vals or durs length 0.\n");
-		// if(valsLength == 0)
-			// printf("Vals length 0.\n");
 
-		// if(dursLength == 0)
-			// printf("Durs length 0.\n");
+		// int i;
+		// for(i=0;i<valsLength;++i)
+	    // {
+			// printf("vals %f: %f\n",i,UGEN_IN(u, i+valsOffset));
+		// }
 
-		UGEN_OUT(u,0,0);
-	}
-	else
-	{
+		// for(i=0;i<dursLength;++i)
+		// {
+			// printf("durs %f: %f\n",i,UGEN_IN(u, i+dursOffset));
+		// }
+
 		double currentDuration   = 0;
 		double nextDuration      = 0;
 
@@ -1341,14 +1353,14 @@ void env_calc(ugen* u)
 		int i;
 	    for(i=0;i<valsLength - 1;++i)
 	    {
-	    	currentDuration   = UGEN_IN(u,(i     % dursLength)+dursOffset);
-			nextDuration      = UGEN_IN(u,(i + 1 % dursLength)+dursOffset);
+	    	currentDuration   = nextDuration;
+			nextDuration      = UGEN_IN(u,(i % dursLength)+dursOffset);
 
 	    	curTotalDuration += currentDuration;
 	    	nextTotalDuration = curTotalDuration + nextDuration;
 
-			currentValue      = UGEN_IN(u, i                  +valsOffset);
-			nextValue         = UGEN_IN(u,(i + 1 % valsLength)+valsOffset);
+			currentValue      = UGEN_IN(u,i     + valsOffset);
+			nextValue         = UGEN_IN(u,i + 1 + valsOffset);
 
 	    	if(nextTotalDuration > line_timed)
 	    		break;
@@ -1370,9 +1382,19 @@ void env_calc(ugen* u)
 		}
 	    else
 	    {
+			// printf("curTotalDuration: %f\n",curTotalDuration);
+			// printf("line_timed: %f\n",line_timed);
+			// printf("line_timed - curTotalDuration: %f\n",(line_timed - curTotalDuration));
+			// printf("nextDuration: %f\n",nextDuration);
+			// printf("line_timed - curTotalDuration: %f\n",(line_timed - curTotalDuration));
+			// printf("delta: %f\n",(line_timed - curTotalDuration) / nextDuration);
+			// double delta               = (line_timed - curTotalDuration) / nextDuration;
 			double delta               = pow((line_timed - curTotalDuration) / (nextTotalDuration - curTotalDuration), curve);
 			y                          = ((1-delta) * currentValue + delta * nextValue) * x;
 	    	*((unsigned int*) u->data) = line_time + 1;
+
+			// printf("currentValue: %f\n",currentValue);
+			// printf("nextValue: %f\n",nextValue);
 	    }
 
 		UGEN_OUT(u, 0, y);
