@@ -40,12 +40,11 @@ noArgSynth = dust 10 |> out 0
 -- noArgSynth = impulse 2 0.5 |> out 0
 
 oneArgSynth :: UGen -> [UGen]
-oneArgSynth f = saw      (noise2 3 |> range 40 1000)
-             |> gain     (sin 0.35 |> range 0.5 1.0)
-             |> lpf      (lag 6 [f,f]) 6
-             |> freeverb 1.0 0.95 0.95
-             |> gain     0.1
-             |> out      0
+oneArgSynth f = sig |> filt |> verb |> gain 0.1 |> out 0
+    where
+        sig  = saw (noise2 3 |> range 40 1000) * (sin 0.35 |> range 0.5 1.0)
+        filt = lpf      (lag 6 [f,f]) 6
+        verb = freeverb 1.0 0.95 0.95
 
 -- oneArgSynth f = saw 40 |> lpf (lag 6 [f,f]) 6 +> delayN 1.0 1.0 |> gain 0.5 |> out 0
 
@@ -66,7 +65,7 @@ oneArgSynth f = saw      (noise2 3 |> range 40 1000)
 -- oneArgSynth f = lfsaw [f,f] 0 |> gain 0.25 >>> out 0
 
 twoArgSynth :: UGen -> UGen -> [UGen]
-twoArgSynth f ff = sin [f,ff] |> crush 2 >>> decimate 4096 >>> env [0,1,1,0] [3,1,3] 0 >>> out  0
+twoArgSynth f ff = sin [f,ff] |> crush 2 |> decimate 4096 |> env [0,1,1,0] [3,1,3] 0 |> out  0
 -- twoArgSynth f ff = feedback sig |> perc 0.01 5 0.1 16.0 >>> out  0
 -- twoArgSynth f ff = feedback sig |> env [0,1,1,0] [3,1,3] 0 >>> out  0
     -- where
@@ -79,7 +78,7 @@ twoArgSynth f ff = sin [f,ff] |> crush 2 >>> decimate 4096 >>> env [0,1,1,0] [3,
 -- twoArgSynth fx fy = sin [fx,fy] |> gain 0.1 >>> out 0
 
 threeSynth :: UGen -> UGen -> UGen -> UGen
-threeSynth fx fy fz = sin fx + sin fy + sin fz |> gain 0.1 >>> out 0
+threeSynth fx fy fz = sin fx + sin fy + sin fz |> gain 0.1 |> out 0
 
 testScene :: Signal ()
 testScene = scene [pure cam,terrainSig]
