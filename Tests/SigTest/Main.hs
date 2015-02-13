@@ -66,8 +66,8 @@ oneArgSynth f = saw      (noise2 3 |> range 40 1000)
 -- oneArgSynth f = lfsaw [f,f] 0 |> gain 0.25 >>> out 0
 
 twoArgSynth :: UGen -> UGen -> [UGen]
-twoArgSynth f ff = sin [f,ff] |> crush 2 |> decimate 4096 |> env [0,1,1,0] [3,1,3] 0 >>> out  0
--- twoArgSynth f ff = feedback sig |> perc 5 0.1 16.0 >>> out  0
+twoArgSynth f ff = sin [f,ff] |> crush 2 >>> decimate 4096 >>> env [0,1,1,0] [3,1,3] 0 >>> out  0
+-- twoArgSynth f ff = feedback sig |> perc 0.01 5 0.1 16.0 >>> out  0
 -- twoArgSynth f ff = feedback sig |> env [0,1,1,0] [3,1,3] 0 >>> out  0
     -- where
         -- sig i = syncosc [f + (i * 1000),f + (i * 500)] 0 0 [ff,ff] +> delayN 0.1 0.1

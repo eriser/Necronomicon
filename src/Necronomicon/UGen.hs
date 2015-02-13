@@ -213,23 +213,31 @@ foreign import ccall "&line_deconstructor" lineDeconstructor :: CUGenFunc
 line :: UGenType a => a -> a
 line length = ugen Line lineCalc lineConstructor lineDeconstructor [length]
 
-foreign import ccall "&perc_calc" percCalc :: CUGenFunc
-perc :: UGenType a => a -> a -> a -> a -> a
-perc length peak curve x = ugen Perc percCalc lineConstructor lineDeconstructor [length,peak,curve,x]
+-- foreign import ccall "&perc_calc" percCalc :: CUGenFunc
+-- perc :: UGenType a => a -> a -> a -> a -> a
+-- perc length peak curve x = ugen Perc percCalc lineConstructor lineDeconstructor [length,peak,curve,x]
+
+perc :: UGenType a => UGen -> UGen -> UGen -> a -> a -> a
+perc attackTime releaseTime peak curve = env [0,peak,0] [attackTime,releaseTime] curve
+
+adr :: UGenType a => UGen -> UGen -> UGen -> UGen -> UGen -> a -> a -> a
+adr attackTime decayTime releaseTime peak releaseLevel curve = env [0,peak,releaseLevel] [attackTime,decayTime,releaseTime] curve
 
 foreign import ccall "&env_calc" envCalc          :: CUGenFunc
-env :: UGenType a => [Double] -> [Double] -> a -> a -> a
+env :: UGenType a => [UGen] -> [UGen] -> a -> a -> a
 env values durations curve x = ugen Env envCalc lineConstructor lineDeconstructor args
     where
         valuesLength    = length values
         durationsLength = length durations
         args            = [curve,x]
-            `uappend` [(\(len,_) -> UGenNum len) $ findDuration (0.0,0), UGenNum (fromIntegral valuesLength),UGenNum (fromIntegral durationsLength)]
-            `uappend` fmap UGenNum values
-            `uappend` fmap UGenNum durations
-        findDuration (len,count)
-            | count >= valuesLength -1 = (len,count)
-            | otherwise                = findDuration (len + (durations !! (mod count durationsLength)),count + 1)
+            `uappend` [UGenNum (fromIntegral valuesLength),UGenNum (fromIntegral durationsLength)]
+            `uappend` values
+            `uappend` durations
+
+        -- `uappend` [(\(len,_) -> UGenNum len) $ findDuration (0,0), UGenNum (fromIntegral valuesLength),UGenNum (fromIntegral durationsLength)]
+        -- findDuration (len,count)
+            -- | count >= valuesLength -1 = (len,count)
+            -- | otherwise                = findDuration (len + (durations !! (mod count durationsLength)),count + 1)
 
 foreign import ccall "&out_calc" outCalc :: CUGenFunc
 out :: UGenType a => a -> a -> a

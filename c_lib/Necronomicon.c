@@ -1300,11 +1300,11 @@ void env_calc(ugen* u)
 {
 	double       curve      = UGEN_IN(u, 0);
 	double       x          = UGEN_IN(u, 1);
-	double       length     = UGEN_IN(u, 2) * SAMPLE_RATE;
-	int          valsLength = (int) UGEN_IN(u, 3);
-	int          dursLength = (int) UGEN_IN(u, 4);
-	int          valsOffset = 5;
-	int          dursOffset = 5 + valsLength;
+	// double       length     = UGEN_IN(u, 2) * SAMPLE_RATE;
+	int          valsLength = (int) UGEN_IN(u, 2);
+	int          dursLength = (int) UGEN_IN(u, 3);
+	int          valsOffset = 4;
+	int          dursOffset = 4 + valsLength;
 	unsigned int line_time  = *((unsigned int*) u->data);
 	double       line_timed = (double) line_time * RECIP_SAMPLE_RATE;
 	double       y          = 0;
@@ -1326,6 +1326,7 @@ void env_calc(ugen* u)
 
 		double curTotalDuration  = 0;
 		double nextTotalDuration = 0;
+		double totalDuration     = 0;
 
 		double currentValue      = 0;
 		double nextValue         = 0;
@@ -1338,6 +1339,7 @@ void env_calc(ugen* u)
 
 	    	curTotalDuration += currentDuration;
 	    	nextTotalDuration = curTotalDuration + nextDuration;
+			totalDuration     = nextTotalDuration;
 
 			currentValue      = UGEN_IN(u,i     + valsOffset);
 			nextValue         = UGEN_IN(u,i + 1 + valsOffset);
@@ -1346,7 +1348,13 @@ void env_calc(ugen* u)
 	    		break;
 	    }
 
-	    if(line_time >= length)
+		for(;i<valsLength - 1; ++i)
+		{
+			totalDuration += UGEN_IN(u,(i % dursLength)+dursOffset);
+		}
+
+	    // if(line_time >= length)
+		if(line_timed >= totalDuration)
 		{
 			try_schedule_current_synth_for_removal();
 		}
