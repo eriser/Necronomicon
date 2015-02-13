@@ -35,7 +35,7 @@ data UGen = UGenNum Double
           deriving (Typeable)
 
 data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Env | Out | AuxIn | Poll | LFSaw | LFPulse | Saw | Pulse
-              | SyncSaw | SyncPulse | SyncOsc | Random | NoiseN | NoiseL | NoiseC | URandom | Dust | Dust2 | Impulse | Range |ExpRange | LPF | HPF | BPF | Notch | AllPass | PeakEQ
+              | SyncSaw | SyncPulse | SyncOsc | Random | NoiseN | NoiseL | NoiseC | URandom | Dust | Dust2 | Impulse | Range | ExpRange | LPF | HPF | BPF | Notch | AllPass | PeakEQ
               | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int | LPFMS20 | OnePoleMS20
               | Clip | SoftClip | Poly3 | TanH | SinDist | Wrap | Crush | Decimate | DelayN Double | FreeVerb
               deriving (Show)

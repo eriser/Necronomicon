@@ -30,12 +30,10 @@ testSound = play (isDown keyW) (isUp   keyW) myCoolSynth2
         <|> play (isDown keyP) (isDown keyS) myCoolSynth2
 
 testSound2 :: Signal ()
-testSound2 =
-    -- play (isDown keyW) (isDown keyW) noArgSynth
-        --  <|> play (isDown keyA) (isDown keyA) oneArgSynth (mouseX ~> scale 20  3000)
-        --  <|>
-         play (isDown keyS) (isDown keyS) twoArgSynth (mouseX ~> scale 100 3000) (mouseY ~> scale 20 3000)
-        --  <|> play (isDown keyD) (isDown keyD) threeSynth  440 880 66.6
+testSound2 = play (isDown keyW) (isDown keyW) noArgSynth
+         <|> play (isDown keyA) (isDown keyA) oneArgSynth (mouseX ~> scale 20  3000)
+         <|> play (isDown keyS) (isDown keyS) twoArgSynth (mouseX ~> scale 100 3000) (mouseY ~> scale 20 3000)
+         <|> play (isDown keyD) (isDown keyD) threeSynth  440 880 66.6
 
 noArgSynth :: UGen
 noArgSynth = dust 10 |> out 0
@@ -50,18 +48,6 @@ oneArgSynth f = saw      (noise2 3 |> range 40 1000)
              |> out      0
 
 -- oneArgSynth f = saw 40 |> lpf (lag 6 [f,f]) 6 +> delayN 1.0 1.0 |> gain 0.5 |> out 0
-
-{-
-let oneArgSynth f = (saw 40 |> lpf (lag 6 [f,f]) 6 +> delayN 1.0 1.0 |> gain 0.5 |> out 0) :: UGen -> [UGen]
-
-necro <- makeAndStartNecro
-
-
-let mySynth = saw >>> out 0 :: UGen -> UGen
-synth <- testSynth mySynth [440] necro
-synth <- testSynth oneArgSynth [440] necro
-stopTestSynth synth necro
--}
 
 -- oneArgSynth f = saw 80 |> onePoleMS20 [f,f] >>> gain 0.25 >>> out 0
 -- oneArgSynth f = saw 80 |> lpfMS20 [f,f] 1 1 >>> gain 0.25 >>> out 0
