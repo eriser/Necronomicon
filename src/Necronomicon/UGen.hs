@@ -37,7 +37,7 @@ data UGen = UGenNum Double
 data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Env | Out | AuxIn | Poll | LFSaw | LFPulse | Saw | Pulse
               | SyncSaw | SyncPulse | SyncOsc | Random | NoiseN | NoiseL | NoiseC | URandom | Dust | Dust2 | Impulse | Range |ExpRange | LPF | HPF | BPF | Notch | AllPass | PeakEQ
               | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int | LPFMS20 | OnePoleMS20
-              | Clip | SoftClip | Poly3 | TanH | SinDist | Wrap | DelayN Double | FreeVerb
+              | Clip | SoftClip | Poly3 | TanH | SinDist | Wrap | Crush | Decimate | DelayN Double | FreeVerb
               deriving (Show)
 
 instance Show UGen where
@@ -217,10 +217,7 @@ foreign import ccall "&perc_calc" percCalc :: CUGenFunc
 perc :: UGenType a => a -> a -> a -> a -> a
 perc length peak curve x = ugen Perc percCalc lineConstructor lineDeconstructor [length,peak,curve,x]
 
--- foreign import ccall "&env_constructor"   envConstructor   :: CUGenFunc
--- foreign import ccall "&env_deconstructor" envDeconstructor :: CUGenFunc
 foreign import ccall "&env_calc" envCalc          :: CUGenFunc
-
 env :: UGenType a => [Double] -> [Double] -> a -> a -> a
 env values durations curve x = ugen Env envCalc lineConstructor lineDeconstructor args
     where
@@ -430,6 +427,17 @@ sinDist amount input = ugen SinDist sinDistCalc nullConstructor nullDeconstructo
 foreign import ccall "&wrap_calc" wrapCalc :: CUGenFunc
 wrap :: UGenType a => a -> a -> a
 wrap amount input = ugen Wrap wrapCalc nullConstructor nullDeconstructor [amount,input]
+
+foreign import ccall "&crush_calc" crushCalc :: CUGenFunc
+crush :: UGenType a => a -> a -> a
+crush depth x = ugen Crush crushCalc nullConstructor nullDeconstructor [depth,x]
+
+foreign import ccall "&decimate_constructor"   decimateConstructor   :: CUGenFunc
+foreign import ccall "&decimate_deconstructor" decimateDeconstructor :: CUGenFunc
+foreign import ccall "&decimate_calc"          decimateCalc          :: CUGenFunc
+decimate :: UGenType a => a -> a -> a
+decimate rate x = ugen Decimate decimateCalc decimateConstructor decimateDeconstructor [rate,x]
+
 
 foreign import ccall "&delay_constructor" delayConstructor :: CUGenFunc
 foreign import ccall "&delay_deconstructor" delayDeconstructor :: CUGenFunc

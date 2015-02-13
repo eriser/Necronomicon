@@ -2885,6 +2885,59 @@ void wrap_calc(ugen* u)
 	UGEN_OUT(u,0,y);
 }
 
+#define ROUND(f) ((float)((f > 0.0) ? floor(f + 0.5) : ceil(f - 0.5)))
+
+void crush_calc(ugen* u)
+{
+    int    bitDepth = UGEN_IN(u,0);
+    double x        = UGEN_IN(u,1);
+    int    max      = pow(2, bitDepth) - 1;
+    double y        = ROUND((x + 1.0) * max) / max - 1.0;
+
+    UGEN_OUT(u,0,y);
+}
+
+typedef struct
+{
+    double samples;
+    double prev;
+} decimate_t;
+
+void decimate_constructor(ugen* u)
+{
+    decimate_t* decimate = malloc(sizeof(decimate_t));
+    decimate->samples    = 0;
+    decimate->prev       = 0;
+    u->data              = decimate;
+}
+
+void decimate_deconstructor(ugen* u)
+{
+	free(u->data);
+}
+
+void decimate_calc(ugen* u)
+{
+    decimate_t* decimate = (decimate_t*) u->data;
+    double      rate     = UGEN_IN(u,0) * RECIP_SAMPLE_RATE;
+    double      x        = UGEN_IN(u,1);
+    double      y        = 0;
+
+    if(decimate->samples + rate >= 1)
+    {
+        decimate->samples = fmod(decimate->samples + rate,1.0);
+        decimate->prev    = x;
+        y                 = x;
+    }
+    else
+    {
+        decimate->samples += rate;
+        y = decimate->prev;
+    }
+
+    UGEN_OUT(u,0,y);
+}
+
 //======================================
 // Reverberation
 //======================================
