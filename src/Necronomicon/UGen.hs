@@ -37,7 +37,7 @@ data UGen = UGenNum Double
 data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Env | Out | AuxIn | Poll | LFSaw | LFPulse | Saw | Pulse
               | SyncSaw | SyncPulse | SyncOsc | Random | NoiseN | NoiseL | NoiseC | URandom | Dust | Dust2 | Impulse | Range | ExpRange | LPF | HPF | BPF | Notch | AllPass | PeakEQ
               | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int | LPFMS20 | OnePoleMS20
-              | Clip | SoftClip | Poly3 | TanH | SinDist | Wrap | Crush | Decimate | DelayN Double | FreeVerb
+              | Clip | SoftClip | Poly3 | TanH | SinDist | Wrap | Crush | Decimate | DelayN Double | FreeVerb | Pluck Double | WhiteNoise
               deriving (Show)
 
 instance Show UGen where
@@ -446,13 +446,23 @@ foreign import ccall "&decimate_calc"          decimateCalc          :: CUGenFun
 decimate :: UGenType a => a -> a -> a
 decimate rate x = ugen Decimate decimateCalc decimateConstructor decimateDeconstructor [rate,x]
 
-
 foreign import ccall "&delay_constructor" delayConstructor :: CUGenFunc
 foreign import ccall "&delay_deconstructor" delayDeconstructor :: CUGenFunc
 foreign import ccall "&delayN_calc" delayNCalc :: CUGenFunc
 
 delayN :: UGenType a => Double -> a -> a -> a
 delayN maxDelayTime delayTime input = ugen (DelayN maxDelayTime) delayNCalc delayConstructor delayDeconstructor [delayTime, input]
+
+foreign import ccall "&pluck_constructor"   pluckConstructor   :: CUGenFunc
+foreign import ccall "&pluck_deconstructor" pluckDeconstructor :: CUGenFunc
+foreign import ccall "&pluck_calc"          pluckCalc          :: CUGenFunc
+
+pluck :: UGenType a => Double -> a -> a -> a -> a
+pluck minFreq freq duration x = ugen (Pluck minFreq) pluckCalc pluckConstructor pluckDeconstructor [freq,duration,x]
+
+foreign import ccall "&white_calc" whiteCalc :: CUGenFunc
+whiteNoise :: UGenType a => a
+whiteNoise = ugen WhiteNoise whiteCalc nullConstructor nullDeconstructor []
 
 foreign import ccall "&freeverb_constructor" freeverbConstructor :: CUGenFunc
 foreign import ccall "&freeverb_deconstructor" freeverbDeconstructor :: CUGenFunc
@@ -719,6 +729,8 @@ compileUGen (UGenNum d) _ key = do
     return wire
 compileUGen ugen@(UGenFunc (DelayN maxDelayTime) _ _ _ _) args key = liftIO (new $ CDouble maxDelayTime) >>= \maxDelayTimePtr ->
     compileUGenWithConstructorArgs ugen maxDelayTimePtr args key
+compileUGen ugen@(UGenFunc (Pluck minFreq) _ _ _ _) args key = liftIO (new $ CDouble minFreq) >>= \minFreqPtr ->
+    compileUGenWithConstructorArgs ugen minFreqPtr args key
 compileUGen ugen args key = compileUGenWithConstructorArgs ugen nullPtr args key
 
 

@@ -3075,3 +3075,61 @@ void freeverb_calc(ugen* u)
 
 	UGEN_OUT(u,0,y);
 }
+
+#define E 2.7182818284590452353602874713527
+typedef unsigned int uint;
+
+typedef struct
+{
+	sample_buffer* buffer;
+	uint write_index;
+	uint noiseSamples;
+} pluck_data;
+
+void pluck_constructor(ugen* u)
+{
+	u->data = malloc(sizeof(pluck_data));
+	pluck_data data = { acquire_sample_buffer(SAMPLE_RATE / u->constructor_args[0]),0,0 };
+	*((pluck_data*) u->data) = data;
+}
+
+void pluck_deconstructor(ugen* u)
+{
+	release_sample_buffer(((pluck_data*) u->data)->buffer);
+	free(u->data);
+}
+
+//Jaffe and Smith "Extensions of the Karplus-Strong Plucked-String* Algorithm"
+//Need noise burst into this
+void pluck_calc(ugen* u)
+{
+	pluck_data* data             = ((pluck_data*) u->data);
+	uint        write_index      = data->write_index;
+	uint        num_samples_mask = data->buffer->num_samples_mask;
+	double      freq             = UGEN_IN(u, 0) * RECIP_SAMPLE_RATE;
+	uint        n                = SAMPLE_RATE / UGEN_IN(u, 0);
+	double      duration         = UGEN_IN(u, 1) * SAMPLE_RATE;
+	double      x                = UGEN_IN(u, 2);
+	uint        index2           = (write_index + 1) % n;
+	double      decay            = pow(E, (-(n + 0.5) * 6.908) / duration) / cos(M_PI * freq) ;
+	double      y                = 0;
+
+	if(data->noiseSamples < n)
+	{
+		y = x;
+		data->noiseSamples++;
+	}
+	else
+	{
+		y = decay * (data->buffer->samples[write_index] + data->buffer->samples[index2]) / 2;
+	}
+
+	data->buffer->samples[write_index] = y;
+	data->write_index                  = index2;
+	UGEN_OUT(u, 0, y);
+}
+
+void white_calc(ugen* u)
+{
+	UGEN_OUT(u, 0, RAND_RANGE(-1,1));
+}

@@ -36,14 +36,18 @@ testSound2 = play (isDown keyW) (isDown keyW) noArgSynth
          <|> play (isDown keyD) (isDown keyD) threeSynth  440 880 66.6
 
 noArgSynth :: UGen
-noArgSynth = dust 10 |> out 0
+noArgSynth = whiteNoise |> pluck 110 110 5.0
+                        |> gain 0.1
+                        |> out 0
+
+-- noArgSynth = dust 10 |> out 0
 -- noArgSynth = impulse 2 0.5 |> out 0
 
 oneArgSynth :: UGen -> [UGen]
 oneArgSynth f = sig |> filt |> verb |> gain 0.1 |> out 0
     where
         sig  = saw (noise2 3 |> range 40 1000) * (sin 0.35 |> range 0.5 1.0)
-        filt = lpf      (lag 6 [f,f]) 6
+        filt = lpf (lag 6 [f,f]) 6
         verb = freeverb 1.0 0.95 0.95
 
 -- oneArgSynth f = saw 40 |> lpf (lag 6 [f,f]) 6 +> delayN 1.0 1.0 |> gain 0.5 |> out 0
