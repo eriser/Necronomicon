@@ -3,6 +3,7 @@ import Data.Fixed (mod')
 import Control.Arrow
 
 main :: IO ()
+-- main = print scaleTest
 main = runSignal <| testGUI <|> testScene <|> testSound2
 
 testGUI :: Signal ()
@@ -36,9 +37,7 @@ testSound2 = play (isDown keyW) (isDown keyW) noArgSynth
          <|> play (isDown keyD) (isDown keyD) threeSynth  440 880 66.6
 
 noArgSynth :: UGen
-noArgSynth = whiteNoise |> pluck 110 110 5.0
-                        |> gain 0.1
-                        |> out 0
+noArgSynth = whiteNoise |> pluck 110 110 5.0 |> gain 0.1 |> out 0
 
 -- noArgSynth = dust 10 |> out 0
 -- noArgSynth = impulse 2 0.5 |> out 0
