@@ -10,6 +10,9 @@ import Control.Monad.Trans
 dup :: UGen -> [UGen]
 dup u = [u, u]
 
+freqSynth :: UGen -> UGen
+freqSynth freq = sin freq * line 0.333 |> gain 0.1 >>> out 0
+
 bSynth :: UGen
 bSynth = sin 55 |> gain (line 0.15) >>> gain 0.2 >>> out 0
 
@@ -30,19 +33,19 @@ four = sin 990 |> gain (line 0.2) >>> gain 0.2 >>> out 1
 
 patternTest :: Necronomicon ()
 patternTest = do
-    compileSynthDef "LineSynth" lineSynth
+    compileSynthDef "FreqSynth" freqSynth
     compileSynthDef "b" bSynth
     compileSynthDef "p" pSynth
     compileSynthDef "one" one
     compileSynthDef "two" two
     compileSynthDef "three" three
     compileSynthDef "four" four
-    let pLineSynth = return (\degree t -> playSynthAtJackTime "LineSynth" [degree * 110] t >> return ())
+    let pLineSynth = return (\degree t -> playSynthAtJackTime "FreqSynth" [degree * 110] t >> return ())
     let pBeatSynth = return (\synth t -> playSynthAtJackTime synth [] t >> return ())
     let p2 = pseq 1 [1, pseq 2 [5..11]] + pseq 1 [2..5]
     nPrint (collapse (collapse p2 1) 1)
     setTempo 150
-    runPDef $ pstream "myCoolPattern" pLineSynth [lich| 1 [_ 2] _ [3 [4 5]] 6
+    runPDef $ pstream "myCoolPattern" pLineSynth $ [lich| 1 [_ 2] _ [3 [4 5]] 6
                                                         1 [_ 2] _ [3 [4 5]] 6
                                                         1 [_ 2] _ [3 [4 5]] 6
                                                         1 [_ 2] _ [3 [4 5]] 6
