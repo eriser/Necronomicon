@@ -3,7 +3,7 @@ import Data.Fixed (mod')
 import Control.Arrow
 
 main :: IO ()
--- main = print scaleTest
+-- main = testSignals
 main = runSignal <| testGUI <|> testScene <|> testSound2
 
 testGUI :: Signal ()
@@ -26,15 +26,15 @@ testGUI = gui [chatBox,netBox,users]
 -- Implement in terms of play until instead
 -- Networking the state works out better that way!
 testSound :: Signal ()
-testSound = play (isDown keyW) (isUp   keyW) myCoolSynth2
-        <|> play (isDown keyA) (isDown keyA) myCoolSynth3
-        <|> play (isDown keyP) (isDown keyS) myCoolSynth2
+testSound = play (isDown keyW)                    myCoolSynth2
+        <|> play (toggle <| isDown keyA)          myCoolSynth3
+        <|> play (isDown keyP `till` isDown keyS) myCoolSynth2
 
 testSound2 :: Signal ()
-testSound2 = play (isDown keyW) (isDown keyW) noArgSynth
-         <|> play (isDown keyA) (isDown keyA) oneArgSynth (mouseX ~> scale 20  3000)
-         <|> play (isDown keyS) (isDown keyS) twoArgSynth (mouseX ~> scale 100 3000) (mouseY ~> scale 20 3000)
-         <|> play (isDown keyD) (isDown keyD) threeSynth  440 880 66.6
+testSound2 = play (toggle <| isDown keyW) noArgSynth
+         <|> play (toggle <| isDown keyA) oneArgSynth (mouseX ~> scale 20  3000)
+         <|> play (toggle <| isDown keyS) twoArgSynth (mouseX ~> scale 100 3000) (mouseY ~> scale 20 3000)
+         <|> play (toggle <| isDown keyD) threeSynth  440 880 66.6
 
 noArgSynth :: UGen
 noArgSynth = whiteNoise |> pluck 110 110 5.0 |> gain 0.1 |> out 0

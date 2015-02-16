@@ -31,7 +31,7 @@ library
     Else
         -- use extra-libraries, if pkg-config fails
         --   http://hackage.haskell.org/trac/hackage/ticket/170
-        Extra-Libraries: jack
+        Extra-Libraries: jack, sndfile
     Include-Dirs: 		c_lib
     Install-Includes:	Necronomicon.h
     C-Sources:    		c_lib/Necronomicon.c

@@ -16,6 +16,7 @@
 #include <jack/jack.h>
 #include <time.h>
 #include <limits.h>
+#include <sndfile.h>
 
 #include "Necronomicon.h"
 
@@ -956,6 +957,7 @@ void init_rt_thread()
 	clear_necronomicon_buses();
 
 	initialize_wave_tables();
+	// load_audio_files();
 	_necronomicon_current_node = NULL;
 
 	assert(nrt_fifo == NULL);

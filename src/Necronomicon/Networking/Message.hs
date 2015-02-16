@@ -13,7 +13,9 @@ import Control.Exception
 import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString.Lazy  as B
 import Necronomicon.Linear.Vector (Vector2(..),Vector3(..),Vector4(..))
-import Necronomicon.FRP.Event
+-- import Necronomicon.FRP.Event
+import Data.Dynamic
+import Data.Typeable
 import qualified Data.IntMap as IntMap
 
 toOSCString :: String -> Datum
@@ -219,59 +221,93 @@ netValToDyn (NetBoolList   v) = toDyn v
 netValToDyn (NetStringList v) = toDyn v
 netValToDyn (NetVec2List   v) = toDyn v
 netValToDyn (NetVec3List   v) = toDyn v
-netValToDyn (NetVec3List   v) = toDyn v
+netValToDyn (NetVec4List   v) = toDyn v
 
-
-class (Typeable a,Eq a) => Networkable a where
-    toNetVal :: a -> NetValue
+class (Eq a) => Networkable a where
+    toNetVal   :: a -> NetValue
+    fromNetVal :: NetValue -> a -> a
 
 instance Networkable Int where
-    toNetVal = NetInt
+    toNetVal                = NetInt
+    fromNetVal (NetInt n) _ = n
+    fromNetVal _          d = d
 
 instance Networkable Double where
-    toNetVal = NetDouble
+    toNetVal                   = NetDouble
+    fromNetVal (NetDouble n) _ = n
+    fromNetVal _             d = d
 
 instance Networkable Bool where
-    toNetVal = NetBool
+    toNetVal                 = NetBool
+    fromNetVal (NetBool n) _ = n
+    fromNetVal _           d = d
 
 instance Networkable C.ByteString where
-    toNetVal = NetString
+    toNetVal                   = NetString
+    fromNetVal (NetString n) _ = n
+    fromNetVal _             d = d
 
 instance Networkable Vector2 where
-    toNetVal = NetVec2
+    toNetVal                 = NetVec2
+    fromNetVal (NetVec2 n) _ = n
+    fromNetVal _           d = d
 
 instance Networkable Vector3 where
-    toNetVal = NetVec3
+    toNetVal                 = NetVec3
+    fromNetVal (NetVec3 n) _ = n
+    fromNetVal _           d = d
 
 instance Networkable Vector4 where
-    toNetVal = NetVec4
+    toNetVal                 = NetVec4
+    fromNetVal (NetVec4 n) _ = n
+    fromNetVal _           d = d
 
 instance Networkable (Int,Int) where
-    toNetVal = NetTupInt
+    toNetVal                   = NetTupInt
+    fromNetVal (NetTupInt n) _ = n
+    fromNetVal _             d = d
 
 instance Networkable (Double,Double) where
-    toNetVal = NetTupDouble
+    toNetVal                      = NetTupDouble
+    fromNetVal (NetTupDouble n) _ = n
+    fromNetVal _                d = d
 
 instance Networkable (Bool,Bool) where
-    toNetVal = NetTupBool
+    toNetVal                    = NetTupBool
+    fromNetVal (NetTupBool n) _ = n
+    fromNetVal _              d = d
 
 instance Networkable [Int] where
-    toNetVal = NetIntList
+    toNetVal                    = NetIntList
+    fromNetVal (NetIntList n) _ = n
+    fromNetVal _              d = d
 
 instance Networkable [Double] where
-    toNetVal = NetDoubleList
+    toNetVal                       = NetDoubleList
+    fromNetVal (NetDoubleList n) _ = n
+    fromNetVal _                 d = d
 
 instance Networkable [Bool] where
-    toNetVal = NetBoolList
+    toNetVal                     = NetBoolList
+    fromNetVal (NetBoolList n) _ = n
+    fromNetVal _               d = d
 
 instance Networkable [C.ByteString] where
-    toNetVal = NetStringList
+    toNetVal                       = NetStringList
+    fromNetVal (NetStringList n) _ = n
+    fromNetVal _                 d = d
 
 instance Networkable [Vector2] where
-    toNetVal = NetVec2List
+    toNetVal                     = NetVec2List
+    fromNetVal (NetVec2List n) _ = n
+    fromNetVal _               d = d
 
 instance Networkable [Vector3] where
-    toNetVal = NetVec3List
+    toNetVal                     = NetVec3List
+    fromNetVal (NetVec3List n) _ = n
+    fromNetVal _               d = d
 
 instance Networkable [Vector4] where
-    toNetVal = NetVec4List
+    toNetVal                     = NetVec4List
+    fromNetVal (NetVec4List n) _ = n
+    fromNetVal _               d = d

@@ -44,7 +44,7 @@ engineTest = do
 
 main :: IO ()
 main = runSignal
-       <|  play (isDown keyA) (isDown keyA) delaySynth (mouseX ~> scale 20  10000) mouseY
-       <|> play (isDown keyW) (isDown keyW) loopSynth
-       <|> play (isDown keyD) (isDown keyD) simpleSine 440
+       <|  play (toggle <| isDown keyA) delaySynth (mouseX ~> scale 20  10000) mouseY
+       <|> play (toggle <| isDown keyW) loopSynth
+       <|> play (toggle <| isDown keyD) simpleSine 440
 -- main = runNecronomicon engineTest
