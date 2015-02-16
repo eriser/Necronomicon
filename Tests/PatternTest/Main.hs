@@ -7,46 +7,126 @@ import Control.Monad.Trans
 -- b = nPrint "!!B!!"
 -- p = nPrint "..P.."
 
+dup :: UGen -> [UGen]
+dup u = [u, u]
+
+bSynth :: UGen
+bSynth = sin 55 |> gain (line 0.15) >>> gain 0.2 >>> out 0
+
+pSynth :: UGen
+pSynth = sin 1110 |> gain (line 0.1) >>> gain 0.2 >>> out 1
+
+one :: UGen
+one = sin 220 |> gain (line 0.2) >>> gain 0.2 >>> out 0
+
+two :: UGen
+two = sin 440 |> gain (line 0.2) >>> gain 0.2 >>> out 1
+
+three :: UGen
+three = sin 660 |> gain (line 0.2) >>> gain 0.2 >>> out 0
+
+four :: UGen
+four = sin 990 |> gain (line 0.2) >>> gain 0.2 >>> out 1
+
 patternTest :: Necronomicon ()
 patternTest = do
-    let p2 = pseq 1 [1, pseq 2 [5..11]] Prelude.+ pseq 1 [2..5]
+    compileSynthDef "LineSynth" lineSynth
+    compileSynthDef "b" bSynth
+    compileSynthDef "p" pSynth
+    compileSynthDef "one" one
+    compileSynthDef "two" two
+    compileSynthDef "three" three
+    compileSynthDef "four" four
+    let pLineSynth = return (\degree t -> playSynthAtJackTime "LineSynth" [degree * 110] t >> return ())
+    let pBeatSynth = return (\synth t -> playSynthAtJackTime synth [] t >> return ())
+    let p2 = pseq 1 [1, pseq 2 [5..11]] + pseq 1 [2..5]
     nPrint (collapse (collapse p2 1) 1)
     setTempo 150
-    runPDef $ pstream "myCoolPattern" (pure nPrint) [lich| 0 [1 2] _ [3 [4 5]] 6
-                                                           0 [1 2] _ [3 [4 5]] 6
-                                                           0 [1 2] _ [3 [4 5]] 6
-                                                           0 [1 2] _ [3 [4 5]] 6 |]
-    nSleep 10
-    runPDef $ pstream "MyCoolBeat" (pure nPrint) [lich| b p [_ b] p
-                                                        b p [_ b] p
-                                                        b p [_ b] p
-                                                        b p [_ b] p
-                                                        b p [_ b] p
+    runPDef $ pstream "myCoolPattern" pLineSynth [lich| 1 [_ 2] _ [3 [4 5]] 6
+                                                        1 [_ 2] _ [3 [4 5]] 6
+                                                        1 [_ 2] _ [3 [4 5]] 6
+                                                        1 [_ 2] _ [3 [4 5]] 6
+                                                        [1 3] [1 3] [1 3] [1 3] _
+                                                        [_ 1] [_ 2] 3 4 5
+                                                        2 [_ 3] [_ 4] 5 6
+                                                        3 4 [_ 5] [_ 6] 7
+                                                        4 5 6 [_ 7] [_ 8]
+                                                        5 6 7 8 [_ 9]
+                                                        [1 2 3] [2 3 4] [3 4 5] [4 5 6]
+                                                        1 [2 3] _ [4 [5 6]] 7
+                                                        2 [3 4] _ [5 [6 7]] 8
+                                                        3 [4 5] _ [6 [7 8]] 9
+                                                        1 _ 2 _ 3
+                                                        4 _ 5 _ 6
+                                                        7 _ 8 _ 9
+                                                        9 _ 7 _ 6
+                                                        5 _ 4 _ 3
+                                                        [1 1] [_ 1] [_ 1] [_ 2]
+                                                        [2 2] [_ 2] [_ 2] [_ 3]
+                                                        [3 3] [_ 3] [_ 3] [_ 4]
+                                                        [5 5] [_ 5] [_ 5] [_ 6]
+                                                        [6 6 6] [5 5 5] [4 4 4] [3 3 3]
+                                                        2 2 2 1
                                                       |]
+    runPDef $ pstream "MyCoolBeat" pBeatSynth [lich| b p [_ b] p
+                                                     b p [_ b] p
+                                                     b p [_ b] p
+                                                     [b b] [p p] [b b] p
+                                                     b p [_ b] p
+                                                     [_ b _ p] [_ b _ p] [_ b _ p] [_ b _ p]
+                                                     b p [_ b] p
+                                                     [p p p p p p p p] [b b b b b b] [p p p p] [b b b b]
+                                                     [p p p p p p] [b b b b] [p p p] [b b]
+                                                     [[b b b] [p p p]] [b b p p] [b b] p
+                                                     b p [_ b] p
+                                                     [_ b b b] [_ p p p] [_ b b b] [_ p p p]
+                                                     b p [_ b] p
+                                                     [_ b] [p p p] [b b] p
+                                                     [b b] [p p] [b b] p
+                                                     b p [_ b] p
+                                                     [b b p p ] [[b b b] [p p p]] [[p p] b] p
+                                                     b p [_ b] p
+                                                     [_b] [_p] b p
+                                                     b [p p] [_ b] p
+                                                     b p [_ b] p
+                                                     [b p b p] [b p b p] [b p b p] [b p b p]
+                                                     [b p b] [p b p] [b p b] [p b p]
+                                                     [b p] [b p] [b p] [b p]
+                                                     b p b p
+                                                     [p p p p p p p p] [b b b b b b] [p p p p] [b b b]
+                                                     [p p] b p p
+                                                     [b b] [b b] [b b] [b b]
+                                                     b p [_ b] p
+                                                     b p [_ b] p
+                                                   |]
 
-    runPDef $ pstream "one" (pure nPrint) [lich| one _ _ _ one _ _ _ one _ _ _ one _ _ _ one _ _ _ one _ _ _ one _ _ _ one _ _ _ |]
-    runPDef $ pstream "two" (pure nPrint) [lich| _ two _ _ _ two _ _ _ two _ _ _ two _ _ _ two _ _ _ two _ _ _ two _ _ _ two _ _ |]
-    runPDef $ pstream "three" (pure nPrint) [lich| _ _ three _ _ _ three _ _ _ three _ _ _ three _ _ _ three _ _ _ three _ _ _ three _ _ _ three _ |]
-    runPDef $ pstream "four" (pure nPrint) [lich| _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four  |]
-    -- runPDef $ pbeat "MyCoolBeat" [lich| b p [_ b] p |]
-    nSleep 5
-    setTempo 60
     nSleep 10
-    runPDef melo
-    runPDef melo2
-    nSleep 4
-    runPDef melo3
+
+    runPDef $ pstream "one"   pBeatSynth [lich| one _ _ _ one _ _ _ one _ _ _ one _ _ _ one _ _ _ one _ _ _ one _ _ _ one _ _ _ one _ _ _ one _ _ _ |]
+    runPDef $ pstream "two"   pBeatSynth [lich| _ two _ _ _ two _ _ _ two _ _ _ two _ _ _ two _ _ _ two _ _ _ two _ _ _ two _ _ _ two _ _ _ two _ _ |]
+    runPDef $ pstream "three" pBeatSynth [lich| _ _ three _ _ _ three _ _ _ three _ _ _ three _ _ _ three _ _ _ three _ _ _ three _ _ _ three _ _ _ three _ _ _ three _ |]
+    runPDef $ pstream "four"  pBeatSynth [lich| _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four |]
+    
+-- runPDef $ pbeat "MyCoolBeat" [lich| b p [_ b] p |]
+    -- nSleep 5
+    -- setTempo 60
+    -- nSleep 10
+    -- runPDef melo
+    -- runPDef melo2
+    -- nSleep 4
+    -- runPDef melo3
+    nPrint "Waiting for user input..."
     _ <- liftIO $ getLine
     return ()
 
 main :: IO ()
 main = runNecronomicon patternTest
 
-print0p5 :: Pattern (Necronomicon ())
-print0p5 = PVal $ nPrint 0.5
+print0p5 :: Pattern (JackTime -> Necronomicon ())
+print0p5 = PVal $ \jackTime -> nPrint 0.5
 
-print1 :: Pattern (Necronomicon ())
-print1 = PVal $ nPrint 1
+print1 :: Pattern (JackTime -> Necronomicon ())
+print1 = PVal $ \jackTime -> nPrint 1
 
 melo :: PDef
 melo = pbind "melo" sequence durs
@@ -57,13 +137,15 @@ melo = pbind "melo" sequence durs
 melo2 :: PDef
 melo2 = pbind "melo2" sequence durs
     where
-        sequence = ploop [PVal (nPrint 666)]
+        sequence :: Pattern (JackTime -> Necronomicon ())
+        sequence = ploop [PVal (\_ -> nPrint 666.0)]
         durs = pseq 5 [0.25, 0.25, 0.5, 0.25]
 
 melo3 :: PDef -- THIS UPDATES THE "melo" pattern!!!!!!!!!!!
 melo3 = pbind "melo" sequence durs 
     where
-        sequence = PGen (\t -> return (nPrint (t ^ 4)))
+        sequence :: Pattern (JackTime -> Necronomicon ())
+        sequence = PGen (\t -> return (\_ -> nPrint (t ^ 4)))
         durs = pseq 5 [0.5, 0.125, 0.125, 0.25]
         
 melo4 = [lich| 0 [1 2] _ [3 [4 5]] 6

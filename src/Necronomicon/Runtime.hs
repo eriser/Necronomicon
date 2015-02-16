@@ -13,8 +13,8 @@ import Necronomicon.Patterns
 import Necronomicon.Util.Functions
 -- import qualified Data.Map.Strict as M
 import qualified Data.Map as M
-import Sound.OSC.Time
 import Paths_Necronomicon
+import Data.Typeable
 
 data SynthDef = SynthDef {
     synthDefName :: String,
@@ -29,29 +29,31 @@ type SynthDefDict = M.Map String SynthDef
 data RunState = NecroOffline
               | NecroBooting
               | NecroQuitting
-              | NecroRunning deriving (Show, Eq)
+              | NecroRunning
+              deriving (Show, Eq)
 
-data RuntimeMessage = StartSynth SynthDef [CDouble] NodeID CDouble
+data RuntimeMessage = StartSynth SynthDef [CDouble] NodeID JackTime
                     | SetSynthArg Synth CUInt CDouble
                     | SetSynthArgs Synth [CDouble]
                     | StopSynth NodeID
                     | CollectSynthDef SynthDef
                     | ShutdownNrt
-
+                    deriving (Show)
+                      
 type RunTimeMailbox = TChan RuntimeMessage
 
-instance Show (Time -> Int -> Necronomicon (Maybe Double)) where
+instance Show (Time -> Int -> JackTime -> Necronomicon (Maybe Double)) where
     show pfunc = "(PFunc ->)"
 
 data PDef = PDef {
     pdefName :: String,
-    pdefPattern :: Pattern (Time -> Int -> Necronomicon (Maybe Double))
+    pdefPattern :: Pattern (Time -> Int -> JackTime -> Necronomicon (Maybe Double))
 } deriving (Show)
 
 data ScheduledPdef = ScheduledPdef {
     scheduledPDefName :: String,
-    scheduledPDefLastTime :: Double,
-    scheduledPDefNextTime :: Double,
+    scheduledPDefLastTime :: JackTime,
+    scheduledPDefNextTime :: JackTime,
     scheduledPDefBeat :: Double,
     scheduledPDefIteration :: Int
 } deriving (Show)
@@ -62,30 +64,30 @@ instance Ord ScheduledPdef where
 instance Eq ScheduledPdef where
     (ScheduledPdef _ _ t1 _ _) == (ScheduledPdef _ _ t2 _ _) = t1 == t2
 
-pbeat :: String -> Pattern (Pattern (Necronomicon ()), Double) -> PDef
+pbeat :: String -> Pattern (Pattern (JackTime -> Necronomicon ()), Double) -> PDef
 pbeat name layout = PDef name (PSeq (PVal pfunc) (plength layout))
-    where pfunc t i = case collapse layout t of
+    where pfunc t i jackTime = case collapse layout t of
               PVal (p, d) -> case collapse p t of
-                  PVal v -> v >> return (Just d)
+                  PVal v -> v jackTime >> return (Just d)
                   _ -> return (Just d)
               _ -> return Nothing
 
-pstream :: String -> Pattern (a -> Necronomicon ()) -> Pattern (Pattern a, Double) -> PDef
+pstream :: String -> Pattern (a -> JackTime -> Necronomicon ()) -> Pattern (Pattern a, Double) -> PDef
 pstream name func layout = PDef name (PSeq (PVal pfunc) (plength layout))
-    where pfunc t i = case collapse layout t of
+    where pfunc t i jackTime = case collapse layout t of
               PVal (p, d) -> case collapse p t of
                   PVal v -> case collapse func (fromIntegral i) of
-                      PVal pf -> pf v >> return (Just d)
+                      PVal pf -> pf v jackTime >> return (Just d)
                       _ -> return (Just d)
                   _ -> return (Just d)
               _ -> return Nothing
 
-pbind :: String -> Pattern (Necronomicon ()) -> Pattern Double -> PDef
+pbind :: String -> Pattern (JackTime -> Necronomicon ()) -> Pattern Double -> PDef
 pbind name values durs = PDef name (PVal pfunc)
     where
-        pfunc _ iteration = case collapse durs (fromIntegral iteration) of
+        pfunc _ iteration jackTime = case collapse durs (fromIntegral iteration) of
             PVal d -> case collapse values (fromIntegral iteration) of
-                PVal f -> f >> return (Just d)
+                PVal f -> f jackTime >> return (Just d)
                 _ -> return Nothing
             _ -> return Nothing
 
@@ -105,7 +107,7 @@ data NecroVars = NecroVars {
     necroTempo :: TVar Double
 }
 
-data Necronomicon a = Necronomicon { runNecroState :: NecroVars -> IO (a, NecroVars) }
+data Necronomicon a = Necronomicon { runNecroState :: NecroVars -> IO (a, NecroVars) } deriving (Typeable)
 
 instance Monad Necronomicon where
     return x = Necronomicon (\n -> return (x, n))
@@ -225,6 +227,27 @@ shutdownNecronomicon = do
     waitForRunningStatus NecroOffline
     nPrint "Necronomicon shut down."
 
+{-| GHCI Repl functions ---------------------------------------------------------------------------------------------------------------------------------
+    GHCI instructions, line by line.
+    cd $NECRO -- In a terminal, change directory to the Necronomicon cabal sandbox
+    ghci -no-user-package-db -package-db .cabal-sandbox/x86_64-linux-ghc-7.8.4-packages.conf.d -- This is so you can run from the cabal sandbox correctly
+    :m Necronomicon -- load the Necronomicon module
+    necroVars <- beginNecronomiconInterpreter -- This boots the necronomicon engine
+    nInteract necroVars $ compileSynthDef "LineSynth" lineSynth -- Compile a synth definition
+    nInteract necroVars $ playSynth "LineSynth" [440] >> playSynth "LineSynth" [660]  -- Use that synth definition
+    endNecroInterpreter necroVars -- Don't forget to shutdown the necronomicon engine before leaving!
+-}
+
+beginNecroInterpreter :: IO NecroVars
+beginNecroInterpreter = mkNecroVars >>= \necroVars -> runNecroState startNecronomicon necroVars >>= \(_, necroVars') -> return necroVars'
+
+nInteract :: NecroVars -> Necronomicon a -> IO a
+nInteract necroVars f = (runNecroState f necroVars) >>= \(result, _) -> return result
+
+endNecroInterpreter :: NecroVars -> IO ()
+endNecroInterpreter necroVars = runNecroState shutdownNecronomicon necroVars >> return ()
+-----------------------------------------------------------------------------------------------------------------------------------------------------------
+
 sendMessage :: RuntimeMessage -> Necronomicon ()
 sendMessage message = getMailBox >>= \mailBox -> nAtomically $ writeTChan mailBox message
 
@@ -243,7 +266,7 @@ clipSynthArgs name id args numArgs = if length args > numArgs
     where
         clipString = "Too many arguments passed to node (" ++ (show id) ++ ", " ++ name ++ "), truncating to " ++ (show numArgs) ++ "."
 
-processStartSynth :: SynthDef -> [CDouble] -> NodeID -> CDouble -> Necronomicon ()
+processStartSynth :: SynthDef -> [CDouble] -> NodeID -> JackTime -> Necronomicon ()
 processStartSynth (SynthDef name numArgs csynthDef) args id time = clipSynthArgs name id args numArgs >>= \clippedArgs ->
     liftIO $ withArray clippedArgs (play . fromIntegral $ length clippedArgs)
     where
@@ -307,15 +330,15 @@ setTempo tempo = do
     nAtomically . writeTVar tempoTVar $ max 0 tempo
     (pqueue, pmap) <- getPatternQueue
     -- Adjust all the scheduled times in place so that we can proceed normally going forward with correctly adjusted times
-    let pqueue' = PQ.mapInPlace (\(ScheduledPdef n l t b i) -> ScheduledPdef n l (l + ((t - l) * (tempo / currentTempo))) b i) pqueue
+    let pqueue' = PQ.mapInPlace (\(ScheduledPdef n l t b i) -> ScheduledPdef n l (l + floor (fromIntegral (t - l) * (tempo / currentTempo))) b i) pqueue
     setPatternQueue (pqueue', pmap)
 
 getCurrentBeat :: Necronomicon Int
 getCurrentBeat = do
     tempo <- getTempo
-    currentTime <- liftIO time
-    let tempoSeconds = 60 / tempo
-    let currentBeat = currentTime / tempoSeconds
+    currentTime <- liftIO getJackTime
+    let tempoSeconds = 60 / tempo  
+    let currentBeat = (fromIntegral currentTime / microsecondsPerSecond) / tempoSeconds
     return (floor currentBeat)
 
 -- We treat all patterns as if they are running at 60 bpm.
@@ -330,13 +353,19 @@ processPMessages messages =  mapM_ (processMessage) messages
         process m = case m of
             PlayPattern pdef@(PDef name pattern) -> getPatternQueue >>= \(pqueue, pmap) ->
                 case M.lookup name pmap of
-                    Just _ -> setPatternQueue (pqueue, M.insert name pdef pmap) -- Update existing pattern, HOW TO CORRECTLY INSERT/UPDATE EXISTING PATTERN WITH DIFFERENT RHYTHM!!!!!!!!!!!!
-                    Nothing -> liftIO time >>= \currentTime -> getTempo >>= \tempo ->
-                        let currentBeat = floor currentTime
+                    -- Update existing pattern, HOW TO CORRECTLY INSERT/UPDATE EXISTING PATTERN WITH DIFFERENT RHYTHM!!!!!!!!!!!!
+                    -- Idea: Use a pending update structure, something like -> data PDef { pdefName :: String, pdefPattern :: Pattern, pdefQueuedUpdate :: (Maybe Pattern) }
+                    -- When the current cyle is over the scheduler checks to see if there is a queued update,
+                    -- if so we move the queued pattern into the pattern slot and change queued to Nothing
+                    Just _ -> setPatternQueue (pqueue, M.insert name pdef pmap)
+                    Nothing -> liftIO getJackTime >>= \currentTime -> getTempo >>= \tempo ->
+                        let currentBeat = floor (fromIntegral currentTime / microsecondsPerSecond)
                             length = plength pattern
                             tempoRatio = timeTempo / tempo
-                            nextBeat =  (fromIntegral currentBeat) + ((fromIntegral $ length - (mod currentBeat length)) * tempoRatio)
-                            pqueue' = PQ.insert pqueue (ScheduledPdef name currentTime nextBeat 0 0)
+                            currentBeatMicro = secondsToMicro $ fromIntegral currentBeat
+                            nextBeatMicro = currentBeatMicro + floor microsecondsPerSecond
+                            -- nextBeat =  secondsToMicro $ (fromIntegral currentBeat) + ((fromIntegral $ length - (mod currentBeat length)) * tempoRatio)
+                            pqueue' = PQ.insert pqueue (ScheduledPdef name currentBeatMicro nextBeatMicro 0 0)
                             pmap' = M.insert name pdef pmap
                         in setPatternQueue (pqueue', pmap')
             StopPattern (PDef name _) -> getPatternQueue >>= \(pqueue, pmap) -> setPatternQueue (pqueue, M.delete name pmap)
@@ -350,17 +379,23 @@ runPDef pdef = sendPMessage (PlayPattern pdef)
 pstop :: PDef -> Necronomicon ()
 pstop pdef = sendPMessage (StopPattern pdef)
 
-patternLookAhead :: Double
-patternLookAhead = 0.04 -- In Seconds
-
 timeTempo :: Double
 timeTempo = 60
 
-secondsToMicro :: Double -> Int
-secondsToMicro s = floor $ s * 1000000
+microsecondsPerSecond :: Double
+microsecondsPerSecond = 1000000
+
+secondsToMicro :: Double -> JackTime
+secondsToMicro s = floor $ s * microsecondsPerSecond
 
 secsToMicroDivTen :: Double -> Int
 secsToMicroDivTen s = floor $ s * 10
+
+patternLookAhead :: JackTime
+patternLookAhead = floor $ 0.04 * microsecondsPerSecond -- In Microseconds
+
+defaultSleepTime :: JackTime
+defaultSleepTime = 10000 -- In microseconds
 
 notChanged :: Bool
 notChanged = False
@@ -368,26 +403,26 @@ notChanged = False
 changed :: Bool
 changed = True
 
-handleScheduledPatterns :: Int -> Necronomicon Int
+handleScheduledPatterns :: JackTime -> Necronomicon JackTime
 handleScheduledPatterns nextTime = getPatternQueue >>= \(pqueue, pmap) -> handlePattern pqueue pmap nextTime notChanged
     where
         handlePattern q m nextT hasChanged = case PQ.pop q of
             (Nothing, _) -> (if hasChanged then setPatternQueue (q, m) else return ()) >> return nextT
-            (Just (ScheduledPdef n l t b i), q') -> liftIO time >>= \currentTime ->
+            (Just (ScheduledPdef n l t b i), q') -> liftIO getJackTime >>= \currentTime ->
                 if currentTime < (t - patternLookAhead)
                    then if hasChanged
                         then setPatternQueue (q, m) >> return nextT
-                        else return (secondsToMicro $ (t - currentTime) * 0.1)
+                        else return $ floor ((fromIntegral (t - currentTime) :: Double) * 0.1) -- return wait time as a percentage of the distance to the scheduled time
                    else case M.lookup n m of
                        Nothing -> handlePattern q' m nextT changed
                        Just (PDef _ p) -> getTempo >>= \tempo ->
                            let tempoRatio = timeTempo / tempo
                            in case collapse p b of
-                               PVal pfunc -> pfunc b i >>= \mdur -> case mdur of
+                               PVal pfunc -> pfunc b i t >>= \mdur -> case mdur of
                                    Just dur -> handlePattern (PQ.insert q' (ScheduledPdef n t (t + scaledDur) (b + dur) (i + 1))) m waitTime changed
                                        where
-                                           scaledDur = dur * tempoRatio
-                                           waitTime = secondsToMicro $ scaledDur * 0.1
+                                           scaledDur = floor $ dur * tempoRatio * microsecondsPerSecond -- Convert from beats to microseconds
+                                           waitTime = floor $ fromIntegral scaledDur * 0.1 -- return wait time as a percentage of the duration of this beat
                                    Nothing -> handlePattern q' m nextT changed
                                _ -> handlePattern q' m nextT changed
 
@@ -402,10 +437,9 @@ startPatternScheduler = do
         patternThread vars = runNecroState necroWork vars >> return ()
             where
                 necroWork = getRunning >>= \running -> case running of
-                    NecroRunning -> getPatternMailBox >>= collectMailbox >>= processPMessages >> (handleScheduledPatterns defaultSleepTime) >>= nThreadDelay >> necroWork
+                    NecroRunning -> getPatternMailBox >>= collectMailbox >>= processPMessages >>
+                                    handleScheduledPatterns defaultSleepTime >>= \sleepTime -> nThreadDelay (fromIntegral sleepTime) >> necroWork
                     _ -> return ()
-                    where
-                        defaultSleepTime = 10000 -- In microseconds
 
 incrementNodeID :: Necronomicon NodeID
 incrementNodeID = getNextNodeIDTVar >>= \idTVar -> nAtomically (readTVar idTVar >>= \nodeID -> writeTVar idTVar (nodeID + 1) >> return nodeID)
@@ -455,6 +489,7 @@ freeSynthDefs = getSynthDefs >>= \synthDefs -> mapM_ (freeSynthDef) (M.elems syn
 freeSynthDef :: SynthDef -> Necronomicon ()
 freeSynthDef (SynthDef _ _ csynthDef) = liftIO $ freeCSynthDef csynthDef
 
+type JackTime = CULLong
 type CUGenFunc = FunPtr (Ptr CUGen -> ())
 data CUGen = CUGen CUGenFunc CUGenFunc CUGenFunc (Ptr ()) (Ptr CDouble) (Ptr CUInt) (Ptr CUInt) deriving (Show)
 
@@ -484,11 +519,11 @@ data CSynthDef = CSynthDef {
     csynthDefWireBufs :: Ptr CDouble,
     csynthDefPreviousNode :: Ptr CSynthDef,
     csynthDefNextNode :: Ptr CSynthDef,
+    csynthDefTime :: JackTime,
     csynthDefKey :: CUInt,
     csynthDefHash :: CUInt,
     csynthDefNumUGens :: CUInt,
-    csynthDefNumWires :: CUInt,
-    csynthDefTime :: CUInt
+    csynthDefNumWires :: CUInt
 } deriving (Show)
 
 instance Storable CSynthDef where
@@ -499,34 +534,35 @@ instance Storable CSynthDef where
         wireBufs <- peekByteOff ptr 8  :: IO (Ptr CDouble)
         prevNode <- peekByteOff ptr 16 :: IO (Ptr CSynthDef)
         nextNode <- peekByteOff ptr 24 :: IO (Ptr CSynthDef)
-        nodeKey  <- peekByteOff ptr 32 :: IO CUInt
-        nodeHash <- peekByteOff ptr 36 :: IO CUInt
-        numUGens <- peekByteOff ptr 40 :: IO CUInt
-        numWires <- peekByteOff ptr 44 :: IO CUInt
-        sampTime <- peekByteOff ptr 48 :: IO CUInt
-        return (CSynthDef ugenGrph wireBufs prevNode nextNode nodeKey nodeHash numUGens numWires sampTime)
-    poke ptr (CSynthDef ugenGrph wireBufs prevNode nextNode nodeKey nodeHash numUGens numWires sampTime) = do
+        sampTime <- peekByteOff ptr 32 :: IO JackTime
+        nodeKey  <- peekByteOff ptr 40 :: IO CUInt
+        nodeHash <- peekByteOff ptr 44 :: IO CUInt
+        numUGens <- peekByteOff ptr 48 :: IO CUInt
+        numWires <- peekByteOff ptr 52 :: IO CUInt
+        return (CSynthDef ugenGrph wireBufs prevNode nextNode sampTime nodeKey nodeHash numUGens numWires)
+    poke ptr (CSynthDef ugenGrph wireBufs prevNode nextNode sampTime nodeKey nodeHash numUGens numWires) = do
         pokeByteOff ptr 0  ugenGrph
         pokeByteOff ptr 8  wireBufs
         pokeByteOff ptr 16 prevNode
         pokeByteOff ptr 24 nextNode
-        pokeByteOff ptr 32 nodeKey
-        pokeByteOff ptr 36 nodeHash
-        pokeByteOff ptr 40 numUGens
-        pokeByteOff ptr 44 numWires
-        pokeByteOff ptr 48 sampTime
+        pokeByteOff ptr 32 sampTime
+        pokeByteOff ptr 40 nodeKey
+        pokeByteOff ptr 44 nodeHash
+        pokeByteOff ptr 48 numUGens
+        pokeByteOff ptr 52 numWires
 
 type CSynth = CSynthDef -- A running C Synth is structurally identical to a C SynthDef
 
 foreign import ccall "start_rt_runtime" startRtRuntime :: CString -> IO ()
 foreign import ccall "handle_messages_in_nrt_fifo" handleNrtMessages :: IO ()
 foreign import ccall "shutdown_necronomicon" shutdownNecronomiconCRuntime :: IO ()
-foreign import ccall "play_synth" playSynthInRtRuntime :: Ptr CSynthDef -> Ptr CDouble -> CUInt -> NodeID -> CDouble -> IO ()
+foreign import ccall "play_synth" playSynthInRtRuntime :: Ptr CSynthDef -> Ptr CDouble -> CUInt -> NodeID -> JackTime -> IO ()
 foreign import ccall "send_set_synth_arg" setSynthArgInRtRuntime :: NodeID -> CDouble -> CUInt -> IO ()
 foreign import ccall "send_set_synth_args" setSynthArgsInRtRuntime :: NodeID -> Ptr CDouble -> CUInt -> IO ()
 foreign import ccall "stop_synth" stopSynthInRtRuntime :: NodeID -> IO ()
 foreign import ccall "get_running" getRtRunning :: IO Int
 foreign import ccall "free_synth_definition" freeCSynthDef :: Ptr CSynthDef -> IO ()
+foreign import ccall "jack_get_time" getJackTime :: IO JackTime
 
 nPrint :: (Show a) => a -> Necronomicon ()
 nPrint = liftIO . print
@@ -539,7 +575,7 @@ nThreadDelay = liftIO . threadDelay
 
 -- Sleep in seconds
 nSleep :: Double -> Necronomicon ()
-nSleep = nThreadDelay . secondsToMicro
+nSleep = nThreadDelay . floor . (*microsecondsPerSecond)
 
 nFree :: Storable a => Ptr a -> Necronomicon ()
 nFree = liftIO . free

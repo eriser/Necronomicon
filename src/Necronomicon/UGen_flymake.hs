@@ -24,8 +24,8 @@ import Data.Typeable
 import Control.Arrow
 
 (+>) :: UGenType a => a -> (a -> a) -> a
-(+>) a f = add a (f a)
-infixl 1 +>
+(+>) a f = f a |> add a
+infixl 0 +>
 
 --------------------------------------------------------------------------------------
 -- UGen
@@ -37,7 +37,7 @@ data UGen = UGenNum Double
 data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Out | AuxIn | Poll | LFSaw | LFPulse | Saw | Pulse
               | SyncSaw | SyncPulse | SyncOsc | Random | NoiseN | NoiseL | NoiseC | URandom | Range | LPF | HPF | BPF | Notch | AllPass | PeakEQ
               | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int | LPFMS20 | OnePoleMS20
-              | Clip | SoftClip | Poly3 | TanH | SinDist | Wrap | DelayN Double
+              | Clip | SoftClip | Poly3 | TanH | SinDist | Wrap | DelayN Double | DelayL Double | DelayC Double | Negate
               deriving (Show)
 
 instance Show UGen where
@@ -48,7 +48,7 @@ instance Num UGen where
     (+)         = add
     (*)         = mul
     (-)         = minus
-    negate      = mul (-1)
+    negate      = unegate
     -- abs         = liftA abs
     -- signum      = liftA signum
     fromInteger = UGenNum . fromInteger
@@ -200,6 +200,10 @@ gain = mul
 foreign import ccall "&div_calc" divCalc :: CUGenFunc
 udiv :: UGenType a => a -> a -> a
 udiv x y = ugen Div divCalc nullConstructor nullDeconstructor [x, y]
+
+foreign import ccall "&negate_calc" negateCalc :: CUGenFunc
+unegate :: UGenType a => a -> a
+unegate x = ugen Negate negateCalc nullConstructor nullDeconstructor [x]
 
 foreign import ccall "&line_calc" lineCalc :: CUGenFunc
 foreign import ccall "&line_constructor" lineConstructor :: CUGenFunc
@@ -387,19 +391,27 @@ wrap amount input = ugen Wrap wrapCalc nullConstructor nullDeconstructor [amount
 
 foreign import ccall "&delay_constructor" delayConstructor :: CUGenFunc
 foreign import ccall "&delay_deconstructor" delayDeconstructor :: CUGenFunc
-foreign import ccall "&delayN_calc" delayNCalc :: CUGenFunc
 
+foreign import ccall "&delayN_calc" delayNCalc :: CUGenFunc
 delayN :: UGenType a => Double -> a -> a -> a
 delayN maxDelayTime delayTime input = ugen (DelayN maxDelayTime) delayNCalc delayConstructor delayDeconstructor [delayTime, input] 
+
+foreign import ccall "&delayL_calc" delayLCalc :: CUGenFunc
+delayL :: UGenType a => Double -> a -> a -> a
+delayL maxDelayTime delayTime input = ugen (DelayL maxDelayTime) delayLCalc delayConstructor delayDeconstructor [delayTime, input]
+
+foreign import ccall "&delayC_calc" delayC_calc :: CUGenFunc
+delayC :: UGenType a => Double -> a -> a -> a
+delayC maxDelayTime delayTime input = ugen (DelayC maxDelayTime) delayC_calc delayConstructor delayDeconstructor [delayTime, input]
 ----------------------------------------------------
 
-loopSynth :: [UGen]
-loopSynth = feedback feed |> poll >>> gain 0.3 >>> out 0
+loopSynth :: UGen -> UGen -> [UGen]
+loopSynth freq freq2 = feedback feed |> gain 0.3 >>> out 0
     where
         feed input input2 = [out1, out2] |> gain 0.49
             where
-                out1 = sin (2000 + (input2 * 1500) |> gain (sin input2)) * input2 + sin (input * 0.5 + 0.5 |> gain 0.5)
-                out2 = input * sin (300 * sin (input * 200)) + sin (input2 + 1 |> gain 40)
+                out1 = sin (freq + (input2 * 1500) |> gain (sin input2)) * input2 + sin (input * 0.5 + 0.5 |> gain 0.5)
+                out2 = input * sin (freq2 * sin (input * (freq2 * 0.9))) + sin (input2 + 1 |> gain 40)
 
 -- nestedLoopSynth :: [UGen]
 -- nestedLoopSynth = feedback (\input -> [input + sin (13 + (input * 10))] + feedback (\input2 -> input + input2) |> gain 0.9) |> gain 0.3 >>> out 0
@@ -465,7 +477,7 @@ printSynthDef synthDefName = getSynthDef synthDefName >>= nPrint
 
 playSynthAt :: String -> [Double] -> Double -> Necronomicon Synth
 playSynthAt synthDefName args time = getSynthDef synthDefName >>= \maybeSynthDef -> case maybeSynthDef of
-                Just synthDef -> incrementNodeID >>= \id -> sendMessage (StartSynth synthDef (map (CDouble) args) id (CDouble time)) >> return (Synth id synthDef)
+                Just synthDef -> incrementNodeID >>= \id -> sendMessage (StartSynth synthDef (map (CDouble) args) id (secondsToMicro time)) >> return (Synth id synthDef)
                 Nothing -> nPrint ("SynthDef " ++ synthDefName ++ " not found. Unable to start synth.") >> return (Synth nullID nullSynth)
 
 playSynth :: String -> [Double] -> Necronomicon Synth
@@ -600,7 +612,8 @@ runCompileSynthDef name ugenFunc = do
     let graph = drop numArgs $ reverse revGraph -- Reverse the revGraph because we've been using cons during compilation.
     compiledGraph <- newArray graph
     compiledWireBufs <- initializeWireBufs numWires constants
-    let cs = CSynthDef compiledGraph compiledWireBufs nullPtr nullPtr 0 0 (fromIntegral $ length graph) (fromIntegral numWires) 0
+    let scheduledTime = 0 :: JackTime
+    let cs = CSynthDef compiledGraph compiledWireBufs nullPtr nullPtr scheduledTime 0 0 (fromIntegral $ length graph) (fromIntegral numWires)
     print cs
     csynthDef <- new $ cs
     return (SynthDef name numArgs csynthDef)
@@ -648,5 +661,9 @@ compileUGen (UGenNum d) _ key = do
     addConstant key (CompiledConstant (CDouble d) wire)
     return wire
 compileUGen ugen@(UGenFunc (DelayN maxDelayTime) _ _ _ _) args key = liftIO (new $ CDouble maxDelayTime) >>= \maxDelayTimePtr ->
+    compileUGenWithConstructorArgs ugen maxDelayTimePtr args key
+compileUGen ugen@(UGenFunc (DelayL maxDelayTime) _ _ _ _) args key = liftIO (new $ CDouble maxDelayTime) >>= \maxDelayTimePtr ->
+    compileUGenWithConstructorArgs ugen maxDelayTimePtr args key
+compileUGen ugen@(UGenFunc (DelayC maxDelayTime) _ _ _ _) args key = liftIO (new $ CDouble maxDelayTime) >>= \maxDelayTimePtr ->
     compileUGenWithConstructorArgs ugen maxDelayTimePtr args key
 compileUGen ugen args key = compileUGenWithConstructorArgs ugen nullPtr args key
