@@ -359,11 +359,15 @@ processPMessages messages =  mapM_ (processMessage) messages
                     -- if so we move the queued pattern into the pattern slot and change queued to Nothing
                     Just _ -> setPatternQueue (pqueue, M.insert name pdef pmap)
                     Nothing -> liftIO getJackTime >>= \currentTime -> getTempo >>= \tempo ->
-                        let currentBeat = floor (fromIntegral currentTime / microsecondsPerSecond)
-                            length = plength pattern
+                        let floorTimeBy :: JackTime -> Double -> JackTime
+                            floorTimeBy t b = floor $ (fromIntegral $ floor (fromIntegral t / b)) * b
+                            ceilTimeBy :: JackTime -> Double -> JackTime
+                            ceilTimeBy t b = floor $ (fromIntegral $ ceiling (fromIntegral t / b)) * b
                             tempoRatio = timeTempo / tempo
-                            currentBeatMicro = secondsToMicro $ fromIntegral currentBeat
-                            nextBeatMicro = currentBeatMicro + floor microsecondsPerSecond
+                            beatMicros = microsecondsPerSecond * tempoRatio
+                            currentBeatMicro = floorTimeBy currentTime beatMicros
+                            nextBeatMicro = ceilTimeBy currentTime beatMicros
+                            -- length = plength pattern
                             -- nextBeat =  secondsToMicro $ (fromIntegral currentBeat) + ((fromIntegral $ length - (mod currentBeat length)) * tempoRatio)
                             pqueue' = PQ.insert pqueue (ScheduledPdef name currentBeatMicro nextBeatMicro 0 0)
                             pmap' = M.insert name pdef pmap

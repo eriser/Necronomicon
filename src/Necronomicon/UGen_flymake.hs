@@ -24,11 +24,7 @@ import Data.Typeable
 import Control.Arrow
 
 (+>) :: UGenType a => a -> (a -> a) -> a
-<<<<<<< HEAD
-(+>) a f = f a |> add a
-=======
 (+>) a f = add a (f a)
->>>>>>> 8ed4e383b735c48fe5f50fda60cf4bb5126239b4
 infixl 0 +>
 
 --------------------------------------------------------------------------------------
@@ -39,13 +35,10 @@ data UGen = UGenNum Double
           deriving (Typeable)
 
 data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Env | Out | AuxIn | Poll | LFSaw | LFPulse | Saw | Pulse
-              | SyncSaw | SyncPulse | SyncOsc | Random | NoiseN | NoiseL | NoiseC | URandom | Dust | Dust2 | Impulse | Range | ExpRange | LPF | HPF | BPF | Notch | AllPass | PeakEQ
-              | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int | LPFMS20 | OnePoleMS20
-<<<<<<< HEAD
-              | Clip | SoftClip | Poly3 | TanH | SinDist | Wrap | DelayN Double | DelayL Double | DelayC Double | Negate
-=======
-              | Clip | SoftClip | Poly3 | TanH | SinDist | Wrap | Crush | Decimate | DelayN Double | FreeVerb | Pluck Double | WhiteNoise
->>>>>>> 8ed4e383b735c48fe5f50fda60cf4bb5126239b4
+              | SyncSaw | SyncPulse | SyncOsc | Random | NoiseN | NoiseL | NoiseC | URandom | Dust | Dust2 | Impulse | Range | ExpRange
+              | LPF | HPF | BPF | Notch | AllPass | PeakEQ | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int
+              | LPFMS20 | OnePoleMS20 | Clip | SoftClip | Poly3 | TanH | SinDist | Wrap | DelayN Double | DelayL Double | DelayC Double
+              | Negate | Crush | Decimate | FreeVerb | Pluck Double | WhiteNoise
               deriving (Show)
 
 instance Show UGen where
@@ -463,7 +456,6 @@ foreign import ccall "&delay_deconstructor" delayDeconstructor :: CUGenFunc
 
 foreign import ccall "&delayN_calc" delayNCalc :: CUGenFunc
 delayN :: UGenType a => Double -> a -> a -> a
-<<<<<<< HEAD
 delayN maxDelayTime delayTime input = ugen (DelayN maxDelayTime) delayNCalc delayConstructor delayDeconstructor [delayTime, input] 
 
 foreign import ccall "&delayL_calc" delayLCalc :: CUGenFunc
@@ -473,8 +465,6 @@ delayL maxDelayTime delayTime input = ugen (DelayL maxDelayTime) delayLCalc dela
 foreign import ccall "&delayC_calc" delayC_calc :: CUGenFunc
 delayC :: UGenType a => Double -> a -> a -> a
 delayC maxDelayTime delayTime input = ugen (DelayC maxDelayTime) delayC_calc delayConstructor delayDeconstructor [delayTime, input]
-=======
-delayN maxDelayTime delayTime input = ugen (DelayN maxDelayTime) delayNCalc delayConstructor delayDeconstructor [delayTime, input]
 
 foreign import ccall "&pluck_constructor"   pluckConstructor   :: CUGenFunc
 foreign import ccall "&pluck_deconstructor" pluckDeconstructor :: CUGenFunc
@@ -493,8 +483,6 @@ foreign import ccall "&freeverb_calc" freeverbCalc :: CUGenFunc
 
 freeverb :: UGenType a => a -> a -> a -> a -> a
 freeverb mix roomSize damp input = ugen FreeVerb freeverbCalc freeverbConstructor freeverbDeconstructor [mix,roomSize,damp,input]
-
->>>>>>> 8ed4e383b735c48fe5f50fda60cf4bb5126239b4
 ----------------------------------------------------
 
 loopSynth :: UGen -> UGen -> [UGen]
@@ -757,15 +745,12 @@ compileUGen (UGenNum d) _ key = do
     return wire
 compileUGen ugen@(UGenFunc (DelayN maxDelayTime) _ _ _ _) args key = liftIO (new $ CDouble maxDelayTime) >>= \maxDelayTimePtr ->
     compileUGenWithConstructorArgs ugen maxDelayTimePtr args key
-<<<<<<< HEAD
 compileUGen ugen@(UGenFunc (DelayL maxDelayTime) _ _ _ _) args key = liftIO (new $ CDouble maxDelayTime) >>= \maxDelayTimePtr ->
     compileUGenWithConstructorArgs ugen maxDelayTimePtr args key
 compileUGen ugen@(UGenFunc (DelayC maxDelayTime) _ _ _ _) args key = liftIO (new $ CDouble maxDelayTime) >>= \maxDelayTimePtr ->
     compileUGenWithConstructorArgs ugen maxDelayTimePtr args key
-=======
 compileUGen ugen@(UGenFunc (Pluck minFreq) _ _ _ _) args key = liftIO (new $ CDouble minFreq) >>= \minFreqPtr ->
     compileUGenWithConstructorArgs ugen minFreqPtr args key
->>>>>>> 8ed4e383b735c48fe5f50fda60cf4bb5126239b4
 compileUGen ugen args key = compileUGenWithConstructorArgs ugen nullPtr args key
 
 
