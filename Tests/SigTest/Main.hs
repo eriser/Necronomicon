@@ -3,6 +3,7 @@ import Data.Fixed (mod')
 import Control.Arrow
 
 main :: IO ()
+-- main = print scaleTest
 main = runSignal <| testGUI <|> testScene <|> testSound2
 
 testGUI :: Signal ()
@@ -36,10 +37,19 @@ testSound2 = play (isDown keyW) (isDown keyW) noArgSynth
          <|> play (isDown keyD) (isDown keyD) threeSynth  440 880 66.6
 
 noArgSynth :: UGen
-noArgSynth = sin 0.1 |> out 0
+noArgSynth = whiteNoise |> pluck 110 110 5.0 |> gain 0.1 |> out 0
+
+-- noArgSynth = dust 10 |> out 0
+-- noArgSynth = impulse 2 0.5 |> out 0
 
 oneArgSynth :: UGen -> [UGen]
--- oneArgSynth f = saw 80 |> lpf (lag 6 [f,f]) 6 >>> poly3 20 >>> gain 0.5 >>> out 0
+oneArgSynth f = sig |> filt |> verb |> gain 0.1 |> out 0
+    where
+        sig  = saw (noise2 3 |> range 40 1000) * (sin 0.35 |> range 0.5 1.0)
+        filt = lpf (lag 6 [f,f]) 6
+        verb = freeverb 1.0 0.95 0.95
+
+-- oneArgSynth f = saw 40 |> lpf (lag 6 [f,f]) 6 +> delayN 1.0 1.0 |> gain 0.5 |> out 0
 
 -- oneArgSynth f = saw 80 |> onePoleMS20 [f,f] >>> gain 0.25 >>> out 0
 -- oneArgSynth f = saw 80 |> lpfMS20 [f,f] 1 1 >>> gain 0.25 >>> out 0
@@ -51,21 +61,27 @@ oneArgSynth :: UGen -> [UGen]
 -- oneArgSynth f = saw 220 |> hpf [f,f] 0 3 >>> gain 0.25 >>> out 0
 -- oneArgSynth f = saw (noise2 3 |> range 200 800) |> gain 0.25 >>> out 0
 -- oneArgSynth f = syncpulse [f,f] 0.5 (saw 400) |> gain 0.25 >>> out 0
-oneArgSynth f = syncpulse [f,f] 0.5 (lfsaw 80 0) |> gain 0.25 >>> out 0
+-- oneArgSynth f = syncpulse [f,f] 0.5 (lfsaw 80 0) |> gain 0.25 >>> out 0
 -- oneArgSynth f = syncsaw [f,f] (saw 400) |> gain 0.25 >>> out 0
 -- oneArgSynth f = sin (urandom |> range 100 2000) |> gain 0.25 >>> out 0
 -- oneArgSynth f = lfpulse [f,f] 0 |> gain 0.25 >>> out 0
 -- oneArgSynth f = lfsaw [f,f] 0 |> gain 0.25 >>> out 0
 
 twoArgSynth :: UGen -> UGen -> [UGen]
-twoArgSynth f ff = syncosc [f,f] 0 0 [ff,ff] |> gain 0.25 >>> out 0
+twoArgSynth f ff = sin [f,ff] |> crush 2 |> decimate 4096 |> env [0,1,1,0] [3,1,3] 0 |> out  0
+-- twoArgSynth f ff = feedback sig |> perc 0.01 5 0.1 16.0 >>> out  0
+-- twoArgSynth f ff = feedback sig |> env [0,1,1,0] [3,1,3] 0 >>> out  0
+    -- where
+        -- sig i = syncosc [f + (i * 1000),f + (i * 500)] 0 0 [ff,ff] +> delayN 0.1 0.1
+
+-- twoArgSynth f ff = syncosc [f,f] 0 0 [ff,ff] |> gain 0.25 >>> out 0
 -- twoArgSynth f ff = syncpulse [f,f] 0.5 (lfsaw [ff * 0.25,ff * 0.25] 0) |> lpf (lag 1 [ff,ff]) 3 >>> gain 0.25 >>> out 0
 -- twoArgSynth f ff = saw (lag 1 [f,f]) |> lpf (lag 1 [ff,ff]) 3 >>> gain 0.25 >>> out 0
 -- twoArgSynth f pw = pulse [f,f] [pw,pw] |> gain 0.1 >>> out 0
 -- twoArgSynth fx fy = sin [fx,fy] |> gain 0.1 >>> out 0
 
 threeSynth :: UGen -> UGen -> UGen -> UGen
-threeSynth fx fy fz = sin fx + sin fy + sin fz |> gain 0.1 >>> out 0
+threeSynth fx fy fz = sin fx + sin fy + sin fz |> gain 0.1 |> out 0
 
 testScene :: Signal ()
 testScene = scene [pure cam,terrainSig]

@@ -24,7 +24,11 @@ import Data.Typeable
 import Control.Arrow
 
 (+>) :: UGenType a => a -> (a -> a) -> a
+<<<<<<< HEAD
 (+>) a f = f a |> add a
+=======
+(+>) a f = add a (f a)
+>>>>>>> 8ed4e383b735c48fe5f50fda60cf4bb5126239b4
 infixl 0 +>
 
 --------------------------------------------------------------------------------------
@@ -34,10 +38,14 @@ data UGen = UGenNum Double
           | UGenFunc UGenUnit CUGenFunc CUGenFunc CUGenFunc [UGen]
           deriving (Typeable)
 
-data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Out | AuxIn | Poll | LFSaw | LFPulse | Saw | Pulse
-              | SyncSaw | SyncPulse | SyncOsc | Random | NoiseN | NoiseL | NoiseC | URandom | Range | LPF | HPF | BPF | Notch | AllPass | PeakEQ
+data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Env | Out | AuxIn | Poll | LFSaw | LFPulse | Saw | Pulse
+              | SyncSaw | SyncPulse | SyncOsc | Random | NoiseN | NoiseL | NoiseC | URandom | Dust | Dust2 | Impulse | Range | ExpRange | LPF | HPF | BPF | Notch | AllPass | PeakEQ
               | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int | LPFMS20 | OnePoleMS20
+<<<<<<< HEAD
               | Clip | SoftClip | Poly3 | TanH | SinDist | Wrap | DelayN Double | DelayL Double | DelayC Double | Negate
+=======
+              | Clip | SoftClip | Poly3 | TanH | SinDist | Wrap | Crush | Decimate | DelayN Double | FreeVerb | Pluck Double | WhiteNoise
+>>>>>>> 8ed4e383b735c48fe5f50fda60cf4bb5126239b4
               deriving (Show)
 
 instance Show UGen where
@@ -126,6 +134,8 @@ class UGenType a where
     toUGenList :: a -> [UGen]
     consume :: a -> Int -> Compiled ([UGen], Int) -- used during compiling to correctly handle synth argument compilation
     prFeedback :: a -> Int -> ([UGen], Int)
+    uappend :: [a] -> [UGen] -> [a]
+
 
 instance (UGenType b) => UGenType (UGen -> b)  where
     ugen _ _ _ _ _ = undefined -- Should never be reached
@@ -133,6 +143,7 @@ instance (UGenType b) => UGenType (UGen -> b)  where
     toUGenList u = undefined -- Should neverbe reached
     consume f i = compileSynthArg i >>= \arg -> consume (f arg) (i + 1)
     prFeedback f i = prFeedback (f $ localIn i) (i + 1)
+    uappend us _ = us
 
 instance UGenType UGen where
     ugen name calc constructor deconstructor args = UGenFunc name calc constructor deconstructor args
@@ -140,6 +151,7 @@ instance UGenType UGen where
     toUGenList u = [u]
     consume u i = return ([u], i)
     prFeedback u i = ([u], i)
+    uappend us us' = us ++ us'
 
 instance UGenType [UGen] where
     ugen name calc constructor deconstructor args = expand 0
@@ -163,6 +175,7 @@ instance UGenType [UGen] where
     toUGenList us = us
     consume us i = return (us, i)
     prFeedback us i = (us, i)
+    uappend us us' = us ++ map (: []) us'
 
 ----------------------------------------------------
 -- UGen Bindings
@@ -212,6 +225,32 @@ foreign import ccall "&line_deconstructor" lineDeconstructor :: CUGenFunc
 line :: UGenType a => a -> a
 line length = ugen Line lineCalc lineConstructor lineDeconstructor [length]
 
+-- foreign import ccall "&perc_calc" percCalc :: CUGenFunc
+-- perc :: UGenType a => a -> a -> a -> a -> a
+-- perc length peak curve x = ugen Perc percCalc lineConstructor lineDeconstructor [length,peak,curve,x]
+
+perc :: UGenType a => UGen -> UGen -> UGen -> a -> a -> a
+perc attackTime releaseTime peak curve = env [0,peak,0] [attackTime,releaseTime] curve
+
+adr :: UGenType a => UGen -> UGen -> UGen -> UGen -> UGen -> a -> a -> a
+adr attackTime decayTime releaseTime peak releaseLevel curve = env [0,peak,releaseLevel] [attackTime,decayTime,releaseTime] curve
+
+foreign import ccall "&env_calc" envCalc          :: CUGenFunc
+env :: UGenType a => [UGen] -> [UGen] -> a -> a -> a
+env values durations curve x = ugen Env envCalc lineConstructor lineDeconstructor args
+    where
+        valuesLength    = length values
+        durationsLength = length durations
+        args            = [curve,x]
+            `uappend` [UGenNum (fromIntegral valuesLength),UGenNum (fromIntegral durationsLength)]
+            `uappend` values
+            `uappend` durations
+
+        -- `uappend` [(\(len,_) -> UGenNum len) $ findDuration (0,0), UGenNum (fromIntegral valuesLength),UGenNum (fromIntegral durationsLength)]
+        -- findDuration (len,count)
+            -- | count >= valuesLength -1 = (len,count)
+            -- | otherwise                = findDuration (len + (durations !! (mod count durationsLength)),count + 1)
+
 foreign import ccall "&out_calc" outCalc :: CUGenFunc
 out :: UGenType a => a -> a -> a
 out channel input = incrementArgWithChannels 0 $ ugen Out outCalc nullConstructor nullDeconstructor [channel, input]
@@ -248,6 +287,7 @@ feedback f = expand . localOut 0 $ output
         expand arr = arr ++ (foldl (\acc i -> acc ++ (localOut i [0])) [] (drop (length arr) [0..(numInputs - 1)]))
 
 --oscillators
+--dictionary passing style ugens?
 foreign import ccall "&accumulator_constructor" accumulatorConstructor :: CUGenFunc
 foreign import ccall "&accumulator_deconstructor" accumulatorDeconstructor :: CUGenFunc
 
@@ -258,6 +298,21 @@ lfsaw freq phase = ugen LFSaw lfsawCalc accumulatorConstructor accumulatorDecons
 foreign import ccall "&lfpulse_calc" lfpulseCalc :: CUGenFunc
 lfpulse :: UGenType a => a -> a -> a
 lfpulse freq phase = ugen LFPulse lfpulseCalc accumulatorConstructor accumulatorDeconstructor [freq,phase]
+
+foreign import ccall "&impulse_calc" impulseCalc :: CUGenFunc
+impulse :: UGenType a => a -> a -> a
+impulse freq phase = ugen Impulse impulseCalc accumulatorConstructor accumulatorDeconstructor [freq,phase]
+
+foreign import ccall "&dust_constructor"   dustConstructor   :: CUGenFunc
+foreign import ccall "&dust_deconstructor" dustDeconstructor :: CUGenFunc
+
+foreign import ccall "&dust_calc" dustCalc :: CUGenFunc
+dust :: UGenType a => a -> a
+dust density = ugen Dust dustCalc dustConstructor dustDeconstructor [density]
+
+foreign import ccall "&dust2_calc" dust2Calc :: CUGenFunc
+dust2 :: UGenType a => a -> a
+dust2 density = ugen Dust2 dust2Calc dustConstructor dustDeconstructor [density]
 
 foreign import ccall "&minblep_constructor"   minblepConstructor   :: CUGenFunc
 foreign import ccall "&minblep_deconstructor" minblepDeconstructor :: CUGenFunc
@@ -305,6 +360,10 @@ noise2 freq = ugen NoiseC lfnoiseCCalc randConstructor randDeconstructor [freq]
 foreign import ccall "&range_calc" rangeCalc :: CUGenFunc
 range :: UGenType a => a -> a -> a -> a
 range low high input = ugen Range rangeCalc nullConstructor nullDeconstructor [low,high,input]
+
+foreign import ccall "&exprange_calc" exprangeCalc :: CUGenFunc
+exprange :: UGenType a => a -> a -> a -> a
+exprange low high input = ugen ExpRange exprangeCalc nullConstructor nullDeconstructor [low,high,input]
 
 foreign import ccall "&urand_constructor"   urandConstructor   :: CUGenFunc
 foreign import ccall "&urand_deconstructor" urandDeconstructor :: CUGenFunc
@@ -389,11 +448,22 @@ foreign import ccall "&wrap_calc" wrapCalc :: CUGenFunc
 wrap :: UGenType a => a -> a -> a
 wrap amount input = ugen Wrap wrapCalc nullConstructor nullDeconstructor [amount,input]
 
+foreign import ccall "&crush_calc" crushCalc :: CUGenFunc
+crush :: UGenType a => a -> a -> a
+crush depth x = ugen Crush crushCalc nullConstructor nullDeconstructor [depth,x]
+
+foreign import ccall "&decimate_constructor"   decimateConstructor   :: CUGenFunc
+foreign import ccall "&decimate_deconstructor" decimateDeconstructor :: CUGenFunc
+foreign import ccall "&decimate_calc"          decimateCalc          :: CUGenFunc
+decimate :: UGenType a => a -> a -> a
+decimate rate x = ugen Decimate decimateCalc decimateConstructor decimateDeconstructor [rate,x]
+
 foreign import ccall "&delay_constructor" delayConstructor :: CUGenFunc
 foreign import ccall "&delay_deconstructor" delayDeconstructor :: CUGenFunc
 
 foreign import ccall "&delayN_calc" delayNCalc :: CUGenFunc
 delayN :: UGenType a => Double -> a -> a -> a
+<<<<<<< HEAD
 delayN maxDelayTime delayTime input = ugen (DelayN maxDelayTime) delayNCalc delayConstructor delayDeconstructor [delayTime, input] 
 
 foreign import ccall "&delayL_calc" delayLCalc :: CUGenFunc
@@ -403,6 +473,28 @@ delayL maxDelayTime delayTime input = ugen (DelayL maxDelayTime) delayLCalc dela
 foreign import ccall "&delayC_calc" delayC_calc :: CUGenFunc
 delayC :: UGenType a => Double -> a -> a -> a
 delayC maxDelayTime delayTime input = ugen (DelayC maxDelayTime) delayC_calc delayConstructor delayDeconstructor [delayTime, input]
+=======
+delayN maxDelayTime delayTime input = ugen (DelayN maxDelayTime) delayNCalc delayConstructor delayDeconstructor [delayTime, input]
+
+foreign import ccall "&pluck_constructor"   pluckConstructor   :: CUGenFunc
+foreign import ccall "&pluck_deconstructor" pluckDeconstructor :: CUGenFunc
+foreign import ccall "&pluck_calc"          pluckCalc          :: CUGenFunc
+
+pluck :: UGenType a => Double -> a -> a -> a -> a
+pluck minFreq freq duration x = ugen (Pluck minFreq) pluckCalc pluckConstructor pluckDeconstructor [freq,duration,x]
+
+foreign import ccall "&white_calc" whiteCalc :: CUGenFunc
+whiteNoise :: UGenType a => a
+whiteNoise = ugen WhiteNoise whiteCalc nullConstructor nullDeconstructor []
+
+foreign import ccall "&freeverb_constructor" freeverbConstructor :: CUGenFunc
+foreign import ccall "&freeverb_deconstructor" freeverbDeconstructor :: CUGenFunc
+foreign import ccall "&freeverb_calc" freeverbCalc :: CUGenFunc
+
+freeverb :: UGenType a => a -> a -> a -> a -> a
+freeverb mix roomSize damp input = ugen FreeVerb freeverbCalc freeverbConstructor freeverbDeconstructor [mix,roomSize,damp,input]
+
+>>>>>>> 8ed4e383b735c48fe5f50fda60cf4bb5126239b4
 ----------------------------------------------------
 
 loopSynth :: UGen -> UGen -> [UGen]
@@ -475,10 +567,13 @@ nullSynth = SynthDef "" 0 nullPtr
 printSynthDef :: String -> Necronomicon ()
 printSynthDef synthDefName = getSynthDef synthDefName >>= nPrint
 
-playSynthAt :: String -> [Double] -> Double -> Necronomicon Synth
-playSynthAt synthDefName args time = getSynthDef synthDefName >>= \maybeSynthDef -> case maybeSynthDef of
-                Just synthDef -> incrementNodeID >>= \id -> sendMessage (StartSynth synthDef (map (CDouble) args) id (secondsToMicro time)) >> return (Synth id synthDef)
+playSynthAtJackTime :: String -> [Double] -> JackTime -> Necronomicon Synth
+playSynthAtJackTime synthDefName args time = getSynthDef synthDefName >>= \maybeSynthDef -> case maybeSynthDef of
+                Just synthDef -> incrementNodeID >>= \id -> sendMessage (StartSynth synthDef (map (CDouble) args) id time) >> return (Synth id synthDef)
                 Nothing -> nPrint ("SynthDef " ++ synthDefName ++ " not found. Unable to start synth.") >> return (Synth nullID nullSynth)
+
+playSynthAt :: String -> [Double] -> Double -> Necronomicon Synth
+playSynthAt synthDefName args time = playSynthAtJackTime synthDefName args $ secondsToMicro time
 
 playSynth :: String -> [Double] -> Necronomicon Synth
 playSynth synthDefName args = playSynthAt synthDefName args 0
@@ -637,7 +732,7 @@ compileUGenArgs :: UGen -> Compiled [CUInt]
 compileUGenArgs (UGenFunc _ _ _ _ inputs) = mapM (compileUGenGraphBranch) inputs
 compileUGenArgs (UGenNum _) = return []
 
-compileUGenWithConstructorArgs :: UGen -> Ptr CDouble -> [CUInt] -> String -> Compiled CUInt 
+compileUGenWithConstructorArgs :: UGen -> Ptr CDouble -> [CUInt] -> String -> Compiled CUInt
 compileUGenWithConstructorArgs (UGenFunc _ calc cons decn _) conArgs args key = do
     inputs <- liftIO (newArray args)
     wire <- nextWireIndex
@@ -662,8 +757,41 @@ compileUGen (UGenNum d) _ key = do
     return wire
 compileUGen ugen@(UGenFunc (DelayN maxDelayTime) _ _ _ _) args key = liftIO (new $ CDouble maxDelayTime) >>= \maxDelayTimePtr ->
     compileUGenWithConstructorArgs ugen maxDelayTimePtr args key
+<<<<<<< HEAD
 compileUGen ugen@(UGenFunc (DelayL maxDelayTime) _ _ _ _) args key = liftIO (new $ CDouble maxDelayTime) >>= \maxDelayTimePtr ->
     compileUGenWithConstructorArgs ugen maxDelayTimePtr args key
 compileUGen ugen@(UGenFunc (DelayC maxDelayTime) _ _ _ _) args key = liftIO (new $ CDouble maxDelayTime) >>= \maxDelayTimePtr ->
     compileUGenWithConstructorArgs ugen maxDelayTimePtr args key
+=======
+compileUGen ugen@(UGenFunc (Pluck minFreq) _ _ _ _) args key = liftIO (new $ CDouble minFreq) >>= \minFreqPtr ->
+    compileUGenWithConstructorArgs ugen minFreqPtr args key
+>>>>>>> 8ed4e383b735c48fe5f50fda60cf4bb5126239b4
 compileUGen ugen args key = compileUGenWithConstructorArgs ugen nullPtr args key
+
+
+------------------------------------------
+-- Testing Functions
+------------------------------------------
+
+makeAndStartNecro :: IO NecroVars
+makeAndStartNecro = do
+    necroVars <- mkNecroVars
+    runNecroState startNecronomicon necroVars
+    return necroVars
+
+testSynth :: UGenType a => a -> [Double] -> NecroVars -> IO Synth
+testSynth synth args necroVars = do
+    runNecroState (compileSynthDef "testSynth" synth) necroVars
+    (synth,_) <- runNecroState (playSynth "testSynth" args) necroVars
+    return synth
+
+stopTestSynth :: Synth -> NecroVars -> IO()
+stopTestSynth synth necroVars = runNecroState (stopSynth synth) necroVars >> return ()
+
+------------------------------------------
+-- Experimental
+------------------------------------------
+
+-- data UGenType a => SynthGen a = SynthGen {synthGenName :: String, synthGenUGen :: a}
+-- synthGen :: UGenType a => String -> Int -> a -> a
+-- synthGen name outBus input = SynthGen name (out outBus input)

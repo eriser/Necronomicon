@@ -16,6 +16,7 @@ import System.CPUTime
 import Sound.OSC.Time
 import qualified Data.Fixed as F
 import Necronomicon.Util.Functions
+import qualified Data.Vector as V
 
 type Time = Double
 
@@ -552,3 +553,429 @@ mreseq p = p >>= (\v -> return v * 100)
 
 monadicPattern :: PNum
 monadicPattern = pseq 5 [1..9] >>= mreseq
+
+---------------------------------------
+-- Tunings
+---------------------------------------
+
+data Scale = Scale {
+    tuning           :: V.Vector Double,
+    degrees          :: V.Vector Int,
+    pitchesPerOctave :: Int,
+    rootFreq         :: Double}
+
+degree2Freq :: Scale -> Int -> Double
+degree2Freq scale degree = (tuning scale V.! wrapAt degree (degrees scale)) * octave * rootFreq scale
+    where
+        octave            = fromIntegral $ 2 ^ (div degree $ V.length $ degrees scale)
+        wrapAt index list = list V.! mod index (V.length list)
+
+d2f :: Scale -> Int -> Double
+d2f = degree2Freq
+
+scaleTest :: [Double]
+scaleTest = [d2f major 8,d2f major 9,d2f major 10,d2f major 11,d2f major 12,d2f major 13,d2f major 14]
+
+justTuning :: V.Vector Double
+justTuning = V.fromList [
+    1,
+    16/15,
+    9/8,
+    6/5,
+    5/4,
+    4/3,
+    45/32,
+    3/2,
+    8/5,
+    5/3,
+    9/5,
+    15/8]
+
+equalTuning :: V.Vector Double
+equalTuning = V.fromList $ map (\x -> 2 ** (x / 12)) [0..11]
+
+sruti :: V.Vector Double
+sruti = V.fromList [
+    1,
+    256/243,
+    16/15,
+    10/9,
+    9/8,
+    32/27,
+    6/5,
+    5/4,
+    81/64,
+    4/3,
+    27/20,
+    45/32,
+    729/512,
+    3/2,
+    128/81,
+    8/5,
+    5/3,
+    27/16,
+    16/9,
+    9/5,
+    15/8,
+    243/128]
+
+slendroTuning :: V.Vector Double
+slendroTuning = V.fromList [
+    1,
+    1.1654065573126493,
+    1.3263853707896778,
+    1.5087286267502333,
+    1.743113687764283]
+
+slendroTuning2 :: V.Vector Double
+slendroTuning2 = V.fromList [
+    1,
+    1.0204225362734822,
+    1.1044540007443515,
+    1.1721576888192515,
+    1.2191142483402215,
+    1.3464556089438007,
+    1.3464556089438007,
+    1.4870982841226525,
+    1.5457782086418603,
+    1.6405353335201565,
+    1.7766588275058794,
+    1.8118958124688056]
+
+pelogTuning :: V.Vector Double
+pelogTuning = V.fromList [
+    1,
+    1.0999973132782155,
+    1.3763365917680923,
+    1.4581778243945491,
+    1.629203328218162]
+
+ankaraTuning :: V.Vector Double
+ankaraTuning = V.fromList [
+    1,
+    1053/1000,
+    533/500,
+    1079/1000,
+    273/250,
+    111/100,
+    281/250,
+    589/500,
+    239/200,
+    1211/1000,
+    123/100,
+    156/125,
+    158/125,
+    1333/1000,
+    677/500,
+    1373/1000,
+    1393/1000,
+    7/5,
+    1421/1000,
+    721/500,
+    3/2,
+    317/200,
+    201/125,
+    407/250,
+    1653/1000,
+    167/100,
+    211/125,
+    1777/1000,
+    1801/1000,
+    1827/1000,
+    1853/1000,
+    47/25,
+    951/500,
+    1931/1000]
+
+flamencoTuning :: V.Vector Double
+flamencoTuning = V.fromList [
+    1,
+    160/153,
+    512/459,
+    32/27,
+    64/51,
+    4/3,
+    1216/867,
+    76/51,
+    80/51,
+    256/153,
+    16/9,
+    4096/2187]
+
+hawaiianTuning :: V.Vector Double
+hawaiianTuning = V.fromList [
+    1,
+    1418440/1360773,
+    168926/151197,
+    60354/50399,
+    566204/453591,
+    67431/50399,
+    1897784/1360773,
+    75338/50399,
+    2120315/1360773,
+    84172/50399,
+    90219/50399,
+    846376/453591]
+
+kotoTuning :: V.Vector Double
+kotoTuning = V.fromList [
+    107/152,
+    3/4,
+    5/4,
+    143/114,
+    45/32,
+    429/304,
+    3/2,
+    1/1,
+    5/4,
+    15/8,
+    143/76]
+
+mothraTuning :: V.Vector Double
+mothraTuning = V.fromList [
+    1,
+    1.1189384464207068,
+    1.1436839646530013,
+    1.2797119586051036,
+    1.3080130110044073,
+    1.4635860464313424,
+    1.49595350624323,
+    1.6738798921934088,
+    1.7108980369568154,
+    1.914389591456696,
+    1.9567266500238074]
+
+egyptianTuning :: V.Vector Double
+egyptianTuning = V.fromList [
+    1/2,
+    107/96,
+    9/8,
+    11/9,
+    59/48,
+    4/3,
+    1/1,
+    3/2,
+    5/3,
+    121/72,
+    11/6,
+    133/72]
+
+-- Scales
+
+defaultScale :: Scale
+defaultScale = Scale justTuning (V.fromList [0,2,4,5,7,9,11]) 2 261.6255653006
+
+-----------------
+-- equal temperament scales
+-----------------
+
+major :: Scale
+major = Scale equalTuning (V.fromList [0,2,4,5,7,9,11]) 12 261.6255653006
+
+ionian :: Scale
+ionian = major
+
+dorian :: Scale
+dorian = Scale equalTuning (V.fromList [0,2,3,5,7,9,10]) 12 261.6255653006
+
+phrygian :: Scale
+phrygian = Scale equalTuning (V.fromList [0,1,3,5,7,8,10]) 12 261.6255653006
+
+lydian :: Scale
+lydian = Scale equalTuning (V.fromList [0,2,4,6,7,9,11]) 12 261.6255653006
+
+mixolydian :: Scale
+mixolydian = Scale equalTuning (V.fromList [0,2,4,5,7,9,10]) 12 261.6255653006
+
+minor :: Scale
+minor = Scale equalTuning (V.fromList [0,2,3,5,7,8,10]) 12 261.6255653006
+
+aeolian :: Scale
+aeolian = minor
+
+locrian :: Scale
+locrian = Scale equalTuning (V.fromList [0,1,3,5,6,7,8,10]) 12 261.6255653006
+
+harmonicMinor :: Scale
+harmonicMinor = Scale equalTuning (V.fromList [0,2,3,5,7,8,11]) 12 261.6255653006
+
+bartok :: Scale
+bartok = Scale equalTuning (V.fromList [0,2,4,5,7,8,10]) 12 261.6255653006
+
+majorPentatonic :: Scale
+majorPentatonic = Scale equalTuning (V.fromList [0,2,4,7,9]) 12 261.6255653006
+
+minorPentatonic :: Scale
+minorPentatonic = Scale equalTuning (V.fromList [0,3,5,7,10]) 12 261.6255653006
+
+whole :: Scale
+whole = Scale equalTuning (V.fromList [0,2..10]) 12 261.6255653006
+
+augmented :: Scale
+augmented = Scale equalTuning (V.fromList [0,3,4,7,8,11]) 12 261.6255653006
+
+chromatic :: Scale
+chromatic = Scale equalTuning (V.fromList [0..11]) 12 261.6255653006
+
+romanianMinor :: Scale
+romanianMinor = Scale equalTuning (V.fromList [0,2,3,6,7,9,10]) 12 261.6255653006
+
+neapolitonMinor :: Scale
+neapolitonMinor = Scale equalTuning (V.fromList [0,1,3,5,7,8,11]) 12 261.6255653006
+
+enigmatic :: Scale
+enigmatic = Scale equalTuning (V.fromList [0,1,4,6,8,10,11]) 12 261.6255653006
+
+-----------------
+-- just scales
+-----------------
+
+justMajor :: Scale
+justMajor = Scale justTuning (V.fromList [0,2,4,5,7,9,11]) 12 261.6255653006
+
+justIonian :: Scale
+justIonian = justMajor
+
+justDorian :: Scale
+justDorian = Scale justTuning (V.fromList [0,2,3,5,7,9,10]) 12 261.6255653006
+
+justPhrygian :: Scale
+justPhrygian = Scale justTuning (V.fromList [0,1,3,5,7,8,10]) 12 261.6255653006
+
+justLydian :: Scale
+justLydian = Scale justTuning (V.fromList [0,2,4,6,7,9,11]) 12 261.6255653006
+
+justMixolydian :: Scale
+justMixolydian = Scale justTuning (V.fromList [0,2,4,5,7,9,10]) 12 261.6255653006
+
+justMinor :: Scale
+justMinor = Scale justTuning (V.fromList [0,2,3,5,7,8,10]) 12 261.6255653006
+
+justAeolian :: Scale
+justAeolian = justMinor
+
+justLocrian :: Scale
+justLocrian = Scale justTuning (V.fromList [0,1,3,5,6,7,8,10]) 12 261.6255653006
+
+justHarmonicMinor :: Scale
+justHarmonicMinor = Scale justTuning (V.fromList [0,2,3,5,7,8,11]) 12 261.6255653006
+
+hindu :: Scale
+hindu = Scale justTuning (V.fromList [0,2,4,5,7,8,10]) 12 261.6255653006
+
+justMajorPentatonic :: Scale
+justMajorPentatonic = Scale justTuning (V.fromList [0,2,4,7,9]) 12 261.6255653006
+
+justMinorPentatonic :: Scale
+justMinorPentatonic = Scale justTuning (V.fromList [0,3,5,7,10]) 12 261.6255653006
+
+justAugmented :: Scale
+justAugmented = Scale justTuning (V.fromList [0,3,4,7,8,11]) 12 261.6255653006
+
+prometheus :: Scale
+prometheus = Scale justTuning (V.fromList [0,2,4,6,11]) 12 261.6255653006
+
+scriabin :: Scale
+scriabin = Scale justTuning (V.fromList [0,1,4,7,9]) 12 261.6255653006
+
+-----------------
+-- Other scales
+-----------------
+
+egyptian :: Scale
+egyptian = Scale justTuning (V.fromList [0,2,5,7,10]) 5 261.6255653006
+
+egyptianRast :: Scale
+egyptianRast = Scale egyptianTuning (V.fromList [0..V.length egyptianTuning - 1]) (V.length egyptianTuning) 261.6255653006
+
+kumoi :: Scale
+kumoi = Scale justTuning (V.fromList [0,2,3,7,9]) 5 261.6255653006
+
+koto :: Scale
+koto = Scale kotoTuning (V.fromList [0..V.length kotoTuning - 1]) (V.length kotoTuning) 261.6255653006
+
+hirajoshi :: Scale
+hirajoshi = Scale (V.fromList [1.1179326948564068,1.2290128500397486,1.5148413070990605,1.5883182356387209,1.9988450882827615]) (V.fromList [0..4]) 5 261.6255653006
+
+hirajoshi2 :: Scale
+hirajoshi2 = Scale (V.fromList [1,1.1127786663921269,1.214896433458163,1.483666323795931,1.5782582946772832]) (V.fromList [0..4]) 5 261.6255653006
+
+iwato :: Scale
+iwato = Scale justTuning (V.fromList [0,1,5,6,10]) 5 261.6255653006
+
+chinese :: Scale
+chinese = Scale justTuning (V.fromList [0,4,6,7,11]) 5 261.6255653006
+
+indian :: Scale
+indian = Scale justTuning (V.fromList [0,4,5,7,10]) 5 261.6255653006
+
+pelog :: Scale
+pelog = Scale pelogTuning (V.fromList [0,1,2,3,4]) 5 261.6255653006
+
+slendro :: Scale
+slendro = Scale slendroTuning (V.fromList [0,1,2,3,4]) 5 261.6255653006
+
+slendro2 :: Scale
+slendro2 = Scale slendroTuning2 (V.fromList [0,2,4,7,9]) 12 261.6255653006
+
+alfarabi :: Scale
+alfarabi = Scale (V.fromList [16/15,8/7,4/3,3/2,8/5,12/7,2/1]) (V.fromList [0..6]) 7 261.6255653006
+
+ankara :: Scale
+ankara = Scale ankaraTuning (V.fromList [0..(subtract 1 $ V.length ankaraTuning)]) (V.length ankaraTuning) 261.6255653006
+
+archytas :: Scale
+archytas = Scale (V.fromList [1,9/8,5/4,4/3,3/2,8/5,16/9]) (V.fromList [0..6]) 7 261.6255653006
+
+degung :: Scale
+degung = Scale (V.fromList [1,1.0936636901250125,1.2203859705254885,1.4931129786811597,1.6088158125951093]) (V.fromList [0..4]) 5 261.6255653006
+
+degungSejati :: Scale
+degungSejati = Scale (V.fromList [1,1.277508892327913,1.3302216591077187,1.5035088222376056,1.9207458901020087]) (V.fromList [0..4]) 5 261.6255653006
+
+spanish :: Scale
+spanish = Scale flamencoTuning (V.fromList [0,1,4,5,7,8,10]) 12 261.6255653006
+
+hawaiianMajor :: Scale
+hawaiianMajor = Scale hawaiianTuning (V.fromList [0,2,4,5,7,9,11]) 12 261.6255653006
+
+hawaiianMinor :: Scale
+hawaiianMinor = Scale hawaiianTuning (V.fromList [0,2,3,5,7,8,10]) 12 261.6255653006
+
+hijazira :: Scale
+hijazira = Scale (V.fromList [1,13/12,5/4,4/3,3/2,13/8,11/6]) (V.fromList [0..6]) 7 261.6255653006
+
+mothra :: Scale
+mothra = Scale mothraTuning (V.fromList [0..10]) 11 261.6255653006
+
+-----------------
+-- Raga modes
+-----------------
+
+todi :: Scale
+todi = Scale justTuning (V.fromList [0,1,3,6,7,8,11]) 12 261.6255653006
+
+purvi :: Scale
+purvi = Scale justTuning (V.fromList [0,1,4,6,7,8,11]) 12 261.6255653006
+
+marva :: Scale
+marva = Scale justTuning (V.fromList [0,1,4,6,7,9,11]) 12 261.6255653006
+
+bhairav :: Scale
+bhairav = Scale justTuning (V.fromList [0,1,4,5,7,8,11]) 12 261.6255653006
+
+ahirbhairav :: Scale
+ahirbhairav = Scale justTuning (V.fromList [0,1,4,5,7,9,10]) 12 261.6255653006
+
+-- Cole Ingraham's Just intonated scale
+coleJI :: Scale
+coleJI = Scale (V.fromList [1,10/9,9/8,8/7,6/5,4/3,11/8,3/2,8/5,7/4,16/9,9/5]) (V.fromList [0,1,2,3,4,5,6,7,8,9,10,11]) 12 261.6255653006
+
+scaleList :: [String]
+scaleList = ["major", "ionian", "dorian", "phrygian", "lydian", "mixolydian", "minor", "aeolian", "locrian", "harmonicMinor",
+             "bartok", "majorPentatonic", "minorPentatonic", "whole", "augmented", "chromatic", "romanianMinor", "neapolitonMinor",
+             "enigmatic", "justMajor", "justIonian", "justDorian", "justPhrygian", "justLydian", "justMixolydian", "justMinor",
+             "justAeolian", "justLocrian", "justHarmonicMinor", "hindu", "justMajorPentatonic", "justMinorPentatonic", "justAugmented",
+             "prometheus", "scriabin", "egyptian", "egyptianRast", "kumoi", "koto", "hirajoshi", "hirajoshi2", "iwato", "chinese",
+             "indian", "pelog", "slendro", "slendro2", "alfarabi", "ankara", "archytas", "degung", "degungSejati", "spanish",
+             "hawaiianMajor", "hawaiianMinor", "hijazira", "mothra", "todi", "purvi", "marva", "bhairav", "ahirbhairav", "coleJI"]
