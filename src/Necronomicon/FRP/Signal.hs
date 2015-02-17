@@ -882,7 +882,7 @@ playPattern init playSig stopSig pattern = Signal $ \necro -> do
     (_,netPlayCont,_)     <- unSignal (input False nid) necro
 
     --pure Values
-    let pdef             = pstream ("sigPattern" ++ show uid) (pure $ \time jackTime -> liftIO . atomically . writeTBQueue (globalDispatch necro) . Event uid $ toDyn time) pattern
+    let pdef             = pstream ("sigPattern" ++ show uid) (pure $ liftIO . atomically . writeTBQueue (globalDispatch necro) . Event uid . toDyn) pattern
         ids              = IntSet.insert nid $ IntSet.insert uid $ IntSet.union sids pids
 
     runNecroState (setTempo 150) (necroVars necro)
@@ -1998,7 +1998,7 @@ randFS signal = Signal $ \state -> do
 toggle :: Signal Bool -> Signal Bool
 toggle boolSignal = Signal $ \state -> do
     boolCont <- unSignal boolSignal state
-    boolVal  <- boolCont state >>= return . unEvent
+    boolVal  <- unEvent <~ boolCont state
     boolRef  <- newIORef boolVal
     return $ processSignal boolRef boolCont
     where
@@ -2010,7 +2010,7 @@ till :: Signal Bool -> Signal Bool -> Signal Bool
 till sigA sigB = Signal $ \state -> do
     aCont   <- unSignal sigA state
     bCont   <- unSignal sigB state
-    aValue  <- aCont state >>= return . unEvent
+    aValue  <- unEvent <~ aCont state
     boolRef <- newIORef aValue
     return $ processSignal boolRef aCont bCont
     where
@@ -2070,7 +2070,7 @@ foldn f bInit a = Signal $ \state -> do
 netsignal :: Networkable a => Signal a -> Signal a
 netsignal sig = Signal $ \state -> do
     cont  <- unSignal sig state
-    val   <- cont state >>= return . unEvent
+    val   <- fmap unEvent $ cont state
     ref   <- newIORef val
     netid <- getNextID state
     sendAddNetSignal (client state) (netid,toNetVal val)
@@ -2091,6 +2091,46 @@ netsignal sig = Signal $ \state -> do
 ---------------------------------------------
 -- Sound
 ---------------------------------------------
+
+-- playPattern :: (Show a,Typeable a) => a -> Signal Bool -> Signal Bool -> Pattern (Pattern a,Double) -> Signal a
+-- playPattern init playSig stopSig pattern = Signal $ \necro -> do
+
+    --Signal Values
+    -- (pValue,pCont,pids) <- unSignal playSig necro
+    -- (sValue,sCont,sids) <- unSignal playSig necro
+    -- uid                 <- getNextID necro
+    -- nid                 <- getNextID necro
+    -- ref                 <- newIORef init
+    -- playRef             <- newIORef False
+
+    --Net Values
+    -- (_,netPlayCont,_)     <- unSignal (input False nid) necro
+
+    --pure Values
+    -- let pdef             = pstream ("sigPattern" ++ show uid) (pure $ liftIO . atomically . writeTBQueue (globalDispatch necro) . Event uid . toDyn) pattern
+        -- ids              = IntSet.insert nid $ IntSet.insert uid $ IntSet.union sids pids
+
+    -- runNecroState (setTempo 150) (necroVars necro)
+    -- sendAddNetSignal (client necro) (nid,NetBool False)
+    -- return (init,processEvent pCont sCont netPlayCont uid nid pdef (client necro) (necroVars necro) ref playRef ids,ids)
+    -- where
+        -- processEvent pCont sCont netPlayCont uid nid pdef client necroVars ref playRef ids event@(Event eid e) = case idGuard ids eid ref of
+            -- Just  r -> r
+            -- Nothing -> if eid == uid
+                -- then case fromDynamic e of
+                    -- Just v -> writeIORef ref v >> return (Change v)
+                    -- _      -> print "dynamic casting error in playPattern" >> readIORef ref >>= return . NoChange
+                -- else netPlayCont event >>= \net -> case net of
+                    -- Change True  -> print "net play" >> runNecroState (runPDef pdef) necroVars >> writeIORef playRef True  >> readIORef ref >>= return . NoChange
+                    -- Change False -> print "net stop" >> runNecroState (pstop   pdef) necroVars >> writeIORef playRef False >> readIORef ref >>= return . NoChange
+                    -- _            -> readIORef playRef >>= \play -> if play
+                        -- then sCont event >>= \s -> case s of
+                            -- Change True -> print "stop" >> sendSetNetSignal client (nid,NetBool False) >> runNecroState (pstop   pdef) necroVars >> writeIORef playRef False >> readIORef ref >>= return . NoChange
+                            -- _           -> readIORef ref >>= return . NoChange
+                        -- else pCont event >>= \p -> case p of
+                            -- Change True -> print "play" >> sendSetNetSignal client (nid,NetBool True ) >> runNecroState (runPDef pdef) necroVars >> writeIORef playRef True  >> readIORef ref >>= return . NoChange
+                            -- _           -> readIORef ref >>= return . NoChange
+
 
 playSynthN :: UGenType a => a -> Signal Bool -> [Signal Double] -> Signal ()
 playSynthN synth playSig argSigs = Signal $ \state -> do

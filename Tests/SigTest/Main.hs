@@ -3,7 +3,6 @@ import Data.Fixed (mod')
 import Control.Arrow
 
 main :: IO ()
--- main = testSignals
 main = runSignal <| testGUI <|> (testScene <&> testSound2)
 
 testGUI :: Signal ()
@@ -23,8 +22,6 @@ testGUI = gui [chatBox,netBox,users]
                           <| Font   "OCRA.ttf" 24
                           <| vertexColored (RGBA 1 1 1 0.1)
 
--- Implement in terms of play until instead
--- Networking the state works out better that way!
 testSound :: Signal ()
 testSound = play (isDown keyW)                    myCoolSynth2
         <&> play (toggle <| isDown keyA)          myCoolSynth3

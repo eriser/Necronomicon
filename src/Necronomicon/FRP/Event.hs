@@ -31,6 +31,7 @@ data Event        = Event Int Dynamic
 data EventValue a = Change a | NoChange a deriving (Show)
 
 newtype Signal a = Signal{unSignal :: SignalState -> IO (SignalState -> IO (EventValue a))}
+--timestamp inputs mayhap?
 type SignalVar a = TVar (EventValue a)
 data SignalState = SignalState {
     inputCounter      :: IORef Int,
