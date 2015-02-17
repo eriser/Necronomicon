@@ -196,19 +196,19 @@ parseMessage Alive client _ = do
 parseMessage (Login _) _ _ = putStrLn "Succesfully logged in."
 
 parseMessage (AddNetSignal uid netVal) client _ = do
-    atomically (readTVar (netSignals client) >>= \sig -> writeTVar (netSignals client) (IntMap.insert uid netVal sig))
+    atomically (readTVar (netSignals client) >>= \sig -> writeTVar (netSignals client) (IntMap.insert uid (Change netVal) sig))
     putStrLn $ "Adding NetSignal: " ++ show (uid,netVal)
 
 parseMessage (SetNetSignal uid netVal) client sigstate = do
     -- need new system for this
     -- sendToGlobalDispatch globalDispatch uid $ netValToDyn netVal
-    atomically $ readTVar (netSignals client) >>= \sigs -> writeTVar (netSignals client) (IntMap.insert uid netVal sigs)
+    atomically $ readTVar (netSignals client) >>= \sigs -> writeTVar (netSignals client) (IntMap.insert uid (Change netVal) sigs)
     -- putStrLn $ "Setting NetSignal : " ++ show (uid,netVal)
 
 parseMessage (SyncNetSignals netVals) client sigstate = do
     oldNetSignals <- atomically $ readTVar (netSignals client)
     -- mapM_ (sendMergeEvents oldNetSignals) $ IntMap.toList netVals
-    atomically $ writeTVar (netSignals client) netVals
+    atomically $ writeTVar (netSignals client) $ IntMap.map Change netVals
     -- putStrLn $ "Server sync. old signals size: " ++ show (IntMap.size oldNetSignals) ++ ", new signals size: " ++ show (IntMap.size netVals)
     -- where
         -- sendMergeEvents oldNetSignals (uid,netVal) = case IntMap.lookup uid oldNetSignals of
@@ -217,7 +217,7 @@ parseMessage (SyncNetSignals netVals) client sigstate = do
                 -- then return () -- sendToGlobalDispatch globalDispatch uid $ netValToDyn netVal
                 -- else return ()
 
-parseMessage (Chat name msg) client sigstate = writeToSignal (chatMessageSignal sigstate) $ C.unpack name ++ ": " ++ C.unpack msg
+parseMessage (Chat name msg) client sigstate = print "Chat" >> (writeToSignal (chatMessageSignal sigstate) $ C.unpack name ++ ": " ++ C.unpack msg)
 
 parseMessage EmptyMessage        _ _ = putStrLn "Empty message received!?"
 parseMessage (RemoveNetSignal _) _ _ = putStrLn "Really no reason to remove net signals now is there?"
@@ -259,9 +259,6 @@ printError e = print e
 sendChatMessage :: String -> Client -> IO()
 sendChatMessage chat client = atomically $ writeTChan (outBox client) $ Chat (C.pack $ userName client) (C.pack chat)
 
--- netPlaySynthObject :: Client -> Int -> Bool -> IO()
--- netPlaySynthObject client uid shouldPlay = atomically $ writeTChan (outBox client) $ SetNetSignal uid $ NetBool shouldPlay
-
 addSynthPlayObject :: Client -> Int -> Bool -> [(Int,Double)] -> IO()
 addSynthPlayObject client uid isPlaying args = atomically $ do
     writeTChan (outBox client) $ AddNetSignal uid $ NetBool isPlaying
@@ -270,7 +267,7 @@ addSynthPlayObject client uid isPlaying args = atomically $ do
 sendSetNetSignal :: Client -> (Int,NetValue) -> IO()
 sendSetNetSignal client (uid,v) = do
     atomically $ writeTChan (outBox client) $ SetNetSignal uid v
-    atomically $ readTVar (netSignals client) >>= writeTVar (netSignals client) . IntMap.insert uid v
+    -- atomically $ readTVar (netSignals client) >>= writeTVar (netSignals client) . IntMap.insert uid v
 
 sendAddNetSignal :: Client -> (Int,NetValue) -> IO()
 sendAddNetSignal client (uid,netVal) = atomically $ writeTChan (outBox client) $ AddNetSignal uid netVal

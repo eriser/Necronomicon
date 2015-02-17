@@ -68,7 +68,7 @@ data RunStatus = Connecting
 data Client = Client {
     userName    :: String,
     clientUsers :: TVar [String],
-    netSignals  :: TVar (IntMap.IntMap NetValue),
+    netSignals  :: TVar (IntMap.IntMap (EventValue NetValue)),
     outBox      :: TChan NetMessage,
     inBox       :: TChan NetMessage,
     runStatus   :: TVar RunStatus,

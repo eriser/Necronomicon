@@ -96,12 +96,13 @@ chatDisplay (Vector2 x y) (Size w h) font material = Signal $ \state -> do
     where
         --TODO: delete if too many lines
         processSignal ref metrics chatCont state = chatCont state >>= go
-            where go (NoChange _) = readIORef ref >>= return . NoChange . chatObject
-                  go (Change str) = do
-                      prevStr <- readIORef ref
-                      let val = (fitTextIntoBounds False (prevStr ++ str ++ "\n\n") (w * 1.0,h * 0.75) metrics)
-                      writeIORef ref val
-                      return $ Change $ chatObject val
+            where
+                go (NoChange _) = readIORef ref >>= return . NoChange . chatObject
+                go (Change str) = do
+                    prevStr <- readIORef ref
+                    let val = (fitTextIntoBounds False (prevStr ++ str ++ "\n\n") (w * 1.0,h * 0.75) metrics)
+                    writeIORef ref val
+                    return $ Change $ chatObject val
 
         chatObject t = SceneObject (Vector3  x y 0) identity 1 (Model (rect w h) (vertexColored (RGBA 0 0 0 0))) [textObject t]
         textObject t = SceneObject (Vector3  0 0 1) identity 1 (drawText t font ambient) []

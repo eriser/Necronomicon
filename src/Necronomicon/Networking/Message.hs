@@ -225,89 +225,89 @@ netValToDyn (NetVec4List   v) = toDyn v
 
 class (Eq a) => Networkable a where
     toNetVal   :: a -> NetValue
-    fromNetVal :: NetValue -> a -> a
+    fromNetVal :: NetValue -> Maybe a
 
 instance Networkable Int where
-    toNetVal                = NetInt
-    fromNetVal (NetInt n) _ = n
-    fromNetVal _          d = d
+    toNetVal              = NetInt
+    fromNetVal (NetInt n) = Just n
+    fromNetVal _          = Nothing
 
 instance Networkable Double where
     toNetVal                   = NetDouble
-    fromNetVal (NetDouble n) _ = n
-    fromNetVal _             d = d
+    fromNetVal (NetDouble n) = Just n
+    fromNetVal _             = Nothing
 
 instance Networkable Bool where
     toNetVal                 = NetBool
-    fromNetVal (NetBool n) _ = n
-    fromNetVal _           d = d
+    fromNetVal (NetBool n) = Just n
+    fromNetVal _           = Nothing
 
 instance Networkable C.ByteString where
     toNetVal                   = NetString
-    fromNetVal (NetString n) _ = n
-    fromNetVal _             d = d
+    fromNetVal (NetString n) = Just n
+    fromNetVal _             = Nothing
 
 instance Networkable Vector2 where
     toNetVal                 = NetVec2
-    fromNetVal (NetVec2 n) _ = n
-    fromNetVal _           d = d
+    fromNetVal (NetVec2 n) = Just n
+    fromNetVal _           = Nothing
 
 instance Networkable Vector3 where
     toNetVal                 = NetVec3
-    fromNetVal (NetVec3 n) _ = n
-    fromNetVal _           d = d
+    fromNetVal (NetVec3 n) = Just n
+    fromNetVal _           = Nothing
 
 instance Networkable Vector4 where
     toNetVal                 = NetVec4
-    fromNetVal (NetVec4 n) _ = n
-    fromNetVal _           d = d
+    fromNetVal (NetVec4 n) = Just n
+    fromNetVal _           = Nothing
 
 instance Networkable (Int,Int) where
     toNetVal                   = NetTupInt
-    fromNetVal (NetTupInt n) _ = n
-    fromNetVal _             d = d
+    fromNetVal (NetTupInt n) = Just n
+    fromNetVal _             = Nothing
 
 instance Networkable (Double,Double) where
     toNetVal                      = NetTupDouble
-    fromNetVal (NetTupDouble n) _ = n
-    fromNetVal _                d = d
+    fromNetVal (NetTupDouble n) = Just n
+    fromNetVal _                = Nothing
 
 instance Networkable (Bool,Bool) where
     toNetVal                    = NetTupBool
-    fromNetVal (NetTupBool n) _ = n
-    fromNetVal _              d = d
+    fromNetVal (NetTupBool n) = Just n
+    fromNetVal _              = Nothing
 
 instance Networkable [Int] where
     toNetVal                    = NetIntList
-    fromNetVal (NetIntList n) _ = n
-    fromNetVal _              d = d
+    fromNetVal (NetIntList n) = Just n
+    fromNetVal _              = Nothing
 
 instance Networkable [Double] where
     toNetVal                       = NetDoubleList
-    fromNetVal (NetDoubleList n) _ = n
-    fromNetVal _                 d = d
+    fromNetVal (NetDoubleList n) = Just n
+    fromNetVal _                 = Nothing
 
 instance Networkable [Bool] where
     toNetVal                     = NetBoolList
-    fromNetVal (NetBoolList n) _ = n
-    fromNetVal _               d = d
+    fromNetVal (NetBoolList n) = Just n
+    fromNetVal _               = Nothing
 
 instance Networkable [C.ByteString] where
     toNetVal                       = NetStringList
-    fromNetVal (NetStringList n) _ = n
-    fromNetVal _                 d = d
+    fromNetVal (NetStringList n) = Just n
+    fromNetVal _                 = Nothing
 
 instance Networkable [Vector2] where
     toNetVal                     = NetVec2List
-    fromNetVal (NetVec2List n) _ = n
-    fromNetVal _               d = d
+    fromNetVal (NetVec2List n) = Just n
+    fromNetVal _               = Nothing
 
 instance Networkable [Vector3] where
     toNetVal                     = NetVec3List
-    fromNetVal (NetVec3List n) _ = n
-    fromNetVal _               d = d
+    fromNetVal (NetVec3List n) = Just n
+    fromNetVal _               = Nothing
 
 instance Networkable [Vector4] where
     toNetVal                     = NetVec4List
-    fromNetVal (NetVec4List n) _ = n
-    fromNetVal _               d = d
+    fromNetVal (NetVec4List n) = Just n
+    fromNetVal _               = Nothing

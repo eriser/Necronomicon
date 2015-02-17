@@ -13,6 +13,7 @@ module Necronomicon.FRP.Signal (
     (<~),
     (~~),
     (~>),
+    (<&>),
     -- (=<~),
     -- execute,
     enter,
@@ -99,6 +100,7 @@ module Necronomicon.FRP.Signal (
     users,
     testSignals,
     writeToSignal,
+    lagSig,
     module Control.Applicative
     ) where
 
@@ -1083,17 +1085,18 @@ mkSignalState = do
     return $ SignalState inputCounter sceneVar guiVar necroVars client mouseSignal dimensionsSignal mouseButtonSignal keySignal keysPressed chatMessageSignal netStatusSignal userListSignal 0 0
 
 resetKnownInputs :: SignalState -> IO()
-resetKnownInputs state = atomically $ do
-    readTVar (mouseSignal state)       >>= writeTVar (mouseSignal state) . noChange
-    readTVar (dimensionsSignal state)  >>= writeTVar (dimensionsSignal state) . noChange
-    readTVar (mouseButtonSignal state) >>= writeTVar (mouseButtonSignal state) . noChange
-    readTVar (sceneVar state )         >>= writeTVar (sceneVar state) . noChange
-    readTVar (guiVar state)            >>= writeTVar (guiVar state) . noChange
-    readTVar (keySignal state)         >>= writeTVar (keySignal state) . IntMap.map noChange
-    writeTVar (keysPressed state) []
-    readTVar (chatMessageSignal state) >>= writeTVar (chatMessageSignal state) . noChange
-    readTVar (netStatusSignal state)   >>= writeTVar (netStatusSignal state) . noChange
-    readTVar (userListSignal state)    >>= writeTVar (userListSignal state) . noChange
+resetKnownInputs state = do
+    atomically $ readTVar (mouseSignal state)         >>= writeTVar (mouseSignal state) . noChange
+    atomically $ readTVar (dimensionsSignal state)    >>= writeTVar (dimensionsSignal state) . noChange
+    atomically $ readTVar (mouseButtonSignal state)   >>= writeTVar (mouseButtonSignal state) . noChange
+    atomically $ readTVar (sceneVar state )           >>= writeTVar (sceneVar state) . noChange
+    atomically $ readTVar (guiVar state)              >>= writeTVar (guiVar state) . noChange
+    atomically $ readTVar (keySignal state)           >>= writeTVar (keySignal state) . IntMap.map noChange
+    atomically $ writeTVar (keysPressed state) []
+    atomically $ readTVar (chatMessageSignal state)   >>= writeTVar (chatMessageSignal state) . noChange
+    atomically $ readTVar (netStatusSignal state)     >>= writeTVar (netStatusSignal state) . noChange
+    atomically $ readTVar (userListSignal state)      >>= writeTVar (userListSignal state) . noChange
+    atomically $ readTVar (netSignals $ client state) >>= writeTVar (netSignals $ client state) . IntMap.map noChange
 
 scene :: [Signal SceneObject] -> Signal ()
 scene os = render $ root <~ combine os
@@ -1166,6 +1169,7 @@ runSignal s = initWindow >>= \mw -> case mw of
                     (NoChange s,Change   g) -> renderGraphics window resources s g
                     (Change   s,NoChange g) -> renderGraphics window resources s g
                     _                       -> return ()
+
                 resetKnownInputs signalState
                 -- execIfChanged result print
                 threadDelay $ 16667
@@ -1593,10 +1597,6 @@ textInput = Signal $ \state -> do
                 let char = eventKeyToChar (keys !! 0) isShiftDown
                 writeIORef charRef char
                 return $ Change char
-            -- case (uid == 132 || uid == 133,uid >= 100 && uid <= 155,fromDynamic eval) of
-                -- (True,_,Just isShiftDown) -> writeIORef shiftRef isShiftDown >> readIORef charRef >>= return . NoChange
-                -- (_,True,Just True)        -> readIORef  shiftRef >>= return . Change . eventKeyToChar uid
-                -- _                         -> readIORef  charRef  >>= return . NoChange
 
 signalChallenge :: Signal (Double,Double)
 signalChallenge = tenThousand
@@ -1669,6 +1669,30 @@ fps fpsTime = Signal $ \state -> do
             if newTime >= time
                 then writeIORef accref 0       >> writeIORef valRef newTime >>  return (Change newTime)
                 else writeIORef accref newTime >> readIORef valRef          >>= return . NoChange
+
+lagSig :: (Fractional a,Eq a,Ord a) => Double -> Signal a -> Signal a
+lagSig lagTime sig = Signal $ \state -> do
+    sCont     <- unSignal sig state
+    sValue    <- fmap unEvent $ sCont state
+    ref       <- newIORef (sValue,sValue,1)
+    return $ processSignal sCont sValue ref
+    where
+        processSignal sCont sValue ref state = sCont state >>= \s -> case s of
+            Change v -> do
+                (start,end,acc) <- readIORef ref
+                let acc'         = min (acc + (updateDelta state) * lagTime) 1
+                let value'       = start * (fromRational . toRational $ 1 - acc) + end * (fromRational $ toRational acc)
+                writeIORef ref (value',v,0)
+                return $ Change value'
+            NoChange v -> do
+                (start,end,acc) <- readIORef ref
+                if acc >= 1
+                    then return (NoChange end)
+                    else do
+                        let acc'         = min (acc + (updateDelta state) * lagTime) 1
+                        let value'       = start * (fromRational . toRational $ 1 - acc) + end * (fromRational $ toRational acc)
+                        writeIORef ref (start,end,acc')
+                        return $ Change value'
 
 -----------------------------------------------------------------
 -- Graphics
@@ -1751,27 +1775,35 @@ foldp f bInit a = Signal $ \state -> do
                 writeIORef ref new
                 return $ Change new
 
+(<&>) :: Signal a -> Signal a -> Signal a
+a <&> b = Signal $ \state -> do
+    aCont    <- unSignal a state
+    bCont    <- unSignal b state
+    defaultA <- aCont state >>= return . unEvent
+    defaultB <- bCont state >>= return . unEvent
+    ref      <- newIORef defaultA
+    return $ processState aCont bCont ref
+    where
+        processState aCont bCont ref state = aCont state >>= \aValue -> bCont state >>= \bValue -> case (aValue,bValue) of
+            (Change a, _) -> writeIORef ref a >> return (Change a)
+            (_, Change b) -> writeIORef ref b >> return (Change b)
+            _             -> readIORef  ref   >>= return . NoChange
+
+infixl 3 <&>
+
 merge :: Signal a -> Signal a -> Signal a
-merge = (<|>)
+merge = (<&>)
 
 merges :: [Signal a] -> Signal a
-merges = foldr (<|>) empty
+merges = foldr (<&>) empty
 
 combine :: [Signal a] -> Signal [a]
 combine signals = Signal $ \state -> do
     continuations <- mapM (\s -> unSignal s state) signals
-    defaultValues <- mapM (\f -> f state >>= return . unEvent) continuations
-    refs          <- mapM newIORef defaultValues
-    return $ processSignal $ zip continuations refs
+    defaultValues <- mapM (\f -> fmap unEvent $ f state) continuations
+    return $ processSignal continuations
     where
-        processSignal continuations state = liftM (foldr collapseContinuations (NoChange [])) $ mapM (runEvent state) continuations
-
-        runEvent state (continuation,ref) = do
-            v <- continuation state
-            case v of
-                NoChange v' -> writeIORef ref v'
-                Change   v' -> writeIORef ref v'
-            return v
+        processSignal continuations state = fmap (foldr collapseContinuations (NoChange [])) $ mapM ($ state) continuations
 
 collapseContinuations :: EventValue a -> EventValue [a] -> EventValue [a]
 collapseContinuations (NoChange x) (NoChange xs) = NoChange $ x : xs
@@ -2019,18 +2051,14 @@ foldn f bInit a = Signal $ \state -> do
     cont          <- unSignal a state
     ref           <- newIORef bInit
     netid         <- getNextID state
-    netRef        <- newIORef bInit
     sendAddNetSignal (client state) $ (netid,toNetVal bInit)
-    return $ processSignal cont ref netRef (client state) netid
+    return $ processSignal cont ref (client state) netid
     where
-        processSignal cont ref netRef client netid state = atomically (readTVar $ netSignals client) >>= \ns -> case IntMap.lookup netid ns of
-            Nothing -> localCont
-            Just  n -> do
-                prevN <- readIORef netRef
-                let n' = fromNetVal n prevN
-                if n' /= prevN
-                    then writeIORef ref n' >> writeIORef netRef n' >> return (Change n')
-                    else localCont
+        processSignal cont ref client netid state = atomically (readTVar $ netSignals client) >>= \ns -> case IntMap.lookup netid ns of
+            Just (Change n) -> case fromNetVal n of
+                Just n  -> cont state >> writeIORef ref n >> return (Change n)
+                Nothing -> localCont
+            _           -> localCont
             where
                 localCont = cont state >>= \c -> case c of
                     NoChange _ -> readIORef ref >>= return . NoChange
@@ -2038,22 +2066,8 @@ foldn f bInit a = Signal $ \state -> do
                         prev <- readIORef ref
                         let new = f v prev
                         writeIORef ref    new
-                        writeIORef netRef new
                         if new /= prev then sendSetNetSignal client (netid,toNetVal new) else return ()
                         return (Change new)
-
-        -- processState cont ref netCont client netid ids event@(Event uid _) = case idGuard ids uid ref of
-            -- Just r -> r
-            -- _      -> netCont event >>= \n -> case n of
-                -- Change v -> writeIORef ref v >> return (Change v)
-                -- _        -> cont event >>= \c -> case c of
-                    -- NoChange _ -> readIORef ref >>= return . NoChange
-                    -- Change   v -> do
-                        -- prev <- readIORef ref
-                        -- let new = f v prev
-                        -- writeIORef ref new
-                        -- if new /= prev then sendSetNetSignal client (netid,toNetVal new) else return ()
-                        -- return (Change new)
 
 netsignal :: Networkable a => Signal a -> Signal a
 netsignal sig = Signal $ \state -> do
@@ -2065,13 +2079,10 @@ netsignal sig = Signal $ \state -> do
     return $ processEvent cont ref (client state) netid
     where
         processEvent cont ref client netid state = atomically (readTVar $ netSignals client) >>= \ns -> case IntMap.lookup netid ns of
-            Nothing -> localCont
-            Just  n -> do
-                prevN <- readIORef ref
-                let n'  = fromNetVal n prevN
-                if  n' /= prevN
-                    then writeIORef ref n' >> return (Change n')
-                    else localCont
+            Just (Change n) -> case fromNetVal n of
+                Just n  -> cont state >> writeIORef ref n >> return (Change n)
+                Nothing -> localCont
+            _           -> localCont
             where
                 localCont = cont state >>= \c -> case c of
                     NoChange v -> return $ NoChange v
@@ -2112,50 +2123,6 @@ playSynthN synth playSig argSigs = Signal $ \state -> do
             (Nothing   ,True )  -> liftIO (print "play") >> playSynth synthName args >>= \s -> liftIO (writeIORef synthRef $ Just s) >> return (Change ())
             (Just synth,False)  -> liftIO (print "stop") >> stopSynth synth          >>        liftIO (writeIORef synthRef  Nothing) >> return (Change ())
             _                   -> return $ NoChange ()
-
-
-        -- processEvent pCont sCont args netPlayCont synthName synthRef netArgs necroVars client uid ids event@(Event eid _) = if not $ IntSet.member eid ids
-            -- then return $ NoChange ()
-            -- else netPlayCont event >>= \net -> case net of
-                -- Change netPlay -> runNecroState (playStopSynth synthName netArgs netPlay synthRef) necroVars >>= \(e,_) -> return e --Play/Stop event from the network
-                -- NoChange     _ -> readIORef synthRef >>= \s -> case s of
-                    -- Just s  -> sCont event >>= \e -> case e of --There is a synth playing
-                        -- Change True  -> sendSetNetSignal client (uid,NetBool False) >> runNecroState (playStopSynth synthName netArgs False synthRef) necroVars >>= \(e,_) -> return e --Stop an already running synth
-                        -- Change False -> return $ NoChange ()
-                        -- _            -> mapM_ (receiveNetArg synthRef necroVars uid event) netArgs >> mapM_ (localArgUpdate synthRef client necroVars uid event) args >> return (NoChange ()) --Argument continuations
-
-                    -- Nothing -> pCont event >>= \e -> case e of --There is not a synth playing
-                        -- Change True  -> do
-                            -- mapM_ (\(_,uid',ref) -> readIORef ref >>= \v -> sendSetNetSignal client (uid',toNetVal v)) netArgs --Send set arg messages first, to make sure we are on same page
-                            -- sendSetNetSignal client (uid,NetBool True) >> runNecroState (playStopSynth synthName netArgs True synthRef) necroVars >>= \(e,_) -> return e --Play an already stopped synth
-                        -- Change False -> return $ NoChange ()
-                        -- _            -> mapM_ (receiveNetArg synthRef necroVars uid event) netArgs >> mapM_ (localArgUpdate synthRef client necroVars uid event) args >> return (NoChange ()) --Argument continuations
-
--- third :: (a,b,c) -> c
--- third (a,b,c) = c
-
---Check for Local argument updates, write to arg ref, and if a synth is playing modify the synth, then send changes to the network
--- localArgUpdate :: IORef (Maybe Synth) -> Client -> NecroVars -> Int -> Event -> ((Event -> IO (EventValue Double)),Int,IORef Double) -> IO()
--- localArgUpdate synthRef client necroVars uid event@(Event eid _) (cont,uid',ref) = cont event >>= \argValue -> case argValue of
-    -- NoChange _ -> return ()
-    -- Change   v -> writeIORef ref v >> readIORef synthRef >>= \maybeSynth -> case maybeSynth of
-        -- Nothing    -> return ()
-        -- Just synth -> do
-            -- sendSetNetSignal client (uid',toNetVal v)
-            -- runNecroState (setSynthArg synth (uid'-uid - 1) v) necroVars
-            -- print "localArgUpdate....."
-            -- return ()
-
---Receive an argument update from the network, write it to the arg ref, then if the synth is playing modify the synth
--- receiveNetArg :: IORef (Maybe Synth) -> NecroVars -> Int -> Event -> ((Event -> IO (EventValue Double)),Int,IORef Double) -> IO()
--- receiveNetArg synthRef necroVars uid event@(Event eid _) (cont,uid',ref) = if uid' /= eid then return () else cont event >>= \argValue -> case argValue of
-    -- NoChange _ -> return ()
-    -- Change   v -> writeIORef ref v >> readIORef synthRef >>= \maybeSynth -> case maybeSynth of
-        -- Nothing    -> return ()
-        -- Just synth -> do
-            -- runNecroState (setSynthArg synth (uid'-uid - 1) v) necroVars
-            -- print "receiveNetArg....."
-            -- return ()
 
 class Play a where
     type PlayRet a :: *
