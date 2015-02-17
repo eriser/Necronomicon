@@ -1785,8 +1785,8 @@ a <&> b = Signal $ \state -> do
     return $ processState aCont bCont ref
     where
         processState aCont bCont ref state = aCont state >>= \aValue -> bCont state >>= \bValue -> case (aValue,bValue) of
-            (Change a, _) -> writeIORef ref a >> return (Change a)
-            (_, Change b) -> writeIORef ref b >> return (Change b)
+            (Change a, _) -> writeIORef ref a >>  return (Change a)
+            (_, Change b) -> writeIORef ref b >>  return (Change b)
             _             -> readIORef  ref   >>= return . NoChange
 
 infixl 3 <&>
@@ -1804,12 +1804,10 @@ combine signals = Signal $ \state -> do
     return $ processSignal continuations
     where
         processSignal continuations state = fmap (foldr collapseContinuations (NoChange [])) $ mapM ($ state) continuations
-
-collapseContinuations :: EventValue a -> EventValue [a] -> EventValue [a]
-collapseContinuations (NoChange x) (NoChange xs) = NoChange $ x : xs
-collapseContinuations (NoChange x) (Change   xs) = Change   $ x : xs
-collapseContinuations (Change   x) (NoChange xs) = Change   $ x : xs
-collapseContinuations (Change   x) (Change   xs) = Change   $ x : xs
+        collapseContinuations (NoChange x) (NoChange xs) = NoChange $ x : xs
+        collapseContinuations (NoChange x) (Change   xs) = Change   $ x : xs
+        collapseContinuations (Change   x) (NoChange xs) = Change   $ x : xs
+        collapseContinuations (Change   x) (Change   xs) = Change   $ x : xs
 
 dropIf :: (a -> Bool) -> a -> Signal a -> Signal a
 dropIf pred init signal = Signal $ \state ->do

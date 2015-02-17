@@ -51,11 +51,11 @@ data SignalState = SignalState {
     }
 
 writeToSignal :: (Eq a) => SignalVar a -> a -> IO ()
-writeToSignal signal val = atomically write
-    where
-        write = readTVar signal >>= \prev -> case prev of
-            Change   prevVal -> if val /= prevVal then writeTVar signal $ Change val else writeTVar signal $ NoChange val
-            NoChange prevVal -> if val /= prevVal then writeTVar signal $ Change val else writeTVar signal $ NoChange val
+writeToSignal signal val = atomically $ writeTVar signal $ Change val
+    -- where
+        -- write = readTVar signal >>= \prev -> case prev of
+            -- Change   prevVal -> if val /= prevVal then writeTVar signal $ Change val else writeTVar signal $ NoChange val
+            -- NoChange prevVal -> if val /= prevVal then writeTVar signal $ Change val else writeTVar signal $ NoChange val
 
 data RunStatus = Connecting
                | Running
