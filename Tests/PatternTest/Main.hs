@@ -72,6 +72,7 @@ patternTest = do
                                                         [6 _ 6] [_ 6 _] [5 _ 5] [_ 5 _]
                                                         [4 _ 4] [_ 4 _] [3 _ 3] [_ 3 _]
                                                         2 2 2 1
+                                                        5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5
                                                       |]
     runPDef $ pstream "MyCoolBeat" pBeatSynth [lich| b p [_ b] p
                                                      b p [_ b] p
@@ -104,6 +105,7 @@ patternTest = do
                                                      b p [_ b] p
                                                      b p [_ b] p
                                                      b p [_ b] p
+                                                     p p p p p p p p p p p p p p p p p p p
                                                    |]
 
     nSleep 10
@@ -114,7 +116,7 @@ patternTest = do
     runPDef $ pstream "four"  pBeatSynth [lich| _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four |]
     
     -- runPDef $ pbeat "MyCoolBeat" [lich| b p [_ b] p |]
-    {-
+    
     nSleep 5
     setTempo 60
     nSleep 10
@@ -127,7 +129,7 @@ patternTest = do
     setTempo 222
     nSleep 3
     setTempo 150
-    -}
+    
     -- runPDef melo
     -- runPDef melo2
     -- nSleep 4

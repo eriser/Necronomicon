@@ -324,13 +324,16 @@ getTempo :: Necronomicon Double
 getTempo = prGet necroTempo
 
 setTempo :: Double -> Necronomicon ()
-setTempo tempo = do
+setTempo newTempo = do
     tempoTVar <- prGetTVar necroTempo
     currentTempo <- nAtomically $ readTVar tempoTVar
-    nAtomically . writeTVar tempoTVar $ max 0 tempo
+    nAtomically . writeTVar tempoTVar $ max 0 newTempo
     (pqueue, pmap) <- getPatternQueue
+    currentTime <- liftIO getJackTime                  
     -- Adjust all the scheduled times in place so that we can proceed normally going forward with correctly adjusted times
-    let pqueue' = PQ.mapInPlace (\(ScheduledPdef n l t b i) -> ScheduledPdef n l (l + floor (fromIntegral (t - l) * (tempo / currentTempo))) b i) pqueue
+    let updatePattern (ScheduledPdef n l t b i) = let diff = currentTime - l in
+            ScheduledPdef n l (l + diff + floor (fromIntegral (t - l - diff) * currentTempo / newTempo)) b i
+    let pqueue' = PQ.mapInPlace updatePattern pqueue
     setPatternQueue (pqueue', pmap)
 
 getCurrentBeat :: Necronomicon Int
