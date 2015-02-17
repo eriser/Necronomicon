@@ -1,12 +1,12 @@
 
 module Necronomicon.FRP.GUI (Gui(..),
                              Size(..),
-                             button,
+                            --  button,
                              input,
                              element,
                              gui,
                              label,
-                             slider,
+                            --  slider,
                              chat,
                              netStat,
                              userBox)where
@@ -62,20 +62,19 @@ netStat (Vector2 x y) (Size w h) font = indicator <~ networkRunStatus
 chat :: Vector2 -> Size -> Font -> Material -> Signal SceneObject
 chat (Vector2 x y) (Size w h) font material = addChild <~ textEditSignal textInput (toggle $ lift2 (&&) ctrl $ isDown keyT) ~~ chatDisplay (Vector2 x y) (Size w h) font material
     where
-        textEditSignal textInputSignal toggleSignal = Signal $ \necro -> do
-            (_,inputCont,inIDs) <- unSignal textInputSignal necro
-            (_,toggleCont,tIDs) <- unSignal toggleSignal    necro
-            let ids              = IntSet.union inIDs tIDs
-            textRef             <- newIORef ""
-            activeRef           <- newIORef False
-            metrics             <- charMetrics font
-            return (emptyObject,processEvent textRef activeRef inputCont toggleCont metrics (client necro),ids)
+        textEditSignal textInputSignal toggleSignal = Signal $ \state -> do
+            inputCont  <- unSignal textInputSignal state
+            toggleCont <- unSignal toggleSignal    state
+            textRef    <- newIORef ""
+            activeRef  <- newIORef False
+            metrics    <- charMetrics font
+            return $ processSignal textRef activeRef inputCont toggleCont metrics (client state)
 
-        processEvent textRef activeRef inputCont toggleCont metrics client event = toggleCont event >>= go
+        processSignal textRef activeRef inputCont toggleCont metrics client state = toggleCont state >>= go
             where go (Change   isActive) = writeIORef activeRef isActive >> if isActive then readIORef textRef >>= return . Change . background else return $ Change emptyObject
                   go (NoChange isActive) = if not isActive then return $ NoChange emptyObject else do
                       t <- readIORef textRef
-                      c <- inputCont event
+                      c <- inputCont state
                       case (c,t) of
                           (NoChange  _,_)      -> return . NoChange $ background t
                           (Change '\n',_)     -> sendChatMessage t client >> returnNewText textRef metrics ""
@@ -89,24 +88,26 @@ chat (Vector2 x y) (Size w h) font material = addChild <~ textEditSignal textInp
         textObject         t = SceneObject (Vector3  0 0 1) identity 1 (drawText t font ambient) []
 
 chatDisplay :: Vector2 -> Size -> Font -> Material -> Signal SceneObject
-chatDisplay (Vector2 x y) (Size w h) font material = Signal $ \necro -> do
-    (chatVal,chatCont,chatIds) <- unSignal receiveChatMessage necro
-    metrics                    <- charMetrics font
-    ref                        <- newIORef ""
-    return (chatObject "",processEvent ref metrics chatCont, chatIds)
+chatDisplay (Vector2 x y) (Size w h) font material = Signal $ \state -> do
+    chatCont <- unSignal receiveChatMessage state
+    metrics  <- charMetrics font
+    ref      <- newIORef ""
+    return $ processSignal ref metrics chatCont
     where
-        --delete if too many lines
-        processEvent ref metrics chatCont event = chatCont event >>= go
-            where go (NoChange _) = readIORef ref >>= return . NoChange . chatObject
-                  go (Change str) = do
-                      prevStr <- readIORef ref
-                      let val = (fitTextIntoBounds False (prevStr ++ str ++ "\n\n") (w * 1.0,h * 0.75) metrics)
-                      writeIORef ref val
-                      return $ Change $ chatObject val
+        --TODO: delete if too many lines
+        processSignal ref metrics chatCont state = chatCont state >>= \c -> case c of
+            NoChange _ -> readIORef ref >>= return . NoChange . chatObject
+            Change str -> do
+                print "chatDisplay"
+                prevStr <- readIORef ref
+                let val = (fitTextIntoBounds False (prevStr ++ str ++ "\n\n") (w * 1.0,h * 0.75) metrics)
+                writeIORef ref val
+                return $ Change $ chatObject val
 
         chatObject t = SceneObject (Vector3  x y 0) identity 1 (Model (rect w h) (vertexColored (RGBA 0 0 0 0))) [textObject t]
         textObject t = SceneObject (Vector3  0 0 1) identity 1 (drawText t font ambient) []
 
+{-
 slider :: Vector2 -> Size -> Color -> Signal (Gui Double)
 slider (Vector2 x y) (Size w h) color = Signal $ \necro -> do
     ref <- newIORef $ Gui 0.0 (s 0.5)
@@ -181,3 +182,4 @@ button (Vector2 x y) (Size w h) color = Signal $ \necro -> do
         hh = h * 0.5
         m c= Model (rect w h) (vertexColored c)
         --c is color....
+-}

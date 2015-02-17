@@ -6,7 +6,7 @@ import Sound.OSC.Time
 import Necronomicon
 import Control.Monad.Trans
 import Control.Monad
-import Language.Haskell.Interpreter
+-- import Language.Haskell.Interpreter
 
 delaySynthN :: UGen -> UGen -> UGen
 delaySynthN freq delayTime = s |> delayN 1 1 >>> add s >>> gain 0.1 >>> out 0
@@ -25,11 +25,10 @@ delaySynthC freq delayTime = s |> delayC 1 1 >>> add s >>> gain 0.1 >>> out 0
 
 main :: IO ()
 main = runSignal
-       <|  play (isDown keyA) (isDown keyA) delaySynthN (mouseX ~> scale 20 10000) 1
-       <|> play (isDown keyW) (isDown keyW) delaySynthL (mouseX ~> scale 20 10000) 1
-       <|> play (isDown keyD) (isDown keyD) delaySynthC (mouseX ~> scale 20 10000) 1
-       <|> play (isDown keyS) (isDown keyS) loopSynth   (mouseX ~> scale 20 10000) (mouseY ~> scale 20 10000)
-
+       <|  play (toggle <| isDown keyA) delaySynthN (mouseX ~> scale 20 10000) 1
+       <&> play (toggle <| isDown keyW) delaySynthL (mouseX ~> scale 20 10000) 1
+       <&> play (toggle <| isDown keyD) delaySynthC (mouseX ~> scale 20 10000) 1
+       <&> play (toggle <| isDown keyS) loopSynth   (mouseX ~> scale 20 10000) (mouseY ~> scale 20 10000)
 
 {-
 
@@ -68,7 +67,6 @@ engineTest = do
 
 {-
 
-main :: IO ()
 main = runNecronomicon necroInterpreterTest
 
 necroInterpreterTest :: Necronomicon ()
@@ -93,7 +91,7 @@ interpretNecroCode vars code = do
         ]
     setImportsQ [("Prelude", Nothing)]
     interpret code (as :: Necronomicon ())
-      
+
 say :: String -> Interpreter ()
 say = liftIO . putStrLn
 

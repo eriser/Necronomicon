@@ -31,7 +31,7 @@ library
     Else
         -- use extra-libraries, if pkg-config fails
         --   http://hackage.haskell.org/trac/hackage/ticket/170
-        Extra-Libraries: jack
+        Extra-Libraries: jack, sndfile
     Include-Dirs: 		c_lib
     Install-Includes:	Necronomicon.h
     C-Sources:    		c_lib/Necronomicon.c
@@ -154,9 +154,6 @@ executable AudioEngineTest
         base             == 4.*,
         hosc             >= 0.14,
         mtl              >= 2.1.3.0,
-        hint             >= 0.4.2.2,
-        ghc              >= 7.8.0,
-        ghc-mtl          >= 1.2,
         Necronomicon
 
 executable PriorityQueueTest

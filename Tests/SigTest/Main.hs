@@ -3,8 +3,8 @@ import Data.Fixed (mod')
 import Control.Arrow
 
 main :: IO ()
--- main = print scaleTest
-main = runSignal <| testGUI <|> testScene <|> testSound2
+-- main = testSignals
+main = runSignal <| testGUI <|> (testScene <&> testSound2)
 
 testGUI :: Signal ()
 testGUI = gui [chatBox,netBox,users]
@@ -26,15 +26,15 @@ testGUI = gui [chatBox,netBox,users]
 -- Implement in terms of play until instead
 -- Networking the state works out better that way!
 testSound :: Signal ()
-testSound = play (isDown keyW) (isUp   keyW) myCoolSynth2
-        <|> play (isDown keyA) (isDown keyA) myCoolSynth3
-        <|> play (isDown keyP) (isDown keyS) myCoolSynth2
+testSound = play (isDown keyW)                    myCoolSynth2
+        <&> play (toggle <| isDown keyA)          myCoolSynth3
+        <&> play (isDown keyP `till` isDown keyS) myCoolSynth2
 
 testSound2 :: Signal ()
-testSound2 = play (isDown keyW) (isDown keyW) noArgSynth
-         <|> play (isDown keyA) (isDown keyA) oneArgSynth (mouseX ~> scale 20  3000)
-         <|> play (isDown keyS) (isDown keyS) twoArgSynth (mouseX ~> scale 100 3000) (mouseY ~> scale 20 3000)
-         <|> play (isDown keyD) (isDown keyD) threeSynth  440 880 66.6
+testSound2 = play (toggle <| isDown keyW) noArgSynth
+         <&> play (toggle <| isDown keyA) oneArgSynth (mouseX ~> scale 20  3000)
+         <&> play (toggle <| isDown keyS) twoArgSynth (mouseX ~> scale 100 3000) (mouseY ~> scale 20 3000)
+         <&> play (toggle <| isDown keyD) threeSynth  440 880 66.6
 
 noArgSynth :: UGen
 noArgSynth = whiteNoise |> pluck 110 110 5.0 |> gain 0.1 |> out 0
@@ -89,7 +89,7 @@ testScene = scene [pure cam,terrainSig]
         move (x,y) z a = Vector3 (x*z*a) (y*z*a) 0
         cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
         terrain pos    = SceneObject pos identity 1 (Model simplexMesh $ vertexColored (RGBA 1 1 1 0.35)) []
-        terrainSig     = terrain <~ foldn (+) 0 (lift3 move arrows (fps 30) 5)
+        terrainSig     = terrain <~ (lagSig 4 $ foldn (+) 0 (lift3 move arrows (fps 4) 3))
         -- terrainSig     = terrain <~ playPattern 0 (isDown keyP) (isDown keyP)
             -- [lich| [0 1 2 3] [4 5 6 7] [6 0 5 0] [4 0 3 0] |]
 
