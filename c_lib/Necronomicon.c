@@ -80,6 +80,9 @@ float period_usecs = 0;
 const jack_time_t USECS_PER_SECOND = 1000000;
 double usecs_per_frame = 1000000 / 44100;
 
+double out_bus_buffers[16][512];
+unsigned int  out_bus_buffer_index = 0;
+
 /////////////////////
 // UGen
 /////////////////////
@@ -948,7 +951,7 @@ void init_rt_thread()
 	RECIP_SAMPLE_RATE = 1.0 / SAMPLE_RATE;
 	TABLE_MUL_RECIP_SAMPLE_RATE = TABLE_SIZE * RECIP_SAMPLE_RATE;
 	usecs_per_frame = USECS_PER_SECOND / SAMPLE_RATE;
-	
+
 	synth_table = hash_table_new();
 	rt_fifo = new_message_fifo();
 	scheduled_node_list = new_node_list();
@@ -961,6 +964,18 @@ void init_rt_thread()
 
 	initialize_wave_tables();
 	// load_audio_files();
+
+	int i=0;
+	for(i<16;i++;)
+	{
+		int i2=0;
+		for(i2<512;i2++;)
+		{
+			out_bus_buffers[i][i2] = 0;
+		}
+	}
+	out_bus_buffer_index = 0;
+
 	_necronomicon_current_node = NULL;
 
 	assert(nrt_fifo == NULL);
@@ -1056,10 +1071,10 @@ void jack_shutdown(void *arg)
 // Main audio process callback function
 int process(jack_nframes_t nframes, void* arg)
 {
-	jack_get_cycle_times(client, &current_cycle_frames, &current_cycle_usecs, &next_cycle_usecs, &period_usecs); // Update time variables for the current cycle	
+	jack_get_cycle_times(client, &current_cycle_frames, &current_cycle_usecs, &next_cycle_usecs, &period_usecs); // Update time variables for the current cycle
 	// Cache the current_cycle_usecs so we can recalculate current_cycle_usecs without rounding errors from iteration
 	jack_time_t cached_cycle_usecs = current_cycle_usecs;
-	
+
 	jack_default_audio_sample_t* out0 = (jack_default_audio_sample_t*) jack_port_get_buffer(output_port1, nframes);
 	jack_default_audio_sample_t* out1 = (jack_default_audio_sample_t*) jack_port_get_buffer(output_port2, nframes);
 	handle_messages_in_rt_fifo(); // Handles messages including moving uge_nodes from the RT FIFO queue into the scheduled_synth_list
@@ -1080,6 +1095,25 @@ int process(jack_nframes_t nframes, void* arg)
 
 		out0[i] = _necronomicon_buses[0]; // Write the output of buses 0/1 to jack buffers 0/1, which can be routed or sent directly to the main outs
 		out1[i] = _necronomicon_buses[1];
+
+		//Hand un-rolled this loop. The non-unrolled version was causing 13% cpu overhead on my machine, this doesn't make a blip...
+		out_bus_buffers[0][out_bus_buffer_index]  = _necronomicon_buses[0];
+		out_bus_buffers[1][out_bus_buffer_index]  = _necronomicon_buses[1];
+		out_bus_buffers[2][out_bus_buffer_index]  = _necronomicon_buses[2];
+		out_bus_buffers[3][out_bus_buffer_index]  = _necronomicon_buses[3];
+		out_bus_buffers[4][out_bus_buffer_index]  = _necronomicon_buses[4];
+		out_bus_buffers[5][out_bus_buffer_index]  = _necronomicon_buses[5];
+		out_bus_buffers[6][out_bus_buffer_index]  = _necronomicon_buses[6];
+		out_bus_buffers[7][out_bus_buffer_index]  = _necronomicon_buses[7];
+		out_bus_buffers[8][out_bus_buffer_index]  = _necronomicon_buses[8];
+		out_bus_buffers[9][out_bus_buffer_index]  = _necronomicon_buses[9];
+		out_bus_buffers[10][out_bus_buffer_index] = _necronomicon_buses[10];
+		out_bus_buffers[11][out_bus_buffer_index] = _necronomicon_buses[11];
+		out_bus_buffers[12][out_bus_buffer_index] = _necronomicon_buses[12];
+		out_bus_buffers[13][out_bus_buffer_index] = _necronomicon_buses[13];
+		out_bus_buffers[14][out_bus_buffer_index] = _necronomicon_buses[14];
+		out_bus_buffers[15][out_bus_buffer_index] = _necronomicon_buses[15];
+		out_bus_buffer_index = (out_bus_buffer_index + 1) & 511;
 
 		remove_scheduled_synths(); // Remove any synths that are scheduled for removal and send them to the NRT thread FIFO queue for freeing.
 		current_cycle_usecs = cached_cycle_usecs + (jack_time_t) ((double) i * usecs_per_frame); // update current usecs time every sample
@@ -1502,13 +1536,13 @@ sample_buffer buffer = *data.buffer;					  \
 long write_index = data.write_index;					  \
 unsigned int num_samples_mask = buffer.num_samples_mask;  \
 double delay_time = UGEN_IN(u, 0) * SAMPLE_RATE;		  \
-double x = UGEN_IN(u, 1);								  
+double x = UGEN_IN(u, 1);
 
 #define FINISH_DELAY(u, y)								  \
 buffer.samples[write_index & num_samples_mask] = x;	      \
 data.write_index = write_index + 1;						  \
 *((delay_data*) u->data) = data;						  \
-UGEN_OUT(u, 0, y);                                        
+UGEN_OUT(u, 0, y);
 
 void delayN_calc(ugen* u)
 {
@@ -1533,12 +1567,12 @@ void delayL_calc(ugen* u)
 	else
 	{
 		long iread_index1 = iread_index0 - 1;
-		double delta = read_index - iread_index0; 
+		double delta = read_index - iread_index0;
 		double y0 = buffer.samples[iread_index0 & num_samples_mask];
 		double y1 = iread_index1 < 0 ? 0 : buffer.samples[iread_index1 & num_samples_mask];
 		y  = LINEAR_INTERP(y0, y1, delta);
 	}
-	
+
 	FINISH_DELAY(u, y);
 }
 
@@ -1550,7 +1584,7 @@ void delayC_calc(ugen* u)
 	long iread_index1 = iread_index0 - 1;
 	long iread_index2 = iread_index0 - 2;
 	long iread_index3 = iread_index0 + 1;
-	double delta = read_index - iread_index0; 
+	double delta = read_index - iread_index0;
 	double y0 = iread_index0 < 0 ? 0 : buffer.samples[iread_index0 & num_samples_mask];
 	double y1 = iread_index1 < 0 ? 0 : buffer.samples[iread_index1 & num_samples_mask];
 	double y2 = iread_index2 < 0 ? 0 : buffer.samples[iread_index2 & num_samples_mask];
