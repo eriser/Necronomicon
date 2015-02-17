@@ -1,6 +1,6 @@
 {-
     Necronomicon - Deterministic Audio Engine
-    Copyright 2014 - Chad McKinney and Curtis McKinney
+    Copyright 2014-2015 Chad McKinney and Curtis McKinney
 -}
 
 module Necronomicon.Patterns where

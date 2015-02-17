@@ -72,19 +72,13 @@ unsigned int num_audio_buses_bytes;
 unsigned int num_synths = 0;
 FILE* devurandom = NULL;
 
-/////////////////////
 // Time
-/////////////////////
-
-typedef struct
-{
-	time_t tv_sec;  /* seconds */
-    long   tv_nsec; /* nanoseconds */
-} timespec;
-
-timespec current_time;
-
-unsigned int current_sample_time = 0;
+jack_nframes_t current_cycle_frames = 0;
+jack_time_t current_cycle_usecs = 0;
+jack_time_t next_cycle_usecs = 0;
+float period_usecs = 0;
+const jack_time_t USECS_PER_SECOND = 1000000;
+double usecs_per_frame = 1000000 / 44100;
 
 /////////////////////
 // UGen
@@ -185,11 +179,11 @@ struct synth_node
 	double* ugen_wires; // UGen output wire buffers
 	synth_node* previous; // Previous node, used in synth_list for the scheduler
 	synth_node* next; // Next node, used in the synth_list for the scheduler
+	jack_time_t time; // scheduled time, in microseconds
 	unsigned int key; // Node ID, used to look up synths in the synth hash table
 	unsigned int hash; // Cached hash of the node id for the synth hash table
 	unsigned int num_ugens;
 	unsigned int num_wires;
-	unsigned int time; // scheduled time, in samples
 };
 
 synth_node* _necronomicon_current_node = NULL;
@@ -262,7 +256,7 @@ void free_synth_definition(synth_node* synth_definition)
 	free(synth_definition);
 }
 
-synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned int num_arguments, unsigned int node_id, unsigned int time)
+synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned int num_arguments, unsigned int node_id, jack_time_t time)
 {
 	unsigned int i;
 
@@ -507,7 +501,7 @@ void scheduled_list_sort()
 
 	unsigned int i, j, k;
 	synth_node* x;
-	double xTime, yTime;
+	jack_time_t xTime, yTime;
 
 	for (i = (scheduled_list_read_index + 1) & FIFO_SIZE_MASK; i != scheduled_list_write_index; i = (i + 1) & FIFO_SIZE_MASK)
 	{
@@ -770,9 +764,11 @@ void add_scheduled_synths()
 
 	while (scheduled_list_read_index != scheduled_list_write_index)
 	{
-		if (SCHEDULED_LIST_PEEK_TIME() <= current_sample_time)
+		if (SCHEDULED_LIST_PEEK_TIME() <= current_cycle_usecs)
 		{
 			synth_node* node = SCHEDULED_LIST_POP();
+			// Uncomment to print timing information for synths
+			// printf("add_synth -> time: %llu, current_cycle_usecs: %llu, current_cycle_usecs - time: %llu\n", node->time, current_cycle_usecs, current_cycle_usecs - node->time);
 			add_synth(node);
 		}
 
@@ -795,6 +791,8 @@ void remove_scheduled_synths()
 		--removal_fifo_size;
 		synth_node* node = hash_table_remove(synth_table, id);
 		remove_synth(node);
+		removal_fifo_read_index = removal_fifo_read_index & REMOVAL_FIFO_SIZE_MASK;
+		removal_fifo_write_index = removal_fifo_write_index & REMOVAL_FIFO_SIZE_MASK;
 	}
 }
 
@@ -830,6 +828,8 @@ void handle_rt_message(message msg)
 // Copy nodes from the rt_node_fifo into the scheduled_node_list
 void handle_messages_in_rt_fifo()
 {
+	rt_fifo_read_index = rt_fifo_read_index & FIFO_SIZE_MASK;
+	rt_fifo_write_index = rt_fifo_write_index & FIFO_SIZE_MASK;
 	if (rt_fifo_read_index == rt_fifo_write_index)
 	{
 		return;
@@ -839,6 +839,8 @@ void handle_messages_in_rt_fifo()
 	{
 		message msg = RT_FIFO_POP();
 		handle_rt_message(msg);
+		rt_fifo_read_index = rt_fifo_read_index & FIFO_SIZE_MASK;
+		rt_fifo_write_index = rt_fifo_write_index & FIFO_SIZE_MASK;
 	}
 
 	scheduled_list_sort();
@@ -876,9 +878,8 @@ void handle_messages_in_nrt_fifo()
 	}
 }
 
-void play_synth(synth_node* synth_definition, double* arguments, unsigned int num_arguments, unsigned int node_id, double time)
+void play_synth(synth_node* synth_definition, double* arguments, unsigned int num_arguments, unsigned int node_id, jack_time_t time)
 {
-	time = time * SAMPLE_RATE;
 	synth_node* synth = new_synth(synth_definition, arguments, num_arguments, node_id, time);
 
 	message msg;
@@ -895,6 +896,7 @@ void stop_synth(unsigned int id)
 	RT_FIFO_PUSH(msg);
 }
 
+// How to handle sample accurate setting? Use FIFO messages?
 void send_set_synth_arg(unsigned int id, double argument, unsigned int arg_index)
 {
 	synth_node* synth = hash_table_lookup(synth_table, id);
@@ -945,7 +947,8 @@ void init_rt_thread()
 	SAMPLE_RATE = jack_get_sample_rate(client);
 	RECIP_SAMPLE_RATE = 1.0 / SAMPLE_RATE;
 	TABLE_MUL_RECIP_SAMPLE_RATE = TABLE_SIZE * RECIP_SAMPLE_RATE;
-
+	usecs_per_frame = USECS_PER_SECOND / SAMPLE_RATE;
+	
 	synth_table = hash_table_new();
 	rt_fifo = new_message_fifo();
 	scheduled_node_list = new_node_list();
@@ -963,7 +966,6 @@ void init_rt_thread()
 	assert(nrt_fifo == NULL);
 	nrt_fifo = new_message_fifo();
 
-	current_sample_time = 0;
 	necronomicon_running = true;
 }
 
@@ -1051,8 +1053,13 @@ void jack_shutdown(void *arg)
 	exit(1);
 }
 
+// Main audio process callback function
 int process(jack_nframes_t nframes, void* arg)
 {
+	jack_get_cycle_times(client, &current_cycle_frames, &current_cycle_usecs, &next_cycle_usecs, &period_usecs); // Update time variables for the current cycle	
+	// Cache the current_cycle_usecs so we can recalculate current_cycle_usecs without rounding errors from iteration
+	jack_time_t cached_cycle_usecs = current_cycle_usecs;
+	
 	jack_default_audio_sample_t* out0 = (jack_default_audio_sample_t*) jack_port_get_buffer(output_port1, nframes);
 	jack_default_audio_sample_t* out1 = (jack_default_audio_sample_t*) jack_port_get_buffer(output_port2, nframes);
 	handle_messages_in_rt_fifo(); // Handles messages including moving uge_nodes from the RT FIFO queue into the scheduled_synth_list
@@ -1071,11 +1078,11 @@ int process(jack_nframes_t nframes, void* arg)
 			_necronomicon_current_node = _necronomicon_current_node->next;
 		}
 
-		out0[i] = _necronomicon_buses[0];
+		out0[i] = _necronomicon_buses[0]; // Write the output of buses 0/1 to jack buffers 0/1, which can be routed or sent directly to the main outs
 		out1[i] = _necronomicon_buses[1];
 
 		remove_scheduled_synths(); // Remove any synths that are scheduled for removal and send them to the NRT thread FIFO queue for freeing.
-        current_sample_time += 1;
+		current_cycle_usecs = cached_cycle_usecs + (jack_time_t) ((double) i * usecs_per_frame); // update current usecs time every sample
     }
 
 	return 0;
@@ -1184,6 +1191,17 @@ void shutdown_necronomicon()
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // UGens
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#define LINEAR_INTERP(A, B, DELTA) (A + DELTA * (B - A))
+
+#define CUBIC_INTERP(A,B,C,D,DELTA) \
+({                                  \
+	double delta2 = DELTA * DELTA;  \
+	double a0     = D - C - A + B;  \
+	double a1     = A - B - a0;     \
+	double a2     = C - A;          \
+	a0 * DELTA * delta2 + a1 * delta2 + a2 * DELTA + B; \
+})
 
 void add_calc(ugen* u)
 {
@@ -1460,7 +1478,7 @@ void poll_deconstructor(ugen* u)
 typedef struct
 {
 	sample_buffer* buffer;
-	unsigned int write_index;
+	long write_index;
 } delay_data;
 
 const unsigned int DELAY_DATA_SIZE = sizeof(delay_data);
@@ -1478,21 +1496,67 @@ void delay_deconstructor(ugen* u)
 	free(u->data);
 }
 
+#define INIT_DELAY(u)									  \
+delay_data data = *((delay_data*) u->data);				  \
+sample_buffer buffer = *data.buffer;					  \
+long write_index = data.write_index;					  \
+unsigned int num_samples_mask = buffer.num_samples_mask;  \
+double delay_time = UGEN_IN(u, 0) * SAMPLE_RATE;		  \
+double x = UGEN_IN(u, 1);								  
+
+#define FINISH_DELAY(u, y)								  \
+buffer.samples[write_index & num_samples_mask] = x;	      \
+data.write_index = write_index + 1;						  \
+*((delay_data*) u->data) = data;						  \
+UGEN_OUT(u, 0, y);                                        
+
 void delayN_calc(ugen* u)
 {
-	delay_data* data = ((delay_data*) u->data);
-	sample_buffer* buffer = data->buffer;
-	unsigned int write_index = data->write_index;
-	unsigned int num_samples_mask = buffer->num_samples_mask;
+	INIT_DELAY(u);
+	long iread_index = write_index - (long) delay_time;
+	double y = iread_index < 0 ? 0 : buffer.samples[iread_index & num_samples_mask];
+	FINISH_DELAY(u, y);
+}
 
-	unsigned int delay_time = UGEN_IN(u, 0) * SAMPLE_RATE;
-	double x = UGEN_IN(u, 1);
+void delayL_calc(ugen* u)
+{
+	INIT_DELAY(u);
+	double y;
+	double read_index = (double) write_index - delay_time;
+	long iread_index0 = (long) read_index;
 
-	double y = buffer->samples[(write_index - delay_time) & num_samples_mask];
+	if (iread_index0 < 0)
+	{
+		y = 0;
+	}
 
-	buffer->samples[write_index] = x;
-	data->write_index = (write_index + 1) & num_samples_mask;
-	UGEN_OUT(u, 0, y);
+	else
+	{
+		long iread_index1 = iread_index0 - 1;
+		double delta = read_index - iread_index0; 
+		double y0 = buffer.samples[iread_index0 & num_samples_mask];
+		double y1 = iread_index1 < 0 ? 0 : buffer.samples[iread_index1 & num_samples_mask];
+		y  = LINEAR_INTERP(y0, y1, delta);
+	}
+	
+	FINISH_DELAY(u, y);
+}
+
+void delayC_calc(ugen* u)
+{
+	INIT_DELAY(u);
+	double read_index  = (double) write_index - delay_time;
+	long iread_index0 = (long) read_index;
+	long iread_index1 = iread_index0 - 1;
+	long iread_index2 = iread_index0 - 2;
+	long iread_index3 = iread_index0 + 1;
+	double delta = read_index - iread_index0; 
+	double y0 = iread_index0 < 0 ? 0 : buffer.samples[iread_index0 & num_samples_mask];
+	double y1 = iread_index1 < 0 ? 0 : buffer.samples[iread_index1 & num_samples_mask];
+	double y2 = iread_index2 < 0 ? 0 : buffer.samples[iread_index2 & num_samples_mask];
+	double y3 = iread_index3 < 0 ? 0 : buffer.samples[iread_index3 & num_samples_mask];
+	double y  = CUBIC_INTERP(y0, y1, y2, y3, delta);
+	FINISH_DELAY(u, y);
 }
 
 void print_ugen(ugen* ugen)
@@ -1531,7 +1595,7 @@ synth_node* new_test_synth(unsigned int time)
 void print_node(synth_node* node)
 {
 	if (node)
-		printf("synth_node { graph: %p, wires: %p, prev: %p, next: %p, key %i, hash: %i, num_ugens: %u, num_wires: %u, time: %u }",
+		printf("synth_node { graph: %p, wires: %p, prev: %p, next: %p, key %i, hash: %i, num_ugens: %u, num_wires: %u, time: %llu }",
 			   node->ugen_graph,
 			   node->ugen_wires,
 			   node->previous,
@@ -1762,7 +1826,7 @@ void test_doubly_linked_list()
 
 		if (next)
 		{
-			printf("(next: %u) - (node: %u) = %u\n", next->time, node->time, next->time - node->time);
+			printf("(next: %llu) - (node: %llu) = %llu\n", next->time, node->time, next->time - node->time);
 			assert((next->time - node->time) == 1);
 		}
 
@@ -1784,7 +1848,7 @@ void test_doubly_linked_list()
 
 		if (next)
 		{
-			printf("(next: %u) - (node: %u) = %u\n", next->time, node->time, next->time - node->time);
+			printf("(next: %llu) - (node: %llu) = %llu\n", next->time, node->time, next->time - node->time);
 			assert((next->time - node->time) == 2);
 		}
 

@@ -882,7 +882,7 @@ playPattern init playSig stopSig pattern = Signal $ \necro -> do
     (_,netPlayCont,_)     <- unSignal (input False nid) necro
 
     --pure Values
-    let pdef             = pstream ("sigPattern" ++ show uid) (pure $ liftIO . atomically . writeTBQueue (globalDispatch necro) . Event uid . toDyn) pattern
+    let pdef             = pstream ("sigPattern" ++ show uid) (pure $ \time jackTime -> liftIO . atomically . writeTBQueue (globalDispatch necro) . Event uid $ toDyn time) pattern
         ids              = IntSet.insert nid $ IntSet.insert uid $ IntSet.union sids pids
 
     runNecroState (setTempo 150) (necroVars necro)
