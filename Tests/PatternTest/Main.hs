@@ -11,25 +11,25 @@ dup :: UGen -> [UGen]
 dup u = [u, u]
 
 freqSynth :: UGen -> UGen
-freqSynth freq = sin freq * line 0.333 |> gain 0.1 >>> out 0
+freqSynth freq = sin freq * line 0.1 |> gain 0.1 >>> out 0
 
 bSynth :: UGen
-bSynth = sin 55 |> gain (line 0.15) >>> gain 0.2 >>> out 0
+bSynth = sin 55 |> gain (line 0.1) >>> gain 0.2 >>> out 0
 
 pSynth :: UGen
 pSynth = sin 1110 |> gain (line 0.1) >>> gain 0.2 >>> out 1
 
 one :: UGen
-one = sin 220 |> gain (line 0.2) >>> gain 0.2 >>> out 0
+one = sin 220 |> gain (line 0.1) >>> gain 0.2 >>> out 0
 
 two :: UGen
-two = sin 440 |> gain (line 0.2) >>> gain 0.2 >>> out 1
+two = sin 440 |> gain (line 0.1) >>> gain 0.2 >>> out 1
 
 three :: UGen
-three = sin 660 |> gain (line 0.2) >>> gain 0.2 >>> out 0
+three = sin 660 |> gain (line 0.1) >>> gain 0.2 >>> out 0
 
 four :: UGen
-four = sin 990 |> gain (line 0.2) >>> gain 0.2 >>> out 1
+four = sin 990 |> gain (line 0.1) >>> gain 0.2 >>> out 1
 
 patternTest :: Necronomicon ()
 patternTest = do
@@ -114,9 +114,20 @@ patternTest = do
     runPDef $ pstream "four"  pBeatSynth [lich| _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four |]
     
     -- runPDef $ pbeat "MyCoolBeat" [lich| b p [_ b] p |]
-    -- nSleep 5
-    -- setTempo 60
-    -- nSleep 10
+    {-
+    nSleep 5
+    setTempo 60
+    nSleep 10
+    setTempo 97
+    nSleep 7
+    setTempo 300
+    nSleep 2
+    setTempo 33
+    nSleep 2.5
+    setTempo 222
+    nSleep 3
+    setTempo 150
+    -}
     -- runPDef melo
     -- runPDef melo2
     -- nSleep 4
