@@ -165,7 +165,7 @@ triOsc f1 f2 = [sig1,sig2] + [sig3,sig3] |> verb |> gain 0.1 |> out 0
     where
         sig1 = sinOsc (f1 + sig3 * 1000) |> auxThrough 2
         sig2 = sinOsc (f2 + sig3 * 1000) |> auxThrough 3
-        sig3 = sinOsc (f1 - f2)   |> auxThrough 4
+        sig3 = sinOsc (f1 - f2)          |> auxThrough 4
         verb = freeverb 0.25 0.5 0.5
 
 hyperTerrainSounds :: Signal ()

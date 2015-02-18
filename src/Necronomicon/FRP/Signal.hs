@@ -1082,27 +1082,69 @@ mkSignalState = do
     client            <- newClient name
     mouseSignal       <- atomically $ newTVar (NoChange (0,0))
     dimensionsSignal  <- atomically $ newTVar (NoChange $ Vector2 1920 1080)
+
     mouseButtonSignal <- atomically $ newTVar (NoChange False)
     keySignal         <- atomically $ newTVar $ IntMap.fromList $ map (\i -> (i,NoChange False)) [100..154]
-    keysPressed       <- atomically $ newTVar []
+    keysPressed       <- atomically $ newTVar (NoChange 0)
     chatMessageSignal <- atomically $ newTVar (NoChange "")
     netStatusSignal   <- atomically $ newTVar (NoChange Connecting)
     userListSignal    <- atomically $ newTVar (NoChange [])
-    return $ SignalState inputCounter sceneVar guiVar necroVars client mouseSignal dimensionsSignal mouseButtonSignal keySignal keysPressed chatMessageSignal netStatusSignal userListSignal 0 0
+
+    mouseButtonBuffer <- atomically $ newTChan
+    keySignalBuffer   <- atomically $ newTChan
+    keysPressedBuffer <- atomically $ newTChan
+    chatMessageBuffer <- atomically $ newTChan
+    netStatusBuffer   <- atomically $ newTVar Connecting
+    userListBuffer    <- atomically $ newTVar []
+
+    return $ SignalState
+        inputCounter
+        sceneVar
+        guiVar
+        necroVars
+        client
+        mouseSignal
+        dimensionsSignal
+        mouseButtonSignal
+        keySignal
+        keysPressed
+        chatMessageSignal
+        netStatusSignal
+        userListSignal
+        mouseButtonBuffer
+        keySignalBuffer
+        keysPressedBuffer
+        chatMessageBuffer
+        netStatusBuffer
+        userListBuffer
+        0
+        0
 
 resetKnownInputs :: SignalState -> IO()
 resetKnownInputs state = do
     atomically $ readTVar (mouseSignal state)         >>= writeTVar (mouseSignal state) . noChange
     atomically $ readTVar (dimensionsSignal state)    >>= writeTVar (dimensionsSignal state) . noChange
-    atomically $ readTVar (mouseButtonSignal state)   >>= writeTVar (mouseButtonSignal state) . noChange
     atomically $ readTVar (sceneVar state )           >>= writeTVar (sceneVar state) . noChange
     atomically $ readTVar (guiVar state)              >>= writeTVar (guiVar state) . noChange
-    atomically $ readTVar (keySignal state)           >>= writeTVar (keySignal state) . IntMap.map noChange
-    atomically $ writeTVar (keysPressed state) []
     atomically $ readTVar (chatMessageSignal state)   >>= writeTVar (chatMessageSignal state) . noChange
     atomically $ readTVar (netStatusSignal state)     >>= writeTVar (netStatusSignal state) . noChange
     atomically $ readTVar (userListSignal state)      >>= writeTVar (userListSignal state) . noChange
     atomically $ readTVar (netSignals $ client state) >>= writeTVar (netSignals $ client state) . IntMap.map noChange
+
+    atomically $
+        (readTChan (mouseButtonBuffer state) >>= writeTVar (mouseButtonSignal state) . Change) `orElse`
+        (readTVar  (mouseButtonSignal state) >>= writeTVar (mouseButtonSignal state) . noChange)
+    atomically $ updateKeySignalFromBackBuffer `orElse` (readTVar (keySignal state) >>= writeTVar (keySignal state) . IntMap.map noChange)
+    atomically $
+        (readTChan (keysPressedBuffer state) >>= writeTVar (keysPressed state) . Change) `orElse`
+        (readTVar  (keysPressed state) >>= writeTVar (keysPressed state) . noChange)
+
+    where
+        updateKeySignalFromBackBuffer = do
+            (k,b)  <- readTChan $ keySignalBuffer state
+            signal <- readTVar  $ keySignal state
+            writeTVar (keySignal state) $ IntMap.insert k (Change b) $ IntMap.map noChange signal
+
 
 scene :: [Signal SceneObject] -> Signal ()
 scene os = render $ root <~ combine os
@@ -1112,10 +1154,10 @@ initWindow = GLFW.init >>= \initSuccessful -> if initSuccessful then window else
     where
         mkWindow = do
             --Windowed
-            -- GLFW.createWindow 1280 768 "Necronomicon" Nothing Nothing
+            GLFW.createWindow 1280 768 "Necronomicon" Nothing Nothing
             --Full screen
-            fullScreenOnMain <- GLFW.getPrimaryMonitor
-            GLFW.createWindow 1920 1080 "Necronomicon" fullScreenOnMain Nothing
+            -- fullScreenOnMain <- GLFW.getPrimaryMonitor
+            -- GLFW.createWindow 1920 1080 "Necronomicon" fullScreenOnMain Nothing
         window   = mkWindow >>= \w -> GLFW.makeContextCurrent w >> return w
 
 runSignal :: (Show a) => Signal a -> IO()
@@ -1143,13 +1185,13 @@ runSignal s = initWindow >>= \mw -> case mw of
         render False w signalLoop signalState resources
     where
         --event callbacks
-        mousePressEvent state _ _ GLFW.MouseButtonState'Released _ = writeToSignal (mouseButtonSignal state) $ False
-        mousePressEvent state _ _ GLFW.MouseButtonState'Pressed  _ = writeToSignal (mouseButtonSignal state) $ True
+        mousePressEvent state _ _ GLFW.MouseButtonState'Released _ = atomically $ writeTChan (mouseButtonBuffer state) $ False
+        mousePressEvent state _ _ GLFW.MouseButtonState'Pressed  _ = atomically $ writeTChan (mouseButtonBuffer state) $ True
         dimensionsEvent state _ x y = writeToSignal (dimensionsSignal state) $ Vector2 (fromIntegral x) (fromIntegral y)
         keyPressEvent   state _ k _ GLFW.KeyState'Pressed  _       = do
-            atomically $ readTVar (keySignal   state) >>= writeTVar (keySignal   state) . IntMap.insert (glfwKeyToEventKey k) (Change True)
-            atomically $ readTVar (keysPressed state) >>= writeTVar (keysPressed state) . ((glfwKeyToEventKey k) :)
-        keyPressEvent   state _ k _ GLFW.KeyState'Released _       = atomically $ readTVar (keySignal state) >>= writeTVar (keySignal state) . IntMap.insert (glfwKeyToEventKey k) (Change False)
+            atomically $ writeTChan (keySignalBuffer state)   (glfwKeyToEventKey k,True)
+            atomically $ writeTChan (keysPressedBuffer state) (glfwKeyToEventKey k)
+        keyPressEvent   state _ k _ GLFW.KeyState'Released _       = atomically $ writeTChan (keySignalBuffer state) (glfwKeyToEventKey k,False)
         keyPressEvent   state _ k _ _ _                            = return ()
 
         mousePosEvent state w x y = do
@@ -1161,7 +1203,7 @@ runSignal s = initWindow >>= \mw -> case mw of
             | quit      = quitClient (client signalState) >> runNecroState shutdownNecronomicon (necroVars signalState) >> print "Qutting" >> return ()
             | otherwise = do
                 GLFW.pollEvents
-                q           <- liftA (== GLFW.KeyState'Pressed) (GLFW.getKey window GLFW.Key'Escape)
+                q <- liftA (== GLFW.KeyState'Pressed) (GLFW.getKey window GLFW.Key'Escape)
                 currentTime <- getCurrentTime
 
                 let delta        = currentTime - runTime signalState
@@ -1176,8 +1218,11 @@ runSignal s = initWindow >>= \mw -> case mw of
                     (Change   s,NoChange g) -> renderGraphics window resources s g
                     _                       -> return ()
 
+                --Compute input data
+
                 resetKnownInputs signalState
                 -- execIfChanged result print
+
                 threadDelay $ 16667
                 render q window signalLoop signalState' resources
 
@@ -1596,11 +1641,11 @@ textInput = Signal $ \state -> do
     shiftCont <- unSignal shift state
     return $ processSignal shiftRef charRef shiftCont
     where
-        processSignal shiftRef charRef shiftCont state = do
-            keys        <- atomically $ readTVar $ keysPressed state
-            isShiftDown <- shiftCont state >>= return . unEvent
-            if null keys then readIORef charRef >>= return . NoChange else do
-                let char = eventKeyToChar (keys !! 0) isShiftDown
+        processSignal shiftRef charRef shiftCont state = atomically (readTVar $ keysPressed state) >>= \keys -> case keys of
+            NoChange _ -> readIORef charRef >>= return . NoChange
+            Change   k -> do
+                isShiftDown <- shiftCont state >>= return . unEvent
+                let char = eventKeyToChar k isShiftDown
                 writeIORef charRef char
                 return $ Change char
 
