@@ -3,7 +3,8 @@ import Data.Fixed (mod')
 import Control.Arrow
 
 main :: IO ()
-main = runSignal <| testGUI <|> (testScene <&> testSound2)
+-- main = runSignal <| sigPrint (audioBuffer 0) <&> testSound2
+main = runSignal <| testGUI <|> (testScene <&> hyperTerrainSounds)
 
 testGUI :: Signal ()
 testGUI = gui [chatBox,netBox,users]
@@ -81,7 +82,8 @@ threeSynth :: UGen -> UGen -> UGen -> UGen
 threeSynth fx fy fz = sin fx + sin fy + sin fz |> gain 0.1 |> out 0
 
 testScene :: Signal ()
-testScene = scene [pure cam,terrainSig]
+-- testScene = scene [pure cam,terrainSig]
+testScene = scene [pure cam,oscillatorObject]
     where
         move (x,y) z a = Vector3 (x*z*a) (y*z*a) 0
         cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
@@ -112,3 +114,48 @@ simplexMesh = Mesh "simplex" vertices colors uvs indices
         colors   = map toColor  values
         uvs      = map toUV     values
         indices  = foldr (addIndices (round w)) [] [0..(length values)]
+
+oscillatorObject :: Signal SceneObject
+oscillatorObject = model <~ oscillatorMesh
+    where
+        model mesh = SceneObject 0 identity 1 (Model mesh $ vertexColored (RGBA 1 1 1 0.35)) []
+
+oscillatorMesh :: Signal Mesh
+oscillatorMesh = Signal $ \state -> do
+    (vertexBuffer,indexBuffer) <- genDynMeshBuffers
+    audioCont0                 <- unSignal (audioBuffer 2) state
+    audioCont1                 <- unSignal (audioBuffer 3) state
+    audioCont2                 <- unSignal (audioBuffer 4) state
+    return $ processSignal vertexBuffer indexBuffer audioCont0 audioCont1 audioCont2
+    where
+        processSignal vertexBuffer indexBuffer audioCont0 audioCont1 audioCont2 state = do
+            audio0 <- fmap unEvent $ audioCont0 state
+            audio1 <- fmap unEvent $ audioCont1 state
+            audio2 <- fmap unEvent $ audioCont1 state
+            let zippedAudio   = zip3 audio0 audio1 audio2
+                audioVertices = foldr toVertex [] $ zip zippedAudio $ drop 1 zippedAudio
+            return $ Change $ DynamicMesh vertexBuffer indexBuffer audioVertices colors uvs indices
+
+        colors  = replicate 511 white
+        uvs     = replicate 512 0
+        indices = foldr (\i acc -> i + 1 : i + 2 : i + 3 : i + 1 : i + 0 : i + 2 : acc ) [] [0..511]
+        scale   = 6
+        width   = 0.25
+        toVertex ((x1,y1,z1),(x2,y2,z2)) acc = p3 : p2 : p1 : p0 : acc
+            where
+                p0 = Vector3 (x1 * scale) (y1 * scale) (z1 * scale * 0.25)
+                p1 = Vector3 (x2 * scale) (y2 * scale) (z2 * scale * 0.25)
+                cp = normalize $ cross p0 p1
+                p2 = p0 + cp * width
+                p3 = p1 + cp * width
+
+triOsc :: UGen -> UGen -> [UGen]
+triOsc f1 f2 = [sig1,sig2] + [sig3,sig3] |> verb |> gain 0.1 |> out 0
+    where
+        sig1 = sinOsc (f1 + sig3) |> auxThrough 2
+        sig2 = sinOsc (f2 + sig3) |> auxThrough 3
+        sig3 = sinOsc 10 |> auxThrough 4
+        verb = freeverb 0.25 0.5 0.5
+
+hyperTerrainSounds :: Signal ()
+hyperTerrainSounds = play (toggle <| isDown keyW) triOsc (mouseX ~> scale 100 3000) (mouseY ~> scale 20 3000)

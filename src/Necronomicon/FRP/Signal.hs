@@ -2,6 +2,8 @@ module Necronomicon.FRP.Signal (
     module Necronomicon.FRP.Event,
     Signal (..),
     SignalState (..),
+    unEvent,
+    audioBuffer,
     netsignal,
     foldn,
     -- playPattern,
@@ -133,6 +135,10 @@ import           Necronomicon.Runtime
 import           Necronomicon.UGen
 import           Necronomicon.Networking
 import           System.Random
+import           Foreign hiding (shift)
+import           Foreign.C
+import           Foreign.Marshal
+
 ------------------------------------------------------
 
 (<~) :: Functor f => (a -> b) -> f a -> f b
@@ -2130,6 +2136,18 @@ netsignal sig = Signal $ \state -> do
                         -- else pCont event >>= \p -> case p of
                             -- Change True -> print "play" >> sendSetNetSignal client (nid,NetBool True ) >> runNecroState (runPDef pdef) necroVars >> writeIORef playRef True  >> readIORef ref >>= return . NoChange
                             -- _           -> readIORef ref >>= return . NoChange
+
+foreign import ccall "&out_bus_buffers" outBusBuffers :: Ptr CDouble
+
+audioBuffer :: Int -> Signal [Double]
+audioBuffer index = Signal $ \_ -> if index < 16
+        then return processState
+        else return $ \_ -> return $ NoChange []
+    where
+        processState state = do
+            array <- peekArray 512 $ advancePtr outBusBuffers (512 * index)
+            return $ Change $ map realToFrac array
+
 
 
 playSynthN :: UGenType a => a -> Signal Bool -> [Signal Double] -> Signal ()

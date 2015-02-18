@@ -29,3 +29,9 @@ makeDynamicBuffer buffer target elems = do
     where
         len = length elems
         n   = fromIntegral $ len * sizeOf (head elems)
+
+genDynMeshBuffers :: IO (GL.BufferObject,GL.BufferObject)
+genDynMeshBuffers = do
+    vertexBuffer:_ <- GL.genObjectNames 1
+    indexBuffer :_ <- GL.genObjectNames 1
+    return (vertexBuffer,indexBuffer)
