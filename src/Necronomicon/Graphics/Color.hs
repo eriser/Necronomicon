@@ -148,3 +148,6 @@ cast (RGBA r g b _) = RGB r g b
 toGLColor3 :: Color -> GL.Color3 GL.GLdouble
 toGLColor3 (RGB  r g b   ) = GL.Color3 (realToFrac r) (realToFrac g) (realToFrac b)
 toGLColor3 (RGBA r g b _ ) = GL.Color3 (realToFrac r) (realToFrac g) (realToFrac b)
+
+vtoc :: Vector3 -> Double -> Color
+vtoc (Vector3 r g b) a = RGBA r g b a

@@ -132,30 +132,41 @@ oscillatorMesh = Signal $ \state -> do
             audio0 <- fmap unEvent $ audioCont0 state
             audio1 <- fmap unEvent $ audioCont1 state
             audio2 <- fmap unEvent $ audioCont1 state
-            let zippedAudio   = zip3 audio0 audio1 audio2
-                audioVertices = foldr toVertex [] $ zip zippedAudio $ drop 1 zippedAudio
-            return $ Change $ DynamicMesh vertexBuffer indexBuffer audioVertices colors uvs indices
+            let zippedAudio       = zip3 audio0 audio1 audio2
+                (vertices,colors) = foldr toVertex ([],[]) $ zip zippedAudio $ drop 1 zippedAudio
+            return $ Change $ DynamicMesh vertexBuffer indexBuffer vertices colors uvs indices
 
-        colors  = replicate 511 white
+        -- colors  = replicate 511 white
         uvs     = replicate 512 0
         indices = foldr (\i acc -> i + 1 : i + 2 : i + 3 : i + 1 : i + 0 : i + 2 : acc ) [] [0..511]
         scale   = 6
-        width   = 0.25
-        toVertex ((x1,y1,z1),(x2,y2,z2)) acc = p3 : p2 : p1 : p0 : acc
+        width   = 1
+        toVertex ((x1,y1,z1),(x2,y2,z2)) (vacc,cacc) = (p3 : p2 : p1 : p0 : vacc,r3 : r2 : r1 : r0 : cacc)
             where
-                p0 = Vector3 (x1 * scale) (y1 * scale) (z1 * scale * 0.25)
-                p1 = Vector3 (x2 * scale) (y2 * scale) (z2 * scale * 0.25)
-                cp = normalize $ cross p0 p1
+                cp = cross np0 np1
+
+                p0 = Vector3 (x1 * scale) (y1 * scale) (z1 * scale * 0.35)
+                p1 = Vector3 (x2 * scale) (y2 * scale) (z2 * scale * 0.35)
                 p2 = p0 + cp * width
                 p3 = p1 + cp * width
+
+                np0 = normalize p0
+                np1 = normalize p1
+                np2 = normalize p2
+                np3 = normalize p3
+
+                r0 = vtoc (np0 * 0.5 + 0.5) 0.35
+                r1 = vtoc (np1 * 0.5 + 0.5) 0.35
+                r2 = vtoc (np2 * 0.5 + 0.5) 0.35
+                r3 = vtoc (np3 * 0.5 + 0.5) 0.35
 
 triOsc :: UGen -> UGen -> [UGen]
 triOsc f1 f2 = [sig1,sig2] + [sig3,sig3] |> verb |> gain 0.1 |> out 0
     where
-        sig1 = sinOsc (f1 + sig3) |> auxThrough 2
-        sig2 = sinOsc (f2 + sig3) |> auxThrough 3
-        sig3 = sinOsc 10 |> auxThrough 4
+        sig1 = sinOsc (f1 + sig3 * 1000) |> auxThrough 2
+        sig2 = sinOsc (f2 + sig3 * 1000) |> auxThrough 3
+        sig3 = sinOsc (f1 - f2)   |> auxThrough 4
         verb = freeverb 0.25 0.5 0.5
 
 hyperTerrainSounds :: Signal ()
-hyperTerrainSounds = play (toggle <| isDown keyW) triOsc (mouseX ~> scale 100 3000) (mouseY ~> scale 20 3000)
+hyperTerrainSounds = play (toggle <| isDown keyW) triOsc (mouseX ~> scale 20 3000) (mouseY ~> scale 20 3000)

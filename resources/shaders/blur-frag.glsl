@@ -8,7 +8,7 @@ out vec4 fragColor;
 const int   stepCount   = 4;
 const float gWeights[4] = float[](0.44908,0.05092,0.05092,0.44908);
 const float gOffsets[4] = float[](0.53805,2.06278,2.06278,0.53805);
-const float offset      = 0.00333333333 * 1;
+const float offset      = 0.00333333333 * 2;
 const float halfOffset  = offset * 0.5;
 
 vec4 gaussianBlur( sampler2D tex0, vec2 centreUV, vec2 halfPixelOffset, vec2 pixelOffset )
