@@ -1218,6 +1218,8 @@ runSignal s = initWindow >>= \mw -> case mw of
         render quit window signalLoop signalState resources
             | quit      = quitClient (client signalState) >> runNecroState shutdownNecronomicon (necroVars signalState) >> print "Qutting" >> return ()
             | otherwise = do
+
+                resetKnownInputs signalState
                 GLFW.pollEvents
                 q <- liftA (== GLFW.KeyState'Pressed) (GLFW.getKey window GLFW.Key'Escape)
                 currentTime <- getCurrentTime
@@ -1226,6 +1228,7 @@ runSignal s = initWindow >>= \mw -> case mw of
                     signalState' = signalState{runTime = currentTime,updateDelta = delta}
 
                 result <- signalLoop signalState'
+
                 scene  <- atomically $ readTVar $ sceneVar signalState
                 gui    <- atomically $ readTVar $ guiVar   signalState
                 case (scene,gui) of
@@ -1234,9 +1237,6 @@ runSignal s = initWindow >>= \mw -> case mw of
                     (Change   s,NoChange g) -> renderGraphics window resources s g
                     _                       -> return ()
 
-                --Compute input data
-
-                resetKnownInputs signalState
                 -- execIfChanged result print
 
                 threadDelay $ 16667
@@ -2115,9 +2115,9 @@ foldn f bInit a = Signal $ \state -> do
     ref           <- newIORef bInit
     netid         <- getNextID state
     sendAddNetSignal (client state) $ (netid,toNetVal bInit)
-    return $ processSignal cont ref (client state) netid
+    return $ processSignal cont ref netid
     where
-        processSignal cont ref client netid state = atomically (readTVar $ netSignals client) >>= \ns -> case IntMap.lookup netid ns of
+        processSignal cont ref netid state = atomically (readTVar $ netSignals $ client state) >>= \ns -> case IntMap.lookup netid ns of
             Just (Change n) -> case fromNetVal n of
                 Just n  -> cont state >> writeIORef ref n >> return (Change n)
                 Nothing -> localCont
@@ -2129,29 +2129,33 @@ foldn f bInit a = Signal $ \state -> do
                         prev <- readIORef ref
                         let new = f v prev
                         writeIORef ref    new
-                        if new /= prev then sendSetNetSignal client (netid,toNetVal new) else return ()
+                        if new /= prev then sendSetNetSignal (client state) (netid,toNetVal new) else return ()
                         return (Change new)
 
 netsignal :: Networkable a => Signal a -> Signal a
 netsignal sig = Signal $ \state -> do
-    cont  <- unSignal sig state
-    val   <- fmap unEvent $ cont state
-    ref   <- newIORef val
-    netid <- getNextID state
+    cont   <- unSignal sig state
+    val    <- fmap unEvent $ cont state
+    ref    <- newIORef val
+    netid  <- getNextID state
+    netRef <- newIORef val
     sendAddNetSignal (client state) (netid,toNetVal val)
-    return $ processEvent cont ref (client state) netid
+    return $ processEvent cont ref netid netRef
     where
-        processEvent cont ref client netid state = atomically (readTVar $ netSignals client) >>= \ns -> case IntMap.lookup netid ns of
+        processEvent cont ref netid netRef state = atomically (readTVar $ netSignals $ client state) >>= \ns -> case IntMap.lookup netid ns of
             Just (Change n) -> case fromNetVal n of
                 Just n  -> print "Just Change (Just n)" >> cont state >> writeIORef ref n >> return (Change n)
                 Nothing -> print "fromNetVal is wrong!?" >> localCont
-            -- Just (NoChange n) -> print "Just (NoChange n)" >> localCont
-            _               -> localCont
+            Just (NoChange n) -> readIORef netRef >>= \prevN -> case fromNetVal n of
+                Nothing -> print "fromNetVal is wrong!?" >> localCont
+                Just n'  -> if n' /= prevN
+                    then print "n /= prevN" >> cont state >> writeIORef ref n' >> writeIORef netRef n' >> return (Change n')
+                    else localCont
             where
                 localCont = cont state >>= \c -> case c of
                     NoChange v -> return $ NoChange v
                     Change   v -> readIORef ref >>= \prev -> if v /= prev
-                        then sendSetNetSignal client (netid,toNetVal v) >> writeIORef ref v >> return (Change v)
+                        then sendSetNetSignal (client state) (netid,toNetVal v) >> writeIORef ref v >> return (Change v)
                         else return $ Change v
 
 ---------------------------------------------

@@ -86,8 +86,8 @@ connectionLoop client socket serverAddr = Control.Exception.catch tryConnect onF
             connect socket serverAddr
             atomically (writeTVar (runStatus client) Running)
             putStrLn "Connected. Starting worker threads..."
+        onFailure :: IOException -> IO ()
         onFailure e = do
-            return (e :: IOException)
             atomically $ writeTVar (runStatus client) Connecting
             threadDelay 1000000
             connectionLoop client socket serverAddr
