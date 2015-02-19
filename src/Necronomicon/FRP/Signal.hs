@@ -1094,7 +1094,9 @@ mkSignalState = do
     keySignalBuffer   <- atomically $ newTChan
     keysPressedBuffer <- atomically $ newTChan
     chatMessageBuffer <- atomically $ newTChan
-
+    netStatusBuffer   <- atomically $ newTChan
+    userListBuffer    <- atomically $ newTChan
+    netSignalsBuffer  <- atomically $ newTVar []
 
     return $ SignalState
         inputCounter
@@ -1114,20 +1116,21 @@ mkSignalState = do
         keySignalBuffer
         keysPressedBuffer
         chatMessageBuffer
+        netStatusBuffer
+        userListBuffer
+        netSignalsBuffer
         0
         0
 
 resetKnownInputs :: SignalState -> IO()
 resetKnownInputs state = do
+    --Streams that don't need absolute synchronicity
     atomically $ readTVar (mouseSignal state)         >>= writeTVar (mouseSignal state) . noChange
     atomically $ readTVar (dimensionsSignal state)    >>= writeTVar (dimensionsSignal state) . noChange
     atomically $ readTVar (sceneVar state )           >>= writeTVar (sceneVar state) . noChange
     atomically $ readTVar (guiVar state)              >>= writeTVar (guiVar state) . noChange
-    atomically $ readTVar (chatMessageSignal state)   >>= writeTVar (chatMessageSignal state) . noChange
-    atomically $ readTVar (netStatusSignal state)     >>= writeTVar (netStatusSignal state) . noChange
-    atomically $ readTVar (userListSignal state)      >>= writeTVar (userListSignal state) . noChange
-    atomically $ readTVar (netSignals $ client state) >>= writeTVar (netSignals $ client state) . IntMap.map noChange
 
+    --Signals that need lock step
     atomically $ updateKeySignalFromBackBuffer `orElse` (readTVar (keySignal state) >>= writeTVar (keySignal state) . IntMap.map noChange)
 
     atomically $
@@ -1139,13 +1142,25 @@ resetKnownInputs state = do
     atomically $
         (readTChan (chatMessageBuffer state) >>= writeTVar (chatMessageSignal state) . Change) `orElse`
         (readTVar  (chatMessageSignal state) >>= writeTVar (chatMessageSignal state) . noChange)
+    atomically $
+        (readTChan (netStatusBuffer state) >>= writeTVar (netStatusSignal state) . Change) `orElse`
+        (readTVar  (netStatusSignal state) >>= writeTVar (netStatusSignal state) . noChange)
+    atomically $
+        (readTChan (userListBuffer state) >>= writeTVar (userListSignal state) . Change) `orElse`
+        (readTVar  (userListSignal state) >>= writeTVar (userListSignal state) . noChange)
 
+    atomically $ updateNetSignalsFromBackBuffer
     where
         updateKeySignalFromBackBuffer = do
             (k,b)  <- readTChan $ keySignalBuffer state
             signal <- readTVar  $ keySignal state
             writeTVar (keySignal state) $ IntMap.insert k (Change b) $ IntMap.map noChange signal
-
+        updateNetSignalsFromBackBuffer = do
+            updates <- readTVar $ netSignalsBuffer state
+            signal  <- readTVar $ netSignals $ client state
+            let signal' = foldr (\(k,ns) -> IntMap.insert k (Change ns)) (IntMap.map noChange signal) updates
+            writeTVar (netSignals $ client state) signal'
+            writeTVar (netSignalsBuffer state) []
 
 scene :: [Signal SceneObject] -> Signal ()
 scene os = render $ root <~ combine os
@@ -2128,9 +2143,10 @@ netsignal sig = Signal $ \state -> do
     where
         processEvent cont ref client netid state = atomically (readTVar $ netSignals client) >>= \ns -> case IntMap.lookup netid ns of
             Just (Change n) -> case fromNetVal n of
-                Just n  -> cont state >> writeIORef ref n >> return (Change n)
-                Nothing -> localCont
-            _           -> localCont
+                Just n  -> print "Just Change (Just n)" >> cont state >> writeIORef ref n >> return (Change n)
+                Nothing -> print "fromNetVal is wrong!?" >> localCont
+            -- Just (NoChange n) -> print "Just (NoChange n)" >> localCont
+            _               -> localCont
             where
                 localCont = cont state >>= \c -> case c of
                     NoChange v -> return $ NoChange v

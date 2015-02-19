@@ -51,8 +51,11 @@ data SignalState = SignalState {
 
     mouseButtonBuffer :: TChan Bool,
     keySignalBuffer   :: TChan (Int,Bool),
-    keysPressedBuffer :: TChan  Int,
+    keysPressedBuffer :: TChan Int,
     chatMessageBuffer :: TChan String,
+    netStatusBuffer   :: TChan RunStatus,
+    userListBuffer    :: TChan [String],
+    netSignalsBuffer  :: TVar  [(Int, NetValue)],
 
     updateDelta       :: Double,
     runTime           :: Double

@@ -50,14 +50,14 @@ startup :: Client -> String -> SignalState -> IO()
 startup client serverIPAddress sigstate = do
     putStrLn "Setting up networking..."
     (sock,serverAddr) <- getSocket
-    writeToSignal (netStatusSignal sigstate) Connecting
+    atomically $ writeTChan (netStatusBuffer sigstate) Connecting
     connectionLoop            client sock serverAddr
     time >>= \t -> atomically $ writeTVar (aliveTime client) t
     forkIO $ messageProcessor client sigstate
     forkIO $ listener         client sock
     forkIO $ aliveLoop        client sock
     forkIO $ sender           client sock
-    writeToSignal (netStatusSignal sigstate) Running
+    atomically $ writeTChan (netStatusBuffer sigstate) Running
     -- forkIO $ sendLoginMessage client
     sendLoginMessage client
     -- forkIO $ testNetworking   client
@@ -154,7 +154,8 @@ quitClient client = atomically (writeTVar (runStatus client) ShouldQuit) >> atom
 statusLoop :: Client -> Socket -> String -> SignalState -> RunStatus -> IO()
 statusLoop client sock serverIPAddress sigstate status = do
     status' <-atomically (readTVar (runStatus client) >>= \status' -> if status /= status' then return status' else retry)
-    writeToSignal (netStatusSignal sigstate) status'
+    -- writeToSignal (netStatusSignal sigstate) status'
+    atomically $ writeTChan (netStatusBuffer sigstate) status'
     putStrLn ("Network status update: " ++ show status')
     case status' of
         Disconnected -> threadDelay 2500000 >> putStrLn "Disconnected. Trying to restart..." >> startup client serverIPAddress sigstate
@@ -185,7 +186,7 @@ parseMessage :: NetMessage -> Client -> SignalState -> IO()
 parseMessage (UserList ul) client sigstate = do
     -- putStrLn $ "Received user list:" ++ show userStringList
     atomically $ writeTVar (clientUsers client) userStringList
-    writeToSignal (userListSignal sigstate) userStringList
+    atomically $ writeTChan (userListBuffer sigstate) userStringList
     where
         userStringList = map C.unpack ul
 
@@ -195,20 +196,26 @@ parseMessage Alive client _ = do
 
 parseMessage (Login _) _ _ = putStrLn "Succesfully logged in."
 
-parseMessage (AddNetSignal uid netVal) client _ = do
-    atomically (readTVar (netSignals client) >>= \sig -> writeTVar (netSignals client) (IntMap.insert uid (Change netVal) sig))
+parseMessage (AddNetSignal uid netVal) client sigstate = do
+    -- atomically (readTVar (netSignals client) >>= \sig -> writeTVar (netSignals client) (IntMap.insert uid (Change netVal) sig))
+    atomically $ readTVar (netSignalsBuffer sigstate) >>= writeTVar (netSignalsBuffer sigstate) . ((uid,netVal) :)
     putStrLn $ "Adding NetSignal: " ++ show (uid,netVal)
 
 parseMessage (SetNetSignal uid netVal) client sigstate = do
     -- need new system for this
     -- sendToGlobalDispatch globalDispatch uid $ netValToDyn netVal
-    atomically $ readTVar (netSignals client) >>= \sigs -> writeTVar (netSignals client) (IntMap.insert uid (Change netVal) sigs)
+    -- atomically $ readTVar (netSignals client) >>= \sigs -> writeTVar (netSignals client) (IntMap.insert uid (Change netVal) sigs)
+    atomically $ readTVar (netSignalsBuffer sigstate) >>= writeTVar (netSignalsBuffer sigstate) . ((uid,netVal) :)
+
     -- putStrLn $ "Setting NetSignal : " ++ show (uid,netVal)
 
 parseMessage (SyncNetSignals netVals) client sigstate = do
-    oldNetSignals <- atomically $ readTVar (netSignals client)
+    print "SyncNetSignals"
+    -- oldNetSignals <- atomically $ readTVar (netSignals client)
     -- mapM_ (sendMergeEvents oldNetSignals) $ IntMap.toList netVals
-    atomically $ writeTVar (netSignals client) $ IntMap.map Change netVals
+    -- atomically $ writeTVar (netSignals client) $ IntMap.map Change netVals
+    -- atomically $ writeTVar (netSignals client) $ IntMap.map Change netVals
+    atomically $ readTVar (netSignalsBuffer sigstate) >>= writeTVar (netSignalsBuffer sigstate) . ((IntMap.toList netVals) ++)
     -- putStrLn $ "Server sync. old signals size: " ++ show (IntMap.size oldNetSignals) ++ ", new signals size: " ++ show (IntMap.size netVals)
     -- where
         -- sendMergeEvents oldNetSignals (uid,netVal) = case IntMap.lookup uid oldNetSignals of
@@ -217,7 +224,7 @@ parseMessage (SyncNetSignals netVals) client sigstate = do
                 -- then return () -- sendToGlobalDispatch globalDispatch uid $ netValToDyn netVal
                 -- else return ()
 
-parseMessage (Chat name msg) client sigstate = print "Chat" >> (atomically $ writeTChan (chatMessageBuffer sigstate) $ C.unpack name ++ ": " ++ C.unpack msg)
+parseMessage (Chat name msg) client sigstate = atomically $ writeTChan (chatMessageBuffer sigstate) $ C.unpack name ++ ": " ++ C.unpack msg
 
 parseMessage EmptyMessage        _ _ = putStrLn "Empty message received!?"
 parseMessage (RemoveNetSignal _) _ _ = putStrLn "Really no reason to remove net signals now is there?"
@@ -259,10 +266,10 @@ printError e = print e
 sendChatMessage :: String -> Client -> IO()
 sendChatMessage chat client = atomically $ writeTChan (outBox client) $ Chat (C.pack $ userName client) (C.pack chat)
 
-addSynthPlayObject :: Client -> Int -> Bool -> [(Int,Double)] -> IO()
-addSynthPlayObject client uid isPlaying args = atomically $ do
-    writeTChan (outBox client) $ AddNetSignal uid $ NetBool isPlaying
-    mapM_ (\(uid,v) -> writeTChan (outBox client) . AddNetSignal uid $ NetDouble v) args
+-- addSynthPlayObject :: Client -> Int -> Bool -> [(Int,Double)] -> IO()
+-- addSynthPlayObject client uid isPlaying args = atomically $ do
+    -- writeTChan (outBox client) $ AddNetSignal uid $ NetBool isPlaying
+    -- mapM_ (\(uid,v) -> writeTChan (outBox client) . AddNetSignal uid $ NetDouble v) args
 
 sendSetNetSignal :: Client -> (Int,NetValue) -> IO()
 sendSetNetSignal client (uid,v) = do
@@ -270,4 +277,6 @@ sendSetNetSignal client (uid,v) = do
     -- atomically $ readTVar (netSignals client) >>= writeTVar (netSignals client) . IntMap.insert uid v
 
 sendAddNetSignal :: Client -> (Int,NetValue) -> IO()
-sendAddNetSignal client (uid,netVal) = atomically $ writeTChan (outBox client) $ AddNetSignal uid netVal
+sendAddNetSignal client (uid,netVal) = do
+    atomically $ writeTChan (outBox client) $ AddNetSignal uid netVal
+    atomically (readTVar (netSignals client) >>= \sig -> writeTVar (netSignals client) (IntMap.insert uid (NoChange netVal) sig))
