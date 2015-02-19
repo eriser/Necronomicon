@@ -1094,8 +1094,7 @@ mkSignalState = do
     keySignalBuffer   <- atomically $ newTChan
     keysPressedBuffer <- atomically $ newTChan
     chatMessageBuffer <- atomically $ newTChan
-    netStatusBuffer   <- atomically $ newTVar Connecting
-    userListBuffer    <- atomically $ newTVar []
+
 
     return $ SignalState
         inputCounter
@@ -1115,8 +1114,6 @@ mkSignalState = do
         keySignalBuffer
         keysPressedBuffer
         chatMessageBuffer
-        netStatusBuffer
-        userListBuffer
         0
         0
 
@@ -1131,13 +1128,17 @@ resetKnownInputs state = do
     atomically $ readTVar (userListSignal state)      >>= writeTVar (userListSignal state) . noChange
     atomically $ readTVar (netSignals $ client state) >>= writeTVar (netSignals $ client state) . IntMap.map noChange
 
+    atomically $ updateKeySignalFromBackBuffer `orElse` (readTVar (keySignal state) >>= writeTVar (keySignal state) . IntMap.map noChange)
+
     atomically $
         (readTChan (mouseButtonBuffer state) >>= writeTVar (mouseButtonSignal state) . Change) `orElse`
         (readTVar  (mouseButtonSignal state) >>= writeTVar (mouseButtonSignal state) . noChange)
-    atomically $ updateKeySignalFromBackBuffer `orElse` (readTVar (keySignal state) >>= writeTVar (keySignal state) . IntMap.map noChange)
     atomically $
         (readTChan (keysPressedBuffer state) >>= writeTVar (keysPressed state) . Change) `orElse`
         (readTVar  (keysPressed state) >>= writeTVar (keysPressed state) . noChange)
+    atomically $
+        (readTChan (chatMessageBuffer state) >>= writeTVar (chatMessageSignal state) . Change) `orElse`
+        (readTVar  (chatMessageSignal state) >>= writeTVar (chatMessageSignal state) . noChange)
 
     where
         updateKeySignalFromBackBuffer = do
@@ -1600,11 +1601,9 @@ isDown :: Key -> Signal Bool
 isDown k = Signal $ \_ -> return processSignal
     where
         eventKey            = glfwKeyToEventKey k
-        processSignal state = do
-            keys <- atomically $ readTVar $ keySignal state
-            case IntMap.lookup eventKey keys of
-                Nothing -> return $ NoChange False
-                Just  e -> return $ e
+        processSignal state = atomically (readTVar $ keySignal state) >>= \keys -> case IntMap.lookup eventKey keys of
+            Nothing -> return $ NoChange False
+            Just  e -> return e
 
 isUp :: Key -> Signal Bool
 isUp k = not <~ isDown k
@@ -1642,9 +1641,9 @@ textInput = Signal $ \state -> do
     return $ processSignal shiftRef charRef shiftCont
     where
         processSignal shiftRef charRef shiftCont state = atomically (readTVar $ keysPressed state) >>= \keys -> case keys of
-            NoChange _ -> readIORef charRef >>= return . NoChange
+            NoChange _ -> shiftCont state >> readIORef charRef >>= return . NoChange
             Change   k -> do
-                isShiftDown <- shiftCont state >>= return . unEvent
+                isShiftDown <- fmap unEvent $ shiftCont state
                 let char = eventKeyToChar k isShiftDown
                 writeIORef charRef char
                 return $ Change char

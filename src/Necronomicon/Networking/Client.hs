@@ -217,7 +217,7 @@ parseMessage (SyncNetSignals netVals) client sigstate = do
                 -- then return () -- sendToGlobalDispatch globalDispatch uid $ netValToDyn netVal
                 -- else return ()
 
-parseMessage (Chat name msg) client sigstate = print "Chat" >> (writeToSignal (chatMessageSignal sigstate) $ C.unpack name ++ ": " ++ C.unpack msg)
+parseMessage (Chat name msg) client sigstate = print "Chat" >> (atomically $ writeTChan (chatMessageBuffer sigstate) $ C.unpack name ++ ": " ++ C.unpack msg)
 
 parseMessage EmptyMessage        _ _ = putStrLn "Empty message received!?"
 parseMessage (RemoveNetSignal _) _ _ = putStrLn "Really no reason to remove net signals now is there?"

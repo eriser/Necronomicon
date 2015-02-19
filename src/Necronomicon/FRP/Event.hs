@@ -53,8 +53,6 @@ data SignalState = SignalState {
     keySignalBuffer   :: TChan (Int,Bool),
     keysPressedBuffer :: TChan  Int,
     chatMessageBuffer :: TChan String,
-    netStatusBuffer   :: TVar  RunStatus,
-    userListBuffer    :: TVar  [String],
 
     updateDelta       :: Double,
     runTime           :: Double
