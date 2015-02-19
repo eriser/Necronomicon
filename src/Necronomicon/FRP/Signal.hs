@@ -2144,12 +2144,12 @@ netsignal sig = Signal $ \state -> do
     where
         processEvent cont ref netid netRef state = atomically (readTVar $ netSignals $ client state) >>= \ns -> case IntMap.lookup netid ns of
             Just (Change n) -> case fromNetVal n of
-                Just n  -> print "Just Change (Just n)" >> cont state >> writeIORef ref n >> return (Change n)
-                Nothing -> print "fromNetVal is wrong!?" >> localCont
+                Just n  -> cont state >> writeIORef ref n >> return (Change n)
+                Nothing -> localCont
             Just (NoChange n) -> readIORef netRef >>= \prevN -> case fromNetVal n of
-                Nothing -> print "fromNetVal is wrong!?" >> localCont
+                Nothing -> localCont
                 Just n'  -> if n' /= prevN
-                    then print "n /= prevN" >> cont state >> writeIORef ref n' >> writeIORef netRef n' >> return (Change n')
+                    then cont state >> writeIORef ref n' >> writeIORef netRef n' >> return (Change n')
                     else localCont
             where
                 localCont = cont state >>= \c -> case c of
