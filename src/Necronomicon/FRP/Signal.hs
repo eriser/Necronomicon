@@ -2,6 +2,7 @@ module Necronomicon.FRP.Signal (
     module Necronomicon.FRP.Event,
     Signal (..),
     SignalState (..),
+    time,
     unEvent,
     audioBuffer,
     netsignal,
@@ -1760,6 +1761,9 @@ lagSig lagTime sig = Signal $ \state -> do
                         let value'       = start * (fromRational . toRational $ 1 - acc) + end * (fromRational $ toRational acc)
                         writeIORef ref (start,end,acc')
                         return $ Change value'
+
+time :: Signal Double
+time = Signal $ \_ -> return $ \_ -> getCurrentTime >>= return . Change
 
 -----------------------------------------------------------------
 -- Graphics

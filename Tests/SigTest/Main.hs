@@ -1,6 +1,7 @@
 import Necronomicon
 import Data.Fixed (mod')
 import Control.Arrow
+import Debug.Trace
 
 main :: IO ()
 -- main = runSignal <| sigPrint (audioBuffer 0) <&> testSound2
@@ -82,39 +83,41 @@ threeSynth :: UGen -> UGen -> UGen -> UGen
 threeSynth fx fy fz = sin fx + sin fy + sin fz |> gain 0.1 |> out 0
 
 testScene :: Signal ()
-testScene = scene [pure cam,oscSig]
+testScene = scene [pure cam,terrainSig]
     where
         move (x,y) z a = Vector3 (x*z*a) (y*z*a) 0
         cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
-        terrain pos    = SceneObject pos identity 1 (Model simplexMesh $ vertexColored (RGBA 1 1 1 0.35)) []
-        terrainSig     = terrain <~ (lagSig 4 $ foldn (+) 0 (lift3 move arrows (fps 4) 3))
         oscSig         = oscillatorObject <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4
+        terrainSig     = terrainObject    <~ time * 0.075  ~~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4
 
-        -- terrainSig     = terrain <~ playPattern 0 (isDown keyP) (isDown keyP)
-            -- [lich| [0 1 2 3] [4 5 6 7] [6 0 5 0] [4 0 3 0] |]
+        -- camSig         = cam <~ (lagSig 4 <| foldn (+) 0 (lift3 move arrows (fps 4) 3))
 
-testTri :: Vector3 -> Quaternion -> SceneObject
-testTri pos r = SceneObject pos r 1 (Model (tri 0.3 white) $ vertexColored white) []
-
-simplexMesh :: Mesh
-simplexMesh = Mesh "simplex" vertices colors uvs indices
+terrainObject :: Double -> [Double] -> [Double] -> [Double] -> SceneObject
+terrainObject t a1 a2 a3 = SceneObject (Vector3 (-8) (-3) (-9)) (fromEuler' (-24) 0 0) 1 (Model mesh <| vertexColored (RGBA 1 1 1 0.35)) []
     where
-        (w,h)            = (64,128)
-        (scale,vscale)   = (1 / 6,3)
-        values           = [(x,simplex 16 (x / w) (y / h),y) | (x,y) <- [(mod' n w,fromIntegral . floor $ n / h) | n <- [0..w*h]]]
+        mesh             = DynamicMesh "simplex" vertices colors uvs indices
+        (w,h)            = (32.0,16.0)
+        (scale,vscale)   = (1 / 6,2.5)
+        -- values           = [(x + a,simplex 8 (x / w + t) (y / h + t) + aa,y + aaa)
+        values           = [(x + a,aa,y + aaa)
+                          | (x,y) <- map (\n -> (mod' n w,n / h)) [0..w*h]
+                          | a     <- map (* 5.0) <| cycle a1
+                          | aa    <- map (* 0.5) <| cycle a2
+                          | aaa   <- map (* 5.0) <| cycle a3]
 
         toVertex (x,y,z) = Vector3 (x*scale*3) (y*vscale) (z*scale*3)
-        toColor  (x,y,z) = RGBA    (x / w) (y * 0.75 + 0.35) (z / h) 0.25
+        toColor  (x,y,z) = RGBA    (x / w) (y * 0.75 + 0.35) (z / h) 0.75
         toUV     (x,y,_) = Vector2 (x / w) (y / h)
 
         addIndices w i indices
-            | mod i w /= (w-1) = i : i+w+1 : i+w : i+w+1 : i+1 : i : indices
-            | otherwise        = indices
+            | mod i w < (w-1) = i + 1 : i + w : i + w + 1 : i + 1 : i : i + w : indices
+            | otherwise       = indices
 
         vertices = map toVertex values
         colors   = map toColor  values
-        uvs      = map toUV     values
-        indices  = foldr (addIndices (round w)) [] [0..(length values)]
+        -- uvs      = map toUV     values
+        uvs      = replicate (floor <| w * h) 0
+        indices  = foldr (addIndices <| floor w) [] [0..length values - floor (w + 2)]
 
 oscillatorObject :: [Double] -> [Double] -> [Double] -> SceneObject
 oscillatorObject audioBuffer1 audioBuffer2 audioBuffer3 = SceneObject 0 identity 1 (Model mesh <| vertexColored (RGBA 1 1 1 0.35)) []
