@@ -117,7 +117,7 @@ simplexMesh = Mesh "simplex" vertices colors uvs indices
         indices  = foldr (addIndices (round w)) [] [0..(length values)]
 
 oscillatorObject :: [Double] -> [Double] -> [Double] -> SceneObject
-oscillatorObject audioBuffer1 audioBuffer2 audioBuffer3 = SceneObject 0 identity 1 (Model mesh $ vertexColored (RGBA 1 1 1 0.35)) []
+oscillatorObject audioBuffer1 audioBuffer2 audioBuffer3 = SceneObject 0 identity 1 (Model mesh <| vertexColored (RGBA 1 1 1 0.35)) []
     where
         mesh                                         = DynamicMesh "osc1" vertices colors uvs indices
         scale                                        = 6
@@ -128,8 +128,8 @@ oscillatorObject audioBuffer1 audioBuffer2 audioBuffer3 = SceneObject 0 identity
         (vertices,colors)                            = foldr toVertex ([],[]) (zip zippedAudio <| drop 1 zippedAudio)
         toVertex ((x1,y1,z1),(x2,y2,z2)) (vacc,cacc) = (p3 : p2 : p1 : p0 : vacc,r3 : r2 : r1 : r0 : cacc)
             where
-                p0  = Vector3 (x1 * scale) (y1 * scale) (z1 * scale * 0.35)
-                p1  = Vector3 (x2 * scale) (y2 * scale) (z2 * scale * 0.35)
+                p0  = Vector3 (x1 * scale) (y1 * scale) (z1 * scale * 0.5)
+                p1  = Vector3 (x2 * scale) (y2 * scale) (z2 * scale * 0.5)
 
                 cp  = cross np0 np1
 
