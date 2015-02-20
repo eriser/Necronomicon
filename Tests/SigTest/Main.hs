@@ -116,10 +116,40 @@ simplexMesh = Mesh "simplex" vertices colors uvs indices
         indices  = foldr (addIndices (round w)) [] [0..(length values)]
 
 oscillatorObject :: Signal SceneObject
-oscillatorObject = model <~ oscillatorMesh
+oscillatorObject = model <~ (oscillatorMesh <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4)
     where
         model mesh = SceneObject 0 identity 1 (Model mesh $ vertexColored (RGBA 1 1 1 0.35)) []
 
+oscillatorMesh :: [Double] -> [Double] -> [Double] -> Mesh
+oscillatorMesh audioBuffer1 audioBuffer2 audioBuffer3 = DynamicMesh "osc1" vertices colors uvs indices
+    where
+        scale                                        = 6
+        width                                        = 1
+        indices                                      = foldr (\i acc -> i + 1 : i + 2 : i + 3 : i + 1 : i + 0 : i + 2 : acc) [] [0..511]
+        uvs                                          = replicate 512 0
+        zippedAudio                                  = zip3 audioBuffer1 audioBuffer2 audioBuffer3
+        (vertices,colors)                            = foldr toVertex ([],[]) (zip zippedAudio <| drop 1 zippedAudio)
+        toVertex ((x1,y1,z1),(x2,y2,z2)) (vacc,cacc) = (p3 : p2 : p1 : p0 : vacc,r3 : r2 : r1 : r0 : cacc)
+            where
+                p0  = Vector3 (x1 * scale) (y1 * scale) (z1 * scale * 0.35)
+                p1  = Vector3 (x2 * scale) (y2 * scale) (z2 * scale * 0.35)
+
+                cp  = cross np0 np1
+
+                p2  = p0 + cp * width
+                p3  = p1 + cp * width
+
+                np0 = normalize p0
+                np1 = normalize p1
+                np2 = normalize p2
+                np3 = normalize p3
+
+                r0  = vtoc (np0 * 0.5 + 0.5) 0.35
+                r1  = vtoc (np1 * 0.5 + 0.5) 0.35
+                r2  = vtoc (np2 * 0.5 + 0.5) 0.35
+                r3  = vtoc (np3 * 0.5 + 0.5) 0.35
+
+{-
 oscillatorMesh :: Signal Mesh
 oscillatorMesh = Signal $ \state -> do
     (vertexBuffer,indexBuffer) <- genDynMeshBuffers
@@ -159,6 +189,7 @@ oscillatorMesh = Signal $ \state -> do
                 r1 = vtoc (np1 * 0.5 + 0.5) 0.35
                 r2 = vtoc (np2 * 0.5 + 0.5) 0.35
                 r3 = vtoc (np3 * 0.5 + 0.5) 0.35
+-}
 
 triOsc :: UGen -> UGen -> [UGen]
 triOsc f1 f2 = [sig1,sig2] + [sig3,sig3] |> verb |> gain 0.1 |> out 0
