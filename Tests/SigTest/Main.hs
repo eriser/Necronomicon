@@ -99,11 +99,10 @@ terrainObject t a1 a2 a3 = SceneObject (Vector3 (-8) 3 (-12)) (fromEuler' (-24) 
         (w,h)            = (64.0,32.0)
         (scale,vscale)   = (1 / 6,2.5)
         values           = [(x + a,simplex 8 (x / w + t * 0.05) (y / h + t * 0.05) * 0.65 + aa,y + aaa)
-        -- values           = [(x + a,aa,y + aaa)
                           | (x,y) <- map (\n -> (mod' n w,n / h)) [0..w*h]
-                          | a     <- map (* 2.0) <| cycle a1
+                          | a     <- map (* 2.00) <| cycle a1
                           | aa    <- map (* 0.35) <| cycle a2
-                          | aaa   <- map (* 2.0) <| cycle a3]
+                          | aaa   <- map (* 2.00) <| cycle a3]
 
         toVertex (x,y,z) = Vector3 (x*scale*3) (y*vscale) (z*scale*3)
         toColor  (x,y,z) = RGBA    ((x * 1.75) / w * (y * 0.6 + 0.4)) (y * 0.75 + 0.25) (z / h * (y * 0.75 + 0.25)) 0.3

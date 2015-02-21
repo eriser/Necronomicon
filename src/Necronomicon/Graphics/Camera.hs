@@ -34,9 +34,9 @@ renderCamera (w,h) view scene resources g = case _camera g of
     Nothing -> return newView
     Just c  -> do
         let  ratio    = fromIntegral w / fromIntegral h
-        let (r,g,b,a) = case _clearColor c of
-                RGB  r g b   -> (r,g,b,1.0)
-                RGBA r g b a -> (r,g,b,a)
+        let (RGBA r g b a) = case _clearColor c of
+                RGB  r g b   -> RGBA r g b 1.0
+                c            -> c
 
         --If we have anye post-rendering fx let's bind their fbo
         case _fx c of
@@ -58,29 +58,27 @@ renderCamera (w,h) view scene resources g = case _camera g of
             0 -> drawScene identity4 (invert newView) (orthoMatrix 0 ratio 1 0 (-1) 1) resources scene
             _ -> drawScene identity4 (invert newView) (perspMatrix (_fov c) ratio (_near c) (_far c))      resources scene
 
-        --If we have any post-render fx let's switch back to main fbo and draw scene texture
-        case _fx c of
-            []   -> return ()
-            fx:_ -> do
-                glBindFramebuffer gl_FRAMEBUFFER 0
-                GL.depthFunc     GL.$= Nothing
-                GL.blend         GL.$= GL.Disabled
-                GL.blendBuffer 0 GL.$= GL.Disabled
-
-                GL.clearColor GL.$= GL.Color4 (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a)
-                GL.clear [GL.ColorBuffer,GL.DepthBuffer]
-                postFX <- getPostFX resources (fromIntegral w,fromIntegral h) fx
-                let (Material draw) = postRenderMaterial postFX (Texture [] . return .GL.TextureObject $ postRenderTex postFX)
-                draw (rect 1 1) identity4 (orthoMatrix 0 1 0 1 (-1) 1) resources
-
-                GL.depthFunc     GL.$= Just GL.Less
-                GL.blend         GL.$= GL.Enabled
-                GL.blendBuffer 0 GL.$= GL.Enabled
-                GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
+        mapM_ (drawPostRenderFX (RGBA r g b a)) $ _fx c
 
         return $ newView
     where
         newView = view .*. (trsMatrix (_position g) (_rotation g) 1)
+        drawPostRenderFX (RGBA r g b a) fx = do
+            glBindFramebuffer gl_FRAMEBUFFER 0
+            GL.depthFunc     GL.$= Nothing
+            GL.blend         GL.$= GL.Disabled
+            GL.blendBuffer 0 GL.$= GL.Disabled
+
+            GL.clearColor GL.$= GL.Color4 (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a)
+            GL.clear [GL.ColorBuffer,GL.DepthBuffer]
+            postFX <- getPostFX resources (fromIntegral w,fromIntegral h) fx
+            let (Material draw) = postRenderMaterial postFX (Texture [] . return .GL.TextureObject $ postRenderTex postFX)
+            draw (rect 1 1) identity4 (orthoMatrix 0 1 0 1 (-1) 1) resources
+
+            GL.depthFunc     GL.$= Just GL.Less
+            GL.blend         GL.$= GL.Enabled
+            GL.blendBuffer 0 GL.$= GL.Enabled
+            GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
 
 renderCameras :: (Int,Int) -> Matrix4x4 -> SceneObject -> Resources -> SceneObject -> IO ()
 renderCameras (w,h) view scene resources g = renderCamera (w,h) view scene resources g >>= \newView -> mapM_ (renderCameras (w,h) newView scene resources) (_children g)
