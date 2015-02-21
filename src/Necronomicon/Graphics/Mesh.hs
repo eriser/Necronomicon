@@ -18,13 +18,14 @@ import qualified Graphics.Rendering.OpenGL.Raw      as GLRaw (glUniformMatrix4fv
 
 {-
 
-0,1---------1,1
+0,1,---------1,1
 |             |
 |             |
 |             |
 0,0---------1,0
 
 0,0 : 1,0 : 0,1 : 1,1 : []
+
 
 -}
 
@@ -36,6 +37,38 @@ rect w h = Mesh (show w ++ show h ++ "rect") vertices colors uvs indices
         uvs      = [Vector2 0 0,Vector2 1 0,Vector2 0 1,Vector2 1 1]
         indices  = [2,0,1,3,2,1]
 
+cube :: Double -> Double -> Double -> Mesh
+cube w h d = Mesh (show w ++ show h ++ show d ++ "cube") vertices colors uvs indices
+    where
+        phw = w * 0.5
+        phh = h * 0.5
+        phd = d * 0.5
+        nhw = negate phw
+        nhh = negate phh
+        nhd = negate phd
+        vertices = [Vector3 nhw nhh phd,
+                    Vector3 phw nhh phd,
+                    Vector3 nhw phh phd,
+                    Vector3 phw phh phd,
+                    Vector3 nhw nhh nhd,
+                    Vector3 phw nhh nhd,
+                    Vector3 phw phh nhd,
+                    Vector3 phw phh nhd]
+        colors   = repeat white
+        uvs      = [Vector2 0 0,
+                    Vector2 1 0,
+                    Vector2 0 1,
+                    Vector2 1 1,
+                    Vector2 1 0,
+                    Vector2 0 0,
+                    Vector2 1 1,
+                    Vector2 0 1]
+        indices  = [2,0,1,3,2,1, -- Front
+                    7,4,5,6,7,5, -- Back
+                    3,1,5,7,3,5, -- Right
+                    6,4,0,2,6,0, -- Left
+                    6,2,3,7,6,3, -- Top
+                    0,4,5,1,0,5] -- Bottom
 
 dynRect :: Double -> Double -> Mesh
 dynRect w h = DynamicMesh (show w ++ show h ++ "rect") vertices colors uvs indices

@@ -163,5 +163,5 @@ draw world view proj resources g
     | Just (FontRenderer text font material) <- _model g = renderFont text font material      modelView proj resources >> return newWorld
     | otherwise                                          = return newWorld
     where
-        newWorld  = world    .*. (trsMatrix (_position g) (_rotation g) (_scale g))
-        modelView = newWorld .*. view
+        newWorld  = world .*. (trsMatrix (_position g) (_rotation g) (_scale g))
+        modelView = view  .*. newWorld

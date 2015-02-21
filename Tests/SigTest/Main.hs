@@ -83,17 +83,18 @@ threeSynth :: UGen -> UGen -> UGen -> UGen
 threeSynth fx fy fz = sin fx + sin fy + sin fz |> gain 0.1 |> out 0
 
 testScene :: Signal ()
-testScene = scene [pure cam,terrainSig]
+testScene = scene [pure cam,cubeSig]
     where
-        move (x,y) z a = Vector3 (x*z*a) (y*z*a) 0
-        cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
         oscSig         = oscillatorObject <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4
-        terrainSig     = terrainObject    <~ time          ~~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4
+        terrainSig     = terrainObject    <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time
+        cubeSig        = cubeObject       <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time
+        cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
+        -- cam p          = perspCamera p identity 60 0.1 1000 black [glow]
+        -- camSig         = cam <~ (lagSig 4 <| foldn (+) (Vector3 0 0 10) (lift3 move arrows (fps 4) 3))
+        -- move (x,y) z a = Vector3 (x*z*a) (y*z*a) 0
 
-        -- camSig         = cam <~ (lagSig 4 <| foldn (+) 0 (lift3 move arrows (fps 4) 3))
-
-terrainObject :: Double -> [Double] -> [Double] -> [Double] -> SceneObject
-terrainObject t a1 a2 a3 = SceneObject (Vector3 (-8) 3 (-12)) (fromEuler' (-24) 0 0) (Vector3 0.5 1 0.5) (Model mesh <| vertexColored (RGBA 1 1 1 0.35)) []
+terrainObject :: [Double] -> [Double] -> [Double] -> Double -> SceneObject
+terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 3 (-12)) (fromEuler' (-24) 0 0) (Vector3 0.5 1 0.5) (Model mesh <| vertexColored (RGBA 1 1 1 0.35)) []
     where
         mesh             = DynamicMesh "simplex" vertices colors uvs indices
         (w,h)            = (64.0,32.0)
@@ -115,7 +116,7 @@ terrainObject t a1 a2 a3 = SceneObject (Vector3 (-8) 3 (-12)) (fromEuler' (-24) 
         vertices = map toVertex values
         colors   = map toColor  values
         -- uvs      = map toUV     values
-        uvs      = replicate (floor <| w * h) 0
+        uvs      = repeat 0
         indices  = foldr (addIndices <| floor w) [] [0..length values - floor (w + 2)]
 
 oscillatorObject :: [Double] -> [Double] -> [Double] -> SceneObject
@@ -147,6 +148,11 @@ oscillatorObject audioBuffer1 audioBuffer2 audioBuffer3 = SceneObject 0 identity
                 r1  = vtoc (np1 * 0.5 + 0.5) 0.35
                 r2  = vtoc (np2 * 0.5 + 0.5) 0.35
                 r3  = vtoc (np3 * 0.5 + 0.5) 0.35
+
+cubeObject :: [Double] -> [Double] -> [Double] -> Double -> SceneObject
+cubeObject a1 a2 a3 t = root [cubeObj 0,cubeObj (-1),cubeObj 1]
+    where
+        cubeObj p = SceneObject p (fromEuler' (t*0.1) 0 0) 1 (Model (cube 2 2 2) <| vertexColored (RGBA 1 1 1 0.25)) []
 
 triOsc :: UGen -> UGen -> [UGen]
 triOsc f1 f2 = [sig1,sig2] + [sig3,sig3] |> verb |> gain 0.1 |> out 0
