@@ -83,7 +83,7 @@ threeSynth :: UGen -> UGen -> UGen -> UGen
 threeSynth fx fy fz = sin fx + sin fy + sin fz |> gain 0.1 |> out 0
 
 testScene :: Signal ()
-testScene = scene [pure cam,cubeSig]
+testScene = scene [pure cam,terrainSig]
     where
         oscSig         = oscillatorObject <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4
         terrainSig     = terrainObject    <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time
@@ -94,7 +94,7 @@ testScene = scene [pure cam,cubeSig]
         -- move (x,y) z a = Vector3 (x*z*a) (y*z*a) 0
 
 terrainObject :: [Double] -> [Double] -> [Double] -> Double -> SceneObject
-terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 3 (-12)) (fromEuler' (-24) 0 0) (Vector3 0.5 1 0.5) (Model mesh <| vertexColored (RGBA 1 1 1 0.35)) []
+terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 8 (-4)) (fromEuler' (-24) 0 0) (Vector3 0.5 1 0.5) (Model mesh <| vertexColored (RGBA 1 1 1 0.35)) []
     where
         mesh             = DynamicMesh "simplex" vertices colors uvs indices
         (w,h)            = (64.0,32.0)
