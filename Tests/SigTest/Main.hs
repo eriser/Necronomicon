@@ -152,8 +152,8 @@ oscillatorObject audioBuffer1 audioBuffer2 audioBuffer3 = SceneObject 0 identity
 triOsc :: UGen -> UGen -> [UGen]
 triOsc f1 f2 = [sig1,sig2] + [sig3,sig3] |> verb |> gain 0.1 |> out 0
     where
-        sig1 = sinOsc (f1 + sig3 * 1000) * (sinOsc (f1 * 0.00025) |> range 0.5 1) |> auxThrough 2
-        sig2 = sinOsc (f2 + sig3 * 1000) * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> auxThrough 3
+        sig1 = sinOsc (f1 + sig3 * 1000) * (sinOsc (f1 * 0.00025)         |> range 0.5 1) |> auxThrough 2
+        sig2 = sinOsc (f2 + sig3 * 1000) * (sinOsc (f2 * 0.00025)         |> range 0.5 1) |> auxThrough 3
         sig3 = sinOsc (f1 - f2)          * (sinOsc ((f1 + f2 )* 0.000125) |> range 0.5 1) |> auxThrough 4
         verb = freeverb 0.25 0.5 0.5
 
@@ -163,10 +163,10 @@ triOsc32 f1 f2 = feedback fSig |> verb |> gain 0.1 |> out 0
         verb   = freeverb 0.25 0.5 0.5
         fSig i = [sig1,sig2] + [sig3,sig3]
             where
-                sig1 = sinOsc (f1 + sig3 * 10) * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> auxThrough 2
-                sig2 = sinOsc (f2 - sig3 * 10) * (sinOsc (f1 * 0.00025) |> range 0.5 1)  |> auxThrough 3
-                sig3 = sinOsc (f1 - f2 + i * 10) * (sinOsc (i * 0.00025)|> range 0.5 1) |> auxThrough 4
+                sig1 = sinOsc (f1 + sig3 * 10)   * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> auxThrough 2
+                sig2 = sinOsc (f2 - sig3 * 10)   * (sinOsc (f1 * 0.00025) |> range 0.5 1) |> auxThrough 3
+                sig3 = sinOsc (f1 - f2 + i * 10) * (sinOsc (i * 0.00025)  |> range 0.5 1) |> auxThrough 4
 
 hyperTerrainSounds :: Signal ()
 hyperTerrainSounds = play (toggle <| isDown keyW) triOsc (mouseX ~> scale 20 3000) (mouseY ~> scale 20 3000)
-                 <&> play (toggle <| isDown keyA) triOsc32 (mouseX ~> scale 2900 3000) (mouseY ~> scale 2900 3000)
+                 <&> play (toggle <| isDown keyA) triOsc32 (mouseX ~> scale 20 3000) (mouseY ~> scale 20 3000)
