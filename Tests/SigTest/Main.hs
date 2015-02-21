@@ -88,17 +88,17 @@ testScene = scene [pure cam,terrainSig]
         move (x,y) z a = Vector3 (x*z*a) (y*z*a) 0
         cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
         oscSig         = oscillatorObject <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4
-        terrainSig     = terrainObject    <~ time * 0.025  ~~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4
+        terrainSig     = terrainObject    <~ time          ~~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4
 
         -- camSig         = cam <~ (lagSig 4 <| foldn (+) 0 (lift3 move arrows (fps 4) 3))
 
 terrainObject :: Double -> [Double] -> [Double] -> [Double] -> SceneObject
-terrainObject t a1 a2 a3 = SceneObject (Vector3 (-8) (-3) (-9)) (fromEuler' (-24) 0 0) 1 (Model mesh <| vertexColored (RGBA 1 1 1 0.35)) []
+terrainObject t a1 a2 a3 = SceneObject (Vector3 (-8) 3 (-12)) (fromEuler' (-24) 0 0) (Vector3 0.5 1 0.5) (Model mesh <| vertexColored (RGBA 1 1 1 0.35)) []
     where
         mesh             = DynamicMesh "simplex" vertices colors uvs indices
-        (w,h)            = (32.0,16.0)
+        (w,h)            = (64.0,32.0)
         (scale,vscale)   = (1 / 6,2.5)
-        values           = [(x + a,simplex 8 (x / w + t) (y / h + t) * 0.65 + aa,y + aaa)
+        values           = [(x + a,simplex 8 (x / w + t * 0.05) (y / h + t * 0.05) * 0.65 + aa,y + aaa)
         -- values           = [(x + a,aa,y + aaa)
                           | (x,y) <- map (\n -> (mod' n w,n / h)) [0..w*h]
                           | a     <- map (* 2.0) <| cycle a1
@@ -168,5 +168,5 @@ triOsc32 f1 f2 = feedback fSig |> verb |> gain 0.1 |> out 0
                 sig3 = sinOsc (f1 - f2 + i * 10) * (sinOsc (i * 0.00025) * 0.5 + 0.5) |> auxThrough 4
 
 hyperTerrainSounds :: Signal ()
-hyperTerrainSounds = play (toggle <| isDown keyW) triOsc (mouseX ~> scale 2900 3000) (mouseY ~> scale 2900 3000)
+hyperTerrainSounds = play (toggle <| isDown keyW) triOsc (mouseX ~> scale 20 3000) (mouseY ~> scale 20 3000)
                  <&> play (toggle <| isDown keyA) triOsc32 (mouseX ~> scale 2900 3000) (mouseY ~> scale 2900 3000)
