@@ -88,7 +88,7 @@ testScene = scene [pure cam,terrainSig]
         move (x,y) z a = Vector3 (x*z*a) (y*z*a) 0
         cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
         oscSig         = oscillatorObject <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4
-        terrainSig     = terrainObject    <~ time * 0.075  ~~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4
+        terrainSig     = terrainObject    <~ time * 0.025  ~~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4
 
         -- camSig         = cam <~ (lagSig 4 <| foldn (+) 0 (lift3 move arrows (fps 4) 3))
 
@@ -98,15 +98,15 @@ terrainObject t a1 a2 a3 = SceneObject (Vector3 (-8) (-3) (-9)) (fromEuler' (-24
         mesh             = DynamicMesh "simplex" vertices colors uvs indices
         (w,h)            = (32.0,16.0)
         (scale,vscale)   = (1 / 6,2.5)
-        -- values           = [(x + a,simplex 8 (x / w + t) (y / h + t) + aa,y + aaa)
-        values           = [(x + a,aa,y + aaa)
+        values           = [(x + a,simplex 8 (x / w + t) (y / h + t) * 0.65 + aa,y + aaa)
+        -- values           = [(x + a,aa,y + aaa)
                           | (x,y) <- map (\n -> (mod' n w,n / h)) [0..w*h]
-                          | a     <- map (* 5.0) <| cycle a1
-                          | aa    <- map (* 0.5) <| cycle a2
-                          | aaa   <- map (* 5.0) <| cycle a3]
+                          | a     <- map (* 2.0) <| cycle a1
+                          | aa    <- map (* 0.35) <| cycle a2
+                          | aaa   <- map (* 2.0) <| cycle a3]
 
         toVertex (x,y,z) = Vector3 (x*scale*3) (y*vscale) (z*scale*3)
-        toColor  (x,y,z) = RGBA    (x / w) (y * 0.75 + 0.35) (z / h) 0.75
+        toColor  (x,y,z) = RGBA    ((x * 1.75) / w * (y * 0.6 + 0.4)) (y * 0.75 + 0.25) (z / h * (y * 0.75 + 0.25)) 0.3
         toUV     (x,y,_) = Vector2 (x / w) (y / h)
 
         addIndices w i indices
