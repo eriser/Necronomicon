@@ -211,11 +211,12 @@ ptree (PVal tree@(Node _ tlength)) = PSeq (PGen (collapseTree tree)) tlength
                 --                                then PVal v
                 --                                else PNothing
 
+-- Take a potentially infinite list of patterns and plays through them one by one, each beat
 pforever :: [Pattern a] -> Pattern a
 pforever [PNothing] = PNothing
 pforever patterns = PSeq (PGen timeSeq) (floor inf) -- We really need an Integer Infinity here.
             where
-                timeSeq t = (collapse (patterns !! (floor t)) t)
+                timeSeq t = (collapse (patterns !! (min (length patterns - 1) $ floor t)) t)
 
 ploop :: [Pattern a] -> Pattern a
 ploop [PNothing] = PNothing
@@ -234,7 +235,6 @@ ploop patterns = PSeq (PGen timeSeq) (floor totalRepeats)
                 currentPattern = (cycle repeatedPatterns) !! (floor t)
                 currentTime = F.mod' (t - ((cycle repeatedTimes) !! (floor t))) totalRepeats
 
-
 pseq :: Int -> [Pattern a] -> Pattern a
 pseq _ [PNothing] = PNothing
 pseq iterations patterns = PSeq (PGen timeSeq) totalBeats
@@ -246,7 +246,7 @@ pseq iterations patterns = PSeq (PGen timeSeq) totalBeats
         totalRepeats = sum $ repeatAmounts
         findRepeats :: Pattern a -> Double
         findRepeats p = case p of
-            (PSeq _ n) -> fromIntegral n
+            (PSeq _ n) -> fromIntegral (trace ("pseq length: " ++ show n) n)
             _ -> 1.0
         timeSeq t = if t >= (fromIntegral totalBeats)
                     then PNothing
