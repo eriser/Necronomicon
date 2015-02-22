@@ -2270,6 +2270,17 @@ synthDef name synth = Signal $ \state -> do
 play :: Signal Bool -> String -> [Signal Double] -> Signal ()
 play = playSynthN
 
+tempo :: Signal Double -> Signal Double
+tempo tempoSignal = Signal $ \state -> do
+    tCont  <- unSignal tempoSignal state
+    tValue <- fmap unEvent $ tCont state
+    runNecroState (setTempo tValue) (necroVars state)
+    return $ processSignal tCont (necroVars state)
+    where
+        processSignal tCont necroVars state = tCont state >>= \t -> case t of
+            NoChange t' -> return $ NoChange t'
+            Change   t' -> runNecroState (setTempo t') necroVars >> return (Change t')
+
 playSignalPattern :: (Show a,Eq a) => Signal Bool -> a -> [Signal Double] -> Pattern (Pattern a,Double) -> Signal a
 playSignalPattern playSig initValue argSigs pattern = Signal $ \state -> do
 
@@ -2341,7 +2352,7 @@ playSynthPattern playSig synthName argSigs pattern = Signal $ \state -> do
             NoChange _ -> return ()
             Change val -> runNecroState (setPDefArg pattern index $ PVal val) necroVars >> return ()
 
-playBeatPattern :: Signal Bool -> [Signal Double] -> Pattern (Pattern String,Double) -> Signal ()
+playBeatPattern :: Signal Bool -> [Signal Double] -> Pattern (Pattern String, Double) -> Signal ()
 playBeatPattern playSig argSigs pattern = Signal $ \state -> do
 
     pCont   <- unSignal (netsignal playSig) state
@@ -2372,17 +2383,6 @@ playBeatPattern playSig argSigs pattern = Signal $ \state -> do
         updateArg index aCont pattern necroVars state = aCont state >>= \a -> case a of
             NoChange _ -> return ()
             Change val -> runNecroState (setPDefArg pattern index $ PVal val) necroVars >> return ()
-
-tempo :: Signal Double -> Signal Double
-tempo tempoSignal = Signal $ \state -> do
-    tCont  <- unSignal tempoSignal state
-    tValue <- fmap unEvent $ tCont state
-    runNecroState (setTempo tValue) (necroVars state)
-    return $ processSignal tCont (necroVars state)
-    where
-        processSignal tCont necroVars state = tCont state >>= \t -> case t of
-            NoChange t' -> return $ NoChange t'
-            Change   t' -> runNecroState (setTempo t') necroVars >> return (Change t')
 
 
 {-

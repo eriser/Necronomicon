@@ -39,7 +39,7 @@ data RuntimeMessage = StartSynth SynthDef [CDouble] NodeID JackTime
                     | CollectSynthDef SynthDef
                     | ShutdownNrt
                     deriving (Show)
-                      
+
 type RunTimeMailbox = TChan RuntimeMessage
 
 instance Show (Time -> Int -> JackTime -> Necronomicon (Maybe Double)) where
@@ -354,7 +354,7 @@ setTempo newTempo = do
     currentTempo <- nAtomically $ readTVar tempoTVar
     nAtomically . writeTVar tempoTVar $ max 0 newTempo
     (pqueue, pmap) <- getPatternQueue
-    currentTime <- liftIO getJackTime                  
+    currentTime <- liftIO getJackTime
     -- Adjust all the scheduled times in place so that we can proceed normally going forward with correctly adjusted times
     let updatePattern (ScheduledPdef n l t b i) = let diff = currentTime - l in
             ScheduledPdef n l (l + diff + floor (fromIntegral (t - l - diff) * currentTempo / newTempo)) b i
@@ -365,7 +365,7 @@ getCurrentBeat :: Necronomicon Int
 getCurrentBeat = do
     tempo <- getTempo
     currentTime <- liftIO getJackTime
-    let tempoSeconds = 60 / tempo  
+    let tempoSeconds = 60 / tempo
     let currentBeat = (fromIntegral currentTime / microsecondsPerSecond) / tempoSeconds
     return (floor currentBeat)
 
@@ -490,11 +490,11 @@ handleScheduledPatterns nextTime = getPatternQueue >>= \(pqueue, pmap) -> handle
                                    Nothing -> handleNothing -- After player the pattern returns Nothing for the duration, which means it is done and ready to be removed
                             handleNothing = handlePattern q' m nextT changed -- The pattern was stopped or the pattern collapsed to PNothing, so we keep the popped queue and don't play the pattern
                         in case M.lookup n m of
-                           Nothing -> handleNothing -- When we check the name/pdef map we find nothing, which means it was stopped 
-                           Just (PDefNoArgs _ p) -> case collapse p b of 
+                           Nothing -> handleNothing -- When we check the name/pdef map we find nothing, which means it was stopped
+                           Just (PDefNoArgs _ p) -> case collapse p b of
                                PVal pfunc -> pfunc b i t >>= schedulePattern n -- play the pattern then schedule it again
                                _ -> handleNothing -- The pattern collapsed to Nothing
-                           Just (PDefWithArgs _ pfunc args) -> pfunc b i t args >>= schedulePattern n  -- play the pattern then schedule it again    
+                           Just (PDefWithArgs _ pfunc args) -> pfunc b i t args >>= schedulePattern n  -- play the pattern then schedule it again
 
 startPatternScheduler :: Necronomicon ()
 startPatternScheduler = do
