@@ -43,12 +43,25 @@ data RuntimeMessage = StartSynth SynthDef [CDouble] NodeID JackTime
 type RunTimeMailbox = TChan RuntimeMessage
 
 instance Show (Time -> Int -> JackTime -> Necronomicon (Maybe Double)) where
-    show pfunc = "(PFunc ->)"
+    show pfunc = "(\\PFunc ->)"
 
-data PDef = PDef {
-    pdefName :: String,
-    pdefPattern :: Pattern (Time -> Int -> JackTime -> Necronomicon (Maybe Double))
-} deriving (Show)
+instance Show (Time -> Int -> JackTime -> [PDouble] -> Necronomicon (Maybe Double)) where
+    show pfunc = "(\\PFuncWithArgs ->)"
+
+type PDouble = Pattern Double
+
+class PDefType a b where
+    applyPDefFuncArgs :: a -> [PDouble] -> Pattern (Pattern b, Double)
+
+instance PDefType (Pattern (Pattern b, Double)) b where
+    applyPDefFuncArgs p _ = p
+
+instance (PDefType b c) => PDefType (PDouble -> b) c where
+    applyPDefFuncArgs f [] = applyPDefFuncArgs (f 0) []
+    applyPDefFuncArgs f (x:xs) = applyPDefFuncArgs (f x) xs
+
+data PDef = PDefNoArgs   String (Pattern (Time -> Int -> JackTime -> Necronomicon (Maybe Double)))
+          | PDefWithArgs String (Time -> Int -> JackTime -> [PDouble] -> Necronomicon (Maybe Double)) [PDouble] deriving (Show)
 
 data ScheduledPdef = ScheduledPdef {
     scheduledPDefName :: String,
@@ -65,7 +78,7 @@ instance Eq ScheduledPdef where
     (ScheduledPdef _ _ t1 _ _) == (ScheduledPdef _ _ t2 _ _) = t1 == t2
 
 pbeat :: String -> Pattern (Pattern (JackTime -> Necronomicon ()), Double) -> PDef
-pbeat name layout = PDef name (PSeq (PVal pfunc) (plength layout))
+pbeat name layout = PDefNoArgs name (PSeq (PVal pfunc) (plength layout))
     where pfunc t i jackTime = case collapse layout t of
               PVal (p, d) -> case collapse p t of
                   PVal v -> v jackTime >> return (Just d)
@@ -73,7 +86,7 @@ pbeat name layout = PDef name (PSeq (PVal pfunc) (plength layout))
               _ -> return Nothing
 
 pstream :: String -> Pattern (a -> JackTime -> Necronomicon ()) -> Pattern (Pattern a, Double) -> PDef
-pstream name func layout = PDef name (PSeq (PVal pfunc) (plength layout))
+pstream name func layout = PDefNoArgs name (PSeq (PVal pfunc) (plength layout))
     where pfunc t i jackTime = case collapse layout t of
               PVal (p, d) -> case collapse p t of
                   PVal v -> case collapse func (fromIntegral i) of
@@ -82,8 +95,20 @@ pstream name func layout = PDef name (PSeq (PVal pfunc) (plength layout))
                   _ -> return (Just d)
               _ -> return Nothing
 
+pstreamWithArgs :: PDefType p a => String -> Pattern (a -> JackTime -> Necronomicon ()) -> p -> [PDouble] -> PDef
+pstreamWithArgs name func layoutFunc defaultArgs = PDefWithArgs name pfunc defaultArgs
+    where
+        applyArgs layoutArgs = applyPDefFuncArgs layoutFunc layoutArgs
+        pfunc t i jackTime as = case collapse (applyArgs (as ++ cycle [PVal 0])) t of
+            PVal (p, d) -> case collapse p t of
+                PVal v -> case collapse func (fromIntegral i) of
+                    PVal pf -> pf v jackTime >> return (Just d)
+                    _ -> return (Just d)
+                _ -> return (Just d)
+            _ -> return Nothing
+
 pbind :: String -> Pattern (JackTime -> Necronomicon ()) -> Pattern Double -> PDef
-pbind name values durs = PDef name (PVal pfunc)
+pbind name values durs = PDefNoArgs name (PVal pfunc)
     where
         pfunc _ iteration jackTime = case collapse durs (fromIntegral iteration) of
             PVal d -> case collapse values (fromIntegral iteration) of
@@ -91,7 +116,7 @@ pbind name values durs = PDef name (PVal pfunc)
                 _ -> return Nothing
             _ -> return Nothing
 
-data PRunTimeMessage = PlayPattern PDef | StopPattern PDef
+data PRunTimeMessage = PlayPattern PDef | StopPattern PDef | SetPatternArg PDef Int PDouble | SetPatternArgs PDef [PDouble]
 type PRunTimeMailbox = TChan PRunTimeMessage
 type PDefQueue = (PQ.PriorityQueue ScheduledPdef, M.Map String PDef)
 
@@ -344,47 +369,80 @@ getCurrentBeat = do
     let currentBeat = (fromIntegral currentTime / microsecondsPerSecond) / tempoSeconds
     return (floor currentBeat)
 
+
 -- We treat all patterns as if they are running at 60 bpm.
 -- The scheduler modifies it's own rate instead of the pattern's times to account for actual tempo
+pmessagePlayPattern :: PDef -> String -> Necronomicon ()
+pmessagePlayPattern pdef name =  getPatternQueue >>= \(pqueue, pmap) ->
+    case M.lookup name pmap of
+        -- Update existing pattern, HOW TO CORRECTLY INSERT/UPDATE EXISTING PATTERN WITH DIFFERENT RHYTHM!!!!!!!!!!!!?????????
+        -- Idea: Use a pending update structure, something like -> data PDef { pdefName :: String, pdefPattern :: Pattern, pdefQueuedUpdate :: (Maybe Pattern) }
+        -- When the current cyle is over the scheduler checks to see if there is a queued update,
+        -- if so we move the queued pattern into the pattern slot and change queued to Nothing
+        Just _ -> setPatternQueue (pqueue, M.insert name pdef pmap)
+        Nothing -> liftIO getJackTime >>= \currentTime -> getTempo >>= \tempo ->
+            let floorTimeBy :: JackTime -> Double -> JackTime
+                floorTimeBy t b = floor $ (fromIntegral $ floor (fromIntegral t / b)) * b
+                ceilTimeBy :: JackTime -> Double -> JackTime
+                ceilTimeBy t b = floor $ (fromIntegral $ ceiling (fromIntegral t / b)) * b
+                tempoRatio = timeTempo / tempo
+                beatMicros = microsecondsPerSecond * tempoRatio
+                currentBeatMicro = floorTimeBy currentTime beatMicros
+                nextBeatMicro = ceilTimeBy currentTime beatMicros
+                -- length = plength pattern
+                -- nextBeat =  secondsToMicro $ (fromIntegral currentBeat) + ((fromIntegral $ length - (mod currentBeat length)) * tempoRatio)
+                pqueue' = PQ.insert pqueue (ScheduledPdef name currentBeatMicro nextBeatMicro 0 0)
+                pmap' = M.insert name pdef pmap
+            in setPatternQueue (pqueue', pmap')
+
+pmessageStopPattern :: String -> Necronomicon ()
+pmessageStopPattern name = getPatternQueue >>= \(pqueue, pmap) -> setPatternQueue (pqueue, M.delete name pmap)
+
+printNoArgMessage :: String -> Necronomicon ()
+printNoArgMessage name = nPrint ("Failed setting argument for pattern " ++ name ++ ". You cannot set the argument of a pattern with no arguments.")
+
+printSetPatternNotFound :: String -> Necronomicon ()
+printSetPatternNotFound name = nPrint ("Failed setting argument for pattern " ++ name ++ ". Pattern not found.")
+
+setListIndex :: Int -> a -> [a] -> [a]
+setListIndex i x xs = if i >= 0 && i < length xs
+                          then take i xs ++ x : drop (i + 1) xs
+                          else xs
+
+pmessageSetPDefArg :: String -> [PDouble] -> Necronomicon ()
+pmessageSetPDefArg name argValues = getPatternQueue >>= \(pqueue, pmap) ->
+        case M.lookup name pmap of
+            Just (PDefWithArgs _ pattern _) -> setPatternQueue (pqueue, M.insert name (PDefWithArgs name pattern argValues) pmap)
+            Nothing -> printSetPatternNotFound name
+
+processPMessage :: PRunTimeMessage -> Necronomicon ()
+processPMessage m = case m of
+    PlayPattern pdef@(PDefNoArgs name _) -> pmessagePlayPattern pdef name
+    PlayPattern pdef@(PDefWithArgs name _ _) -> pmessagePlayPattern pdef name
+    StopPattern (PDefNoArgs name _) -> pmessageStopPattern name
+    StopPattern (PDefWithArgs name _ _) -> pmessageStopPattern name
+    SetPatternArg (PDefNoArgs name _) _ _ -> printNoArgMessage name
+    SetPatternArg (PDefWithArgs name _ argValues) argIndex argValue -> pmessageSetPDefArg name $ setListIndex argIndex argValue argValues
+    SetPatternArgs (PDefNoArgs name _) _ -> printNoArgMessage name
+    SetPatternArgs (PDefWithArgs name _ _) argValues -> pmessageSetPDefArg name argValues
+
 processPMessages :: [PRunTimeMessage] -> Necronomicon ()
-processPMessages messages =  mapM_ (processMessage) messages
-    where
-        processMessage m = getRunning >>= \isRunning ->
-            if isRunning /= NecroRunning
-               then return ()
-               else process m
-        process m = case m of
-            PlayPattern pdef@(PDef name pattern) -> getPatternQueue >>= \(pqueue, pmap) ->
-                case M.lookup name pmap of
-                    -- Update existing pattern, HOW TO CORRECTLY INSERT/UPDATE EXISTING PATTERN WITH DIFFERENT RHYTHM!!!!!!!!!!!!
-                    -- Idea: Use a pending update structure, something like -> data PDef { pdefName :: String, pdefPattern :: Pattern, pdefQueuedUpdate :: (Maybe Pattern) }
-                    -- When the current cyle is over the scheduler checks to see if there is a queued update,
-                    -- if so we move the queued pattern into the pattern slot and change queued to Nothing
-                    Just _ -> setPatternQueue (pqueue, M.insert name pdef pmap)
-                    Nothing -> liftIO getJackTime >>= \currentTime -> getTempo >>= \tempo ->
-                        let floorTimeBy :: JackTime -> Double -> JackTime
-                            floorTimeBy t b = floor $ (fromIntegral $ floor (fromIntegral t / b)) * b
-                            ceilTimeBy :: JackTime -> Double -> JackTime
-                            ceilTimeBy t b = floor $ (fromIntegral $ ceiling (fromIntegral t / b)) * b
-                            tempoRatio = timeTempo / tempo
-                            beatMicros = microsecondsPerSecond * tempoRatio
-                            currentBeatMicro = floorTimeBy currentTime beatMicros
-                            nextBeatMicro = ceilTimeBy currentTime beatMicros
-                            -- length = plength pattern
-                            -- nextBeat =  secondsToMicro $ (fromIntegral currentBeat) + ((fromIntegral $ length - (mod currentBeat length)) * tempoRatio)
-                            pqueue' = PQ.insert pqueue (ScheduledPdef name currentBeatMicro nextBeatMicro 0 0)
-                            pmap' = M.insert name pdef pmap
-                        in setPatternQueue (pqueue', pmap')
-            StopPattern (PDef name _) -> getPatternQueue >>= \(pqueue, pmap) -> setPatternQueue (pqueue, M.delete name pmap)
+processPMessages messages = mapM_ (processPMessage) messages
 
 sendPMessage :: PRunTimeMessage -> Necronomicon ()
 sendPMessage message = getPatternMailBox >>= \mailBox -> nAtomically $ writeTChan mailBox message
 
-runPDef :: PDef -> Necronomicon ()
-runPDef pdef = sendPMessage (PlayPattern pdef)
+runPDef :: PDef -> Necronomicon PDef
+runPDef pdef = sendPMessage (PlayPattern pdef) >> return pdef
 
 pstop :: PDef -> Necronomicon ()
 pstop pdef = sendPMessage (StopPattern pdef)
+
+setPDefArg :: PDef -> Int -> PDouble -> Necronomicon ()
+setPDefArg pdef argIndex argValue = sendPMessage (SetPatternArg pdef argIndex argValue)
+
+setPDefArgs :: PDef -> [PDouble] -> Necronomicon ()
+setPDefArgs pdef argValues = sendPMessage (SetPatternArgs pdef argValues)
 
 timeTempo :: Double
 timeTempo = 60
@@ -410,28 +468,33 @@ notChanged = False
 changed :: Bool
 changed = True
 
+-- handleScheduledPatterns recursively checks the pattern queue for patterns that needs to be played
+-- After playing them the scheduler will schedule them again for the future (if needed)
 handleScheduledPatterns :: JackTime -> Necronomicon JackTime
 handleScheduledPatterns nextTime = getPatternQueue >>= \(pqueue, pmap) -> handlePattern pqueue pmap nextTime notChanged
     where
         handlePattern q m nextT hasChanged = case PQ.pop q of
-            (Nothing, _) -> (if hasChanged then setPatternQueue (q, m) else return ()) >> return nextT
+            (Nothing, _) -> (if hasChanged then setPatternQueue (q, m) else return ()) >> return nextT -- Handle empty queue, which could be the result of a recursive call
             (Just (ScheduledPdef n l t b i), q') -> liftIO getJackTime >>= \currentTime ->
-                if currentTime < (t - patternLookAhead)
-                   then if hasChanged
+                if currentTime < (t - patternLookAhead) -- Check to see if any patterns are ready to be played
+                   then if hasChanged -- No pattern is ready, but this could be a recursive call, so we check if we need to update the pattern queue
                         then setPatternQueue (q, m) >> return nextT
                         else return $ floor ((fromIntegral (t - currentTime) :: Double) * 0.1) -- return wait time as a percentage of the distance to the scheduled time
-                   else case M.lookup n m of
-                       Nothing -> handlePattern q' m nextT changed
-                       Just (PDef _ p) -> getTempo >>= \tempo ->
-                           let tempoRatio = timeTempo / tempo
-                           in case collapse p b of
-                               PVal pfunc -> pfunc b i t >>= \mdur -> case mdur of
+                   else getTempo >>= \tempo -> -- The top of the queue is ready to be played
+                        let tempoRatio = timeTempo / tempo
+                            schedulePattern n maybeDur =  case maybeDur of -- Schedule the pattern to be played again
                                    Just dur -> handlePattern (PQ.insert q' (ScheduledPdef n t (t + scaledDur) (b + dur) (i + 1))) m waitTime changed
                                        where
                                            scaledDur = floor $ dur * tempoRatio * microsecondsPerSecond -- Convert from beats to microseconds
                                            waitTime = floor $ fromIntegral scaledDur * 0.1 -- return wait time as a percentage of the duration of this beat
-                                   Nothing -> handlePattern q' m nextT changed
-                               _ -> handlePattern q' m nextT changed
+                                   Nothing -> handleNothing -- After player the pattern returns Nothing for the duration, which means it is done and ready to be removed
+                            handleNothing = handlePattern q' m nextT changed -- The pattern was stopped or the pattern collapsed to PNothing, so we keep the popped queue and don't play the pattern
+                        in case M.lookup n m of
+                           Nothing -> handleNothing -- When we check the name/pdef map we find nothing, which means it was stopped 
+                           Just (PDefNoArgs _ p) -> case collapse p b of 
+                               PVal pfunc -> pfunc b i t >>= schedulePattern n -- play the pattern then schedule it again
+                               _ -> handleNothing -- The pattern collapsed to Nothing
+                           Just (PDefWithArgs _ pfunc args) -> pfunc b i t args >>= schedulePattern n  -- play the pattern then schedule it again    
 
 startPatternScheduler :: Necronomicon ()
 startPatternScheduler = do
