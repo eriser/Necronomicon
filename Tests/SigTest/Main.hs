@@ -10,11 +10,14 @@ hyperTerrainSounds :: Signal ()
 hyperTerrainSounds = play             (toggle <| isDown keyW) "triOsc"    [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
                  <&> play             (toggle <| isDown keyA) "triOsc32"  [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
                  <&> playSynthPattern (toggle <| isDown keyD) "triOscEnv" [] (pmap (d2f bartok . (+12)) <| ploop [ [lich| [0 1] [4 3] [2 3] [2 3 4 5] |] ])
+                 <&> playBeatPattern  (toggle <| isDown keyE) [] (ploop [ [lich| b [p b] p [p p p] |] ])
 
 synthDefs :: Signal ()
 synthDefs = synthDef "triOsc"    triOsc
          *> synthDef "triOsc32"  triOsc32
          *> synthDef "triOscEnv" triOscEnv
+         *> synthDef "b"         bSynth
+         *> synthDef "p"         pSynth
 
 testGUI :: Signal ()
 testGUI = gui [chatBox,netBox,users]
@@ -153,6 +156,12 @@ triOscEnv f1 = [sig1,sig2] + [sig3,sig3] |> verb |> out 0
         sig3 = sinOsc (f1 * 0.25)              |> e |> auxThrough 4
         e    = perc 0.01 0.5 0.1 0
         verb = freeverb 0.25 0.5 0.5
+
+bSynth :: UGen
+bSynth = sin 55 |> gain (line 0.1) >>> gain 0.4 >>> out 0
+
+pSynth :: UGen
+pSynth = sin 1110 |> gain (line 0.1) >>> gain 0.2 >>> out 1
 
 {-
 testSound :: Signal ()
