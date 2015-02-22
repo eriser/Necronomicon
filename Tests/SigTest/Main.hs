@@ -7,12 +7,14 @@ main :: IO ()
 main = runSignal <| synthDefs *> testGUI <|> (testScene <&> hyperTerrainSounds)
 
 hyperTerrainSounds :: Signal ()
-hyperTerrainSounds = play (toggle <| isDown keyW) "triOsc"   [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
-                 <&> play (toggle <| isDown keyA) "triOsc32" [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
+hyperTerrainSounds = play             (toggle <| isDown keyW) "triOsc"    [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
+                 <&> play             (toggle <| isDown keyA) "triOsc32"  [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
+                 <&> playSynthPattern (toggle <| isDown keyD) "triOscEnv" [] (pmap (d2f bartok . (+12)) <| ploop [ [lich| [0 1] [4 3] [2 3] [2 3 4 5] |] ])
 
 synthDefs :: Signal ()
-synthDefs = synthDef "triOsc"   triOsc
-         *> synthDef "triOsc32" triOsc32
+synthDefs = synthDef "triOsc"    triOsc
+         *> synthDef "triOsc32"  triOsc32
+         *> synthDef "triOscEnv" triOscEnv
 
 testGUI :: Signal ()
 testGUI = gui [chatBox,netBox,users]
@@ -142,6 +144,15 @@ triOsc32 f1 f2 = feedback fSig |> verb |> gain 0.1 |> out 0
                 sig1 = sinOsc (f1 + sig3 * 10)   * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> auxThrough 2
                 sig2 = sinOsc (f2 - sig3 * 10)   * (sinOsc (f1 * 0.00025) |> range 0.5 1) |> auxThrough 3
                 sig3 = sinOsc (f1 - f2 + i * 10) * (sinOsc (i * 0.00025)  |> range 0.5 1) |> auxThrough 4
+
+triOscEnv :: UGen -> [UGen]
+triOscEnv f1 = [sig1,sig2] + [sig3,sig3] |> verb |> out 0
+    where
+        sig1 = sinOsc (f1 * 1.0 + sig3 * 1000) |> e |> auxThrough 2
+        sig2 = sinOsc (f1 * 0.5 - sig3 * 1000) |> e |> auxThrough 3
+        sig3 = sinOsc (f1 * 0.25)              |> e |> auxThrough 4
+        e    = perc 0.01 0.5 0.1 0
+        verb = freeverb 0.25 0.5 0.5
 
 {-
 testSound :: Signal ()

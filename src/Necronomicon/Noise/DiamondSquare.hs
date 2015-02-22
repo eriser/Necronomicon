@@ -52,6 +52,7 @@ diamond !scale !w !h !fs !x !y ((r:rs),!t) = (rs,setSample x y w h v' t)
         v'	= ((a+b+c+d) / 4.0) + (r*scale)
 
 -- | Helper function that allows easy traversal over a one dimensional sequence using two dimensional coordinates, skipping n equal to a given feature size, and transforming the supplied Seq with a given function at every iteration.
+fskip :: Int -> Int -> Int -> (Int -> Int -> ([Float],Seq Float) -> ([Float],Seq Float)) -> Int -> Int -> Int -> ([Float],Seq Float) -> ([Float],Seq Float)
 fskip !fs !w !h !f !x !y !sx (rs,!t)
     | y >= h	= (rs,t)
     | x >= w	= fskip fs w h f sx (y+fs) sx $! f x y (rs,t)
@@ -75,4 +76,3 @@ diamondSquare !fs !scale !seed !w !h = Vec.fromList . Fold.toList . snd $! go fs
         go !fs !scale (rs,!t)
             | fs < 2	= (rs,t)
             | otherwise	= go (fs `div` 2) (scale / 2.0) $! runDiamondSquare w h fs scale (rs,t)
-                                          

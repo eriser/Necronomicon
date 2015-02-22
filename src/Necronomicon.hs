@@ -15,7 +15,7 @@ import Necronomicon.Networking
 import Necronomicon.Language.Layout
 import Necronomicon.Math
 import Necronomicon.UGen
-import Necronomicon.Patterns
+import Necronomicon.Patterns hiding (tempo)
 import Necronomicon.Runtime
 import Necronomicon.Linear
 import Necronomicon.FRP

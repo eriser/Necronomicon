@@ -223,7 +223,7 @@ line length = ugen Line lineCalc lineConstructor lineDeconstructor [length]
 -- perc length peak curve x = ugen Perc percCalc lineConstructor lineDeconstructor [length,peak,curve,x]
 
 perc :: UGenType a => UGen -> UGen -> UGen -> a -> a -> a
-perc attackTime releaseTime peak curve = env [0,peak,0] [attackTime,releaseTime] curve
+perc attackTime releaseTime peak curve input = env [0,peak,0] [attackTime,releaseTime] curve input
 
 adr :: UGenType a => UGen -> UGen -> UGen -> UGen -> UGen -> a -> a -> a
 adr attackTime decayTime releaseTime peak releaseLevel curve = env [0,peak,releaseLevel] [attackTime,decayTime,releaseTime] curve
