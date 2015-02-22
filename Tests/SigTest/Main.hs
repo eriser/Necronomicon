@@ -1,11 +1,14 @@
 import Necronomicon
 import Data.Fixed (mod')
 import Control.Arrow
-import Debug.Trace
+import Data.List (zip4)
 
 main :: IO ()
--- main = runSignal <| sigPrint (audioBuffer 0) <&> testSound2
 main = runSignal <| testGUI <|> (testScene <&> hyperTerrainSounds)
+
+hyperTerrainSounds :: Signal ()
+hyperTerrainSounds = play (toggle <| isDown keyW) triOsc (mouseX ~> scale 20 3000) (mouseY ~> scale 20 3000)
+                 <&> play (toggle <| isDown keyA) triOsc32 (mouseX ~> scale 20 3000) (mouseY ~> scale 20 3000)
 
 testGUI :: Signal ()
 testGUI = gui [chatBox,netBox,users]
@@ -24,70 +27,13 @@ testGUI = gui [chatBox,netBox,users]
                           <| Font   "OCRA.ttf" 24
                           <| vertexColored (RGBA 1 1 1 0.1)
 
-testSound :: Signal ()
-testSound = play (isDown keyW)                    myCoolSynth2
-        <&> play (toggle <| isDown keyA)          myCoolSynth3
-        <&> play (isDown keyP `till` isDown keyS) myCoolSynth2
-
-testSound2 :: Signal ()
-testSound2 = play (toggle <| isDown keyW) noArgSynth
-         <&> play (toggle <| isDown keyA) oneArgSynth (mouseX ~> scale 20  3000)
-         <&> play (toggle <| isDown keyS) twoArgSynth (mouseX ~> scale 100 3000) (mouseY ~> scale 20 3000)
-         <&> play (toggle <| isDown keyD) threeSynth  440 880 66.6
-
-noArgSynth :: UGen
-noArgSynth = whiteNoise |> pluck 110 110 5.0 |> gain 0.1 |> out 0
-
--- noArgSynth = dust 10 |> out 0
--- noArgSynth = impulse 2 0.5 |> out 0
-
-oneArgSynth :: UGen -> [UGen]
-oneArgSynth f = sig |> filt |> verb |> gain 0.1 |> out 0
-    where
-        sig  = saw (noise2 3 |> range 40 1000) * (sin 0.35 |> range 0.5 1.0)
-        filt = lpf (lag 6 [f,f]) 6
-        verb = freeverb 1.0 0.95 0.95
-
--- oneArgSynth f = saw 40 |> lpf (lag 6 [f,f]) 6 +> delayN 1.0 1.0 |> gain 0.5 |> out 0
-
--- oneArgSynth f = saw 80 |> onePoleMS20 [f,f] >>> gain 0.25 >>> out 0
--- oneArgSynth f = saw 80 |> lpfMS20 [f,f] 1 1 >>> gain 0.25 >>> out 0
--- oneArgSynth f = saw 40 |> highshelf [f,f] (6) 6 >>> gain 0.25 >>> out 0
--- oneArgSynth f = saw 40 |> lowshelf[f,f] 6 6 >>> gain 0.25 >>> out 0
--- oneArgSynth f = saw 110 |> peakEQ [f,f] 12 0.3 >>> gain 0.25 >>> out 0
--- oneArgSynth f = saw 220 |> notch [f,f] 0 3 >>> gain 0.25 >>> out 0
--- oneArgSynth f = saw 220 |> bpf [f,f] 0 3 >>> gain 0.25 >>> out 0
--- oneArgSynth f = saw 220 |> hpf [f,f] 0 3 >>> gain 0.25 >>> out 0
--- oneArgSynth f = saw (noise2 3 |> range 200 800) |> gain 0.25 >>> out 0
--- oneArgSynth f = syncpulse [f,f] 0.5 (saw 400) |> gain 0.25 >>> out 0
--- oneArgSynth f = syncpulse [f,f] 0.5 (lfsaw 80 0) |> gain 0.25 >>> out 0
--- oneArgSynth f = syncsaw [f,f] (saw 400) |> gain 0.25 >>> out 0
--- oneArgSynth f = sin (urandom |> range 100 2000) |> gain 0.25 >>> out 0
--- oneArgSynth f = lfpulse [f,f] 0 |> gain 0.25 >>> out 0
--- oneArgSynth f = lfsaw [f,f] 0 |> gain 0.25 >>> out 0
-
-twoArgSynth :: UGen -> UGen -> [UGen]
-twoArgSynth f ff = sin [f,ff] |> crush 2 |> decimate 4096 |> env [0,1,1,0] [3,1,3] 0 |> out  0
--- twoArgSynth f ff = feedback sig |> perc 0.01 5 0.1 16.0 >>> out  0
--- twoArgSynth f ff = feedback sig |> env [0,1,1,0] [3,1,3] 0 >>> out  0
-    -- where
-        -- sig i = syncosc [f + (i * 1000),f + (i * 500)] 0 0 [ff,ff] +> delayN 0.1 0.1
-
--- twoArgSynth f ff = syncosc [f,f] 0 0 [ff,ff] |> gain 0.25 >>> out 0
--- twoArgSynth f ff = syncpulse [f,f] 0.5 (lfsaw [ff * 0.25,ff * 0.25] 0) |> lpf (lag 1 [ff,ff]) 3 >>> gain 0.25 >>> out 0
--- twoArgSynth f ff = saw (lag 1 [f,f]) |> lpf (lag 1 [ff,ff]) 3 >>> gain 0.25 >>> out 0
--- twoArgSynth f pw = pulse [f,f] [pw,pw] |> gain 0.1 >>> out 0
--- twoArgSynth fx fy = sin [fx,fy] |> gain 0.1 >>> out 0
-
-threeSynth :: UGen -> UGen -> UGen -> UGen
-threeSynth fx fy fz = sin fx + sin fy + sin fz |> gain 0.1 |> out 0
-
 testScene :: Signal ()
-testScene = scene [pure cam,terrainSig]
+testScene = scene [pure cam,sphereSig]
     where
         oscSig         = oscillatorObject <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4
         terrainSig     = terrainObject    <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time
         cubeSig        = cubeObject       <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time
+        sphereSig      = sphereObject     <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time
         cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
         -- cam p          = perspCamera p identity 60 0.1 1000 black [glow]
         -- camSig         = cam <~ (lagSig 4 <| foldn (+) (Vector3 0 0 10) (lift3 move arrows (fps 4) 3))
@@ -150,9 +96,36 @@ oscillatorObject audioBuffer1 audioBuffer2 audioBuffer3 = SceneObject 0 identity
                 r3  = vtoc (np3 * 0.5 + 0.5) 0.35
 
 cubeObject :: [Double] -> [Double] -> [Double] -> Double -> SceneObject
-cubeObject a1 a2 a3 t = root [cubeObj 0,cubeObj (-1),cubeObj 1]
+cubeObject a1 a2 a3 t = root [cubeObj (Vector3 (-3) 0 0),cubeObj (Vector3 0 0 0),cubeObj (Vector3 3 0 0)]
     where
-        cubeObj p = SceneObject p (fromEuler' (t*0.1) 0 0) 1 (Model (cube 2 2 2) <| vertexColored (RGBA 1 1 1 0.25)) []
+        cubeObj p = SceneObject p (fromEuler' (t*0.8) 0 0) 2 (Model cube <| vertexColored (RGBA 1 1 1 0.1)) []
+
+sphereObject :: [Double] -> [Double] -> [Double] -> Double -> SceneObject
+sphereObject as1 as2 as3 t = SceneObject 0 (fromEuler' 0 (t * 0.5) (t * 0.125)) 5.5 (Model mesh (vertexColored <| RGBA 1 1 1 0.25)) []
+    where
+        colorRange     = (+0.5) . (*0.5)
+        toRadians      = (* 0.0174532925)
+        latitudes      = 36.0
+        latInc         = 360 / latitudes
+        longitudes     = 32.0
+        longInc        = 180 / longitudes
+        us             = map (* latInc)  [0..latitudes]
+        ts             = map (* longInc) [0..longitudes]
+
+        toVertex (u,t) = Vector3 <| sin (toRadians t) * sin (toRadians u)
+                                 <| cos (toRadians t)
+                                 <| sin (toRadians t) * cos (toRadians u)
+        toColor p      = RGBA    <| colorRange (_x p)
+                                 <| colorRange (_y p)
+                                 <| colorRange (_z p)
+                                 <| 0.75
+        vertices       = map (\(a1,a2,a3,p) -> p + (Vector3 a1 a2 a3 * 0.2)) <| zip4 (cycle as1) (cycle as2) (cycle as3) (map toVertex (zip (cycle us) (ts >>= replicate (floor longitudes))))
+        colors         = map toColor vertices
+        uvs            = repeat 0
+        l              = floor longitudes
+        indices        = foldr (\i acc -> i + 1 : i + l : i + l + 1 : i + 1 : i + 0 : i + l : acc) [] [0,4..floor (latitudes * longitudes) - l]
+        mesh           = DynamicMesh "aSphere" vertices colors uvs indices
+
 
 triOsc :: UGen -> UGen -> [UGen]
 triOsc f1 f2 = [sig1,sig2] + [sig3,sig3] |> verb |> gain 0.1 |> out 0
@@ -172,6 +145,61 @@ triOsc32 f1 f2 = feedback fSig |> verb |> gain 0.1 |> out 0
                 sig2 = sinOsc (f2 - sig3 * 10)   * (sinOsc (f1 * 0.00025) |> range 0.5 1) |> auxThrough 3
                 sig3 = sinOsc (f1 - f2 + i * 10) * (sinOsc (i * 0.00025)  |> range 0.5 1) |> auxThrough 4
 
-hyperTerrainSounds :: Signal ()
-hyperTerrainSounds = play (toggle <| isDown keyW) triOsc (mouseX ~> scale 20 3000) (mouseY ~> scale 20 3000)
-                 <&> play (toggle <| isDown keyA) triOsc32 (mouseX ~> scale 20 3000) (mouseY ~> scale 20 3000)
+{-
+testSound :: Signal ()
+testSound = play (isDown keyW)                    myCoolSynth2
+        <&> play (toggle <| isDown keyA)          myCoolSynth3
+        <&> play (isDown keyP `till` isDown keyS) myCoolSynth2
+
+testSound2 :: Signal ()
+testSound2 = play (toggle <| isDown keyW) noArgSynth
+         <&> play (toggle <| isDown keyA) oneArgSynth (mouseX ~> scale 20  3000)
+         <&> play (toggle <| isDown keyS) twoArgSynth (mouseX ~> scale 100 3000) (mouseY ~> scale 20 3000)
+         <&> play (toggle <| isDown keyD) threeSynth  440 880 66.6
+
+noArgSynth :: UGen
+noArgSynth = whiteNoise |> pluck 110 110 5.0 |> gain 0.1 |> out 0
+
+-- noArgSynth = dust 10 |> out 0
+-- noArgSynth = impulse 2 0.5 |> out 0
+
+oneArgSynth :: UGen -> [UGen]
+oneArgSynth f = sig |> filt |> verb |> gain 0.1 |> out 0
+    where
+        sig  = saw (noise2 3 |> range 40 1000) * (sin 0.35 |> range 0.5 1.0)
+        filt = lpf (lag 6 [f,f]) 6
+        verb = freeverb 1.0 0.95 0.95
+
+-- oneArgSynth f = saw 40 |> lpf (lag 6 [f,f]) 6 +> delayN 1.0 1.0 |> gain 0.5 |> out 0
+-- oneArgSynth f = saw 80 |> onePoleMS20 [f,f] >>> gain 0.25 >>> out 0
+-- oneArgSynth f = saw 80 |> lpfMS20 [f,f] 1 1 >>> gain 0.25 >>> out 0
+-- oneArgSynth f = saw 40 |> highshelf [f,f] (6) 6 >>> gain 0.25 >>> out 0
+-- oneArgSynth f = saw 40 |> lowshelf[f,f] 6 6 >>> gain 0.25 >>> out 0
+-- oneArgSynth f = saw 110 |> peakEQ [f,f] 12 0.3 >>> gain 0.25 >>> out 0
+-- oneArgSynth f = saw 220 |> notch [f,f] 0 3 >>> gain 0.25 >>> out 0
+-- oneArgSynth f = saw 220 |> bpf [f,f] 0 3 >>> gain 0.25 >>> out 0
+-- oneArgSynth f = saw 220 |> hpf [f,f] 0 3 >>> gain 0.25 >>> out 0
+-- oneArgSynth f = saw (noise2 3 |> range 200 800) |> gain 0.25 >>> out 0
+-- oneArgSynth f = syncpulse [f,f] 0.5 (saw 400) |> gain 0.25 >>> out 0
+-- oneArgSynth f = syncpulse [f,f] 0.5 (lfsaw 80 0) |> gain 0.25 >>> out 0
+-- oneArgSynth f = syncsaw [f,f] (saw 400) |> gain 0.25 >>> out 0
+-- oneArgSynth f = sin (urandom |> range 100 2000) |> gain 0.25 >>> out 0
+-- oneArgSynth f = lfpulse [f,f] 0 |> gain 0.25 >>> out 0
+-- oneArgSynth f = lfsaw [f,f] 0 |> gain 0.25 >>> out 0
+
+twoArgSynth :: UGen -> UGen -> [UGen]
+twoArgSynth f ff = sin [f,ff] |> crush 2 |> decimate 4096 |> env [0,1,1,0] [3,1,3] 0 |> out  0
+-- twoArgSynth f ff = feedback sig |> perc 0.01 5 0.1 16.0 >>> out  0
+-- twoArgSynth f ff = feedback sig |> env [0,1,1,0] [3,1,3] 0 >>> out  0
+    -- where
+        -- sig i = syncosc [f + (i * 1000),f + (i * 500)] 0 0 [ff,ff] +> delayN 0.1 0.1
+
+-- twoArgSynth f ff = syncosc [f,f] 0 0 [ff,ff] |> gain 0.25 >>> out 0
+-- twoArgSynth f ff = syncpulse [f,f] 0.5 (lfsaw [ff * 0.25,ff * 0.25] 0) |> lpf (lag 1 [ff,ff]) 3 >>> gain 0.25 >>> out 0
+-- twoArgSynth f ff = saw (lag 1 [f,f]) |> lpf (lag 1 [ff,ff]) 3 >>> gain 0.25 >>> out 0
+-- twoArgSynth f pw = pulse [f,f] [pw,pw] |> gain 0.1 >>> out 0
+-- twoArgSynth fx fy = sin [fx,fy] |> gain 0.1 >>> out 0
+
+threeSynth :: UGen -> UGen -> UGen -> UGen
+threeSynth fx fy fz = sin fx + sin fy + sin fz |> gain 0.1 |> out 0
+-}

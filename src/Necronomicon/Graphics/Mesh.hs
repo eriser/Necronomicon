@@ -37,23 +37,17 @@ rect w h = Mesh (show w ++ show h ++ "rect") vertices colors uvs indices
         uvs      = [Vector2 0 0,Vector2 1 0,Vector2 0 1,Vector2 1 1]
         indices  = [2,0,1,3,2,1]
 
-cube :: Double -> Double -> Double -> Mesh
-cube w h d = Mesh (show w ++ show h ++ show d ++ "cube") vertices colors uvs indices
+cube :: Mesh
+cube = Mesh "cube" vertices colors uvs indices
     where
-        phw = w * 0.5
-        phh = h * 0.5
-        phd = d * 0.5
-        nhw = negate phw
-        nhh = negate phh
-        nhd = negate phd
-        vertices = [Vector3 nhw nhh phd,
-                    Vector3 phw nhh phd,
-                    Vector3 nhw phh phd,
-                    Vector3 phw phh phd,
-                    Vector3 nhw nhh nhd,
-                    Vector3 phw nhh nhd,
-                    Vector3 phw phh nhd,
-                    Vector3 phw phh nhd]
+        vertices = [Vector3 (-0.5) (-0.5)   0.5,
+                    Vector3   0.5  (-0.5)   0.5,
+                    Vector3 (-0.5)   0.5    0.5,
+                    Vector3   0.5    0.5    0.5,
+                    Vector3 (-0.5) (-0.5) (-0.5),
+                    Vector3   0.5  (-0.5) (-0.5),
+                    Vector3 (-0.5)   0.5  (-0.5),
+                    Vector3   0.5    0.5  (-0.5)]
         colors   = repeat white
         uvs      = [Vector2 0 0,
                     Vector2 1 0,
@@ -64,11 +58,29 @@ cube w h d = Mesh (show w ++ show h ++ show d ++ "cube") vertices colors uvs ind
                     Vector2 1 1,
                     Vector2 0 1]
         indices  = [2,0,1,3,2,1, -- Front
-                    7,4,5,6,7,5, -- Back
+                    7,5,4,6,7,4, -- Back
                     3,1,5,7,3,5, -- Right
                     6,4,0,2,6,0, -- Left
                     6,2,3,7,6,3, -- Top
                     0,4,5,1,0,5] -- Bottom
+
+sphere :: Int -> Int -> Mesh
+sphere latitudes longitudes = Mesh (show latitudes ++ show longitudes ++ "sphere") vertices colors uvs indices
+    where
+        toRadians      = (* 0.0174532925)
+        latitudesReal  = fromIntegral latitudes
+        latInc         = 360 / latitudesReal
+        longitudesReal = fromIntegral longitudes
+        longInc        = 180 / longitudesReal
+        us             = map (* latInc)  [0..latitudesReal]
+        ts             = map (* longInc) [0..longitudesReal]
+        toVertex (u,t) = Vector3 (sin (toRadians t) * sin (toRadians u))
+                                 (cos (toRadians t))
+                                 (sin (toRadians t) * cos (toRadians u))
+        vertices       = map toVertex $ zip (cycle us) (ts >>= replicate longitudes)
+        colors         = repeat white
+        uvs            = repeat 0
+        indices        = foldr (\i acc -> i + 1 : i + 2 : i + 3 : i + 1 : i + 0 : i + 2 : acc) [] [0,4..latitudes * longitudes]
 
 dynRect :: Double -> Double -> Mesh
 dynRect w h = DynamicMesh (show w ++ show h ++ "rect") vertices colors uvs indices
