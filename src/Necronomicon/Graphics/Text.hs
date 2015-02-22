@@ -150,7 +150,7 @@ renderFont :: String -> Font -> (NecroTex.Texture -> Material) -> Linear.Matrix4
 renderFont text font material modelView proj resources = do
     loadedFont <- getFont resources font
     let characterMesh                       = textMesh (characters loadedFont) (atlasWidth loadedFont) (atlasHeight loadedFont)
-        fontMesh                            = DynamicMesh (characterVertexBuffer loadedFont) (characterIndexBuffer loadedFont) vertices colors uvs indices
+        fontMesh                            = DynamicMesh (fontKey font) vertices colors uvs indices
         (vertices,colors,uvs,indices,_,_,_) = foldl' characterMesh ([],[],[],[],0,0,0) text
     drawMeshWithMaterial (material $ atlas loadedFont) fontMesh modelView proj resources
 

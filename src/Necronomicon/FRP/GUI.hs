@@ -98,7 +98,6 @@ chatDisplay (Vector2 x y) (Size w h) font material = Signal $ \state -> do
         processSignal ref metrics chatCont state = chatCont state >>= \c -> case c of
             NoChange _ -> readIORef ref >>= return . NoChange . chatObject
             Change str -> do
-                print "chatDisplay"
                 prevStr <- readIORef ref
                 let val = (fitTextIntoBounds False (prevStr ++ str ++ "\n\n") (w * 1.0,h * 0.75) metrics)
                 writeIORef ref val

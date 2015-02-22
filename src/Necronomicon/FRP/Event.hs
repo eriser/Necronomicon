@@ -41,12 +41,22 @@ data SignalState = SignalState {
     client            :: Client,
     mouseSignal       :: SignalVar (Double,Double),
     dimensionsSignal  :: SignalVar Vector2,
+
     mouseButtonSignal :: SignalVar Bool,
     keySignal         :: TVar (IntMap.IntMap (EventValue Bool)),
-    keysPressed       :: TVar [Int],
+    keysPressed       :: SignalVar Int,
     chatMessageSignal :: SignalVar String,
     netStatusSignal   :: SignalVar RunStatus,
     userListSignal    :: SignalVar [String],
+
+    mouseButtonBuffer :: TChan Bool,
+    keySignalBuffer   :: TChan (Int,Bool),
+    keysPressedBuffer :: TChan Int,
+    chatMessageBuffer :: TChan String,
+    netStatusBuffer   :: TChan RunStatus,
+    userListBuffer    :: TChan [String],
+    netSignalsBuffer  :: TVar  [(Int, NetValue)],
+
     updateDelta       :: Double,
     runTime           :: Double
     }

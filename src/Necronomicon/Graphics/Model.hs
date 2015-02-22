@@ -17,7 +17,7 @@ instance Show (Texture -> Material) where
     show _ = "TextureFunction"
 
 data Mesh  = Mesh        String                          [Vector3] [Color] [Vector2] [Int]
-           | DynamicMesh GL.BufferObject GL.BufferObject [Vector3] [Color] [Vector2] [Int]
+           | DynamicMesh String                          [Vector3] [Color] [Vector2] [Int]
            deriving (Show)
 
 type LoadedMesh = (GL.BufferObject,GL.BufferObject,Int,[GL.VertexArrayDescriptor GL.GLfloat])

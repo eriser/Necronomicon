@@ -1,6 +1,7 @@
 import Necronomicon
 import Data.Fixed (mod')
 import Control.Arrow
+import Debug.Trace
 
 main :: IO ()
 -- main = runSignal <| sigPrint (audioBuffer 0) <&> testSound2
@@ -82,91 +83,89 @@ threeSynth :: UGen -> UGen -> UGen -> UGen
 threeSynth fx fy fz = sin fx + sin fy + sin fz |> gain 0.1 |> out 0
 
 testScene :: Signal ()
--- testScene = scene [pure cam,terrainSig]
-testScene = scene [pure cam,oscillatorObject]
+testScene = scene [pure cam,terrainSig]
     where
         move (x,y) z a = Vector3 (x*z*a) (y*z*a) 0
         cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
-        terrain pos    = SceneObject pos identity 1 (Model simplexMesh $ vertexColored (RGBA 1 1 1 0.35)) []
-        terrainSig     = terrain <~ (lagSig 4 $ foldn (+) 0 (lift3 move arrows (fps 4) 3))
-        -- terrainSig     = terrain <~ playPattern 0 (isDown keyP) (isDown keyP)
-            -- [lich| [0 1 2 3] [4 5 6 7] [6 0 5 0] [4 0 3 0] |]
+        oscSig         = oscillatorObject <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4
+        terrainSig     = terrainObject    <~ time          ~~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4
 
-testTri :: Vector3 -> Quaternion -> SceneObject
-testTri pos r = SceneObject pos r 1 (Model (tri 0.3 white) $ vertexColored white) []
+        -- camSig         = cam <~ (lagSig 4 <| foldn (+) 0 (lift3 move arrows (fps 4) 3))
 
-simplexMesh :: Mesh
-simplexMesh = Mesh "simplex" vertices colors uvs indices
+terrainObject :: Double -> [Double] -> [Double] -> [Double] -> SceneObject
+terrainObject t a1 a2 a3 = SceneObject (Vector3 (-8) 3 (-12)) (fromEuler' (-24) 0 0) (Vector3 0.5 1 0.5) (Model mesh <| vertexColored (RGBA 1 1 1 0.35)) []
     where
-        (w,h)            = (64,128)
-        (scale,vscale)   = (1 / 6,3)
-        values           = [(x,simplex 16 (x / w) (y / h),y) | (x,y) <- [(mod' n w,fromIntegral . floor $ n / h) | n <- [0..w*h]]]
+        mesh             = DynamicMesh "simplex" vertices colors uvs indices
+        (w,h)            = (64.0,32.0)
+        (scale,vscale)   = (1 / 6,2.5)
+        values           = [(x + a,simplex 8 (x / w + t * 0.05) (y / h + t * 0.05) * 0.65 + aa,y + aaa)
+                          | (x,y) <- map (\n -> (mod' n w,n / h)) [0..w*h]
+                          | a     <- map (* 2.00) <| cycle a1
+                          | aa    <- map (* 0.35) <| cycle a2
+                          | aaa   <- map (* 2.00) <| cycle a3]
 
         toVertex (x,y,z) = Vector3 (x*scale*3) (y*vscale) (z*scale*3)
-        toColor  (x,y,z) = RGBA    (x / w) (y * 0.75 + 0.35) (z / h) 0.25
+        toColor  (x,y,z) = RGBA    ((x * 1.75) / w * (y * 0.6 + 0.4)) (y * 0.75 + 0.25) (z / h * (y * 0.75 + 0.25)) 0.3
         toUV     (x,y,_) = Vector2 (x / w) (y / h)
 
         addIndices w i indices
-            | mod i w /= (w-1) = i : i+w+1 : i+w : i+w+1 : i+1 : i : indices
-            | otherwise        = indices
+            | mod i w < (w-1) = i + 1 : i + w : i + w + 1 : i + 1 : i : i + w : indices
+            | otherwise       = indices
 
         vertices = map toVertex values
         colors   = map toColor  values
-        uvs      = map toUV     values
-        indices  = foldr (addIndices (round w)) [] [0..(length values)]
+        -- uvs      = map toUV     values
+        uvs      = replicate (floor <| w * h) 0
+        indices  = foldr (addIndices <| floor w) [] [0..length values - floor (w + 2)]
 
-oscillatorObject :: Signal SceneObject
-oscillatorObject = model <~ oscillatorMesh
+oscillatorObject :: [Double] -> [Double] -> [Double] -> SceneObject
+oscillatorObject audioBuffer1 audioBuffer2 audioBuffer3 = SceneObject 0 identity 1 (Model mesh <| vertexColored (RGBA 1 1 1 0.35)) []
     where
-        model mesh = SceneObject 0 identity 1 (Model mesh $ vertexColored (RGBA 1 1 1 0.35)) []
-
-oscillatorMesh :: Signal Mesh
-oscillatorMesh = Signal $ \state -> do
-    (vertexBuffer,indexBuffer) <- genDynMeshBuffers
-    audioCont0                 <- unSignal (audioBuffer 2) state
-    audioCont1                 <- unSignal (audioBuffer 3) state
-    audioCont2                 <- unSignal (audioBuffer 4) state
-    return $ processSignal vertexBuffer indexBuffer audioCont0 audioCont1 audioCont2
-    where
-        processSignal vertexBuffer indexBuffer audioCont0 audioCont1 audioCont2 state = do
-            audio0 <- fmap unEvent $ audioCont0 state
-            audio1 <- fmap unEvent $ audioCont1 state
-            audio2 <- fmap unEvent $ audioCont1 state
-            let zippedAudio       = zip3 audio0 audio1 audio2
-                (vertices,colors) = foldr toVertex ([],[]) $ zip zippedAudio $ drop 1 zippedAudio
-            return $ Change $ DynamicMesh vertexBuffer indexBuffer vertices colors uvs indices
-
-        -- colors  = replicate 511 white
-        uvs     = replicate 512 0
-        indices = foldr (\i acc -> i + 1 : i + 2 : i + 3 : i + 1 : i + 0 : i + 2 : acc ) [] [0..511]
-        scale   = 6
-        width   = 1
+        mesh                                         = DynamicMesh "osc1" vertices colors uvs indices
+        scale                                        = 6
+        width                                        = 1
+        indices                                      = foldr (\i acc -> i + 1 : i + 2 : i + 3 : i + 1 : i + 0 : i + 2 : acc) [] [0..511]
+        uvs                                          = replicate 512 0
+        zippedAudio                                  = zip3 audioBuffer1 audioBuffer2 audioBuffer3
+        (vertices,colors)                            = foldr toVertex ([],[]) (zip zippedAudio <| drop 1 zippedAudio)
         toVertex ((x1,y1,z1),(x2,y2,z2)) (vacc,cacc) = (p3 : p2 : p1 : p0 : vacc,r3 : r2 : r1 : r0 : cacc)
             where
-                cp = cross np0 np1
+                p0  = Vector3 (x1 * scale) (y1 * scale) (z1 * scale * 0.5)
+                p1  = Vector3 (x2 * scale) (y2 * scale) (z2 * scale * 0.5)
 
-                p0 = Vector3 (x1 * scale) (y1 * scale) (z1 * scale * 0.35)
-                p1 = Vector3 (x2 * scale) (y2 * scale) (z2 * scale * 0.35)
-                p2 = p0 + cp * width
-                p3 = p1 + cp * width
+                cp  = cross np0 np1
+
+                p2  = p0 + cp * width
+                p3  = p1 + cp * width
 
                 np0 = normalize p0
                 np1 = normalize p1
                 np2 = normalize p2
                 np3 = normalize p3
 
-                r0 = vtoc (np0 * 0.5 + 0.5) 0.35
-                r1 = vtoc (np1 * 0.5 + 0.5) 0.35
-                r2 = vtoc (np2 * 0.5 + 0.5) 0.35
-                r3 = vtoc (np3 * 0.5 + 0.5) 0.35
+                r0  = vtoc (np0 * 0.5 + 0.5) 0.35
+                r1  = vtoc (np1 * 0.5 + 0.5) 0.35
+                r2  = vtoc (np2 * 0.5 + 0.5) 0.35
+                r3  = vtoc (np3 * 0.5 + 0.5) 0.35
 
 triOsc :: UGen -> UGen -> [UGen]
 triOsc f1 f2 = [sig1,sig2] + [sig3,sig3] |> verb |> gain 0.1 |> out 0
     where
-        sig1 = sinOsc (f1 + sig3 * 1000) |> auxThrough 2
-        sig2 = sinOsc (f2 + sig3 * 1000) |> auxThrough 3
-        sig3 = sinOsc (f1 - f2)   |> auxThrough 4
+        sig1 = sinOsc (f1 + sig3 * 1000) * (sinOsc (f1 * 0.00025)         |> range 0.5 1) |> auxThrough 2
+        sig2 = sinOsc (f2 + sig3 * 1000) * (sinOsc (f2 * 0.00025)         |> range 0.5 1) |> auxThrough 3
+        sig3 = sinOsc (f1 - f2)          * (sinOsc ((f1 + f2 )* 0.000125) |> range 0.5 1) |> auxThrough 4
         verb = freeverb 0.25 0.5 0.5
+
+triOsc32 :: UGen -> UGen -> [UGen]
+triOsc32 f1 f2 = feedback fSig |> verb |> gain 0.1 |> out 0
+    where
+        verb   = freeverb 0.25 0.5 0.5
+        fSig i = [sig1,sig2] + [sig3,sig3]
+            where
+                sig1 = sinOsc (f1 + sig3 * 10)   * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> auxThrough 2
+                sig2 = sinOsc (f2 - sig3 * 10)   * (sinOsc (f1 * 0.00025) |> range 0.5 1) |> auxThrough 3
+                sig3 = sinOsc (f1 - f2 + i * 10) * (sinOsc (i * 0.00025)  |> range 0.5 1) |> auxThrough 4
 
 hyperTerrainSounds :: Signal ()
 hyperTerrainSounds = play (toggle <| isDown keyW) triOsc (mouseX ~> scale 20 3000) (mouseY ~> scale 20 3000)
+                 <&> play (toggle <| isDown keyA) triOsc32 (mouseX ~> scale 20 3000) (mouseY ~> scale 20 3000)

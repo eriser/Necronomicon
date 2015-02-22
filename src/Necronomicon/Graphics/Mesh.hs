@@ -37,8 +37,8 @@ rect w h = Mesh (show w ++ show h ++ "rect") vertices colors uvs indices
         indices  = [2,0,1,3,2,1]
 
 
-dynRect :: Double -> Double -> GL.BufferObject -> GL.BufferObject -> Mesh
-dynRect w h vbuf ibuf = DynamicMesh vbuf ibuf vertices colors uvs indices
+dynRect :: Double -> Double -> Mesh
+dynRect w h = DynamicMesh (show w ++ show h ++ "rect") vertices colors uvs indices
     where
         vertices = [Vector3 0 0 0,Vector3 w 0 0,Vector3 0 h 0,Vector3 w h 0]
         colors   = [white,white,white,white]
@@ -138,17 +138,25 @@ getMesh :: Resources -> Mesh -> IO LoadedMesh
 getMesh resources mesh@(Mesh mKey _ _ _ _) = readIORef (meshesRef resources) >>= \meshes -> case Map.lookup mKey meshes of
     Nothing         -> loadMesh mesh >>= \loadedMesh -> (writeIORef (meshesRef resources) $ Map.insert mKey loadedMesh meshes) >> return loadedMesh
     Just loadedMesh -> return loadedMesh
-getMesh _         mesh                     = loadMesh mesh
+getMesh resources mesh@(DynamicMesh mKey v c u i) = readIORef (meshesRef resources) >>= \meshes -> case Map.lookup mKey meshes of
+    Nothing              -> loadMesh mesh >>= \loadedMesh@(vbuf,ibuf,_,_) -> (writeIORef (meshesRef resources) (Map.insert mKey loadedMesh meshes)) >> dynamicDrawMesh vbuf ibuf v c u i
+    Just (vbuf,ibuf,_,_) -> dynamicDrawMesh vbuf ibuf v c u i
+
+dynamicDrawMesh :: GL.BufferObject -> GL.BufferObject -> [Vector3] -> [Color] -> [Vector2] -> [Int] -> IO LoadedMesh
+dynamicDrawMesh vBuf iBuf vertices colors uvs indices = do
+    vertexBuffer  <- makeDynamicBuffer vBuf GL.ArrayBuffer        (map realToFrac (posColorUV vertices colors uvs) :: [GL.GLfloat])
+    indexBuffer   <- makeDynamicBuffer iBuf GL.ElementArrayBuffer (map fromIntegral indices :: [GL.GLuint])
+    return (vertexBuffer,indexBuffer,length indices,vadPosColorUV)
 
 loadMesh :: Mesh -> IO LoadedMesh
 loadMesh (Mesh _ vertices colors uvs indices) = do
     vertexBuffer  <- makeBuffer GL.ArrayBuffer        (map realToFrac (posColorUV vertices colors uvs) :: [GL.GLfloat])
     indexBuffer   <- makeBuffer GL.ElementArrayBuffer (map fromIntegral indices :: [GL.GLuint])
     return (vertexBuffer,indexBuffer,length indices,vadPosColorUV)
-loadMesh (DynamicMesh vBuf iBuf vertices colors uvs indices) = do
-    vertexBuffer  <- makeDynamicBuffer vBuf GL.ArrayBuffer        (map realToFrac (posColorUV vertices colors uvs) :: [GL.GLfloat])
-    indexBuffer   <- makeDynamicBuffer iBuf GL.ElementArrayBuffer (map fromIntegral indices :: [GL.GLuint])
-    return (vertexBuffer,indexBuffer,length indices,vadPosColorUV)
+loadMesh (DynamicMesh _ _ _ _ _) = do
+    vertexBuffer:_ <- GL.genObjectNames 1
+    indexBuffer :_ <- GL.genObjectNames 1
+    return (vertexBuffer,indexBuffer,0,[])
 
 vadPosColorUV :: [GL.VertexArrayDescriptor GL.GLfloat]
 vadPosColorUV = [vertexVad,colorVad,uvVad]

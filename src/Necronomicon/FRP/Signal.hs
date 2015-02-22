@@ -2,6 +2,7 @@ module Necronomicon.FRP.Signal (
     module Necronomicon.FRP.Event,
     Signal (..),
     SignalState (..),
+    time,
     unEvent,
     audioBuffer,
     netsignal,
@@ -126,7 +127,9 @@ import           Debug.Trace
 import qualified Graphics.Rendering.OpenGL         as GL
 import qualified Graphics.UI.GLFW                  as GLFW
 import           Necronomicon.Graphics.Camera      (renderGraphics)
-import           Necronomicon.Graphics.Model       (Resources, newResources)
+import           Necronomicon.Graphics.Color       (Color)
+import           Necronomicon.Graphics.BufferObject (genDynMeshBuffers)
+import           Necronomicon.Graphics.Model       (Resources, newResources,Mesh(..))
 import           Necronomicon.Graphics.SceneObject (SceneObject, root,emptyObject)
 import           Necronomicon.Linear.Vector        (Vector2 (Vector2),
                                                     Vector3 (Vector3))
@@ -1082,27 +1085,85 @@ mkSignalState = do
     client            <- newClient name
     mouseSignal       <- atomically $ newTVar (NoChange (0,0))
     dimensionsSignal  <- atomically $ newTVar (NoChange $ Vector2 1920 1080)
+
     mouseButtonSignal <- atomically $ newTVar (NoChange False)
     keySignal         <- atomically $ newTVar $ IntMap.fromList $ map (\i -> (i,NoChange False)) [100..154]
-    keysPressed       <- atomically $ newTVar []
+    keysPressed       <- atomically $ newTVar (NoChange 0)
     chatMessageSignal <- atomically $ newTVar (NoChange "")
     netStatusSignal   <- atomically $ newTVar (NoChange Connecting)
     userListSignal    <- atomically $ newTVar (NoChange [])
-    return $ SignalState inputCounter sceneVar guiVar necroVars client mouseSignal dimensionsSignal mouseButtonSignal keySignal keysPressed chatMessageSignal netStatusSignal userListSignal 0 0
+
+    mouseButtonBuffer <- atomically $ newTChan
+    keySignalBuffer   <- atomically $ newTChan
+    keysPressedBuffer <- atomically $ newTChan
+    chatMessageBuffer <- atomically $ newTChan
+    netStatusBuffer   <- atomically $ newTChan
+    userListBuffer    <- atomically $ newTChan
+    netSignalsBuffer  <- atomically $ newTVar []
+
+    return $ SignalState
+        inputCounter
+        sceneVar
+        guiVar
+        necroVars
+        client
+        mouseSignal
+        dimensionsSignal
+        mouseButtonSignal
+        keySignal
+        keysPressed
+        chatMessageSignal
+        netStatusSignal
+        userListSignal
+        mouseButtonBuffer
+        keySignalBuffer
+        keysPressedBuffer
+        chatMessageBuffer
+        netStatusBuffer
+        userListBuffer
+        netSignalsBuffer
+        0
+        0
 
 resetKnownInputs :: SignalState -> IO()
 resetKnownInputs state = do
+    --Streams that don't need absolute synchronicity
     atomically $ readTVar (mouseSignal state)         >>= writeTVar (mouseSignal state) . noChange
     atomically $ readTVar (dimensionsSignal state)    >>= writeTVar (dimensionsSignal state) . noChange
-    atomically $ readTVar (mouseButtonSignal state)   >>= writeTVar (mouseButtonSignal state) . noChange
     atomically $ readTVar (sceneVar state )           >>= writeTVar (sceneVar state) . noChange
     atomically $ readTVar (guiVar state)              >>= writeTVar (guiVar state) . noChange
-    atomically $ readTVar (keySignal state)           >>= writeTVar (keySignal state) . IntMap.map noChange
-    atomically $ writeTVar (keysPressed state) []
-    atomically $ readTVar (chatMessageSignal state)   >>= writeTVar (chatMessageSignal state) . noChange
-    atomically $ readTVar (netStatusSignal state)     >>= writeTVar (netStatusSignal state) . noChange
-    atomically $ readTVar (userListSignal state)      >>= writeTVar (userListSignal state) . noChange
-    atomically $ readTVar (netSignals $ client state) >>= writeTVar (netSignals $ client state) . IntMap.map noChange
+
+    --Signals that need lock step
+    atomically $ updateKeySignalFromBackBuffer `orElse` (readTVar (keySignal state) >>= writeTVar (keySignal state) . IntMap.map noChange)
+
+    atomically $
+        (readTChan (mouseButtonBuffer state) >>= writeTVar (mouseButtonSignal state) . Change) `orElse`
+        (readTVar  (mouseButtonSignal state) >>= writeTVar (mouseButtonSignal state) . noChange)
+    atomically $
+        (readTChan (keysPressedBuffer state) >>= writeTVar (keysPressed state) . Change) `orElse`
+        (readTVar  (keysPressed state) >>= writeTVar (keysPressed state) . noChange)
+    atomically $
+        (readTChan (chatMessageBuffer state) >>= writeTVar (chatMessageSignal state) . Change) `orElse`
+        (readTVar  (chatMessageSignal state) >>= writeTVar (chatMessageSignal state) . noChange)
+    atomically $
+        (readTChan (netStatusBuffer state) >>= writeTVar (netStatusSignal state) . Change) `orElse`
+        (readTVar  (netStatusSignal state) >>= writeTVar (netStatusSignal state) . noChange)
+    atomically $
+        (readTChan (userListBuffer state) >>= writeTVar (userListSignal state) . Change) `orElse`
+        (readTVar  (userListSignal state) >>= writeTVar (userListSignal state) . noChange)
+
+    atomically $ updateNetSignalsFromBackBuffer
+    where
+        updateKeySignalFromBackBuffer = do
+            (k,b)  <- readTChan $ keySignalBuffer state
+            signal <- readTVar  $ keySignal state
+            writeTVar (keySignal state) $ IntMap.insert k (Change b) $ IntMap.map noChange signal
+        updateNetSignalsFromBackBuffer = do
+            updates <- readTVar $ netSignalsBuffer state
+            signal  <- readTVar $ netSignals $ client state
+            let signal' = foldr (\(k,ns) -> IntMap.insert k (Change ns)) (IntMap.map noChange signal) updates
+            writeTVar (netSignals $ client state) signal'
+            writeTVar (netSignalsBuffer state) []
 
 scene :: [Signal SceneObject] -> Signal ()
 scene os = render $ root <~ combine os
@@ -1143,13 +1204,13 @@ runSignal s = initWindow >>= \mw -> case mw of
         render False w signalLoop signalState resources
     where
         --event callbacks
-        mousePressEvent state _ _ GLFW.MouseButtonState'Released _ = writeToSignal (mouseButtonSignal state) $ False
-        mousePressEvent state _ _ GLFW.MouseButtonState'Pressed  _ = writeToSignal (mouseButtonSignal state) $ True
+        mousePressEvent state _ _ GLFW.MouseButtonState'Released _ = atomically $ writeTChan (mouseButtonBuffer state) $ False
+        mousePressEvent state _ _ GLFW.MouseButtonState'Pressed  _ = atomically $ writeTChan (mouseButtonBuffer state) $ True
         dimensionsEvent state _ x y = writeToSignal (dimensionsSignal state) $ Vector2 (fromIntegral x) (fromIntegral y)
         keyPressEvent   state _ k _ GLFW.KeyState'Pressed  _       = do
-            atomically $ readTVar (keySignal   state) >>= writeTVar (keySignal   state) . IntMap.insert (glfwKeyToEventKey k) (Change True)
-            atomically $ readTVar (keysPressed state) >>= writeTVar (keysPressed state) . ((glfwKeyToEventKey k) :)
-        keyPressEvent   state _ k _ GLFW.KeyState'Released _       = atomically $ readTVar (keySignal state) >>= writeTVar (keySignal state) . IntMap.insert (glfwKeyToEventKey k) (Change False)
+            atomically $ writeTChan (keySignalBuffer state)   (glfwKeyToEventKey k,True)
+            atomically $ writeTChan (keysPressedBuffer state) (glfwKeyToEventKey k)
+        keyPressEvent   state _ k _ GLFW.KeyState'Released _       = atomically $ writeTChan (keySignalBuffer state) (glfwKeyToEventKey k,False)
         keyPressEvent   state _ k _ _ _                            = return ()
 
         mousePosEvent state w x y = do
@@ -1160,14 +1221,17 @@ runSignal s = initWindow >>= \mw -> case mw of
         render quit window signalLoop signalState resources
             | quit      = quitClient (client signalState) >> runNecroState shutdownNecronomicon (necroVars signalState) >> print "Qutting" >> return ()
             | otherwise = do
+
+                resetKnownInputs signalState
                 GLFW.pollEvents
-                q           <- liftA (== GLFW.KeyState'Pressed) (GLFW.getKey window GLFW.Key'Escape)
+                q <- liftA (== GLFW.KeyState'Pressed) (GLFW.getKey window GLFW.Key'Escape)
                 currentTime <- getCurrentTime
 
                 let delta        = currentTime - runTime signalState
                     signalState' = signalState{runTime = currentTime,updateDelta = delta}
 
                 result <- signalLoop signalState'
+
                 scene  <- atomically $ readTVar $ sceneVar signalState
                 gui    <- atomically $ readTVar $ guiVar   signalState
                 case (scene,gui) of
@@ -1176,8 +1240,8 @@ runSignal s = initWindow >>= \mw -> case mw of
                     (Change   s,NoChange g) -> renderGraphics window resources s g
                     _                       -> return ()
 
-                resetKnownInputs signalState
                 -- execIfChanged result print
+
                 threadDelay $ 16667
                 render q window signalLoop signalState' resources
 
@@ -1555,11 +1619,9 @@ isDown :: Key -> Signal Bool
 isDown k = Signal $ \_ -> return processSignal
     where
         eventKey            = glfwKeyToEventKey k
-        processSignal state = do
-            keys <- atomically $ readTVar $ keySignal state
-            case IntMap.lookup eventKey keys of
-                Nothing -> return $ NoChange False
-                Just  e -> return $ e
+        processSignal state = atomically (readTVar $ keySignal state) >>= \keys -> case IntMap.lookup eventKey keys of
+            Nothing -> return $ NoChange False
+            Just  e -> return e
 
 isUp :: Key -> Signal Bool
 isUp k = not <~ isDown k
@@ -1596,11 +1658,11 @@ textInput = Signal $ \state -> do
     shiftCont <- unSignal shift state
     return $ processSignal shiftRef charRef shiftCont
     where
-        processSignal shiftRef charRef shiftCont state = do
-            keys        <- atomically $ readTVar $ keysPressed state
-            isShiftDown <- shiftCont state >>= return . unEvent
-            if null keys then readIORef charRef >>= return . NoChange else do
-                let char = eventKeyToChar (keys !! 0) isShiftDown
+        processSignal shiftRef charRef shiftCont state = atomically (readTVar $ keysPressed state) >>= \keys -> case keys of
+            NoChange _ -> shiftCont state >> readIORef charRef >>= return . NoChange
+            Change   k -> do
+                isShiftDown <- fmap unEvent $ shiftCont state
+                let char = eventKeyToChar k isShiftDown
                 writeIORef charRef char
                 return $ Change char
 
@@ -1699,6 +1761,9 @@ lagSig lagTime sig = Signal $ \state -> do
                         let value'       = start * (fromRational . toRational $ 1 - acc) + end * (fromRational $ toRational acc)
                         writeIORef ref (start,end,acc')
                         return $ Change value'
+
+time :: Signal Double
+time = Signal $ \_ -> return $ \_ -> getCurrentTime >>= return . Change
 
 -----------------------------------------------------------------
 -- Graphics
@@ -2026,6 +2091,7 @@ till sigA sigB = Signal $ \state -> do
                 Change True -> writeIORef boolRef False >>  return (Change False)
                 _           -> readIORef boolRef        >>= return . NoChange
 
+
 ---------------------------------------------
 -- Networking
 ---------------------------------------------
@@ -2056,9 +2122,9 @@ foldn f bInit a = Signal $ \state -> do
     ref           <- newIORef bInit
     netid         <- getNextID state
     sendAddNetSignal (client state) $ (netid,toNetVal bInit)
-    return $ processSignal cont ref (client state) netid
+    return $ processSignal cont ref netid
     where
-        processSignal cont ref client netid state = atomically (readTVar $ netSignals client) >>= \ns -> case IntMap.lookup netid ns of
+        processSignal cont ref netid state = atomically (readTVar $ netSignals $ client state) >>= \ns -> case IntMap.lookup netid ns of
             Just (Change n) -> case fromNetVal n of
                 Just n  -> cont state >> writeIORef ref n >> return (Change n)
                 Nothing -> localCont
@@ -2070,28 +2136,33 @@ foldn f bInit a = Signal $ \state -> do
                         prev <- readIORef ref
                         let new = f v prev
                         writeIORef ref    new
-                        if new /= prev then sendSetNetSignal client (netid,toNetVal new) else return ()
+                        if new /= prev then sendSetNetSignal (client state) (netid,toNetVal new) else return ()
                         return (Change new)
 
 netsignal :: Networkable a => Signal a -> Signal a
 netsignal sig = Signal $ \state -> do
-    cont  <- unSignal sig state
-    val   <- fmap unEvent $ cont state
-    ref   <- newIORef val
-    netid <- getNextID state
+    cont   <- unSignal sig state
+    val    <- fmap unEvent $ cont state
+    ref    <- newIORef val
+    netid  <- getNextID state
+    netRef <- newIORef val
     sendAddNetSignal (client state) (netid,toNetVal val)
-    return $ processEvent cont ref (client state) netid
+    return $ processEvent cont ref netid netRef
     where
-        processEvent cont ref client netid state = atomically (readTVar $ netSignals client) >>= \ns -> case IntMap.lookup netid ns of
+        processEvent cont ref netid netRef state = atomically (readTVar $ netSignals $ client state) >>= \ns -> case IntMap.lookup netid ns of
             Just (Change n) -> case fromNetVal n of
                 Just n  -> cont state >> writeIORef ref n >> return (Change n)
                 Nothing -> localCont
-            _           -> localCont
+            Just (NoChange n) -> readIORef netRef >>= \prevN -> case fromNetVal n of
+                Nothing -> localCont
+                Just n'  -> if n' /= prevN
+                    then cont state >> writeIORef ref n' >> writeIORef netRef n' >> return (Change n')
+                    else localCont
             where
                 localCont = cont state >>= \c -> case c of
                     NoChange v -> return $ NoChange v
                     Change   v -> readIORef ref >>= \prev -> if v /= prev
-                        then sendSetNetSignal client (netid,toNetVal v) >> writeIORef ref v >> return (Change v)
+                        then sendSetNetSignal (client state) (netid,toNetVal v) >> writeIORef ref v >> return (Change v)
                         else return $ Change v
 
 ---------------------------------------------
