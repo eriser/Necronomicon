@@ -46,7 +46,11 @@ patternTest = do
     nPrint (collapse (collapse p2 1) 1)
     setTempo 150
 
-    argsPattern <- runPDef $ pstreamWithArgs "ArgsPattern" pLineSynth ((\x -> pstutter x $ ploop [[lich| 1 2 [3 4] 5 6 [7 8]|]]) :: Pattern Double -> Pattern (Pattern Double, Double)) [1]
+    argsPattern <- runPDef $ pstreamWithArgs "ArgsPattern" pLineSynth ((\x -> pstutter x $ pseq 10 [
+                                                                             [lich| 5 [5 5] 5 |],
+                                                                             [lich| 7 [7 7] 7 |],
+                                                                             [lich| 9 [9 9] 9 |]
+                                                                             ]) :: Pattern Double -> Pattern (Pattern Double, Double)) [1]
 
     nSleep 5
     setTempo 100
