@@ -456,7 +456,7 @@ foreign import ccall "&delay_deconstructor" delayDeconstructor :: CUGenFunc
 
 foreign import ccall "&delayN_calc" delayNCalc :: CUGenFunc
 delayN :: UGenType a => Double -> a -> a -> a
-delayN maxDelayTime delayTime input = ugen (DelayN maxDelayTime) delayNCalc delayConstructor delayDeconstructor [delayTime, input] 
+delayN maxDelayTime delayTime input = ugen (DelayN maxDelayTime) delayNCalc delayConstructor delayDeconstructor [delayTime, input]
 
 foreign import ccall "&delayL_calc" delayLCalc :: CUGenFunc
 delayL :: UGenType a => Double -> a -> a -> a
@@ -776,7 +776,3 @@ stopTestSynth synth necroVars = runNecroState (stopSynth synth) necroVars >> ret
 ------------------------------------------
 -- Experimental
 ------------------------------------------
-
--- data UGenType a => SynthGen a = SynthGen {synthGenName :: String, synthGenUGen :: a}
--- synthGen :: UGenType a => String -> Int -> a -> a
--- synthGen name outBus input = SynthGen name (out outBus input)
