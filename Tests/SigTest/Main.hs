@@ -4,11 +4,15 @@ import Control.Arrow
 import Data.List (zip4)
 
 main :: IO ()
-main = runSignal <| testGUI <|> (testScene <&> hyperTerrainSounds)
+main = runSignal <| synthDefs *> testGUI <|> (testScene <&> hyperTerrainSounds)
 
 hyperTerrainSounds :: Signal ()
-hyperTerrainSounds = play (toggle <| isDown keyW) triOsc (mouseX ~> scale 20 3000) (mouseY ~> scale 20 3000)
-                 <&> play (toggle <| isDown keyA) triOsc32 (mouseX ~> scale 20 3000) (mouseY ~> scale 20 3000)
+hyperTerrainSounds = play (toggle <| isDown keyW) "triOsc"   [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
+                 <&> play (toggle <| isDown keyA) "triOsc32" [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
+
+synthDefs :: Signal ()
+synthDefs = synthDef "triOsc"   triOsc
+         *> synthDef "triOsc32" triOsc32
 
 testGUI :: Signal ()
 testGUI = gui [chatBox,netBox,users]
@@ -32,8 +36,8 @@ testScene = scene [pure cam,sphereSig]
     where
         oscSig         = oscillatorObject <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4
         terrainSig     = terrainObject    <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time
-        cubeSig        = cubeObject       <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time
-        sphereSig      = sphereObject     <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time
+        sphereSig      = sphereObject     <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time ~~ latitudes
+        latitudes      = playSignalPattern (isDown keyS) 36.6 [] [lich| 36 24 32 [30 33 34 35] |]
         cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
         -- cam p          = perspCamera p identity 60 0.1 1000 black [glow]
         -- camSig         = cam <~ (lagSig 4 <| foldn (+) (Vector3 0 0 10) (lift3 move arrows (fps 4) 3))
@@ -95,17 +99,12 @@ oscillatorObject audioBuffer1 audioBuffer2 audioBuffer3 = SceneObject 0 identity
                 r2  = vtoc (np2 * 0.5 + 0.5) 0.35
                 r3  = vtoc (np3 * 0.5 + 0.5) 0.35
 
-cubeObject :: [Double] -> [Double] -> [Double] -> Double -> SceneObject
-cubeObject a1 a2 a3 t = root [cubeObj (Vector3 (-3) 0 0),cubeObj (Vector3 0 0 0),cubeObj (Vector3 3 0 0)]
-    where
-        cubeObj p = SceneObject p (fromEuler' (t*0.8) 0 0) 2 (Model cube <| vertexColored (RGBA 1 1 1 0.1)) []
-
-sphereObject :: [Double] -> [Double] -> [Double] -> Double -> SceneObject
-sphereObject as1 as2 as3 t = SceneObject 0 (fromEuler' 0 (t * 0.5) (t * 0.125)) 5.5 (Model mesh (vertexColored <| RGBA 1 1 1 0.25)) []
+sphereObject :: [Double] -> [Double] -> [Double] -> Double -> Double -> SceneObject
+sphereObject as1 as2 as3 t latitudes = SceneObject 0 (fromEuler' 0 (t * 0.5) (t * 0.125)) 5.5 (Model mesh (vertexColored <| RGBA 1 1 1 0.25)) []
     where
         colorRange     = (+0.5) . (*0.5)
         toRadians      = (* 0.0174532925)
-        latitudes      = 36.0
+        -- latitudes      = 36.0
         latInc         = 360 / latitudes
         longitudes     = 32.0
         longInc        = 180 / longitudes
@@ -125,7 +124,6 @@ sphereObject as1 as2 as3 t = SceneObject 0 (fromEuler' 0 (t * 0.5) (t * 0.125)) 
         l              = floor longitudes
         indices        = foldr (\i acc -> i + 1 : i + l : i + l + 1 : i + 1 : i + 0 : i + l : acc) [] [0,4..floor (latitudes * longitudes) - l]
         mesh           = DynamicMesh "aSphere" vertices colors uvs indices
-
 
 triOsc :: UGen -> UGen -> [UGen]
 triOsc f1 f2 = [sig1,sig2] + [sig3,sig3] |> verb |> gain 0.1 |> out 0

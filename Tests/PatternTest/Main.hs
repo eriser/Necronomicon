@@ -93,7 +93,7 @@ patternTest = do
                                                                2 2 2 1
                                                                5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5 5
                                                              |]
-        
+
     _ <- runPDef $ pstream "MyCoolBeat" pBeatSynth [lich| b p [_ b] p
                                                           b p [_ b] p
                                                           b p [_ b] p
@@ -134,9 +134,9 @@ patternTest = do
     _ <- runPDef $ pstream "two"   pBeatSynth [lich| _ two _ _ _ two _ _ _ two _ _ _ two _ _ _ two _ _ _ two _ _ _ two _ _ _ two _ _ _ two _ _ _ two _ _ |]
     _ <- runPDef $ pstream "three" pBeatSynth [lich| _ _ three _ _ _ three _ _ _ three _ _ _ three _ _ _ three _ _ _ three _ _ _ three _ _ _ three _ _ _ three _ _ _ three _ |]
     _ <- runPDef $ pstream "four"  pBeatSynth [lich| _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four _ _ _ four |]
-    
+
     -- runPDef $ pbeat "MyCoolBeat" [lich| b p [_ b] p |]
-    
+
     nSleep 5
     setTempo 60
     nSleep 10
@@ -149,7 +149,7 @@ patternTest = do
     setTempo 222
     nSleep 3
     setTempo 150
-    
+
     -- runPDef melo
     -- runPDef melo2
     -- nSleep 4
@@ -181,12 +181,12 @@ melo2 = pbind "melo2" sequence durs
         durs = pseq 5 [0.25, 0.25, 0.5, 0.25]
 
 melo3 :: PDef -- THIS UPDATES THE "melo" pattern!!!!!!!!!!!
-melo3 = pbind "melo" sequence durs 
+melo3 = pbind "melo" sequence durs
     where
         sequence :: Pattern (JackTime -> Necronomicon ())
         sequence = PGen (\t -> return (\_ -> nPrint (t ^ 4)))
         durs = pseq 5 [0.5, 0.125, 0.125, 0.25]
-        
+
 melo4 = [lich| 0 [1 2] _ [3 [4 5]] 6
                0 [1 2] _ [3 [4 5]] 6
                0 [1 2] _ [3 [4 5]] 6
@@ -194,4 +194,3 @@ melo4 = [lich| 0 [1 2] _ [3 [4 5]] 6
 
 -- funcs= [lich| (+1) ((*2),(+2),(3/)) _ [(/2) (+2)] |]
 -- mix  = [l| 1 2 s _ |]
-    

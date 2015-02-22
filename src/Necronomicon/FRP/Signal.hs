@@ -2,6 +2,8 @@ module Necronomicon.FRP.Signal (
     module Necronomicon.FRP.Event,
     Signal (..),
     SignalState (..),
+    playSignalPattern,
+    synthDef,
     time,
     unEvent,
     audioBuffer,
@@ -1197,6 +1199,7 @@ runSignal s = initWindow >>= \mw -> case mw of
         GLFW.setWindowSizeCallback  w $ Just $ dimensionsEvent signalState
 
         runNecroState startNecronomicon $ necroVars signalState
+        runNecroState (setTempo 150) (necroVars signalState)
 
         threadDelay $ 16667
 
@@ -1279,6 +1282,16 @@ instance Applicative Signal where
                 (Change   f,NoChange g) -> let newValue = f g in writeIORef ref newValue >> return (Change newValue)
                 (NoChange f,Change   g) -> let newValue = f g in writeIORef ref newValue >> return (Change newValue)
                 _                       -> readIORef ref >>= return . NoChange
+    x *> y = Signal $ \state -> do
+        xCont    <- unSignal x state
+        yCont    <- unSignal y state
+        _        <- xCont state >>= return . unEvent
+        return yCont
+    y <* x = Signal $ \state -> do
+        xCont    <- unSignal x state
+        yCont    <- unSignal y state
+        _        <- xCont state >>= return . unEvent
+        return yCont
 
 instance Alternative Signal where
     empty   = Signal $ \_ -> return $ \_ -> return $ NoChange undefined
@@ -2219,22 +2232,16 @@ audioBuffer index = Signal $ \_ -> if index < 16
             array <- peekArray 512 $ advancePtr outBusBuffers (512 * index)
             return $ Change $ map realToFrac array
 
+playSynthN :: Signal Bool -> String -> [Signal Double] -> Signal ()
+playSynthN playSig synthName argSigs = Signal $ \state -> do
 
-
-playSynthN :: UGenType a => a -> Signal Bool -> [Signal Double] -> Signal ()
-playSynthN synth playSig argSigs = Signal $ \state -> do
-
-    synthName    <- getNextID state >>= return . ("sigsynth" ++) . show
     pCont        <- unSignal (netsignal playSig) state
     pValue       <- pCont state >>= return . unEvent
     aConts       <- mapM (\a -> unSignal (netsignal a) state) argSigs
     aValues      <- mapM (\f -> f state >>= return . unEvent) aConts
     synthRef     <- newIORef Nothing
-    compiled     <- runNecroState (compileSynthDef synthName synth) (necroVars state) >> return True
 
-    if not compiled
-        then print "playSynthN compiling error" >> return (\_ -> return $ NoChange ())
-        else return $ processSignal pCont aConts synthName synthRef (necroVars state) (client state)
+    return $ processSignal pCont aConts synthName synthRef (necroVars state) (client state)
     where
         processSignal pCont aConts synthName synthRef necroVars client state = pCont state >>= \p -> case p of
             Change   p -> mapM (\f -> f state >>= return . unEvent) aConts >>= \args -> runNecroState (playStopSynth synthName args p synthRef) necroVars >>= \(e,_) -> return e
@@ -2251,10 +2258,67 @@ playSynthN synth playSig argSigs = Signal $ \state -> do
             (Just synth,False)  -> liftIO (print "stop") >> stopSynth synth          >>        liftIO (writeIORef synthRef  Nothing) >> return (Change ())
             _                   -> return $ NoChange ()
 
-class Play a where
-    type PlayRet a :: *
-    play :: Signal Bool -> a -> PlayRet a
+synthDef :: UGenType a => String -> a -> Signal ()
+synthDef name synth = Signal $ \state -> do
+    runNecroState (compileSynthDef name synth) (necroVars state)
+    print $ "Compiling synthDef: " ++ name
+    return $ \_ -> return $ NoChange ()
 
+play :: Signal Bool -> String -> [Signal Double] -> Signal ()
+play = playSynthN
+
+playSignalPattern :: (Show a,Eq a) => Signal Bool -> a -> [Signal Double] -> Pattern (Pattern a,Double) -> Signal a
+playSignalPattern playSig initValue argSigs pattern = Signal $ \state -> do
+
+    pCont   <- unSignal (netsignal playSig) state
+    pValue  <- pCont state >>= return . unEvent
+    aConts  <- mapM (\a -> unSignal (netsignal a) state) argSigs
+    aValues <- mapM (\f -> f state >>= return . unEvent) aConts
+    valVar  <- atomically $ newTVar initValue
+    pid     <- getNextID state
+    let pFunc = return (\val _ -> liftIO (atomically $ writeTVar valVar val))-- :: Pattern (a -> JackTime -> Necronomicon ())
+        pDef  = pstreamWithArgs ("sigPat" ++ show pid) pFunc pattern (map PVal aValues)
+
+    maybePattern <- if pValue then runNecroState (runPDef pDef) (necroVars state) >>= \(pat,_) -> return (Just pat) else return Nothing
+    patternRef   <- newIORef maybePattern
+
+    valRef <- newIORef initValue
+
+    return $ processSignal patternRef pDef pCont aConts valVar valRef (necroVars state)
+    where
+        processSignal patternRef pDef pCont aConts valVar valRef necroVars state = do
+            p   <- pCont state
+            pat <- readIORef patternRef
+            case (p,pat) of
+                (Change True ,Nothing) -> runNecroState (runPDef pDef) necroVars >>= \(pat',_) -> writeIORef patternRef (Just pat')
+                (Change False,Just  _) -> runNecroState (pstop   pDef) necroVars >>               writeIORef patternRef Nothing
+                _                      -> return ()
+            readIORef patternRef >>= \pat' -> case pat' of
+                Nothing -> return ()
+                Just pat'' -> foldM (\i f -> updateArg i f pat'' necroVars state >> return (i+1)) 0 aConts >> return ()
+            prev <- readIORef valRef
+            val  <- atomically $ readTVar valVar `orElse` return prev
+            if val == prev
+                then return $ NoChange prev
+                else writeIORef valRef val >> return (Change val)
+
+        updateArg index aCont pattern necroVars state = aCont state >>= \a -> case a of
+            NoChange _ -> return ()
+            Change val -> runNecroState (setPDefArg pattern index $ PVal val) necroVars >> return ()
+
+tempo :: Signal Double -> Signal Double
+tempo tempoSignal = Signal $ \state -> do
+    tCont  <- unSignal tempoSignal state
+    tValue <- fmap unEvent $ tCont state
+    runNecroState (setTempo tValue) (necroVars state)
+    return $ processSignal tCont (necroVars state)
+    where
+        processSignal tCont necroVars state = tCont state >>= \t -> case t of
+            NoChange t' -> return $ NoChange t'
+            Change   t' -> runNecroState (setTempo t') necroVars >> return (Change t')
+
+
+{-
 instance Play UGen where
     type PlayRet UGen = Signal ()
     play playSig synth = playSynthN synth playSig []
@@ -2310,3 +2374,4 @@ instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> [UGen]) where
 instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> [UGen]) where
     type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> [UGen]) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
     play playSig synth x y z w p q = playSynthN synth playSig [x,y,z,w,p,q]
+-}
