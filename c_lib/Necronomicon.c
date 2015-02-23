@@ -69,7 +69,7 @@ double* _necronomicon_buses = NULL;
 unsigned int num_audio_buses = 256;
 unsigned int last_audio_bus_index = 255;
 unsigned int num_audio_buses_bytes;
-unsigned int num_synths = 0;
+int num_synths = 0;
 FILE* devurandom = NULL;
 
 // Time
@@ -533,8 +533,8 @@ void scheduled_list_sort()
 
 // List used by ugens to queue for removal during RT runtime
 
-const unsigned int MAX_REMOVAL_IDS = 256; // Max number of ids able to be scheduled for removal *per sample frame*
-const unsigned int REMOVAL_FIFO_SIZE_MASK = 255;
+const unsigned int MAX_REMOVAL_IDS = 512; // Max number of ids able to be scheduled for removal *per sample frame*
+const unsigned int REMOVAL_FIFO_SIZE_MASK = 511;
 
 typedef unsigned int* node_id_fifo;
 
@@ -764,7 +764,8 @@ void remove_synth_by_id(unsigned int id)
 // Iterate over the scheduled list and add synths if they are ready. Stop as soon as we find a synth that isn't ready.
 void add_scheduled_synths()
 {
-
+	scheduled_list_read_index = scheduled_list_read_index & FIFO_SIZE_MASK;
+	scheduled_list_write_index = scheduled_list_write_index & FIFO_SIZE_MASK;
 	while (scheduled_list_read_index != scheduled_list_write_index)
 	{
 		if (SCHEDULED_LIST_PEEK_TIME() <= current_cycle_usecs)
@@ -773,6 +774,8 @@ void add_scheduled_synths()
 			// Uncomment to print timing information for synths
 			// printf("add_synth -> time: %llu, current_cycle_usecs: %llu, current_cycle_usecs - time: %llu\n", node->time, current_cycle_usecs, current_cycle_usecs - node->time);
 			add_synth(node);
+			scheduled_list_read_index = scheduled_list_read_index & FIFO_SIZE_MASK;
+			scheduled_list_write_index = scheduled_list_write_index & FIFO_SIZE_MASK;
 		}
 
 		else
@@ -855,7 +858,7 @@ void handle_messages_in_rt_fifo()
 
 void handle_nrt_message(message msg)
 {
-	switch(msg.type)
+	switch (msg.type)
 	{
 	case FREE_SYNTH:
 		free_synth(msg.arg.node);
@@ -874,21 +877,33 @@ void handle_nrt_message(message msg)
 // Handle messages in the NRT fifo queue, including freeing memory and printing messages originating from the RT thread.
 void handle_messages_in_nrt_fifo()
 {
+	nrt_fifo_read_index = nrt_fifo_read_index & FIFO_SIZE_MASK;
+	nrt_fifo_write_index = nrt_fifo_write_index & FIFO_SIZE_MASK;
 	while (nrt_fifo_read_index != nrt_fifo_write_index)
 	{
 		message msg = NRT_FIFO_POP();
 		handle_nrt_message(msg);
+		nrt_fifo_read_index = nrt_fifo_read_index & FIFO_SIZE_MASK;
+		nrt_fifo_write_index = nrt_fifo_write_index & FIFO_SIZE_MASK;
 	}
 }
 
 void play_synth(synth_node* synth_definition, double* arguments, unsigned int num_arguments, unsigned int node_id, jack_time_t time)
 {
-	synth_node* synth = new_synth(synth_definition, arguments, num_arguments, node_id, time);
+	if (num_synths < MAX_SYNTHS)
+	{
+		synth_node* synth = new_synth(synth_definition, arguments, num_arguments, node_id, time);
 
-	message msg;
-	msg.arg.node = synth;
-	msg.type = START_SYNTH;
-	RT_FIFO_PUSH(msg);
+		message msg;
+		msg.arg.node = synth;
+		msg.type = START_SYNTH;
+		RT_FIFO_PUSH(msg);
+	}
+
+	else
+	{
+		printf("Unable to play synth because the maximum number of synths (%u) are already playing.", MAX_SYNTHS);
+	}
 }
 
 void stop_synth(unsigned int id)

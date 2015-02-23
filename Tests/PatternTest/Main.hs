@@ -44,7 +44,7 @@ patternTest = do
     -- let pBeatSynth = return (\synth t -> playSynthAtJackTime synth [] t >> return ())
 
     _ <- runPDef $ pstream "ArgsPattern2" pLineSynth (PVal (5, 1))
-    setTempo 100000
+    setTempo 500
 
     {-
     setTempo 150
