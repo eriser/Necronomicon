@@ -3,21 +3,8 @@ import Data.Fixed (mod')
 import Data.List (zip4)
 
 main :: IO ()
-main = runSignal <| synthDefs *> testGUI <|> (testScene <&> hyperTerrainSounds)
--- main = layoutPatternTest
+main = runSignal <| synthDefs *> testGUI <|> (sections <&> hyperTerrainSounds)
 
-{- TO DO: Remove this?
-layoutPatternTest :: IO ()
-layoutPatternTest = print $ plength pattern
-    where
-        pattern = [lich| [0 1] [4 3] [2 3] [2 3 4 5] |]
--}
-
-hyperTerrainSounds :: Signal ()
-hyperTerrainSounds = play             (toggle <| isDown keyW) "triOsc"    [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
-                 <&> play             (toggle <| isDown keyA) "triOsc32"  [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
-                 <&> playSynthPattern (toggle <| isDown keyD) "triOscEnv" [] (pmap (d2f bartok . (+12)) <| ploop [ [lich| [0 1] [4 3] [2 3] [2 3 4 5] |] ])
-                 <&> playBeatPattern  (toggle <| isDown keyE) [] (ploop [ [lich| b [p b] p [p p p] |] ])
 
 synthDefs :: Signal ()
 synthDefs = synthDef "triOsc"    triOsc
@@ -26,34 +13,39 @@ synthDefs = synthDef "triOsc"    triOsc
          *> synthDef "b"         bSynth
          *> synthDef "p"         pSynth
 
-testGUI :: Signal ()
-testGUI = gui [chatBox,netBox,nusers]
+hyperTerrainSounds :: Signal ()
+hyperTerrainSounds = play             (toggle <| isDown keyW) "triOsc"    [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
+                 <&> play             (toggle <| isDown keyA) "triOsc32"  [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
+                 <&> playSynthPattern (toggle <| isDown keyD) "triOscEnv" [] (pmap (d2f bartok . (+12)) <| ploop [ [lich| [0 1] [4 3] [2 3] [2 3 4 5] |] ])
+                 <&> playBeatPattern  (toggle <| isDown keyE) [] (ploop [ [lich| b [p b] p [p p p] |] ])
+
+section :: Signal Int
+section = netsignal <| switch 1 [pure False,combo [alt,isDown key1],combo [alt,isDown key2],combo [alt,isDown key3]]
+
+isSection :: Int -> Signal Bool
+isSection n = lift (== n) section
+
+sections :: Signal ()
+sections = keepWhen (isSection 1) section1 <|> keepWhen (isSection 2) section2 <|> keepWhen (isSection 3) section3
+
+section1 :: Signal ()
+section1 = scene [pure cam,oscSig]
     where
-        nusers  = userBox <| Vector2 0.0 0.945
-                          <| Size    0.0 0.055
-                          <| Font   "OCRA.ttf" 24
-                          <| vertexColored (RGBA 0 0 0 0.25)
+        oscSig         = oscillatorObject <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4
+        cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
 
-        netBox  = netStat <| Vector2 1.4 0.97
-                          <| Size    0.2 0.03
-                          <| Font   "OCRA.ttf" 24
-
-        chatBox = chat    <| Vector2 0.0 0.0
-                          <| Size    0.4 0.75
-                          <| Font   "OCRA.ttf" 24
-                          <| vertexColored (RGBA 1 1 1 0.1)
-
-testScene :: Signal ()
-testScene = scene [pure cam,sphereSig]
+section2 :: Signal ()
+section2 = scene [pure cam,terrainSig]
     where
-        _ {-oscSig-}     = oscillatorObject <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4
-        _ {-terrainSig-} = terrainObject    <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time
-        sphereSig        = sphereObject     <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time ~~ latitudes
-        latitudes        = playSignalPattern (toggle <| isDown keyS) 36.6 [] <| ploop [ [lich| [36 10] [24 12] [32 37] [30 33 34 35] |] ]
-        cam              = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
-        -- cam p          = perspCamera p identity 60 0.1 1000 black [glow]
-        -- camSig         = cam <~ (lagSig 4 <| foldn (+) (Vector3 0 0 10) (lift3 move arrows (fps 4) 3))
-        -- move (x,y) z a = Vector3 (x*z*a) (y*z*a) 0
+        terrainSig     = terrainObject <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time
+        cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
+
+section3 :: Signal ()
+section3 = scene [pure cam,sphereSig]
+    where
+        sphereSig      = sphereObject <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time ~~ latitudes
+        latitudes      = playSignalPattern (toggle <| isDown keyS) 36.6 [] <| ploop [ [lich| [36 10] [24 12] [32 37] [30 33 34 35] |] ]
+        cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
 
 terrainObject :: [Double] -> [Double] -> [Double] -> Double -> SceneObject
 terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 8 (-4)) (fromEuler' (-24) 0 0) (Vector3 0.5 1 0.5) (Model mesh <| vertexColored (RGBA 1 1 1 0.35)) []
@@ -169,6 +161,23 @@ bSynth = sin 55 |> gain (line 0.1) >>> gain 0.4 >>> out 0
 
 pSynth :: UGen
 pSynth = sin 1110 |> gain (line 0.1) >>> gain 0.2 >>> out 1
+
+testGUI :: Signal ()
+testGUI = gui [chatBox,netBox,ubox]
+    where
+        ubox    = userBox <| Vector2 0.0 0.945
+                          <| Size    0.0 0.055
+                          <| Font   "OCRA.ttf" 24
+                          <| vertexColored (RGBA 0 0 0 0.25)
+
+        netBox  = netStat <| Vector2 1.4 0.97
+                          <| Size    0.2 0.03
+                          <| Font   "OCRA.ttf" 24
+
+        chatBox = chat    <| Vector2 0.0 0.0
+                          <| Size    0.4 0.75
+                          <| Font   "OCRA.ttf" 24
+                          <| vertexColored (RGBA 1 1 1 0.1)
 
 {-
 testSound :: Signal ()
