@@ -5,6 +5,12 @@ import Data.List (zip4)
 
 main :: IO ()
 main = runSignal <| synthDefs *> testGUI <|> (testScene <&> hyperTerrainSounds)
+-- main = layoutPatternTest
+
+layoutPatternTest :: IO ()
+layoutPatternTest = print $ plength pattern
+    where
+        pattern = [lich| [0 1] [4 3] [2 3] [2 3 4 5] |]
 
 hyperTerrainSounds :: Signal ()
 hyperTerrainSounds = play             (toggle <| isDown keyW) "triOsc"    [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]

@@ -249,13 +249,14 @@ parseRawFunction = between (char '(' *> spaces) (spaces *> char ')') (try leftSe
 layoutToPattern :: ParsecPattern a -> NP.Pattern (NP.Pattern a,Double)
 layoutToPattern (ParsecValue a) = NP.PVal (NP.PVal a,1)
 layoutToPattern  ParsecRest     = NP.PVal (NP.PNothing,1)
-layoutToPattern (ParsecList as) = NP.PSeq (NP.PGen $ pvector withTimes) $ floor timeLength
+layoutToPattern (ParsecList as) = NP.PSeq (NP.PGen $ pvector withTimes) $ floor (timeLength + finalDur)
     where
-        (_,_,timeLength)        = withTimes V.! (V.length withTimes - 1)
+        (_,finalDur,timeLength) = withTimes V.! (V.length withTimes - 1)
         withTimes               = V.fromList . reverse $ foldl countTime [] withoutTimes
-        withoutTimes            = foldr (go 1) [] as
         countTime [] (v,d)      = (v,d,0) : []
         countTime ((v1,d1,t1) : vs) (v2,d2) = (v2,d2,d1+t1) : (v1,d1,t1) : vs
+
+        withoutTimes            = foldr (go 1) [] as
         go d (ParsecValue a) vs = (NP.PVal a,d)   : vs
         go d  ParsecRest     vs = (NP.PNothing,d) : vs
         go d (ParsecList as) vs = foldr (go (d / (fromIntegral $ length as))) vs as
