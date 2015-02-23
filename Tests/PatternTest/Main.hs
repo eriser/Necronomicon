@@ -41,9 +41,13 @@ patternTest = do
     compileSynthDef "three" three
     compileSynthDef "four" four
     let pLineSynth = return (\degree t -> playSynthAtJackTime "FreqSynth" [degree * 110] t >> return ())
-    let pBeatSynth = return (\synth t -> playSynthAtJackTime synth [] t >> return ())
-    setTempo 150
+    -- let pBeatSynth = return (\synth t -> playSynthAtJackTime synth [] t >> return ())
 
+    _ <- runPDef $ pstream "ArgsPattern2" pLineSynth (PVal (5, 1))
+    setTempo 100000
+
+    {-
+    setTempo 150
     argsPattern <- runPDef $ pstreamWithArgs "ArgsPattern" pLineSynth ((\x -> pstutter x $ pseq 10 [
                                                                              [lich| 5 [5 5] 5 |],
                                                                              [lich| 7 [7 7] 7 |],
@@ -151,6 +155,8 @@ patternTest = do
     setTempo 222
     nSleep 3
     setTempo 150
+
+    -}
 
     -- runPDef melo
     -- runPDef melo2
