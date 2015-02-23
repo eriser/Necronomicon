@@ -4,18 +4,16 @@ import Prelude
 import Network.Socket hiding (send,recv,recvFrom,sendTo)
 import Network.Socket.ByteString.Lazy
 import Sound.OSC.Core
-import Data.Binary (Binary,encode,decode,get,put,getWord8,Get)
+import Data.Binary (Binary,encode,decode,get,put,Get)
 import Data.Int    (Int32,Int64)
 import Control.Monad (when)
 import Data.Word (Word8,Word16)
-import Data.Bits ((.|.),(.&.),shift)
 import Control.Exception
 import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString.Lazy  as B
 import Necronomicon.Linear.Vector (Vector2(..),Vector3(..),Vector4(..))
 -- import Necronomicon.FRP.Event
 import Data.Dynamic
-import Data.Typeable
 import qualified Data.IntMap as IntMap
 
 toOSCString :: String -> Datum
@@ -35,30 +33,8 @@ decodeTransLength bs = if B.length bs == lengthOfMessageLength || B.length bs ==
     then Just $ fromIntegral (decode bs :: Word16)
     else Nothing
 
-encodeWord16 :: Word16 -> B.ByteString
-encodeWord16 word
-    | word < 0x7f  = B.cons 0 $ B.cons (fromIntegral word) B.empty
-    | word < 0x7ff = B.cons 0 $ B.cons (0xc0 .|. (fromIntegral $ shift word  (-6) .&. 0x1f)) $ B.cons (fromIntegral $ 0x80 .|. (word .&. 0x3f)) B.empty
-    | otherwise    = B.cons 0
-                   $ B.cons (0xe0 .|. (fromIntegral $ shift word (-12) .&. 0x0f))
-                   $ B.cons (0x80 .|. (fromIntegral $ shift word  (-6) .&. 0x3f))
-                   $ B.cons (0x80 .|. (fromIntegral $       word       .&. 0x3f)) B.empty
-
-decodeWord16 :: B.ByteString -> Word16
-decodeWord16 word
-    | B.length word < 1   = fromIntegral 0
-    | w0 .&. 0x80 == 0    = fromIntegral w0
-    | B.length word < 2   = fromIntegral 0
-    | w0 .&. 0xE0 == 0xC0 = fromIntegral $ shift (w0 .&. 0x1F) 6  .|.       (w1 .&. 0x3F)
-    | B.length word < 3   = fromIntegral 0
-    | w0 .&. 0xF0 == 0xE0 = fromIntegral $ shift (w0 .&. 0x0F) 12 .|. shift (w1 .&. 0x3F) 6 .|. (w2 .&. 0x3F)
-    where
-        w0 = B.head $ B.tail word
-        w1 = B.head $ B.tail $ B.tail word
-        w2 = B.head $ B.tail $ B.tail $ B.tail word
-
 sendWithLength :: Socket -> B.ByteString -> IO()
-sendWithLength socket msg = Control.Exception.catch trySend onFailure
+sendWithLength nsocket msg = Control.Exception.catch trySend onFailure
     where
         messageLength  = fromIntegral $ B.length msg :: Word16
         trySend = do
@@ -75,8 +51,8 @@ sendWithLength socket msg = Control.Exception.catch trySend onFailure
             -- putStrLn $ "Decoded==Length: " ++ show (decoded == messageLength)
 
             -- sendAll socket $ encodeWord16 messageLength
-            sendAll socket $ encode messageLength
-            bytes <- send socket msg
+            sendAll nsocket $ encode messageLength
+            bytes <- send nsocket msg
             when (fromIntegral bytes /= messageLength) $ putStrLn "SEND ERROR: Disagreement in bytes sent"
         onFailure e = print (e :: IOException)
 
@@ -86,29 +62,17 @@ data Receive = Receive B.ByteString
              | Exception IOException
 
 receiveWithLength :: Socket -> IO Receive
-receiveWithLength socket = Control.Exception.catch trySend onFailure
+receiveWithLength nsocket = Control.Exception.catch trySend onFailure
     where
-        trySend = isConnected socket >>= \connected -> if not connected then return ShutdownMessage else recv socket lengthOfMessageLength >>= \len -> case decodeTransLength len of
+        trySend = isConnected nsocket >>= \connected -> if not connected then return ShutdownMessage else recv nsocket lengthOfMessageLength >>= \len -> case decodeTransLength len of
             Nothing -> return IncorrectLength
             Just len' -> if len' == 0
                 then return ShutdownMessage
-                else recv socket len' >>= return . Receive
+                else recv nsocket len' >>= return . Receive
         onFailure e = return $ Exception e
 -------------------------------------------------------------------
 -- Networking 3.0
 -------------------------------------------------------------------
-
-instance Binary Vector2 where
-    put (Vector2 x y)     = put (realToFrac x::Float) >> put (realToFrac y::Float)
-    get = (get ::Get Float) >>= \x -> (get ::Get Float) >>= \y -> return (Vector2 (realToFrac x) (realToFrac y))
-
-instance Binary Vector3 where
-    put (Vector3 x y z)   = put (realToFrac x ::Float) >> put (realToFrac y ::Float) >> put (realToFrac z::Float)
-    get =(get ::Get Float) >>= \x -> (get ::Get Float) >>= \y -> (get ::Get Float) >>= \z -> return (Vector3 (realToFrac x) (realToFrac y) (realToFrac z))
-
-instance Binary Vector4 where
-    put (Vector4 x y z w) = put (realToFrac x ::Float) >> put (realToFrac y ::Float) >> put (realToFrac z::Float) >> put (realToFrac w::Float)
-    get =(get ::Get Float) >>= \x -> (get ::Get Float) >>= \y -> (get ::Get Float) >>= \z -> (get ::Get Float) >>= \w -> return (Vector4 (realToFrac x) (realToFrac y) (realToFrac z) (realToFrac w))
 
 data NetValue = NetInt         Int
               | NetDouble      Double
@@ -129,6 +93,7 @@ data NetValue = NetInt         Int
               | NetVec2List   [Vector2]
               | NetVec3List   [Vector3]
               | NetVec4List   [Vector4]
+              | NetNothing
               deriving (Show,Eq)
 
 data NetMessage = Chat            C.ByteString C.ByteString
@@ -161,6 +126,7 @@ instance Binary NetValue where
     put (NetVec2List   v) = put (14 ::Word8) >> put v
     put (NetVec3List   v) = put (15 ::Word8) >> put v
     put (NetVec4List   v) = put (16 ::Word8) >> put v
+    put NetNothing        = return ()
 
     get = (get :: Get Word8) >>= \t -> case t of
         0  -> (get ::Get Int32)          >>= return . NetInt        . fromIntegral
@@ -180,6 +146,7 @@ instance Binary NetValue where
         14 -> (get ::Get [Vector2])      >>= return . NetVec2List
         15 -> (get ::Get [Vector3])      >>= return . NetVec3List
         16 -> (get ::Get [Vector4])      >>= return . NetVec4List
+        _  -> return NetNothing
 
 instance Binary NetMessage where
     put (Chat            n m) = put (0 ::Word8) >> put n >> put m
@@ -191,9 +158,10 @@ instance Binary NetMessage where
     put (Login             n) = put (6 ::Word8) >> put n
     put (Logout            n) = put (7 ::Word8) >> put n
     put (SyncNetSignals   ss) = put (8 ::Word8) >> put ss
+    put (EmptyMessage)        = return ()
 
     get = (get ::Get Word8) >>= \ t -> case t of
-        0 ->  get >>= \name -> get >>= \message -> return (Chat name message)
+        0 ->  get >>= \name -> get >>= \nmessage -> return (Chat name nmessage)
         1 -> (get ::Get Int32) >>= \uid -> get >>= \s -> return (AddNetSignal (fromIntegral uid) s)
         2 -> (get ::Get Int32) >>= return . RemoveNetSignal . fromIntegral
         3 -> (get ::Get Int32) >>= \uid -> get >>= \s -> return (SetNetSignal (fromIntegral uid) s)
@@ -222,6 +190,7 @@ netValToDyn (NetStringList v) = toDyn v
 netValToDyn (NetVec2List   v) = toDyn v
 netValToDyn (NetVec3List   v) = toDyn v
 netValToDyn (NetVec4List   v) = toDyn v
+netValToDyn NetNothing        = toDyn ()
 
 class (Eq a) => Networkable a where
     toNetVal   :: a -> NetValue
@@ -233,81 +202,81 @@ instance Networkable Int where
     fromNetVal _          = Nothing
 
 instance Networkable Double where
-    toNetVal                   = NetDouble
+    toNetVal                 = NetDouble
     fromNetVal (NetDouble n) = Just n
     fromNetVal _             = Nothing
 
 instance Networkable Bool where
-    toNetVal                 = NetBool
+    toNetVal               = NetBool
     fromNetVal (NetBool n) = Just n
     fromNetVal _           = Nothing
 
 instance Networkable C.ByteString where
-    toNetVal                   = NetString
+    toNetVal                 = NetString
     fromNetVal (NetString n) = Just n
     fromNetVal _             = Nothing
 
 instance Networkable Vector2 where
-    toNetVal                 = NetVec2
+    toNetVal               = NetVec2
     fromNetVal (NetVec2 n) = Just n
     fromNetVal _           = Nothing
 
 instance Networkable Vector3 where
-    toNetVal                 = NetVec3
+    toNetVal               = NetVec3
     fromNetVal (NetVec3 n) = Just n
     fromNetVal _           = Nothing
 
 instance Networkable Vector4 where
-    toNetVal                 = NetVec4
+    toNetVal               = NetVec4
     fromNetVal (NetVec4 n) = Just n
     fromNetVal _           = Nothing
 
 instance Networkable (Int,Int) where
-    toNetVal                   = NetTupInt
+    toNetVal                 = NetTupInt
     fromNetVal (NetTupInt n) = Just n
     fromNetVal _             = Nothing
 
 instance Networkable (Double,Double) where
-    toNetVal                      = NetTupDouble
+    toNetVal                    = NetTupDouble
     fromNetVal (NetTupDouble n) = Just n
     fromNetVal _                = Nothing
 
 instance Networkable (Bool,Bool) where
-    toNetVal                    = NetTupBool
+    toNetVal                  = NetTupBool
     fromNetVal (NetTupBool n) = Just n
     fromNetVal _              = Nothing
 
 instance Networkable [Int] where
-    toNetVal                    = NetIntList
+    toNetVal                  = NetIntList
     fromNetVal (NetIntList n) = Just n
     fromNetVal _              = Nothing
 
 instance Networkable [Double] where
-    toNetVal                       = NetDoubleList
+    toNetVal                     = NetDoubleList
     fromNetVal (NetDoubleList n) = Just n
     fromNetVal _                 = Nothing
 
 instance Networkable [Bool] where
-    toNetVal                     = NetBoolList
+    toNetVal                   = NetBoolList
     fromNetVal (NetBoolList n) = Just n
     fromNetVal _               = Nothing
 
 instance Networkable [C.ByteString] where
-    toNetVal                       = NetStringList
+    toNetVal                     = NetStringList
     fromNetVal (NetStringList n) = Just n
     fromNetVal _                 = Nothing
 
 instance Networkable [Vector2] where
-    toNetVal                     = NetVec2List
+    toNetVal                   = NetVec2List
     fromNetVal (NetVec2List n) = Just n
     fromNetVal _               = Nothing
 
 instance Networkable [Vector3] where
-    toNetVal                     = NetVec3List
+    toNetVal                   = NetVec3List
     fromNetVal (NetVec3List n) = Just n
     fromNetVal _               = Nothing
 
 instance Networkable [Vector4] where
-    toNetVal                     = NetVec4List
+    toNetVal                   = NetVec4List
     fromNetVal (NetVec4List n) = Just n
     fromNetVal _               = Nothing

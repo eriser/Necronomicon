@@ -11,16 +11,10 @@ module Necronomicon.FRP.GUI (Gui(..),
                              netStat,
                              userBox)where
 
-import           Debug.Trace
-import           Data.Dynamic
-import qualified Data.IntSet             as IntSet
 import           Data.IORef
 import           Necronomicon.FRP.Signal
 import           Necronomicon.Graphics
 import           Necronomicon.Linear
-import           Necronomicon.Util       (loadTextureFromTGA)
-import           Necronomicon.Utility    (linlin)
-import           Prelude
 import           Necronomicon.Networking (sendChatMessage)
 
 data Gui a = Gui a SceneObject
@@ -35,16 +29,18 @@ element = lift $ \(Gui _ s) -> s
 gui :: [Signal SceneObject] -> Signal ()
 gui gs = renderGUI $ root <~ combine gs
 
+{- TO DO: Remove this?
 guiEvent :: (Typeable a) => IORef (Gui b) -> Dynamic -> (a -> IO (EventValue (Gui b))) -> IO (EventValue (Gui b))
 guiEvent ref v f = case fromDynamic v of
     Nothing -> print "button Type error" >> readIORef ref >>= return . NoChange
     Just v' -> f v'
+-}
 
 label :: Vector2 -> Font -> Color -> String -> SceneObject
-label (Vector2 x y) font color text = SceneObject (Vector3 x y 0) identity 1 (drawText text font ambient) []
+label (Vector2 x y) font _ text = SceneObject (Vector3 x y 0) identity 1 (drawText text font ambient) []
 
 userBox :: Vector2 -> Size -> Font -> Material -> Signal SceneObject
-userBox (Vector2 x y) (Size w h) font material = textBox <~ users
+userBox (Vector2 x y) _ font _ = textBox <~ users
     where
         textBox    us = SceneObject (Vector3  x y 0)  identity 1 (drawText (userString us) font ambient) []
         userString us = "[ " ++ foldr (\u us'-> u ++ " " ++ us') [] us ++ "]"
@@ -55,7 +51,7 @@ netStat (Vector2 x y) (Size w h) font = indicator <~ networkRunStatus
     where
         indicator Running      = emptyObject
         indicator Disconnected = background (RGBA 1 0.00 0 0.5) "Disconnected"
-        indicator status       = background (RGBA 0.75 0.5 0 0.5) $ show status
+        indicator nstatus      = background (RGBA 0.75 0.5 0 0.5) $ show nstatus
         background         c t = SceneObject (Vector3  x y 0) identity 1 (Model (rect w h) (vertexColored c)) [textObject t]
         textObject           t = SceneObject (Vector3  0 0 1) identity 1 (drawText t font ambient) []
 
@@ -68,7 +64,7 @@ chat (Vector2 x y) (Size w h) font material = addChild <~ textEditSignal textInp
             textRef    <- newIORef ""
             activeRef  <- newIORef False
             metrics    <- charMetrics font
-            return $ processSignal textRef activeRef inputCont toggleCont metrics (client state)
+            return $ processSignal textRef activeRef inputCont toggleCont metrics (necroNetClient state)
 
         processSignal textRef activeRef inputCont toggleCont metrics client state = toggleCont state >>= go
             where go (Change   isActive) = writeIORef activeRef isActive >> if isActive then readIORef textRef >>= return . Change . background else return $ Change emptyObject
@@ -88,7 +84,7 @@ chat (Vector2 x y) (Size w h) font material = addChild <~ textEditSignal textInp
         textObject         t = SceneObject (Vector3  0 0 1) identity 1 (drawText t font ambient) []
 
 chatDisplay :: Vector2 -> Size -> Font -> Material -> Signal SceneObject
-chatDisplay (Vector2 x y) (Size w h) font material = Signal $ \state -> do
+chatDisplay (Vector2 x y) (Size w h) font _ = Signal $ \state -> do
     chatCont <- unSignal receiveChatMessage state
     metrics  <- charMetrics font
     ref      <- newIORef ""

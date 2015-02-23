@@ -1,8 +1,6 @@
 module Main where
 
-import Prelude
 import Test.QuickCheck
-import Necronomicon hiding (choose)
 import qualified Necronomicon.Util.PriorityQueue as PQ
 
 emptyIsEmpty :: Bool

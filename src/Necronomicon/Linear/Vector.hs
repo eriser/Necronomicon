@@ -5,6 +5,7 @@ import Necronomicon.Linear.Math
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.Rendering.OpenGL.GL.Tensor as GLT
 import Data.Typeable
+import qualified Data.Binary as B
 
 data Vector2 = Vector2 Double Double                     deriving (Show,Eq,Ord,Typeable)
 data Vector3 = Vector3 Double Double Double              deriving (Show,Eq,Ord,Typeable)
@@ -401,3 +402,14 @@ toGLVertex3 (Vector3 x y z) = GL.Vertex3 (realToFrac x) (realToFrac y) (realToFr
 toGLVertex4 :: Vector4 -> GLT.Vertex4 GL.GLfloat
 toGLVertex4 (Vector4 x y z w) = GLT.Vertex4 (realToFrac x) (realToFrac y) (realToFrac z) (realToFrac w) ::GLT.Vertex4 GL.GLfloat
 
+instance B.Binary Vector2 where
+    put (Vector2 x y) = B.put (realToFrac x :: Float) >> B.put (realToFrac y :: Float)
+    get = (B.get :: B.Get Float) >>= \x -> (B.get :: B.Get Float) >>= \y -> return (Vector2 (realToFrac x) (realToFrac y))
+
+instance B.Binary Vector3 where
+    put (Vector3 x y z) = B.put (realToFrac x :: Float) >> B.put (realToFrac y :: Float) >> B.put (realToFrac z :: Float)
+    get = (B.get :: B.Get Float) >>= \x -> (B.get :: B.Get Float) >>= \y -> (B.get :: B.Get Float) >>= \z -> return (Vector3 (realToFrac x) (realToFrac y) (realToFrac z))
+
+instance B.Binary Vector4 where
+    put (Vector4 x y z w) = B.put (realToFrac x :: Float) >> B.put (realToFrac y :: Float) >> B.put (realToFrac z :: Float) >> B.put (realToFrac w :: Float)
+    get = (B.get :: B.Get Float) >>= \x -> (B.get :: B.Get Float) >>= \y -> (B.get :: B.Get Float) >>= \z -> (B.get :: B.Get Float) >>= \w -> return (Vector4 (realToFrac x) (realToFrac y) (realToFrac z) (realToFrac w))

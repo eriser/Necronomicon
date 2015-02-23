@@ -96,7 +96,6 @@ module Necronomicon.FRP.Signal (
     glfwKeyToEventKey,
     eventKeyToChar,
     textInput,
-    unSignal,
     toggle,
     till,
     receiveChatMessage,
@@ -104,7 +103,6 @@ module Necronomicon.FRP.Signal (
     RunStatus(..),
     users,
     testSignals,
-    writeToSignal,
     lagSig,
     module Control.Applicative
     ) where
@@ -116,25 +114,13 @@ import           Control.Concurrent
 import           Control.Concurrent.STM
 import           Control.Monad
 import           Control.Monad.Trans               (liftIO)
-import           Data.Dynamic
-import           Data.Either
-import qualified Data.Fixed                        as F
 import qualified Data.IntMap                       as IntMap
-import qualified Data.IntSet                       as IntSet
 import           Data.IORef
-import           Data.List                         (unzip3)
-import           Data.Monoid
-import qualified Data.Sequence                     as Seq
-import           Debug.Trace
-import qualified Graphics.Rendering.OpenGL         as GL
 import qualified Graphics.UI.GLFW                  as GLFW
 import           Necronomicon.Graphics.Camera      (renderGraphics)
-import           Necronomicon.Graphics.Color       (Color)
-import           Necronomicon.Graphics.BufferObject (genDynMeshBuffers)
-import           Necronomicon.Graphics.Model       (Resources, newResources,Mesh(..))
-import           Necronomicon.Graphics.SceneObject (SceneObject, root,emptyObject)
-import           Necronomicon.Linear.Vector        (Vector2 (Vector2),
-                                                    Vector3 (Vector3))
+import           Necronomicon.Graphics.Model       ( newResources)
+import           Necronomicon.Graphics.SceneObject (SceneObject, root)
+import           Necronomicon.Linear.Vector        (Vector2 (Vector2))
 import           Necronomicon.Patterns             (Pattern (..))
 import           Necronomicon.Runtime
 import           Necronomicon.UGen
@@ -142,7 +128,6 @@ import           Necronomicon.Networking
 import           System.Random
 import           Foreign hiding (shift)
 import           Foreign.C
-import           Foreign.Marshal
 
 ------------------------------------------------------
 
@@ -1073,57 +1058,61 @@ unEvent :: EventValue a -> a
 unEvent (Change   a) = a
 unEvent (NoChange a) = a
 
+{- TO DO: Remove this?
 execIfChanged :: EventValue a -> (a -> IO b) -> IO ()
-execIfChanged (Change a) f = f a >> return ()
-execIfChanged _          f = return ()
+execIfChanged (Change a) _ = f a >> return ()
+execIfChanged _          _ = return ()
+-}
+
+newtype Signal a = Signal { unSignal :: SignalState -> IO (SignalState -> IO (EventValue a)) }
 
 mkSignalState :: IO SignalState
 mkSignalState = do
-    inputCounter      <- newIORef 1000
-    sceneVar          <- atomically $ newTVar $ (NoChange $ root [])
-    guiVar            <- atomically $ newTVar $ (NoChange $ root [])
-    necroVars         <- mkNecroVars
-    name              <- getCommandArgName
-    client            <- newClient name
-    mouseSignal       <- atomically $ newTVar (NoChange (0,0))
-    dimensionsSignal  <- atomically $ newTVar (NoChange $ Vector2 1920 1080)
+    stateInputCounter      <- newIORef 1000
+    stateSceneVar          <- atomically $ newTVar $ (NoChange $ root [])
+    stateGuiVar            <- atomically $ newTVar $ (NoChange $ root [])
+    stateNecroVars         <- mkNecroVars
+    name                   <- getCommandArgName
+    stateClient            <- newClient name
+    stateMouseSignal       <- atomically $ newTVar (NoChange (0,0))
+    stateDimensionsSignal  <- atomically $ newTVar (NoChange $ Vector2 1920 1080)
 
-    mouseButtonSignal <- atomically $ newTVar (NoChange False)
-    keySignal         <- atomically $ newTVar $ IntMap.fromList $ map (\i -> (i,NoChange False)) [100..154]
-    keysPressed       <- atomically $ newTVar (NoChange 0)
-    chatMessageSignal <- atomically $ newTVar (NoChange "")
-    netStatusSignal   <- atomically $ newTVar (NoChange Connecting)
-    userListSignal    <- atomically $ newTVar (NoChange [])
+    stateMouseButtonSignal <- atomically $ newTVar (NoChange False)
+    stateKeySignal         <- atomically $ newTVar $ IntMap.fromList $ map (\i -> (i,NoChange False)) [100..154]
+    stateKeysPressed       <- atomically $ newTVar (NoChange 0)
+    stateChatMessageSignal <- atomically $ newTVar (NoChange "")
+    stateNetStatusSignal   <- atomically $ newTVar (NoChange Connecting)
+    stateUserListSignal    <- atomically $ newTVar (NoChange [])
 
-    mouseButtonBuffer <- atomically $ newTChan
-    keySignalBuffer   <- atomically $ newTChan
-    keysPressedBuffer <- atomically $ newTChan
-    chatMessageBuffer <- atomically $ newTChan
-    netStatusBuffer   <- atomically $ newTChan
-    userListBuffer    <- atomically $ newTChan
-    netSignalsBuffer  <- atomically $ newTVar []
+    stateMouseButtonBuffer <- atomically $ newTChan
+    stateKeySignalBuffer   <- atomically $ newTChan
+    stateKeysPressedBuffer <- atomically $ newTChan
+    stateChatMessageBuffer <- atomically $ newTChan
+    stateNetStatusBuffer   <- atomically $ newTChan
+    stateUserListBuffer    <- atomically $ newTChan
+    stateNetSignalsBuffer  <- atomically $ newTVar []
 
     return $ SignalState
-        inputCounter
-        sceneVar
-        guiVar
-        necroVars
-        client
-        mouseSignal
-        dimensionsSignal
-        mouseButtonSignal
-        keySignal
-        keysPressed
-        chatMessageSignal
-        netStatusSignal
-        userListSignal
-        mouseButtonBuffer
-        keySignalBuffer
-        keysPressedBuffer
-        chatMessageBuffer
-        netStatusBuffer
-        userListBuffer
-        netSignalsBuffer
+        stateInputCounter
+        stateSceneVar
+        stateGuiVar
+        stateNecroVars
+        stateClient
+        stateMouseSignal
+        stateDimensionsSignal
+        stateMouseButtonSignal
+        stateKeySignal
+        stateKeysPressed
+        stateChatMessageSignal
+        stateNetStatusSignal
+        stateUserListSignal
+        stateMouseButtonBuffer
+        stateKeySignalBuffer
+        stateKeysPressedBuffer
+        stateChatMessageBuffer
+        stateNetStatusBuffer
+        stateUserListBuffer
+        stateNetSignalsBuffer
         0
         0
 
@@ -1162,9 +1151,9 @@ resetKnownInputs state = do
             writeTVar (keySignal state) $ IntMap.insert k (Change b) $ IntMap.map noChange signal
         updateNetSignalsFromBackBuffer = do
             updates <- readTVar $ netSignalsBuffer state
-            signal  <- readTVar $ netSignals $ client state
+            signal  <- readTVar $ clientNetSignals $ necroNetClient state
             let signal' = foldr (\(k,ns) -> IntMap.insert k (Change ns)) (IntMap.map noChange signal) updates
-            writeTVar (netSignals $ client state) signal'
+            writeTVar (clientNetSignals $ necroNetClient state) signal'
             writeTVar (netSignalsBuffer state) []
 
 scene :: [Signal SceneObject] -> Signal ()
@@ -1189,7 +1178,7 @@ runSignal s = initWindow >>= \mw -> case mw of
 
         signalState <- mkSignalState
         args        <- getArgs
-        startNetworking signalState args (client signalState)
+        startNetworking signalState args (necroNetClient signalState)
         threadDelay $ 16667
         signalLoop  <- unSignal s signalState
 
@@ -1198,13 +1187,13 @@ runSignal s = initWindow >>= \mw -> case mw of
         GLFW.setKeyCallback         w $ Just $ keyPressEvent   signalState
         GLFW.setWindowSizeCallback  w $ Just $ dimensionsEvent signalState
 
-        runNecroState startNecronomicon $ necroVars signalState
-        runNecroState (setTempo 150) (necroVars signalState)
+        _ <- runNecroState startNecronomicon $ necroVars signalState
+        _ <- runNecroState (setTempo 150) (necroVars signalState)
 
         threadDelay $ 16667
 
         resources <- newResources
-        render False w signalLoop signalState resources
+        renderNecronomicon False w signalLoop signalState resources
     where
         --event callbacks
         mousePressEvent state _ _ GLFW.MouseButtonState'Released _ = atomically $ writeTChan (mouseButtonBuffer state) $ False
@@ -1214,15 +1203,15 @@ runSignal s = initWindow >>= \mw -> case mw of
             atomically $ writeTChan (keySignalBuffer state)   (glfwKeyToEventKey k,True)
             atomically $ writeTChan (keysPressedBuffer state) (glfwKeyToEventKey k)
         keyPressEvent   state _ k _ GLFW.KeyState'Released _       = atomically $ writeTChan (keySignalBuffer state) (glfwKeyToEventKey k,False)
-        keyPressEvent   state _ k _ _ _                            = return ()
+        keyPressEvent   _ _ _ _ _ _                            = return ()
 
         mousePosEvent state w x y = do
             (wx,wy) <- GLFW.getWindowSize w
             let pos = (x / fromIntegral wx,y / fromIntegral wy)
             writeToSignal (mouseSignal state) pos
 
-        render quit window signalLoop signalState resources
-            | quit      = quitClient (client signalState) >> runNecroState shutdownNecronomicon (necroVars signalState) >> print "Qutting" >> return ()
+        renderNecronomicon quit window signalLoop signalState resources
+            | quit      = quitClient (necroNetClient signalState) >> runNecroState shutdownNecronomicon (necroVars signalState) >> print "Qutting" >> return ()
             | otherwise = do
 
                 resetKnownInputs signalState
@@ -1233,20 +1222,20 @@ runSignal s = initWindow >>= \mw -> case mw of
                 let delta        = currentTime - runTime signalState
                     signalState' = signalState{runTime = currentTime,updateDelta = delta}
 
-                result <- signalLoop signalState'
+                _ <- signalLoop signalState'
 
-                scene  <- atomically $ readTVar $ sceneVar signalState
+                nscene <- atomically $ readTVar $ sceneVar signalState
                 gui    <- atomically $ readTVar $ guiVar   signalState
-                case (scene,gui) of
-                    (Change   s,Change   g) -> renderGraphics window resources s g
-                    (NoChange s,Change   g) -> renderGraphics window resources s g
-                    (Change   s,NoChange g) -> renderGraphics window resources s g
+                case (nscene,gui) of
+                    (Change   ns,Change   g) -> renderGraphics window resources ns g
+                    (NoChange ns,Change   g) -> renderGraphics window resources ns g
+                    (Change   ns,NoChange g) -> renderGraphics window resources ns g
                     _                       -> return ()
 
                 -- execIfChanged result print
 
                 threadDelay $ 16667
-                render q window signalLoop signalState' resources
+                renderNecronomicon q window signalLoop signalState' resources
 
 getCurrentTime :: IO Double
 getCurrentTime = GLFW.getTime >>= \currentTime -> case currentTime of
@@ -1265,7 +1254,7 @@ instance Functor Signal where
         where
             processState xCont ref state = xCont state >>= \ex -> case ex of
                 NoChange _ -> readIORef ref >>= return . NoChange
-                Change   x -> let newValue = f x in writeIORef ref newValue >> return (Change newValue)
+                Change   x' -> let newValue = f x' in writeIORef ref newValue >> return (Change newValue)
 
 instance Applicative Signal where
     pure  a = Signal $ \_ -> return $ \_ -> return $ NoChange a
@@ -1278,9 +1267,9 @@ instance Applicative Signal where
         return $ processState fCont gCont ref
         where
             processState fCont gCont ref state = fCont state >>= \fe -> gCont state >>= \ge -> case (fe,ge) of
-                (Change   f,Change   g) -> let newValue = f g in writeIORef ref newValue >> return (Change newValue)
-                (Change   f,NoChange g) -> let newValue = f g in writeIORef ref newValue >> return (Change newValue)
-                (NoChange f,Change   g) -> let newValue = f g in writeIORef ref newValue >> return (Change newValue)
+                (Change   f',Change   g') -> let newValue = f' g' in writeIORef ref newValue >> return (Change newValue)
+                (Change   f',NoChange g') -> let newValue = f' g' in writeIORef ref newValue >> return (Change newValue)
+                (NoChange f',Change   g') -> let newValue = f' g' in writeIORef ref newValue >> return (Change newValue)
                 _                       -> readIORef ref >>= return . NoChange
     x *> y = Signal $ \state -> do
         xCont    <- unSignal x state
@@ -1299,14 +1288,14 @@ instance Alternative Signal where
         aCont    <- unSignal a state
         bCont    <- unSignal b state
         defaultA <- aCont state >>= return . unEvent
-        defaultB <- bCont state >>= return . unEvent
+        _        <- bCont state >>= return . unEvent
         ref      <- newIORef defaultA
         return $ processState aCont bCont ref
         where
             processState aCont bCont ref state = aCont state >>= \aValue -> case aValue of
-                Change   a -> writeIORef ref a >> return (Change a)
+                Change a' -> writeIORef ref a' >> return (Change a')
                 NoChange _ -> bCont state >>= \bValue -> case bValue of
-                    Change   b -> writeIORef ref b >>  return  (Change b)
+                    Change b' -> writeIORef ref b' >>  return  (Change b')
                     NoChange _ -> readIORef  ref   >>= return . NoChange
 
 instance Num a => Num (Signal a) where
@@ -1354,8 +1343,8 @@ instance Floating a => Floating (Signal a) where
 instance (Enum a) => Enum (Signal a) where
     succ     = lift succ
     pred     = lift pred
-    -- toEnum   = lift toEnum
-    -- fromEnum = pure
+    toEnum   = pure . toEnum
+    fromEnum _ = 0
 
 instance Show (Signal a) where
     show _ = "~~Signal~~"
@@ -1365,66 +1354,185 @@ instance Show (Signal a) where
 -- Input
 -----------------------------------------------------------------
 type Key  = GLFW.Key
-keyA = GLFW.Key'A
-keyB = GLFW.Key'B
-keyC = GLFW.Key'C
-keyD = GLFW.Key'D
-keyE = GLFW.Key'E
-keyF = GLFW.Key'F
-keyG = GLFW.Key'G
-keyH = GLFW.Key'H
-keyI = GLFW.Key'I
-keyJ = GLFW.Key'J
-keyK = GLFW.Key'K
-keyL = GLFW.Key'L
-keyM = GLFW.Key'M
-keyN = GLFW.Key'N
-keyO = GLFW.Key'O
-keyP = GLFW.Key'P
-keyQ = GLFW.Key'Q
-keyR = GLFW.Key'R
-keyS = GLFW.Key'S
-keyT = GLFW.Key'T
-keyU = GLFW.Key'U
-keyV = GLFW.Key'V
-keyW = GLFW.Key'W
-keyX = GLFW.Key'X
-keyY = GLFW.Key'Y
-keyZ = GLFW.Key'Z
-keyEnter  = GLFW.Key'Enter
-keyLCtrl  = GLFW.Key'LeftControl
-keyRCtrl  = GLFW.Key'RightControl
-keyLAlt   = GLFW.Key'LeftAlt
-keyRAlt   = GLFW.Key'RightAlt
-keySpace  = GLFW.Key'Space
-keyLShift = GLFW.Key'LeftShift
-keyRShift = GLFW.Key'RightShift
-keyBackspace = GLFW.Key'Backspace
-key0 = GLFW.Key'0
-key1 = GLFW.Key'1
-key2 = GLFW.Key'2
-key3 = GLFW.Key'3
-key4 = GLFW.Key'4
-key5 = GLFW.Key'5
-key6 = GLFW.Key'6
-key7 = GLFW.Key'7
-key8 = GLFW.Key'8
-key9 = GLFW.Key'9
-keyApostrophe   = GLFW.Key'Apostrophe
-keyComma        = GLFW.Key'Comma
-keyMinus        = GLFW.Key'Minus
-keyEqual        = GLFW.Key'Equal
-keyPeriod       = GLFW.Key'Period
-keySlash        = GLFW.Key'Slash
-keySemiColon    = GLFW.Key'Semicolon
-keyLeftBracket  = GLFW.Key'LeftBracket
-keyBackSlash    = GLFW.Key'Backslash
-keyRightBracket = GLFW.Key'RightBracket
-keyGraveAccent  = GLFW.Key'GraveAccent
 
+keyA :: GLFW.Key
+keyA = GLFW.Key'A
+
+keyB :: GLFW.Key
+keyB = GLFW.Key'B
+
+keyC :: GLFW.Key
+keyC = GLFW.Key'C
+
+keyD :: GLFW.Key
+keyD = GLFW.Key'D
+
+keyE :: GLFW.Key
+keyE = GLFW.Key'E
+
+keyF :: GLFW.Key
+keyF = GLFW.Key'F
+
+keyG :: GLFW.Key
+keyG = GLFW.Key'G
+
+keyH :: GLFW.Key
+keyH = GLFW.Key'H
+
+keyI :: GLFW.Key
+keyI = GLFW.Key'I
+
+keyJ :: GLFW.Key
+keyJ = GLFW.Key'J
+
+keyK :: GLFW.Key
+keyK = GLFW.Key'K
+
+keyL :: GLFW.Key
+keyL = GLFW.Key'L
+
+keyM :: GLFW.Key
+keyM = GLFW.Key'M
+
+keyN :: GLFW.Key
+keyN = GLFW.Key'N
+
+keyO :: GLFW.Key
+keyO = GLFW.Key'O
+
+keyP :: GLFW.Key
+keyP = GLFW.Key'P
+
+keyQ :: GLFW.Key
+keyQ = GLFW.Key'Q
+
+keyR :: GLFW.Key
+keyR = GLFW.Key'R
+
+keyS :: GLFW.Key
+keyS = GLFW.Key'S
+
+keyT :: GLFW.Key
+keyT = GLFW.Key'T
+
+keyU :: GLFW.Key
+keyU = GLFW.Key'U
+
+keyV :: GLFW.Key
+keyV = GLFW.Key'V
+
+keyW :: GLFW.Key
+keyW = GLFW.Key'W
+
+keyX :: GLFW.Key
+keyX = GLFW.Key'X
+
+keyY :: GLFW.Key
+keyY = GLFW.Key'Y
+
+keyZ :: GLFW.Key
+keyZ = GLFW.Key'Z
+
+keyEnter :: GLFW.Key
+keyEnter  = GLFW.Key'Enter
+
+keyLCtrl :: GLFW.Key
+keyLCtrl  = GLFW.Key'LeftControl
+
+keyRCtrl :: GLFW.Key
+keyRCtrl  = GLFW.Key'RightControl
+
+keyLAlt :: GLFW.Key
+keyLAlt   = GLFW.Key'LeftAlt
+
+keyRAlt :: GLFW.Key
+keyRAlt   = GLFW.Key'RightAlt
+
+keySpace :: GLFW.Key
+keySpace  = GLFW.Key'Space
+
+keyLShift :: GLFW.Key
+keyLShift = GLFW.Key'LeftShift
+
+keyRShift :: GLFW.Key
+keyRShift = GLFW.Key'RightShift
+
+keyBackspace :: GLFW.Key
+keyBackspace = GLFW.Key'Backspace
+
+key0 :: GLFW.Key
+key0 = GLFW.Key'0
+
+key1 :: GLFW.Key
+key1 = GLFW.Key'1
+
+key2 :: GLFW.Key
+key2 = GLFW.Key'2
+
+key3 :: GLFW.Key
+key3 = GLFW.Key'3
+
+key4 :: GLFW.Key
+key4 = GLFW.Key'4
+
+key5 :: GLFW.Key
+key5 = GLFW.Key'5
+
+key6 :: GLFW.Key
+key6 = GLFW.Key'6
+
+key7 :: GLFW.Key
+key7 = GLFW.Key'7
+
+key8 :: GLFW.Key
+key8 = GLFW.Key'8
+
+key9 :: GLFW.Key
+key9 = GLFW.Key'9
+
+keyApostrophe :: GLFW.Key
+keyApostrophe = GLFW.Key'Apostrophe
+
+keyComma :: GLFW.Key
+keyComma = GLFW.Key'Comma
+
+keyMinus :: GLFW.Key
+keyMinus = GLFW.Key'Minus
+
+keyEqual :: GLFW.Key
+keyEqual = GLFW.Key'Equal
+
+keyPeriod :: GLFW.Key
+keyPeriod = GLFW.Key'Period
+
+keySlash :: GLFW.Key
+keySlash = GLFW.Key'Slash
+
+keySemiColon :: GLFW.Key
+keySemiColon = GLFW.Key'Semicolon
+
+keyLeftBracket :: GLFW.Key
+keyLeftBracket = GLFW.Key'LeftBracket
+
+keyBackSlash :: GLFW.Key
+keyBackSlash = GLFW.Key'Backslash
+
+keyRightBracket :: GLFW.Key
+keyRightBracket = GLFW.Key'RightBracket
+
+keyGraveAccent :: GLFW.Key
+keyGraveAccent = GLFW.Key'GraveAccent
+
+keyUp :: GLFW.Key
 keyUp    = GLFW.Key'Up
+
+keyDown :: GLFW.Key
 keyDown  = GLFW.Key'Down
+
+keyLeft :: GLFW.Key
 keyLeft  = GLFW.Key'Left
+
+keyRight :: GLFW.Key
 keyRight = GLFW.Key'Right
 
 glfwKeyToEventKey :: GLFW.Key -> Int
@@ -1671,7 +1779,7 @@ textInput = Signal $ \state -> do
     shiftCont <- unSignal shift state
     return $ processSignal shiftRef charRef shiftCont
     where
-        processSignal shiftRef charRef shiftCont state = atomically (readTVar $ keysPressed state) >>= \keys -> case keys of
+        processSignal _ charRef shiftCont state = atomically (readTVar $ keysPressed state) >>= \keys -> case keys of
             NoChange _ -> shiftCont state >> readIORef charRef >>= return . NoChange
             Change   k -> do
                 isShiftDown <- fmap unEvent $ shiftCont state
@@ -1679,6 +1787,7 @@ textInput = Signal $ \state -> do
                 writeIORef charRef char
                 return $ Change char
 
+{- TO DO: Remove this function ?
 signalChallenge :: Signal (Double,Double)
 signalChallenge = tenThousand
     where
@@ -1687,6 +1796,7 @@ signalChallenge = tenThousand
         hundred     = ten `addM` ten `addM` ten `addM` ten `addM` ten `addM` ten `addM` ten `addM` ten `addM` ten `addM` ten
         thousand    = hundred `addM` hundred `addM` hundred `addM` hundred `addM` hundred `addM` hundred `addM` hundred `addM` hundred `addM` hundred `addM` hundred
         tenThousand = thousand `addM` thousand `addM` thousand `addM` thousand `addM` thousand `addM` thousand `addM` thousand `addM` thousand `addM` thousand `addM` thousand
+-}
 
 testSignals :: IO ()
 testSignals = runSignal wasd
@@ -1708,22 +1818,24 @@ millisecond    :: Time
 second         :: Time
 minute         :: Time
 hour           :: Time
-toMilliseconds :: Time -> Time
-toMinutes      :: Time -> Time
-toHours        :: Time -> Time
 
 millisecond      = 0.001
 second           = 1
 minute           = 60
 hour             = 3600
+
+{- TO DO: Remove these?
+toMilliseconds :: Time -> Time
+toMinutes      :: Time -> Time
+toHours        :: Time -> Time
 toMilliseconds t = t / 0.001
 toMinutes      t = t / 60
 toHours        t = t / 3600
-
+-}
 --TODO lagsig
 
 every :: Time -> Signal Time
-every time = Signal $ \state -> do
+every stime = Signal $ \state -> do
     accref <- newIORef $ runTime state
     valRef <- newIORef 0
     return $ processSignal accref valRef
@@ -1731,7 +1843,7 @@ every time = Signal $ \state -> do
         processSignal accref valRef state = do
             accumulatedTime <- readIORef accref
             let newTime = accumulatedTime + updateDelta state
-            if newTime >= time
+            if newTime >= stime
                 then writeIORef accref 0       >> writeIORef valRef newTime >>  return (Change $ runTime state)
                 else writeIORef accref newTime >> readIORef valRef          >>= return . NoChange
 
@@ -1743,11 +1855,11 @@ fps fpsTime = Signal $ \state -> do
     valRef <- newIORef 0
     return $ processSignal accref valRef
     where
-        time = 1.0 / fpsTime
+        stime = 1.0 / fpsTime
         processSignal accref valRef state = do
             accumulatedTime <- readIORef accref
             let newTime = accumulatedTime + updateDelta state
-            if newTime >= time
+            if newTime >= stime
                 then writeIORef accref 0       >> writeIORef valRef newTime >>  return (Change newTime)
                 else writeIORef accref newTime >> readIORef valRef          >>= return . NoChange
 
@@ -1758,14 +1870,14 @@ lagSig lagTime sig = Signal $ \state -> do
     ref       <- newIORef (sValue,sValue,1)
     return $ processSignal sCont sValue ref
     where
-        processSignal sCont sValue ref state = sCont state >>= \s -> case s of
+        processSignal sCont _ ref state = sCont state >>= \s -> case s of
             Change v -> do
                 (start,end,acc) <- readIORef ref
-                let acc'         = min (acc + (updateDelta state) * lagTime) 1
-                let value'       = start * (fromRational . toRational $ 1 - acc) + end * (fromRational $ toRational acc)
+                let _           = min (acc + (updateDelta state) * lagTime) 1
+                let value'      = start * (fromRational . toRational $ 1 - acc) + end * (fromRational $ toRational acc)
                 writeIORef ref (value',v,0)
                 return $ Change value'
-            NoChange v -> do
+            NoChange _ -> do
                 (start,end,acc) <- readIORef ref
                 if acc >= 1
                     then return (NoChange end)
@@ -1783,8 +1895,8 @@ time = Signal $ \_ -> return $ \_ -> getCurrentTime >>= return . Change
 -----------------------------------------------------------------
 
 render :: Signal SceneObject -> Signal ()
-render scene = Signal $ \state -> do
-    sCont <- unSignal scene state
+render nscene = Signal $ \state -> do
+    sCont <- unSignal nscene state
     defaultValue <- sCont state
     atomically $ writeTVar (sceneVar state) defaultValue
     return $ processSignal sCont
@@ -1794,8 +1906,8 @@ render scene = Signal $ \state -> do
             Change   _ -> atomically (writeTVar (sceneVar state) se) >> return (Change ())
 
 renderGUI :: Signal SceneObject -> Signal ()
-renderGUI scene = Signal $ \state -> do
-    sCont <- unSignal scene state
+renderGUI nscene = Signal $ \state -> do
+    sCont <- unSignal nscene state
     defaultValue <- sCont state
     atomically $ writeTVar (guiVar state) defaultValue
     return $ processSignal sCont
@@ -1840,8 +1952,8 @@ sigPrint s = Signal $ \state -> do
     return $ processSignal sCont
     where
         processSignal sCont state = sCont state >>= \sValue -> case sValue of
-            NoChange s -> return $ NoChange ()
-            Change   s -> print s >> return (Change ())
+            NoChange _  -> return $ NoChange ()
+            Change   s' -> print s' >> return (Change ())
 
 foldp :: (a -> b -> b) -> b -> Signal a -> Signal b
 foldp f bInit a = Signal $ \state -> do
@@ -1855,23 +1967,23 @@ foldp f bInit a = Signal $ \state -> do
                 return $ NoChange prev
             Change a' -> do
                 prev <- readIORef ref
-                let new = f a' prev
-                writeIORef ref new
-                return $ Change new
+                let nextV = f a' prev
+                writeIORef ref nextV
+                return $ Change nextV
 
 (<&>) :: Signal a -> Signal a -> Signal a
 a <&> b = Signal $ \state -> do
     aCont    <- unSignal a state
     bCont    <- unSignal b state
     defaultA <- aCont state >>= return . unEvent
-    defaultB <- bCont state >>= return . unEvent
+    _        <- bCont state >>= return . unEvent
     ref      <- newIORef defaultA
     return $ processState aCont bCont ref
     where
         processState aCont bCont ref state = aCont state >>= \aValue -> bCont state >>= \bValue -> case (aValue,bValue) of
-            (Change a, _) -> writeIORef ref a >>  return (Change a)
-            (_, Change b) -> writeIORef ref b >>  return (Change b)
-            _             -> readIORef  ref   >>= return . NoChange
+            (Change a', _) -> writeIORef ref a' >>  return (Change a')
+            (_, Change b') -> writeIORef ref b' >>  return (Change b')
+            _              -> readIORef  ref   >>= return . NoChange
 
 infixl 3 <&>
 
@@ -1884,7 +1996,7 @@ merges = foldr (<&>) empty
 combine :: [Signal a] -> Signal [a]
 combine signals = Signal $ \state -> do
     continuations <- mapM (\s -> unSignal s state) signals
-    defaultValues <- mapM (\f -> fmap unEvent $ f state) continuations
+    _             <- mapM (\f -> fmap unEvent $ f state) continuations
     return $ processSignal continuations
     where
         processSignal continuations state = fmap (foldr collapseContinuations (NoChange [])) $ mapM ($ state) continuations
@@ -1894,41 +2006,41 @@ combine signals = Signal $ \state -> do
         collapseContinuations (Change   x) (Change   xs) = Change   $ x : xs
 
 dropIf :: (a -> Bool) -> a -> Signal a -> Signal a
-dropIf pred init signal = Signal $ \state ->do
+dropIf sPred sInit signal = Signal $ \state ->do
     sCont  <- unSignal signal state
     sValue <- sCont state >>= return . unEvent
-    let defaultValue = if not (pred sValue) then sValue else init
+    let defaultValue = if not (sPred sValue) then sValue else sInit
     ref <- newIORef defaultValue
     return $ processSignal sCont ref
     where
         processSignal sCont ref state = sCont state >>= \sValue -> case sValue of
             NoChange s -> return $ NoChange s
-            Change   s -> case not $ pred s of
+            Change   s -> case not $ sPred s of
                 False  -> readIORef ref >>= return . NoChange
                 True   -> do
                     writeIORef ref s
                     return $ Change s
 
 keepIf :: (a -> Bool) -> a -> Signal a -> Signal a
-keepIf pred init signal = Signal $ \state ->do
+keepIf sPred sInit signal = Signal $ \state ->do
     sCont  <- unSignal signal state
     sValue <- sCont state >>= return . unEvent
-    let defaultValue = if pred sValue then sValue else init
+    let defaultValue = if sPred sValue then sValue else sInit
     ref <- newIORef defaultValue
     return $ processSignal sCont ref
     where
         processSignal sCont ref state = sCont state >>= \sValue -> case sValue of
             NoChange s -> return $ NoChange s
-            Change   s -> case pred s of
+            Change   s -> case sPred s of
                 False  -> readIORef ref >>= return . NoChange
                 True   -> do
                     writeIORef ref s
                     return $ Change s
 
 keepWhen :: Signal Bool -> Signal a -> Signal a
-keepWhen pred x = Signal $ \state -> do
-    pCont <- unSignal pred state
-    xCont <- unSignal x    state
+keepWhen sPred x = Signal $ \state -> do
+    pCont <- unSignal sPred state
+    xCont <- unSignal x state
     xVal  <- xCont state >>= return . unEvent
     ref   <- newIORef xVal
     return $ processSignal pCont xCont ref
@@ -1938,21 +2050,21 @@ keepWhen pred x = Signal $ \state -> do
             xValue <- xCont state
             case pValue of
                 Change p -> case xValue of
-                    Change   x -> go x p
-                    NoChange x -> readIORef ref >>= return . NoChange
+                    Change   x' -> go x' p
+                    NoChange _  -> readIORef ref >>= return . NoChange
                 NoChange p -> case xValue of
-                    Change   x -> go x p
+                    Change   x' -> go x' p
                     NoChange _ -> readIORef ref >>= return . NoChange
             where
-                go x p = if p
-                         then writeIORef ref x >> (return $ Change x)
+                go y p = if p
+                         then writeIORef ref y >> (return $ Change y)
                          else readIORef  ref   >>= return . NoChange
 
 
 dropWhen :: Signal Bool -> Signal a -> Signal a
-dropWhen pred x = Signal $ \state -> do
-    pCont <- unSignal pred state
-    xCont <- unSignal x    state
+dropWhen sPred x = Signal $ \state -> do
+    pCont <- unSignal sPred state
+    xCont <- unSignal x state
     xVal  <- xCont state >>= return . unEvent
     ref   <- newIORef xVal
     return $ processSignal pCont xCont ref
@@ -1962,14 +2074,14 @@ dropWhen pred x = Signal $ \state -> do
             xValue <- xCont state
             case pValue of
                 Change p -> case xValue of
-                    Change   x -> go x p
-                    NoChange x -> readIORef ref >>= return . NoChange
+                    Change   x' -> go x' p
+                    NoChange _ -> readIORef ref >>= return . NoChange
                 NoChange p -> case xValue of
-                    Change   x -> go x p
+                    Change   x' -> go x' p
                     NoChange _ -> readIORef ref >>= return . NoChange
             where
-                go x p = if not p
-                         then writeIORef ref x >> (return $ Change x)
+                go y p = if not p
+                         then writeIORef ref y >> (return $ Change y)
                          else readIORef  ref   >>= return . NoChange
 
 dropRepeats :: (Eq a) => Signal a -> Signal a
@@ -2008,7 +2120,7 @@ count signal = Signal $ \state -> do
                     return $ Change result
 
 countIf :: (a -> Bool) -> Signal a -> Signal Int
-countIf pred signal = Signal $ \state -> do
+countIf sPred signal = Signal $ \state -> do
     sCont <- unSignal signal state
     ref   <- newIORef 0
     return $ processSignal sCont ref
@@ -2017,7 +2129,7 @@ countIf pred signal = Signal $ \state -> do
             sValue <- sCont state
             case sValue of
                 NoChange _ -> readIORef ref >>= return . NoChange
-                Change v   -> if pred v
+                Change v   -> if sPred v
                               then do n <- readIORef ref
                                       let result = n + 1
                                       writeIORef ref result
@@ -2038,14 +2150,14 @@ sampleOn a b = Signal $ \state -> do
             case aValue of
                 NoChange _ -> case bValue of
                     NoChange _ -> readIORef ref >>= return . NoChange
-                    Change   b -> do
-                        writeIORef ref b
-                        return $ NoChange b
+                    Change   b' -> do
+                        writeIORef ref b'
+                        return $ NoChange b'
                 Change _ -> case bValue of
                     NoChange _ -> readIORef ref >>= return . Change
-                    Change   b -> do
-                        writeIORef ref b
-                        return $ Change b
+                    Change   b' -> do
+                        writeIORef ref b'
+                        return $ Change b'
 
 randS :: Int -> Int -> Signal a -> Signal Int
 randS low high signal = Signal $ \necro -> do
@@ -2134,12 +2246,12 @@ foldn f bInit a = Signal $ \state -> do
     cont          <- unSignal a state
     ref           <- newIORef bInit
     netid         <- getNextID state
-    sendAddNetSignal (client state) $ (netid,toNetVal bInit)
+    sendAddNetSignal (necroNetClient state) $ (netid,toNetVal bInit)
     return $ processSignal cont ref netid
     where
-        processSignal cont ref netid state = atomically (readTVar $ netSignals $ client state) >>= \ns -> case IntMap.lookup netid ns of
+        processSignal cont ref netid state = atomically (readTVar $ clientNetSignals $ necroNetClient state) >>= \ns -> case IntMap.lookup netid ns of
             Just (Change n) -> case fromNetVal n of
-                Just n  -> cont state >> writeIORef ref n >> return (Change n)
+                Just n' -> cont state >> writeIORef ref n' >> return (Change n')
                 Nothing -> localCont
             _           -> localCont
             where
@@ -2147,10 +2259,10 @@ foldn f bInit a = Signal $ \state -> do
                     NoChange _ -> readIORef ref >>= return . NoChange
                     Change   v -> do
                         prev <- readIORef ref
-                        let new = f v prev
-                        writeIORef ref    new
-                        if new /= prev then sendSetNetSignal (client state) (netid,toNetVal new) else return ()
-                        return (Change new)
+                        let nextV = f v prev
+                        writeIORef ref nextV
+                        if nextV /= prev then sendSetNetSignal (necroNetClient state) (netid,toNetVal nextV) else return ()
+                        return (Change nextV)
 
 netsignal :: Networkable a => Signal a -> Signal a
 netsignal sig = Signal $ \state -> do
@@ -2159,23 +2271,24 @@ netsignal sig = Signal $ \state -> do
     ref    <- newIORef val
     netid  <- getNextID state
     netRef <- newIORef val
-    sendAddNetSignal (client state) (netid,toNetVal val)
+    sendAddNetSignal (necroNetClient state) (netid,toNetVal val)
     return $ processEvent cont ref netid netRef
     where
-        processEvent cont ref netid netRef state = atomically (readTVar $ netSignals $ client state) >>= \ns -> case IntMap.lookup netid ns of
+        processEvent cont ref netid netRef state = atomically (readTVar $ clientNetSignals $ necroNetClient state) >>= \ns -> case IntMap.lookup netid ns of
             Just (Change n) -> case fromNetVal n of
-                Just n  -> cont state >> writeIORef ref n >> return (Change n)
+                Just n' -> cont state >> writeIORef ref n' >> return (Change n')
                 Nothing -> localCont
             Just (NoChange n) -> readIORef netRef >>= \prevN -> case fromNetVal n of
                 Nothing -> localCont
-                Just n'  -> if n' /= prevN
+                Just n' -> if n' /= prevN
                     then cont state >> writeIORef ref n' >> writeIORef netRef n' >> return (Change n')
                     else localCont
+            Nothing -> localCont -- Is this correct?
             where
                 localCont = cont state >>= \c -> case c of
                     NoChange v -> return $ NoChange v
                     Change   v -> readIORef ref >>= \prev -> if v /= prev
-                        then sendSetNetSignal (client state) (netid,toNetVal v) >> writeIORef ref v >> return (Change v)
+                        then sendSetNetSignal (necroNetClient state) (netid,toNetVal v) >> writeIORef ref v >> return (Change v)
                         else return $ Change v
 
 ---------------------------------------------
@@ -2228,7 +2341,7 @@ audioBuffer index = Signal $ \_ -> if index < 16
         then return processState
         else return $ \_ -> return $ NoChange []
     where
-        processState state = do
+        processState _ = do
             array <- peekArray 512 $ advancePtr outBusBuffers (512 * index)
             return $ Change $ map realToFrac array
 
@@ -2236,31 +2349,31 @@ playSynthN :: Signal Bool -> String -> [Signal Double] -> Signal ()
 playSynthN playSig synthName argSigs = Signal $ \state -> do
 
     pCont        <- unSignal (netsignal playSig) state
-    pValue       <- pCont state >>= return . unEvent
+    _ {-pValue-} <- pCont state >>= return . unEvent
     aConts       <- mapM (\a -> unSignal (netsignal a) state) argSigs
-    aValues      <- mapM (\f -> f state >>= return . unEvent) aConts
+    _ {-aValues-}<- mapM (\f -> f state >>= return . unEvent) aConts
     synthRef     <- newIORef Nothing
 
-    return $ processSignal pCont aConts synthName synthRef (necroVars state) (client state)
+    return $ processSignal pCont aConts synthRef (necroVars state) (necroNetClient state)
     where
-        processSignal pCont aConts synthName synthRef necroVars client state = pCont state >>= \p -> case p of
-            Change   p -> mapM (\f -> f state >>= return . unEvent) aConts >>= \args -> runNecroState (playStopSynth synthName args p synthRef) necroVars >>= \(e,_) -> return e
-            NoChange _ -> readIORef synthRef >>= \s -> case s of
-                Nothing -> return $ NoChange ()
-                Just  s -> foldM (\i f -> updateArg i f s necroVars state >> return (i+1)) 0 aConts >> return (NoChange ())
+        processSignal pCont aConts synthRef sNecroVars _ state = pCont state >>= \p -> case p of
+            Change   p'  -> mapM (\f -> f state >>= return . unEvent) aConts >>= \args -> runNecroState (playStopSynth args p' synthRef) sNecroVars >>= \(e,_) -> return e
+            NoChange _   -> readIORef synthRef >>= \s -> case s of
+                Nothing  -> return $ NoChange ()
+                Just  s' -> foldM (\i f -> updateArg i f s' sNecroVars state >> return (i+1)) 0 aConts >> return (NoChange ())
 
-        updateArg index aCont synth necroVars state = aCont state >>= \a -> case a of
+        updateArg index aCont synth sNecroVars state = aCont state >>= \a -> case a of
             NoChange _ -> return ()
-            Change   v -> runNecroState (setSynthArg synth index v) necroVars >> return ()
+            Change   v -> runNecroState (setSynthArg synth index v) sNecroVars >> return ()
 
-        playStopSynth synthName args shouldPlay synthRef = liftIO (readIORef synthRef) >>= \ms -> case (ms,shouldPlay) of
+        playStopSynth args shouldPlay synthRef = liftIO (readIORef synthRef) >>= \ms -> case (ms,shouldPlay) of
             (Nothing   ,True )  -> liftIO (print "play") >> playSynth synthName args >>= \s -> liftIO (writeIORef synthRef $ Just s) >> return (Change ())
             (Just synth,False)  -> liftIO (print "stop") >> stopSynth synth          >>        liftIO (writeIORef synthRef  Nothing) >> return (Change ())
             _                   -> return $ NoChange ()
 
 synthDef :: UGenType a => String -> a -> Signal ()
 synthDef name synth = Signal $ \state -> do
-    runNecroState (compileSynthDef name synth) (necroVars state)
+    _ <- runNecroState (compileSynthDef name synth) (necroVars state)
     print $ "Compiling synthDef: " ++ name
     return $ \_ -> return $ NoChange ()
 
@@ -2286,26 +2399,27 @@ playSignalPattern playSig initValue argSigs pattern = Signal $ \state -> do
 
     return $ processSignal patternRef pDef pCont aConts valVar valRef (necroVars state)
     where
-        processSignal patternRef pDef pCont aConts valVar valRef necroVars state = do
+        processSignal patternRef pDef pCont aConts valVar valRef sNecroVars state = do
             p   <- pCont state
             pat <- readIORef patternRef
             case (p,pat) of
-                (Change True ,Nothing) -> runNecroState (runPDef pDef) necroVars >>= \(pat',_) -> writeIORef patternRef (Just pat')
-                (Change False,Just  _) -> runNecroState (pstop   pDef) necroVars >>               writeIORef patternRef Nothing
+                (Change True ,Nothing) -> runNecroState (runPDef pDef) sNecroVars >>= \(pat',_) -> writeIORef patternRef (Just pat')
+                (Change False,Just  _) -> runNecroState (pstop   pDef) sNecroVars >>               writeIORef patternRef Nothing
                 _                      -> return ()
             readIORef patternRef >>= \pat' -> case pat' of
                 Nothing -> return ()
-                Just pat'' -> foldM (\i f -> updateArg i f pat'' necroVars state >> return (i+1)) 0 aConts >> return ()
+                Just pat'' -> foldM (\i f -> updateArg i f pat'' sNecroVars state >> return (i+1)) 0 aConts >> return ()
             prev <- readIORef valRef
             val  <- atomically $ readTVar valVar `orElse` return prev
             if val == prev
                 then return $ NoChange prev
                 else writeIORef valRef val >> return (Change val)
 
-        updateArg index aCont pattern necroVars state = aCont state >>= \a -> case a of
+        updateArg index aCont sPattern sNecroVars state = aCont state >>= \a -> case a of
             NoChange _ -> return ()
-            Change val -> runNecroState (setPDefArg pattern index $ PVal val) necroVars >> return ()
+            Change val -> runNecroState (setPDefArg sPattern index $ PVal val) sNecroVars >> return ()
 
+{- TO DO: Remove this?
 tempo :: Signal Double -> Signal Double
 tempo tempoSignal = Signal $ \state -> do
     tCont  <- unSignal tempoSignal state
@@ -2316,7 +2430,7 @@ tempo tempoSignal = Signal $ \state -> do
         processSignal tCont necroVars state = tCont state >>= \t -> case t of
             NoChange t' -> return $ NoChange t'
             Change   t' -> runNecroState (setTempo t') necroVars >> return (Change t')
-
+-}
 
 {-
 instance Play UGen where

@@ -133,8 +133,8 @@ charMetrics font = do
     ft <- freeType
     ff <- fontFace ft $ fontPath ++ "fonts/" ++ fontKey font
     runFreeType $ ft_Set_Pixel_Sizes ff (fromIntegral $ fontSize font) 0
-    metrics <- mapM (getCharMetrics ff) [32..128]
-    return $ foldr (\cm -> Map.insert (character cm) cm) Map.empty metrics
+    cmetrics <- mapM (getCharMetrics ff) [32..128]
+    return $ foldr (\cm -> Map.insert (character cm) cm) Map.empty cmetrics
 
 getFont :: Resources -> Font -> IO LoadedFont
 getFont resources font = readIORef (fontsRef resources) >>= \fonts ->
@@ -160,11 +160,11 @@ textMesh :: Map.Map Char CharMetric ->
             ([Linear.Vector3],[Color.Color],[Linear.Vector2],[Int],Int,Double,Double) ->
             Char ->
             ([Linear.Vector3],[Color.Color],[Linear.Vector2],[Int],Int,Double,Double)
-textMesh charMetrics aWidth aHeight (vertices,colors,uvs,indices,count,x,y) char
+textMesh chMetrics aWidth aHeight (vertices,colors,uvs,indices,count,x,y) char
     | '\n' <- char = (vertices ,colors ,uvs ,indices ,count    ,0   ,y + aHeight * fontScale)
     | otherwise    = (vertices',colors',uvs',indices',count + 4,x+ax,y)
     where
-        charMetric = fromMaybe (CharMetric (toEnum 0) 0 0 0 0 0 0 0 0 0) $ Map.lookup char charMetrics
+        charMetric = fromMaybe (CharMetric (toEnum 0) 0 0 0 0 0 0 0 0 0) $ Map.lookup char chMetrics
         w          = charWidth  charMetric * fontScale
         h          = charHeight charMetric * fontScale
         l          = charLeft   charMetric * fontScale
@@ -196,26 +196,27 @@ fitTextIntoBounds removeTopLines text (w,h) cmetrics = finalText
         (finalText  ,_)  = foldl' (removeExtraLines removeTopLines h cmetrics) ([],cheight cmetrics) widthBound
 
 removeExtraLines :: Bool -> Double -> Map.Map Char CharMetric -> TextWord -> Char -> TextWord
-removeExtraLines rmvTop boundsHeight metrics (text,currentHeight) char = if rmvTop then removeExtraTopLines else removeExtraBottomLines
+removeExtraLines rmvTop boundsHeight cmetrics (text,currentHeight) char = if rmvTop then removeExtraTopLines else removeExtraBottomLines
     where
         removeExtraTopLines
-            | currentHeight + cheight metrics >= boundsHeight                 = (text,currentHeight)
-            | char == '\n' && currentHeight + cheight metrics >= boundsHeight = (text,currentHeight)
-            | char == '\n' && currentHeight + cheight metrics <  boundsHeight = (text ++ [char],currentHeight + cheight metrics)
-            | otherwise                                                       = (text ++ [char],currentHeight)
+            | currentHeight + cheight cmetrics >= boundsHeight                 = (text,currentHeight)
+            | char == '\n' && currentHeight + cheight cmetrics >= boundsHeight = (text,currentHeight)
+            | char == '\n' && currentHeight + cheight cmetrics <  boundsHeight = (text ++ [char],currentHeight + cheight cmetrics)
+            | otherwise                                                        = (text ++ [char],currentHeight)
         removeExtraBottomLines
-            | currentHeight + cheight metrics >= boundsHeight                 = (deleteFirstLine text ++ [char],currentHeight - cheight metrics)
-            -- | char == '\n' && currentHeight + cheight metrics >= boundsHeight = (deleteFirstLine text ++ [char],currentHeight)
-            | char == '\n' && currentHeight + cheight metrics <  boundsHeight = (text ++ [char],currentHeight + cheight metrics)
-            | otherwise                                                       = (text ++ [char],currentHeight)
+            | currentHeight + cheight cmetrics >= boundsHeight                 = (deleteFirstLine text ++ [char],currentHeight - cheight cmetrics)
+            -- | char == '\n' && currentHeight + cheight cmetrics >= boundsHeight = (deleteFirstLine text ++ [char],currentHeight)
+            | char == '\n' && currentHeight + cheight cmetrics <  boundsHeight = (text ++ [char],currentHeight + cheight cmetrics)
+            | otherwise                                                        = (text ++ [char],currentHeight)
         deleteFirstLine s = s'
             where
-                (_,s')                = foldl' go (False,[]) s
-                go (False,accum) '\n' = (True ,accum)
-                go (False,accum) _    = (False,accum)
-                go (True ,accum) char = (True ,accum ++ [char])
+                (_,s')                  = foldl' go (False,[]) s
+                go (False,saccum) '\n'  = (True ,saccum)
+                go (False,saccum) _     = (False,saccum)
+                go (True ,saccum) schar = (True ,saccum ++ [schar])
 
-cheight metrics = case Map.lookup 'A' metrics of
+cheight :: Map.Map Char CharMetric -> Double 
+cheight cmetrics = case Map.lookup 'A' cmetrics of
     Nothing -> 20 * fontScale
     Just cm -> charHeight cm * fontScale
 

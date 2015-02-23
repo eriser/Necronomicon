@@ -1,6 +1,5 @@
 import Necronomicon
 import Data.Fixed (mod')
-import Control.Arrow
 import Data.List (zip4)
 
 main :: IO ()
@@ -15,9 +14,9 @@ synthDefs = synthDef "triOsc"   triOsc
          *> synthDef "triOsc32" triOsc32
 
 testGUI :: Signal ()
-testGUI = gui [chatBox,netBox,users]
+testGUI = gui [chatBox,netBox,nusers]
     where
-        users   = userBox <| Vector2 0.0 0.945
+        nusers  = userBox <| Vector2 0.0 0.945
                           <| Size    0.0 0.055
                           <| Font   "OCRA.ttf" 24
                           <| vertexColored (RGBA 0 0 0 0.25)
@@ -34,11 +33,11 @@ testGUI = gui [chatBox,netBox,users]
 testScene :: Signal ()
 testScene = scene [pure cam,sphereSig]
     where
-        oscSig         = oscillatorObject <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4
-        terrainSig     = terrainObject    <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time
-        sphereSig      = sphereObject     <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time ~~ latitudes
-        latitudes      = playSignalPattern (toggle <| isDown keyS) 36.6 [] <| ploop [ [lich| [36 10] [24 12] [32 37] [30 33 34 35] |] ]
-        cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
+        _ {-oscSig-}     = oscillatorObject <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4
+        _ {-terrainSig-} = terrainObject    <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time
+        sphereSig        = sphereObject     <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time ~~ latitudes
+        latitudes        = playSignalPattern (toggle <| isDown keyS) 36.6 [] <| ploop [ [lich| [36 10] [24 12] [32 37] [30 33 34 35] |] ]
+        cam              = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
         -- cam p          = perspCamera p identity 60 0.1 1000 black [glow]
         -- camSig         = cam <~ (lagSig 4 <| foldn (+) (Vector3 0 0 10) (lift3 move arrows (fps 4) 3))
         -- move (x,y) z a = Vector3 (x*z*a) (y*z*a) 0
@@ -48,20 +47,20 @@ terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 8 (-4)) (fromEuler' (-24) 0
     where
         mesh             = DynamicMesh "simplex" vertices colors uvs indices
         (w,h)            = (64.0,32.0)
-        (scale,vscale)   = (1 / 6,2.5)
+        (tscale,vscale)  = (1 / 6,2.5)
         values           = [(x + a,simplex 8 (x / w + t * 0.05) (y / h + t * 0.05) * 0.65 + aa,y + aaa)
                           | (x,y) <- map (\n -> (mod' n w,n / h)) [0..w*h]
                           | a     <- map (* 2.00) <| cycle a1
                           | aa    <- map (* 0.35) <| cycle a2
                           | aaa   <- map (* 2.00) <| cycle a3]
 
-        toVertex (x,y,z) = Vector3 (x*scale*3) (y*vscale) (z*scale*3)
+        toVertex (x,y,z) = Vector3 (x*tscale*3) (y*vscale) (z*tscale*3)
         toColor  (x,y,z) = RGBA    ((x * 1.75) / w * (y * 0.6 + 0.4)) (y * 0.75 + 0.25) (z / h * (y * 0.75 + 0.25)) 0.3
-        toUV     (x,y,_) = Vector2 (x / w) (y / h)
+        -- toUV     (x,y,_) = Vector2 (x / w) (y / h)
 
-        addIndices w i indices
-            | mod i w < (w-1) = i + 1 : i + w : i + w + 1 : i + 1 : i : i + w : indices
-            | otherwise       = indices
+        addIndices w' i indicesList
+            | mod i w' < (w'-1) = i + 1 : i + w' : i + w' + 1 : i + 1 : i : i + w' : indicesList
+            | otherwise         = indices
 
         vertices = map toVertex values
         colors   = map toColor  values
@@ -73,7 +72,7 @@ oscillatorObject :: [Double] -> [Double] -> [Double] -> SceneObject
 oscillatorObject audioBuffer1 audioBuffer2 audioBuffer3 = SceneObject 0 identity 1 (Model mesh <| vertexColored (RGBA 1 1 1 0.35)) []
     where
         mesh                                         = DynamicMesh "osc1" vertices colors uvs indices
-        scale                                        = 6
+        oscale                                       = 6
         width                                        = 1
         indices                                      = foldr (\i acc -> i + 1 : i + 2 : i + 3 : i + 1 : i + 0 : i + 2 : acc) [] [0..511]
         uvs                                          = replicate 512 0
@@ -81,8 +80,8 @@ oscillatorObject audioBuffer1 audioBuffer2 audioBuffer3 = SceneObject 0 identity
         (vertices,colors)                            = foldr toVertex ([],[]) (zip zippedAudio <| drop 1 zippedAudio)
         toVertex ((x1,y1,z1),(x2,y2,z2)) (vacc,cacc) = (p3 : p2 : p1 : p0 : vacc,r3 : r2 : r1 : r0 : cacc)
             where
-                p0  = Vector3 (x1 * scale) (y1 * scale) (z1 * scale * 0.5)
-                p1  = Vector3 (x2 * scale) (y2 * scale) (z2 * scale * 0.5)
+                p0  = Vector3 (x1 * oscale) (y1 * oscale) (z1 * oscale * 0.5)
+                p1  = Vector3 (x2 * oscale) (y2 * oscale) (z2 * oscale * 0.5)
 
                 cp  = cross np0 np1
 
@@ -111,9 +110,9 @@ sphereObject as1 as2 as3 t latitudes = SceneObject 0 (fromEuler' 0 (t * 0.5) (t 
         us             = map (* latInc)  [0..latitudes]
         ts             = map (* longInc) [0..longitudes]
 
-        toVertex (u,t) = Vector3 <| sin (toRadians t) * sin (toRadians u)
-                                 <| cos (toRadians t)
-                                 <| sin (toRadians t) * cos (toRadians u)
+        toVertex (u,v) = Vector3 <| sin (toRadians v) * sin (toRadians u)
+                                 <| cos (toRadians v)
+                                 <| sin (toRadians v) * cos (toRadians u)
         toColor p      = RGBA    <| colorRange (_x p)
                                  <| colorRange (_y p)
                                  <| colorRange (_z p)

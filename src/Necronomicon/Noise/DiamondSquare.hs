@@ -3,11 +3,9 @@ module Necronomicon.Noise.DiamondSquare (diamondSquare) where
 --------------------------------------------------------------------------------
 import Prelude
 import Data.Foldable as Fold (toList)
-import Data.Sequence as Seq (fromList, Seq, update, index,adjust)
+import Data.Sequence as Seq (fromList, Seq, update, index)
 import Data.Vector as Vec (fromList,Vector)
-import Graphics.Rendering.OpenGL
 import System.Random (randomRs,mkStdGen)
-import GHC.Float
 --------------------------------------------------------------------------------
 
 -- | An infinite stream of random floats
@@ -18,7 +16,8 @@ randStream !seed = randomRs (-1,1) $ mkStdGen seed
 initTerrain :: Int -> Int -> Int -> [Float] -> ([Float],Seq Float)
 initTerrain !w !h !fs rs = randomize (rs,Seq.fromList $ replicate (w*h) 0)
     where
-        makeRandom !x !y ((r:rs),t) = (rs,setSample x y w h r t)
+        makeRandom !x !y ([],t) = ([], setSample x y w h 0 t)
+        makeRandom !x !y ((v:vs),t) = (vs,setSample x y w h v t)
         randomize = fskip fs w h (makeRandom) 0 0 0
 
 -- | Obtain a value from the given Seq at wrapped x and y coordinates
@@ -31,6 +30,7 @@ setSample !x !y !w !h !v !t = update ( (rem x w) + ((rem y h)*w) ) v t
 
 -- | The square pattern portion of the diamond square algorithm. Is offset by half of the feature size.
 square :: Float -> Int -> Int -> Int -> Int -> Int -> ([Float],Seq Float) -> ([Float],Seq Float)
+square !scale !w !h !fs !x !y ([],!t) = square scale w h fs x y ([0],t)
 square !scale !w !h !fs !x !y ((r:rs),!t) = (rs,setSample x y w h v' t)
     where
         hs	= fs `div` 2
@@ -42,6 +42,7 @@ square !scale !w !h !fs !x !y ((r:rs),!t) = (rs,setSample x y w h v' t)
 
 -- | Same as the square function, however the pattern is rotated to diamond pattern instead.
 diamond :: Float -> Int -> Int -> Int -> Int -> Int -> ([Float],Seq Float) -> ([Float],Seq Float)
+diamond !scale !w !h !fs !x !y ([],!t) = diamond scale w h fs x y ([0],t) 
 diamond !scale !w !h !fs !x !y ((r:rs),!t) = (rs,setSample x y w h v' t)
     where
         hs	= fs `div` 2
@@ -52,6 +53,7 @@ diamond !scale !w !h !fs !x !y ((r:rs),!t) = (rs,setSample x y w h v' t)
         v'	= ((a+b+c+d) / 4.0) + (r*scale)
 
 -- | Helper function that allows easy traversal over a one dimensional sequence using two dimensional coordinates, skipping n equal to a given feature size, and transforming the supplied Seq with a given function at every iteration.
+fskip :: Int -> Int -> Int -> (Int -> Int -> ([Float],Seq Float) -> ([Float],Seq Float)) -> Int -> Int -> Int -> ([Float],Seq Float) -> ([Float],Seq Float)
 fskip !fs !w !h !f !x !y !sx (rs,!t)
     | y >= h	= (rs,t)
     | x >= w	= fskip fs w h f sx (y+fs) sx $! f x y (rs,t)
@@ -72,7 +74,7 @@ diamondSquare !fs !scale !seed !w !h = Vec.fromList . Fold.toList . snd $! go fs
     where
         randomStream = randStream seed
         terrain = initTerrain w h fs randomStream
-        go !fs !scale (rs,!t)
-            | fs < 2	= (rs,t)
-            | otherwise	= go (fs `div` 2) (scale / 2.0) $! runDiamondSquare w h fs scale (rs,t)
+        go !fsk !scl (rs,!t)
+            | fsk < 2	= (rs,t)
+            | otherwise	= go (fsk `div` 2) (scl / 2.0) $! runDiamondSquare w h fsk scl (rs,t)
                                           

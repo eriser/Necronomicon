@@ -1,7 +1,6 @@
 module Necronomicon.Networking.SyncObject where
 
 import Prelude
-import qualified Data.ByteString as B
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Char8 as C
 import Sound.OSC.Core
@@ -28,19 +27,18 @@ data Score = Score {
 data ScoreEvent = AddObjectEvent SyncObject | RemoveObjectEvent Int | SectionChangeEvent Int deriving (Show)
 
 setArgMessage :: Int -> Int -> SyncValue -> Message
-setArgMessage id index value = Message "setSyncArg" [Int32 $ fromIntegral id,Int32 $ fromIntegral index,argToDatum value]
+setArgMessage objID index value = Message "setSyncArg" [Int32 $ fromIntegral objID,Int32 $ fromIntegral index,argToDatum value]
 
 removeObjectMessage :: Int -> Message
-removeObjectMessage id = Message "removeSyncObject" [Int32 $ fromIntegral id]
+removeObjectMessage objID = Message "removeSyncObject" [Int32 $ fromIntegral objID]
 
 setArg :: Int -> SyncValue -> SyncObject -> SyncObject
-setArg index v (SyncObject id ty st as) = SyncObject id ty st $ Seq.update index v as
+setArg index v (SyncObject objID ty st as) = SyncObject objID ty st $ Seq.update index v as
 
 argToDatum :: SyncValue -> Datum
 argToDatum (SyncString v) = toOSCString v
 argToDatum (SyncFloat  v) = Float v
 argToDatum (SyncDouble v) = Double v
-argToDatum (SyncInt    v) = Int32 (fromIntegral v)
 argToDatum (SyncInt    v) = Int32 (fromIntegral v)
 
 datumToArg :: Datum -> SyncValue
@@ -48,26 +46,28 @@ datumToArg (ASCII_String v) = SyncString $ C.unpack   v
 datumToArg (Float        v) = SyncFloat  v
 datumToArg (Double       v) = SyncDouble v
 datumToArg (Int32        v) = SyncInt    (fromIntegral v)
+datumToArg (Int64        v) = SyncInt (fromIntegral v)
+datumToArg _                = SyncInt 0
 
 syncObjectMessage :: SyncObject -> Message
-syncObjectMessage (SyncObject id t st as) = Message "addSyncObject" $ Int32 (fromIntegral id) : toOSCString t : toOSCString st : map argToDatum (F.toList as)
+syncObjectMessage (SyncObject objID t st as) = Message "addSyncObject" $ Int32 (fromIntegral objID) : toOSCString t : toOSCString st : map argToDatum (F.toList as)
 
 messageToSync :: [Datum] -> Maybe SyncObject
-messageToSync (Int32 id : ASCII_String otype : ASCII_String osubtype : args) = Just $ SyncObject (fromIntegral id) (C.unpack otype) (C.unpack osubtype) $ Seq.fromList $ map datumToArg args
+messageToSync (Int32 objID : ASCII_String otype : ASCII_String osubtype : args) = Just $ SyncObject (fromIntegral objID) (C.unpack otype) (C.unpack osubtype) $ Seq.fromList $ map datumToArg args
 messageToSync _ = Nothing
 
 removeMessage :: Int -> Message
-removeMessage id = Message "removeSyncObject" $ Int32 (fromIntegral id) : []
+removeMessage objID = Message "removeSyncObject" $ Int32 (fromIntegral objID) : []
 
 toSynchronizationMsg :: Map.Map Int SyncObject -> Message
 toSynchronizationMsg = Message "sync" . concat . map toOSC . Map.toList
     where
-        toOSC (_,(SyncObject id t st as)) = Blob BL.empty : Int32 (fromIntegral id) : toOSCString t : toOSCString st : map argToDatum (F.toList as)
+        toOSC (_,(SyncObject objID t st as)) = Blob BL.empty : Int32 (fromIntegral objID) : toOSCString t : toOSCString st : map argToDatum (F.toList as)
 
 fromSynchronizationMsg :: [Datum] -> Map.Map Int SyncObject
 fromSynchronizationMsg = snd . foldr fromOSC ([],Map.empty)
     where
-        fromOSC (Blob _) (SyncInt id : SyncString t : SyncString st : as,so) = ([],Map.insert id (SyncObject id t st $ Seq.fromList as) so)
+        fromOSC (Blob _) (SyncInt objID : SyncString t : SyncString st : as,so) = ([],Map.insert objID (SyncObject objID t st $ Seq.fromList as) so)
         fromOSC (Blob _) so = so
         fromOSC d (as,so)   = (datumToArg d : as,so)
 

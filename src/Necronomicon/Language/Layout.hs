@@ -4,20 +4,14 @@ module Necronomicon.Language.Layout
        where
 
 import Prelude
-import qualified Language.Haskell.TH as TH
 import Language.Haskell.TH.Syntax
 import Language.Haskell.TH.Quote
-import Control.Monad
-import Control.Applicative ((<*),(<*>),(*>),some,(<$>),liftA)
+import Control.Applicative ((<*),(<*>),(*>),(<$>))
 import Text.ParserCombinators.Parsec
-import System.Environment
 import qualified Data.Vector as V
-
-import Debug.Trace
 
 import Data.Typeable
 import Data.Data
-import Data.Tree
 
 import qualified Necronomicon.Patterns as NP
 
@@ -56,9 +50,15 @@ instance (Show a) => Show (a -> a) where
 ----------------------------------
 
 -- |The quasi-quoter used to generate patterns from quasi-quotations in layout form.
-lich = QuasiQuoter{quoteExp =  parseParsecPattern }
+lich :: QuasiQuoter
+lich = QuasiQuoter
+           parseParsecPattern
+           (error "quote: Invalid application in quotePat context.")
+           (error "quote: Invalid application in quoteType context.")
+           (error "quote: Invalid application in quoteDec context.")
 
 -- | Parses a string into a ParsecPattern structure
+parseParsecPattern :: String -> Q Exp
 parseParsecPattern input =
     case parse parseExpr "pattern" (('[':input)++[']']) of
         Left  err -> fail $ show err
@@ -149,21 +149,23 @@ parseRawFunction = between (char '(' *> spaces) (spaces *> char ')') (try leftSe
             f <- oneOf "+*/"
             spaces
             v <- parseRawNumber
-            return $ case f of
-                '+' -> InfixE Nothing (VarE (mkName "Prelude.+")) (Just (LitE (RationalL $ toRational v)))
-                -- '-' -> AppE (VarE (mkName "Prelude.subtract")) (LitE (RationalL $ toRational v))
-                '*' -> InfixE Nothing (VarE (mkName "Prelude.*")) (Just (LitE (RationalL $ toRational v)))
-                '/' -> InfixE Nothing (VarE (mkName "Prelude./")) (Just (LitE (RationalL $ toRational v)))
+            case f of
+                '+' -> return $ InfixE Nothing (VarE (mkName "Prelude.+")) (Just (LitE (RationalL $ toRational v)))
+                -- '-' -> return $ AppE (VarE (mkName "Prelude.subtract")) (LitE (RationalL $ toRational v))
+                '*' -> return $ InfixE Nothing (VarE (mkName "Prelude.*")) (Just (LitE (RationalL $ toRational v)))
+                '/' -> return $ InfixE Nothing (VarE (mkName "Prelude./")) (Just (LitE (RationalL $ toRational v)))
+                _   -> fail (f : " is not a supported operator.")
         rightSection  = do
             v <- parseRawNumber
             spaces
             f <- oneOf "+-*/"
-            return $ case f of
-                '+' -> InfixE (Just (LitE (RationalL $ toRational v))) (VarE (mkName "Prelude.+")) Nothing
-                '-' -> InfixE (Just (LitE (RationalL $ toRational v))) (VarE (mkName "Prelude.-")) Nothing
-                '*' -> InfixE (Just (LitE (RationalL $ toRational v))) (VarE (mkName "Prelude.*")) Nothing
-                '/' -> InfixE (Just (LitE (RationalL $ toRational v))) (VarE (mkName "Prelude./")) Nothing
-
+            case f of
+                '+' -> return $ InfixE (Just (LitE (RationalL $ toRational v))) (VarE (mkName "Prelude.+")) Nothing
+                '-' -> return $ InfixE (Just (LitE (RationalL $ toRational v))) (VarE (mkName "Prelude.-")) Nothing
+                '*' -> return $ InfixE (Just (LitE (RationalL $ toRational v))) (VarE (mkName "Prelude.*")) Nothing
+                '/' -> return $ InfixE (Just (LitE (RationalL $ toRational v))) (VarE (mkName "Prelude./")) Nothing
+                _   -> fail (f : " is not a supported operator.")
+                
 ---------------------
 -- convert to QExpr
 --------------------
@@ -247,26 +249,28 @@ parseRawFunction = between (char '(' *> spaces) (spaces *> char ')') (try leftSe
 
 --Don't think this can handle negative numbers right now. Oops....
 layoutToPattern :: ParsecPattern a -> NP.Pattern (NP.Pattern a,Double)
-layoutToPattern (ParsecValue a) = NP.PVal (NP.PVal a,1)
-layoutToPattern  ParsecRest     = NP.PVal (NP.PNothing,1)
-layoutToPattern (ParsecList as) = NP.PSeq (NP.PGen $ pvector withTimes) $ floor timeLength
+layoutToPattern (ParsecValue a)  = NP.PVal (NP.PVal a,1)
+layoutToPattern  ParsecRest      = NP.PVal (NP.PNothing,1)
+layoutToPattern (ParsecList as)  = NP.PSeq (NP.PGen $ pvector withTimes) $ floor timeLength
     where
-        (_,_,timeLength)        = withTimes V.! (V.length withTimes - 1)
-        withTimes               = V.fromList . reverse $ foldl countTime [] withoutTimes
-        withoutTimes            = foldr (go 1) [] as
-        countTime [] (v,d)      = (v,d,0) : []
+        (_,_,timeLength)         = withTimes V.! (V.length withTimes - 1)
+        withTimes                = V.fromList . reverse $ foldl countTime [] withoutTimes
+        withoutTimes             = foldr (go 1) [] as
+        countTime [] (v,d)       = (v,d,0) : []
         countTime ((v1,d1,t1) : vs) (v2,d2) = (v2,d2,d1+t1) : (v1,d1,t1) : vs
-        go d (ParsecValue a) vs = (NP.PVal a,d)   : vs
-        go d  ParsecRest     vs = (NP.PNothing,d) : vs
-        go d (ParsecList as) vs = foldr (go (d / (fromIntegral $ length as))) vs as
+        go d (ParsecValue a) vs  = (NP.PVal a,d)   : vs
+        go d  ParsecRest     vs  = (NP.PNothing,d) : vs
+        go d (ParsecList as') vs = foldr (go (d / (fromIntegral $ length as'))) vs as'
+        go _ _ vs                = vs
+layoutToPattern _                = NP.PNothing
 
 
 pvector :: V.Vector(NP.Pattern a,Double,Time) -> Time -> NP.Pattern (NP.Pattern a,Double)
-pvector vec time = go time 0 vecLength
+pvector vec initialTime = go initialTime 0 vecLength
     where
         vecLength = V.length vec
         go time imin imax
-            | index < 0                         = NP.PVal $ (\(v,d,t) -> (v,d)) $ vec V.! 0
+            | index < 0                         = NP.PVal $ (\(v,d,_) -> (v,d)) $ vec V.! 0
             | index > vecLength - 1             = NP.PNothing
             | time == curTime                   = NP.PVal (curValue,curDur)
             | time == prevTime                  = NP.PVal (prevValue,prevDur)
@@ -276,17 +280,10 @@ pvector vec time = go time 0 vecLength
             | time < curTime && time > prevTime = NP.PVal (prevValue,prevDur)
             | otherwise                         = NP.PVal (curValue ,curDur)
             where
-                index                        = imin + floor (fromIntegral (imax - imin) / 2)
+                index                        = imin + floor (((fromIntegral (imax - imin)) :: Double) / 2)
                 (prevValue,prevDur,prevTime) = vec V.! max (index-1) 0
                 (curValue ,curDur ,curTime)  = vec V.! index
                 (nextValue,nextDur,nextTime) = vec V.! min (index+1) (vecLength -1)
-
-getName :: String -> Q Name
-getName s = do
-    name <- lookupTypeName s
-    return $ case name of
-        Just n  -> n
-        Nothing -> mkName s
 
 getValueName :: String -> Q Name
 getValueName s = do

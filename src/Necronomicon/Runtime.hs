@@ -3,15 +3,12 @@ module Necronomicon.Runtime where
 import Prelude
 import Foreign
 import Foreign.C
-import GHC.Float
 import Control.Concurrent
 import Control.Concurrent.STM
-import Control.Monad
+import Control.Applicative
 import Control.Monad.Trans
 import qualified Necronomicon.Util.PriorityQueue as PQ
 import Necronomicon.Patterns
-import Necronomicon.Util.Functions
--- import qualified Data.Map.Strict as M
 import qualified Data.Map as M
 import Paths_Necronomicon
 import Data.Typeable
@@ -43,10 +40,10 @@ data RuntimeMessage = StartSynth SynthDef [CDouble] NodeID JackTime
 type RunTimeMailbox = TChan RuntimeMessage
 
 instance Show (Time -> Int -> JackTime -> Necronomicon (Maybe Double)) where
-    show pfunc = "(\\PFunc ->)"
+    show _ = "(\\PFunc ->)"
 
 instance Show (Time -> Int -> JackTime -> [PDouble] -> Necronomicon (Maybe Double)) where
-    show pfunc = "(\\PFuncWithArgs ->)"
+    show _ = "(\\PFuncWithArgs ->)"
 
 type PDouble = Pattern Double
 
@@ -79,7 +76,7 @@ instance Eq ScheduledPdef where
 
 pbeat :: String -> Pattern (Pattern (JackTime -> Necronomicon ()), Double) -> PDef
 pbeat name layout = PDefNoArgs name (PSeq (PVal pfunc) (plength layout))
-    where pfunc t i jackTime = case collapse layout t of
+    where pfunc t _ jackTime = case collapse layout t of
               PVal (p, d) -> case collapse p t of
                   PVal v -> v jackTime >> return (Just d)
                   _ -> return (Just d)
@@ -134,15 +131,19 @@ data NecroVars = NecroVars {
 
 data Necronomicon a = Necronomicon { runNecroState :: NecroVars -> IO (a, NecroVars) } deriving (Typeable)
 
+instance Functor Necronomicon where
+    fmap f (Necronomicon h) = Necronomicon (\n -> h n >>= \(a, n') -> return (f a, n'))
+
+instance Applicative Necronomicon where
+    pure x = Necronomicon (\n -> return (x, n))
+    (Necronomicon x) <*> (Necronomicon y) = Necronomicon (\n -> x n >>= \(a, n') -> y n' >>= \(b, n'') -> return (a b, n''))
+
 instance Monad Necronomicon where
     return x = Necronomicon (\n -> return (x, n))
     (Necronomicon h) >>= f = Necronomicon (\n -> h n >>= \(a, n') -> let (Necronomicon g) = f a in (g n'))
 
 instance MonadIO Necronomicon where
     liftIO f = Necronomicon (\n -> f >>= \result -> return (result, n))
-
-instance Show a => Show (Necronomicon a) where
-    show (Necronomicon n) = "(Necronomicon n)"
 
 getVars :: Necronomicon NecroVars
 getVars = Necronomicon (\n -> return (n, n))
@@ -196,7 +197,7 @@ getPatternThreadIdTVar :: Necronomicon (TVar ThreadId)
 getPatternThreadIdTVar = prGetTVar necroPatternThreadID
 
 setPatternThreadId :: ThreadId -> Necronomicon ()
-setPatternThreadId id = getPatternThreadIdTVar >>= \idTVar -> nAtomically (writeTVar idTVar id)
+setPatternThreadId threadID = getPatternThreadIdTVar >>= \idTVar -> nAtomically (writeTVar idTVar threadID)
 
 getPatternMailBox :: Necronomicon PRunTimeMailbox
 getPatternMailBox = Necronomicon (\n -> return (necroPatternMailbox n, n))
@@ -222,8 +223,8 @@ mkNecroVars = do
     pThreadIdTVar <- atomically $ newTVar pThreadId
     pMailBox <- atomically $ newTChan
     patternQueue <- atomically $ newTVar (PQ.empty, M.empty)
-    tempo <- atomically $ newTVar 60.0
-    return (NecroVars threadIdTVar mailBox nextNodeId synthDefDict running pThreadIdTVar pMailBox patternQueue tempo)
+    tempoTVar <- atomically $ newTVar 60.0
+    return (NecroVars threadIdTVar mailBox nextNodeId synthDefDict running pThreadIdTVar pMailBox patternQueue tempoTVar)
 
 runNecronomicon :: Necronomicon a -> IO a
 runNecronomicon func = do
@@ -277,7 +278,7 @@ sendMessage :: RuntimeMessage -> Necronomicon ()
 sendMessage message = getMailBox >>= \mailBox -> nAtomically $ writeTChan mailBox message
 
 collectMailbox :: TChan a -> Necronomicon [a]
-collectMailbox mailBox = liftIO $ collectWorker mailBox []
+collectMailbox runtimeMailBox = liftIO $ collectWorker runtimeMailBox []
     where
         collectWorker mailBox messages = (atomically $ tryReadTChan mailBox) >>= \maybeMessage ->
             case maybeMessage of
@@ -285,30 +286,30 @@ collectMailbox mailBox = liftIO $ collectWorker mailBox []
                 Just message -> collectWorker mailBox (message : messages)
 
 clipSynthArgs :: String -> NodeID -> [CDouble] -> Int -> Necronomicon [CDouble]
-clipSynthArgs name id args numArgs = if length args > numArgs
+clipSynthArgs name nodeID args numArgs = if length args > numArgs
                          then nPrint clipString >> return (take numArgs args)
                          else return args
     where
-        clipString = "Too many arguments passed to node (" ++ (show id) ++ ", " ++ name ++ "), truncating to " ++ (show numArgs) ++ "."
+        clipString = "Too many arguments passed to node (" ++ (show nodeID) ++ ", " ++ name ++ "), truncating to " ++ (show numArgs) ++ "."
 
 processStartSynth :: SynthDef -> [CDouble] -> NodeID -> JackTime -> Necronomicon ()
-processStartSynth (SynthDef name numArgs csynthDef) args id time = clipSynthArgs name id args numArgs >>= \clippedArgs ->
+processStartSynth (SynthDef name numArgs csynthDef) args nodeID time = clipSynthArgs name nodeID args numArgs >>= \clippedArgs ->
     liftIO $ withArray clippedArgs (play . fromIntegral $ length clippedArgs)
     where
-        play num ptrArgs = playSynthInRtRuntime csynthDef ptrArgs num id time
+        play num ptrArgs = playSynthInRtRuntime csynthDef ptrArgs num nodeID time
 
 processSetSynthArg :: Synth -> CUInt -> CDouble -> Necronomicon ()
-processSetSynthArg (Synth id (SynthDef name numArgs _)) argIndex arg = clipArgIndex >>= \argIndex -> liftIO $ setSynthArgInRtRuntime id arg argIndex
+processSetSynthArg (Synth nodeID (SynthDef name numArgs _)) argIndex arg = clipArgIndex >>= \clippedArgIndex -> liftIO $ setSynthArgInRtRuntime nodeID arg clippedArgIndex
     where
         cNumArgs = fromIntegral numArgs
         clipArgIndex = if argIndex >= cNumArgs
                           then nPrint clipString >> return (cNumArgs - 1)
                           else return argIndex
-        clipString = "Argument index " ++ (show argIndex) ++ " is too high for node (" ++ (show id) ++ ", " ++ name ++ "), clipping to " ++ (show (numArgs - 1)) ++ "."
+        clipString = "Argument index " ++ (show argIndex) ++ " is too high for node (" ++ (show nodeID) ++ ", " ++ name ++ "), clipping to " ++ (show (numArgs - 1)) ++ "."
 
 processSetSynthArgs :: Synth -> [CDouble] -> Necronomicon ()
-processSetSynthArgs (Synth id (SynthDef name numArgs _)) args = clipSynthArgs name id args numArgs >>= \clippedArgs ->
-    liftIO $ withArray clippedArgs (\ptrArgs -> liftIO $ setSynthArgsInRtRuntime id ptrArgs (fromIntegral $ length clippedArgs))
+processSetSynthArgs (Synth nodeID (SynthDef name numArgs _)) args = clipSynthArgs name nodeID args numArgs >>= \clippedArgs ->
+    liftIO $ withArray clippedArgs (\ptrArgs -> liftIO $ setSynthArgsInRtRuntime nodeID ptrArgs (fromIntegral $ length clippedArgs))
 
 processMessages :: [RuntimeMessage] -> Necronomicon ()
 processMessages messages =  mapM_ (processMessage) messages
@@ -318,10 +319,10 @@ processMessages messages =  mapM_ (processMessage) messages
                then return ()
                else process m
         process m = case m of
-            StartSynth synthDef args id time -> processStartSynth synthDef args id time
+            StartSynth synthDef args nodeID time -> processStartSynth synthDef args nodeID time
             SetSynthArg synth argIndex arg -> processSetSynthArg synth argIndex arg
             SetSynthArgs synth args -> processSetSynthArgs synth args
-            StopSynth id -> liftIO $ stopSynthInRtRuntime id
+            StopSynth nodeID -> liftIO $ stopSynthInRtRuntime nodeID
             CollectSynthDef synthDef -> addSynthDef synthDef
             ShutdownNrt -> necronomiconEndSequence
 
@@ -363,12 +364,21 @@ setTempo newTempo = do
 
 getCurrentBeat :: Necronomicon Int
 getCurrentBeat = do
-    tempo <- getTempo
+    currentTempo <- getTempo
     currentTime <- liftIO getJackTime
-    let tempoSeconds = 60 / tempo  
+    let tempoSeconds = 60 / currentTempo
     let currentBeat = (fromIntegral currentTime / microsecondsPerSecond) / tempoSeconds
     return (floor currentBeat)
 
+floorTimeBy :: JackTime -> Double -> JackTime
+floorTimeBy t b = floor $ timeDividedByBeatMicros * b
+    where
+        timeDividedByBeatMicros = (fromIntegral ((floor (((fromIntegral t) :: Double) / b)) :: JackTime)) :: Double
+
+ceilTimeBy :: JackTime -> Double -> JackTime
+ceilTimeBy t b = floor $ timeDividedByBeatMicros * b
+    where
+        timeDividedByBeatMicros = (fromIntegral ((ceiling (((fromIntegral t) :: Double) / b)) :: JackTime)) :: Double
 
 -- We treat all patterns as if they are running at 60 bpm.
 -- The scheduler modifies it's own rate instead of the pattern's times to account for actual tempo
@@ -380,12 +390,8 @@ pmessagePlayPattern pdef name =  getPatternQueue >>= \(pqueue, pmap) ->
         -- When the current cyle is over the scheduler checks to see if there is a queued update,
         -- if so we move the queued pattern into the pattern slot and change queued to Nothing
         Just _ -> setPatternQueue (pqueue, M.insert name pdef pmap)
-        Nothing -> liftIO getJackTime >>= \currentTime -> getTempo >>= \tempo ->
-            let floorTimeBy :: JackTime -> Double -> JackTime
-                floorTimeBy t b = floor $ (fromIntegral $ floor (fromIntegral t / b)) * b
-                ceilTimeBy :: JackTime -> Double -> JackTime
-                ceilTimeBy t b = floor $ (fromIntegral $ ceiling (fromIntegral t / b)) * b
-                tempoRatio = timeTempo / tempo
+        Nothing -> liftIO getJackTime >>= \currentTime -> getTempo >>= \currentTempo ->
+            let tempoRatio = timeTempo / currentTempo
                 beatMicros = microsecondsPerSecond * tempoRatio
                 currentBeatMicro = floorTimeBy currentTime beatMicros
                 nextBeatMicro = ceilTimeBy currentTime beatMicros
@@ -413,6 +419,7 @@ pmessageSetPDefArg :: String -> [PDouble] -> Necronomicon ()
 pmessageSetPDefArg name argValues = getPatternQueue >>= \(pqueue, pmap) ->
         case M.lookup name pmap of
             Just (PDefWithArgs _ pattern _) -> setPatternQueue (pqueue, M.insert name (PDefWithArgs name pattern argValues) pmap)
+            Just (PDefNoArgs patternName _) -> printNoArgMessage patternName
             Nothing -> printSetPatternNotFound name
 
 processPMessage :: PRunTimeMessage -> Necronomicon ()
@@ -475,26 +482,26 @@ handleScheduledPatterns nextTime = getPatternQueue >>= \(pqueue, pmap) -> handle
     where
         handlePattern q m nextT hasChanged = case PQ.pop q of
             (Nothing, _) -> (if hasChanged then setPatternQueue (q, m) else return ()) >> return nextT -- Handle empty queue, which could be the result of a recursive call
-            (Just (ScheduledPdef n l t b i), q') -> liftIO getJackTime >>= \currentTime ->
+            (Just (ScheduledPdef n _ t b i), q') -> liftIO getJackTime >>= \currentTime ->
                 if currentTime < (t - patternLookAhead) -- Check to see if any patterns are ready to be played
                    then if hasChanged -- No pattern is ready, but this could be a recursive call, so we check if we need to update the pattern queue
                         then setPatternQueue (q, m) >> return nextT
                         else return $ floor ((fromIntegral (t - currentTime) :: Double) * 0.1) -- return wait time as a percentage of the distance to the scheduled time
-                   else getTempo >>= \tempo -> -- The top of the queue is ready to be played
-                        let tempoRatio = timeTempo / tempo
-                            schedulePattern n maybeDur =  case maybeDur of -- Schedule the pattern to be played again
+                   else getTempo >>= \currentTempo -> -- The top of the queue is ready to be played
+                        let tempoRatio = timeTempo / currentTempo
+                            handleNothing = handlePattern q' m nextT changed -- The pattern was stopped or the pattern collapsed to PNothing, so we keep the popped queue and don't play the pattern
+                            schedulePattern maybeDur = case maybeDur of -- Schedule the pattern to be played again
                                    Just dur -> handlePattern (PQ.insert q' (ScheduledPdef n t (t + scaledDur) (b + dur) (i + 1))) m waitTime changed
                                        where
                                            scaledDur = floor $ dur * tempoRatio * microsecondsPerSecond -- Convert from beats to microseconds
-                                           waitTime = floor $ fromIntegral scaledDur * 0.1 -- return wait time as a percentage of the duration of this beat
-                                   Nothing -> handleNothing -- After player the pattern returns Nothing for the duration, which means it is done and ready to be removed
-                            handleNothing = handlePattern q' m nextT changed -- The pattern was stopped or the pattern collapsed to PNothing, so we keep the popped queue and don't play the pattern
+                                           waitTime = (floor (((fromIntegral scaledDur) :: Double) * 0.1)) :: JackTime -- return wait time as a percentage of the duration of this beat
+                                   Nothing -> handleNothing -- After player the pattern returns Nothing for the duration, which means it is done and ready to be removed                            
                         in case M.lookup n m of
                            Nothing -> handleNothing -- When we check the name/pdef map we find nothing, which means it was stopped 
                            Just (PDefNoArgs _ p) -> case collapse p b of 
-                               PVal pfunc -> pfunc b i t >>= schedulePattern n -- play the pattern then schedule it again
+                               PVal pfunc -> pfunc b i t >>= schedulePattern -- play the pattern then schedule it again
                                _ -> handleNothing -- The pattern collapsed to Nothing
-                           Just (PDefWithArgs _ pfunc args) -> pfunc b i t args >>= schedulePattern n  -- play the pattern then schedule it again    
+                           Just (PDefWithArgs _ pfunc args) -> pfunc b i t args >>= schedulePattern -- play the pattern then schedule it again    
 
 startPatternScheduler :: Necronomicon ()
 startPatternScheduler = do

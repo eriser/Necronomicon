@@ -42,8 +42,6 @@ patternTest = do
     compileSynthDef "four" four
     let pLineSynth = return (\degree t -> playSynthAtJackTime "FreqSynth" [degree * 110] t >> return ())
     let pBeatSynth = return (\synth t -> playSynthAtJackTime synth [] t >> return ())
-    let p2 = pseq 1 [1, pseq 2 [5..11]] + pseq 1 [2..5]
-    nPrint (collapse (collapse p2 1) 1)
     setTempo 150
 
     argsPattern <- runPDef $ pstreamWithArgs "ArgsPattern" pLineSynth ((\x -> pstutter x $ pseq 10 [
@@ -164,37 +162,3 @@ patternTest = do
 
 main :: IO ()
 main = runNecronomicon patternTest
-
-print0p5 :: Pattern (JackTime -> Necronomicon ())
-print0p5 = PVal $ \jackTime -> nPrint 0.5
-
-print1 :: Pattern (JackTime -> Necronomicon ())
-print1 = PVal $ \jackTime -> nPrint 1
-
-melo :: PDef
-melo = pbind "melo" sequence durs
-    where
-        sequence = ploop [print1, print0p5, print0p5]
-        durs = pseq 5 [1, 0.25, 0.5, 0.25]
-
-melo2 :: PDef
-melo2 = pbind "melo2" sequence durs
-    where
-        sequence :: Pattern (JackTime -> Necronomicon ())
-        sequence = ploop [PVal (\_ -> nPrint 666.0)]
-        durs = pseq 5 [0.25, 0.25, 0.5, 0.25]
-
-melo3 :: PDef -- THIS UPDATES THE "melo" pattern!!!!!!!!!!!
-melo3 = pbind "melo" sequence durs
-    where
-        sequence :: Pattern (JackTime -> Necronomicon ())
-        sequence = PGen (\t -> return (\_ -> nPrint (t ^ 4)))
-        durs = pseq 5 [0.5, 0.125, 0.125, 0.25]
-
-melo4 = [lich| 0 [1 2] _ [3 [4 5]] 6
-               0 [1 2] _ [3 [4 5]] 6
-               0 [1 2] _ [3 [4 5]] 6
-               0 [1 2] _ [3 [4 5]] 6 |]
-
--- funcs= [lich| (+1) ((*2),(+2),(3/)) _ [(/2) (+2)] |]
--- mix  = [l| 1 2 s _ |]

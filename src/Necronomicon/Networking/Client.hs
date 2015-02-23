@@ -4,27 +4,15 @@ import Prelude
 
 import Control.Concurrent (forkIO,threadDelay)
 import Control.Concurrent.STM
-import System.Environment (getArgs)
 import Network.Socket hiding (send,recv,recvFrom,sendTo)
-import Network.Socket.ByteString.Lazy
-import qualified Data.ByteString.Char8 as C (null,unpack,pack)
+import qualified Data.ByteString.Char8 as C (unpack,pack)
 import qualified Data.ByteString.Lazy  as B  (null)
 import Control.Exception
-import Control.Monad (unless,forever,(<=<))
-import System.CPUTime
-import qualified Data.Map      as Map
 import qualified Data.IntMap   as IntMap
-import qualified Data.Sequence as Seq
-import qualified Data.Foldable as Foldable (toList)
 import Sound.OSC.Core
-import Necronomicon.Networking.SyncObject
-import Necronomicon.Networking.Server (clientPort,serverPort)
+import Necronomicon.Networking.Server (serverPort)
 import Necronomicon.Networking.Message
 import Necronomicon.FRP.Event
-import System.Random (randomRIO)
-import System.Exit
-import Debug.Trace
-import Data.Typeable
 import Data.Binary (encode,decode)
 
 --fix lazy chat and chat in general
@@ -35,10 +23,10 @@ import Data.Binary (encode,decode)
 -- Server keeps like 10 - 20 line chat log?
 
 startClient :: String -> String -> SignalState -> Client -> IO ()
-startClient name serverIPAddress sigstate client = do
+startClient _ serverIPAddress sigstate client = do
     putStrLn "Starting a client..."
     -- client <- newClient name
-    forkIO $ withSocketsDo $ startup client serverIPAddress sigstate
+    _ <- forkIO $ withSocketsDo $ startup client serverIPAddress sigstate
     -- return client
     return ()
 
@@ -52,11 +40,11 @@ startup client serverIPAddress sigstate = do
     (sock,serverAddr) <- getSocket
     atomically $ writeTChan (netStatusBuffer sigstate) Connecting
     connectionLoop            client sock serverAddr
-    time >>= \t -> atomically $ writeTVar (aliveTime client) t
-    forkIO $ messageProcessor client sigstate
-    forkIO $ listener         client sock
-    forkIO $ aliveLoop        client sock
-    forkIO $ sender           client sock
+    time >>= \t -> atomically $ writeTVar (clientAliveTime client) t
+    _ <- forkIO $ messageProcessor client sigstate
+    _ <- forkIO $ listener         client sock
+    _ <- forkIO $ aliveLoop        client sock
+    _ <- forkIO $ sender           client sock
     atomically $ writeTChan (netStatusBuffer sigstate) Running
     -- forkIO $ sendLoginMessage client
     sendLoginMessage client
@@ -76,24 +64,24 @@ sendLoginMessage :: Client -> IO()
 sendLoginMessage client = do
     putStrLn "Logging in..."
     -- threadDelay 1000000
-    atomically $ writeTChan (outBox client) $ Login (C.pack $ userName client)
+    atomically $ writeTChan (clientOutBox client) $ Login (C.pack $ clientUserName client)
 
 connectionLoop :: Client -> Socket -> SockAddr -> IO()
-connectionLoop client socket serverAddr = Control.Exception.catch tryConnect onFailure
+connectionLoop client nsocket serverAddr = Control.Exception.catch tryConnect onFailure
     where
         tryConnect  = do
             putStrLn "trying connection..."
-            connect socket serverAddr
-            atomically (writeTVar (runStatus client) Running)
+            connect nsocket serverAddr
+            atomically (writeTVar (clientRunStatus client) Running)
             putStrLn "Connected. Starting worker threads..."
         onFailure :: IOException -> IO ()
-        onFailure e = do
-            atomically $ writeTVar (runStatus client) Connecting
+        onFailure _ = do
+            atomically $ writeTVar (clientRunStatus client) Connecting
             threadDelay 1000000
-            connectionLoop client socket serverAddr
+            connectionLoop client nsocket serverAddr
 
 sender :: Client -> Socket -> IO()
-sender client sock = executeIfConnected client (readTChan $ outBox client) >>= \maybeMessage -> case maybeMessage of
+sender client sock = executeIfConnected client (readTChan $ clientOutBox client) >>= \maybeMessage -> case maybeMessage of
     Nothing  -> putStrLn "Shutting down sender"
     Just msg -> Control.Exception.catch (sendWithLength sock $ encode msg) printError >> sender client sock
 
@@ -103,17 +91,17 @@ aliveLoop client sock = time >>= \t -> executeIfConnected client (sendAliveMessa
     Nothing -> putStrLn "Shutting down aliveLoop"
     Just () -> do
         currentTime   <- time
-        lastAliveTime <- atomically $ readTVar (aliveTime client)
+        lastAliveTime <- atomically $ readTVar (clientAliveTime client)
         let delta = currentTime - lastAliveTime
         -- putStrLn $ "Time since last alive message: " ++ show delta
         if delta < 6.5
             then threadDelay 2000000 >> aliveLoop client sock
             else do
                 putStrLn "Lost server alive messages! Shutting down."
-                atomically $ writeTVar (runStatus client) Disconnected
+                atomically $ writeTVar (clientRunStatus client) Disconnected
                 sClose sock
     where
-        sendAliveMessage t = writeTChan (outBox client) Alive
+        sendAliveMessage _ = writeTChan (clientOutBox client) Alive
 
 --Should this shutdown or keep up the loop???
 --Need alive loop to handle weird in between states
@@ -121,19 +109,19 @@ aliveLoop client sock = time >>= \t -> executeIfConnected client (sendAliveMessa
 listener :: Client -> Socket -> IO()
 listener client sock = receiveWithLength sock >>= \maybeMsg -> case maybeMsg of
     Exception     e -> putStrLn ("listener Exception: " ++ show e)         >> listener client sock
-    ShutdownMessage -> putStrLn "Message has zero length. Shutting down."  >> shutdown
-    IncorrectLength -> putStrLn "Message is incorrect length! Ignoring..." >> shutdown -- listener client sock
+    ShutdownMessage -> putStrLn "Message has zero length. Shutting down."  >> shutdownClient
+    IncorrectLength -> putStrLn "Message is incorrect length! Ignoring..." >> shutdownClient -- listener client sock
     Receive     msg -> if B.null msg
-        then shutdown
-        else atomically (writeTChan (inBox client) (decode msg)) >> listener client sock
+        then shutdownClient
+        else atomically (writeTChan (clientInBox client) (decode msg)) >> listener client sock
     where
-        shutdown = do
+        shutdownClient = do
             putStrLn "Shutting down listener"
-            atomically $ writeTVar (runStatus client) Disconnected
+            atomically $ writeTVar (clientRunStatus client) Disconnected
             close sock
 
 messageProcessor :: Client -> SignalState -> IO()
-messageProcessor client sigstate = executeIfConnected client (readTChan $ inBox client) >>= \maybeMessage -> case maybeMessage of
+messageProcessor client sigstate = executeIfConnected client (readTChan $ clientInBox client) >>= \maybeMessage -> case maybeMessage of
     Just m  -> parseMessage m client sigstate >> messageProcessor client sigstate
     Nothing -> putStrLn "Shutting down messageProcessor"
 
@@ -142,7 +130,7 @@ messageProcessor client sigstate = executeIfConnected client (readTChan $ inBox 
 -----------------------------
 
 quitClient :: Client -> IO ()
-quitClient client = atomically (writeTVar (runStatus client) ShouldQuit) >> atomically (readTVar (runStatus client) >>= waitTillDone)
+quitClient client = atomically (writeTVar (clientRunStatus client) ShouldQuit) >> atomically (readTVar (clientRunStatus client) >>= waitTillDone)
     where
         waitTillDone Connecting   = retry
         waitTillDone Running      = retry
@@ -153,7 +141,7 @@ quitClient client = atomically (writeTVar (runStatus client) ShouldQuit) >> atom
 
 statusLoop :: Client -> Socket -> String -> SignalState -> RunStatus -> IO()
 statusLoop client sock serverIPAddress sigstate status = do
-    status' <-atomically (readTVar (runStatus client) >>= \status' -> if status /= status' then return status' else retry)
+    status' <-atomically (readTVar (clientRunStatus client) >>= \status' -> if status /= status' then return status' else retry)
     -- writeToSignal (netStatusSignal sigstate) status'
     atomically $ writeTChan (netStatusBuffer sigstate) status'
     putStrLn ("Network status update: " ++ show status')
@@ -161,20 +149,20 @@ statusLoop client sock serverIPAddress sigstate status = do
         Disconnected -> threadDelay 2500000 >> putStrLn "Disconnected. Trying to restart..." >> startup client serverIPAddress sigstate
         ShouldQuit   -> do
             putStrLn "Quitting..."
-            atomically $ writeTVar  (runStatus client) Quitting
+            atomically $ writeTVar  (clientRunStatus client) Quitting
             putStrLn "Sending quit message to server..."
-            Control.Exception.catch (sendWithLength sock $ encode $ Logout (C.pack $ userName client)) printError
+            Control.Exception.catch (sendWithLength sock $ encode $ Logout (C.pack $ clientUserName client)) printError
             putStrLn "Closing socket..."
             close sock
             putStrLn "Done quitting..."
-            atomically $ writeTVar  (runStatus client) DoneQuitting
+            atomically $ writeTVar  (clientRunStatus client) DoneQuitting
         _            -> statusLoop client sock serverIPAddress sigstate status'
 
 executeIfConnected :: Client -> STM a -> IO (Maybe a)
 executeIfConnected client action = atomically (checkForStatus `orElse` checkForMessage)
     where
         checkForMessage = action >>= return . Just
-        checkForStatus  = readTVar  (runStatus client) >>= \status -> case status of
+        checkForStatus  = readTVar  (clientRunStatus client) >>= \status -> case status of
             Connecting -> retry
             Running    -> retry
             _          -> return Nothing
@@ -192,16 +180,16 @@ parseMessage (UserList ul) client sigstate = do
 
 parseMessage Alive client _ = do
     currentTime  <- time
-    atomically $ writeTVar (aliveTime client) currentTime
+    atomically $ writeTVar (clientAliveTime client) currentTime
 
 parseMessage (Login _) _ _ = putStrLn "Succesfully logged in."
 
-parseMessage (AddNetSignal uid netVal) client sigstate = do
+parseMessage (AddNetSignal uid netVal) _ sigstate = do
     -- atomically (readTVar (netSignals client) >>= \sig -> writeTVar (netSignals client) (IntMap.insert uid (Change netVal) sig))
     atomically $ readTVar (netSignalsBuffer sigstate) >>= writeTVar (netSignalsBuffer sigstate) . ((uid,netVal) :)
     putStrLn $ "Adding NetSignal: " ++ show (uid,netVal)
 
-parseMessage (SetNetSignal uid netVal) client sigstate = do
+parseMessage (SetNetSignal uid netVal) _ sigstate = do
     -- need new system for this
     -- sendToGlobalDispatch globalDispatch uid $ netValToDyn netVal
     -- atomically $ readTVar (netSignals client) >>= \sigs -> writeTVar (netSignals client) (IntMap.insert uid (Change netVal) sigs)
@@ -209,7 +197,7 @@ parseMessage (SetNetSignal uid netVal) client sigstate = do
 
     -- putStrLn $ "Setting NetSignal : " ++ show (uid,netVal)
 
-parseMessage (SyncNetSignals netVals) client sigstate = do
+parseMessage (SyncNetSignals netVals) _ sigstate = do
     print "SyncNetSignals"
     -- oldNetSignals <- atomically $ readTVar (netSignals client)
     -- mapM_ (sendMergeEvents oldNetSignals) $ IntMap.toList netVals
@@ -224,7 +212,7 @@ parseMessage (SyncNetSignals netVals) client sigstate = do
                 -- then return () -- sendToGlobalDispatch globalDispatch uid $ netValToDyn netVal
                 -- else return ()
 
-parseMessage (Chat name msg) client sigstate = atomically $ writeTChan (chatMessageBuffer sigstate) $ C.unpack name ++ ": " ++ C.unpack msg
+parseMessage (Chat name msg) _ sigstate = atomically $ writeTChan (chatMessageBuffer sigstate) $ C.unpack name ++ ": " ++ C.unpack msg
 
 parseMessage EmptyMessage        _ _ = putStrLn "Empty message received!?"
 parseMessage (RemoveNetSignal _) _ _ = putStrLn "Really no reason to remove net signals now is there?"
@@ -264,7 +252,7 @@ printError e = print e
 -----------------------------
 
 sendChatMessage :: String -> Client -> IO()
-sendChatMessage chat client = atomically $ writeTChan (outBox client) $ Chat (C.pack $ userName client) (C.pack chat)
+sendChatMessage chat client = atomically $ writeTChan (clientOutBox client) $ Chat (C.pack $ clientUserName client) (C.pack chat)
 
 -- addSynthPlayObject :: Client -> Int -> Bool -> [(Int,Double)] -> IO()
 -- addSynthPlayObject client uid isPlaying args = atomically $ do
@@ -273,10 +261,10 @@ sendChatMessage chat client = atomically $ writeTChan (outBox client) $ Chat (C.
 
 sendSetNetSignal :: Client -> (Int,NetValue) -> IO()
 sendSetNetSignal client (uid,v) = do
-    atomically $ writeTChan (outBox client) $ SetNetSignal uid v
+    atomically $ writeTChan (clientOutBox client) $ SetNetSignal uid v
     -- atomically $ readTVar (netSignals client) >>= writeTVar (netSignals client) . IntMap.insert uid v
 
 sendAddNetSignal :: Client -> (Int,NetValue) -> IO()
 sendAddNetSignal client (uid,netVal) = do
-    atomically $ writeTChan (outBox client) $ AddNetSignal uid netVal
-    atomically (readTVar (netSignals client) >>= \sig -> writeTVar (netSignals client) (IntMap.insert uid (NoChange netVal) sig))
+    atomically $ writeTChan (clientOutBox client) $ AddNetSignal uid netVal
+    atomically (readTVar (clientNetSignals client) >>= \sig -> writeTVar (clientNetSignals client) (IntMap.insert uid (NoChange netVal) sig))
