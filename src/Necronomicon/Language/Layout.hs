@@ -264,7 +264,6 @@ layoutToPattern (ParsecList as)  = NP.PSeq (NP.PGen $ pvector withTimes) $ floor
         go _ _ vs                = vs
 layoutToPattern _                = NP.PNothing
 
-
 pvector :: V.Vector(NP.Pattern a,Double,Time) -> Time -> NP.Pattern (NP.Pattern a,Double)
 pvector vec initialTime = go initialTime 0 vecLength
     where

@@ -36,7 +36,7 @@ data RuntimeMessage = StartSynth SynthDef [CDouble] NodeID JackTime
                     | CollectSynthDef SynthDef
                     | ShutdownNrt
                     deriving (Show)
-                      
+
 type RunTimeMailbox = TChan RuntimeMessage
 
 instance Show (Time -> Int -> JackTime -> Necronomicon (Maybe Double)) where
@@ -354,13 +354,13 @@ setTempo newTempo = do
     tempoTVar <- prGetTVar necroTempo
     currentTempo <- nAtomically $ readTVar tempoTVar
     nAtomically . writeTVar tempoTVar $ max 0 newTempo
-    (pqueue, pmap) <- getPatternQueue
-    currentTime <- liftIO getJackTime                  
+    (pqueue, pdict) <- getPatternQueue
+    currentTime <- liftIO getJackTime
     -- Adjust all the scheduled times in place so that we can proceed normally going forward with correctly adjusted times
     let updatePattern (ScheduledPdef n l t b i) = let diff = currentTime - l in
             ScheduledPdef n l (l + diff + floor (fromIntegral (t - l - diff) * currentTempo / newTempo)) b i
     let pqueue' = PQ.mapInPlace updatePattern pqueue
-    setPatternQueue (pqueue', pmap)
+    setPatternQueue (pqueue', pdict)
 
 getCurrentBeat :: Necronomicon Int
 getCurrentBeat = do
@@ -383,13 +383,13 @@ ceilTimeBy t b = floor $ timeDividedByBeatMicros * b
 -- We treat all patterns as if they are running at 60 bpm.
 -- The scheduler modifies it's own rate instead of the pattern's times to account for actual tempo
 pmessagePlayPattern :: PDef -> String -> Necronomicon ()
-pmessagePlayPattern pdef name =  getPatternQueue >>= \(pqueue, pmap) ->
-    case M.lookup name pmap of
+pmessagePlayPattern pdef name =  getPatternQueue >>= \(pqueue, pdict) ->
+    case M.lookup name pdict of
         -- Update existing pattern, HOW TO CORRECTLY INSERT/UPDATE EXISTING PATTERN WITH DIFFERENT RHYTHM!!!!!!!!!!!!?????????
         -- Idea: Use a pending update structure, something like -> data PDef { pdefName :: String, pdefPattern :: Pattern, pdefQueuedUpdate :: (Maybe Pattern) }
         -- When the current cyle is over the scheduler checks to see if there is a queued update,
         -- if so we move the queued pattern into the pattern slot and change queued to Nothing
-        Just _ -> setPatternQueue (pqueue, M.insert name pdef pmap)
+        Just _ -> setPatternQueue (pqueue, M.insert name pdef pdict)
         Nothing -> liftIO getJackTime >>= \currentTime -> getTempo >>= \currentTempo ->
             let tempoRatio = timeTempo / currentTempo
                 beatMicros = microsecondsPerSecond * tempoRatio
@@ -398,11 +398,11 @@ pmessagePlayPattern pdef name =  getPatternQueue >>= \(pqueue, pmap) ->
                 -- length = plength pattern
                 -- nextBeat =  secondsToMicro $ (fromIntegral currentBeat) + ((fromIntegral $ length - (mod currentBeat length)) * tempoRatio)
                 pqueue' = PQ.insert pqueue (ScheduledPdef name currentBeatMicro nextBeatMicro 0 0)
-                pmap' = M.insert name pdef pmap
-            in setPatternQueue (pqueue', pmap')
+                pdict' = M.insert name pdef pdict
+            in setPatternQueue (pqueue', pdict')
 
 pmessageStopPattern :: String -> Necronomicon ()
-pmessageStopPattern name = getPatternQueue >>= \(pqueue, pmap) -> setPatternQueue (pqueue, M.delete name pmap)
+pmessageStopPattern name = getPatternQueue >>= \(pqueue, pdict) -> setPatternQueue (pqueue, M.delete name pdict)
 
 printNoArgMessage :: String -> Necronomicon ()
 printNoArgMessage name = nPrint ("Failed setting argument for pattern " ++ name ++ ". You cannot set the argument of a pattern with no arguments.")
@@ -416,9 +416,9 @@ setListIndex i x xs = if i >= 0 && i < length xs
                           else xs
 
 pmessageSetPDefArg :: String -> [PDouble] -> Necronomicon ()
-pmessageSetPDefArg name argValues = getPatternQueue >>= \(pqueue, pmap) ->
-        case M.lookup name pmap of
-            Just (PDefWithArgs _ pattern _) -> setPatternQueue (pqueue, M.insert name (PDefWithArgs name pattern argValues) pmap)
+pmessageSetPDefArg name argValues = getPatternQueue >>= \(pqueue, pdict) ->
+        case M.lookup name pdict of
+            Just (PDefWithArgs _ pattern _) -> setPatternQueue (pqueue, M.insert name (PDefWithArgs name pattern argValues) pdict)
             Just (PDefNoArgs patternName _) -> printNoArgMessage patternName
             Nothing -> printSetPatternNotFound name
 
@@ -478,7 +478,7 @@ changed = True
 -- handleScheduledPatterns recursively checks the pattern queue for patterns that needs to be played
 -- After playing them the scheduler will schedule them again for the future (if needed)
 handleScheduledPatterns :: JackTime -> Necronomicon JackTime
-handleScheduledPatterns nextTime = getPatternQueue >>= \(pqueue, pmap) -> handlePattern pqueue pmap nextTime notChanged
+handleScheduledPatterns nextTime = getPatternQueue >>= \(pqueue, pdict) -> handlePattern pqueue pdict nextTime notChanged
     where
         handlePattern q m nextT hasChanged = case PQ.pop q of
             (Nothing, _) -> (if hasChanged then setPatternQueue (q, m) else return ()) >> return nextT -- Handle empty queue, which could be the result of a recursive call

@@ -77,4 +77,3 @@ diamondSquare !fs !scale !seed !w !h = Vec.fromList . Fold.toList . snd $! go fs
         go !fsk !scl (rs,!t)
             | fsk < 2	= (rs,t)
             | otherwise	= go (fsk `div` 2) (scl / 2.0) $! runDiamondSquare w h fsk scl (rs,t)
-                                          

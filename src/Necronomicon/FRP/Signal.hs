@@ -2,7 +2,10 @@ module Necronomicon.FRP.Signal (
     module Necronomicon.FRP.Event,
     Signal (..),
     SignalState (..),
+    tempo,
+    playSynthPattern,
     playSignalPattern,
+    playBeatPattern,
     synthDef,
     time,
     unEvent,
@@ -2380,6 +2383,17 @@ synthDef name synth = Signal $ \state -> do
 play :: Signal Bool -> String -> [Signal Double] -> Signal ()
 play = playSynthN
 
+tempo :: Signal Double -> Signal Double
+tempo tempoSignal = Signal $ \state -> do
+    tCont  <- unSignal tempoSignal state
+    tValue <- fmap unEvent $ tCont state
+    _      <- runNecroState (setTempo tValue) (necroVars state)
+    return $ processSignal tCont (necroVars state)
+    where
+        processSignal tCont sNecroVars state = tCont state >>= \t -> case t of
+            NoChange t' -> return $ NoChange t'
+            Change   t' -> runNecroState (setTempo t') sNecroVars >> return (Change t')
+
 playSignalPattern :: (Show a,Eq a) => Signal Bool -> a -> [Signal Double] -> Pattern (Pattern a,Double) -> Signal a
 playSignalPattern playSig initValue argSigs pattern = Signal $ \state -> do
 
@@ -2389,7 +2403,7 @@ playSignalPattern playSig initValue argSigs pattern = Signal $ \state -> do
     aValues <- mapM (\f -> f state >>= return . unEvent) aConts
     valVar  <- atomically $ newTVar initValue
     pid     <- getNextID state
-    let pFunc = return (\val _ -> liftIO (atomically $ writeTVar valVar val))-- :: Pattern (a -> JackTime -> Necronomicon ())
+    let pFunc = return (\val _ -> liftIO (atomically $ writeTVar valVar val))
         pDef  = pstreamWithArgs ("sigPat" ++ show pid) pFunc pattern (map PVal aValues)
 
     maybePattern <- if pValue then runNecroState (runPDef pDef) (necroVars state) >>= \(pat,_) -> return (Just pat) else return Nothing
@@ -2431,6 +2445,70 @@ tempo tempoSignal = Signal $ \state -> do
             NoChange t' -> return $ NoChange t'
             Change   t' -> runNecroState (setTempo t') necroVars >> return (Change t')
 -}
+
+playSynthPattern :: Signal Bool -> String -> [Signal Double] -> Pattern (Pattern Double,Double) -> Signal ()
+playSynthPattern playSig synthName argSigs pattern = Signal $ \state -> do
+
+    pCont   <- unSignal (netsignal playSig) state
+    pValue  <- pCont state >>= return . unEvent
+    aConts  <- mapM (\a -> unSignal (netsignal a) state) argSigs
+    aValues <- mapM (\f -> f state >>= return . unEvent) aConts
+    pid     <- getNextID state
+    let pFunc = return (\val t -> playSynthAtJackTime synthName [val] t >> return ())
+        pDef  = pstreamWithArgs ("sigPat" ++ show pid) pFunc pattern (map PVal aValues)
+
+    maybePattern <- if pValue then runNecroState (runPDef pDef) (necroVars state) >>= \(pat,_) -> return (Just pat) else return Nothing
+    patternRef   <- newIORef maybePattern
+
+    return $ processSignal patternRef pDef pCont aConts (necroVars state)
+    where
+        processSignal patternRef pDef pCont aConts sNecroVars state = do
+            p   <- pCont state
+            pat <- readIORef patternRef
+            playChange <- case (p,pat) of
+                (Change True ,Nothing) -> print "play synthPattern" >> runNecroState (runPDef pDef) sNecroVars >>= \(pat',_) -> writeIORef patternRef (Just pat') >> return (Change ())
+                (Change False,Just  _) -> print "stop synthPattern" >> runNecroState (pstop   pDef) sNecroVars >>               writeIORef patternRef Nothing     >> return (Change ())
+                _                      -> return $ NoChange ()
+            readIORef patternRef >>= \pat' -> case pat' of
+                Nothing -> return ()
+                Just pat'' -> foldM (\i f -> updateArg i f pat'' sNecroVars state >> return (i+1)) 0 aConts >> return ()
+            return playChange
+
+        updateArg index aCont sPattern sNecroVars state = aCont state >>= \a -> case a of
+            NoChange _ -> return ()
+            Change val -> runNecroState (setPDefArg sPattern index $ PVal val) sNecroVars >> return ()
+
+playBeatPattern :: Signal Bool -> [Signal Double] -> Pattern (Pattern String, Double) -> Signal ()
+playBeatPattern playSig argSigs pattern = Signal $ \state -> do
+
+    pCont   <- unSignal (netsignal playSig) state
+    pValue  <- pCont state >>= return . unEvent
+    aConts  <- mapM (\a -> unSignal (netsignal a) state) argSigs
+    aValues <- mapM (\f -> f state >>= return . unEvent) aConts
+    pid     <- getNextID state
+    let pFunc = return (\synth t -> playSynthAtJackTime synth [] t >> return ())
+        pDef  = pstreamWithArgs ("sigPat" ++ show pid) pFunc pattern (map PVal aValues)
+
+    maybePattern <- if pValue then runNecroState (runPDef pDef) (necroVars state) >>= \(pat,_) -> return (Just pat) else return Nothing
+    patternRef   <- newIORef maybePattern
+
+    return $ processSignal patternRef pDef pCont aConts (necroVars state)
+    where
+        processSignal patternRef pDef pCont aConts sNecroVars state = do
+            p   <- pCont state
+            pat <- readIORef patternRef
+            playChange <- case (p,pat) of
+                (Change True ,Nothing) -> print "play synthPattern" >> runNecroState (runPDef pDef) sNecroVars >>= \(pat',_) -> writeIORef patternRef (Just pat') >> return (Change ())
+                (Change False,Just  _) -> print "stop synthPattern" >> runNecroState (pstop   pDef) sNecroVars >>               writeIORef patternRef Nothing     >> return (Change ())
+                _                      -> return $ NoChange ()
+            readIORef patternRef >>= \pat' -> case pat' of
+                Nothing -> return ()
+                Just pat'' -> foldM (\i f -> updateArg i f pat'' sNecroVars state >> return (i+1)) 0 aConts >> return ()
+            return playChange
+
+        updateArg index aCont sPattern sNecroVars state = aCont state >>= \a -> case a of
+            NoChange _ -> return ()
+            Change val -> runNecroState (setPDefArg sPattern index $ PVal val) sNecroVars >> return ()
 
 {-
 instance Play UGen where

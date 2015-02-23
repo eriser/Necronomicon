@@ -537,8 +537,8 @@ degree2Freq scale degree = (tuning scale V.! wrapAt degree (degrees scale)) * oc
         octave            = fromIntegral (2 ^ (div degree $ V.length $ degrees scale) :: Int)
         wrapAt index list = list V.! mod index (V.length list)
 
-d2f :: Scale -> Int -> Double
-d2f = degree2Freq
+d2f :: Scale -> Double -> Double
+d2f scale = degree2Freq scale . floor
 
 scaleTest :: [Double]
 scaleTest = [d2f major 8,d2f major 9,d2f major 10,d2f major 11,d2f major 12,d2f major 13,d2f major 14]
@@ -946,3 +946,6 @@ scaleList = ["major", "ionian", "dorian", "phrygian", "lydian", "mixolydian", "m
              "prometheus", "scriabin", "egyptian", "egyptianRast", "kumoi", "koto", "hirajoshi", "hirajoshi2", "iwato", "chinese",
              "indian", "pelog", "slendro", "slendro2", "alfarabi", "ankara", "archytas", "degung", "degungSejati", "spanish",
              "hawaiianMajor", "hawaiianMinor", "hijazira", "mothra", "todi", "purvi", "marva", "bhairav", "ahirbhairav", "coleJI"]
+
+pmap :: (a -> a) -> Pattern (Pattern a, Double) -> Pattern (Pattern a, Double)
+pmap f p = fmap (\(p',d) -> (fmap f p',d)) p
