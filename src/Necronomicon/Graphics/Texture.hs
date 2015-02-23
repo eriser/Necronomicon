@@ -6,10 +6,10 @@ import Necronomicon.Util.TGA (loadTextureFromTGA)
 data Texture = Texture {
     textureKey  :: String,
     loadTexture :: IO GL.TextureObject
-    } deriving (Show)
+    }
 
-instance Show (IO GL.TextureObject) where
-    show _ = "(IO GL.TextureObject)"
+instance Show Texture where
+    show (Texture k _) = "(Texture " ++ (show k) ++ " (TextureObject))"
 
 tga :: String -> Texture
 tga path = Texture path $ loadTextureFromTGA path

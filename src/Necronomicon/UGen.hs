@@ -3,23 +3,13 @@ module Necronomicon.UGen where
 
 import GHC.Exts
 import Data.List
-import Debug.Trace
-import qualified Data.Vector as V
-import qualified Data.Word as W
 import Foreign
 import Foreign.C
-import Foreign.Storable
-import Control.Monad
 import Control.Monad.State.Lazy
 import Control.Applicative
-import Control.Concurrent
-import Control.Concurrent.STM
 import Necronomicon.Runtime
-import Necronomicon.Util
 import Necronomicon.Utility
-import Control.Monad.Trans
 import qualified Data.Map as M
-import Data.Monoid
 import Data.Typeable
 import Control.Arrow
 
@@ -37,21 +27,22 @@ data UGen = UGenNum Double
 data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Env | Out | AuxIn | Poll | LFSaw | LFPulse | Saw | Pulse
               | SyncSaw | SyncPulse | SyncOsc | Random | NoiseN | NoiseL | NoiseC | URandom | Dust | Dust2 | Impulse | Range | ExpRange
               | LPF | HPF | BPF | Notch | AllPass | PeakEQ | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int
-              | LPFMS20 | OnePoleMS20 | Clip | SoftClip | Poly3 | TanH | SinDist | Wrap | DelayN Double | DelayL Double | DelayC Double
-              | Negate | Crush | Decimate | FreeVerb | Pluck Double | WhiteNoise
+              | LPFMS20 | OnePoleMS20 | Clip | SoftClip | Poly3 | TanHDist | SinDist | Wrap | DelayN Double | DelayL Double | DelayC Double
+              | Negate | Crush | Decimate | FreeVerb | Pluck Double | WhiteNoise | Abs | Signum | Pow | Exp | Log | Cos | ASin | ACos
+              | ATan | LogBase | Sqrt | Tan | SinH | CosH | TanH | ASinH | ATanH | ACosH
               deriving (Show)
 
 instance Show UGen where
     show (UGenNum d) = show d
-    show (UGenFunc u _ _ _ us) = "(" ++ (show u) ++ " (" ++ foldl (\acc u -> acc ++ show u ++ " ") " " us ++ "))"
+    show (UGenFunc u _ _ _ us) = "(" ++ (show u) ++ " (" ++ foldl (\acc ug -> acc ++ show ug ++ " ") " " us ++ "))"
 
 instance Num UGen where
     (+)         = add
     (*)         = mul
     (-)         = minus
     negate      = unegate
-    -- abs         = liftA abs
-    -- signum      = liftA signum
+    abs         = uabs
+    signum      = usignum
     fromInteger = UGenNum . fromInteger
 
 instance Fractional UGen where
@@ -60,37 +51,38 @@ instance Fractional UGen where
 
 instance Floating UGen where
     pi      = UGenNum pi
-    -- (**)    = liftA2 (**)
-    -- exp     = liftA exp
-    -- log     = liftA log
+    (**)    = upow
+    exp     = uexp
+    log     = ulog
     sin     = sinOsc
-    -- cos     = liftA cos
-    -- asin    = liftA asin
-    -- acos    = liftA acos
-    -- atan    = liftA atan
-    -- logBase = liftA2 logBase
-    -- sqrt    = liftA sqrt
-    -- tan     = liftA tan
-    tanh    = tanhDist 1
-    -- sinh    = liftA sinh
-    -- cosh    = liftA cosh
-    -- asinh   = liftA asinh
-    -- atanh   = liftA atanh
-    -- acosh   = liftA acosh
+    cos     = ucos
+    asin    = uasin  
+    acos    = uacos
+    atan    = uatan
+    logBase = ulogBase
+    sqrt    = usqrt
+    tan     = utan
+    tanh    = utanh
+    sinh    = usinh
+    cosh    = ucosh
+    asinh   = uasinh
+    atanh   = uatanh
+    acosh   = uacosh
 
 instance Enum UGen where
     succ a = a + 1
     pred a = a - 1
     toEnum a = UGenNum $ fromIntegral a
     fromEnum (UGenNum a) = floor a
+    fromEnum _ = 0
 
 instance Num [UGen] where
     (+)           = add
     (*)           = mul
     (-)           = minus
-    negate        = mul (-1)
-    -- abs         = liftA abs
-    -- signum      = liftA signum
+    negate        = unegate
+    abs           = uabs
+    signum        = usignum
     fromInteger i = [UGenNum $ fromInteger i]
 
 instance Fractional [UGen] where
@@ -99,30 +91,30 @@ instance Fractional [UGen] where
 
 instance Floating [UGen] where
     pi      = [UGenNum pi]
-    -- (**)    = liftA2 (**)
-    -- exp     = liftA exp
-    -- log     = liftA log
+    (**)    = upow
+    exp     = uexp
+    log     = ulog
     sin     = sinOsc
-    -- cos     = liftA cos
-    -- asin    = liftA asin
-    -- acos    = liftA acos
-    -- atan    = liftA atan
-    -- logBase = liftA2 logBase
-    -- sqrt    = liftA sqrt
-    -- tan     = liftA tan
-    tanh    = tanhDist 1
-    -- sinh    = liftA sinh
-    -- cosh    = liftA cosh
-    -- asinh   = liftA asinh
-    -- atanh   = liftA atanh
-    -- acosh   = liftA acosh
+    cos     = ucos
+    asin    = uasin
+    acos    = uacos
+    atan    = uatan
+    logBase = ulogBase
+    sqrt    = usqrt
+    tan     = utan
+    tanh    = utanh
+    sinh    = usinh
+    cosh    = ucosh
+    asinh   = uasinh
+    atanh   = uatanh
+    acosh   = uacosh
 
 --------------------------------------------------------------------------------------
 -- UGenType Class
 --------------------------------------------------------------------------------------
 
 class UGenType a where
-    ugen :: UGenUnit -> CUGenFunc -> CUGenFunc -> CUGenFunc -> [a] -> a
+    multiChannelExpandUGen :: UGenUnit -> CUGenFunc -> CUGenFunc -> CUGenFunc -> [a] -> a
     incrementArgWithChannels :: Int -> a -> a -- Used to increase arguments with number of channels. Used with In/Out UGens
     toUGenList :: a -> [UGen]
     consume :: a -> Int -> Compiled ([UGen], Int) -- used during compiling to correctly handle synth argument compilation
@@ -131,15 +123,15 @@ class UGenType a where
 
 
 instance (UGenType b) => UGenType (UGen -> b)  where
-    ugen _ _ _ _ _ = undefined -- Should never be reached
+    multiChannelExpandUGen _ _ _ _ _ = undefined -- Should never be reached
     incrementArgWithChannels _ _ = undefined -- Should never be reached
-    toUGenList u = undefined -- Should neverbe reached
+    toUGenList _ = undefined -- Should neverbe reached
     consume f i = compileSynthArg i >>= \arg -> consume (f arg) (i + 1)
     prFeedback f i = prFeedback (f $ localIn i) (i + 1)
     uappend us _ = us
 
 instance UGenType UGen where
-    ugen name calc constructor deconstructor args = UGenFunc name calc constructor deconstructor args
+    multiChannelExpandUGen name calc constructor deconstructor args = UGenFunc name calc constructor deconstructor args
     incrementArgWithChannels _ u = u
     toUGenList u = [u]
     consume u i = return ([u], i)
@@ -147,21 +139,21 @@ instance UGenType UGen where
     uappend us us' = us ++ us'
 
 instance UGenType [UGen] where
-    ugen name calc constructor deconstructor args = expand 0
+    multiChannelExpandUGen name calc constructor deconstructor args = expand 0
         where
             argsWithLengths = zip args $ map length args
             args'           = map (\(arg,len) -> if len <= 0 then ([UGenNum 0],1) else (arg,len)) argsWithLengths
-            longest         = foldr (\(_,argLength) longest -> if argLength > longest then argLength else longest) 0 args'
+            longest         = foldr (\(_,argLength) longestLength -> if argLength > longestLength then argLength else longestLength) 0 args'
             expand n
                 | n >= longest = []
-                | otherwise    = UGenFunc name calc constructor deconstructor (map (\(arg,length) -> arg !! mod n length) args') : expand (n + 1)
+                | otherwise    = UGenFunc name calc constructor deconstructor (map (\(arg,ulength) -> arg !! mod n ulength) args') : expand (n + 1)
     incrementArgWithChannels incrementedArgIndex ugens = map (incrementUGenChannels) (zip ugens [0..])
         where
-            incrementUGenChannels (n@(UGenNum _), channelOffset) = n
+            incrementUGenChannels (n@(UGenNum _), _) = n
             incrementUGenChannels (UGenFunc n f c d args, channelOffset) = UGenFunc n f c d . map incrementSelectedArg $ zip args [0..]
                 where
                     incrementSelectedArg (u, argIndex) = if argIndex == incrementedArgIndex then increment u else u
-                    increment (UGenNum n) = UGenNum $ n + channelOffset
+                    increment (UGenNum num) = UGenNum $ num + channelOffset
                     increment ugenFunc = if channelOffset == 0
                                              then ugenFunc
                                              else ugenFunc + (UGenNum channelOffset)
@@ -182,7 +174,7 @@ foreign import ccall "&sin_constructor" sinConstructor :: CUGenFunc
 foreign import ccall "&sin_deconstructor" sinDeconstructor :: CUGenFunc
 
 sinOsc :: UGenType a => a -> a
-sinOsc freq = ugen Sin sinCalc sinConstructor sinDeconstructor [freq]
+sinOsc freq = multiChannelExpandUGen Sin sinCalc sinConstructor sinDeconstructor [freq]
 
 -- foreign import ccall "&delay_calc" delayCalc :: Calc
 -- delay :: UGen Double -> UGen Double -> UGen Double
@@ -190,37 +182,109 @@ sinOsc freq = ugen Sin sinCalc sinConstructor sinDeconstructor [freq]
 
 foreign import ccall "&add_calc" addCalc :: CUGenFunc
 add :: UGenType a => a -> a -> a
-add x y = ugen Add addCalc nullConstructor nullDeconstructor [x, y]
+add x y = multiChannelExpandUGen Add addCalc nullConstructor nullDeconstructor [x, y]
 
 foreign import ccall "&minus_calc" minusCalc :: CUGenFunc
 minus :: UGenType a => a -> a -> a
-minus x y = ugen Minus minusCalc nullConstructor nullDeconstructor [x, y]
+minus x y = multiChannelExpandUGen Minus minusCalc nullConstructor nullDeconstructor [x, y]
 
 foreign import ccall "&mul_calc" mulCalc :: CUGenFunc
 mul :: UGenType a => a -> a -> a
-mul x y = ugen Mul mulCalc nullConstructor nullDeconstructor [x, y]
+mul x y = multiChannelExpandUGen Mul mulCalc nullConstructor nullDeconstructor [x, y]
 
 gain :: UGenType a => a -> a -> a
 gain = mul
 
 foreign import ccall "&div_calc" divCalc :: CUGenFunc
 udiv :: UGenType a => a -> a -> a
-udiv x y = ugen Div divCalc nullConstructor nullDeconstructor [x, y]
+udiv x y = multiChannelExpandUGen Div divCalc nullConstructor nullDeconstructor [x, y]
 
 foreign import ccall "&negate_calc" negateCalc :: CUGenFunc
 unegate :: UGenType a => a -> a
-unegate x = ugen Negate negateCalc nullConstructor nullDeconstructor [x]
+unegate x = multiChannelExpandUGen Negate negateCalc nullConstructor nullDeconstructor [x]
+
+foreign import ccall "&abs_calc" absCalc :: CUGenFunc
+uabs :: UGenType a => a -> a
+uabs x = multiChannelExpandUGen Abs absCalc nullConstructor nullDeconstructor [x]
+
+foreign import ccall "&signum_calc" signumCalc :: CUGenFunc
+usignum :: UGenType a => a -> a
+usignum x = multiChannelExpandUGen Signum signumCalc nullConstructor nullDeconstructor [x]
+
+foreign import ccall "&pow_calc" powCalc :: CUGenFunc
+upow :: UGenType a => a -> a -> a
+upow x y = multiChannelExpandUGen Pow powCalc nullConstructor nullDeconstructor [x, y]
+
+foreign import ccall "&exp_calc" expCalc :: CUGenFunc
+uexp :: UGenType a => a -> a
+uexp x = multiChannelExpandUGen Exp expCalc nullConstructor nullDeconstructor [x]
+
+foreign import ccall "&log_calc" logCalc :: CUGenFunc
+ulog :: UGenType a => a -> a
+ulog x = multiChannelExpandUGen Log logCalc nullConstructor nullDeconstructor [x]
+
+foreign import ccall "&cos_calc" cosCalc :: CUGenFunc
+ucos :: UGenType a => a -> a
+ucos x = multiChannelExpandUGen Cos cosCalc nullConstructor nullDeconstructor [x]
+
+foreign import ccall "&asin_calc" asinCalc :: CUGenFunc
+uasin :: UGenType a => a -> a
+uasin x = multiChannelExpandUGen ASin asinCalc nullConstructor nullDeconstructor [x]
+
+foreign import ccall "&acos_calc" acosCalc :: CUGenFunc
+uacos :: UGenType a => a -> a
+uacos x = multiChannelExpandUGen ACos acosCalc nullConstructor nullDeconstructor [x]
+
+foreign import ccall "&atan_calc" atanCalc :: CUGenFunc
+uatan :: UGenType a => a -> a
+uatan x = multiChannelExpandUGen ATan atanCalc nullConstructor nullDeconstructor [x]
+
+foreign import ccall "&logbase_calc" logBaseCalc :: CUGenFunc
+ulogBase :: UGenType a => a -> a -> a
+ulogBase x y = multiChannelExpandUGen LogBase logBaseCalc nullConstructor nullDeconstructor [x, y]
+
+foreign import ccall "&sqrt_calc" sqrtCalc :: CUGenFunc
+usqrt :: UGenType a => a -> a
+usqrt x = multiChannelExpandUGen Sqrt sqrtCalc nullConstructor nullDeconstructor [x]
+
+foreign import ccall "&tan_calc" tanCalc :: CUGenFunc
+utan :: UGenType a => a -> a
+utan x = multiChannelExpandUGen Tan tanCalc nullConstructor nullDeconstructor [x]
+
+foreign import ccall "&sinh_calc" sinhCalc :: CUGenFunc
+usinh :: UGenType a => a -> a
+usinh x = multiChannelExpandUGen SinH sinhCalc nullConstructor nullDeconstructor [x]
+
+foreign import ccall "&cosh_calc" coshCalc :: CUGenFunc
+ucosh :: UGenType a => a -> a
+ucosh x = multiChannelExpandUGen CosH coshCalc nullConstructor nullDeconstructor [x]
+
+foreign import ccall "&tanh_calc" tanhCalc :: CUGenFunc
+utanh :: UGenType a => a -> a
+utanh x = multiChannelExpandUGen TanH tanhCalc nullConstructor nullDeconstructor [x]
+
+foreign import ccall "&asinh_calc" asinhCalc :: CUGenFunc
+uasinh :: UGenType a => a -> a
+uasinh x = multiChannelExpandUGen ASinH asinhCalc nullConstructor nullDeconstructor [x]
+
+foreign import ccall "&atanh_calc" atanhCalc :: CUGenFunc
+uatanh :: UGenType a => a -> a
+uatanh x = multiChannelExpandUGen ATanH atanhCalc nullConstructor nullDeconstructor [x]
+
+foreign import ccall "&acosh_calc" acoshCalc :: CUGenFunc
+uacosh :: UGenType a => a -> a
+uacosh x = multiChannelExpandUGen ACosH acoshCalc nullConstructor nullDeconstructor [x]
 
 foreign import ccall "&line_calc" lineCalc :: CUGenFunc
 foreign import ccall "&line_constructor" lineConstructor :: CUGenFunc
 foreign import ccall "&line_deconstructor" lineDeconstructor :: CUGenFunc
 
 line :: UGenType a => a -> a
-line length = ugen Line lineCalc lineConstructor lineDeconstructor [length]
+line lineLength = multiChannelExpandUGen Line lineCalc lineConstructor lineDeconstructor [lineLength]
 
 -- foreign import ccall "&perc_calc" percCalc :: CUGenFunc
 -- perc :: UGenType a => a -> a -> a -> a -> a
--- perc length peak curve x = ugen Perc percCalc lineConstructor lineDeconstructor [length,peak,curve,x]
+-- perc length peak curve x = multiChannelExpandUGen Perc percCalc lineConstructor lineDeconstructor [length,peak,curve,x]
 
 perc :: UGenType a => UGen -> UGen -> UGen -> a -> a -> a
 perc attackTime releaseTime peak curve input = env [0,peak,0] [attackTime,releaseTime] curve input
@@ -230,7 +294,7 @@ adr attackTime decayTime releaseTime peak releaseLevel curve = env [0,peak,relea
 
 foreign import ccall "&env_calc" envCalc          :: CUGenFunc
 env :: UGenType a => [UGen] -> [UGen] -> a -> a -> a
-env values durations curve x = ugen Env envCalc lineConstructor lineDeconstructor args
+env values durations curve x = multiChannelExpandUGen Env envCalc lineConstructor lineDeconstructor args
     where
         valuesLength    = length values
         durationsLength = length durations
@@ -246,11 +310,11 @@ env values durations curve x = ugen Env envCalc lineConstructor lineDeconstructo
 
 foreign import ccall "&out_calc" outCalc :: CUGenFunc
 out :: UGenType a => a -> a -> a
-out channel input = incrementArgWithChannels 0 $ ugen Out outCalc nullConstructor nullDeconstructor [channel, input]
+out channel input = incrementArgWithChannels 0 $ multiChannelExpandUGen Out outCalc nullConstructor nullDeconstructor [channel, input]
 
 foreign import ccall "&in_calc" inCalc :: CUGenFunc
 auxIn :: UGenType a => a -> a
-auxIn channel = incrementArgWithChannels 0 $ ugen AuxIn inCalc nullConstructor nullDeconstructor [channel]
+auxIn channel = incrementArgWithChannels 0 $ multiChannelExpandUGen AuxIn inCalc nullConstructor nullDeconstructor [channel]
 
 auxThrough :: UGenType a => a -> a -> a
 auxThrough channel input = add (out channel input) input
@@ -260,7 +324,7 @@ foreign import ccall "&poll_constructor" pollConstructor :: CUGenFunc
 foreign import ccall "&poll_deconstructor" pollDeconstructor :: CUGenFunc
 
 poll :: UGenType a => a -> a
-poll input = add input $ ugen Poll pollCalc pollConstructor pollDeconstructor [input]
+poll input = add input $ multiChannelExpandUGen Poll pollCalc pollConstructor pollDeconstructor [input]
 
 -- foreign import ccall "&local_in_calc" localInCalc :: CUGenFunc
 localIn :: Int -> UGen
@@ -270,14 +334,14 @@ foreign import ccall "&local_out_calc" localOutCalc :: CUGenFunc
 localOut :: Int -> [UGen] -> [UGen]
 localOut busNum input = foldr (\((UGenFunc (LocalOut feedBus) f c d is), i) acc -> UGenFunc (LocalOut (feedBus + i)) f c d is : acc) [] $ zip lOut [0..]
     where
-        lOut = ugen (LocalOut busNum) localOutCalc nullConstructor nullDeconstructor [input]
+        lOut = multiChannelExpandUGen (LocalOut busNum) localOutCalc nullConstructor nullDeconstructor [input]
 
 feedback :: (UGenType b) => (UGen -> b) -> [UGen]
 feedback f = expand . localOut 0 $ output
     where
         (output, numInputs) = prFeedback f 0
         -- Pad with extra localOut buses if numInputs is larger than numOutputs
-        expand arr = arr ++ (foldl (\acc i -> acc ++ (localOut i [0])) [] (drop (length arr) [0..(numInputs - 1)]))
+        expand larr = larr ++ (foldl (\acc i -> acc ++ (localOut i [0])) [] (drop (length larr) [0..(numInputs - 1)]))
 
 --oscillators
 --dictionary passing style ugens?
@@ -286,49 +350,49 @@ foreign import ccall "&accumulator_deconstructor" accumulatorDeconstructor :: CU
 
 foreign import ccall "&lfsaw_calc" lfsawCalc :: CUGenFunc
 lfsaw :: UGenType a => a -> a -> a
-lfsaw freq phase = ugen LFSaw lfsawCalc accumulatorConstructor accumulatorDeconstructor [freq,phase]
+lfsaw freq phase = multiChannelExpandUGen LFSaw lfsawCalc accumulatorConstructor accumulatorDeconstructor [freq,phase]
 
 foreign import ccall "&lfpulse_calc" lfpulseCalc :: CUGenFunc
 lfpulse :: UGenType a => a -> a -> a
-lfpulse freq phase = ugen LFPulse lfpulseCalc accumulatorConstructor accumulatorDeconstructor [freq,phase]
+lfpulse freq phase = multiChannelExpandUGen LFPulse lfpulseCalc accumulatorConstructor accumulatorDeconstructor [freq,phase]
 
 foreign import ccall "&impulse_calc" impulseCalc :: CUGenFunc
 impulse :: UGenType a => a -> a -> a
-impulse freq phase = ugen Impulse impulseCalc accumulatorConstructor accumulatorDeconstructor [freq,phase]
+impulse freq phase = multiChannelExpandUGen Impulse impulseCalc accumulatorConstructor accumulatorDeconstructor [freq,phase]
 
 foreign import ccall "&dust_constructor"   dustConstructor   :: CUGenFunc
 foreign import ccall "&dust_deconstructor" dustDeconstructor :: CUGenFunc
 
 foreign import ccall "&dust_calc" dustCalc :: CUGenFunc
 dust :: UGenType a => a -> a
-dust density = ugen Dust dustCalc dustConstructor dustDeconstructor [density]
+dust density = multiChannelExpandUGen Dust dustCalc dustConstructor dustDeconstructor [density]
 
 foreign import ccall "&dust2_calc" dust2Calc :: CUGenFunc
 dust2 :: UGenType a => a -> a
-dust2 density = ugen Dust2 dust2Calc dustConstructor dustDeconstructor [density]
+dust2 density = multiChannelExpandUGen Dust2 dust2Calc dustConstructor dustDeconstructor [density]
 
 foreign import ccall "&minblep_constructor"   minblepConstructor   :: CUGenFunc
 foreign import ccall "&minblep_deconstructor" minblepDeconstructor :: CUGenFunc
 
 foreign import ccall "&saw_calc" sawCalc :: CUGenFunc
 saw :: UGenType a => a -> a
-saw freq = ugen Saw sawCalc minblepConstructor minblepDeconstructor [freq]
+saw freq = multiChannelExpandUGen Saw sawCalc minblepConstructor minblepDeconstructor [freq]
 
 foreign import ccall "&square_calc" squareCalc :: CUGenFunc
 pulse :: UGenType a => a -> a -> a
-pulse freq pw = ugen Pulse squareCalc minblepConstructor minblepDeconstructor [freq,pw]
+pulse freq pw = multiChannelExpandUGen Pulse squareCalc minblepConstructor minblepDeconstructor [freq,pw]
 
 foreign import ccall "&syncsaw_calc" syncSawCalc :: CUGenFunc
 syncsaw :: UGenType a => a -> a -> a
-syncsaw freq master = ugen SyncSaw syncSawCalc minblepConstructor minblepDeconstructor [freq,master]
+syncsaw freq master = multiChannelExpandUGen SyncSaw syncSawCalc minblepConstructor minblepDeconstructor [freq,master]
 
 foreign import ccall "&syncsquare_calc" syncSquareCalc :: CUGenFunc
 syncpulse :: UGenType a => a -> a -> a -> a
-syncpulse freq pw master = ugen SyncPulse syncSquareCalc minblepConstructor minblepDeconstructor [freq,pw,master]
+syncpulse freq pw master = multiChannelExpandUGen SyncPulse syncSquareCalc minblepConstructor minblepDeconstructor [freq,pw,master]
 
 foreign import ccall "&syncosc_calc" syncoscCalc :: CUGenFunc
 syncosc :: UGenType a => a -> a -> a -> a -> a
-syncosc slaveFreq slaveWave slavePW masterFreq = ugen SyncOsc syncoscCalc minblepConstructor minblepDeconstructor [slaveFreq,slaveWave,slavePW,masterFreq]
+syncosc slaveFreq slaveWave slavePW masterFreq = multiChannelExpandUGen SyncOsc syncoscCalc minblepConstructor minblepDeconstructor [slaveFreq,slaveWave,slavePW,masterFreq]
 
 --randomness
 foreign import ccall "&rand_constructor"   randConstructor   :: CUGenFunc
@@ -336,34 +400,34 @@ foreign import ccall "&rand_deconstructor" randDeconstructor :: CUGenFunc
 
 foreign import ccall "&rand_calc" randCalc :: CUGenFunc
 random :: UGenType a => a
-random = ugen Random randCalc randConstructor randDeconstructor []
+random = multiChannelExpandUGen Random randCalc randConstructor randDeconstructor []
 
 foreign import ccall "&lfnoiseN_calc" lfnoiseNCalc :: CUGenFunc
 noise0 :: UGenType a => a -> a
-noise0 freq = ugen NoiseN lfnoiseNCalc randConstructor randDeconstructor [freq]
+noise0 freq = multiChannelExpandUGen NoiseN lfnoiseNCalc randConstructor randDeconstructor [freq]
 
 foreign import ccall "&lfnoiseL_calc" lfnoiseLCalc :: CUGenFunc
 noise1 :: UGenType a => a -> a
-noise1 freq = ugen NoiseL lfnoiseLCalc randConstructor randDeconstructor [freq]
+noise1 freq = multiChannelExpandUGen NoiseL lfnoiseLCalc randConstructor randDeconstructor [freq]
 
 foreign import ccall "&lfnoiseC_calc" lfnoiseCCalc :: CUGenFunc
 noise2 :: UGenType a => a -> a
-noise2 freq = ugen NoiseC lfnoiseCCalc randConstructor randDeconstructor [freq]
+noise2 freq = multiChannelExpandUGen NoiseC lfnoiseCCalc randConstructor randDeconstructor [freq]
 
 foreign import ccall "&range_calc" rangeCalc :: CUGenFunc
 range :: UGenType a => a -> a -> a -> a
-range low high input = ugen Range rangeCalc nullConstructor nullDeconstructor [low,high,input]
+range low high input = multiChannelExpandUGen Range rangeCalc nullConstructor nullDeconstructor [low,high,input]
 
 foreign import ccall "&exprange_calc" exprangeCalc :: CUGenFunc
 exprange :: UGenType a => a -> a -> a -> a
-exprange low high input = ugen ExpRange exprangeCalc nullConstructor nullDeconstructor [low,high,input]
+exprange low high input = multiChannelExpandUGen ExpRange exprangeCalc nullConstructor nullDeconstructor [low,high,input]
 
 foreign import ccall "&urand_constructor"   urandConstructor   :: CUGenFunc
 foreign import ccall "&urand_deconstructor" urandDeconstructor :: CUGenFunc
 
 foreign import ccall "&urand_calc" urandCalc :: CUGenFunc
 urandom :: UGenType a => a
-urandom = ugen URandom urandCalc urandConstructor urandDeconstructor []
+urandom = multiChannelExpandUGen URandom urandCalc urandConstructor urandDeconstructor []
 
 --filters
 foreign import ccall "&biquad_constructor"   biquadConstructor   :: CUGenFunc
@@ -371,118 +435,118 @@ foreign import ccall "&biquad_deconstructor" biquadDeconstructor :: CUGenFunc
 
 foreign import ccall "&lpf_calc" lpfCalc :: CUGenFunc
 lpf :: UGenType a => a -> a -> a -> a
-lpf freq q input = ugen LPF lpfCalc biquadConstructor biquadDeconstructor [freq,q,input]
+lpf freq q input = multiChannelExpandUGen LPF lpfCalc biquadConstructor biquadDeconstructor [freq,q,input]
 
 foreign import ccall "&hpf_calc" hpfCalc :: CUGenFunc
 hpf :: UGenType a => a -> a -> a -> a
-hpf freq q input = ugen HPF hpfCalc biquadConstructor biquadDeconstructor [freq,q,input]
+hpf freq q input = multiChannelExpandUGen HPF hpfCalc biquadConstructor biquadDeconstructor [freq,q,input]
 
 foreign import ccall "&bpf_calc" bpfCalc :: CUGenFunc
 bpf :: UGenType a => a -> a -> a -> a
-bpf freq q input = ugen BPF bpfCalc biquadConstructor biquadDeconstructor [freq,q,input]
+bpf freq q input = multiChannelExpandUGen BPF bpfCalc biquadConstructor biquadDeconstructor [freq,q,input]
 
 foreign import ccall "&notch_calc" notchCalc :: CUGenFunc
 notch :: UGenType a => a -> a -> a -> a -> a
-notch freq gain q input = ugen Notch notchCalc biquadConstructor biquadDeconstructor [freq,gain,q,input]
+notch freq fgain q input = multiChannelExpandUGen Notch notchCalc biquadConstructor biquadDeconstructor [freq,fgain,q,input]
 
 foreign import ccall "&peakEQ_calc" peakEQCalc :: CUGenFunc
 peakEQ :: UGenType a => a -> a -> a -> a -> a
-peakEQ freq gain q input = ugen PeakEQ peakEQCalc biquadConstructor biquadDeconstructor [freq,gain,q,input]
+peakEQ freq fgain q input = multiChannelExpandUGen PeakEQ peakEQCalc biquadConstructor biquadDeconstructor [freq,fgain,q,input]
 
 foreign import ccall "&allpass_calc" allpassCalc :: CUGenFunc
 allpass :: UGenType a => a -> a -> a -> a
-allpass freq q input = ugen AllPass allpassCalc biquadConstructor biquadDeconstructor [freq,q,input]
+allpass freq q input = multiChannelExpandUGen AllPass allpassCalc biquadConstructor biquadDeconstructor [freq,q,input]
 
 foreign import ccall "&notch_calc" lowshelfCalc :: CUGenFunc
 lowshelf :: UGenType a => a -> a -> a -> a -> a
-lowshelf freq gain slope input = ugen LowShelf lowshelfCalc biquadConstructor biquadDeconstructor [freq,gain,slope,input]
+lowshelf freq fgain slope input = multiChannelExpandUGen LowShelf lowshelfCalc biquadConstructor biquadDeconstructor [freq,fgain,slope,input]
 
 foreign import ccall "&highshelf_calc" highshelfCalc :: CUGenFunc
 highshelf :: UGenType a => a -> a -> a -> a -> a
-highshelf freq gain slope input = ugen HighShelf highshelfCalc biquadConstructor biquadDeconstructor [freq,gain,slope,input]
+highshelf freq fgain slope input = multiChannelExpandUGen HighShelf highshelfCalc biquadConstructor biquadDeconstructor [freq,fgain,slope,input]
 
 foreign import ccall "&lag_calc" lagCalc :: CUGenFunc
 lag :: UGenType a => a -> a -> a
-lag timeLag input = ugen LagCalc lagCalc accumulatorConstructor accumulatorDeconstructor [timeLag,input]
+lag timeLag input = multiChannelExpandUGen LagCalc lagCalc accumulatorConstructor accumulatorDeconstructor [timeLag,input]
 
 foreign import ccall "&zeroDelayFilter_constructor"   zeroDelayFilterConstructor   :: CUGenFunc
 foreign import ccall "&zeroDelayFilter_deconstructor" zeroDelayFilterDeconstructor :: CUGenFunc
 
 foreign import ccall "&zeroDelayOnePole_calc" zeroDelayOnePoleCalc :: CUGenFunc
 onePoleMS20 :: UGenType a => a -> a -> a
-onePoleMS20 freq input = ugen OnePoleMS20 zeroDelayOnePoleCalc zeroDelayFilterConstructor zeroDelayFilterDeconstructor [freq,input]
+onePoleMS20 freq input = multiChannelExpandUGen OnePoleMS20 zeroDelayOnePoleCalc zeroDelayFilterConstructor zeroDelayFilterDeconstructor [freq,input]
 
 foreign import ccall "&zeroDelayLPMS20_calc" zeroDelayLPMS20Calc :: CUGenFunc
 lpfMS20 :: UGenType a => a -> a -> a -> a -> a
-lpfMS20 freq reson dist input = ugen LPFMS20 zeroDelayLPMS20Calc zeroDelayFilterConstructor zeroDelayFilterDeconstructor [freq,reson,dist,input]
+lpfMS20 freq reson dist input = multiChannelExpandUGen LPFMS20 zeroDelayLPMS20Calc zeroDelayFilterConstructor zeroDelayFilterDeconstructor [freq,reson,dist,input]
 
 --Distortions
 foreign import ccall "&clip_calc" clipCalc :: CUGenFunc
 clip :: UGenType a => a -> a -> a
-clip amount input = ugen Clip clipCalc nullConstructor nullDeconstructor [amount,input]
+clip amount input = multiChannelExpandUGen Clip clipCalc nullConstructor nullDeconstructor [amount,input]
 
 foreign import ccall "&softclip_calc" softclipCalc :: CUGenFunc
 softclip :: UGenType a => a -> a -> a
-softclip amount input = ugen SoftClip softclipCalc nullConstructor nullDeconstructor [amount,input]
+softclip amount input = multiChannelExpandUGen SoftClip softclipCalc nullConstructor nullDeconstructor [amount,input]
 
 foreign import ccall "&poly3_calc" poly3Calc :: CUGenFunc
 poly3 :: UGenType a => a -> a -> a
-poly3 amount input = ugen Poly3 poly3Calc nullConstructor nullDeconstructor [amount,input]
+poly3 amount input = multiChannelExpandUGen Poly3 poly3Calc nullConstructor nullDeconstructor [amount,input]
 
-foreign import ccall "&tanh_calc" tanhCalc :: CUGenFunc
+foreign import ccall "&tanhdist_calc" tanhDistCalc :: CUGenFunc
 tanhDist :: UGenType a => a -> a -> a
-tanhDist amount input = ugen TanH tanhCalc nullConstructor nullDeconstructor [amount,input]
+tanhDist amount input = multiChannelExpandUGen TanHDist tanhDistCalc nullConstructor nullDeconstructor [amount,input]
 
 foreign import ccall "&sinDist_calc" sinDistCalc :: CUGenFunc
 sinDist :: UGenType a => a -> a -> a
-sinDist amount input = ugen SinDist sinDistCalc nullConstructor nullDeconstructor [amount,input]
+sinDist amount input = multiChannelExpandUGen SinDist sinDistCalc nullConstructor nullDeconstructor [amount,input]
 
 foreign import ccall "&wrap_calc" wrapCalc :: CUGenFunc
 wrap :: UGenType a => a -> a -> a
-wrap amount input = ugen Wrap wrapCalc nullConstructor nullDeconstructor [amount,input]
+wrap amount input = multiChannelExpandUGen Wrap wrapCalc nullConstructor nullDeconstructor [amount,input]
 
 foreign import ccall "&crush_calc" crushCalc :: CUGenFunc
 crush :: UGenType a => a -> a -> a
-crush depth x = ugen Crush crushCalc nullConstructor nullDeconstructor [depth,x]
+crush depth x = multiChannelExpandUGen Crush crushCalc nullConstructor nullDeconstructor [depth,x]
 
 foreign import ccall "&decimate_constructor"   decimateConstructor   :: CUGenFunc
 foreign import ccall "&decimate_deconstructor" decimateDeconstructor :: CUGenFunc
 foreign import ccall "&decimate_calc"          decimateCalc          :: CUGenFunc
 decimate :: UGenType a => a -> a -> a
-decimate rate x = ugen Decimate decimateCalc decimateConstructor decimateDeconstructor [rate,x]
+decimate rate x = multiChannelExpandUGen Decimate decimateCalc decimateConstructor decimateDeconstructor [rate,x]
 
 foreign import ccall "&delay_constructor" delayConstructor :: CUGenFunc
 foreign import ccall "&delay_deconstructor" delayDeconstructor :: CUGenFunc
 
 foreign import ccall "&delayN_calc" delayNCalc :: CUGenFunc
 delayN :: UGenType a => Double -> a -> a -> a
-delayN maxDelayTime delayTime input = ugen (DelayN maxDelayTime) delayNCalc delayConstructor delayDeconstructor [delayTime, input]
+delayN maxDelayTime delayTime input = multiChannelExpandUGen (DelayN maxDelayTime) delayNCalc delayConstructor delayDeconstructor [delayTime, input]
 
 foreign import ccall "&delayL_calc" delayLCalc :: CUGenFunc
 delayL :: UGenType a => Double -> a -> a -> a
-delayL maxDelayTime delayTime input = ugen (DelayL maxDelayTime) delayLCalc delayConstructor delayDeconstructor [delayTime, input]
+delayL maxDelayTime delayTime input = multiChannelExpandUGen (DelayL maxDelayTime) delayLCalc delayConstructor delayDeconstructor [delayTime, input]
 
 foreign import ccall "&delayC_calc" delayC_calc :: CUGenFunc
 delayC :: UGenType a => Double -> a -> a -> a
-delayC maxDelayTime delayTime input = ugen (DelayC maxDelayTime) delayC_calc delayConstructor delayDeconstructor [delayTime, input]
+delayC maxDelayTime delayTime input = multiChannelExpandUGen (DelayC maxDelayTime) delayC_calc delayConstructor delayDeconstructor [delayTime, input]
 
 foreign import ccall "&pluck_constructor"   pluckConstructor   :: CUGenFunc
 foreign import ccall "&pluck_deconstructor" pluckDeconstructor :: CUGenFunc
 foreign import ccall "&pluck_calc"          pluckCalc          :: CUGenFunc
 
 pluck :: UGenType a => Double -> a -> a -> a -> a
-pluck minFreq freq duration x = ugen (Pluck minFreq) pluckCalc pluckConstructor pluckDeconstructor [freq,duration,x]
+pluck minFreq freq duration x = multiChannelExpandUGen (Pluck minFreq) pluckCalc pluckConstructor pluckDeconstructor [freq,duration,x]
 
 foreign import ccall "&white_calc" whiteCalc :: CUGenFunc
 whiteNoise :: UGenType a => a
-whiteNoise = ugen WhiteNoise whiteCalc nullConstructor nullDeconstructor []
+whiteNoise = multiChannelExpandUGen WhiteNoise whiteCalc nullConstructor nullDeconstructor []
 
 foreign import ccall "&freeverb_constructor" freeverbConstructor :: CUGenFunc
 foreign import ccall "&freeverb_deconstructor" freeverbDeconstructor :: CUGenFunc
 foreign import ccall "&freeverb_calc" freeverbCalc :: CUGenFunc
 
 freeverb :: UGenType a => a -> a -> a -> a -> a
-freeverb mix roomSize damp input = ugen FreeVerb freeverbCalc freeverbConstructor freeverbDeconstructor [mix,roomSize,damp,input]
+freeverb mix roomSize damp input = multiChannelExpandUGen FreeVerb freeverbCalc freeverbConstructor freeverbDeconstructor [mix,roomSize,damp,input]
 ----------------------------------------------------
 
 loopSynth :: UGen -> UGen -> [UGen]
@@ -524,14 +588,14 @@ twoSinArrays f1 f2 = sin f1 + sin f2
 -- myCoolSynth2 = foldl (|>) (sin 0.3) (replicate 21 sin)
 
 myCoolSynth2 :: UGen
-myCoolSynth2 = sin (440 + mod) |> gain 0.25 >>> out 0
+myCoolSynth2 = sin (440 + fmod) |> gain 0.25 >>> out 0
     where
-        mod = sin (10 + sin 0.1 * 9) |> gain 40
+        fmod = sin (10 + sin 0.1 * 9) |> gain 40
 
 myCoolSynth3 :: UGen
-myCoolSynth3 = sin (880 + mod) |> gain 0.25 >>> out 0
+myCoolSynth3 = sin (880 + fmod) |> gain 0.25 >>> out 0
     where
-        mod = sin (20 + sin 0.1 * 9) |> gain 80
+        fmod = sin (20 + sin 0.1 * 9) |> gain 80
 
 myCoolSynth4 :: UGen
 myCoolSynth4 = foldl (|>) (sin 0.3) (replicate 21 sin)
@@ -553,21 +617,21 @@ nullSynth :: SynthDef
 nullSynth = SynthDef "" 0 nullPtr
 
 printSynthDef :: String -> Necronomicon ()
-printSynthDef synthDefName = getSynthDef synthDefName >>= nPrint
+printSynthDef sdName = getSynthDef sdName >>= nPrint
 
 playSynthAtJackTime :: String -> [Double] -> JackTime -> Necronomicon Synth
-playSynthAtJackTime synthDefName args time = getSynthDef synthDefName >>= \maybeSynthDef -> case maybeSynthDef of
-                Just synthDef -> incrementNodeID >>= \id -> sendMessage (StartSynth synthDef (map (CDouble) args) id time) >> return (Synth id synthDef)
-                Nothing -> nPrint ("SynthDef " ++ synthDefName ++ " not found. Unable to start synth.") >> return (Synth nullID nullSynth)
+playSynthAtJackTime sdName args time = getSynthDef sdName >>= \maybeSynthDef -> case maybeSynthDef of
+                Just synthDef -> incrementNodeID >>= \nodeID -> sendMessage (StartSynth synthDef (map (CDouble) args) nodeID time) >> return (Synth nodeID synthDef)
+                Nothing -> nPrint ("SynthDef " ++ sdName ++ " not found. Unable to start synth.") >> return (Synth nullID nullSynth)
 
 playSynthAt :: String -> [Double] -> Double -> Necronomicon Synth
-playSynthAt synthDefName args time = playSynthAtJackTime synthDefName args $ secondsToMicro time
+playSynthAt sdName args time = playSynthAtJackTime sdName args $ secondsToMicro time
 
 playSynth :: String -> [Double] -> Necronomicon Synth
-playSynth synthDefName args = playSynthAt synthDefName args 0
+playSynth sdName args = playSynthAt sdName args 0
 
 stopSynth :: Synth -> Necronomicon ()
-stopSynth (Synth id _) = sendMessage (StopSynth id)
+stopSynth (Synth nodeID _) = sendMessage (StopSynth nodeID)
 
 setSynthArg :: Synth -> Int -> Double -> Necronomicon ()
 setSynthArg synth argIndex argValue = sendMessage (SetSynthArg synth (fromIntegral argIndex) $ CDouble argValue)
@@ -603,6 +667,13 @@ mkCompiledData = CompiledData M.empty [] [] 0 M.empty []
 
 data Compiled a = Compiled { runCompile :: CompiledData -> IO (a, CompiledData) }
 
+instance Functor Compiled where
+    fmap f (Compiled h) = Compiled (\c -> h c >>= \(a, c') -> return (f a, c'))
+
+instance Applicative Compiled where
+    pure x = Compiled (\c -> return (x, c))
+    (Compiled x) <*> (Compiled y) = Compiled (\c -> x c >>= \(a, c') -> y c' >>= \(b, c'') -> return (a b, c''))
+
 instance Monad Compiled where
     return x = Compiled (\c -> return (x, c))
     (Compiled h) >>= f = Compiled $ \c -> do
@@ -628,11 +699,11 @@ setGraph :: [CUGen] -> Compiled ()
 setGraph graph = Compiled (\c -> return ((), c { compiledUGenGraph = graph } ))
 
 addUGen :: String -> CUGen -> CUInt -> Compiled ()
-addUGen key ugen wireIndex = do
+addUGen key ug wireIndex = do
     outputTable <- getTable
     setTable (M.insert key wireIndex outputTable)
     ugenGraph <- getGraph
-    setGraph (ugen : ugenGraph) -- work back to front to use cons over ++, reversed at the very end in runCompileSynthDef
+    setGraph (ug : ugenGraph) -- work back to front to use cons over ++, reversed at the very end in runCompileSynthDef
 
 getConstants :: Compiled [CompiledConstant]
 getConstants = Compiled (\c -> return (compiledConstants c, c))
@@ -651,12 +722,12 @@ getCompiledFeedWires :: Compiled CompiledFeedback
 getCompiledFeedWires = Compiled (\c -> return (compiledFeedWires c, c))
 
 setCompiledFeedWires :: CompiledFeedback -> Compiled ()
-setCompiledFeedWires compiledFeedWires = Compiled (\c -> return ((), c { compiledFeedWires = compiledFeedWires }))
+setCompiledFeedWires compFeedWires = Compiled (\c -> return ((), c { compiledFeedWires = compFeedWires }))
 
 getOrAddCompiledFeedWire :: Int -> Compiled CUInt
-getOrAddCompiledFeedWire feedBus = getCompiledFeedWires >>= \compiledFeedWires ->
-    case M.lookup feedBus compiledFeedWires of
-        Nothing -> nextWireIndex >>= \wire -> setCompiledFeedWires (M.insert feedBus wire compiledFeedWires) >> return wire
+getOrAddCompiledFeedWire feedBus = getCompiledFeedWires >>= \compFeedWires ->
+    case M.lookup feedBus compFeedWires of
+        Nothing -> nextWireIndex >>= \wire -> setCompiledFeedWires (M.insert feedBus wire compFeedWires) >> return wire
         Just wire -> return wire
 
 getWireIndex :: Compiled CUInt
@@ -686,7 +757,7 @@ compileSynthArg argIndex = let arg = (synthArgument argIndex) in compileUGen arg
 
 runCompileSynthDef :: UGenType a => String -> a -> IO SynthDef
 runCompileSynthDef name ugenFunc = do
-    (numArgs, (CompiledData table revGraph constants numWires _ localBufs)) <- runCompile (compileSynthArgsAndUGenGraph ugenFunc) mkCompiledData
+    (numArgs, (CompiledData table revGraph constants numWires _ _)) <- runCompile (compileSynthArgsAndUGenGraph ugenFunc) mkCompiledData
     print ("table: " ++ (show table))
     print ("Total ugens: " ++ (show $ length revGraph))
     print ("Total constants: " ++ (show $ length constants))
@@ -708,19 +779,20 @@ compileUGenGraphList :: [UGen] -> Compiled ()
 compileUGenGraphList ugenList = mapM_ (\u -> compileUGenGraphBranch u) ugenList
 
 compileUGenGraphBranch :: UGen -> Compiled CUInt
-compileUGenGraphBranch ugen = do
-    let hashed = show ugen
-    args <- compileUGenArgs ugen -- Compile argument input branches first to build up ugen cache table
+compileUGenGraphBranch ug = do
+    let hashed = show ug
+    args <- compileUGenArgs ug -- Compile argument input branches first to build up ugen cache table
     table <- getTable
     case M.lookup hashed table of -- Look to see if this ugen has been compiled already, if so return that ugen's output buffer
         Just wireIndex -> return wireIndex
-        Nothing -> compileUGen ugen args hashed
+        Nothing -> compileUGen ug args hashed
 
 compileUGenArgs :: UGen -> Compiled [CUInt]
 compileUGenArgs (UGenFunc _ _ _ _ inputs) = mapM (compileUGenGraphBranch) inputs
 compileUGenArgs (UGenNum _) = return []
 
 compileUGenWithConstructorArgs :: UGen -> Ptr CDouble -> [CUInt] -> String -> Compiled CUInt
+compileUGenWithConstructorArgs num@(UGenNum _) _ args key = compileUGen num args key -- This should not be used, but definition here to satisy warning
 compileUGenWithConstructorArgs (UGenFunc _ calc cons decn _) conArgs args key = do
     inputs <- liftIO (newArray args)
     wire <- nextWireIndex
@@ -730,7 +802,7 @@ compileUGenWithConstructorArgs (UGenFunc _ calc cons decn _) conArgs args key = 
 
 -- To Do: Add multi-out ugen support
 compileUGen :: UGen -> [CUInt] -> String -> Compiled CUInt
-compileUGen (UGenFunc (LocalIn feedBus) _ _ _ _) args key = do
+compileUGen (UGenFunc (LocalIn feedBus) _ _ _ _) _ _ = do
     wire <- getOrAddCompiledFeedWire feedBus
     return wire
 compileUGen (UGenFunc (LocalOut feedBus) calc cons decn _) args key = do
@@ -761,14 +833,14 @@ compileUGen ugen args key = compileUGenWithConstructorArgs ugen nullPtr args key
 makeAndStartNecro :: IO NecroVars
 makeAndStartNecro = do
     necroVars <- mkNecroVars
-    runNecroState startNecronomicon necroVars
+    _ <- runNecroState startNecronomicon necroVars
     return necroVars
 
 testSynth :: UGenType a => a -> [Double] -> NecroVars -> IO Synth
 testSynth synth args necroVars = do
-    runNecroState (compileSynthDef "testSynth" synth) necroVars
-    (synth,_) <- runNecroState (playSynth "testSynth" args) necroVars
-    return synth
+    _ <- runNecroState (compileSynthDef "testSynth" synth) necroVars
+    (runningSynth,_) <- runNecroState (playSynth "testSynth" args) necroVars
+    return runningSynth
 
 stopTestSynth :: Synth -> NecroVars -> IO()
 stopTestSynth synth necroVars = runNecroState (stopSynth synth) necroVars >> return ()

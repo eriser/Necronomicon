@@ -35,7 +35,7 @@ library
     Include-Dirs: 		c_lib
     Install-Includes:	Necronomicon.h
     C-Sources:    		c_lib/Necronomicon.c
-    ghc-options:        -threaded -O3 -Wall
+    ghc-options:        -threaded -O3 -Wall -Werror
     default-extensions: FunctionalDependencies FlexibleInstances MultiParamTypeClasses ForeignFunctionInterface QuasiQuotes TemplateHaskell DeriveDataTypeable TypeFamilies BangPatterns ExistentialQuantification
 
     exposed-modules:
@@ -105,7 +105,7 @@ library
 executable PatternTest
     main-is:          Main.hs
     default-language: Haskell2010
-    ghc-options:      -threaded -Wall
+    ghc-options:      -threaded -Wall -Werror
     hs-source-dirs:   Tests/PatternTest
     default-extensions: QuasiQuotes TemplateHaskell
     build-depends:
@@ -116,7 +116,7 @@ executable PatternTest
 executable NecroNet
     main-is:          Main.hs
     default-language: Haskell2010
-    ghc-options:      -threaded -Wall
+    ghc-options:      -threaded -Wall -Werror
     hs-source-dirs:   NecroNet
     default-extensions:
     build-depends:
@@ -126,7 +126,7 @@ executable NecroNet
 executable SigTest
     main-is:          Main.hs
     default-language: Haskell2010
-    ghc-options:      -threaded -O3 -Wall
+    ghc-options:      -threaded -O3 -Wall -Werror
     hs-source-dirs:   Tests/SigTest
     default-extensions: QuasiQuotes TemplateHaskell ParallelListComp
     build-depends:
@@ -137,7 +137,7 @@ executable SigTest
 executable CTest
     main-is:          Main.hs
     default-language: Haskell2010
-    ghc-options:      -threaded -Wall
+    ghc-options:      -threaded -Wall -Werror
     hs-source-dirs:   Tests/CTest
     default-extensions:
     build-depends:
@@ -147,7 +147,7 @@ executable CTest
 executable AudioEngineTest
     main-is:          Main.hs
     default-language: Haskell2010
-    ghc-options:      -threaded -Wall
+    ghc-options:      -threaded -Wall -Werror
     hs-source-dirs:   Tests/AudioEngineTest
     default-extensions:
     build-depends:
@@ -159,7 +159,7 @@ executable AudioEngineTest
 executable PriorityQueueTest
     main-is:          Main.hs
     default-language: Haskell2010
-    ghc-options:      -threaded -Wall
+    ghc-options:      -threaded -Wall -Werror
     hs-source-dirs:   Tests/PriorityQueueTest
     default-extensions:
     build-depends:

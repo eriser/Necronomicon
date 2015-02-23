@@ -1,12 +1,7 @@
 module Necronomicon.Noise.Simplex (simplex) where
 --------------------------------------------------------------------------------
 import Prelude
-import Data.Foldable (toList)
-import Data.Sequence as Seq (fromList, Seq, update, index,adjust)
-import Graphics.Rendering.OpenGL
-import System.Random (randomRs,mkStdGen)
 import qualified Data.Vector as V
-import GHC.Float
 import Data.Bits
 import Data.Word
 --------------------------------------------------------------------------------

@@ -1,15 +1,7 @@
 module Necronomicon.Graphics.SceneObject where
 
-import           Control.Monad                       (foldM)
-import qualified Data.IntMap                         as IntMap
-import qualified Graphics.Rendering.OpenGL           as GL
-import qualified Graphics.Rendering.OpenGL.GL.Tensor as GLT
-import           Prelude
-
 import           Necronomicon.Graphics.Color
-import           Necronomicon.Graphics.Mesh
 import           Necronomicon.Graphics.Model
-import           Necronomicon.Graphics.Shader
 import           Necronomicon.Graphics.Text          (renderFont)
 import           Necronomicon.Linear
 

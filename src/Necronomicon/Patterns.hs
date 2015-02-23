@@ -8,14 +8,9 @@ module Necronomicon.Patterns where
 import Prelude
 import System.Random
 import Debug.Trace
-import Control.Concurrent
 import Control.Applicative
-import Control.Arrow
 import Data.Monoid
-import System.CPUTime
-import Sound.OSC.Time
 import qualified Data.Fixed as F
-import Necronomicon.Util.Functions
 import qualified Data.Vector as V
 
 type Time = Double
@@ -137,34 +132,6 @@ beatsToTime b = b * beatsToSecondsRatio
 
 beatsToMicro :: Double -> Int
 beatsToMicro b = floor (b * tempoMicros)
-
-pschedule :: (Show a) => Pattern (Pattern a, Double) -> Time -> Beat -> IO ()
-pschedule !p !scheduledTime !beat = do
-    t <- time
-    checkTime t
-    where
-        checkTime !t
-            | t >= (scheduledTime - scheduleAhead) = case collapse p beat of
-                PVal (pattern, dur) -> do
-                    print ("Beat: " ++ (show beat) ++ " Value: " ++ show (collapse pattern beat))
-                    pschedule p (scheduledTime + beatsToTime dur) (beat + dur)
-                p' -> do
-                    print p'
-                    print "Finished."
-                    return ()
-            | otherwise = do
-                threadDelay (floor $ (scheduledTime - t) * 100000) -- (scheduledTime - currentTime) / 10 for sleep time
-                pschedule p scheduledTime beat
-
-imp :: (Show a) => Pattern (Pattern a, Double) -> IO (ThreadId)
-imp p = do
-    t <- time
-    tId <- forkIO (pschedule p (t + (beatsToTime 1)) 0) -- This needs to schedule for a down beat, but this is just placeholder for the moment
-    -- mapM_ (\_ -> forkIO (pschedule p (t + (beatsToTime 1)) 0)) [1..100]
-    return tId
-
-daemon :: (Show a) => Pattern a -> Pattern a -> (Time -> Double)
-daemon s p = (\t -> 0)
 
 wrapResize :: [a] -> [b] -> [a]
 wrapResize [] _ = []
@@ -567,7 +534,7 @@ data Scale = Scale {
 degree2Freq :: Scale -> Int -> Double
 degree2Freq scale degree = (tuning scale V.! wrapAt degree (degrees scale)) * octave * rootFreq scale
     where
-        octave            = fromIntegral $ 2 ^ (div degree $ V.length $ degrees scale)
+        octave            = fromIntegral (2 ^ (div degree $ V.length $ degrees scale) :: Int)
         wrapAt index list = list V.! mod index (V.length list)
 
 d2f :: Scale -> Double -> Double

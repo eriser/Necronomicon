@@ -1284,10 +1284,90 @@ void negate_calc(ugen* u)
 	UGEN_OUT(u, 0, -(UGEN_IN(u, 0)));
 }
 
+void pow_calc(ugen* u)
+{
+	UGEN_OUT(u, 0, pow(UGEN_IN(u, 0), UGEN_IN(u, 1)));
+}
+
+void exp_calc(ugen* u)
+{
+	UGEN_OUT(u, 0, exp(UGEN_IN(u, 0)));
+}
+
+void log_calc(ugen* u)
+{
+	UGEN_OUT(u, 0, log(UGEN_IN(u, 0)));
+}
+
+void cos_calc(ugen* u)
+{
+	UGEN_OUT(u, 0, cos(UGEN_IN(u, 0)));
+}
+
+void asin_calc(ugen* u)
+{
+	UGEN_OUT(u, 0, asin(UGEN_IN(u, 0)));
+}
+
+void acos_calc(ugen* u)
+{
+	UGEN_OUT(u, 0, acos(UGEN_IN(u, 0)));
+}
+
+void atan_calc(ugen* u)
+{
+	UGEN_OUT(u, 0, atan(UGEN_IN(u, 0)));
+}
+
+void logbase_calc(ugen* u)
+{
+	UGEN_OUT(u, 0, log(UGEN_IN(u, 0)) / log(UGEN_IN(u, 1)));
+}
+
 void line_constructor(ugen* u)
 {
 	u->data = malloc(UINT_SIZE); // Line time
 	*((unsigned int*) u->data) = 0;
+}
+
+void sqrt_calc(ugen* u)
+{
+	UGEN_OUT(u, 0, sqrt(UGEN_IN(u, 0)));
+}
+
+void tan_calc(ugen* u)
+{
+	UGEN_OUT(u, 0, tan(UGEN_IN(u, 0)));
+}
+
+void sinh_calc(ugen* u)
+{
+	UGEN_OUT(u, 0, sinh(UGEN_IN(u, 0)));
+}
+
+void cosh_calc(ugen* u)
+{
+	UGEN_OUT(u, 0, cosh(UGEN_IN(u, 0)));
+}
+
+void tanh_calc(ugen* u)
+{
+	UGEN_OUT(u, 0, tanh(UGEN_IN(u, 0)));
+}
+
+void asinh_calc(ugen* u)
+{
+	UGEN_OUT(u, 0, asinh(UGEN_IN(u, 0)));
+}
+
+void atanh_calc(ugen* u)
+{
+	UGEN_OUT(u, 0, atanh(UGEN_IN(u, 0)));
+}
+
+void acosh_calc(ugen* u)
+{
+	UGEN_OUT(u, 0, acosh(UGEN_IN(u, 0)));
 }
 
 void line_deconstructor(ugen* u)
@@ -2969,7 +3049,7 @@ void poly3_calc(ugen* u)
 	UGEN_OUT(u,0,y);
 }
 
-void tanh_calc(ugen* u)
+void tanhdist_calc(ugen* u)
 {
 	double amount = UGEN_IN(u,0);
 	double x      = UGEN_IN(u,1);

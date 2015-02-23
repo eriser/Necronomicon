@@ -1,8 +1,6 @@
 module Necronomicon.Graphics.Camera where
 
 ----------------------------------------------------------
-import           Control.Monad
-import           Debug.Trace
 import qualified Graphics.Rendering.OpenGL         as GL
 import           Graphics.Rendering.OpenGL.Raw
 import qualified Graphics.UI.GLFW                  as GLFW
@@ -11,10 +9,8 @@ import           Necronomicon.Graphics.Mesh
 import           Necronomicon.Graphics.Model
 import           Necronomicon.Graphics.SceneObject
 import           Necronomicon.Graphics.Texture
-import           Necronomicon.Graphics.BufferObject
 import           Necronomicon.Linear
 import           Foreign
-import qualified Data.ByteString.Char8             as C
 import           Data.IORef
 import qualified Data.Map                          as Map
 ----------------------------------------------------------
@@ -30,13 +26,13 @@ perspCamera pos r fov near far clearColor fx = CameraObject pos r 1 c []
         c = Camera (fov/2) near far clearColor fx
 
 renderCamera :: (Int,Int) -> Matrix4x4 -> SceneObject -> Resources -> SceneObject -> IO Matrix4x4
-renderCamera (w,h) view scene resources g = case _camera g of
+renderCamera (w,h) view scene resources so = case _camera so of
     Nothing -> return newView
     Just c  -> do
         let  ratio    = fromIntegral w / fromIntegral h
         let (RGBA r g b a) = case _clearColor c of
-                RGB  r g b   -> RGBA r g b 1.0
-                c            -> c
+                RGB r' g' b' -> RGBA r' g' b' 1.0
+                c'           -> c'
 
         --If we have anye post-rendering fx let's bind their fbo
         case _fx c of
@@ -62,7 +58,8 @@ renderCamera (w,h) view scene resources g = case _camera g of
 
         return $ newView
     where
-        newView = view .*. (trsMatrix (_position g) (_rotation g) 1)
+        newView = view .*. (trsMatrix (_position so) (_rotation so) 1)
+        drawPostRenderFX (RGB r g b) fx = drawPostRenderFX (RGBA r g b 1) fx
         drawPostRenderFX (RGBA r g b a) fx = do
             glBindFramebuffer gl_FRAMEBUFFER 0
             GL.depthFunc     GL.$= Nothing
@@ -72,8 +69,8 @@ renderCamera (w,h) view scene resources g = case _camera g of
             GL.clearColor GL.$= GL.Color4 (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a)
             GL.clear [GL.ColorBuffer,GL.DepthBuffer]
             postFX <- getPostFX resources (fromIntegral w,fromIntegral h) fx
-            let (Material draw) = postRenderMaterial postFX (Texture [] . return .GL.TextureObject $ postRenderTex postFX)
-            draw (rect 1 1) identity4 (orthoMatrix 0 1 0 1 (-1) 1) resources
+            let (Material mdraw) = postRenderMaterial postFX (Texture [] . return .GL.TextureObject $ postRenderTex postFX)
+            mdraw (rect 1 1) identity4 (orthoMatrix 0 1 0 1 (-1) 1) resources
 
             GL.depthFunc     GL.$= Just GL.Less
             GL.blend         GL.$= GL.Enabled
@@ -128,14 +125,14 @@ loadPostFX (PostRenderingFX name material) (w,h) = do
     glFramebufferRenderbuffer gl_FRAMEBUFFER gl_DEPTH_ATTACHMENT  gl_RENDERBUFFER rboDepth
 
     --Is the FBO complete?
-    status <- glCheckFramebufferStatus fbo
-    if status /= gl_FRAMEBUFFER_COMPLETE
+    fboStatus <- glCheckFramebufferStatus fbo
+    if fboStatus /= gl_FRAMEBUFFER_COMPLETE
         then putStrLn "ERROR binding FBO."
         else return ()
 
     glBindFramebuffer gl_FRAMEBUFFER 0
 
-    return $ LoadedPostRenderingFX name material (w,h) fboTexture rboDepth fbo status
+    return $ LoadedPostRenderingFX name material (w,h) fboTexture rboDepth fbo fboStatus
 
 maybeReshape :: LoadedPostRenderingFX -> (Double,Double) -> IO (Maybe LoadedPostRenderingFX)
 maybeReshape post dim@(w,h) = if postRenderDimensions post == dim then return Nothing else do

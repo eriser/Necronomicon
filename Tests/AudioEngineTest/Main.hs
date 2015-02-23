@@ -1,25 +1,19 @@
 module Main where
 
-import Prelude
-import Control.Concurrent
-import Sound.OSC.Time
 import Necronomicon
-import Control.Monad.Trans
-import Control.Monad
--- import Language.Haskell.Interpreter
 
 delaySynthN :: UGen -> UGen -> UGen
-delaySynthN freq delayTime = s |> delayN 1 1 >>> add s >>> gain 0.1 >>> out 0
+delaySynthN freq _ = s |> delayN 1 1 >>> add s >>> gain 0.1 >>> out 0
     where
         s = sin freq
 
 delaySynthL :: UGen -> UGen -> UGen
-delaySynthL freq delayTime = s |> delayL 1 1 >>> add s >>> gain 0.1 >>> out 0
+delaySynthL freq _ = s |> delayL 1 1 >>> add s >>> gain 0.1 >>> out 0
     where
         s = sin freq
 
 delaySynthC :: UGen -> UGen -> UGen
-delaySynthC freq delayTime = s |> delayC 1 1 >>> add s >>> gain 0.1 >>> out 0
+delaySynthC freq _ = s |> delayC 1 1 >>> add s >>> gain 0.1 >>> out 0
     where
         s = sin freq
 

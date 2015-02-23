@@ -1,10 +1,10 @@
 import Necronomicon
 import Data.Fixed (mod')
-import Control.Arrow
 import Data.List (zip4)
 
 main :: IO ()
-main = runSignal <| synthDefs *> testGUI <|> sections <&> hyperTerrainSounds
+main = runSignal <| synthDefs *> testGUI <|> (sections <&> hyperTerrainSounds)
+
 
 synthDefs :: Signal ()
 synthDefs = synthDef "triOsc"    triOsc
@@ -14,10 +14,10 @@ synthDefs = synthDef "triOsc"    triOsc
          *> synthDef "p"         pSynth
 
 hyperTerrainSounds :: Signal ()
-hyperTerrainSounds = play             (combo [isSection 1, toggle <| isDown keyW]) "triOsc"    [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
-                 <&> play             (combo [isSection 2, toggle <| isDown keyA]) "triOsc32"  [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
-                 <&> playSynthPattern (combo [isSection 3, toggle <| isDown keyD]) "triOscEnv" [] (pmap (d2f bartok . (+12)) <| ploop [ [lich| [0 1] [4 3] [2 3] [2 3 4 5] |] ])
-                 <&> playBeatPattern  (combo [isSection 3, toggle <| isDown keyE]) [] (ploop [ [lich| b [p b] p [p p p] |] ])
+hyperTerrainSounds = play             (toggle <| isDown keyW) "triOsc"    [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
+                 <&> play             (toggle <| isDown keyA) "triOsc32"  [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
+                 <&> playSynthPattern (toggle <| isDown keyD) "triOscEnv" [] (pmap (d2f bartok . (+12)) <| ploop [ [lich| [0 1] [4 3] [2 3] [2 3 4 5] |] ])
+                 <&> playBeatPattern  (toggle <| isDown keyE) [] (ploop [ [lich| b [p b] p [p p p] |] ])
 
 section :: Signal Int
 section = netsignal <| switch 1 [pure False,combo [alt,isDown key1],combo [alt,isDown key2],combo [alt,isDown key3]]
@@ -26,22 +26,22 @@ isSection :: Int -> Signal Bool
 isSection n = lift (== n) section
 
 sections :: Signal ()
-sections = section1 <|> section2 <|> section3
+sections = keepWhen (isSection 1) section1 <|> keepWhen (isSection 2) section2 <|> keepWhen (isSection 3) section3
 
 section1 :: Signal ()
-section1 = keepWhen (isSection 1) <| scene [pure cam,oscSig]
+section1 = scene [pure cam,oscSig]
     where
         oscSig         = oscillatorObject <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4
         cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
 
 section2 :: Signal ()
-section2 = keepWhen (isSection 2) <| scene [pure cam,terrainSig]
+section2 = scene [pure cam,terrainSig]
     where
         terrainSig     = terrainObject <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time
         cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
 
 section3 :: Signal ()
-section3 = keepWhen (isSection 3) <| scene [pure cam,sphereSig]
+section3 = scene [pure cam,sphereSig]
     where
         sphereSig      = sphereObject <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time ~~ latitudes
         latitudes      = playSignalPattern (toggle <| isDown keyS) 36.6 [] <| ploop [ [lich| [36 10] [24 12] [32 37] [30 33 34 35] |] ]
@@ -52,20 +52,20 @@ terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 8 (-4)) (fromEuler' (-24) 0
     where
         mesh             = DynamicMesh "simplex" vertices colors uvs indices
         (w,h)            = (64.0,32.0)
-        (scale,vscale)   = (1 / 6,2.5)
+        (tscale,vscale)  = (1 / 6,2.5)
         values           = [(x + a,simplex 8 (x / w + t * 0.05) (y / h + t * 0.05) * 0.65 + aa,y + aaa)
                           | (x,y) <- map (\n -> (mod' n w,n / h)) [0..w*h]
                           | a     <- map (* 2.00) <| cycle a1
                           | aa    <- map (* 0.35) <| cycle a2
                           | aaa   <- map (* 2.00) <| cycle a3]
 
-        toVertex (x,y,z) = Vector3 (x*scale*3) (y*vscale) (z*scale*3)
+        toVertex (x,y,z) = Vector3 (x*tscale*3) (y*vscale) (z*tscale*3)
         toColor  (x,y,z) = RGBA    ((x * 1.75) / w * (y * 0.6 + 0.4)) (y * 0.75 + 0.25) (z / h * (y * 0.75 + 0.25)) 0.3
-        toUV     (x,y,_) = Vector2 (x / w) (y / h)
+        -- toUV     (x,y,_) = Vector2 (x / w) (y / h)
 
-        addIndices w i indices
-            | mod i w < (w-1) = i + 1 : i + w : i + w + 1 : i + 1 : i : i + w : indices
-            | otherwise       = indices
+        addIndices w' i indicesList
+            | mod i w' < (w'-1) = i + 1 : i + w' : i + w' + 1 : i + 1 : i : i + w' : indicesList
+            | otherwise         = indices
 
         vertices = map toVertex values
         colors   = map toColor  values
@@ -77,7 +77,7 @@ oscillatorObject :: [Double] -> [Double] -> [Double] -> SceneObject
 oscillatorObject audioBuffer1 audioBuffer2 audioBuffer3 = SceneObject 0 identity 1 (Model mesh <| vertexColored (RGBA 1 1 1 0.35)) []
     where
         mesh                                         = DynamicMesh "osc1" vertices colors uvs indices
-        scale                                        = 6
+        oscale                                       = 6
         width                                        = 1
         indices                                      = foldr (\i acc -> i + 1 : i + 2 : i + 3 : i + 1 : i + 0 : i + 2 : acc) [] [0..511]
         uvs                                          = replicate 512 0
@@ -85,8 +85,8 @@ oscillatorObject audioBuffer1 audioBuffer2 audioBuffer3 = SceneObject 0 identity
         (vertices,colors)                            = foldr toVertex ([],[]) (zip zippedAudio <| drop 1 zippedAudio)
         toVertex ((x1,y1,z1),(x2,y2,z2)) (vacc,cacc) = (p3 : p2 : p1 : p0 : vacc,r3 : r2 : r1 : r0 : cacc)
             where
-                p0  = Vector3 (x1 * scale) (y1 * scale) (z1 * scale * 0.5)
-                p1  = Vector3 (x2 * scale) (y2 * scale) (z2 * scale * 0.5)
+                p0  = Vector3 (x1 * oscale) (y1 * oscale) (z1 * oscale * 0.5)
+                p1  = Vector3 (x2 * oscale) (y2 * oscale) (z2 * oscale * 0.5)
 
                 cp  = cross np0 np1
 
@@ -115,9 +115,9 @@ sphereObject as1 as2 as3 t latitudes = SceneObject 0 (fromEuler' 0 (t * 0.5) (t 
         us             = map (* latInc)  [0..latitudes]
         ts             = map (* longInc) [0..longitudes]
 
-        toVertex (u,t) = Vector3 <| sin (toRadians t) * sin (toRadians u)
-                                 <| cos (toRadians t)
-                                 <| sin (toRadians t) * cos (toRadians u)
+        toVertex (u,v) = Vector3 <| sin (toRadians v) * sin (toRadians u)
+                                 <| cos (toRadians v)
+                                 <| sin (toRadians v) * cos (toRadians u)
         toColor p      = RGBA    <| colorRange (_x p)
                                  <| colorRange (_y p)
                                  <| colorRange (_z p)
@@ -163,9 +163,9 @@ pSynth :: UGen
 pSynth = sin 1110 |> gain (line 0.1) >>> gain 0.2 >>> out 1
 
 testGUI :: Signal ()
-testGUI = gui [chatBox,netBox,users]
+testGUI = gui [chatBox,netBox,ubox]
     where
-        users   = userBox <| Vector2 0.0 0.945
+        ubox    = userBox <| Vector2 0.0 0.945
                           <| Size    0.0 0.055
                           <| Font   "OCRA.ttf" 24
                           <| vertexColored (RGBA 0 0 0 0.25)

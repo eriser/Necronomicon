@@ -1,7 +1,6 @@
 module Necronomicon.FRP.Event (
     EventValue(..),
     Event(..),
-    Signal(..),
     SignalVar,
     SignalState(..),
     Client(..),
@@ -12,7 +11,6 @@ module Necronomicon.FRP.Event (
     ) where
 
 ------------------------------------------------------
-import           Control.Concurrent
 import           Control.Concurrent.STM
 import           Data.Typeable(Typeable)
 import           Data.Dynamic (Dynamic,toDyn,fromDynamic)
@@ -30,7 +28,6 @@ import qualified Data.IntMap as IntMap
 data Event        = Event Int Dynamic
 data EventValue a = Change a | NoChange a deriving (Show)
 
-newtype Signal a = Signal{unSignal :: SignalState -> IO (SignalState -> IO (EventValue a))}
 --timestamp inputs mayhap?
 type SignalVar a = TVar (EventValue a)
 data SignalState = SignalState {
@@ -38,7 +35,7 @@ data SignalState = SignalState {
     sceneVar          :: SignalVar SceneObject,
     guiVar            :: SignalVar SceneObject,
     necroVars         :: NecroVars,
-    client            :: Client,
+    necroNetClient    :: Client,
     mouseSignal       :: SignalVar (Double,Double),
     dimensionsSignal  :: SignalVar Vector2,
 
@@ -77,11 +74,11 @@ data RunStatus = Connecting
                deriving (Show,Eq,Typeable)
 
 data Client = Client {
-    userName    :: String,
+    clientUserName    :: String,
     clientUsers :: TVar [String],
-    netSignals  :: TVar (IntMap.IntMap (EventValue NetValue)),
-    outBox      :: TChan NetMessage,
-    inBox       :: TChan NetMessage,
-    runStatus   :: TVar RunStatus,
-    aliveTime   :: TVar Double
+    clientNetSignals  :: TVar (IntMap.IntMap (EventValue NetValue)),
+    clientOutBox      :: TChan NetMessage,
+    clientInBox       :: TChan NetMessage,
+    clientRunStatus   :: TVar RunStatus,
+    clientAliveTime   :: TVar Double
     }
