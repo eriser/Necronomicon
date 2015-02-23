@@ -2,6 +2,8 @@ module Necronomicon.FRP.Signal (
     module Necronomicon.FRP.Event,
     Signal (..),
     SignalState (..),
+    switch,
+    combo,
     tempo,
     playSynthPattern,
     playSignalPattern,
@@ -85,6 +87,40 @@ module Necronomicon.FRP.Signal (
     keyX,
     keyY,
     keyZ,
+    keyEnter,
+    keyLCtrl,
+    keyRCtrl,
+    keyLAlt,
+    keyRAlt,
+    keySpace,
+    keyLShift,
+    keyRShift,
+    keyBackspace,
+    key0,
+    key1,
+    key2,
+    key3,
+    key4,
+    key5,
+    key6,
+    key7,
+    key8,
+    key9,
+    keyApostrophe,
+    keyComma,
+    keyMinus,
+    keyEqual,
+    keyPeriod,
+    keySlash,
+    keySemiColon,
+    keyLeftBracket,
+    keyBackSlash,
+    keyRightBracket,
+    keyGraveAccent,
+    keyUp,
+    keyDown,
+    keyLeft,
+    keyRight,
     lift,
     lift2,
     lift3,
@@ -1178,10 +1214,10 @@ initWindow = GLFW.init >>= \initSuccessful -> if initSuccessful then window else
     where
         mkWindow = do
             --Windowed
-            -- GLFW.createWindow 1280 768 "Necronomicon" Nothing Nothing
+            GLFW.createWindow 1280 768 "Necronomicon" Nothing Nothing
             --Full screen
-            fullScreenOnMain <- GLFW.getPrimaryMonitor
-            GLFW.createWindow 1920 1080 "Necronomicon" fullScreenOnMain Nothing
+            -- fullScreenOnMain <- GLFW.getPrimaryMonitor
+            -- GLFW.createWindow 1920 1080 "Necronomicon" fullScreenOnMain Nothing
         window   = mkWindow >>= \w -> GLFW.makeContextCurrent w >> return w
 
 runSignal :: (Show a) => Signal a -> IO()
@@ -2107,6 +2143,29 @@ till sigA sigB = Signal $ \state -> do
                 Change True -> writeIORef boolRef False >>  return (Change False)
                 _           -> readIORef boolRef        >>= return . NoChange
 
+combo :: [Signal Bool] -> Signal Bool
+combo bs = isTrue <~ combine bs
+    where
+        isTrue = foldr (&&) True
+
+switch :: Int -> [Signal Bool] -> Signal Int
+switch startSection signals = Signal $ \state -> do
+    sConts  <- mapM (\s -> unSignal s state) signals
+    sValues <- mapM (\cont -> fmap unEvent $ cont state) sConts
+    ref     <- newIORef startSection
+    return $ processSignal ref sConts
+    where
+        processSignal ref sConts state = do
+            prev <- readIORef ref
+            foldM (\i s -> setSection i ref state s >> return (i + 1)) 0 sConts
+            cur  <- readIORef ref
+            if cur /= prev
+                then return $ Change   cur
+                else return $ NoChange cur
+
+        setSection index ref state cont = cont state >>= \c -> case c of
+            Change True -> writeIORef ref index
+            _           -> return ()
 
 ---------------------------------------------
 -- Networking
