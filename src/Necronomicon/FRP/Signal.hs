@@ -2085,19 +2085,21 @@ keepWhen sPred x = Signal $ \state -> do
     return $ processSignal pCont xCont ref
     where
         processSignal pCont xCont ref state = do
-            pValue <- pCont state
-            xValue <- xCont state
-            case pValue of
-                Change p -> case xValue of
-                    Change   x' -> go x' p
-                    NoChange _  -> readIORef ref >>= return . NoChange
-                NoChange p -> case xValue of
-                    Change   x' -> go x' p
-                    NoChange _ -> readIORef ref >>= return . NoChange
-            where
-                go y p = if p
-                         then writeIORef ref y >> (return $ Change y)
-                         else readIORef  ref   >>= return . NoChange
+            pValue <- unEvent <~ pCont state
+            if not pValue then  readIORef ref >>= return . NoChange else xCont state >>= \x -> case x of
+                NoChange x -> return $ NoChange x
+                Change   x -> writeIORef ref x >> return (Change x)
+                -- case xValue of
+                    -- Change   x' -> go x' p
+                    -- NoChange _  -> readIORef ref >>= return . NoChange
+                -- NoChange p -> case xValue of
+                    -- Change   x' -> go x' p
+                    -- NoChange _ -> readIORef ref >>= return . NoChange
+
+            -- where
+                -- go y p = if p
+                        --  then writeIORef ref y >> (return $ Change y)
+                        --  else readIORef  ref   >>= return . NoChange
 
 
 dropWhen :: Signal Bool -> Signal a -> Signal a
@@ -2263,7 +2265,6 @@ combo bs = isTrue <~ combine bs
 switch :: Int -> [Signal Bool] -> Signal Int
 switch startSection signals = Signal $ \state -> do
     sConts  <- mapM (\s -> unSignal s state) signals
-    -- sValues <- mapM (\cont -> fmap unEvent $ cont state) sConts
     ref     <- newIORef startSection
     return $ processSignal ref sConts
     where
