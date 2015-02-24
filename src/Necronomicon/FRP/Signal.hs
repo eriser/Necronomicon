@@ -1299,7 +1299,7 @@ randS low high signal = Signal $ \necro -> do
                     writeIORef ref r
                     return $ Change r
 
-randFS :: Signal a -> Signal Float
+randFS :: Signal a -> Signal Double
 randFS signal = Signal $ \state -> do
     cont <- unSignal signal state
     r    <- randomRIO (0,1)
