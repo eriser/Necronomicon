@@ -40,11 +40,11 @@ patternTest = do
     compileSynthDef "two" two
     compileSynthDef "three" three
     compileSynthDef "four" four
-    let pLineSynth = return (\degree t -> playSynthAtJackTime "FreqSynth" [degree * 110] t >> return ())
+    let pLineSynth = return (\degree t -> playSynthAtJackTime "FreqSynth" [degree * 11] t >> return ())
     -- let pBeatSynth = return (\synth t -> playSynthAtJackTime synth [] t >> return ())
 
     _ <- runPDef $ pstream "ArgsPattern2" pLineSynth (PVal (5, 1))
-    setTempo 500
+    setTempo 50000
 
     {-
     setTempo 150
