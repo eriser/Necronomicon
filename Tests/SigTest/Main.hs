@@ -5,7 +5,6 @@ import Data.List (zip4)
 main :: IO ()
 main = runSignal <| synthDefs *> testGUI <|> (sections <&> hyperTerrainSounds)
 
-
 synthDefs :: Signal ()
 synthDefs = synthDef "triOsc"    triOsc
          *> synthDef "triOsc32"  triOsc32

@@ -52,10 +52,7 @@ data SignalState = SignalState {
     chatMessageBuffer :: TChan String,
     netStatusBuffer   :: TChan RunStatus,
     userListBuffer    :: TChan [String],
-    netSignalsBuffer  :: TVar  [(Int, NetValue)],
-
-    updateDelta       :: Double,
-    runTime           :: Double
+    netSignalsBuffer  :: TVar  [(Int, NetValue)]
     }
 
 writeToSignal :: (Eq a) => SignalVar a -> a -> IO ()
