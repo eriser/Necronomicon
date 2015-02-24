@@ -1464,7 +1464,7 @@ playSynthN playSig synthName argSigs = Signal $ \state -> do
     return $ processSignal pCont aConts synthRef (necroVars state)
     where
         processSignal pCont aConts synthRef sNecroVars update = pCont update >>= \p -> case p of
-            Change   p'  -> mapM (\f -> unEvent <~ f updateZero) aConts >>= \args -> runNecroState (playStopSynth args p' synthRef) sNecroVars >>= \(e,_) -> return e
+            Change   p'  -> mapM (\f -> unEvent <~ f update) aConts >>= \args -> runNecroState (playStopSynth args p' synthRef) sNecroVars >>= \(e,_) -> return e
             NoChange _   -> readIORef synthRef >>= \s -> case s of
                 Nothing  -> return $ NoChange ()
                 Just  s' -> foldM (\i f -> updateArg i f s' sNecroVars update >> return (i+1)) 0 aConts >> return (NoChange ())
