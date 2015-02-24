@@ -1441,45 +1441,6 @@ netsignal sig = Signal $ \state -> do
 -- Sound
 ---------------------------------------------
 
--- playPattern :: (Show a,Typeable a) => a -> Signal Bool -> Signal Bool -> Pattern (Pattern a,Double) -> Signal a
--- playPattern init playSig stopSig pattern = Signal $ \necro -> do
-
-    --Signal Values
-    -- (pValue,pCont,pids) <- unSignal playSig necro
-    -- (sValue,sCont,sids) <- unSignal playSig necro
-    -- uid                 <- getNextID necro
-    -- nid                 <- getNextID necro
-    -- ref                 <- newIORef init
-    -- playRef             <- newIORef False
-
-    --Net Values
-    -- (_,netPlayCont,_)     <- unSignal (input False nid) necro
-
-    --pure Values
-    -- let pdef             = pstream ("sigPattern" ++ show uid) (pure $ liftIO . atomically . writeTBQueue (globalDispatch necro) . Event uid . toDyn) pattern
-        -- ids              = IntSet.insert nid $ IntSet.insert uid $ IntSet.union sids pids
-
-    -- runNecroState (setTempo 150) (necroVars necro)
-    -- sendAddNetSignal (client necro) (nid,NetBool False)
-    -- return (init,processEvent pCont sCont netPlayCont uid nid pdef (client necro) (necroVars necro) ref playRef ids,ids)
-    -- where
-        -- processEvent pCont sCont netPlayCont uid nid pdef client necroVars ref playRef ids event@(Event eid e) = case idGuard ids eid ref of
-            -- Just  r -> r
-            -- Nothing -> if eid == uid
-                -- then case fromDynamic e of
-                    -- Just v -> writeIORef ref v >> return (Change v)
-                    -- _      -> print "dynamic casting error in playPattern" >> readIORef ref >>= return . NoChange
-                -- else netPlayCont event >>= \net -> case net of
-                    -- Change True  -> print "net play" >> runNecroState (runPDef pdef) necroVars >> writeIORef playRef True  >> readIORef ref >>= return . NoChange
-                    -- Change False -> print "net stop" >> runNecroState (pstop   pdef) necroVars >> writeIORef playRef False >> readIORef ref >>= return . NoChange
-                    -- _            -> readIORef playRef >>= \play -> if play
-                        -- then sCont event >>= \s -> case s of
-                            -- Change True -> print "stop" >> sendSetNetSignal client (nid,NetBool False) >> runNecroState (pstop   pdef) necroVars >> writeIORef playRef False >> readIORef ref >>= return . NoChange
-                            -- _           -> readIORef ref >>= return . NoChange
-                        -- else pCont event >>= \p -> case p of
-                            -- Change True -> print "play" >> sendSetNetSignal client (nid,NetBool True ) >> runNecroState (runPDef pdef) necroVars >> writeIORef playRef True  >> readIORef ref >>= return . NoChange
-                            -- _           -> readIORef ref >>= return . NoChange
-
 foreign import ccall "&out_bus_buffers" outBusBuffers :: Ptr CDouble
 
 audioBuffer :: Int -> Signal [Double]
@@ -1513,8 +1474,8 @@ playSynthN playSig synthName argSigs = Signal $ \state -> do
             Change   v -> runNecroState (setSynthArg synth index v) sNecroVars >> return ()
 
         playStopSynth args shouldPlay synthRef = liftIO (readIORef synthRef) >>= \ms -> case (ms,shouldPlay) of
-            (Nothing   ,True )  -> liftIO (print "play") >> playSynth synthName args >>= \s -> liftIO (writeIORef synthRef $ Just s) >> return (Change ())
-            (Just synth,False)  -> liftIO (print "stop") >> stopSynth synth          >>        liftIO (writeIORef synthRef  Nothing) >> return (Change ())
+            (Nothing   ,True )  -> playSynth synthName args >>= \s -> liftIO (writeIORef synthRef $ Just s) >> return (Change ())
+            (Just synth,False)  -> stopSynth synth          >>        liftIO (writeIORef synthRef  Nothing) >> return (Change ())
             _                   -> return $ NoChange ()
 
 synthDef :: UGenType a => String -> a -> Signal ()
@@ -1596,8 +1557,8 @@ playSynthPattern playSig synthName argSigs pattern = Signal $ \state -> do
             p   <- pCont update
             pat <- readIORef patternRef
             playChange <- case (p,pat) of
-                (Change True ,Nothing) -> print "play synthPattern" >> runNecroState (runPDef pDef) sNecroVars >>= \(pat',_) -> writeIORef patternRef (Just pat') >> return (Change ())
-                (Change False,Just  _) -> print "stop synthPattern" >> runNecroState (pstop   pDef) sNecroVars >>               writeIORef patternRef Nothing     >> return (Change ())
+                (Change True ,Nothing) -> runNecroState (runPDef pDef) sNecroVars >>= \(pat',_) -> writeIORef patternRef (Just pat') >> return (Change ())
+                (Change False,Just  _) -> runNecroState (pstop   pDef) sNecroVars >>               writeIORef patternRef Nothing     >> return (Change ())
                 _                      -> return $ NoChange ()
             readIORef patternRef >>= \pat' -> case pat' of
                 Nothing -> return ()
@@ -1628,8 +1589,8 @@ playBeatPattern playSig argSigs pattern = Signal $ \state -> do
             p   <- pCont update
             pat <- readIORef patternRef
             playChange <- case (p,pat) of
-                (Change True ,Nothing) -> print "play synthPattern" >> runNecroState (runPDef pDef) sNecroVars >>= \(pat',_) -> writeIORef patternRef (Just pat') >> return (Change ())
-                (Change False,Just  _) -> print "stop synthPattern" >> runNecroState (pstop   pDef) sNecroVars >>               writeIORef patternRef Nothing     >> return (Change ())
+                (Change True ,Nothing) -> runNecroState (runPDef pDef) sNecroVars >>= \(pat',_) -> writeIORef patternRef (Just pat') >> return (Change ())
+                (Change False,Just  _) -> runNecroState (pstop   pDef) sNecroVars >>               writeIORef patternRef Nothing     >> return (Change ())
                 _                      -> return $ NoChange ()
             readIORef patternRef >>= \pat' -> case pat' of
                 Nothing -> return ()
