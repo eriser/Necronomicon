@@ -126,7 +126,8 @@ executable NecroNet
 executable SigTest
     main-is:          Main.hs
     default-language: Haskell2010
-    ghc-options:      -threaded -O3 -Wall -Werror
+    ghc-options:      -threaded -O3 -Wall
+    -- -Werror
     hs-source-dirs:   Tests/SigTest
     default-extensions: QuasiQuotes TemplateHaskell ParallelListComp
     build-depends:

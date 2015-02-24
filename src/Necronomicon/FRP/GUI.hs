@@ -66,11 +66,11 @@ chat (Vector2 x y) (Size w h) font material = addChild <~ textEditSignal textInp
             metrics    <- charMetrics font
             return $ processSignal textRef activeRef inputCont toggleCont metrics (necroNetClient state)
 
-        processSignal textRef activeRef inputCont toggleCont metrics client state = toggleCont state >>= go
+        processSignal textRef activeRef inputCont toggleCont metrics client update = toggleCont update >>= go
             where go (Change   isActive) = writeIORef activeRef isActive >> if isActive then readIORef textRef >>= return . Change . background else return $ Change emptyObject
                   go (NoChange isActive) = if not isActive then return $ NoChange emptyObject else do
                       t <- readIORef textRef
-                      c <- inputCont state
+                      c <- inputCont update
                       case (c,t) of
                           (NoChange  _,_)      -> return . NoChange $ background t
                           (Change '\n',_)     -> sendChatMessage t client >> returnNewText textRef metrics ""
@@ -91,7 +91,7 @@ chatDisplay (Vector2 x y) (Size w h) font _ = Signal $ \state -> do
     return $ processSignal ref metrics chatCont
     where
         --TODO: delete if too many lines
-        processSignal ref metrics chatCont state = chatCont state >>= \c -> case c of
+        processSignal ref metrics chatCont update = chatCont update >>= \c -> case c of
             NoChange _ -> readIORef ref >>= return . NoChange . chatObject
             Change str -> do
                 prevStr <- readIORef ref

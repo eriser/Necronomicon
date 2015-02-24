@@ -183,907 +183,8 @@ constant :: a -> Signal a
 constant = pure
 
 infixl 4 <~,~~
-
 infixr 4 ~>
 
--- maybe revert to global timer system?
-
--------------------------
--- Signals 4.0
--------------------------
--- data Necro        = Necro {
-    -- globalDispatch :: TBQueue Event,
-    -- inputCounter   :: IORef Int,
-    -- sceneVar       :: TMVar SceneObject,
-    -- guiVar         :: TMVar SceneObject,
-    -- necroVars      :: NecroVars,
-    -- client         :: Client
-    -- }
--- newtype Signal a = Signal {unSignal :: Necro -> IO(a,Event -> IO (EventValue a),IntSet.IntSet)}
-
-{-
-idGuard :: IntSet.IntSet -> Handle -> IORef a -> Maybe (IO (EventValue a))
-idGuard set uid ref = case IntSet.member uid set of
-    True  -> Nothing
-    False -> Just (readIORef ref >>= return . NoChange)
-
-instance  Functor Signal where
-    fmap f x = Signal $ \necro -> do
-        (defaultX,xCont,ids) <- unSignal x necro
-        let defaultValue = f defaultX
-        ref <- newIORef defaultValue
-        return (defaultValue,processState xCont ref ids,ids)
-        where
-            processState xCont ref ids event@(Event uid _) = case idGuard ids uid ref of
-                Just r  -> r
-                Nothing -> xCont event >>= \xValue -> case xValue of
-                    Change x -> let newValue = f x in writeIORef ref newValue >> return (Change newValue)
-                    _        -> readIORef ref >>= return . NoChange
-
-instance Applicative Signal where
-    pure  a = Signal $ \_ -> return (a,\_ -> return $ NoChange a,IntSet.empty)
-    f <*> g = Signal $ \necro -> do
-        (defaultF,fCont,fIds) <- unSignal f necro
-        (defaultG,gCont,gIds) <- unSignal g necro
-        let defaultValue = defaultF defaultG
-        ref <- newIORef defaultValue
-        let ids = IntSet.union fIds gIds
-        return (defaultValue,processState fCont gCont ref ids,ids)
-        where
-            processState fCont gCont ref ids event@(Event uid _) = case idGuard ids uid ref of
-                Just  r -> r
-                Nothing -> fCont event >>= \fe -> gCont event >>= \ge -> case (fe,ge) of
-                    (Change   f',Change   g') -> let newValue = f' g' in writeIORef ref newValue >> return (Change newValue)
-                    (Change   f',NoChange g') -> let newValue = f' g' in writeIORef ref newValue >> return (Change newValue)
-                    (NoChange f',Change   g') -> let newValue = f' g' in writeIORef ref newValue >> return (Change newValue)
-                    _                         -> readIORef ref >>= return . NoChange
-
-instance Alternative Signal where
-    empty   = Signal $ \_ -> return (undefined,\_ -> return $ NoChange undefined,IntSet.empty)
-    a <|> b = Signal $ \necro -> do
-        (defaultA,aCont,aIds) <- unSignal a necro
-        (defaultB,bCont,bIds) <- unSignal b necro
-        ref                   <- newIORef defaultA
-        let ids                = IntSet.union aIds bIds
-        return (defaultA,processState aCont bCont ref ids,ids)
-        where
-            processState aCont bCont ref ids event@(Event uid _) = case idGuard ids uid ref of
-                Just  r -> r
-                Nothing -> aCont event >>= \aValue -> case aValue of
-                    Change   a -> writeIORef ref a >> return (Change a)
-                    NoChange _ -> bCont event >>= \bValue -> case bValue of
-                        Change   b -> writeIORef ref b >>  return  (Change b)
-                        NoChange _ -> readIORef  ref   >>= return . NoChange
-
-instance Num a => Num (Signal a) where
-    (+)         = liftA2 (+)
-    (*)         = liftA2 (*)
-    (-)         = liftA2 (-)
-    negate      = lift negate
-    abs         = lift abs
-    signum      = lift signum
-    fromInteger = pure . fromInteger
-
-instance Fractional a => Fractional (Signal a) where
-    (/) = liftA2 (/)
-    fromRational = pure . fromRational
-
-instance Floating a => Floating (Signal a) where
-    pi      = pure pi
-    (**)    = liftA2 (**)
-    exp     = lift exp
-    log     = lift log
-    sin     = lift sin
-    cos     = lift cos
-    asin    = lift asin
-    acos    = lift acos
-    atan    = lift atan
-    logBase = liftA2 logBase
-    sqrt    = lift sqrt
-    tan     = lift tan
-    tanh    = lift tanh
-    sinh    = lift sinh
-    cosh    = lift cosh
-    asinh   = lift asinh
-    atanh   = lift atanh
-    acosh   = lift acosh
-
--- instance (Eq a) => Eq (Signal a) where
-    -- (==) = liftA2 (==)
-    -- (/=) = liftA2 (/=)
-
--- instance (Eq a, Ord a) => Ord (Signal a) where
-    -- compare = liftA2 compare
-    -- max     = liftA2 max
-    -- min     = liftA2 min
-
-instance (Enum a) => Enum (Signal a) where
-    succ     = lift succ
-    pred     = lift pred
-    -- toEnum   = lift toEnum
-    -- fromEnum = pure
-
-instance Show (Signal a) where
-    show _ = "~~Signal~~"
-
---------------------------------------
--- RunTime
---------------------------------------
-
-runSignal :: (Show a) => Signal a -> IO()
-runSignal s = initWindow >>= \mw ->
-    case mw of
-        Nothing -> print "Error starting GLFW." >> return ()
-        Just w  -> do
-
-            print "Starting signal run time"
-
-            globalDispatch <- atomically $ newTBQueue 100000
-            GLFW.setCursorPosCallback   w $ Just $ mousePosEvent   globalDispatch
-            GLFW.setMouseButtonCallback w $ Just $ mousePressEvent globalDispatch
-            GLFW.setKeyCallback         w $ Just $ keyPressEvent   globalDispatch
-            GLFW.setWindowSizeCallback  w $ Just $ dimensionsEvent globalDispatch
-
-            client <- getArgs >>= startNetworking globalDispatch
-
-            -- threadDelay $ 16667
-
-            inputCounterRef <- newIORef 1000
-            sceneVar        <- atomically newEmptyTMVar
-            guiVar          <- atomically newEmptyTMVar
-            necroVars       <- mkNecroVars
-            runNecroState startNecronomicon necroVars
-            let necro = Necro globalDispatch inputCounterRef sceneVar guiVar necroVars client
-            forkIO $ globalEventDispatch s necro
-
-            -- threadDelay $ 16667
-
-            --Start up openGL rendering loop
-            -- GL.doubleBuffer GL.$= True
-            resources <- newResources
-            render False w sceneVar guiVar emptyObject emptyObject resources necroVars client
-    where
-        --event callbacks
-        mousePressEvent eventNotify _ _ GLFW.MouseButtonState'Released _ = atomically $ (writeTBQueue eventNotify $ Event 1 $ toDyn False) `orElse` return ()
-        mousePressEvent eventNotify _ _ GLFW.MouseButtonState'Pressed  _ = atomically $ (writeTBQueue eventNotify $ Event 1 $ toDyn True ) `orElse` return ()
-        keyPressEvent   eventNotify _ k _ GLFW.KeyState'Pressed  _       = atomically $ (writeTBQueue eventNotify $ Event (glfwKeyToEventKey k) $ toDyn True)
-        keyPressEvent   eventNotify _ k _ GLFW.KeyState'Released _       = atomically $ (writeTBQueue eventNotify $ Event (glfwKeyToEventKey k) $ toDyn False)
-        keyPressEvent   eventNotify _ k _ _ _                            = return ()
-        dimensionsEvent eventNotify _ x y                                = atomically $ writeTBQueue eventNotify $ Event 2 $ toDyn $ Vector2 (fromIntegral x) (fromIntegral y)
-        mousePosEvent   eventNotify w x y                                = do
-            (wx,wy) <- GLFW.getWindowSize w
-            -- let pos = ((x / fromIntegral wx) * 2 - 1,(y / fromIntegral wy) * (-2) + 1)
-            let pos = (x / fromIntegral wx,y / fromIntegral wy)
-            atomically $ (writeTBQueue eventNotify $ Event 0 $ toDyn pos) `orElse` return ()
-
-        render quit window sceneVar guiVar prevScene prevGUI resources necroVars client
-            | quit      = quitClient client >> runNecroState shutdownNecronomicon necroVars >> print "Qutting" >> return ()
-            | otherwise = do
-                GLFW.pollEvents
-                q          <- liftA (== GLFW.KeyState'Pressed) (GLFW.getKey window GLFW.Key'Escape)
-                ms         <- atomically $ tryTakeTMVar sceneVar
-                mg         <- atomically $ tryTakeTMVar guiVar
-                (newScene,newGUI) <- case (ms,mg) of
-                    (Just  s,Just  g) -> renderGraphics window resources s          g       >> return (s,g)
-                    (Nothing,Just  g) -> renderGraphics window resources prevScene  g       >> return (prevScene,g)
-                    (Just  s,Nothing) -> renderGraphics window resources s          prevGUI >> return (s,prevGUI)
-                    (Nothing,Nothing) -> return (prevScene,prevGUI)
-                threadDelay $ 16667
-                render q window sceneVar guiVar newScene newGUI resources necroVars client
-
-globalEventDispatch :: Show a => Signal a -> Necro -> IO()
-globalEventDispatch signal necro = do
-    (a,processState,_) <- unSignal signal necro
-    print a
-    forever $ do
-        e <- atomically $ readTBQueue $ globalDispatch necro
-        a <- processState e
-        case a of
-            NoChange _ -> return ()
-            Change  a' -> return () --print a'
-
-startNetworking :: TBQueue Event -> [String] -> IO Client
-startNetworking globalDispatch (name : serverAddr : []) = startClient name serverAddr globalDispatch
-startNetworking _ _                                     = print "You must give a user name and the server ip address" >> newClient "INCORRECT_COMMAND_ARGS"
-
----------------------------------------------
--- Time
----------------------------------------------
-
-every :: Time -> Signal Time
-every time = Signal $ \necro -> do
-    (Input uid inputSig) <- createInput (0::Double) necro
-    (sigValue,sigCont,sIds)   <- unSignal inputSig necro
-    forkIO $ timer uid $ globalDispatch necro
-    return $ (sigValue,sigCont,IntSet.insert uid sIds)
-    where
-        timer uid outBox = forever $ do
-            currentTime <- getCurrentTime
-            atomically   $ writeTBQueue outBox $ Event uid $ toDyn currentTime
-            threadDelay  $ floor $ time * 1000000
-            where
-                getCurrentTime = do
-                    currentTime <- GLFW.getTime
-                    case currentTime of
-                        Nothing -> return 0
-                        Just t  -> return t
-
--- fpsWhen !!!!
--- combined global timers?
-fps :: Time -> Signal Time
-fps time = Signal $ \necro -> do
-    (Input uid inputSig)    <- createInput (0::Double) necro
-    (sigValue,sigCont,sIds) <- unSignal inputSig necro
-    ref <- newIORef 0
-    forkIO $ timer ref uid $ globalDispatch necro
-    return $ (sigValue,sigCont,IntSet.insert uid sIds)
-    where
-        timer ref uid outBox = forever $ do
-            lastTime    <- readIORef ref
-            currentTime <- getCurrentTime
-            let delta    = (currentTime - lastTime)
-            atomically   $ writeTBQueue outBox $ Event uid $ toDyn delta
-            writeIORef ref currentTime
-            threadDelay  $ floor $ (1.0 / time) * 1000000
-            where
-                getCurrentTime = do
-                    currentTime <- GLFW.getTime
-                    case currentTime of
-                        Nothing -> return 0
-                        Just t  -> return t
-
----------------------------------------------
--- Input
----------------------------------------------
-
-input :: Typeable a => a -> Int -> Signal a
-input a uid = Signal $ \_ -> newIORef a >>= \ref -> return (a,processState ref,IntSet.fromList [uid])
-    where
-        processState ref (Event uid' e)
-            | uid /= uid'             = readIORef ref    >>= return . NoChange
-            | Just v <- fromDynamic e = writeIORef ref v >>  return  (Change v)
-            | otherwise               = print "input type error" >> readIORef ref >>= return . NoChange
-
-type Handle = Int
-
-data Input a = Input {
-    inputHandle :: Handle,
-    inputSignal :: Signal a
-    }
-
-createInput :: Typeable a => a -> Necro -> IO (Input a)
-createInput a necro = do
-    puid   <- readIORef $ inputCounter necro
-    let uid = puid + 1
-    writeIORef (inputCounter necro) uid
-    return $ Input uid $ Signal $ \_ -> do
-        ref <- newIORef a
-        return (a,processEvent uid ref,IntSet.insert uid IntSet.empty)
-    where
-        processEvent uid ref (Event uid' e) = do
-            case uid == uid' of
-                False -> do
-                    v <- readIORef ref
-                    return $ NoChange v
-                True  -> case fromDynamic e of
-                    Nothing -> print "input type error" >> do
-                        v <- readIORef ref
-                        return $ NoChange v
-                    Just v  -> do
-                        writeIORef ref v
-                        return $ Change v
-
-getNextID :: Necro -> IO Int
-getNextID necro = readIORef (inputCounter necro) >>= \counterValue -> writeIORef (inputCounter necro) (counterValue + 1) >> return (counterValue + 1)
-
-textInput :: Signal Char
-textInput = Signal $ \necro -> do
-    shiftRef <- newIORef False
-    charRef  <- newIORef ' '
-    return (' ',processEvent shiftRef charRef,IntSet.fromList [100..155])
-    where
-        processEvent shiftRef charRef (Event uid eval) = case (uid == 132 || uid == 133,uid >= 100 && uid <= 155,fromDynamic eval) of
-            (True,_,Just isShiftDown) -> writeIORef shiftRef isShiftDown >> readIORef charRef >>= return . NoChange
-            (_,True,Just True)        -> readIORef  shiftRef >>= return . Change . eventKeyToChar uid
-            _                         -> readIORef  charRef  >>= return . NoChange
-
-mousePos :: Signal (Double,Double)
-mousePos = input (0,0) 0
-
-mouseX :: Signal Double
-mouseX = fst <~ mousePos
-
-mouseY :: Signal Double
-mouseY = snd <~ mousePos
-
-mouseClicks :: Signal ()
-mouseClicks = (\_ -> ()) <~ keepIf (\x -> x == False) True mouseDown
-
-mouseDown :: Signal Bool
-mouseDown = input False 1
-
-dimensions :: Signal Vector2
-dimensions = input (Vector2 1280 768) 2
-
-isDown :: Key -> Signal Bool
-isDown = input False . glfwKeyToEventKey
-
-isUp :: Key -> Signal Bool
-isUp k = not <~ isDown k
-
-wasd :: Signal (Double,Double)
-wasd = go <~ isDown keyW ~~ isDown keyA ~~ isDown keyS ~~ isDown keyD
-    where
-        go w a s d = (((if d then 1 else 0) + (if a then (-1) else 0)),((if w then 1 else 0) + (if s then (-1) else 0)))
-
-arrows :: Signal (Double,Double)
-arrows = go <~ isDown keyUp ~~ isDown keyLeft ~~ isDown keyDown ~~ isDown keyRight
-    where
-        go w a s d = (((if d then 1 else 0) + (if a then (-1) else 0)),((if w then 1 else 0) + (if s then (-1) else 0)))
-
-enter :: Signal Bool
-enter = isDown keyEnter
-
-space :: Signal Bool
-space = isDown keySpace
-
-ctrl :: Signal Bool
-ctrl = isDown keyLCtrl <|> isDown keyRCtrl
-
-alt :: Signal Bool
-alt = isDown keyLAlt <|> isDown keyRAlt
-
-shift :: Signal Bool
-shift = isDown keyLShift <|> isDown keyRShift
-
----------------------------------------------
--- Networking
----------------------------------------------
-
-receiveChatMessage :: Signal String
-receiveChatMessage = input "" 3
-
-networkRunStatus :: Signal RunStatus
-networkRunStatus = input Connecting 4
-
-users :: Signal [String]
-users = input [] 5
-
--- class Networkable a => NetSignal a where
-
-foldn :: Networkable a => (b -> a -> a) -> a -> Signal b -> Signal a
-foldn f bInit a = Signal $ \necro -> do
-    (val,cont,sids) <- unSignal a necro
-    ref             <- newIORef bInit
-    netid           <- getNextID necro
-    (_,netCont,_)   <- unSignal (input bInit netid) necro
-    let ids          = IntSet.insert netid sids
-    sendAddNetSignal (client necro) $  (netid,toNetVal bInit)
-    return (f val bInit,processState cont ref netCont (client necro) netid ids,ids)
-    where
-        processState cont ref netCont client netid ids event@(Event uid _) = case idGuard ids uid ref of
-            Just r -> r
-            _      -> netCont event >>= \n -> case n of
-                Change v -> writeIORef ref v >> return (Change v)
-                _        -> cont event >>= \c -> case c of
-                    NoChange _ -> readIORef ref >>= return . NoChange
-                    Change   v -> do
-                        prev <- readIORef ref
-                        let new = f v prev
-                        writeIORef ref new
-                        if new /= prev then sendSetNetSignal client (netid,toNetVal new) else return ()
-                        return (Change new)
-
-netsignal :: Networkable a => Signal a -> Signal a
-netsignal sig = Signal $ \necro -> do
-    (val,cont,sids) <- unSignal sig necro
-    ref             <- newIORef val
-    netid           <- getNextID necro
-    (_,netCont,_)   <- unSignal (input val netid) necro
-    let ids          = IntSet.insert netid sids
-    sendAddNetSignal (client necro) $  (netid,toNetVal val)
-    return (val,processEvent cont netCont ref (client necro) netid ids,ids)
-    where
-        processEvent cont netCont ref client netid ids event@(Event uid _) = case idGuard ids uid ref of
-            Just r -> r
-            _      -> cont event >>= \c -> case c of
-                Change v -> (readIORef ref >>= \prev -> if v /= prev then sendSetNetSignal client (netid,toNetVal v) else return ()) >> writeIORef ref v >> return (Change v)
-                _        -> netCont event >>= \n -> case n of
-                    Change v -> writeIORef ref v >>  return (Change v)
-                    _        -> readIORef  ref   >>= return . NoChange
-
----------------------------------------------
--- Combinators
----------------------------------------------
-
-sigPrint :: Show a => Signal a -> Signal ()
-sigPrint s = Signal $ \necro -> do
-    (sValue,sCont,sIds) <- unSignal s necro
-    print sValue
-    return ((),processEvent sCont,sIds)
-    where
-        processEvent sCont event = do
-            sValue <- sCont event
-            case sValue of
-                NoChange s -> return $ NoChange ()
-                Change   s -> print s >> return (Change ())
-
-foldp :: (a -> b -> b) -> b -> Signal a -> Signal b
-foldp f bInit a = Signal $ \necro -> do
-    (aDefaultValue,aCont,aIds) <- unSignal a necro
-    ref  <- newIORef bInit
-    return (f aDefaultValue bInit,processState aCont ref,aIds)
-    where
-        processState aCont ref event = do
-            aValue <- aCont event
-            case aValue of
-                NoChange _ -> do
-                    prev <- readIORef ref
-                    return $ NoChange prev
-                Change a' -> do
-                    prev <- readIORef ref
-                    let new = f a' prev
-                    writeIORef ref new
-                    return $ Change new
-
-merge :: Signal a -> Signal a -> Signal a
-merge = (<|>)
-
-merges :: [Signal a] -> Signal a
-merges = foldr (<|>) empty
-
-combine :: [Signal a] -> Signal [a]
-combine signals = Signal $ \necro -> do
-    (defaultValues,continuations,ids) <- liftM unzip3 $ mapM (\s -> unSignal s necro) signals
-    refs <- mapM newIORef defaultValues
-    return $ (defaultValues,processEvent $ zip3 continuations ids refs,foldr IntSet.union IntSet.empty ids)
-    where
-        processEvent continuations event = liftM (foldr collapseContinuations (NoChange [])) $ mapM (runEvent event) continuations
-
-        runEvent event@(Event uid _) (continuation,ids,ref) = case idGuard ids uid ref of
-            Just r  -> r
-            Nothing -> do
-                v <- continuation event
-                case v of
-                    NoChange v' -> writeIORef ref v'
-                    Change   v' -> writeIORef ref v'
-                return v
-
-collapseContinuations :: EventValue a -> EventValue [a] -> EventValue [a]
-collapseContinuations (NoChange x) (NoChange xs) = NoChange $ x : xs
-collapseContinuations (NoChange x) (Change   xs) = Change   $ x : xs
-collapseContinuations (Change   x) (NoChange xs) = Change   $ x : xs
-collapseContinuations (Change   x) (Change   xs) = Change   $ x : xs
-
-dropIf :: (a -> Bool) -> a -> Signal a -> Signal a
-dropIf pred init signal = Signal $ \necro ->do
-    (sValue,sCont,sIds) <- unSignal signal necro
-    let defaultValue = if not (pred sValue) then sValue else init
-    ref <- newIORef defaultValue
-    return (defaultValue,processEvent sCont ref,sIds)
-    where
-        processEvent sCont ref event = do
-            sValue <- sCont event
-            case sValue of
-                NoChange s -> return $ NoChange s
-                Change   s -> case not $ pred s of
-                    True -> do
-                        writeIORef ref s
-                        return $ Change s
-                    False -> do
-                        v <- readIORef ref
-                        return $ NoChange v
-
-keepIf :: (a -> Bool) -> a -> Signal a -> Signal a
-keepIf pred init signal = Signal $ \necro ->do
-    (sValue,sCont,sIds) <- unSignal signal necro
-    let defaultValue = if pred sValue then sValue else init
-    ref <- newIORef init
-    return (defaultValue,processEvent sCont ref,sIds)
-    where
-        processEvent sCont ref event = do
-            sValue <- sCont event
-            case sValue of
-                NoChange s -> return $ NoChange s
-                Change   s -> case pred s of
-                    True -> do
-                        writeIORef ref s
-                        return $ Change s
-                    False -> do
-                        v <- readIORef ref
-                        return $ NoChange v
-
-keepWhen :: Signal Bool -> Signal a -> Signal a
-keepWhen pred x = Signal $ \necro -> do
-    (pValue,pCont,pIds) <- unSignal pred necro
-    (xValue,xCont,xIds) <- unSignal x    necro
-    ref            <- newIORef xValue
-    return (xValue,processEvent pCont xCont ref,IntSet.union pIds xIds)
-    where
-        processEvent pCont xCont ref event = do
-            pValue <- pCont event
-            xValue <- xCont event
-            case pValue of
-                Change p -> case xValue of
-                    Change   x -> go x p
-                    NoChange x -> readIORef ref >>= return . NoChange
-                NoChange p -> case xValue of
-                    Change   x -> go x p
-                    NoChange _ -> readIORef ref >>= return . NoChange
-            where
-                go x p = if p
-                         then writeIORef ref x >> (return $ Change x)
-                         else readIORef  ref   >>= return . NoChange
-
-
-dropWhen :: Signal Bool -> Signal a -> Signal a
-dropWhen pred x = Signal $ \necro -> do
-    (pValue,pCont,pIds) <- unSignal pred necro
-    (xValue,xCont,xIds) <- unSignal x    necro
-    ref            <- newIORef xValue
-    return (xValue,processEvent pCont xCont ref,IntSet.union pIds xIds)
-    where
-        processEvent pCont xCont ref event = do
-            pValue <- pCont event
-            xValue <- xCont event
-            case pValue of
-                Change p -> case xValue of
-                    Change   x -> go x p
-                    NoChange x -> readIORef ref >>= return . NoChange
-                NoChange p -> case xValue of
-                    Change   x -> go x p
-                    NoChange _ -> readIORef ref >>= return . NoChange
-            where
-                go x p = if not p
-                         then writeIORef ref x >> (return $ Change x)
-                         else readIORef  ref   >>= return . NoChange
-
-dropRepeats :: (Eq a) => Signal a -> Signal a
-dropRepeats signal = Signal $ \necro -> do
-    (value,cont,ids) <- unSignal signal necro
-    ref          <- newIORef value
-    return (value,processEvent ref cont,ids)
-    where
-        processEvent ref cont event = do
-            value <- cont event
-            case value of
-                NoChange _ -> readIORef ref >>= return . NoChange
-                Change   v -> do
-                    prev <- readIORef ref
-                    if prev == v
-                        then return $ NoChange v
-                        else writeIORef ref v >> return (Change v)
-
-count :: Signal a -> Signal Int
-count signal = Signal $ \necro -> do
-    (_,sCont,ids) <- unSignal signal necro
-    ref <- newIORef 0
-    return (0,processEvent sCont ref,ids)
-    where
-        processEvent sCont ref event = do
-            sValue <- sCont event
-            case sValue of
-                NoChange _ -> do
-                    n <- readIORef ref
-                    return $ NoChange n
-                Change _ -> do
-                    n <- readIORef ref
-                    let result = n + 1
-                    writeIORef ref result
-                    return $ Change result
-
-countIf :: (a -> Bool) -> Signal a -> Signal Int
-countIf pred signal = Signal $ \necro -> do
-    (_,sCont,ids) <- unSignal signal necro
-    ref       <- newIORef 0
-    return (0,processEvent sCont ref,ids)
-    where
-        processEvent sCont ref event = do
-            sValue <- sCont event
-            case sValue of
-                NoChange _ -> readIORef ref >>= return . NoChange
-                Change v   -> if pred v
-                              then do n <- readIORef ref
-                                      let result = n + 1
-                                      writeIORef ref result
-                                      return $ Change result
-                              else readIORef ref >>= return . NoChange
-
-sampleOn :: Signal a -> Signal b -> Signal b
-sampleOn a b = Signal $ \necro -> do
-    (aValue,aCont,aIds) <- unSignal a necro
-    (bValue,bCont,bIds) <- unSignal b necro
-    ref            <- newIORef bValue
-    return (bValue,processEvent aCont bCont ref,IntSet.union aIds bIds)
-    where
-        processEvent aCont bCont ref event = do
-            aValue <- aCont event
-            bValue <- bCont event
-            case aValue of
-                NoChange _ -> case bValue of
-                    NoChange _ -> readIORef ref >>= return . NoChange
-                    Change   b -> do
-                        writeIORef ref b
-                        return $ NoChange b
-                Change _ -> case bValue of
-                    NoChange _ -> readIORef ref >>= return . Change
-                    Change   b -> do
-                        writeIORef ref b
-                        return $ Change b
-
-randS :: Int -> Int -> Signal a -> Signal Int
-randS low high signal = Signal $ \necro -> do
-    (_,cont,ids) <- unSignal signal necro
-    r        <- randomRIO (low,high)
-    ref      <- newIORef r
-    return (r,processEvent cont ref,ids)
-    where
-        processEvent cont ref event = do
-            value <- cont event
-            case value of
-                NoChange _ -> readIORef ref >>= return . NoChange
-                Change   _ -> do
-                    r <- randomRIO (low,high)
-                    writeIORef ref r
-                    return $ Change r
-
-randFS :: Signal a -> Signal Float
-randFS signal = Signal $ \necro -> do
-    (_,cont,ids) <- unSignal signal necro
-    r            <- randomRIO (0,1)
-    ref          <- newIORef r
-    return (r,processEvent cont ref,ids)
-    where
-        processEvent cont ref event = do
-            value <- cont event
-            case value of
-                NoChange _ -> readIORef ref >>= return . NoChange
-                Change   _ -> do
-                    r <- randomRIO (0,1)
-                    writeIORef ref r
-                    return $ Change r
-
-toggle :: Signal Bool -> Signal Bool
-toggle boolSignal = Signal $ \necro -> do
-    (bValue,boolCont,boolIds) <- unSignal boolSignal necro
-    boolRef <- newIORef bValue
-    return (bValue,processEvent boolRef boolCont boolIds,boolIds)
-    where
-        processEvent boolRef boolCont ids event@(Event uid _) = case idGuard ids uid boolRef of
-            Just r  -> r
-            Nothing -> boolCont event >>= \b -> case b of
-                Change True -> readIORef boolRef >>= \prevBool -> writeIORef boolRef (not prevBool) >> return (Change (not prevBool))
-                _           -> readIORef boolRef >>= return . NoChange
-
-till :: Signal Bool -> Signal Bool -> Signal Bool
-till sigA sigB = Signal $ \necro -> do
-    (aValue,aCont,aIds) <- unSignal sigA necro
-    (bValue,bCont,bIds) <- unSignal sigB necro
-    let ids = IntSet.union aIds bIds
-    boolRef <- newIORef aValue
-    return (aValue,processEvent boolRef aCont bCont ids,ids)
-    where
-        processEvent boolRef aCont bCont ids event@(Event uid _) = case idGuard ids uid boolRef of
-            Just r  -> r
-            Nothing -> aCont event >>= \a -> case a of
-                Change True -> writeIORef boolRef True >>  return (Change True)
-                _           -> bCont event >>= \b -> case b of
-                    Change True -> writeIORef boolRef False >>  return (Change False)
-                    _           -> readIORef boolRef        >>= return . NoChange
-
-
----------------------------------------------
--- Sound
----------------------------------------------
-
-oneShot :: UGenType a => a -> Signal Bool -> Signal ()
-oneShot synth sig = Signal $ \necro -> do
-    (pVal,pCont,ids) <- unSignal sig necro
-    uid              <- getNextID necro
-    let synthName     = "signalsSynth" ++ show uid
-    synthRef         <- newIORef Nothing
-    runNecroState (compileAndRunSynth synthName synth False pVal synthRef) (necroVars necro)
-    return ((),processEvent pCont synthName synthRef (necroVars necro),ids)
-    where
-        processEvent pCont synthName synthRef necroVars event = pCont event >>= \e -> case e of
-            NoChange _     -> return $ NoChange ()
-            Change   False -> return $ Change   ()
-            Change   True  -> writeIORef synthRef Nothing >> runNecroState (compileAndRunSynth synthName synth True True synthRef) necroVars >> return (Change ())
-
-compileAndRunSynth :: UGenType a => String -> a -> Bool -> Bool -> IORef (Maybe Synth) -> Necronomicon (EventValue ())
-compileAndRunSynth synthName synth isCompiled shouldPlay synthRef = do
-    if not isCompiled then init else return ()
-    maybeSynth <- liftIO $ readIORef synthRef
-    case (maybeSynth,shouldPlay) of
-        (Nothing   ,True )  -> liftIO (print "play") >> playSynth synthName [{- PUT ARGS HERE! -}] >>= \s -> liftIO (writeIORef synthRef $ Just s) >> return (Change ())
-        (Just synth,False)  -> liftIO (print "stop") >> stopSynth synth                            >>        liftIO (writeIORef synthRef  Nothing) >> return (Change ())
-        _                   -> return (NoChange ())
-    where
-        init = do
-            compileSynthDef synthName synth
-
-playPattern :: (Show a,Typeable a) => a -> Signal Bool -> Signal Bool -> Pattern (Pattern a,Double) -> Signal a
-playPattern init playSig stopSig pattern = Signal $ \necro -> do
-
-    --Signal Values
-    (pValue,pCont,pids) <- unSignal playSig necro
-    (sValue,sCont,sids) <- unSignal playSig necro
-    uid                 <- getNextID necro
-    nid                 <- getNextID necro
-    ref                 <- newIORef init
-    playRef             <- newIORef False
-
-    --Net Values
-    (_,netPlayCont,_)     <- unSignal (input False nid) necro
-
-    --pure Values
-    let pdef             = pstream ("sigPattern" ++ show uid) (pure $ liftIO . atomically . writeTBQueue (globalDispatch necro) . Event uid . toDyn) pattern
-        ids              = IntSet.insert nid $ IntSet.insert uid $ IntSet.union sids pids
-
-    runNecroState (setTempo 150) (necroVars necro)
-    sendAddNetSignal (client necro) (nid,NetBool False)
-    return (init,processEvent pCont sCont netPlayCont uid nid pdef (client necro) (necroVars necro) ref playRef ids,ids)
-    where
-        processEvent pCont sCont netPlayCont uid nid pdef client necroVars ref playRef ids event@(Event eid e) = case idGuard ids eid ref of
-            Just  r -> r
-            Nothing -> if eid == uid
-                then case fromDynamic e of
-                    Just v -> writeIORef ref v >> return (Change v)
-                    _      -> print "dynamic casting error in playPattern" >> readIORef ref >>= return . NoChange
-                else netPlayCont event >>= \net -> case net of
-                    Change True  -> print "net play" >> runNecroState (runPDef pdef) necroVars >> writeIORef playRef True  >> readIORef ref >>= return . NoChange
-                    Change False -> print "net stop" >> runNecroState (pstop   pdef) necroVars >> writeIORef playRef False >> readIORef ref >>= return . NoChange
-                    _            -> readIORef playRef >>= \play -> if play
-                        then sCont event >>= \s -> case s of
-                            Change True -> print "stop" >> sendSetNetSignal client (nid,NetBool False) >> runNecroState (pstop   pdef) necroVars >> writeIORef playRef False >> readIORef ref >>= return . NoChange
-                            _           -> readIORef ref >>= return . NoChange
-                        else pCont event >>= \p -> case p of
-                            Change True -> print "play" >> sendSetNetSignal client (nid,NetBool True ) >> runNecroState (runPDef pdef) necroVars >> writeIORef playRef True  >> readIORef ref >>= return . NoChange
-                            _           -> readIORef ref >>= return . NoChange
-
-playSynthN :: UGenType a => a -> Signal Bool -> Signal Bool -> [Signal Double] -> Signal ()
-playSynthN synth playSig stopSig argSigs = Signal $ \necro -> do
-
-    --Signal Values
-    (pValue ,pCont ,pids) <- unSignal playSig necro
-    (sValue ,sCont ,sids) <- unSignal stopSig necro
-    (aValues,aConts,aids) <- fmap unzip3 $ mapM (\s -> unSignal s necro) argSigs
-    (uid:uids)            <- sequence $ take (length argSigs + 1) $ repeat $ getNextID necro
-    synthRef              <- newIORef Nothing
-    argRefs               <- mapM newIORef aValues
-
-    --Net Values
-    (_,netPlayCont,_)     <- unSignal (input False uid) necro
-    (_,netArgConts,_)     <- fmap unzip3 $ mapM (\(v,uid') -> unSignal (input v uid') necro) $ zip aValues uids
-
-    --Pure Values
-    let defaultValue       = pValue && not sValue
-        ids                = foldr IntSet.union (IntSet.insert uid $ IntSet.union (IntSet.fromList uids) $ IntSet.union pids sids) aids
-        synthName          = "sigsynth" ++ show uid
-        args               = zip3 aConts      uids argRefs
-        netArgs            = zip3 netArgConts uids argRefs
-
-    compiled <- runNecroState (compileSynthDef synthName synth) (necroVars necro) >> return True
-
-    --Send AddSynth message to the out box to be sent when convenient, Then return this monster of a continuation
-    if not compiled then print "playSynthN compiling error" >> return ((),\_ -> return $ NoChange (),IntSet.empty) else do
-        -- addSynthPlayObject (client necro) uid False aValues
-        sendAddNetSignal (client necro) (uid,NetBool False)
-        mapM_ (\(uid',v) -> sendAddNetSignal (client necro) (uid',NetDouble v)) $ zip uids aValues
-        return ((),processEvent pCont sCont args netPlayCont synthName synthRef netArgs (necroVars necro) (client necro) uid ids,ids)
-    where
-        processEvent pCont sCont args netPlayCont synthName synthRef netArgs necroVars client uid ids event@(Event eid _) = if not $ IntSet.member eid ids
-            then return $ NoChange ()
-            else netPlayCont event >>= \net -> case net of
-                Change netPlay -> runNecroState (playStopSynth synthName netArgs netPlay synthRef) necroVars >>= \(e,_) -> return e --Play/Stop event from the network
-                NoChange     _ -> readIORef synthRef >>= \s -> case s of
-                    Just s  -> sCont event >>= \e -> case e of --There is a synth playing
-                        Change True  -> sendSetNetSignal client (uid,NetBool False) >> runNecroState (playStopSynth synthName netArgs False synthRef) necroVars >>= \(e,_) -> return e --Stop an already running synth
-                        Change False -> return $ NoChange ()
-                        _            -> mapM_ (receiveNetArg synthRef necroVars uid event) netArgs >> mapM_ (localArgUpdate synthRef client necroVars uid event) args >> return (NoChange ()) --Argument continuations
-
-                    Nothing -> pCont event >>= \e -> case e of --There is not a synth playing
-                        Change True  -> do
-                            mapM_ (\(_,uid',ref) -> readIORef ref >>= \v -> sendSetNetSignal client (uid',toNetVal v)) netArgs --Send set arg messages first, to make sure we are on same page
-                            sendSetNetSignal client (uid,NetBool True) >> runNecroState (playStopSynth synthName netArgs True synthRef) necroVars >>= \(e,_) -> return e --Play an already stopped synth
-                        Change False -> return $ NoChange ()
-                        _            -> mapM_ (receiveNetArg synthRef necroVars uid event) netArgs >> mapM_ (localArgUpdate synthRef client necroVars uid event) args >> return (NoChange ()) --Argument continuations
-
-third :: (a,b,c) -> c
-third (a,b,c) = c
-
---Check for Local argument updates, write to arg ref, and if a synth is playing modify the synth, then send changes to the network
-localArgUpdate :: IORef (Maybe Synth) -> Client -> NecroVars -> Int -> Event -> ((Event -> IO (EventValue Double)),Int,IORef Double) -> IO()
-localArgUpdate synthRef client necroVars uid event@(Event eid _) (cont,uid',ref) = cont event >>= \argValue -> case argValue of
-    NoChange _ -> return ()
-    Change   v -> writeIORef ref v >> readIORef synthRef >>= \maybeSynth -> case maybeSynth of
-        Nothing    -> return ()
-        Just synth -> do
-            sendSetNetSignal client (uid',toNetVal v)
-            runNecroState (setSynthArg synth (uid'-uid - 1) v) necroVars
-            -- print "localArgUpdate....."
-            return ()
-
---Receive an argument update from the network, write it to the arg ref, then if the synth is playing modify the synth
-receiveNetArg :: IORef (Maybe Synth) -> NecroVars -> Int -> Event -> ((Event -> IO (EventValue Double)),Int,IORef Double) -> IO()
-receiveNetArg synthRef necroVars uid event@(Event eid _) (cont,uid',ref) = if uid' /= eid then return () else cont event >>= \argValue -> case argValue of
-    NoChange _ -> return ()
-    Change   v -> writeIORef ref v >> readIORef synthRef >>= \maybeSynth -> case maybeSynth of
-        Nothing    -> return ()
-        Just synth -> do
-            runNecroState (setSynthArg synth (uid'-uid - 1) v) necroVars
-            -- print "receiveNetArg....."
-            return ()
-
-playStopSynth :: String -> [((Event -> IO (EventValue Double)),Int,IORef Double)] -> Bool -> IORef (Maybe Synth) -> Necronomicon (EventValue ())
-playStopSynth synthName netArgs shouldPlay synthRef = do
-    maybeSynth <- liftIO $ readIORef synthRef
-    args       <- liftIO $ mapM (\(_,_,r) -> readIORef r) netArgs
-    case (maybeSynth,shouldPlay) of
-        (Nothing   ,True )  -> liftIO (print "play") >> playSynth synthName args >>= \s -> liftIO (writeIORef synthRef $ Just s) >> return (Change ())
-        (Just synth,False)  -> liftIO (print "stop") >> stopSynth synth          >>        liftIO (writeIORef synthRef  Nothing) >> return (Change ())
-        _                   -> return (NoChange ())
-
-class Play a where
-    type PlayRet a :: *
-    play :: Signal Bool -> Signal Bool -> a -> PlayRet a
-
-instance Play UGen where
-    type PlayRet UGen = Signal ()
-    play playSig stopSig synth = playSynthN synth playSig stopSig []
-
-instance Play (UGen -> UGen) where
-    type PlayRet (UGen -> UGen) = Signal Double -> Signal ()
-    play playSig stopSig synth x = playSynthN synth playSig stopSig [x]
-
-instance Play (UGen -> UGen -> UGen) where
-    type PlayRet (UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal ()
-    play playSig stopSig synth x y = playSynthN synth playSig stopSig [x,y]
-
-instance Play (UGen -> UGen -> UGen -> UGen) where
-    type PlayRet (UGen -> UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal Double -> Signal ()
-    play playSig stopSig synth x y z = playSynthN synth playSig stopSig [x,y,z]
-
-instance Play (UGen -> UGen -> UGen -> UGen -> UGen) where
-    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
-    play playSig stopSig synth x y z w = playSynthN synth playSig stopSig [x,y,z,w]
-
-instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
-    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
-    play playSig stopSig synth x y z w p = playSynthN synth playSig stopSig [x,y,z,w,p]
-
-instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
-    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
-    play playSig stopSig synth x y z w p q = playSynthN synth playSig stopSig [x,y,z,w,p,q]
-
-instance Play [UGen] where
-    type PlayRet [UGen] = Signal ()
-    play playSig stopSig synth = playSynthN synth playSig stopSig []
-
-instance Play (UGen -> [UGen]) where
-    type PlayRet (UGen -> [UGen]) = Signal Double -> Signal ()
-    play playSig stopSig synth x = playSynthN synth playSig stopSig [x]
-
-instance Play (UGen -> UGen -> [UGen]) where
-    type PlayRet (UGen -> UGen -> [UGen]) = Signal Double -> Signal Double -> Signal ()
-    play playSig stopSig synth x y = playSynthN synth playSig stopSig [x,y]
-
-instance Play (UGen -> UGen -> UGen -> [UGen]) where
-    type PlayRet (UGen -> UGen -> UGen -> [UGen]) = Signal Double -> Signal Double -> Signal Double -> Signal ()
-    play playSig stopSig synth x y z = playSynthN synth playSig stopSig [x,y,z]
-
-instance Play (UGen -> UGen -> UGen -> UGen -> [UGen]) where
-    type PlayRet (UGen -> UGen -> UGen -> UGen -> [UGen]) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
-    play playSig stopSig synth x y z w = playSynthN synth playSig stopSig [x,y,z,w]
-
-instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> [UGen]) where
-    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> [UGen]) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
-    play playSig stopSig synth x y z w p = playSynthN synth playSig stopSig [x,y,z,w,p]
-
-instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> [UGen]) where
-    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> [UGen]) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
-    play playSig stopSig synth x y z w p q = playSynthN synth playSig stopSig [x,y,z,w,p,q]
--}
 -------------------------------------------------------------------------------------------------
 -- Signals 6.0
 -------------------------------------------------------------------------------------------------
@@ -1103,7 +204,12 @@ execIfChanged (Change a) _ = f a >> return ()
 execIfChanged _          _ = return ()
 -}
 
-newtype Signal a = Signal { unSignal :: SignalState -> IO (SignalState -> IO (EventValue a)) }
+--(UpdateDelta,RunTime,NetUpdate)
+data    SignalUpdate   = SignalUpdate {updateDelta :: Double, runTime :: Double}
+newtype Signal       a = Signal       {unSignal :: SignalState -> IO (SignalUpdate -> IO (EventValue a))}
+
+updateZero :: SignalUpdate
+updateZero = SignalUpdate 0 0
 
 mkSignalState :: IO SignalState
 mkSignalState = do
@@ -1152,8 +258,6 @@ mkSignalState = do
         stateNetStatusBuffer
         stateUserListBuffer
         stateNetSignalsBuffer
-        0
-        0
 
 resetKnownInputs :: SignalState -> IO()
 resetKnownInputs state = do
@@ -1232,7 +336,7 @@ runSignal s = initWindow >>= \mw -> case mw of
         threadDelay $ 16667
 
         resources <- newResources
-        renderNecronomicon False w signalLoop signalState resources
+        renderNecronomicon False w signalLoop signalState resources 0
     where
         --event callbacks
         mousePressEvent state _ _ GLFW.MouseButtonState'Released _ = atomically $ writeTChan (mouseButtonBuffer state) $ False
@@ -1249,7 +353,7 @@ runSignal s = initWindow >>= \mw -> case mw of
             let pos = (x / fromIntegral wx,y / fromIntegral wy)
             writeToSignal (mouseSignal state) pos
 
-        renderNecronomicon quit window signalLoop signalState resources
+        renderNecronomicon quit window signalLoop signalState resources runTime'
             | quit      = quitClient (necroNetClient signalState) >> runNecroState shutdownNecronomicon (necroVars signalState) >> print "Qutting" >> return ()
             | otherwise = do
 
@@ -1258,10 +362,10 @@ runSignal s = initWindow >>= \mw -> case mw of
                 q <- liftA (== GLFW.KeyState'Pressed) (GLFW.getKey window GLFW.Key'Escape)
                 currentTime <- getCurrentTime
 
-                let delta        = currentTime - runTime signalState
-                    signalState' = signalState{runTime = currentTime,updateDelta = delta}
+                let delta  = currentTime - runTime'
+                    update = SignalUpdate delta currentTime
 
-                _ <- signalLoop signalState'
+                _ <- signalLoop update
 
                 nscene <- atomically $ readTVar $ sceneVar signalState
                 gui    <- atomically $ readTVar $ guiVar   signalState
@@ -1274,7 +378,7 @@ runSignal s = initWindow >>= \mw -> case mw of
                 -- execIfChanged result print
 
                 threadDelay $ 16667
-                renderNecronomicon q window signalLoop signalState' resources
+                renderNecronomicon q window signalLoop signalState resources currentTime
 
 getCurrentTime :: IO Double
 getCurrentTime = GLFW.getTime >>= \currentTime -> case currentTime of
@@ -1287,11 +391,11 @@ getCurrentTime = GLFW.getTime >>= \currentTime -> case currentTime of
 instance Functor Signal where
     fmap f x = Signal $ \state -> do
         xCont    <- unSignal x state
-        defaultX <- xCont state >>= return . unEvent
+        defaultX <- unEvent <~ xCont updateZero
         ref      <- newIORef $ f defaultX
         return $ processState xCont ref
         where
-            processState xCont ref state = xCont state >>= \ex -> case ex of
+            processState xCont ref update = xCont update >>= \ex -> case ex of
                 NoChange _ -> readIORef ref >>= return . NoChange
                 Change   x' -> let newValue = f x' in writeIORef ref newValue >> return (Change newValue)
 
@@ -1300,25 +404,25 @@ instance Applicative Signal where
     f <*> g = Signal $ \state -> do
         fCont    <- unSignal f state
         gCont    <- unSignal g state
-        defaultF <- fCont state >>= return . unEvent
-        defaultG <- gCont state >>= return . unEvent
+        defaultF <- unEvent <~ fCont updateZero
+        defaultG <- unEvent <~ gCont updateZero
         ref      <- newIORef $ defaultF defaultG
         return $ processState fCont gCont ref
         where
-            processState fCont gCont ref state = fCont state >>= \fe -> gCont state >>= \ge -> case (fe,ge) of
+            processState fCont gCont ref update = fCont update >>= \fe -> gCont update >>= \ge -> case (fe,ge) of
                 (Change   f',Change   g') -> let newValue = f' g' in writeIORef ref newValue >> return (Change newValue)
                 (Change   f',NoChange g') -> let newValue = f' g' in writeIORef ref newValue >> return (Change newValue)
                 (NoChange f',Change   g') -> let newValue = f' g' in writeIORef ref newValue >> return (Change newValue)
-                _                       -> readIORef ref >>= return . NoChange
+                _                        -> readIORef ref >>= return . NoChange
     x *> y = Signal $ \state -> do
         xCont    <- unSignal x state
         yCont    <- unSignal y state
-        _        <- xCont state >>= return . unEvent
+        _        <- unEvent <~ xCont updateZero
         return yCont
     y <* x = Signal $ \state -> do
         xCont    <- unSignal x state
         yCont    <- unSignal y state
-        _        <- xCont state >>= return . unEvent
+        _        <- unEvent <~ xCont updateZero
         return yCont
 
 instance Alternative Signal where
@@ -1326,14 +430,14 @@ instance Alternative Signal where
     a <|> b = Signal $ \state -> do
         aCont    <- unSignal a state
         bCont    <- unSignal b state
-        defaultA <- aCont state >>= return . unEvent
-        _        <- bCont state >>= return . unEvent
+        defaultA <- unEvent <~ aCont updateZero
+        _        <- unEvent <~ bCont updateZero
         ref      <- newIORef defaultA
         return $ processState aCont bCont ref
         where
-            processState aCont bCont ref state = aCont state >>= \aValue -> case aValue of
+            processState aCont bCont ref update = aCont update >>= \aValue -> case aValue of
                 Change a' -> writeIORef ref a' >> return (Change a')
-                NoChange _ -> bCont state >>= \bValue -> case bValue of
+                NoChange _ -> bCont update >>= \bValue -> case bValue of
                     Change b' -> writeIORef ref b' >>  return  (Change b')
                     NoChange _ -> readIORef  ref   >>= return . NoChange
 
@@ -1776,10 +880,10 @@ mouseClicks :: Signal ()
 mouseClicks = (\_ -> ()) <~ keepIf (\x -> x == False) True mouseDown
 
 isDown :: Key -> Signal Bool
-isDown k = Signal $ \_ -> return processSignal
+isDown k = Signal $ \state -> return $ processSignal state
     where
-        eventKey            = glfwKeyToEventKey k
-        processSignal state = atomically (readTVar $ keySignal state) >>= \keys -> case IntMap.lookup eventKey keys of
+        eventKey              = glfwKeyToEventKey k
+        processSignal state _ = atomically (readTVar $ keySignal state) >>= \keys -> case IntMap.lookup eventKey keys of
             Nothing -> return $ NoChange False
             Just  e -> return e
 
@@ -1816,12 +920,12 @@ textInput = Signal $ \state -> do
     shiftRef  <- newIORef False
     charRef   <- newIORef ' '
     shiftCont <- unSignal shift state
-    return $ processSignal shiftRef charRef shiftCont
+    return $ processSignal shiftRef charRef shiftCont state
     where
-        processSignal _ charRef shiftCont state = atomically (readTVar $ keysPressed state) >>= \keys -> case keys of
-            NoChange _ -> shiftCont state >> readIORef charRef >>= return . NoChange
+        processSignal _ charRef shiftCont state update = atomically (readTVar $ keysPressed state) >>= \keys -> case keys of
+            NoChange _ -> shiftCont update >> readIORef charRef >>= return . NoChange
             Change   k -> do
-                isShiftDown <- fmap unEvent $ shiftCont state
+                isShiftDown <- unEvent <~ shiftCont update
                 let char = eventKeyToChar k isShiftDown
                 writeIORef charRef char
                 return $ Change char
@@ -1874,30 +978,30 @@ toHours        t = t / 3600
 --TODO lagsig
 
 every :: Time -> Signal Time
-every stime = Signal $ \state -> do
-    accref <- newIORef $ runTime state
+every stime = Signal $ \_ -> do
+    accref <- newIORef 0
     valRef <- newIORef 0
     return $ processSignal accref valRef
     where
-        processSignal accref valRef state = do
+        processSignal accref valRef update = do
             accumulatedTime <- readIORef accref
-            let newTime = accumulatedTime + updateDelta state
+            let newTime = accumulatedTime + updateDelta update
             if newTime >= stime
-                then writeIORef accref 0       >> writeIORef valRef newTime >>  return (Change $ runTime state)
+                then writeIORef accref 0       >> writeIORef valRef newTime >>  return (Change $ runTime update)
                 else writeIORef accref newTime >> readIORef valRef          >>= return . NoChange
 
 -- fpsWhen !!!!
 -- combined global timers?
 fps :: Time -> Signal Time
-fps fpsTime = Signal $ \state -> do
-    accref <- newIORef $ runTime state
+fps fpsTime = Signal $ \_ -> do
+    accref <- newIORef 0
     valRef <- newIORef 0
     return $ processSignal accref valRef
     where
         stime = 1.0 / fpsTime
-        processSignal accref valRef state = do
+        processSignal accref valRef update = do
             accumulatedTime <- readIORef accref
-            let newTime = accumulatedTime + updateDelta state
+            let newTime = accumulatedTime + updateDelta update
             if newTime >= stime
                 then writeIORef accref 0       >> writeIORef valRef newTime >>  return (Change newTime)
                 else writeIORef accref newTime >> readIORef valRef          >>= return . NoChange
@@ -1905,14 +1009,14 @@ fps fpsTime = Signal $ \state -> do
 lagSig :: (Fractional a,Eq a,Ord a) => Double -> Signal a -> Signal a
 lagSig lagTime sig = Signal $ \state -> do
     sCont     <- unSignal sig state
-    sValue    <- fmap unEvent $ sCont state
+    sValue    <- unEvent <~ sCont updateZero
     ref       <- newIORef (sValue,sValue,1)
     return $ processSignal sCont sValue ref
     where
-        processSignal sCont _ ref state = sCont state >>= \s -> case s of
+        processSignal sCont _ ref update = sCont update >>= \s -> case s of
             Change v -> do
                 (start,end,acc) <- readIORef ref
-                let _           = min (acc + (updateDelta state) * lagTime) 1
+                let _           = min (acc + (updateDelta update) * lagTime) 1
                 let value'      = start * (fromRational . toRational $ 1 - acc) + end * (fromRational $ toRational acc)
                 writeIORef ref (value',v,0)
                 return $ Change value'
@@ -1921,7 +1025,7 @@ lagSig lagTime sig = Signal $ \state -> do
                 if acc >= 1
                     then return (NoChange end)
                     else do
-                        let acc'         = min (acc + (updateDelta state) * lagTime) 1
+                        let acc'         = min (acc + (updateDelta update) * lagTime) 1
                         let value'       = start * (fromRational . toRational $ 1 - acc) + end * (fromRational $ toRational acc)
                         writeIORef ref (start,end,acc')
                         return $ Change value'
@@ -1936,22 +1040,22 @@ time = Signal $ \_ -> return $ \_ -> getCurrentTime >>= return . Change
 render :: Signal SceneObject -> Signal ()
 render nscene = Signal $ \state -> do
     sCont <- unSignal nscene state
-    defaultValue <- sCont state
+    defaultValue <- sCont updateZero
     atomically $ writeTVar (sceneVar state) defaultValue
-    return $ processSignal sCont
+    return $ processSignal sCont state
     where
-        processSignal sCont state = sCont state >>= \se -> case se of
+        processSignal sCont state update = sCont update >>= \se -> case se of
             NoChange _ -> return $ NoChange ()
             Change   _ -> atomically (writeTVar (sceneVar state) se) >> return (Change ())
 
 renderGUI :: Signal SceneObject -> Signal ()
 renderGUI nscene = Signal $ \state -> do
     sCont <- unSignal nscene state
-    defaultValue <- sCont state
+    defaultValue <- sCont updateZero
     atomically $ writeTVar (guiVar state) defaultValue
-    return $ processSignal sCont
+    return $ processSignal sCont state
     where
-        processSignal sCont state = sCont state >>= \se -> case se of
+        processSignal sCont state update = sCont update >>= \se -> case se of
             NoChange _ -> return $ NoChange ()
             Change   _ -> atomically (writeTVar (guiVar state) se) >> return (Change ())
 
@@ -1986,11 +1090,11 @@ lift8 f a b c d e f' g h = f <~ a ~~ b ~~ c ~~ d ~~ e ~~ f' ~~ g ~~ h
 sigPrint :: Show a => Signal a -> Signal ()
 sigPrint s = Signal $ \state -> do
     sCont <- unSignal s state
-    sVal  <- sCont state >>= return . unEvent
+    sVal  <- unEvent <~ sCont updateZero
     print sVal
     return $ processSignal sCont
     where
-        processSignal sCont state = sCont state >>= \sValue -> case sValue of
+        processSignal sCont update = sCont update >>= \sValue -> case sValue of
             NoChange _  -> return $ NoChange ()
             Change   s' -> print s' >> return (Change ())
 
@@ -2000,7 +1104,7 @@ foldp f bInit a = Signal $ \state -> do
     ref   <- newIORef bInit
     return $ processSignal aCont ref
     where
-        processSignal aCont ref state = aCont state >>= \aValue -> case aValue of
+        processSignal aCont ref update = aCont update >>= \aValue -> case aValue of
             NoChange _ -> do
                 prev <- readIORef ref
                 return $ NoChange prev
@@ -2014,12 +1118,12 @@ foldp f bInit a = Signal $ \state -> do
 a <&> b = Signal $ \state -> do
     aCont    <- unSignal a state
     bCont    <- unSignal b state
-    defaultA <- aCont state >>= return . unEvent
-    _        <- bCont state >>= return . unEvent
+    defaultA <- unEvent <~ aCont updateZero
+    _        <- unEvent <~ bCont updateZero
     ref      <- newIORef defaultA
     return $ processState aCont bCont ref
     where
-        processState aCont bCont ref state = aCont state >>= \aValue -> bCont state >>= \bValue -> case (aValue,bValue) of
+        processState aCont bCont ref update = aCont update >>= \aValue -> bCont update >>= \bValue -> case (aValue,bValue) of
             (Change a', _) -> writeIORef ref a' >>  return (Change a')
             (_, Change b') -> writeIORef ref b' >>  return (Change b')
             _              -> readIORef  ref   >>= return . NoChange
@@ -2035,10 +1139,10 @@ merges = foldr (<&>) empty
 combine :: [Signal a] -> Signal [a]
 combine signals = Signal $ \state -> do
     continuations <- mapM (\s -> unSignal s state) signals
-    _             <- mapM (\f -> fmap unEvent $ f state) continuations
+    _             <- mapM (\f -> fmap unEvent $ f updateZero) continuations
     return $ processSignal continuations
     where
-        processSignal continuations state = fmap (foldr collapseContinuations (NoChange [])) $ mapM ($ state) continuations
+        processSignal continuations update = fmap (foldr collapseContinuations (NoChange [])) $ mapM ($ update) continuations
         collapseContinuations (NoChange x) (NoChange xs) = NoChange $ x : xs
         collapseContinuations (NoChange x) (Change   xs) = Change   $ x : xs
         collapseContinuations (Change   x) (NoChange xs) = Change   $ x : xs
@@ -2047,12 +1151,12 @@ combine signals = Signal $ \state -> do
 dropIf :: (a -> Bool) -> a -> Signal a -> Signal a
 dropIf sPred sInit signal = Signal $ \state ->do
     sCont  <- unSignal signal state
-    sValue <- sCont state >>= return . unEvent
+    sValue <- unEvent <~ sCont updateZero
     let defaultValue = if not (sPred sValue) then sValue else sInit
     ref <- newIORef defaultValue
     return $ processSignal sCont ref
     where
-        processSignal sCont ref state = sCont state >>= \sValue -> case sValue of
+        processSignal sCont ref update = sCont update >>= \sValue -> case sValue of
             NoChange s -> return $ NoChange s
             Change   s -> case not $ sPred s of
                 False  -> readIORef ref >>= return . NoChange
@@ -2063,12 +1167,12 @@ dropIf sPred sInit signal = Signal $ \state ->do
 keepIf :: (a -> Bool) -> a -> Signal a -> Signal a
 keepIf sPred sInit signal = Signal $ \state ->do
     sCont  <- unSignal signal state
-    sValue <- sCont state >>= return . unEvent
+    sValue <- unEvent <~ sCont updateZero
     let defaultValue = if sPred sValue then sValue else sInit
     ref <- newIORef defaultValue
     return $ processSignal sCont ref
     where
-        processSignal sCont ref state = sCont state >>= \sValue -> case sValue of
+        processSignal sCont ref update = sCont update >>= \sValue -> case sValue of
             NoChange s -> return $ NoChange s
             Change   s -> case sPred s of
                 False  -> readIORef ref >>= return . NoChange
@@ -2080,58 +1184,39 @@ keepWhen :: Signal Bool -> Signal a -> Signal a
 keepWhen sPred x = Signal $ \state -> do
     pCont <- unSignal sPred state
     xCont <- unSignal x state
-    xVal  <- xCont state >>= return . unEvent
+    xVal  <- unEvent <~ xCont updateZero
     ref   <- newIORef xVal
     return $ processSignal pCont xCont ref
     where
-        processSignal pCont xCont ref state = do
-            pValue <- pCont state
-            xValue <- xCont state
-            case pValue of
-                Change p -> case xValue of
-                    Change   x' -> go x' p
-                    NoChange _  -> readIORef ref >>= return . NoChange
-                NoChange p -> case xValue of
-                    Change   x' -> go x' p
-                    NoChange _ -> readIORef ref >>= return . NoChange
-            where
-                go y p = if p
-                         then writeIORef ref y >> (return $ Change y)
-                         else readIORef  ref   >>= return . NoChange
-
+        processSignal pCont xCont ref update = do
+            pValue <- unEvent <~ pCont update
+            if not pValue then  readIORef ref >>= return . NoChange else xCont update >>= \xc -> case xc of
+                NoChange x' -> return $ NoChange x'
+                Change   x' -> writeIORef ref x' >> return (Change x')
 
 dropWhen :: Signal Bool -> Signal a -> Signal a
 dropWhen sPred x = Signal $ \state -> do
     pCont <- unSignal sPred state
     xCont <- unSignal x state
-    xVal  <- xCont state >>= return . unEvent
+    xVal  <- unEvent <~ xCont updateZero
     ref   <- newIORef xVal
     return $ processSignal pCont xCont ref
     where
-        processSignal pCont xCont ref state = do
-            pValue <- pCont state
-            xValue <- xCont state
-            case pValue of
-                Change p -> case xValue of
-                    Change   x' -> go x' p
-                    NoChange _ -> readIORef ref >>= return . NoChange
-                NoChange p -> case xValue of
-                    Change   x' -> go x' p
-                    NoChange _ -> readIORef ref >>= return . NoChange
-            where
-                go y p = if not p
-                         then writeIORef ref y >> (return $ Change y)
-                         else readIORef  ref   >>= return . NoChange
+        processSignal pCont xCont ref update = do
+            pValue <- unEvent <~ pCont update
+            if pValue then  readIORef ref >>= return . NoChange else xCont update >>= \xc -> case xc of
+                NoChange x' -> return $ NoChange x'
+                Change   x' -> writeIORef ref x' >> return (Change x')
 
 dropRepeats :: (Eq a) => Signal a -> Signal a
 dropRepeats signal = Signal $ \state -> do
     cont <- unSignal signal state
-    val  <- cont state >>= return . unEvent
+    val  <- unEvent <~ cont updateZero
     ref  <- newIORef val
     return $ processSignal ref cont
     where
-        processSignal ref cont state = do
-            value <- cont state
+        processSignal ref cont update = do
+            value <- cont update
             case value of
                 NoChange _ -> readIORef ref >>= return . NoChange
                 Change   v -> do
@@ -2146,8 +1231,8 @@ count signal = Signal $ \state -> do
     ref   <- newIORef 0
     return $ processSignal sCont ref
     where
-        processSignal sCont ref state = do
-            sValue <- sCont state
+        processSignal sCont ref update = do
+            sValue <- sCont update
             case sValue of
                 NoChange _ -> do
                     n <- readIORef ref
@@ -2164,8 +1249,8 @@ countIf sPred signal = Signal $ \state -> do
     ref   <- newIORef 0
     return $ processSignal sCont ref
     where
-        processSignal sCont ref state = do
-            sValue <- sCont state
+        processSignal sCont ref update = do
+            sValue <- sCont update
             case sValue of
                 NoChange _ -> readIORef ref >>= return . NoChange
                 Change v   -> if sPred v
@@ -2179,13 +1264,13 @@ sampleOn :: Signal a -> Signal b -> Signal b
 sampleOn a b = Signal $ \state -> do
     aCont <- unSignal a state
     bCont <- unSignal b state
-    bVal  <- bCont state >>= return . unEvent
+    bVal  <- unEvent <~ bCont updateZero
     ref   <- newIORef bVal
     return $ processSignal aCont bCont ref
     where
-        processSignal aCont bCont ref state = do
-            aValue <- aCont state
-            bValue <- bCont state
+        processSignal aCont bCont ref update = do
+            aValue <- aCont update
+            bValue <- bCont update
             case aValue of
                 NoChange _ -> case bValue of
                     NoChange _ -> readIORef ref >>= return . NoChange
@@ -2205,8 +1290,8 @@ randS low high signal = Signal $ \necro -> do
     ref  <- newIORef r
     return $ processSignal cont ref
     where
-        processSignal cont ref state = do
-            value <- cont state
+        processSignal cont ref update = do
+            value <- cont update
             case value of
                 NoChange _ -> readIORef ref >>= return . NoChange
                 Change   _ -> do
@@ -2214,15 +1299,15 @@ randS low high signal = Signal $ \necro -> do
                     writeIORef ref r
                     return $ Change r
 
-randFS :: Signal a -> Signal Float
+randFS :: Signal a -> Signal Double
 randFS signal = Signal $ \state -> do
     cont <- unSignal signal state
     r    <- randomRIO (0,1)
     ref  <- newIORef r
     return $ processSignal cont ref
     where
-        processSignal cont ref state = do
-            value <- cont state
+        processSignal cont ref update = do
+            value <- cont update
             case value of
                 NoChange _ -> readIORef ref >>= return . NoChange
                 Change   _ -> do
@@ -2233,11 +1318,11 @@ randFS signal = Signal $ \state -> do
 toggle :: Signal Bool -> Signal Bool
 toggle boolSignal = Signal $ \state -> do
     boolCont <- unSignal boolSignal state
-    boolVal  <- unEvent <~ boolCont state
+    boolVal  <- unEvent <~ boolCont updateZero
     boolRef  <- newIORef boolVal
     return $ processSignal boolRef boolCont
     where
-        processSignal boolRef boolCont state = boolCont state >>= \b -> case b of
+        processSignal boolRef boolCont update = boolCont update >>= \b -> case b of
             Change True -> readIORef boolRef >>= \prevBool -> writeIORef boolRef (not prevBool) >> return (Change (not prevBool))
             _           -> readIORef boolRef >>= return . NoChange
 
@@ -2245,13 +1330,13 @@ till :: Signal Bool -> Signal Bool -> Signal Bool
 till sigA sigB = Signal $ \state -> do
     aCont   <- unSignal sigA state
     bCont   <- unSignal sigB state
-    aValue  <- unEvent <~ aCont state
+    aValue  <- unEvent <~ aCont updateZero
     boolRef <- newIORef aValue
     return $ processSignal boolRef aCont bCont
     where
-        processSignal boolRef aCont bCont state = aCont state >>= \a -> case a of
+        processSignal boolRef aCont bCont update = aCont update >>= \a -> case a of
             Change True -> writeIORef boolRef True >>  return (Change True)
-            _           -> bCont state >>= \b -> case b of
+            _           -> bCont update >>= \b -> case b of
                 Change True -> writeIORef boolRef False >>  return (Change False)
                 _           -> readIORef boolRef        >>= return . NoChange
 
@@ -2263,19 +1348,18 @@ combo bs = isTrue <~ combine bs
 switch :: Int -> [Signal Bool] -> Signal Int
 switch startSection signals = Signal $ \state -> do
     sConts  <- mapM (\s -> unSignal s state) signals
-    -- sValues <- mapM (\cont -> fmap unEvent $ cont state) sConts
     ref     <- newIORef startSection
     return $ processSignal ref sConts
     where
-        processSignal ref sConts state = do
+        processSignal ref sConts update = do
             prev <- readIORef ref
-            _    <-foldM (\i s -> setSection i ref state s >> return (i + 1)) 0 sConts
+            _    <-foldM (\i s -> setSection i ref update s >> return (i + 1)) 0 sConts
             cur  <- readIORef ref
             if cur /= prev
                 then return $ Change   cur
                 else return $ NoChange cur
 
-        setSection index ref state cont = cont state >>= \c -> case c of
+        setSection index ref update cont = cont update >>= \c -> case c of
             Change True -> writeIORef ref index
             _           -> return ()
 
@@ -2309,92 +1393,53 @@ foldn f bInit a = Signal $ \state -> do
     ref           <- newIORef bInit
     netid         <- getNextID state
     sendAddNetSignal (necroNetClient state) $ (netid,toNetVal bInit)
-    return $ processSignal cont ref netid
+    return $ processSignal cont ref netid (necroNetClient state)
     where
-        processSignal cont ref netid state = atomically (readTVar $ clientNetSignals $ necroNetClient state) >>= \ns -> case IntMap.lookup netid ns of
+        processSignal cont ref netid client update = atomically (readTVar $ clientNetSignals $ client) >>= \ns -> case IntMap.lookup netid ns of
             Just (Change n) -> case fromNetVal n of
-                Just n' -> cont state >> writeIORef ref n' >> return (Change n')
+                Just n' -> cont update >> writeIORef ref n' >> return (Change n')
                 Nothing -> localCont
             _           -> localCont
             where
-                localCont = cont state >>= \c -> case c of
+                localCont = cont update >>= \c -> case c of
                     NoChange _ -> readIORef ref >>= return . NoChange
                     Change   v -> do
                         prev <- readIORef ref
                         let nextV = f v prev
                         writeIORef ref nextV
-                        if nextV /= prev then sendSetNetSignal (necroNetClient state) (netid,toNetVal nextV) else return ()
+                        if nextV /= prev then sendSetNetSignal client (netid,toNetVal nextV) else return ()
                         return (Change nextV)
 
 netsignal :: Networkable a => Signal a -> Signal a
 netsignal sig = Signal $ \state -> do
     cont   <- unSignal sig state
-    val    <- fmap unEvent $ cont state
+    val    <- unEvent <~ cont updateZero
     ref    <- newIORef val
     netid  <- getNextID state
     netRef <- newIORef val
     sendAddNetSignal (necroNetClient state) (netid,toNetVal val)
-    return $ processEvent cont ref netid netRef
+    return $ processEvent cont ref netid netRef (necroNetClient state)
     where
-        processEvent cont ref netid netRef state = atomically (readTVar $ clientNetSignals $ necroNetClient state) >>= \ns -> case IntMap.lookup netid ns of
+        processEvent cont ref netid netRef client update = atomically (readTVar $ clientNetSignals client) >>= \ns -> case IntMap.lookup netid ns of
             Just (Change n) -> case fromNetVal n of
-                Just n' -> cont state >> writeIORef ref n' >> return (Change n')
+                Just n' -> cont update >> writeIORef ref n' >> return (Change n')
                 Nothing -> localCont
             Just (NoChange n) -> readIORef netRef >>= \prevN -> case fromNetVal n of
                 Nothing -> localCont
                 Just n' -> if n' /= prevN
-                    then cont state >> writeIORef ref n' >> writeIORef netRef n' >> return (Change n')
+                    then cont update >> writeIORef ref n' >> writeIORef netRef n' >> return (Change n')
                     else localCont
             Nothing -> localCont -- Is this correct?
             where
-                localCont = cont state >>= \c -> case c of
+                localCont = cont update >>= \c -> case c of
                     NoChange v -> return $ NoChange v
                     Change   v -> readIORef ref >>= \prev -> if v /= prev
-                        then sendSetNetSignal (necroNetClient state) (netid,toNetVal v) >> writeIORef ref v >> return (Change v)
+                        then sendSetNetSignal client (netid,toNetVal v) >> writeIORef ref v >> return (Change v)
                         else return $ Change v
 
 ---------------------------------------------
 -- Sound
 ---------------------------------------------
-
--- playPattern :: (Show a,Typeable a) => a -> Signal Bool -> Signal Bool -> Pattern (Pattern a,Double) -> Signal a
--- playPattern init playSig stopSig pattern = Signal $ \necro -> do
-
-    --Signal Values
-    -- (pValue,pCont,pids) <- unSignal playSig necro
-    -- (sValue,sCont,sids) <- unSignal playSig necro
-    -- uid                 <- getNextID necro
-    -- nid                 <- getNextID necro
-    -- ref                 <- newIORef init
-    -- playRef             <- newIORef False
-
-    --Net Values
-    -- (_,netPlayCont,_)     <- unSignal (input False nid) necro
-
-    --pure Values
-    -- let pdef             = pstream ("sigPattern" ++ show uid) (pure $ liftIO . atomically . writeTBQueue (globalDispatch necro) . Event uid . toDyn) pattern
-        -- ids              = IntSet.insert nid $ IntSet.insert uid $ IntSet.union sids pids
-
-    -- runNecroState (setTempo 150) (necroVars necro)
-    -- sendAddNetSignal (client necro) (nid,NetBool False)
-    -- return (init,processEvent pCont sCont netPlayCont uid nid pdef (client necro) (necroVars necro) ref playRef ids,ids)
-    -- where
-        -- processEvent pCont sCont netPlayCont uid nid pdef client necroVars ref playRef ids event@(Event eid e) = case idGuard ids eid ref of
-            -- Just  r -> r
-            -- Nothing -> if eid == uid
-                -- then case fromDynamic e of
-                    -- Just v -> writeIORef ref v >> return (Change v)
-                    -- _      -> print "dynamic casting error in playPattern" >> readIORef ref >>= return . NoChange
-                -- else netPlayCont event >>= \net -> case net of
-                    -- Change True  -> print "net play" >> runNecroState (runPDef pdef) necroVars >> writeIORef playRef True  >> readIORef ref >>= return . NoChange
-                    -- Change False -> print "net stop" >> runNecroState (pstop   pdef) necroVars >> writeIORef playRef False >> readIORef ref >>= return . NoChange
-                    -- _            -> readIORef playRef >>= \play -> if play
-                        -- then sCont event >>= \s -> case s of
-                            -- Change True -> print "stop" >> sendSetNetSignal client (nid,NetBool False) >> runNecroState (pstop   pdef) necroVars >> writeIORef playRef False >> readIORef ref >>= return . NoChange
-                            -- _           -> readIORef ref >>= return . NoChange
-                        -- else pCont event >>= \p -> case p of
-                            -- Change True -> print "play" >> sendSetNetSignal client (nid,NetBool True ) >> runNecroState (runPDef pdef) necroVars >> writeIORef playRef True  >> readIORef ref >>= return . NoChange
-                            -- _           -> readIORef ref >>= return . NoChange
 
 foreign import ccall "&out_bus_buffers" outBusBuffers :: Ptr CDouble
 
@@ -2411,26 +1456,26 @@ playSynthN :: Signal Bool -> String -> [Signal Double] -> Signal ()
 playSynthN playSig synthName argSigs = Signal $ \state -> do
 
     pCont        <- unSignal (netsignal playSig) state
-    _ {-pValue-} <- pCont state >>= return . unEvent
+    _ {-pValue-} <- unEvent <~ pCont updateZero
     aConts       <- mapM (\a -> unSignal (netsignal a) state) argSigs
-    _ {-aValues-}<- mapM (\f -> f state >>= return . unEvent) aConts
+    _ {-aValues-}<- mapM (\f -> unEvent <~ f updateZero) aConts
     synthRef     <- newIORef Nothing
 
-    return $ processSignal pCont aConts synthRef (necroVars state) (necroNetClient state)
+    return $ processSignal pCont aConts synthRef (necroVars state)
     where
-        processSignal pCont aConts synthRef sNecroVars _ state = pCont state >>= \p -> case p of
-            Change   p'  -> mapM (\f -> f state >>= return . unEvent) aConts >>= \args -> runNecroState (playStopSynth args p' synthRef) sNecroVars >>= \(e,_) -> return e
+        processSignal pCont aConts synthRef sNecroVars update = pCont update >>= \p -> case p of
+            Change   p'  -> mapM (\f -> unEvent <~ f updateZero) aConts >>= \args -> runNecroState (playStopSynth args p' synthRef) sNecroVars >>= \(e,_) -> return e
             NoChange _   -> readIORef synthRef >>= \s -> case s of
                 Nothing  -> return $ NoChange ()
-                Just  s' -> foldM (\i f -> updateArg i f s' sNecroVars state >> return (i+1)) 0 aConts >> return (NoChange ())
+                Just  s' -> foldM (\i f -> updateArg i f s' sNecroVars update >> return (i+1)) 0 aConts >> return (NoChange ())
 
-        updateArg index aCont synth sNecroVars state = aCont state >>= \a -> case a of
+        updateArg index aCont synth sNecroVars update = aCont update >>= \a -> case a of
             NoChange _ -> return ()
             Change   v -> runNecroState (setSynthArg synth index v) sNecroVars >> return ()
 
         playStopSynth args shouldPlay synthRef = liftIO (readIORef synthRef) >>= \ms -> case (ms,shouldPlay) of
-            (Nothing   ,True )  -> liftIO (print "play") >> playSynth synthName args >>= \s -> liftIO (writeIORef synthRef $ Just s) >> return (Change ())
-            (Just synth,False)  -> liftIO (print "stop") >> stopSynth synth          >>        liftIO (writeIORef synthRef  Nothing) >> return (Change ())
+            (Nothing   ,True )  -> playSynth synthName args >>= \s -> liftIO (writeIORef synthRef $ Just s) >> return (Change ())
+            (Just synth,False)  -> stopSynth synth          >>        liftIO (writeIORef synthRef  Nothing) >> return (Change ())
             _                   -> return $ NoChange ()
 
 synthDef :: UGenType a => String -> a -> Signal ()
@@ -2445,11 +1490,11 @@ play = playSynthN
 tempo :: Signal Double -> Signal Double
 tempo tempoSignal = Signal $ \state -> do
     tCont  <- unSignal tempoSignal state
-    tValue <- fmap unEvent $ tCont state
+    tValue <- unEvent <~ tCont updateZero
     _      <- runNecroState (setTempo tValue) (necroVars state)
     return $ processSignal tCont (necroVars state)
     where
-        processSignal tCont sNecroVars state = tCont state >>= \t -> case t of
+        processSignal tCont sNecroVars update = tCont update >>= \t -> case t of
             NoChange t' -> return $ NoChange t'
             Change   t' -> runNecroState (setTempo t') sNecroVars >> return (Change t')
 
@@ -2457,9 +1502,9 @@ playSignalPattern :: (Show a,Eq a) => Signal Bool -> a -> [Signal Double] -> Pat
 playSignalPattern playSig initValue argSigs pattern = Signal $ \state -> do
 
     pCont   <- unSignal (netsignal playSig) state
-    pValue  <- pCont state >>= return . unEvent
+    pValue  <- unEvent <~ pCont updateZero
     aConts  <- mapM (\a -> unSignal (netsignal a) state) argSigs
-    aValues <- mapM (\f -> f state >>= return . unEvent) aConts
+    aValues <- mapM (\f -> unEvent <~ f updateZero) aConts
     valVar  <- atomically $ newTVar initValue
     pid     <- getNextID state
     let pFunc = return (\val _ -> liftIO (atomically $ writeTVar valVar val))
@@ -2472,8 +1517,8 @@ playSignalPattern playSig initValue argSigs pattern = Signal $ \state -> do
 
     return $ processSignal patternRef pDef pCont aConts valVar valRef (necroVars state)
     where
-        processSignal patternRef pDef pCont aConts valVar valRef sNecroVars state = do
-            p   <- pCont state
+        processSignal patternRef pDef pCont aConts valVar valRef sNecroVars update = do
+            p   <- pCont update
             pat <- readIORef patternRef
             case (p,pat) of
                 (Change True ,Nothing) -> runNecroState (runPDef pDef) sNecroVars >>= \(pat',_) -> writeIORef patternRef (Just pat')
@@ -2481,37 +1526,24 @@ playSignalPattern playSig initValue argSigs pattern = Signal $ \state -> do
                 _                      -> return ()
             readIORef patternRef >>= \pat' -> case pat' of
                 Nothing -> return ()
-                Just pat'' -> foldM (\i f -> updateArg i f pat'' sNecroVars state >> return (i+1)) 0 aConts >> return ()
+                Just pat'' -> foldM (\i f -> updateArg i f pat'' sNecroVars update >> return (i+1)) 0 aConts >> return ()
             prev <- readIORef valRef
             val  <- atomically $ readTVar valVar `orElse` return prev
             if val == prev
                 then return $ NoChange prev
                 else writeIORef valRef val >> return (Change val)
 
-        updateArg index aCont sPattern sNecroVars state = aCont state >>= \a -> case a of
+        updateArg index aCont sPattern sNecroVars update = aCont update >>= \a -> case a of
             NoChange _ -> return ()
             Change val -> runNecroState (setPDefArg sPattern index $ PVal val) sNecroVars >> return ()
-
-{- TO DO: Remove this?
-tempo :: Signal Double -> Signal Double
-tempo tempoSignal = Signal $ \state -> do
-    tCont  <- unSignal tempoSignal state
-    tValue <- fmap unEvent $ tCont state
-    runNecroState (setTempo tValue) (necroVars state)
-    return $ processSignal tCont (necroVars state)
-    where
-        processSignal tCont necroVars state = tCont state >>= \t -> case t of
-            NoChange t' -> return $ NoChange t'
-            Change   t' -> runNecroState (setTempo t') necroVars >> return (Change t')
--}
 
 playSynthPattern :: Signal Bool -> String -> [Signal Double] -> Pattern (Pattern Double,Double) -> Signal ()
 playSynthPattern playSig synthName argSigs pattern = Signal $ \state -> do
 
     pCont   <- unSignal (netsignal playSig) state
-    pValue  <- pCont state >>= return . unEvent
+    pValue  <- unEvent <~ pCont updateZero
     aConts  <- mapM (\a -> unSignal (netsignal a) state) argSigs
-    aValues <- mapM (\f -> f state >>= return . unEvent) aConts
+    aValues <- mapM (\f -> unEvent <~ f updateZero) aConts
     pid     <- getNextID state
     let pFunc = return (\val t -> playSynthAtJackTime synthName [val] t >> return ())
         pDef  = pstreamWithArgs ("sigPat" ++ show pid) pFunc pattern (map PVal aValues)
@@ -2521,19 +1553,19 @@ playSynthPattern playSig synthName argSigs pattern = Signal $ \state -> do
 
     return $ processSignal patternRef pDef pCont aConts (necroVars state)
     where
-        processSignal patternRef pDef pCont aConts sNecroVars state = do
-            p   <- pCont state
+        processSignal patternRef pDef pCont aConts sNecroVars update = do
+            p   <- pCont update
             pat <- readIORef patternRef
             playChange <- case (p,pat) of
-                (Change True ,Nothing) -> print "play synthPattern" >> runNecroState (runPDef pDef) sNecroVars >>= \(pat',_) -> writeIORef patternRef (Just pat') >> return (Change ())
-                (Change False,Just  _) -> print "stop synthPattern" >> runNecroState (pstop   pDef) sNecroVars >>               writeIORef patternRef Nothing     >> return (Change ())
+                (Change True ,Nothing) -> runNecroState (runPDef pDef) sNecroVars >>= \(pat',_) -> writeIORef patternRef (Just pat') >> return (Change ())
+                (Change False,Just  _) -> runNecroState (pstop   pDef) sNecroVars >>               writeIORef patternRef Nothing     >> return (Change ())
                 _                      -> return $ NoChange ()
             readIORef patternRef >>= \pat' -> case pat' of
                 Nothing -> return ()
-                Just pat'' -> foldM (\i f -> updateArg i f pat'' sNecroVars state >> return (i+1)) 0 aConts >> return ()
+                Just pat'' -> foldM (\i f -> updateArg i f pat'' sNecroVars update >> return (i+1)) 0 aConts >> return ()
             return playChange
 
-        updateArg index aCont sPattern sNecroVars state = aCont state >>= \a -> case a of
+        updateArg index aCont sPattern sNecroVars update = aCont update >>= \a -> case a of
             NoChange _ -> return ()
             Change val -> runNecroState (setPDefArg sPattern index $ PVal val) sNecroVars >> return ()
 
@@ -2541,9 +1573,9 @@ playBeatPattern :: Signal Bool -> [Signal Double] -> Pattern (Pattern String, Do
 playBeatPattern playSig argSigs pattern = Signal $ \state -> do
 
     pCont   <- unSignal (netsignal playSig) state
-    pValue  <- pCont state >>= return . unEvent
+    pValue  <- unEvent <~ pCont updateZero
     aConts  <- mapM (\a -> unSignal (netsignal a) state) argSigs
-    aValues <- mapM (\f -> f state >>= return . unEvent) aConts
+    aValues <- mapM (\f -> unEvent <~ f updateZero) aConts
     pid     <- getNextID state
     let pFunc = return (\synth t -> playSynthAtJackTime synth [] t >> return ())
         pDef  = pstreamWithArgs ("sigPat" ++ show pid) pFunc pattern (map PVal aValues)
@@ -2553,19 +1585,19 @@ playBeatPattern playSig argSigs pattern = Signal $ \state -> do
 
     return $ processSignal patternRef pDef pCont aConts (necroVars state)
     where
-        processSignal patternRef pDef pCont aConts sNecroVars state = do
-            p   <- pCont state
+        processSignal patternRef pDef pCont aConts sNecroVars update = do
+            p   <- pCont update
             pat <- readIORef patternRef
             playChange <- case (p,pat) of
-                (Change True ,Nothing) -> print "play synthPattern" >> runNecroState (runPDef pDef) sNecroVars >>= \(pat',_) -> writeIORef patternRef (Just pat') >> return (Change ())
-                (Change False,Just  _) -> print "stop synthPattern" >> runNecroState (pstop   pDef) sNecroVars >>               writeIORef patternRef Nothing     >> return (Change ())
+                (Change True ,Nothing) -> runNecroState (runPDef pDef) sNecroVars >>= \(pat',_) -> writeIORef patternRef (Just pat') >> return (Change ())
+                (Change False,Just  _) -> runNecroState (pstop   pDef) sNecroVars >>               writeIORef patternRef Nothing     >> return (Change ())
                 _                      -> return $ NoChange ()
             readIORef patternRef >>= \pat' -> case pat' of
                 Nothing -> return ()
-                Just pat'' -> foldM (\i f -> updateArg i f pat'' sNecroVars state >> return (i+1)) 0 aConts >> return ()
+                Just pat'' -> foldM (\i f -> updateArg i f pat'' sNecroVars update >> return (i+1)) 0 aConts >> return ()
             return playChange
 
-        updateArg index aCont sPattern sNecroVars state = aCont state >>= \a -> case a of
+        updateArg index aCont sPattern sNecroVars update = aCont update >>= \a -> case a of
             NoChange _ -> return ()
             Change val -> runNecroState (setPDefArg sPattern index $ PVal val) sNecroVars >> return ()
 
