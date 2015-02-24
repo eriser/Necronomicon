@@ -65,7 +65,7 @@ terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 8 (-4)) (fromEuler' (-24) 0
 
         addIndices w' i indicesList
             | mod i w' < (w'-1) = i + 1 : i + w' : i + w' + 1 : i + 1 : i : i + w' : indicesList
-            | otherwise         = indices
+            | otherwise         = indicesList
 
         vertices = map toVertex values
         colors   = map toColor  values
