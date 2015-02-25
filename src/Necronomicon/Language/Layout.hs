@@ -267,17 +267,17 @@ layoutToPattern (ParsecList as)  = NP.PSeq (NP.PGen $ pvector totalLength withTi
 layoutToPattern _                = NP.PNothing
 
 pvector :: Time -> V.Vector(NP.Pattern a,Double,Time) -> Time -> NP.Pattern (NP.Pattern a,Double)
-pvector totalLength vec initialTime = traceShow initialTime $ go initialTime 0 vecLength
+pvector totalLength vec time = traceShow time $ go 0 vecLength
     where
         vecLength = V.length vec
-        go time imin imax
+        go imin imax
             | index < 0                         = NP.PVal $ (\(v,d,_) -> (v,d)) $ vec V.! 0
             | index > vecLength - 1             = if time < totalLength then NP.PVal $ ((\(v,_,_) -> (v,totalLength - time)) $ vec V.! (vecLength - 1)) else NP.PNothing
             | time == curTime                   = NP.PVal (curValue,curDur)
             | time == prevTime                  = NP.PVal (prevValue,prevDur)
             | time == nextTime                  = NP.PVal (nextValue,nextDur)
-            | time < prevTime                   = go time imin $ index - 1
-            | time > nextTime                   = go time (index + 1) imax
+            | time < prevTime                   = go imin $ index - 1
+            | time > nextTime                   = go (index + 1) imax
             | time < curTime && time > prevTime = NP.PVal (prevValue,prevDur)
             | otherwise                         = NP.PVal (curValue ,curDur)
             where
