@@ -173,6 +173,14 @@ void release_sample_buffer(sample_buffer* buffer)
 // SynthDef/Synth Node
 ////////////////////////
 
+typedef enum
+{
+	NODE_ALIVE, // Not scheduled for removal or free
+	NODE_SCHEDULED_FOR_REMOVAL, // Scheduled for removal from removal_fifo, first step in removal of synths
+	NODE_SCHEDULED_FOR_FREE, // Scheduled for memory free, second and last step in removal of synths
+	NODE_DEAD
+} node_alive_status;
+
 struct synth_node;
 typedef struct synth_node synth_node;
 
@@ -185,8 +193,10 @@ struct synth_node
 	jack_time_t time; // scheduled time, in microseconds
 	unsigned int key; // Node ID, used to look up synths in the synth hash table
 	unsigned int hash; // Cached hash of the node id for the synth hash table
+	unsigned int table_index; // Cached hash table index
 	unsigned int num_ugens;
 	unsigned int num_wires;
+	node_alive_status alive_status; // Flag representing whether the synth is scheduled for removal or not
 };
 
 synth_node* _necronomicon_current_node = NULL;
@@ -198,11 +208,12 @@ const unsigned int max_free_synths = 128;
 
 synth_node* malloc_synth()
 {
-	if (num_free_synths > 0)
+	if (free_synths != NULL)
 	{
 		// Pop a synth off the synth free list
 		synth_node* synth = free_synths;
 		free_synths = synth->next;
+		synth->next = NULL;
 		--num_free_synths;
 		return synth;
 	}
@@ -210,34 +221,42 @@ synth_node* malloc_synth()
 	return malloc(NODE_SIZE);
 }
 
+void deconstruct_synth(synth_node* synth)
+{
+	ugen* ugen_graph = synth->ugen_graph;
+	unsigned int num_ugens = synth->num_ugens;
+	unsigned int i;
+	for (i = 0; i < num_ugens; ++i)
+	{
+		ugen* graph_node = &ugen_graph[i];
+		graph_node->deconstructor(graph_node);
+	}
+
+	free(ugen_graph);
+	free(synth->ugen_wires);
+}
+
 void free_synth(synth_node* synth)
 {
 	if (synth)
 	{
-		ugen* ugen_graph = synth->ugen_graph;
-		unsigned int num_ugens = synth->num_ugens;
-		unsigned int i;
-		for (i = 0; i < num_ugens; ++i)
-		{
-			ugen* graph_node = &ugen_graph[i];
-			graph_node->deconstructor(graph_node);
-		}
+		synth->alive_status = NODE_DEAD;
+		deconstruct_synth(synth);
 
-		free(ugen_graph);
-		free(synth->ugen_wires);
+		// Push the synth on to the free list
+		synth->next = free_synths;
+		free_synths = synth;
 
+		/*
+		  ++num_free_synths;
 		if (num_free_synths < max_free_synths)
 		{
-			// Push the synth on to the free list
-			synth->next = free_synths;
-			free_synths = synth;
-			++num_free_synths;
 		}
 
 		else
 		{
 			free(synth);
-		}
+		}*/
 	}
 }
 
@@ -268,10 +287,12 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 	synth->next = NULL;
 	synth->key = node_id;
 	synth->hash = HASH_KEY(node_id);
+	synth->table_index = 0;
 	synth->num_ugens = synth_definition->num_ugens;
 	synth->num_wires = synth_definition->num_wires;
 	synth->time = time;
-
+	synth->alive_status = NODE_ALIVE;
+	
 	// UGens
 	unsigned int num_ugens = synth_definition->num_ugens;
 	unsigned int size_ugens = synth_definition->num_ugens * UGEN_SIZE;
@@ -372,6 +393,11 @@ typedef struct
 } message;
 
 const unsigned int MESSAGE_SIZE = sizeof(message);
+
+void print_fifo_message(message m)
+{
+	puts(message_map[m.type]);
+};
 
 // Lock Free FIFO Queue (Ring Buffer)
 typedef message* message_fifo;
@@ -506,6 +532,7 @@ void scheduled_list_sort()
 	synth_node* x;
 	jack_time_t xTime, yTime;
 
+	printf("scheduled_list size: %i\n", scheduled_list_write_index - scheduled_list_read_index); 
 	for (i = (scheduled_list_read_index + 1) & FIFO_SIZE_MASK; i != scheduled_list_write_index; i = (i + 1) & FIFO_SIZE_MASK)
 	{
 		x = scheduled_node_list[i];
@@ -536,9 +563,9 @@ void scheduled_list_sort()
 const unsigned int MAX_REMOVAL_IDS = 512; // Max number of ids able to be scheduled for removal *per sample frame*
 const unsigned int REMOVAL_FIFO_SIZE_MASK = 511;
 
-typedef unsigned int* node_id_fifo;
+typedef synth_node** node_fifo;
 
-node_id_fifo removal_fifo = NULL;
+node_fifo removal_fifo = NULL;
 unsigned int removal_fifo_read_index = 0;
 unsigned int removal_fifo_write_index = 0;
 int removal_fifo_size = 0;
@@ -547,10 +574,10 @@ int removal_fifo_size = 0;
 #define REMOVAL_FIFO_POP() FIFO_POP(removal_fifo, removal_fifo_read_index, REMOVAL_FIFO_SIZE_MASK)
 
 // Allocate and null initialize a node list to be used as a node_list
-node_id_fifo new_removal_fifo()
+node_fifo new_removal_fifo()
 {
-	unsigned int byte_size = sizeof(unsigned int) * MAX_REMOVAL_IDS;
-	node_id_fifo fifo = (node_id_fifo) malloc(byte_size);
+	unsigned int byte_size = sizeof(synth_node*) * MAX_REMOVAL_IDS;
+	node_fifo fifo = (node_fifo) malloc(byte_size);
 	assert(fifo);
 	memset(fifo, 0, byte_size);
 	removal_fifo_size = 0;
@@ -606,6 +633,7 @@ void hash_table_free(hash_table table)
 
 void hash_table_insert(hash_table table, synth_node* node)
 {
+	printf("hash_table_insert: %p\n", node);
 	assert(num_synths < MAX_SYNTHS);
 	unsigned int slot = node->hash & HASH_TABLE_SIZE_MASK;
 
@@ -613,15 +641,32 @@ void hash_table_insert(hash_table table, synth_node* node)
 		slot = (slot + 1) & HASH_TABLE_SIZE_MASK;
 
 	table[slot] = node;
+	node->table_index = slot;
 	++num_synths;
 }
 
-synth_node* hash_table_remove(hash_table table, unsigned int key)
+bool hash_table_remove(hash_table table, synth_node* node)
 {
+	printf("hash_table_remove: %p\n", node);
+	unsigned int index = node->table_index;
+	if (table[index] != NULL)
+	{
+		synth_node* found_node = table[index];
+		if (found_node == node)
+		{
+			table[index] = NULL;
+			return true;
+		}
+	}
+
+	return false;
+	
+	/*
 	unsigned int hash = HASH_KEY(key);
 	unsigned int slot = hash & HASH_TABLE_SIZE_MASK;
 	unsigned int i = 0;
 
+	printf("hash_table_remove id: %u", key);
 	while (i < MAX_SYNTHS)
 	{
 		if (table[slot])
@@ -639,7 +684,8 @@ synth_node* hash_table_remove(hash_table table, unsigned int key)
 		slot = (slot + 1) & HASH_TABLE_SIZE_MASK;
 	}
 
-	return NULL;
+	printf(" i: %u\n", i);
+	return NULL;*/
 }
 
 synth_node* hash_table_lookup(hash_table table, unsigned int key)
@@ -737,28 +783,35 @@ int get_running()
 
 void add_synth(synth_node* node)
 {
-	hash_table_insert(synth_table, node);
-	synth_list = doubly_linked_list_push(synth_list, node);
+	printf("add_synth: %p\n", node);
+	if (node && node->alive_status == NODE_ALIVE)
+	{
+		printf("  index: %u, alive_status: %i\n", node->table_index, node->alive_status);
+		hash_table_insert(synth_table, node);
+		synth_list = doubly_linked_list_push(synth_list, node);
+	}
 }
 
 void remove_synth(synth_node* node)
 {
-	if (node)
+	printf("remove_synth: %p, \n", node);
+	if (node && node->alive_status == NODE_SCHEDULED_FOR_REMOVAL)
 	{
-		synth_list = doubly_linked_list_remove(synth_list, node);
+		node->alive_status = NODE_SCHEDULED_FOR_FREE;
+		printf("  index: %u, scheduled_for_removal: %i\n", node->table_index, node->alive_status);
+		bool found = hash_table_remove(synth_table, node);
 
-		message msg;
-		msg.arg.node = node;
-		msg.type = FREE_SYNTH;
+		if (found == true)
+		{
+			synth_list = doubly_linked_list_remove(synth_list, node);
 
-		NRT_FIFO_PUSH(msg); // Send ugen to NRT thread for freeing
+			message msg;
+			msg.arg.node = node;
+			msg.type = FREE_SYNTH;
+			
+			NRT_FIFO_PUSH(msg); // Send ugen to NRT thread for freeing
+		}
 	}
-}
-
-void remove_synth_by_id(unsigned int id)
-{
-	synth_node* node = hash_table_remove(synth_table, id);
-	remove_synth(node);
 }
 
 // Iterate over the scheduled list and add synths if they are ready. Stop as soon as we find a synth that isn't ready.
@@ -771,7 +824,7 @@ void add_scheduled_synths()
 		if (SCHEDULED_LIST_PEEK_TIME() <= current_cycle_usecs)
 		{
 			synth_node* node = SCHEDULED_LIST_POP();
-			// Uncomment to print timing information for synths
+            // Uncomment to print timing information for synths
 			// printf("add_synth -> time: %llu, current_cycle_usecs: %llu, current_cycle_usecs - time: %llu\n", node->time, current_cycle_usecs, current_cycle_usecs - node->time);
 			add_synth(node);
 			scheduled_list_read_index = scheduled_list_read_index & FIFO_SIZE_MASK;
@@ -793,9 +846,8 @@ void remove_scheduled_synths()
 
 	while (removal_fifo_read_index != removal_fifo_write_index)
 	{
-		unsigned int id = REMOVAL_FIFO_POP();
+		synth_node* node = REMOVAL_FIFO_POP();
 		--removal_fifo_size;
-		synth_node* node = hash_table_remove(synth_table, id);
 		remove_synth(node);
 		removal_fifo_read_index = removal_fifo_read_index & REMOVAL_FIFO_SIZE_MASK;
 		removal_fifo_write_index = removal_fifo_write_index & REMOVAL_FIFO_SIZE_MASK;
@@ -804,10 +856,13 @@ void remove_scheduled_synths()
 
 void try_schedule_current_synth_for_removal()
 {
-	if (_necronomicon_current_node && (removal_fifo_size < REMOVAL_FIFO_SIZE_MASK))
+	puts("TRY_SCHEDULE_CURRENT_SYNTH_FOR_REMOVAL!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
+	if (_necronomicon_current_node && (removal_fifo_size < REMOVAL_FIFO_SIZE_MASK) && _necronomicon_current_node->alive_status == NODE_ALIVE)
 	{
+		printf("try_schedule_node: %p\n", _necronomicon_current_node);
+		_necronomicon_current_node->alive_status = NODE_SCHEDULED_FOR_REMOVAL;
 		++removal_fifo_size;
-		REMOVAL_FIFO_PUSH(_necronomicon_current_node->key);
+		REMOVAL_FIFO_PUSH(_necronomicon_current_node);
 	}
 }
 
@@ -815,13 +870,14 @@ void shutdown_rt_runtime(); // Forward declaration
 
 void handle_rt_message(message msg)
 {
+	print_fifo_message(msg);
 	switch (msg.type)
 	{
 	case START_SYNTH:
 		SCHEDULED_LIST_PUSH(msg.arg.node);
 		break;
 	case STOP_SYNTH:
-		remove_synth_by_id(msg.arg.node_id);
+		remove_synth(msg.arg.node);
 		break;
 	case SHUTDOWN:
 		shutdown_rt_runtime();
@@ -858,6 +914,7 @@ void handle_messages_in_rt_fifo()
 
 void handle_nrt_message(message msg)
 {
+	print_fifo_message(msg);
 	switch (msg.type)
 	{
 	case FREE_SYNTH:
@@ -908,38 +965,49 @@ void play_synth(synth_node* synth_definition, double* arguments, unsigned int nu
 
 void stop_synth(unsigned int id)
 {
-	message msg;
-	msg.arg.node_id = id;
-	msg.type = STOP_SYNTH;
-	RT_FIFO_PUSH(msg);
+	synth_node* node = hash_table_lookup(synth_table, id);
+	if (node && node->alive_status == NODE_ALIVE)
+	{
+		node->alive_status = NODE_SCHEDULED_FOR_REMOVAL;
+		printf("stop_synth: %u\n", id);
+		message msg;
+		msg.arg.node = node;
+		msg.type = STOP_SYNTH;
+		RT_FIFO_PUSH(msg);
+	}
+
+	else
+	{
+		printf("stopSynth: Node ID %u not found\n", id);
+	}
 }
 
 // How to handle sample accurate setting? Use FIFO messages?
 void send_set_synth_arg(unsigned int id, double argument, unsigned int arg_index)
 {
 	synth_node* synth = hash_table_lookup(synth_table, id);
-	if (synth)
+	if (synth && synth->alive_status == NODE_ALIVE)
 	{
 		synth->ugen_wires[arg_index] = argument;
 	}
 
 	else
 	{
-		printf("Node ID not found: %u\n", id);
+		printf("setSynthArg: Node ID %u not found\n", id);
 	}
 }
 
 void send_set_synth_args(unsigned int id, double* arguments, unsigned int num_arguments)
 {
 	synth_node* synth = hash_table_lookup(synth_table, id);
-	if (synth)
+	if (synth && synth->alive_status == NODE_ALIVE)
 	{
 		memcpy(synth->ugen_wires, arguments, num_arguments * DOUBLE_SIZE);
 	}
 
 	else
 	{
-		printf("Node ID not found: %u\n", id);
+		printf("setSynthArgs: Node ID %u not found\n", id);
 	}
 }
 
@@ -980,15 +1048,7 @@ void init_rt_thread()
 	initialize_wave_tables();
 	// load_audio_files();
 
-	int i=0;
-	for(i<16;i++;)
-	{
-		int i2=0;
-		for(i2<512;i2++;)
-		{
-			out_bus_buffers[i][i2] = 0;
-		}
-	}
+	memset(out_bus_buffers, 0, DOUBLE_SIZE * 16 * 512);
 	out_bus_buffer_index = 0;
 
 	_necronomicon_current_node = NULL;
@@ -1003,7 +1063,10 @@ void clear_synth_list()
 {
 	while (synth_list)
 	{
-		remove_synth_by_id(synth_list->key);
+		synth_node* node = synth_list;
+		synth_list = node->next;
+		deconstruct_synth(node);
+		free(node);
 	}
 }
 
@@ -1037,15 +1100,11 @@ void shutdown_rt_thread()
 		buffer_free_list = next_buffer;
 	}
 
-	if (free_synths)
+	while (free_synths)
 	{
-		unsigned int i;
-		for (i = 0; i < num_free_synths; ++i)
-		{
-			synth_node* synth = free_synths;
-			free_synths = synth->next;
-			free(synth);
-		}
+		synth_node* synth = free_synths;
+		free_synths = synth->next;
+		free(synth);
 	}
 
 	synth_table = NULL;
@@ -1712,6 +1771,7 @@ synth_node* new_test_synth(unsigned int time)
 	test_synth->next = NULL;
 	test_synth->key = 0;
 	test_synth->hash = 0;
+	test_synth->table_index = 0;
 	test_synth->num_ugens = 1;
 	test_synth->num_wires = 1;
 	test_synth->time = time;
@@ -1724,13 +1784,14 @@ synth_node* new_test_synth(unsigned int time)
 void print_node(synth_node* node)
 {
 	if (node)
-		printf("synth_node { graph: %p, wires: %p, prev: %p, next: %p, key %i, hash: %i, num_ugens: %u, num_wires: %u, time: %llu }",
+		printf("synth_node { graph: %p, wires: %p, prev: %p, next: %p, key %i, hash: %i, num_ugens: %u, table_index: %u, num_wires: %u, time: %llu }",
 			   node->ugen_graph,
 			   node->ugen_wires,
 			   node->previous,
 			   node->next,
 			   node->key,
 			   node->hash,
+			   node->table_index,
 			   node->num_ugens,
 			   node->num_wires,
 			   node->time);
@@ -1854,6 +1915,7 @@ void test_hash_table()
 		synth_node* node = new_test_synth(times[i]);
 		node->key = i;
 		node->hash = HASH_KEY(i);
+		node->table_index = i;
 		hash_table_insert(table, node);
 		assert(node == hash_table_lookup(table, i));
 	}
@@ -1874,8 +1936,9 @@ void test_hash_table()
 
 	for (i = 0; i < num_values; ++i)
 	{
-		synth_node* node = hash_table_remove(table, i);
+		synth_node* node = hash_table_lookup(table, i);
 		assert(node);
+		hash_table_remove(table, node);
 		free_synth(node);
 	}
 

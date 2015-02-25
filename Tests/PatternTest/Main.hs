@@ -41,10 +41,10 @@ patternTest = do
     compileSynthDef "three" three
     compileSynthDef "four" four
     let pLineSynth = return (\degree t -> playSynthAtJackTime "FreqSynth" [degree * 11] t >> return ())
-    -- let pBeatSynth = return (\synth t -> playSynthAtJackTime synth [] t >> return ())
+    let pBeatSynth = return (\synth t -> playSynthAtJackTime synth [] t >> return ())
 
-    _ <- runPDef $ pstream "ArgsPattern2" pLineSynth (PVal (5, 1))
-    setTempo 50000
+    -- _ <- runPDef $ pstream "ArgsPattern2" pLineSynth (PVal (5, 1))
+    -- setTempo 50000
 
     {-
     setTempo 150
@@ -66,10 +66,11 @@ patternTest = do
     nSleep 5
     setTempo 150
     setPDefArg argsPattern 0 1
-    -- runPDef $ pstreamWithArgs "ArgsPattern2" pBeatSynth ((\x -> pstutter x [lich| b p [_ b] p |]) :: Pattern Double -> Pattern (Pattern String, Double)) [1]
+    runPDef $ pstreamWithArgs "ArgsPattern2" pBeatSynth ((\x -> pstutter x [lich| b p [_ b] p |]) :: Pattern Double -> Pattern (Pattern String, Double)) [1]
 
     pstop argsPattern
-
+-}
+    setTempo 150
     _ <- runPDef $ pstream "myCoolPattern" pLineSynth $ [lich| 1 [_ 2] _ [3 [4 5]] 6
                                                                1 [_ 2] _ [3 [4 5]] 6
                                                                1 [_ 2] _ [3 [4 5]] 6
@@ -155,8 +156,6 @@ patternTest = do
     setTempo 222
     nSleep 3
     setTempo 150
-
-    -}
 
     -- runPDef melo
     -- runPDef melo2
