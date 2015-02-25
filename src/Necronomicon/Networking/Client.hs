@@ -198,7 +198,7 @@ parseMessage (SetNetSignal uid netVal) _ sigstate = do
     -- putStrLn $ "Setting NetSignal : " ++ show (uid,netVal)
 
 parseMessage (SyncNetSignals netVals) _ sigstate = do
-    print "SyncNetSignals"
+    -- print "SyncNetSignals"
     -- oldNetSignals <- atomically $ readTVar (netSignals client)
     -- mapM_ (sendMergeEvents oldNetSignals) $ IntMap.toList netVals
     -- atomically $ writeTVar (netSignals client) $ IntMap.map Change netVals
