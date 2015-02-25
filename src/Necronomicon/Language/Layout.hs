@@ -12,6 +12,7 @@ import qualified Data.Vector as V
 
 import Data.Typeable
 import Data.Data
+import Debug.Trace
 
 import qualified Necronomicon.Patterns as NP
 
@@ -165,7 +166,7 @@ parseRawFunction = between (char '(' *> spaces) (spaces *> char ')') (try leftSe
                 '*' -> return $ InfixE (Just (LitE (RationalL $ toRational v))) (VarE (mkName "Prelude.*")) Nothing
                 '/' -> return $ InfixE (Just (LitE (RationalL $ toRational v))) (VarE (mkName "Prelude./")) Nothing
                 _   -> fail (f : " is not a supported operator.")
-                
+
 ---------------------
 -- convert to QExpr
 --------------------
@@ -251,9 +252,9 @@ parseRawFunction = between (char '(' *> spaces) (spaces *> char ')') (try leftSe
 layoutToPattern :: ParsecPattern a -> NP.Pattern (NP.Pattern a,Double)
 layoutToPattern (ParsecValue a)  = NP.PVal (NP.PVal a,1)
 layoutToPattern  ParsecRest      = NP.PVal (NP.PNothing,1)
-layoutToPattern (ParsecList as)  = NP.PSeq (NP.PGen $ pvector withTimes) $ floor timeLength
+layoutToPattern (ParsecList as)  = NP.PSeq (NP.PGen $ pvector withTimes) $ floor (finalDur + timeLength)
     where
-        (_,_,timeLength)         = withTimes V.! (V.length withTimes - 1)
+        (_,finalDur,timeLength)  = withTimes V.! (V.length withTimes - 1)
         withTimes                = V.fromList . reverse $ foldl countTime [] withoutTimes
         withoutTimes             = foldr (go 1) [] as
         countTime [] (v,d)       = (v,d,0) : []
@@ -265,12 +266,12 @@ layoutToPattern (ParsecList as)  = NP.PSeq (NP.PGen $ pvector withTimes) $ floor
 layoutToPattern _                = NP.PNothing
 
 pvector :: V.Vector(NP.Pattern a,Double,Time) -> Time -> NP.Pattern (NP.Pattern a,Double)
-pvector vec initialTime = go initialTime 0 vecLength
+pvector vec initialTime = traceShow initialTime $ go initialTime 0 vecLength
     where
         vecLength = V.length vec
         go time imin imax
             | index < 0                         = NP.PVal $ (\(v,d,_) -> (v,d)) $ vec V.! 0
-            | index > vecLength - 1             = NP.PNothing
+            | index > vecLength - 1             = trace "NP.PNothing" (NP.PNothing)
             | time == curTime                   = NP.PVal (curValue,curDur)
             | time == prevTime                  = NP.PVal (prevValue,prevDur)
             | time == nextTime                  = NP.PVal (nextValue,nextDur)

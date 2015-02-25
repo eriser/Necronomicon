@@ -1456,9 +1456,9 @@ playSynthN :: Signal Bool -> String -> [Signal Double] -> Signal ()
 playSynthN playSig synthName argSigs = Signal $ \state -> do
 
     pCont        <- unSignal (netsignal playSig) state
-    _ {-pValue-} <- unEvent <~ pCont updateZero
+    -- _            <- unEvent <~ pCont updateZero
     aConts       <- mapM (\a -> unSignal (netsignal a) state) argSigs
-    _ {-aValues-}<- mapM (\f -> unEvent <~ f updateZero) aConts
+    -- _            <- mapM (\f -> unEvent <~ f updateZero) aConts
     synthRef     <- newIORef Nothing
 
     return $ processSignal pCont aConts synthRef (necroVars state)
