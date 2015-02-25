@@ -272,7 +272,7 @@ pvector totalLength vec initialTime = traceShow initialTime $ go initialTime 0 v
         vecLength = V.length vec
         go time imin imax
             | index < 0                         = NP.PVal $ (\(v,d,_) -> (v,d)) $ vec V.! 0
-            | index > vecLength - 1             = if time < totalLength then NP.PVal $ (\(v,d,_) -> (v,d)) $ vec V.! (vecLength - 1) else NP.PNothing
+            | index > vecLength - 1             = if time < totalLength then NP.PVal $ ((\(v,_,_) -> (v,totalLength - time)) $ vec V.! (vecLength - 1)) else NP.PNothing
             | time == curTime                   = NP.PVal (curValue,curDur)
             | time == prevTime                  = NP.PVal (prevValue,prevDur)
             | time == nextTime                  = NP.PVal (nextValue,nextDur)
