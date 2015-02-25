@@ -1168,7 +1168,7 @@ dropIf sPred sInit signal = Signal $ \state ->do
     return $ processSignal sCont ref
     where
         processSignal sCont ref update = sCont update >>= \sValue -> case sValue of
-            NoChange s -> return $ NoChange s
+            NoChange _ -> readIORef ref >>= return . NoChange
             Change   s -> case not $ sPred s of
                 False  -> readIORef ref >>= return . NoChange
                 True   -> do
@@ -1184,7 +1184,7 @@ keepIf sPred sInit signal = Signal $ \state ->do
     return $ processSignal sCont ref
     where
         processSignal sCont ref update = sCont update >>= \sValue -> case sValue of
-            NoChange s -> return $ NoChange s
+            NoChange _ -> readIORef ref >>= return . NoChange
             Change   s -> case sPred s of
                 False  -> readIORef ref >>= return . NoChange
                 True   -> do
