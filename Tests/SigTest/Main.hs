@@ -16,7 +16,7 @@ hyperTerrainSounds :: Signal ()
 hyperTerrainSounds = play             (toggle <| isDown keyW) "triOsc"    [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
                  <&> play             (toggle <| isDown keyA) "triOsc32"  [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
                  <&> playSynthPattern (toggle <| isDown keyD) "triOscEnv" [] (pmap (d2f bartok . (+12)) <| ploop [ [lich| [0 1] [4 3] [2 3] [2 3 4 5] |] ])
-                 <&> playBeatPattern  (toggle <| isDown keyE) [] (ploop [ [lich| b [p b] p [p p p] |] ])
+                 <&> playBeatPattern  (toggle <| isDown keyE) [] (ploop [ [lich| [p p p] [p b] p b |] ])
 
 section :: Signal Int
 section = netsignal <| switch 1 [pure False,combo [alt,isDown key1],combo [alt,isDown key2],combo [alt,isDown key3]]

@@ -252,8 +252,9 @@ parseRawFunction = between (char '(' *> spaces) (spaces *> char ')') (try leftSe
 layoutToPattern :: ParsecPattern a -> NP.Pattern (NP.Pattern a,Double)
 layoutToPattern (ParsecValue a)  = NP.PVal (NP.PVal a,1)
 layoutToPattern  ParsecRest      = NP.PVal (NP.PNothing,1)
-layoutToPattern (ParsecList as)  = NP.PSeq (NP.PGen $ pvector withTimes) $ floor (finalDur + timeLength)
+layoutToPattern (ParsecList as)  = NP.PSeq (NP.PGen $ pvector totalLength withTimes) $ round totalLength
     where
+        totalLength              = finalDur + timeLength
         (_,finalDur,timeLength)  = withTimes V.! (V.length withTimes - 1)
         withTimes                = V.fromList . reverse $ foldl countTime [] withoutTimes
         withoutTimes             = foldr (go 1) [] as
@@ -265,13 +266,13 @@ layoutToPattern (ParsecList as)  = NP.PSeq (NP.PGen $ pvector withTimes) $ floor
         go _ _ vs                = vs
 layoutToPattern _                = NP.PNothing
 
-pvector :: V.Vector(NP.Pattern a,Double,Time) -> Time -> NP.Pattern (NP.Pattern a,Double)
-pvector vec initialTime = traceShow initialTime $ go initialTime 0 vecLength
+pvector :: Time -> V.Vector(NP.Pattern a,Double,Time) -> Time -> NP.Pattern (NP.Pattern a,Double)
+pvector totalLength vec initialTime = traceShow initialTime $ go initialTime 0 vecLength
     where
         vecLength = V.length vec
         go time imin imax
             | index < 0                         = NP.PVal $ (\(v,d,_) -> (v,d)) $ vec V.! 0
-            | index > vecLength - 1             = trace "NP.PNothing" (NP.PNothing)
+            | index > vecLength - 1             = if time < totalLength then NP.PVal $ (\(v,d,_) -> (v,d)) $ vec V.! 0 else NP.PNothing
             | time == curTime                   = NP.PVal (curValue,curDur)
             | time == prevTime                  = NP.PVal (prevValue,prevDur)
             | time == nextTime                  = NP.PVal (nextValue,nextDur)
