@@ -131,6 +131,7 @@ module Necronomicon.FRP.Signal (
     lift8,
     constant,
     sigPrint,
+    sigTrace,
     scene,
     glfwKeyToEventKey,
     eventKeyToChar,
@@ -167,6 +168,7 @@ import           Necronomicon.Networking
 import           System.Random
 import           Foreign hiding (shift)
 import           Foreign.C
+import qualified Data.Vector                       as V
 
 ------------------------------------------------------
 
@@ -1098,6 +1100,15 @@ sigPrint s = Signal $ \state -> do
             NoChange _  -> return $ NoChange ()
             Change   s' -> print s' >> return (Change ())
 
+sigTrace :: Show a => Signal a -> Signal ()
+sigTrace s = Signal $ \state -> do
+    sCont <- unSignal s state
+    sVal  <- unEvent <~ sCont updateZero
+    print sVal
+    return $ processSignal sCont
+    where
+        processSignal sCont update = sCont update >>= \s' -> print s' >> return (Change ())
+
 foldp :: (a -> b -> b) -> b -> Signal a -> Signal b
 foldp f bInit a = Signal $ \state -> do
     aCont <- unSignal a state
@@ -1345,6 +1356,17 @@ combo bs = isTrue <~ combine bs
     where
         isTrue = foldr (&&) True
 
+switch :: Signal Int -> [Signal a] -> Signal a
+switch intSig signals = Signal $ \state -> do
+    iCont  <- unSignal intSig state
+    sConts <- V.fromList <~ mapM (\s -> unSignal s state) signals
+    return $ processSignal iCont sConts
+    where
+        processSignal iCont sConts update = iCont update ~> unEvent >>= \index -> case sConts V.!? index of
+            Nothing -> sConts V.! (V.length sConts - 1) $ update
+            Just  c -> c update
+
+{-
 switch :: Int -> [Signal Bool] -> Signal Int
 switch startSection signals = Signal $ \state -> do
     sConts  <- mapM (\s -> unSignal s state) signals
@@ -1362,7 +1384,7 @@ switch startSection signals = Signal $ \state -> do
         setSection index ref update cont = cont update >>= \c -> case c of
             Change True -> writeIORef ref index
             _           -> return ()
-
+-}
 ---------------------------------------------
 -- Networking
 ---------------------------------------------

@@ -3,7 +3,7 @@ import Data.Fixed (mod')
 import Data.List (zip4)
 
 main :: IO ()
-main = runSignal <| synthDefs *> testGUI <|> (stressSections <&> stressSounds)
+main = runSignal <| synthDefs *> testGUI <|> (sections <&> stressSounds)
 
 synthDefs :: Signal ()
 synthDefs = synthDef "triOsc"    triOsc
@@ -15,14 +15,8 @@ synthDefs = synthDef "triOsc"    triOsc
 ticker :: Signal Double
 ticker = fps 30
 
-stressSection :: Signal Int
-stressSection = netsignal <| floor . scale 1 4 <~ randFS ticker
-
-isStressSection :: Int -> Signal Bool
-isStressSection n = lift (== n) stressSection
-
-stressSections :: Signal ()
-stressSections = keepWhen (isStressSection 1) section1 <|> keepWhen (isStressSection 2) section2 <|> keepWhen (isStressSection 3) section3
+sections :: Signal ()
+sections = switch (netsignal <| floor . scale 0 3 <~ randFS ticker) [section1, section2, section3]
 
 stressSounds :: Signal ()
 stressSounds = play             ((> 0.5) <~ randFS ticker) "triOsc"    [randFS ticker ~> scale 20 3000, randFS ticker ~> scale 20 3000]

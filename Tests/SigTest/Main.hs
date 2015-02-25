@@ -18,14 +18,12 @@ hyperTerrainSounds = play             (toggle <| isDown keyW) "triOsc"    [mouse
                  <&> playSynthPattern (toggle <| isDown keyD) "triOscEnv" [] (pmap (d2f bartok . (+12)) <| ploop [ [lich| [0 1] [4 3] [2 3] [2 3 4 5] |] ])
                  <&> playBeatPattern  (toggle <| isDown keyE) [] (ploop [ [lich| [p p p] [p b] p b |] ])
 
-section :: Signal Int
-section = netsignal <| switch 1 [pure False,combo [alt,isDown key1],combo [alt,isDown key2],combo [alt,isDown key3]]
-
-isSection :: Int -> Signal Bool
-isSection n = lift (== n) section
-
 sections :: Signal ()
-sections = keepWhen (isSection 1) section1 <|> keepWhen (isSection 2) section2 <|> keepWhen (isSection 3) section3
+sections = switch section [section1, section2, section3]
+    where
+        section = netsignal <|  sampleOn (keepIf (== True) True (combo [alt,isDown key1])) 0
+                            <|> sampleOn (keepIf (== True) True (combo [alt,isDown key2])) 1
+                            <|> sampleOn (keepIf (== True) True (combo [alt,isDown key3])) 2
 
 section1 :: Signal ()
 section1 = scene [pure cam,oscSig]
@@ -128,6 +126,7 @@ sphereObject as1 as2 as3 t latitudes = SceneObject 0 (fromEuler' 0 (t * 0.5) (t 
         indices        = foldr (\i acc -> i + 1 : i + l : i + l + 1 : i + 1 : i + 0 : i + l : acc) [] [0,4..floor (latitudes * longitudes) - l]
         mesh           = DynamicMesh "aSphere" vertices colors uvs indices
 
+--maybe negative argument values kill IT!?!?!?!?
 triOsc :: UGen -> UGen -> [UGen]
 triOsc f1 f2 = [sig1,sig2] + [sig3,sig3] |> verb |> gain 0.1 |> out 0
     where
