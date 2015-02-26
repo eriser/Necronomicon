@@ -21,9 +21,9 @@ hyperTerrainSounds = play             (toggle <| isDown keyW) "triOsc"    [mouse
 sections :: Signal ()
 sections = switch section [section1, section2, section3]
     where
-        section = netsignal <|  sampleOn (keepIf (== True) True (combo [alt,isDown key1])) 0
-                            <|> sampleOn (keepIf (== True) True (combo [alt,isDown key2])) 1
-                            <|> sampleOn (keepIf (== True) True (combo [alt,isDown key3])) 2
+        section = netsignal <|  sampleOn (keepIf id True (combo [alt,isDown key1])) 0
+                            <|> sampleOn (keepIf id True (combo [alt,isDown key2])) 1
+                            <|> sampleOn (keepIf id True (combo [alt,isDown key3])) 2
 
 section1 :: Signal ()
 section1 = scene [pure cam,oscSig]
