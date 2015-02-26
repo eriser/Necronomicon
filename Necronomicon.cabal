@@ -145,6 +145,17 @@ executable StressTest
         Necronomicon,
         vector
 
+executable UGenTest
+    main-is:          Main.hs
+    default-language: Haskell2010
+    ghc-options:      -threaded -O3 -Wall -Werror
+    hs-source-dirs:   Tests/UGenTest
+    default-extensions: QuasiQuotes TemplateHaskell ParallelListComp
+    build-depends:
+        base             == 4.*,
+        Necronomicon,
+        vector
+
 executable CTest
     main-is:          Main.hs
     default-language: Haskell2010
