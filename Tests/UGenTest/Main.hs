@@ -22,7 +22,7 @@ printTest :: Int -> String
 printTest i
     | i <  V.length synthNamesVec     = "ugenTest1 number " ++ show i ++ ": " ++ (synthNamesVec V.! mod i (V.length synthNamesVec))
     | i <  V.length synthNamesVec * 2 = "ugenTest2 number " ++ show i ++ ": " ++ (synthNamesVec V.! mod i (V.length synthNamesVec))
-    | i == V.length synthNamesVec * 3 = "All tests complete."
+    | i == V.length synthNamesVec * 2 = "All tests complete."
     | otherwise                       = ""
 
 switcher :: Signal Int
