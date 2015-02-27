@@ -2,25 +2,31 @@ import Necronomicon
 import qualified Data.Vector as V
 
 main :: IO ()
-main = runSignal <| synthDefs *> ugenTest1 <|> sigPrint (printTest <~ switcher)
-
-ugenTest1 :: Signal ()
-ugenTest1 = merges (map (\(i,t) -> t <| (== i) <~ switcher) <| zip [0..] ugenTests1)
+main = runSignal
+   <|  synthDefs
+   *>  merges (map (<| switcher) (ugenTests1 ++ ugenTests2))
+   <|> sigPrint (printTest <~ switcher)
 
 switcher :: Signal Int
-switcher = count (every 10)
+switcher = count (every 10) + pure (length synthNames)
 
 ticker :: Signal Double
-ticker = fps 30
+ticker = fps 60
 
-ugenTests1 :: [Signal Bool -> Signal ()]
-ugenTests1 = map (\synthName p -> play p synthName [randFS ticker ~> scale 20 3000, randFS ticker ~> scale 20 3000]) synthNames
+ugenTests1 :: [Signal Int -> Signal ()]
+ugenTests1 = map (\(synthName,i) s -> play ((== i) <~ s) synthName [randFS ticker ~> scale 20 3000, randFS ticker ~> scale 20 3000]) <| zip synthNames [0..]
 
--- ugenTests2 :: [Signal Bool -> Signal ()]
--- ugenTests2 = map (\synthName p -> play ((\a b -> a > 0.5 && b) <~ randFS ticker ~~ p) synthName [randFS ticker ~> scale 20 3000, randFS ticker ~> scale 20 3000]) synthNames
+ugenTests2 :: [Signal Int -> Signal ()]
+ugenTests2 = map (\(synthName,i) s -> play (shouldPlay i <~ s ~~ randFS ticker) synthName [randFS ticker ~> scale 20 3000, randFS ticker ~> scale 20 3000]) <| zip synthNames [length synthNames..]
+    where
+        shouldPlay i a b = a == i && b > 0.5
 
 printTest :: Int -> String
-printTest i = "Testing: " ++ (synthNamesVec V.! i)
+printTest i
+    | i <  V.length synthNamesVec     = "ugenTest1 number " ++ show i ++ ": " ++ (synthNamesVec V.! mod i (V.length synthNamesVec))
+    | i <  V.length synthNamesVec * 2 = "ugenTest2 number " ++ show i ++ ": " ++ (synthNamesVec V.! mod i (V.length synthNamesVec))
+    | i == V.length synthNamesVec * 2 = "All tests complete."
+    | otherwise                       = ""
 
 synthDefs :: Signal ()
 synthDefs = synthDef "sinSynth"        sinSynth
@@ -105,7 +111,7 @@ synthNames = [
     "percSynth",
     "envSynth",
     "outSynth",
-    "pollSynth",
+    -- "pollSynth",
     "lfsawSynth",
     "lfpulseSynth",
     "pulseSynth",
