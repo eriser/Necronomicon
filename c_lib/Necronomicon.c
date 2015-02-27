@@ -3322,12 +3322,13 @@ typedef struct
 	sample_buffer* buffer;
 	uint write_index;
 	uint noiseSamples;
+	uint minFreq;
 } pluck_data;
 
 void pluck_constructor(ugen* u)
 {
 	u->data = malloc(sizeof(pluck_data));
-	pluck_data data = { acquire_sample_buffer(SAMPLE_RATE / u->constructor_args[0]),0,0 };
+	pluck_data data = { acquire_sample_buffer(SAMPLE_RATE / u->constructor_args[0]),0,0,u->constructor_args[0]};
 	*((pluck_data*) u->data) = data;
 }
 
@@ -3337,15 +3338,16 @@ void pluck_deconstructor(ugen* u)
 	free(u->data);
 }
 
+#define MAX( a, b ) ( ( a > b) ? a : b )
+
 //Jaffe and Smith "Extensions of the Karplus-Strong Plucked-String* Algorithm"
-//Need noise burst into this
 void pluck_calc(ugen* u)
 {
 	pluck_data* data             = ((pluck_data*) u->data);
 	uint        write_index      = data->write_index;
 	uint        num_samples_mask = data->buffer->num_samples_mask;
-	double      freq             = UGEN_IN(u, 0) * RECIP_SAMPLE_RATE;
-	uint        n                = SAMPLE_RATE / UGEN_IN(u, 0);
+	double      freq             = MAX(UGEN_IN(u, 0),data->minFreq) * RECIP_SAMPLE_RATE;
+	uint        n                = SAMPLE_RATE / MAX(UGEN_IN(u, 0),data->minFreq);
 	double      duration         = UGEN_IN(u, 1) * SAMPLE_RATE;
 	double      x                = UGEN_IN(u, 2);
 	uint        index2           = (write_index + 1) % n;

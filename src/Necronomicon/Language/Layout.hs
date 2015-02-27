@@ -12,7 +12,7 @@ import qualified Data.Vector as V
 
 import Data.Typeable
 import Data.Data
-
+import Debug.Trace
 import qualified Necronomicon.Patterns as NP
 
 -- modifiers???? How to do this in new layout DSL?
@@ -165,7 +165,7 @@ parseRawFunction = between (char '(' *> spaces) (spaces *> char ')') (try leftSe
                 '*' -> return $ InfixE (Just (LitE (RationalL $ toRational v))) (VarE (mkName "Prelude.*")) Nothing
                 '/' -> return $ InfixE (Just (LitE (RationalL $ toRational v))) (VarE (mkName "Prelude./")) Nothing
                 _   -> fail (f : " is not a supported operator.")
-                
+
 ---------------------
 -- convert to QExpr
 --------------------
@@ -251,9 +251,10 @@ parseRawFunction = between (char '(' *> spaces) (spaces *> char ')') (try leftSe
 layoutToPattern :: ParsecPattern a -> NP.Pattern (NP.Pattern a,Double)
 layoutToPattern (ParsecValue a)  = NP.PVal (NP.PVal a,1)
 layoutToPattern  ParsecRest      = NP.PVal (NP.PNothing,1)
-layoutToPattern (ParsecList as)  = NP.PSeq (NP.PGen $ pvector withTimes) $ floor timeLength
+layoutToPattern (ParsecList as)  = NP.PSeq (NP.PGen $ pvector totalLength withTimes) $ round totalLength
     where
-        (_,_,timeLength)         = withTimes V.! (V.length withTimes - 1)
+        totalLength              = finalDur + timeLength
+        (_,finalDur,timeLength)  = withTimes V.! (V.length withTimes - 1)
         withTimes                = V.fromList . reverse $ foldl countTime [] withoutTimes
         withoutTimes             = foldr (go 1) [] as
         countTime [] (v,d)       = (v,d,0) : []
@@ -264,25 +265,65 @@ layoutToPattern (ParsecList as)  = NP.PSeq (NP.PGen $ pvector withTimes) $ floor
         go _ _ vs                = vs
 layoutToPattern _                = NP.PNothing
 
-pvector :: V.Vector(NP.Pattern a,Double,Time) -> Time -> NP.Pattern (NP.Pattern a,Double)
-pvector vec initialTime = go initialTime 0 vecLength
+pvector :: Time -> V.Vector(NP.Pattern a,Double,Time) -> Time -> NP.Pattern (NP.Pattern a,Double)
+pvector totalLength vec time = go 0 vecLength
     where
         vecLength = V.length vec
-        go time imin imax
-            | index < 0                         = NP.PVal $ (\(v,d,_) -> (v,d)) $ vec V.! 0
-            | index > vecLength - 1             = NP.PNothing
+        go imin imax
+            | index < 0                         = trace "Less than zero" $ NP.PVal $ (\(v,d,_) -> (v,d)) $ vec V.! 0
+            | index > vecLength - 1             = trace "Past the end" $ if time < totalLength then NP.PVal $ ((\(v,_,_) -> (v,totalLength - time)) $ vec V.! (vecLength - 1)) else NP.PNothing
             | time == curTime                   = NP.PVal (curValue,curDur)
             | time == prevTime                  = NP.PVal (prevValue,prevDur)
             | time == nextTime                  = NP.PVal (nextValue,nextDur)
-            | time < prevTime                   = go time imin $ index - 1
-            | time > nextTime                   = go time (index + 1) imax
-            | time < curTime && time > prevTime = NP.PVal (prevValue,prevDur)
-            | otherwise                         = NP.PVal (curValue ,curDur)
+            | time < prevTime                   = go imin $ index - 1
+            | time > nextTime                   = go (index + 1) imax
+            | time < curTime && time > prevTime = trace "FuzzyTime" $ NP.PVal (prevValue,prevDur)
+            | otherwise                         = trace "WTF is this thing?" $ NP.PVal (curValue ,curDur)
             where
                 index                        = imin + floor (((fromIntegral (imax - imin)) :: Double) / 2)
                 (prevValue,prevDur,prevTime) = vec V.! max (index-1) 0
                 (curValue ,curDur ,curTime)  = vec V.! index
                 (nextValue,nextDur,nextTime) = vec V.! min (index+1) (vecLength -1)
+
+{-
+--TODO: RATIONAL PATTERN UPDATE
+layoutToPattern' :: ParsecPattern a -> NP.Pattern (NP.Pattern a,Rational)
+layoutToPattern' (ParsecValue a)  = NP.PVal (NP.PVal a,1)
+layoutToPattern'  ParsecRest      = NP.PVal (NP.PNothing,1)
+layoutToPattern' (ParsecList as)  = NP.PSeq (NP.PGen $ {-pvector' totalLength withTimes Need PGen change to Rational for this to compile-} undefined) $ round totalLength
+    where
+        totalLength              = finalDur + timeLength
+        (_,finalDur,timeLength)  = withTimes V.! (V.length withTimes - 1)
+        withTimes                = V.fromList . reverse $ foldl countTime [] withoutTimes
+        withoutTimes             = foldr (go 1) [] as
+        countTime [] (v,d)       = (v,d,0) : []
+        countTime ((v1,d1,t1) : vs) (v2,d2) = (v2,d2,d1+t1) : (v1,d1,t1) : vs
+        go d (ParsecValue a) vs  = (NP.PVal a,d)   : vs
+        go d  ParsecRest     vs  = (NP.PNothing,d) : vs
+        go d (ParsecList as') vs = foldr (go (d / (toRational $ length as'))) vs as'
+        go _ _ vs                = vs
+layoutToPattern' _                = NP.PNothing
+
+pvector' :: Rational -> V.Vector(NP.Pattern a,Rational,Rational) -> Rational -> NP.Pattern (NP.Pattern a,Rational)
+pvector' totalLength vec time = go 0 vecLength
+    where
+        vecLength = V.length vec
+        go imin imax
+            | index < 0                         = trace "Less than zero" $ NP.PVal $ (\(v,d,_) -> (v,d)) $ vec V.! 0
+            | index > vecLength - 1             = trace "Past the end" $ if time < totalLength then NP.PVal $ ((\(v,d,_) -> (v,d)) $ vec V.! (vecLength - 1)) else NP.PNothing
+            | time == curTime                   = NP.PVal (curValue,curDur)
+            | time == prevTime                  = NP.PVal (prevValue,prevDur)
+            | time == nextTime                  = NP.PVal (nextValue,nextDur)
+            | time < prevTime                   = go imin $ index - 1
+            | time > nextTime                   = go (index + 1) imax
+            | time < curTime && time > prevTime = trace "FuzzyTime" $ NP.PVal (prevValue,prevDur)
+            | otherwise                         = trace "WTF is this thing?" $ NP.PVal (curValue ,curDur)
+            where
+                index                        = imin + floor (((fromIntegral (imax - imin)) :: Double) / 2)
+                (prevValue,prevDur,prevTime) = vec V.! max (index-1) 0
+                (curValue ,curDur ,curTime)  = vec V.! index
+                (nextValue,nextDur,nextTime) = vec V.! min (index+1) (vecLength -1)
+-}
 
 getValueName :: String -> Q Name
 getValueName s = do

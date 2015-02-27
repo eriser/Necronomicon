@@ -3,7 +3,7 @@ import Data.Fixed (mod')
 import Data.List (zip4)
 
 main :: IO ()
-main = runSignal <| synthDefs *> testGUI <|> (sections <&> hyperTerrainSounds)
+main = runSignal <| synthDefs *> testGUI <|> (sections <&> stressSounds)
 
 synthDefs :: Signal ()
 synthDefs = synthDef "triOsc"    triOsc
@@ -12,18 +12,17 @@ synthDefs = synthDef "triOsc"    triOsc
          *> synthDef "b"         bSynth
          *> synthDef "p"         pSynth
 
-hyperTerrainSounds :: Signal ()
-hyperTerrainSounds = play             (toggle <| isDown keyW) "triOsc"    [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
-                 <&> play             (toggle <| isDown keyA) "triOsc32"  [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
-                 <&> playSynthPattern (toggle <| isDown keyD) "triOscEnv" [] (pmap (d2f bartok . (+12)) <| ploop [ [lich| [0 1] [4 3] [2 3] [2 3 4 5] |] ])
-                 <&> playBeatPattern  (toggle <| isDown keyE) [] (ploop [ [lich| [p p p] [p b] p b |] ])
+ticker :: Signal Double
+ticker = fps 30
 
 sections :: Signal ()
-sections = switch section [section1, section2, section3]
-    where
-        section = netsignal <|  sampleOn (keepIf id True (combo [alt,isDown key1])) 0
-                            <|> sampleOn (keepIf id True (combo [alt,isDown key2])) 1
-                            <|> sampleOn (keepIf id True (combo [alt,isDown key3])) 2
+sections = switch (netsignal <| floor . scale 0 3 <~ randFS ticker) [section1, section2, section3]
+
+stressSounds :: Signal ()
+stressSounds = play             ((> 0.5) <~ randFS ticker) "triOsc"    [randFS ticker ~> scale 20 3000, randFS ticker ~> scale 20 3000]
+           <&> play             ((> 0.5) <~ randFS ticker) "triOsc32"  [randFS ticker ~> scale 20 3000, randFS ticker ~> scale 20 3000]
+           <&> playSynthPattern ((> 0.5) <~ randFS ticker) "triOscEnv" [] (pmap (d2f bartok . (+12)) <| ploop [ [lich| [0 1] [4 3] [2 3] [2 3 4 5] |] ])
+           <&> playBeatPattern  ((> 0.5) <~ randFS ticker) [] (ploop [ [lich| b [p b] p [p p p] |] ])
 
 section1 :: Signal ()
 section1 = scene [pure cam,oscSig]
@@ -126,7 +125,6 @@ sphereObject as1 as2 as3 t latitudes = SceneObject 0 (fromEuler' 0 (t * 0.5) (t 
         indices        = foldr (\i acc -> i + 1 : i + l : i + l + 1 : i + 1 : i + 0 : i + l : acc) [] [0,4..floor (latitudes * longitudes) - l]
         mesh           = DynamicMesh "aSphere" vertices colors uvs indices
 
---maybe negative argument values kill IT!?!?!?!?
 triOsc :: UGen -> UGen -> [UGen]
 triOsc f1 f2 = [sig1,sig2] + [sig3,sig3] |> verb |> gain 0.1 |> out 0
     where
@@ -152,8 +150,7 @@ triOscEnv f1 = [sig1,sig2] + [sig3,sig3] |> verb |> out 0
         sig2 = sinOsc (f1 * 0.5 - sig3 * 1000) |> e |> auxThrough 3
         sig3 = sinOsc (f1 * 0.25)              |> e |> auxThrough 4
         e    = perc 0.01 0.5 0.1 0
-        verb n = delayN 0.25 0.25 n + n
-        -- verb = freeverb 0.25 0.5 0.5
+        verb = freeverb 0.25 0.5 0.5
 
 bSynth :: UGen
 bSynth = sin 55 |> gain (line 0.1) >>> gain 0.4 >>> out 0

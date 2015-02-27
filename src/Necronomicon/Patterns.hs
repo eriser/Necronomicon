@@ -195,9 +195,9 @@ ploop patterns = PSeq (PGen timeSeq) (floor totalRepeats)
         totalRepeats = sum $ repeatAmounts
         findRepeats :: Pattern a -> Double
         findRepeats p = case p of
-            (PSeq _ n) -> fromIntegral n
+            (PSeq _ n) -> fromIntegral (trace ("ploop length: " ++ show n) n)
             _ -> 1.0
-        timeSeq t = (collapse currentPattern currentTime)
+        timeSeq t = trace ("t: " ++ show t ++ ", currentTime: " ++ show currentTime) $ (collapse currentPattern currentTime)
             where
                 currentPattern = (cycle repeatedPatterns) !! (floor t)
                 currentTime = F.mod' (t - ((cycle repeatedTimes) !! (floor t))) totalRepeats

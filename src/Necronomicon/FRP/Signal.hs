@@ -131,6 +131,7 @@ module Necronomicon.FRP.Signal (
     lift8,
     constant,
     sigPrint,
+    sigTrace,
     scene,
     glfwKeyToEventKey,
     eventKeyToChar,
@@ -167,6 +168,7 @@ import           Necronomicon.Networking
 import           System.Random
 import           Foreign hiding (shift)
 import           Foreign.C
+import qualified Data.Vector                       as V
 
 ------------------------------------------------------
 
@@ -1098,6 +1100,15 @@ sigPrint s = Signal $ \state -> do
             NoChange _  -> return $ NoChange ()
             Change   s' -> print s' >> return (Change ())
 
+sigTrace :: Show a => Signal a -> Signal ()
+sigTrace s = Signal $ \state -> do
+    sCont <- unSignal s state
+    sVal  <- unEvent <~ sCont updateZero
+    print sVal
+    return $ processSignal sCont
+    where
+        processSignal sCont update = sCont update >>= \s' -> print s' >> return (Change ())
+
 foldp :: (a -> b -> b) -> b -> Signal a -> Signal b
 foldp f bInit a = Signal $ \state -> do
     aCont <- unSignal a state
@@ -1157,7 +1168,7 @@ dropIf sPred sInit signal = Signal $ \state ->do
     return $ processSignal sCont ref
     where
         processSignal sCont ref update = sCont update >>= \sValue -> case sValue of
-            NoChange s -> return $ NoChange s
+            NoChange _ -> readIORef ref >>= return . NoChange
             Change   s -> case not $ sPred s of
                 False  -> readIORef ref >>= return . NoChange
                 True   -> do
@@ -1173,7 +1184,7 @@ keepIf sPred sInit signal = Signal $ \state ->do
     return $ processSignal sCont ref
     where
         processSignal sCont ref update = sCont update >>= \sValue -> case sValue of
-            NoChange s -> return $ NoChange s
+            NoChange _ -> readIORef ref >>= return . NoChange
             Change   s -> case sPred s of
                 False  -> readIORef ref >>= return . NoChange
                 True   -> do
@@ -1345,6 +1356,17 @@ combo bs = isTrue <~ combine bs
     where
         isTrue = foldr (&&) True
 
+switch :: Signal Int -> [Signal a] -> Signal a
+switch intSig signals = Signal $ \state -> do
+    iCont  <- unSignal intSig state
+    sConts <- V.fromList <~ mapM (\s -> unSignal s state) signals
+    return $ processSignal iCont sConts
+    where
+        processSignal iCont sConts update = iCont update ~> unEvent >>= \index -> case sConts V.!? index of
+            Nothing -> sConts V.! (V.length sConts - 1) $ update
+            Just  c -> c update
+
+{-
 switch :: Int -> [Signal Bool] -> Signal Int
 switch startSection signals = Signal $ \state -> do
     sConts  <- mapM (\s -> unSignal s state) signals
@@ -1362,7 +1384,7 @@ switch startSection signals = Signal $ \state -> do
         setSection index ref update cont = cont update >>= \c -> case c of
             Change True -> writeIORef ref index
             _           -> return ()
-
+-}
 ---------------------------------------------
 -- Networking
 ---------------------------------------------
@@ -1456,15 +1478,15 @@ playSynthN :: Signal Bool -> String -> [Signal Double] -> Signal ()
 playSynthN playSig synthName argSigs = Signal $ \state -> do
 
     pCont        <- unSignal (netsignal playSig) state
-    _ {-pValue-} <- unEvent <~ pCont updateZero
+    -- _            <- unEvent <~ pCont updateZero
     aConts       <- mapM (\a -> unSignal (netsignal a) state) argSigs
-    _ {-aValues-}<- mapM (\f -> unEvent <~ f updateZero) aConts
+    -- _            <- mapM (\f -> unEvent <~ f updateZero) aConts
     synthRef     <- newIORef Nothing
 
     return $ processSignal pCont aConts synthRef (necroVars state)
     where
         processSignal pCont aConts synthRef sNecroVars update = pCont update >>= \p -> case p of
-            Change   p'  -> mapM (\f -> unEvent <~ f updateZero) aConts >>= \args -> runNecroState (playStopSynth args p' synthRef) sNecroVars >>= \(e,_) -> return e
+            Change   p'  -> mapM (\f -> unEvent <~ f update) aConts >>= \args -> runNecroState (playStopSynth args p' synthRef) sNecroVars >>= \(e,_) -> return e
             NoChange _   -> readIORef synthRef >>= \s -> case s of
                 Nothing  -> return $ NoChange ()
                 Just  s' -> foldM (\i f -> updateArg i f s' sNecroVars update >> return (i+1)) 0 aConts >> return (NoChange ())
