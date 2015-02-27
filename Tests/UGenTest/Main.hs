@@ -104,12 +104,14 @@ synthDefs = synthDef "sinSynth"        sinSynth
          *> synthDef "asinHSynth"      asinHSynth
          *> synthDef "acosHSynth"      acosHSynth
          *> synthDef "atanHSynth"      atanHSynth
+         *> synthDef "triOscEnv"       triOscEnv
 
 synthNamesVec :: V.Vector String
 synthNamesVec = V.fromList synthNames
 
 synthNames :: [String]
 synthNames = [
+    "triOscEnv",
     "sinSynth",
     "addSynth",
     "minusSynth",
@@ -176,6 +178,15 @@ synthNames = [
     "asinHSynth",
     "acosHSynth",
     "atanHSynth"]
+
+triOscEnv :: UGen -> UGen -> [UGen]
+triOscEnv f1 _ = [sig1,sig2] + [sig3,sig3] |> verb |> out 0
+    where
+        sig1 = sinOsc (f1 * 1.0 + sig3 * 1000) |> e |> auxThrough 2
+        sig2 = sinOsc (f1 * 0.5 - sig3 * 1000) |> e |> auxThrough 3
+        sig3 = sinOsc (f1 * 0.25)              |> e |> auxThrough 4
+        e    = perc 0.01 0.5 0.1 0
+        verb = freeverb 0.25 0.5 0.5
 
 sinSynth :: UGen -> UGen -> UGen
 sinSynth a _ = sin a
