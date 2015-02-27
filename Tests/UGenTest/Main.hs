@@ -7,26 +7,35 @@ main = runSignal
    *>  merges (map (<| switcher) (ugenTests1 ++ ugenTests2))
    <|> sigPrint (printTest <~ switcher)
 
-switcher :: Signal Int
-switcher = count (every 10) + pure (length synthNames)
-
-ticker :: Signal Double
-ticker = fps 60
-
 ugenTests1 :: [Signal Int -> Signal ()]
-ugenTests1 = map (\(synthName,i) s -> play ((== i) <~ s) synthName [randFS ticker ~> scale 20 3000, randFS ticker ~> scale 20 3000]) <| zip synthNames [0..]
+ugenTests1 = map test <| zip synthNames [0..]
+    where
+        test (synthName,i) s = play ((== i) <~ s) synthName [x,y]
 
 ugenTests2 :: [Signal Int -> Signal ()]
-ugenTests2 = map (\(synthName,i) s -> play (shouldPlay i <~ s ~~ randFS ticker) synthName [randFS ticker ~> scale 20 3000, randFS ticker ~> scale 20 3000]) <| zip synthNames [length synthNames..]
+ugenTests2 = map test <| zip synthNames [length synthNames..]
     where
-        shouldPlay i a b = a == i && b > 0.5
+        test (synthName,i) s = play (shouldPlay i <~ s ~~ randFS ticker) synthName [x,y]
+        shouldPlay     i a b = a == i && b > 0.5
 
 printTest :: Int -> String
 printTest i
     | i <  V.length synthNamesVec     = "ugenTest1 number " ++ show i ++ ": " ++ (synthNamesVec V.! mod i (V.length synthNamesVec))
     | i <  V.length synthNamesVec * 2 = "ugenTest2 number " ++ show i ++ ": " ++ (synthNamesVec V.! mod i (V.length synthNamesVec))
-    | i == V.length synthNamesVec * 2 = "All tests complete."
+    | i == V.length synthNamesVec * 3 = "All tests complete."
     | otherwise                       = ""
+
+switcher :: Signal Int
+switcher = count (every 10) + pure (length synthNames * 1)
+
+ticker :: Signal Double
+ticker = fps 60
+
+x :: Signal Double
+x = randFS ticker ~> scale (-3000) 3000
+
+y :: Signal Double
+y = randFS ticker ~> scale (-3000) 3000
 
 synthDefs :: Signal ()
 synthDefs = synthDef "sinSynth"        sinSynth
