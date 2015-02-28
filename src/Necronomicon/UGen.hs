@@ -621,25 +621,25 @@ nullSynth = SynthDef "" 0 nullPtr
 printSynthDef :: String -> Necronomicon ()
 printSynthDef sdName = getSynthDef sdName >>= nPrint
 
-playSynthAtJackTime :: String -> [Double] -> JackTime -> Necronomicon Synth
+playSynthAtJackTime :: String -> [Rational] -> JackTime -> Necronomicon Synth
 playSynthAtJackTime sdName args time = getSynthDef sdName >>= \maybeSynthDef -> case maybeSynthDef of
-                Just synthDef -> incrementNodeID >>= \nodeID -> sendMessage (StartSynth synthDef (map (CDouble) args) nodeID time) >> return (Synth nodeID synthDef)
+                Just synthDef -> incrementNodeID >>= \nodeID -> sendMessage (StartSynth synthDef (map (CDouble . fromRational) args) nodeID time) >> return (Synth nodeID synthDef)
                 Nothing -> nPrint ("SynthDef " ++ sdName ++ " not found. Unable to start synth.") >> return (Synth nullID nullSynth)
 
-playSynthAt :: String -> [Double] -> Rational -> Necronomicon Synth
+playSynthAt :: String -> [Rational] -> Rational -> Necronomicon Synth
 playSynthAt sdName args time = playSynthAtJackTime sdName args $ secondsToMicro time
 
-playSynth :: String -> [Double] -> Necronomicon Synth
+playSynth :: String -> [Rational] -> Necronomicon Synth
 playSynth sdName args = playSynthAt sdName args 0
 
 stopSynth :: Synth -> Necronomicon ()
 stopSynth (Synth nodeID _) = sendMessage (StopSynth nodeID)
 
-setSynthArg :: Synth -> Int -> Double -> Necronomicon ()
-setSynthArg synth argIndex argValue = sendMessage (SetSynthArg synth (fromIntegral argIndex) $ CDouble argValue)
+setSynthArg :: Synth -> Int -> Rational -> Necronomicon ()
+setSynthArg synth argIndex argValue = sendMessage (SetSynthArg synth (fromIntegral argIndex) . CDouble $ fromRational argValue)
 
-setSynthArgs :: Synth -> [Double] -> Necronomicon ()
-setSynthArgs synth argValues = sendMessage (SetSynthArgs synth $ map (CDouble) argValues)
+setSynthArgs :: Synth -> [Rational] -> Necronomicon ()
+setSynthArgs synth argValues = sendMessage (SetSynthArgs synth $ map (CDouble . fromRational) argValues)
 
 compileSynthDef :: UGenType a => String -> a -> Necronomicon ()
 compileSynthDef name synthDef = liftIO (runCompileSynthDef name synthDef) >>= addSynthDef
@@ -838,7 +838,7 @@ makeAndStartNecro = do
     _ <- runNecroState startNecronomicon necroVars
     return necroVars
 
-testSynth :: UGenType a => a -> [Double] -> NecroVars -> IO Synth
+testSynth :: UGenType a => a -> [Rational] -> NecroVars -> IO Synth
 testSynth synth args necroVars = do
     _ <- runNecroState (compileSynthDef "testSynth" synth) necroVars
     (runningSynth,_) <- runNecroState (playSynth "testSynth" args) necroVars
