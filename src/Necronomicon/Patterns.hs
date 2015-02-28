@@ -7,7 +7,6 @@ module Necronomicon.Patterns where
 
 import Prelude
 import System.Random
-import Debug.Trace
 import Control.Applicative
 import Data.Monoid
 import qualified Data.Fixed as F
@@ -191,9 +190,9 @@ ploop patterns = PSeq (PGen timeSeq) (floor totalRepeats)
         totalRepeats = sum $ repeatAmounts
         findRepeats :: Pattern a -> Rational
         findRepeats p = case p of
-            (PSeq _ n) -> fromIntegral (trace ("ploop length: " ++ show n) n)
+            (PSeq _ n) -> fromIntegral n
             _ -> 1.0
-        timeSeq t = trace ("t: " ++ show t ++ ", currentTime: " ++ show currentTime) $ (collapse currentPattern currentTime)
+        timeSeq t = (collapse currentPattern currentTime)
             where
                 currentPattern = (cycle repeatedPatterns) !! (floor t)
                 currentTime = F.mod' (t - ((cycle repeatedTimes) !! (floor t))) totalRepeats
@@ -209,7 +208,7 @@ pseq iterations patterns = PSeq (PGen timeSeq) totalBeats
         totalRepeats = sum $ repeatAmounts
         findRepeats :: Pattern a -> Rational
         findRepeats p = case p of
-            (PSeq _ n) -> fromIntegral (trace ("pseq length: " ++ show n) n)
+            (PSeq _ n) -> fromIntegral n
             _ -> 1.0
         timeSeq t = if t >= (fromIntegral totalBeats)
                     then PNothing
