@@ -220,7 +220,7 @@ shake d = sig1 + sig2 |> e |> verb |> p 0.75 |> gain 0.05  |> out 0
         sig1  = whiteNoise |> bpf (random |> range 6000 12000) 2
         sig2  = whiteNoise |> bpf (random |> range 6000 12000) 2
         e     = perc 0.01 d 1 (-5)
-        verb = freeverb 0.25 0.125 0.5
+        verb = freeverb 0.5 1 1
 
 metallicPattern :: Signal ()
 metallicPattern = metallicPattern1 <&> metallicPattern2 <&> metallicPattern3 <&> shakePattern
