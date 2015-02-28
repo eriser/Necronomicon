@@ -515,20 +515,22 @@ foreign import ccall "&decimate_calc"          decimateCalc          :: CUGenFun
 decimate :: UGenType a => a -> a -> a
 decimate rate x = multiChannelExpandUGen Decimate decimateCalc decimateConstructor decimateDeconstructor [rate,x]
 
-foreign import ccall "&delay_constructor" delayConstructor :: CUGenFunc
-foreign import ccall "&delay_deconstructor" delayDeconstructor :: CUGenFunc
 
+foreign import ccall "&delay_deconstructor" delayDeconstructor :: CUGenFunc
+foreign import ccall "&delayN_constructor" delayNConstructor :: CUGenFunc
 foreign import ccall "&delayN_calc" delayNCalc :: CUGenFunc
 delayN :: UGenType a => Double -> a -> a -> a
-delayN maxDelayTime delayTime input = multiChannelExpandUGen (DelayN maxDelayTime) delayNCalc delayConstructor delayDeconstructor [delayTime, input]
+delayN maxDelayTime delayTime input = multiChannelExpandUGen (DelayN maxDelayTime) delayNCalc delayNConstructor delayDeconstructor [delayTime, input]
 
+foreign import ccall "&delayL_constructor" delayLConstructor :: CUGenFunc
 foreign import ccall "&delayL_calc" delayLCalc :: CUGenFunc
 delayL :: UGenType a => Double -> a -> a -> a
-delayL maxDelayTime delayTime input = multiChannelExpandUGen (DelayL maxDelayTime) delayLCalc delayConstructor delayDeconstructor [delayTime, input]
+delayL maxDelayTime delayTime input = multiChannelExpandUGen (DelayL maxDelayTime) delayLCalc delayLConstructor delayDeconstructor [delayTime, input]
 
+foreign import ccall "&delayC_constructor" delayCConstructor :: CUGenFunc
 foreign import ccall "&delayC_calc" delayC_calc :: CUGenFunc
 delayC :: UGenType a => Double -> a -> a -> a
-delayC maxDelayTime delayTime input = multiChannelExpandUGen (DelayC maxDelayTime) delayC_calc delayConstructor delayDeconstructor [delayTime, input]
+delayC maxDelayTime delayTime input = multiChannelExpandUGen (DelayC maxDelayTime) delayC_calc delayCConstructor delayDeconstructor [delayTime, input]
 
 foreign import ccall "&pluck_constructor"   pluckConstructor   :: CUGenFunc
 foreign import ccall "&pluck_deconstructor" pluckDeconstructor :: CUGenFunc
@@ -767,7 +769,7 @@ runCompileSynthDef name ugenFunc = do
     compiledGraph <- newArray graph
     compiledWireBufs <- initializeWireBufs numWires constants
     let scheduledTime = 0 :: JackTime
-    let cs = CSynthDef compiledGraph compiledWireBufs nullPtr nullPtr scheduledTime 0 0 0 (fromIntegral $ length graph) (fromIntegral numWires) 0
+    let cs = CSynthDef compiledGraph compiledWireBufs nullPtr nullPtr scheduledTime 0 0 0 (fromIntegral $ length graph) (fromIntegral numWires) 0 0
     print cs
     csynthDef <- new $ cs
     return (SynthDef name numArgs csynthDef)

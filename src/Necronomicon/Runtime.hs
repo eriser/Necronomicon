@@ -602,11 +602,12 @@ data CSynthDef = CSynthDef {
     csynthDefTableIndex :: CUInt,
     csynthDefNumUGens :: CUInt,
     csynthDefNumWires :: CUInt,
+    csynthDefPrevAliveStatus :: CUInt,
     csynthDefAliveStatus :: CUInt
 } deriving (Show)
 
 instance Storable CSynthDef where
-    sizeOf _ = sizeOf (undefined :: CDouble) * 8
+    sizeOf _ = sizeOf (undefined :: CDouble) * 9
     alignment _ = alignment (undefined :: CDouble)
     peek ptr = do
         ugenGrph <- peekByteOff ptr 0  :: IO (Ptr CUGen)
@@ -619,9 +620,10 @@ instance Storable CSynthDef where
         tableInd <- peekByteOff ptr 48 :: IO CUInt
         numUGens <- peekByteOff ptr 52 :: IO CUInt
         numWires <- peekByteOff ptr 56 :: IO CUInt
-        aliveSts <- peekByteOff ptr 60 :: IO CUInt
-        return (CSynthDef ugenGrph wireBufs prevNode nextNode sampTime nodeKey nodeHash tableInd numUGens numWires aliveSts)
-    poke ptr (CSynthDef ugenGrph wireBufs prevNode nextNode sampTime nodeKey nodeHash tableInd numUGens numWires aliveSts) = do
+        prAlvSts <- peekByteOff ptr 60 :: IO CUInt
+        aliveSts <- peekByteOff ptr 64 :: IO CUInt
+        return (CSynthDef ugenGrph wireBufs prevNode nextNode sampTime nodeKey nodeHash tableInd numUGens numWires prAlvSts aliveSts)
+    poke ptr (CSynthDef ugenGrph wireBufs prevNode nextNode sampTime nodeKey nodeHash tableInd numUGens numWires prAlvSts aliveSts) = do
         pokeByteOff ptr 0  ugenGrph
         pokeByteOff ptr 8  wireBufs
         pokeByteOff ptr 16 prevNode
@@ -632,6 +634,7 @@ instance Storable CSynthDef where
         pokeByteOff ptr 48 tableInd
         pokeByteOff ptr 52 numUGens
         pokeByteOff ptr 56 numWires
+        pokeByteOff ptr 60 prAlvSts
         pokeByteOff ptr 60 aliveSts
 
 type CSynth = CSynthDef -- A running C Synth is structurally identical to a C SynthDef

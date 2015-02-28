@@ -118,7 +118,8 @@ typedef struct sample_buffer sample_buffer;
 struct sample_buffer
 {
 	double* samples;
-	sample_buffer* next_buffer; // used for free list
+	sample_buffer* next_sample_buffer;
+	unsigned int pool_index;
 	unsigned int num_samples;
 	unsigned int num_samples_mask; // used with power of 2 sized buffers
 };
@@ -126,7 +127,8 @@ struct sample_buffer
 const unsigned int SAMPLE_BUFFER_SIZE = sizeof(sample_buffer);
 const unsigned int SAMPLE_BUFFER_POINTER_SIZE = sizeof(sample_buffer*);
 
-sample_buffer* buffer_free_list = NULL;
+const unsigned int NUM_SAMPLE_BUFFER_POOLS = 32;
+sample_buffer** sample_buffer_pools;
 
 unsigned int next_power_of_two(unsigned int v)
 {
@@ -139,36 +141,66 @@ unsigned int next_power_of_two(unsigned int v)
 	return ++v;
 }
 
-// Note: this will return a sample buffer with a number of samples equal to the next power of two higher than the requested amount
-sample_buffer* acquire_sample_buffer(unsigned int num_samples)
+void print_sample_buffer(sample_buffer* buffer)
 {
-	unsigned int pow_two_num_samples = next_power_of_two(num_samples);
-	sample_buffer* buffer;
-
-	if (buffer_free_list == NULL)
+	if (buffer != NULL)
 	{
-		buffer = malloc(SAMPLE_BUFFER_SIZE);
+		printf(
+			"sample_buffer { samples = %p, next_sample_buffer = %p, pool_index = %u, num_samples = %u, num_samples_mask = %u }\n",
+			buffer->samples, buffer->next_sample_buffer, buffer->pool_index, buffer->num_samples, buffer->num_samples_mask);   
 	}
 
 	else
 	{
-		buffer = buffer_free_list;
-		buffer_free_list = buffer->next_buffer;
+		printf("sample_buffer = NULL\n");
+	}
+}
+
+// Note: this will return a sample buffer with a number of samples equal to the next power of two higher than the requested amount
+sample_buffer* acquire_sample_buffer(unsigned int num_samples)
+{
+	unsigned int pow_two_num_samples = next_power_of_two(num_samples);
+	unsigned int pool_index = __builtin_ctz(pow_two_num_samples);
+	sample_buffer* buffer = sample_buffer_pools[pool_index];
+
+	assert(num_samples <= pow_two_num_samples);
+	assert(pool_index < (NUM_SAMPLE_BUFFER_POOLS - 1));
+	
+	// printf("acquire_sample_buffer(num_samples = %u, pool_index = %u, pooled_buffer = %p.\n", num_samples, pool_index, buffer);
+	
+	if (buffer != NULL)
+	{
+		// printf("Reuse buffer :: ");
+		sample_buffer_pools[pool_index] = buffer->next_sample_buffer;
+		memset(buffer->samples, 0, pow_two_num_samples * DOUBLE_SIZE);
 	}
 
-	buffer->samples = calloc(pow_two_num_samples, DOUBLE_SIZE);
-	buffer->num_samples = pow_two_num_samples;
-	buffer->num_samples_mask = pow_two_num_samples - 1;
-	buffer->next_buffer = NULL;
+	else
+	{
+		// printf("New buffer :: ");
+		buffer = malloc(SAMPLE_BUFFER_SIZE);
+		buffer->samples = calloc(pow_two_num_samples, DOUBLE_SIZE);
+		buffer->pool_index = pool_index;
+		buffer->num_samples = pow_two_num_samples;
+		buffer->num_samples_mask = pow_two_num_samples - 1;
+	}
+
+	buffer->next_sample_buffer = NULL;
+	// print_sample_buffer(buffer);
 	return buffer;
 }
 
 void release_sample_buffer(sample_buffer* buffer)
 {
-	free(buffer->samples);
-	buffer->samples = NULL;
-	buffer->next_buffer = buffer_free_list;
-	buffer_free_list = buffer; // Push on to the buffer free list
+	// printf("release_sample_buffer: ");
+	// print_sample_buffer(buffer);
+	
+	if (buffer != NULL)
+	{
+		unsigned int pool_index = buffer->pool_index;
+		buffer->next_sample_buffer = sample_buffer_pools[pool_index];
+		sample_buffer_pools[pool_index] = buffer;
+	}
 }
 
 ////////////////////////
@@ -177,12 +209,14 @@ void release_sample_buffer(sample_buffer* buffer)
 
 typedef enum
 {
+	NODE_DEAD, // Node is not playing
 	NODE_SPAWNING, // Scheduled for playing
 	NODE_ALIVE, // Actively playing
 	NODE_SCHEDULED_FOR_REMOVAL, // Scheduled for removal from removal_fifo, first step in removal of synths
 	NODE_SCHEDULED_FOR_FREE, // Scheduled for memory free, second and last step in removal of synths
-	NODE_DEAD
 } node_alive_status;
+
+const char* node_alive_status_strings[] = { "NODE_DEAD", "NODE_SPAWNING", "NODE_ALIVE", "NODE_SCHEDULED_FOR_REMOVAL", "NODE_SCHEDULED_FOR_FREE" };
 
 struct synth_node;
 typedef struct synth_node synth_node;
@@ -199,15 +233,38 @@ struct synth_node
 	unsigned int table_index; // Cached hash table index
 	unsigned int num_ugens;
 	unsigned int num_wires;
-	node_alive_status alive_status; // Flag representing whether the synth is scheduled for removal or not
+	node_alive_status previous_alive_status; // Flag representing whether the previous status of the synth
+	node_alive_status alive_status; // Flag representing the alive status of the synth
 };
 
 synth_node* _necronomicon_current_node = NULL;
 const unsigned int NODE_SIZE = sizeof(synth_node);
 const unsigned int NODE_POINTER_SIZE = sizeof(synth_node*);
 synth_node* free_synths = NULL;
+synth_node* free_synths_tail = NULL;
 int num_free_synths = 0;
 const unsigned int max_free_synths = 128;
+
+// Synth hash table
+const unsigned int MAX_SYNTHS = 8192;
+const unsigned int HASH_TABLE_SIZE_MASK = 8191;
+typedef synth_node** hash_table;
+hash_table synth_table = NULL;
+bool hash_table_remove(hash_table table, synth_node* node);
+synth_node* hash_table_lookup(hash_table table, unsigned int key);
+
+void print_node_alive_status(synth_node* node)
+{
+	if (node != NULL)
+	{
+		printf("node_previous_status: %s, node_status: %s\n", node_alive_status_strings[node->previous_alive_status], node_alive_status_strings[node->alive_status]);
+	}
+
+	else
+	{
+		puts("node_status: NULL\n");
+	}
+}
 
 synth_node* malloc_synth()
 {
@@ -217,10 +274,11 @@ synth_node* malloc_synth()
 		synth_node* synth = free_synths;
 		free_synths = synth->next;
 		synth->next = NULL;
+
 		--num_free_synths;
 		return synth;
 	}
-
+	
 	return malloc(NODE_SIZE);
 }
 
@@ -237,19 +295,37 @@ void deconstruct_synth(synth_node* synth)
 
 	free(ugen_graph);
 	free(synth->ugen_wires);
+	synth->ugen_graph = NULL;
+	synth->ugen_wires = NULL;
 }
 
 void free_synth(synth_node* synth)
 {
+	// printf("free_synth -> ");
+	// print_node_alive_status(synth);
+	
 	if (synth)
 	{
-		synth->alive_status = NODE_DEAD;
-		deconstruct_synth(synth);
+		bool found = hash_table_remove(synth_table, synth);
+		--num_synths;
+		
+		if (found == true && synth->alive_status == NODE_SCHEDULED_FOR_FREE)
+		{
+			synth->previous_alive_status = synth->alive_status;
+			synth->alive_status = NODE_DEAD;
+			deconstruct_synth(synth);
+			
+			// Push the synth on to the free_synth stack
+			synth->next = free_synths;
+			free_synths = synth;
+			synth->previous = NULL;
+			++num_free_synths;
+		}
 
-		// Push the synth on to the free list
-		synth->next = free_synths;
-		synth->previous = NULL;
-		free_synths = synth;
+		else
+		{
+			printf("free_synth warning: Potential double free of synth with nodeID %u.\n", synth->key);
+		}
 
 		/*
 		  ++num_free_synths;
@@ -260,7 +336,7 @@ void free_synth(synth_node* synth)
 		else
 		{
 			free(synth);
-		}*/
+			}*/
 	}
 }
 
@@ -295,6 +371,7 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 	synth->num_ugens = synth_definition->num_ugens;
 	synth->num_wires = synth_definition->num_wires;
 	synth->time = time;
+	synth->previous_alive_status = NODE_DEAD;
 	synth->alive_status = NODE_SPAWNING;
 	
 	// UGens
@@ -607,12 +684,6 @@ void removal_fifo_free()
 // Fixed memory hash table using open Addressing with linear probing
 // This is not thread safe.
 
-const unsigned int MAX_SYNTHS = 8192;
-const unsigned int HASH_TABLE_SIZE_MASK = 8191;
-
-typedef synth_node** hash_table;
-hash_table synth_table = NULL;
-
 hash_table hash_table_new()
 {
 	unsigned int byte_size = NODE_POINTER_SIZE * MAX_SYNTHS;
@@ -637,10 +708,9 @@ void hash_table_free(hash_table table)
 
 void hash_table_insert(hash_table table, synth_node* node)
 {
-	assert(num_synths < MAX_SYNTHS);
 	unsigned int slot = node->hash & HASH_TABLE_SIZE_MASK;
 
-	while (table[slot])
+	while (table[slot] != NULL)
 		slot = (slot + 1) & HASH_TABLE_SIZE_MASK;
 
 	table[slot] = node;
@@ -658,6 +728,11 @@ bool hash_table_remove(hash_table table, synth_node* node)
 			table[index] = NULL;
 			return true;
 		}
+
+		else
+		{
+			printf("hash_table_remove: found_node %p != node %p", found_node, node);
+		}
 	}
 
 	return false;
@@ -671,10 +746,12 @@ synth_node* hash_table_lookup(hash_table table, unsigned int key)
 
 	while (i < MAX_SYNTHS)
 	{
-		if (table[slot])
+		if (table[slot] != NULL)
 		{
 			if (table[slot]->key == key)
 				return table[slot];
+			else
+				printf("Found table in hash_table_lookup, but not the one we're after. Looking up node ID %u but found %u.", key, table[slot]->key);
 		}
 
 		++i;
@@ -759,46 +836,58 @@ int get_running()
 
 void add_synth(synth_node* node)
 {
-	if (node && node->alive_status == NODE_SPAWNING)
+	// printf("add_synth -> ");
+	// print_node_alive_status(node);
+	if (node != NULL)
 	{
-		hash_table_insert(synth_table, node);
-		synth_list = doubly_linked_list_push(synth_list, node);
-		++num_synths;
-		node->alive_status = NODE_ALIVE;
-	}
+		node->previous_alive_status = node->alive_status;
+		if (node->alive_status == NODE_SPAWNING)
+		{
+			node->alive_status = NODE_ALIVE;
+			synth_list = doubly_linked_list_push(synth_list, node);
+		}
+		// Scheduled to be freed before add message was handled
+		else if (node->alive_status == NODE_SCHEDULED_FOR_REMOVAL)
+		{
+			node->alive_status = NODE_SCHEDULED_FOR_FREE;
+			message msg;
+			msg.arg.node = node;
+			msg.type = FREE_SYNTH;
+			NRT_FIFO_PUSH(msg); // Send ugen to NRT thread for freeign
+		}
 
-	else
-	{
-		message msg;
-		msg.arg.string = "warning: add_synth node is null or alive_status is not NODE_SPAWNING";
-		msg.type = PRINT;
-		NRT_FIFO_PUSH(msg);
+		else
+		{
+			message msg;
+			msg.arg.string = "warning: add_synth() was given a node with alive_status that is not NODE_SPAWNING or NODE_SCHEDULED_FOR_REMOVAL";
+			msg.type = PRINT;
+			NRT_FIFO_PUSH(msg);
+		}
 	}
 }
 
 void remove_synth(synth_node* node)
 {
-	if (node && node->alive_status == NODE_SCHEDULED_FOR_REMOVAL)
+	// printf("remove_synth -> ");
+	// print_node_alive_status(node);
+	if ((node != NULL) && (node->alive_status == NODE_SCHEDULED_FOR_REMOVAL))
 	{
-		node->alive_status = NODE_SCHEDULED_FOR_REMOVAL;
-		bool found = hash_table_remove(synth_table, node);
-
-		if (found == true)
-		{
+		if (node->previous_alive_status == NODE_ALIVE)
 			synth_list = doubly_linked_list_remove(synth_list, node);
 
-			message msg;
-			msg.arg.node = node;
-			msg.type = FREE_SYNTH;
-			--num_synths;
-			NRT_FIFO_PUSH(msg); // Send ugen to NRT thread for freeing
-		}
+		node->previous_alive_status = node->alive_status;
+		node->alive_status = NODE_SCHEDULED_FOR_FREE;
+		
+		message msg;
+		msg.arg.node = node;
+		msg.type = FREE_SYNTH;
+		NRT_FIFO_PUSH(msg); // Send ugen to NRT thread for freeing
 	}
 
 	else
 	{
 		message msg;
-		msg.arg.string = "warning: remove_synth node is null or alive_status is not NODE_SCHEDULED_FOR_REMOVAL";
+		msg.arg.string = "warning: remove_synth() was given node is null or alive_status is not NODE_SCHEDULED_FOR_REMOVAL";
 		msg.type = PRINT;
 		NRT_FIFO_PUSH(msg);
 	}
@@ -838,8 +927,10 @@ void remove_scheduled_synths()
 
 void try_schedule_current_synth_for_removal()
 {
+	// puts("try_schedule_current_synth_for_removal()");
 	if (_necronomicon_current_node && (removal_fifo_size < REMOVAL_FIFO_SIZE_MASK) && _necronomicon_current_node->alive_status == NODE_ALIVE)
 	{
+		_necronomicon_current_node->previous_alive_status = _necronomicon_current_node->alive_status;
 		_necronomicon_current_node->alive_status = NODE_SCHEDULED_FOR_REMOVAL;
 		removal_fifo_size = (removal_fifo_size + 1) & REMOVAL_FIFO_SIZE_MASK;
 		REMOVAL_FIFO_PUSH(_necronomicon_current_node);
@@ -930,11 +1021,13 @@ void play_synth(synth_node* synth_definition, double* arguments, unsigned int nu
 	if (num_synths < MAX_SYNTHS)
 	{
 		synth_node* synth = new_synth(synth_definition, arguments, num_arguments, node_id, time);
-
+		// printf("play_synth node id: %u.\n", synth->key);
 		message msg;
 		msg.arg.node = synth;
 		msg.type = START_SYNTH;
 		RT_FIFO_PUSH(msg);
+		hash_table_insert(synth_table, synth);
+		++num_synths;
 	}
 
 	else
@@ -946,8 +1039,11 @@ void play_synth(synth_node* synth_definition, double* arguments, unsigned int nu
 void stop_synth(unsigned int id)
 {
 	synth_node* node = hash_table_lookup(synth_table, id);
-	if (node && node->alive_status == NODE_ALIVE)
+	if ((node != NULL) && (node->alive_status == NODE_SPAWNING || node->alive_status == NODE_ALIVE))
 	{
+		// printf("stop_synth node id: %u. ", node->key);
+		// print_node_alive_status(node);
+		node->previous_alive_status = node->alive_status;
 		node->alive_status = NODE_SCHEDULED_FOR_REMOVAL;
 		message msg;
 		msg.arg.node = node;
@@ -957,7 +1053,8 @@ void stop_synth(unsigned int id)
 
 	else
 	{
-		printf("stopSynth: Node ID %u not found\n", id);
+		printf("stopSynth: Node ID %u not found. ", id);
+		print_node_alive_status(node);
 	}
 }
 
@@ -965,28 +1062,30 @@ void stop_synth(unsigned int id)
 void send_set_synth_arg(unsigned int id, double argument, unsigned int arg_index)
 {
 	synth_node* synth = hash_table_lookup(synth_table, id);
-	if (synth && synth->alive_status == NODE_ALIVE)
+	if ((synth != NULL) && (synth->alive_status == NODE_SPAWNING || synth->alive_status == NODE_ALIVE))
 	{
 		synth->ugen_wires[arg_index] = argument;
 	}
 
 	else
 	{
-		printf("setSynthArg: Node ID %u not found\n", id);
+		printf("setSynthArg: Node ID %u not found. ", id);
+		print_node_alive_status(synth);
 	}
 }
 
 void send_set_synth_args(unsigned int id, double* arguments, unsigned int num_arguments)
 {
 	synth_node* synth = hash_table_lookup(synth_table, id);
-	if (synth && synth->alive_status == NODE_ALIVE)
+	if ((synth != NULL) && (synth->alive_status == NODE_SPAWNING || synth->alive_status == NODE_ALIVE))
 	{
 		memcpy(synth->ugen_wires, arguments, num_arguments * DOUBLE_SIZE);
 	}
 
 	else
 	{
-		printf("setSynthArgs: Node ID %u not found\n", id);
+		printf("setSynthArgs: Node ID %u not found. ", id);
+		print_node_alive_status(synth);
 	}
 }
 
@@ -1008,7 +1107,8 @@ void init_rt_thread()
 	assert(synth_list == NULL);
 	assert(removal_fifo == NULL);
 	assert(_necronomicon_buses == NULL);
-
+	assert(sample_buffer_pools == NULL);
+	
 	SAMPLE_RATE = jack_get_sample_rate(client);
 	RECIP_SAMPLE_RATE = 1.0 / SAMPLE_RATE;
 	TABLE_MUL_RECIP_SAMPLE_RATE = TABLE_SIZE * RECIP_SAMPLE_RATE;
@@ -1024,6 +1124,9 @@ void init_rt_thread()
 	_necronomicon_buses = malloc(num_audio_buses_bytes);
 	clear_necronomicon_buses();
 
+	sample_buffer_pools = (sample_buffer**) malloc(sizeof(sample_buffer*) * NUM_SAMPLE_BUFFER_POOLS);
+	memset(sample_buffer_pools, 0, sizeof(sample_buffer*) * NUM_SAMPLE_BUFFER_POOLS);
+	
 	initialize_wave_tables();
 	// load_audio_files();
 
@@ -1064,7 +1167,8 @@ void shutdown_rt_thread()
 	assert(scheduled_node_list != NULL);
 	assert(removal_fifo != NULL);
 	assert(_necronomicon_buses != NULL);
-
+	assert(sample_buffer_pools != NULL);
+	
 	hash_table_free(synth_table);
 	rt_fifo_free();
 	scheduled_list_free();
@@ -1072,13 +1176,20 @@ void shutdown_rt_thread()
 	removal_fifo_free();
 	free(_necronomicon_buses);
 
-	while (buffer_free_list)
+	unsigned int i;
+	for (i = 0; i < NUM_SAMPLE_BUFFER_POOLS; ++i)
 	{
-		sample_buffer* next_buffer = buffer_free_list->next_buffer;
-		free(buffer_free_list);
-		buffer_free_list = next_buffer;
+		sample_buffer* pooled_buffer = sample_buffer_pools[i];
+		while(pooled_buffer != NULL)
+		{
+			sample_buffer* next_buffer = pooled_buffer->next_sample_buffer;
+			free(pooled_buffer);
+			pooled_buffer = next_buffer;
+		}
 	}
-
+	
+	free(sample_buffer_pools);
+	
 	while (free_synths)
 	{
 		synth_node* synth = free_synths;
@@ -1646,15 +1757,33 @@ void poll_deconstructor(ugen* u)
 typedef struct
 {
 	sample_buffer* buffer;
+	double max_delay_time;
 	long write_index;
 } delay_data;
 
 const unsigned int DELAY_DATA_SIZE = sizeof(delay_data);
 
-void delay_constructor(ugen* u)
+void delayN_constructor(ugen* u)
 {
 	u->data = malloc(DELAY_DATA_SIZE);
-	delay_data data = { acquire_sample_buffer(u->constructor_args[0] * SAMPLE_RATE), 0 };
+	double max_delay_time = fmax(1, u->constructor_args[0] * SAMPLE_RATE);
+	delay_data data = { acquire_sample_buffer(max_delay_time), max_delay_time, 0 };
+	*((delay_data*) u->data) = data;
+}
+
+void delayL_constructor(ugen* u)
+{
+	u->data = malloc(DELAY_DATA_SIZE);
+	double max_delay_time = fmax(2, u->constructor_args[0] * SAMPLE_RATE);
+	delay_data data = { acquire_sample_buffer(max_delay_time), fmax(0, max_delay_time - 1), 0 };
+	*((delay_data*) u->data) = data;
+}
+
+void delayC_constructor(ugen* u)
+{
+	u->data = malloc(DELAY_DATA_SIZE);
+	double max_delay_time = fmax(3, u->constructor_args[0] * SAMPLE_RATE);
+	delay_data data = { acquire_sample_buffer(max_delay_time), fmax(0, max_delay_time - 2), 0 };
 	*((delay_data*) u->data) = data;
 }
 
@@ -1681,6 +1810,7 @@ UGEN_OUT(u, 0, y);
 void delayN_calc(ugen* u)
 {
 	INIT_DELAY(u);
+	delay_time = fmin(data.max_delay_time, fmax(1, delay_time));
 	long iread_index = write_index - (long) delay_time;
 	double y = iread_index < 0 ? 0 : buffer.samples[iread_index & num_samples_mask];
 	FINISH_DELAY(u, y);
@@ -1689,6 +1819,7 @@ void delayN_calc(ugen* u)
 void delayL_calc(ugen* u)
 {
 	INIT_DELAY(u);
+	delay_time = fmin(data.max_delay_time, fmax(1, delay_time));
 	double y;
 	double read_index = (double) write_index - delay_time;
 	long iread_index0 = (long) read_index;
@@ -1713,6 +1844,8 @@ void delayL_calc(ugen* u)
 void delayC_calc(ugen* u)
 {
 	INIT_DELAY(u);
+	// Clamp delay at 1 to prevent the + 1 iread_index3 from reading on the wrong side of the write head
+	delay_time = fmin(data.max_delay_time, fmax(2, delay_time));
 	double read_index  = (double) write_index - delay_time;
 	long iread_index0 = (long) read_index;
 	long iread_index1 = iread_index0 - 1;
@@ -3202,21 +3335,21 @@ void freeverb_constructor(ugen* u)
 	freeverb->combz1s             = malloc(sizeof(double) * 8);
 	freeverb->allpassDelays       = malloc(sizeof(delay_data) * 4);
 
-	delay_data data0 = { acquire_sample_buffer(1557), 0 };
+	delay_data data0 = { acquire_sample_buffer(1557), 1557, 0 };
 	freeverb->combFilterDelays[0] = data0;
-	delay_data data1 = { acquire_sample_buffer(1617), 0 };
+	delay_data data1 = { acquire_sample_buffer(1617), 1617, 0 };
 	freeverb->combFilterDelays[1] = data1;
-	delay_data data2 = { acquire_sample_buffer(1491), 0 };
+	delay_data data2 = { acquire_sample_buffer(1491), 1491, 0 };
 	freeverb->combFilterDelays[2] = data2;
-	delay_data data3 = { acquire_sample_buffer(1422), 0 };
+	delay_data data3 = { acquire_sample_buffer(1422), 1422, 0 };
 	freeverb->combFilterDelays[3] = data3;
-	delay_data data4 = { acquire_sample_buffer(1277), 0 };
+	delay_data data4 = { acquire_sample_buffer(1277), 1277, 0 };
 	freeverb->combFilterDelays[4] = data4;
-	delay_data data5 = { acquire_sample_buffer(1356), 0 };
+	delay_data data5 = { acquire_sample_buffer(1356), 1356, 0 };
 	freeverb->combFilterDelays[5] = data5;
-	delay_data data6 = { acquire_sample_buffer(1188), 0 };
+	delay_data data6 = { acquire_sample_buffer(1188), 1188, 0 };
 	freeverb->combFilterDelays[6] = data6;
-	delay_data data7 = { acquire_sample_buffer(1116), 0 };
+	delay_data data7 = { acquire_sample_buffer(1116), 1116, 0 };
 	freeverb->combFilterDelays[7] = data7;
 
 	freeverb->combz1s[0] = 0;
@@ -3228,13 +3361,13 @@ void freeverb_constructor(ugen* u)
 	freeverb->combz1s[6] = 0;
 	freeverb->combz1s[7] = 0;
 
-	delay_data data8 = { acquire_sample_buffer(225), 0 };
+	delay_data data8 = { acquire_sample_buffer(225), 225, 0 };
 	freeverb->allpassDelays[0]    = data8;
-	delay_data data9 = { acquire_sample_buffer(556), 0 };
+	delay_data data9 = { acquire_sample_buffer(556), 556, 0 };
 	freeverb->allpassDelays[1]    = data9;
-	delay_data data10 = { acquire_sample_buffer(441), 0 };
+	delay_data data10 = { acquire_sample_buffer(441), 441, 0 };
 	freeverb->allpassDelays[2]    = data10;
-	delay_data data11 = { acquire_sample_buffer(341), 0 };
+	delay_data data11 = { acquire_sample_buffer(341), 341, 0 };
 	freeverb->allpassDelays[3]    = data11;
 
 	u->data                       = freeverb;

@@ -150,7 +150,8 @@ triOscEnv f1 = [sig1,sig2] + [sig3,sig3] |> verb |> out 0
         sig2 = sinOsc (f1 * 0.5 - sig3 * 1000) |> e |> auxThrough 3
         sig3 = sinOsc (f1 * 0.25)              |> e |> auxThrough 4
         e    = perc 0.01 0.5 0.1 0
-        verb = freeverb 0.25 0.5 0.5
+        verb dIn = delayC 0.25 0.25 dIn + dIn
+        -- verb = freeverb 0.25 0.5 0.5
 
 bSynth :: UGen
 bSynth = sin 55 |> gain (line 0.1) >>> gain 0.4 >>> out 0
