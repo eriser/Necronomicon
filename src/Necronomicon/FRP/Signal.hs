@@ -1509,7 +1509,7 @@ synthDef name synth = Signal $ \state -> do
 play :: Signal Bool -> String -> [Signal Double] -> Signal ()
 play = playSynthN
 
-tempo :: Signal Double -> Signal Double
+tempo :: Signal Rational -> Signal Rational
 tempo tempoSignal = Signal $ \state -> do
     tCont  <- unSignal tempoSignal state
     tValue <- unEvent <~ tCont updateZero
@@ -1520,7 +1520,7 @@ tempo tempoSignal = Signal $ \state -> do
             NoChange t' -> return $ NoChange t'
             Change   t' -> runNecroState (setTempo t') sNecroVars >> return (Change t')
 
-playSignalPattern :: (Show a,Eq a) => Signal Bool -> a -> [Signal Double] -> Pattern (Pattern a,Double) -> Signal a
+playSignalPattern :: (Show a,Eq a) => Signal Bool -> a -> [Signal Double] -> Pattern (Pattern a,Rational) -> Signal a
 playSignalPattern playSig initValue argSigs pattern = Signal $ \state -> do
 
     pCont   <- unSignal (netsignal playSig) state
@@ -1530,7 +1530,7 @@ playSignalPattern playSig initValue argSigs pattern = Signal $ \state -> do
     valVar  <- atomically $ newTVar initValue
     pid     <- getNextID state
     let pFunc = return (\val _ -> liftIO (atomically $ writeTVar valVar val))
-        pDef  = pstreamWithArgs ("sigPat" ++ show pid) pFunc pattern (map PVal aValues)
+        pDef  = pstreamWithArgs ("sigPat" ++ show pid) pFunc pattern (map (PVal . toRational) aValues)
 
     maybePattern <- if pValue then runNecroState (runPDef pDef) (necroVars state) >>= \(pat,_) -> return (Just pat) else return Nothing
     patternRef   <- newIORef maybePattern
@@ -1557,9 +1557,9 @@ playSignalPattern playSig initValue argSigs pattern = Signal $ \state -> do
 
         updateArg index aCont sPattern sNecroVars update = aCont update >>= \a -> case a of
             NoChange _ -> return ()
-            Change val -> runNecroState (setPDefArg sPattern index $ PVal val) sNecroVars >> return ()
+            Change val -> runNecroState (setPDefArg sPattern index $ PVal $ toRational val) sNecroVars >> return ()
 
-playSynthPattern :: Signal Bool -> String -> [Signal Double] -> Pattern (Pattern Double,Double) -> Signal ()
+playSynthPattern :: Signal Bool -> String -> [Signal Double] -> Pattern (Pattern Rational,Rational) -> Signal ()
 playSynthPattern playSig synthName argSigs pattern = Signal $ \state -> do
 
     pCont   <- unSignal (netsignal playSig) state
@@ -1568,7 +1568,7 @@ playSynthPattern playSig synthName argSigs pattern = Signal $ \state -> do
     aValues <- mapM (\f -> unEvent <~ f updateZero) aConts
     pid     <- getNextID state
     let pFunc = return (\val t -> playSynthAtJackTime synthName [val] t >> return ())
-        pDef  = pstreamWithArgs ("sigPat" ++ show pid) pFunc pattern (map PVal aValues)
+        pDef  = pstreamWithArgs ("sigPat" ++ show pid) pFunc pattern (map (PVal . toRational) aValues)
 
     maybePattern <- if pValue then runNecroState (runPDef pDef) (necroVars state) >>= \(pat,_) -> return (Just pat) else return Nothing
     patternRef   <- newIORef maybePattern
@@ -1589,9 +1589,9 @@ playSynthPattern playSig synthName argSigs pattern = Signal $ \state -> do
 
         updateArg index aCont sPattern sNecroVars update = aCont update >>= \a -> case a of
             NoChange _ -> return ()
-            Change val -> runNecroState (setPDefArg sPattern index $ PVal val) sNecroVars >> return ()
+            Change val -> runNecroState (setPDefArg sPattern index $ PVal $ toRational val) sNecroVars >> return ()
 
-playBeatPattern :: Signal Bool -> [Signal Double] -> Pattern (Pattern String, Double) -> Signal ()
+playBeatPattern :: Signal Bool -> [Signal Double] -> Pattern (Pattern String, Rational) -> Signal ()
 playBeatPattern playSig argSigs pattern = Signal $ \state -> do
 
     pCont   <- unSignal (netsignal playSig) state
@@ -1600,7 +1600,7 @@ playBeatPattern playSig argSigs pattern = Signal $ \state -> do
     aValues <- mapM (\f -> unEvent <~ f updateZero) aConts
     pid     <- getNextID state
     let pFunc = return (\synth t -> playSynthAtJackTime synth [] t >> return ())
-        pDef  = pstreamWithArgs ("sigPat" ++ show pid) pFunc pattern (map PVal aValues)
+        pDef  = pstreamWithArgs ("sigPat" ++ show pid) pFunc pattern (map (PVal . toRational) aValues)
 
     maybePattern <- if pValue then runNecroState (runPDef pDef) (necroVars state) >>= \(pat,_) -> return (Just pat) else return Nothing
     patternRef   <- newIORef maybePattern
@@ -1621,7 +1621,7 @@ playBeatPattern playSig argSigs pattern = Signal $ \state -> do
 
         updateArg index aCont sPattern sNecroVars update = aCont update >>= \a -> case a of
             NoChange _ -> return ()
-            Change val -> runNecroState (setPDefArg sPattern index $ PVal val) sNecroVars >> return ()
+            Change val -> runNecroState (setPDefArg sPattern index $ PVal $ toRational val) sNecroVars >> return ()
 
 {-
 instance Play UGen where

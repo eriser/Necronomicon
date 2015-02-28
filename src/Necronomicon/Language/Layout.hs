@@ -31,7 +31,7 @@ data ParsecPattern a = ParsecValue a
                      deriving (Show,Typeable,Data)
 
 
-type Time = Double
+-- type Time = Double
 
 {-
 data Notation a = Note a | Rest | Chord [(Notation a)] | TimedNote (Notation a) Time

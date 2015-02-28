@@ -11,12 +11,13 @@ synthDefs = synthDef "triOsc"    triOsc
          *> synthDef "triOscEnv" triOscEnv
          *> synthDef "b"         bSynth
          *> synthDef "p"         pSynth
+         *> synthDef "metallic"  metallic
 
 hyperTerrainSounds :: Signal ()
 hyperTerrainSounds = play             (toggle <| isDown keyW) "triOsc"    [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
                  <&> play             (toggle <| isDown keyA) "triOsc32"  [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
-                 <&> playSynthPattern (toggle <| isDown keyD) "triOscEnv" [] (pmap (d2f bartok . (+12)) <| ploop [ [lich| [0 1] [4 3] [2 3] [2 3 4 5] |] ])
                  <&> playBeatPattern  (toggle <| isDown keyE) [] (ploop [ [lich| [p p p] [p b] p b |] ])
+                 <&> metallicPattern
 
 sections :: Signal ()
 sections = switch section [section1, section2, section3]
@@ -126,7 +127,23 @@ sphereObject as1 as2 as3 t latitudes = SceneObject 0 (fromEuler' 0 (t * 0.5) (t 
         indices        = foldr (\i acc -> i + 1 : i + l : i + l + 1 : i + 1 : i + 0 : i + l : acc) [] [0,4..floor (latitudes * longitudes) - l]
         mesh           = DynamicMesh "aSphere" vertices colors uvs indices
 
---maybe negative argument values kill IT!?!?!?!?
+testGUI :: Signal ()
+testGUI = gui [chatBox,netBox,ubox]
+    where
+        ubox    = userBox <| Vector2 0.0 0.945
+                          <| Size    0.0 0.055
+                          <| Font   "OCRA.ttf" 24
+                          <| vertexColored (RGBA 0 0 0 0.25)
+
+        netBox  = netStat <| Vector2 1.4 0.97
+                          <| Size    0.2 0.03
+                          <| Font   "OCRA.ttf" 24
+
+        chatBox = chat    <| Vector2 0.0 0.0
+                          <| Size    0.4 0.75
+                          <| Font   "OCRA.ttf" 24
+                          <| vertexColored (RGBA 1 1 1 0.1)
+
 triOsc :: UGen -> UGen -> [UGen]
 triOsc f1 f2 = [sig1,sig2] + [sig3,sig3] |> verb |> gain 0.1 |> out 0
     where
@@ -161,22 +178,22 @@ bSynth = sin 55 |> gain (line 0.1) >>> gain 0.4 >>> out 0
 pSynth :: UGen
 pSynth = sin 1110 |> gain (line 0.1) >>> gain 0.2 >>> out 1
 
-testGUI :: Signal ()
-testGUI = gui [chatBox,netBox,ubox]
+metallic ::UGen -> [UGen]
+metallic f = sig + sig2 + sig3 |> filt |> e |> gain 1 |> out 0
     where
-        ubox    = userBox <| Vector2 0.0 0.945
-                          <| Size    0.0 0.055
-                          <| Font   "OCRA.ttf" 24
-                          <| vertexColored (RGBA 0 0 0 0.25)
+        sig  = sin   [f * (random |> range 0.999 1.001),f * (random |> range 0.999 1.001)]      |> gain 0.1 |> auxThrough 3
+        sig2 = pulse [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)] 0.85 |> gain 0.1 |> auxThrough 4
+        sig3 = sin   [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)]      |> gain 0.1 |> auxThrough 2
+        filt = lpf  ([f * (random |> range 1 2        ),f * (random |> range 1 2)] |> e) 2
+        e    = perc 0.01 1 2 (-3)
 
-        netBox  = netStat <| Vector2 1.4 0.97
-                          <| Size    0.2 0.03
-                          <| Font   "OCRA.ttf" 24
-
-        chatBox = chat    <| Vector2 0.0 0.0
-                          <| Size    0.4 0.75
-                          <| Font   "OCRA.ttf" 24
-                          <| vertexColored (RGBA 1 1 1 0.1)
+metallicPattern :: Signal ()
+metallicPattern = playSynthPattern (toggle <| isDown keyD) "metallic" [] (pmap (d2f slendro . (+0)) <| ploop [sec1])
+    where
+        sec1 = [lich| [0 1] [3 0] [1 1] [_ 1]
+                      [0 1] [3 0] [1 1] [2 1]
+                      [0 1] [3 0] [1 1] [_ 1]
+                      [0 1] [3 0] [4 2] [4 1] |]
 
 {-
 testSound :: Signal ()

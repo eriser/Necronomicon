@@ -144,14 +144,14 @@ triOsc32 f1 f2 = feedback fSig |> verb |> gain 0.1 |> out 0
                 sig3 = sinOsc (f1 - f2 + i * 10) * (sinOsc (i * 0.00025)  |> range 0.5 1) |> auxThrough 4
 
 triOscEnv :: UGen -> [UGen]
-triOscEnv f1 = [sig1,sig2] + [sig3,sig3] |> gain 0.2 |> out 0
+triOscEnv f1 = [sig1,sig2] + [sig3,sig3] |> gain 0.2 |> verb |> out 0
     where
         sig1 = sinOsc (f1 * 1.0 + sig3 * 1000) |> e |> auxThrough 2
         sig2 = sinOsc (f1 * 0.5 - sig3 * 1000) |> e |> auxThrough 3
         sig3 = sinOsc (f1 * 0.25)              |> e |> auxThrough 4
         e    = perc 0.01 0.5 0.1 0
         -- verb dIn = delayC 0.25 0.25 dIn + dIn
-        -- verb = freeverb 0.25 0.5 0.5
+        verb = freeverb 0.25 0.5 0.5
 
 bSynth :: UGen
 bSynth = sin 55 |> gain (line 0.1) >>> gain 0.4 >>> out 0
