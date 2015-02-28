@@ -182,7 +182,7 @@ pSynth :: UGen
 pSynth = sin 1110 |> gain (line 0.1) >>> gain 0.2 >>> out 1
 
 metallic :: UGen -> [UGen]
-metallic f = sig + sig2 + sig3 |> softclip 1 |> filt |> e |> gain 1 |> out 0
+metallic f = sig + sig2 + sig3 |> filt |> e |> gain 0.75 |> out 0
     where
         sig  = sin   [f * (random |> range 0.999 1.001),f * (random |> range 0.999 1.001)]      |> gain 0.1 |> auxThrough 3
         sig2 = pulse   [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)] 0.95 |> gain 0.1 |> auxThrough 4
@@ -190,8 +190,7 @@ metallic f = sig + sig2 + sig3 |> softclip 1 |> filt |> e |> gain 1 |> out 0
         filt1 = lpf  ([f * (random |> range 3 5          ),f * (random |> range 1 2)] |> e) 1
         filt2 = lpf  ([f * (random |> range 6 10         ),f * (random |> range 2 4)] |> e) 1
         filt3 = lpf  ([f * (random |> range 12 24        ),f * (random |> range 3 6)] |> e) 1
-        filt4 = lpf  ([f * (random |> range 24 30        ),f * (random |> range 4 8)] |> e) 1
-        filt i= filt1 i + filt2 i * 0.5 + filt3 i * 0.5 + filt4 i * 0.25
+        filt i= filt1 i + filt2 i * 0.5 + filt3 i * 0.5
         e    = perc 0.01 1 1 (-4)
         -- verb = freeverb 0.25 0.125 0.5
 
@@ -204,8 +203,7 @@ metallic2 f = sig + sig2 + sig3 |> filt |> e |> gain 0.7 |> (\[u1,u2 ]-> [u2,u1]
         filt1 = lpf  ([f * (random |> range 3 5          ),f * (random |> range 1 2)] |> e) 1
         filt2 = lpf  ([f * (random |> range 6 10         ),f * (random |> range 2 4)] |> e) 1
         filt3 = lpf  ([f * (random |> range 12 24         ),f * (random |> range 3 6)] |> e) 1
-        filt4 = lpf  ([f * (random |> range 24 30         ),f * (random |> range 4 8)] |> e) 1
-        filt i= filt1 i + filt2 i * 0.5 + filt3 i * 0.5 + filt4 i * 0.25
+        filt i= filt1 i + filt2 i * 0.5 + filt3 i * 0.5
         e     = perc 0.01 1 1 (-4)
         -- verb = freeverb 0.25 0.125 0.5
 
@@ -221,7 +219,7 @@ metallic3 f = sig + sig2 + sig3 |> filt |> e |> gain 1 |> (\[u1,u2 ]-> [u2,u1]) 
         e      = perc 0.01 8 1 (-3)
 
 shake :: UGen -> [UGen]
-shake d = sig1 + sig2 |> e |> p 0.75 |> gain 0.035  |> out 0
+shake d = sig1 + sig2 |> e |> p 0.75 |> gain 0.02  |> out 0
     where
         -- d2    = d |> linlin 0.25 1 0.75 1
         p a u = [u * (1 - a), u * a]
