@@ -147,7 +147,7 @@ void print_sample_buffer(sample_buffer* buffer)
 	{
 		printf(
 			"sample_buffer { samples = %p, next_sample_buffer = %p, pool_index = %u, num_samples = %u, num_samples_mask = %u }\n",
-			buffer->samples, buffer->next_sample_buffer, buffer->pool_index, buffer->num_samples, buffer->num_samples_mask);   
+			buffer->samples, buffer->next_sample_buffer, buffer->pool_index, buffer->num_samples, buffer->num_samples_mask);
 	}
 
 	else
@@ -165,9 +165,9 @@ sample_buffer* acquire_sample_buffer(unsigned int num_samples)
 
 	assert(num_samples <= pow_two_num_samples);
 	assert(pool_index < (NUM_SAMPLE_BUFFER_POOLS - 1));
-	
+
 	// printf("acquire_sample_buffer(num_samples = %u, pool_index = %u, pooled_buffer = %p.\n", num_samples, pool_index, buffer);
-	
+
 	if (buffer != NULL)
 	{
 		// printf("Reuse buffer :: ");
@@ -194,7 +194,7 @@ void release_sample_buffer(sample_buffer* buffer)
 {
 	// printf("release_sample_buffer: ");
 	// print_sample_buffer(buffer);
-	
+
 	if (buffer != NULL)
 	{
 		unsigned int pool_index = buffer->pool_index;
@@ -277,7 +277,7 @@ synth_node* malloc_synth()
 		--num_free_synths;
 		return synth;
 	}
-	
+
 	return malloc(NODE_SIZE);
 }
 
@@ -302,18 +302,18 @@ void free_synth(synth_node* synth)
 {
 	// printf("free_synth -> ");
 	// print_node_alive_status(synth);
-	
+
 	if (synth != NULL)
 	{
 		bool found = hash_table_remove(synth_table, synth);
 		--num_synths;
-		
+
 		if (found == true && synth->alive_status == NODE_SCHEDULED_FOR_FREE)
 		{
 			synth->previous_alive_status = synth->alive_status;
 			synth->alive_status = NODE_DEAD;
 			deconstruct_synth(synth);
-			
+
 			// Push the synth on to the free_synth stack
 			synth->next = free_synths;
 			free_synths = synth;
@@ -377,7 +377,7 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 	synth->time = time;
 	synth->previous_alive_status = NODE_DEAD;
 	synth->alive_status = NODE_SPAWNING;
-	
+
 	// UGens
 	unsigned int num_ugens = synth_definition->num_ugens;
 	unsigned int size_ugens = synth_definition->num_ugens * UGEN_SIZE;
@@ -617,7 +617,7 @@ void scheduled_list_sort()
 	synth_node* x;
 	jack_time_t xTime, yTime;
 
-	// printf("scheduled_list size: %i\n", scheduled_list_write_index - scheduled_list_read_index); 
+	// printf("scheduled_list size: %i\n", scheduled_list_write_index - scheduled_list_read_index);
 	for (i = (scheduled_list_read_index + 1) & FIFO_SIZE_MASK; i != scheduled_list_write_index; i = (i + 1) & FIFO_SIZE_MASK)
 	{
 		x = scheduled_node_list[i];
@@ -730,7 +730,7 @@ bool hash_table_remove(hash_table table, synth_node* node)
 		table[index] = NULL;
 		return true;
 	}
-	
+
 	else
 	{
 		printf("hash_table_remove: found_node %p != node %p", found_node, node);
@@ -880,7 +880,7 @@ void remove_synth(synth_node* node)
 
 		node->previous_alive_status = node->alive_status;
 		node->alive_status = NODE_SCHEDULED_FOR_FREE;
-		
+
 		message msg;
 		msg.arg.node = node;
 		msg.type = FREE_SYNTH;
@@ -1111,7 +1111,7 @@ void init_rt_thread()
 	assert(removal_fifo == NULL);
 	assert(_necronomicon_buses == NULL);
 	assert(sample_buffer_pools == NULL);
-	
+
 	SAMPLE_RATE = jack_get_sample_rate(client);
 	RECIP_SAMPLE_RATE = 1.0 / SAMPLE_RATE;
 	TABLE_MUL_RECIP_SAMPLE_RATE = TABLE_SIZE * RECIP_SAMPLE_RATE;
@@ -1129,7 +1129,7 @@ void init_rt_thread()
 
 	sample_buffer_pools = (sample_buffer**) malloc(sizeof(sample_buffer*) * NUM_SAMPLE_BUFFER_POOLS);
 	memset(sample_buffer_pools, 0, sizeof(sample_buffer*) * NUM_SAMPLE_BUFFER_POOLS);
-	
+
 	initialize_wave_tables();
 	// load_audio_files();
 
@@ -1171,7 +1171,7 @@ void shutdown_rt_thread()
 	assert(removal_fifo != NULL);
 	assert(_necronomicon_buses != NULL);
 	assert(sample_buffer_pools != NULL);
-	
+
 	hash_table_free(synth_table);
 	rt_fifo_free();
 	scheduled_list_free();
@@ -1190,9 +1190,9 @@ void shutdown_rt_thread()
 			pooled_buffer = next_buffer;
 		}
 	}
-	
+
 	free(sample_buffer_pools);
-	
+
 	while (free_synths)
 	{
 		synth_node* synth = free_synths;
@@ -1254,7 +1254,7 @@ int process(jack_nframes_t nframes, void* arg)
 
 		// Iterate through the synth_list, processing each synth
 		_necronomicon_current_node = synth_list;
-		
+
 		while (_necronomicon_current_node)
 		{
 			process_synth(_necronomicon_current_node);
@@ -1393,6 +1393,8 @@ void shutdown_necronomicon()
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // UGens
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+#define MAX( a, b ) ( ( a > b) ? a : b )
 
 #define LINEAR_INTERP(A, B, DELTA) (A + DELTA * (B - A))
 
@@ -2880,7 +2882,7 @@ void biquad_deconstructor(ugen* u)
 void lpf_calc(ugen* u)
 {
 	double freq  = UGEN_IN(u,0);
-	double q     = UGEN_IN(u,1);
+	double q     = MAX(UGEN_IN(u,1),0.00000001);
 	double in    = UGEN_IN(u,2);
 
 	biquad_t* bi = (biquad_t*) u->data;
@@ -2910,7 +2912,7 @@ void lpf_calc(ugen* u)
 void hpf_calc(ugen* u)
 {
 	double freq  = UGEN_IN(u,0);
-	double q     = UGEN_IN(u,1);
+	double q     = MAX(UGEN_IN(u,1),0.00000001);
 	double in    = UGEN_IN(u,2);
 
 	biquad_t* bi = (biquad_t*) u->data;
@@ -2940,7 +2942,7 @@ void hpf_calc(ugen* u)
 void bpf_calc(ugen* u)
 {
 	double freq  = UGEN_IN(u,0);
-	double q     = UGEN_IN(u,1);
+	double q     = MAX(UGEN_IN(u,1),0.00000001);
 	double in    = UGEN_IN(u,2);
 
 	biquad_t* bi = (biquad_t*) u->data;
@@ -2971,7 +2973,7 @@ void notch_calc(ugen* u)
 {
 	double freq  = UGEN_IN(u,0);
 	double gain  = UGEN_IN(u,1);
-	double q     = UGEN_IN(u,2);
+	double q     = MAX(UGEN_IN(u,2),0.00000001);
 	double in    = UGEN_IN(u,3);
 
 	biquad_t* bi = (biquad_t*) u->data;
@@ -3001,7 +3003,7 @@ void notch_calc(ugen* u)
 void allpass_calc(ugen* u)
 {
 	double freq  = UGEN_IN(u,0);
-	double q     = UGEN_IN(u,1);
+	double q     = MAX(UGEN_IN(u,1),0.00000001);
 	double in    = UGEN_IN(u,2);
 
 	biquad_t* bi = (biquad_t*) u->data;
@@ -3032,7 +3034,7 @@ void peakEQ_calc(ugen* u)
 {
 	double freq  = UGEN_IN(u,0);
 	double gain  = UGEN_IN(u,1);
-	double q     = UGEN_IN(u,2);
+	double q     = MAX(UGEN_IN(u,2),0.00000001);
 	double in    = UGEN_IN(u,3);
 
 	biquad_t* bi = (biquad_t*) u->data;
@@ -3475,8 +3477,6 @@ void pluck_deconstructor(ugen* u)
 	release_sample_buffer(((pluck_data*) u->data)->buffer);
 	free(u->data);
 }
-
-#define MAX( a, b ) ( ( a > b) ? a : b )
 
 //Jaffe and Smith "Extensions of the Karplus-Strong Plucked-String* Algorithm"
 void pluck_calc(ugen* u)
