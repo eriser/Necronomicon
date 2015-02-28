@@ -14,6 +14,7 @@ synthDefs = synthDef "triOsc"    triOsc
          *> synthDef "metallic"  metallic
          *> synthDef "metallic2" metallic2
          *> synthDef "metallic3" metallic3
+         *> synthDef "shake"     shake
 
 hyperTerrainSounds :: Signal ()
 hyperTerrainSounds = play             (toggle <| isDown keyW) "triOsc"    [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
@@ -180,7 +181,7 @@ bSynth = sin 55 |> gain (line 0.1) >>> gain 0.4 >>> out 0
 pSynth :: UGen
 pSynth = sin 1110 |> gain (line 0.1) >>> gain 0.2 >>> out 1
 
-metallic ::UGen -> [UGen]
+metallic :: UGen -> [UGen]
 metallic f = sig + sig2 + sig3 |> softclip 1 |> filt |> e |> gain 1 |> out 0
     where
         sig  = sin   [f * (random |> range 0.999 1.001),f * (random |> range 0.999 1.001)]      |> gain 0.1 |> auxThrough 3
@@ -190,7 +191,7 @@ metallic f = sig + sig2 + sig3 |> softclip 1 |> filt |> e |> gain 1 |> out 0
         e    = perc 0.01 1 1 (-3)
         -- verb = freeverb 0.25 0.125 0.5
 
-metallic2 ::UGen -> [UGen]
+metallic2 :: UGen -> [UGen]
 metallic2 f = sig + sig2 + sig3 |> filt |> e |> gain 0.7 |> (\[u1,u2 ]-> [u2,u1]) |> out 0
     where
         sig  = sin   [f * (random |> range 0.999 1.001),f * (random |> range 0.999 1.001)]      |> gain 0.1 |> auxThrough 3
@@ -200,7 +201,7 @@ metallic2 f = sig + sig2 + sig3 |> filt |> e |> gain 0.7 |> (\[u1,u2 ]-> [u2,u1]
         e    = perc 0.01 0.75 1 (-3)
         -- verb = freeverb 0.25 0.125 0.5
 
-metallic3 ::UGen -> [UGen]
+metallic3 :: UGen -> [UGen]
 metallic3 f = sig + sig2 + sig3 |> filt |> e |> gain 1 |> (\[u1,u2 ]-> [u2,u1]) |> out 0
     where
         sig    = sin   [f * (random |> range 0.999 1.001),f * (random |> range 0.999 1.001)]          |> gain 0.1 |> auxThrough 3
@@ -211,8 +212,16 @@ metallic3 f = sig + sig2 + sig3 |> filt |> e |> gain 1 |> (\[u1,u2 ]-> [u2,u1]) 
         filt s = filt1 s + filt2 s
         e      = perc 0.01 8 1 (-3)
 
+shake :: UGen -> [UGen]
+shake d = sig1 + sig2 |> e |> gain 0.1 |> p 0.25 |> out 0
+    where
+        p a [u1,u2] = [u1 * 1 - a, u2 * a]
+        sig1        = whiteNoise |> bpf (random |> range 1000 2000 |> gain d |> e ) 1
+        sig2        = whiteNoise |> bpf (random |> range 1000 2000 |> gain d |> e) 1
+        e           = perc 0.01 d 1 (-3)
+
 metallicPattern :: Signal ()
-metallicPattern = metallicPattern1 <&> metallicPattern2 <&> metallicPattern3
+metallicPattern = metallicPattern1 <&> metallicPattern2 <&> metallicPattern3 <&> shakePattern
 
 metallicPattern1 :: Signal ()
 metallicPattern1 = playSynthPattern (toggle <| isDown keyD) "metallic" [] (pmap (d2f slendro . (+0)) <| ploop [sec1])
@@ -237,3 +246,11 @@ metallicPattern3 = playSynthPattern (toggle <| isDown keyD) "metallic3" [] (pmap
                       _ _ _ 1
                       _ _ _ _
                       _ _ _ 0 |]
+
+shakePattern :: Signal ()
+shakePattern = playSynthPattern (toggle <| isDown keyD) "shake" [] (pmap (* 0.25) <| ploop [sec1])
+    where
+        sec1 = [lich| _     4     [_ 1] _
+                      4     [_ 1] _     _
+                      [_ 4] _     1     [_ 4]
+                      _     1     _      _    |]
