@@ -231,15 +231,15 @@ metallic4 f = sig + sig2 + sig3 |> filt |> e |> e2 |> gain 0.25 |> out 0
         sig2 = pulse [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)] 0.975 |> gain 0.1 |> auxThrough 4
         sig3 = sin   [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)]      |> gain 0.1 |> auxThrough 2
 
-        filt2 = lpf  ([f * (random |> range 6 10 ),f * (random |> range 2 4)]  |> e) 2
-        filt3 = lpf  ([f * (random |> range 12 24),f * (random |> range 3 6)]  |> e) 2
-        filt1 = lpf  ([f * (random |> range 24 36),f * (random |> range 9 12)] |> e) 2
-        filt i= filt1 i + filt2 i * 0.5 + filt3 i * 0.5
+        filt2 = bpf  ([f * (random |> range 6 10 ),f * (random |> range 2 4)]  |> e) 1
+        filt3 = bpf  ([f * (random |> range 12 24),f * (random |> range 3 6)]  |> e) 1
+        -- filt1 = bpf  ([f * (random |> range 24 36),f * (random |> range 9 12)] |> e) 1
+        filt i= filt2 i + filt3 i * 0.5
 
         -- verb = freeverb 0.25 0.5 0.5
         -- verb n = delayN 0.2 0.2 n + n
         -- verb n = feedback (\i -> delayN 0.2 0.2 (n + [i,i] * 0.45) + n)
-        e    = perc 0.01 2 1 (-6)
+        e    = perc 0.01 1 1 (-6)
         e2   = env [1,1,0] [3,0.5] 0
 
 metallic5 :: UGen -> [UGen]
