@@ -290,7 +290,7 @@ pvector totalLength vec time = go 0 vecLength
 layoutToPattern :: ParsecPattern a -> NP.Pattern (NP.Pattern a,Rational)
 layoutToPattern (ParsecValue a)  = NP.PVal (NP.PVal a,1)
 layoutToPattern  ParsecRest      = NP.PVal (NP.PNothing,1)
-layoutToPattern (ParsecList as)  = NP.PSeq (NP.PGen $ {-pvector' totalLength withTimes Need PGen change to Rational for this to compile-} undefined) $ round totalLength
+layoutToPattern (ParsecList as)  = NP.PSeq (NP.PGen $ pvector totalLength withTimes) $ round totalLength
     where
         totalLength              = finalDur + timeLength
         (_,finalDur,timeLength)  = withTimes V.! (V.length withTimes - 1)

@@ -184,16 +184,16 @@ metallic f = sig + sig2 + sig3 |> filt |> e |> gain 1 |> out 0
         sig  = sin   [f * (random |> range 0.999 1.001),f * (random |> range 0.999 1.001)]      |> gain 0.1 |> auxThrough 3
         sig2 = pulse [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)] 0.85 |> gain 0.1 |> auxThrough 4
         sig3 = sin   [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)]      |> gain 0.1 |> auxThrough 2
-        filt = lpf  ([f * (random |> range 1 2        ),f * (random |> range 1 2)] |> e) 2
+        filt = lpf  ([f * (random |> range 2 4        ),f * (random |> range 1 2)] |> e) 2
         e    = perc 0.01 1 2 (-3)
 
 metallicPattern :: Signal ()
 metallicPattern = playSynthPattern (toggle <| isDown keyD) "metallic" [] (pmap (d2f slendro . (+0)) <| ploop [sec1])
     where
-        sec1 = [lich| [0 1] [3 0] [1 1] [_ 1]
-                      [0 1] [3 0] [1 1] [2 1]
-                      [0 1] [3 0] [1 1] [_ 1]
-                      [0 1] [3 0] [4 2] [4 1] |]
+        sec1 = [lich| [0 1] [3 0] [1 1]   [_ 1]
+                      [0 1] [3 0] [1 1 1] [2 2 1]
+                      [0 1] [3 0] [1 1]   [_ 1]
+                      [0 1] [3 0] [4 2]   [4 1] |]
 
 {-
 testSound :: Signal ()
