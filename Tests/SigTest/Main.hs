@@ -14,6 +14,8 @@ synthDefs = synthDef "triOsc"    triOsc
          *> synthDef "metallic"  metallic
          *> synthDef "metallic2" metallic2
          *> synthDef "metallic3" metallic3
+         *> synthDef "metallic4" metallic4
+         *> synthDef "metallic5" metallic5
          *> synthDef "shake"     shake
 
 hyperTerrainSounds :: Signal ()
@@ -188,9 +190,9 @@ metallic f = sig + sig2 + sig3 |> filt |> e |> gain 0.5 |> out 0
         sig2 = pulse [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)] 0.975 |> gain 0.1 |> auxThrough 4
         sig3 = sin   [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)]      |> gain 0.1 |> auxThrough 2
 
-        filt1 = lpf  ([f * (random |> range 3 5          ),f * (random |> range 1 2)] |> e) 1
-        filt2 = lpf  ([f * (random |> range 6 10         ),f * (random |> range 2 4)] |> e) 1
-        filt3 = lpf  ([f * (random |> range 12 24        ),f * (random |> range 3 6)] |> e) 1
+        filt1 = lpf  ([f * (random |> range 3 5  ),f * (random |> range 1 2)] |> e) 1
+        filt2 = lpf  ([f * (random |> range 6 10 ),f * (random |> range 2 4)] |> e) 1
+        filt3 = lpf  ([f * (random |> range 12 24),f * (random |> range 3 6)] |> e) 1
         filt i= filt1 i + filt2 i * 0.5 + filt3 i * 0.5
 
         e    = perc 0.01 1 1 (-4)
@@ -222,6 +224,34 @@ metallic3 f = sig + sig2 + sig3 |> filt |> e |> gain 1 |> (\[u1,u2 ]-> [u2,u1]) 
 
         e      = perc 0.01 8 1 (-3)
 
+metallic4 :: UGen -> [UGen]
+metallic4 f = sig + sig2 + sig3 |> filt |> e |> gain 0.25 |> out 0
+    where
+        sig  = sin   [f * (random |> range 0.999 1.001),f * (random |> range 0.999 1.001)]      |> gain 0.1 |> auxThrough 3
+        sig2 = pulse [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)] 0.975 |> gain 0.1 |> auxThrough 4
+        sig3 = sin   [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)]      |> gain 0.1 |> auxThrough 2
+
+        filt2 = lpf  ([f * (random |> range 6 10 ),f * (random |> range 2 4)]  |> e) 2
+        filt3 = lpf  ([f * (random |> range 12 24),f * (random |> range 3 6)]  |> e) 2
+        filt1 = lpf  ([f * (random |> range 24 36),f * (random |> range 9 12)] |> e) 2
+        filt i= filt1 i + filt2 i * 0.5 + filt3 i * 0.5
+
+        e    = perc 0.01 2 1 (-6)
+
+metallic5 :: UGen -> [UGen]
+metallic5 f = sig + sig2 + sig3 |> filt |> e |> gain 0.25 |> out 0
+    where
+        sig  = sin   [f * (random |> range 0.999 1.001),f * (random |> range 0.999 1.001)]      |> gain 0.1 |> auxThrough 3
+        sig2 = pulse [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)] 0.975 |> gain 0.1 |> auxThrough 4
+        sig3 = sin   [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)]      |> gain 0.1 |> auxThrough 2
+
+        filt2 = lpf  ([f * (random |> range 2 4 ),f * (random |> range 6  10)] |> e) 2
+        filt3 = lpf  ([f * (random |> range 3 9 ),f * (random |> range 12 24)] |> e) 2
+        filt1 = lpf  ([f * (random |> range 9 12),f * (random |> range 24 36)] |> e) 2
+        filt i= filt1 i + filt2 i * 0.5 + filt3 i * 0.5
+
+        e    = perc 0.01 2 1 (-6)
+
 shake :: UGen -> [UGen]
 shake d = sig1 + sig2 |> e |> p 0.75 |> gain 0.02  |> out 0
     where
@@ -247,15 +277,15 @@ metallicPattern1 = playSynthPattern (toggle <| isDown keyD) "metallic" [] (pmap 
                       [0 1] [3 0] [4 2]   [4 1] |]
 
 metallicPattern1_2 :: Signal ()
-metallicPattern1_2 = playSynthPattern (toggle <| isDown keyD) "metallic2" [] (pmap (d2f slendro . (+5)) <| ploop [sec1])
+metallicPattern1_2 = playSynthPattern (toggle <| isDown keyD) "metallic4" [] (pmap (d2f slendro . (+5)) <| ploop [sec1])
     where
         sec1 = [lich| _ _ _ 1
                       _ _ _ 2
                       _ _ _ 1
-                      _ _ _ 0 |]
+                      _ _ _ 5 |]
 
 metallicPattern1_3 :: Signal ()
-metallicPattern1_3 = playSynthPattern (toggle <| isDown keyD) "metallic" [] (pmap (d2f slendro . (+5)) <| ploop [sec1])
+metallicPattern1_3 = playSynthPattern (toggle <| isDown keyD) "metallic5" [] (pmap (d2f slendro . (+5)) <| ploop [sec1])
     where
         sec1 = [lich| _ _ 3 _
                       _ _ 4 _

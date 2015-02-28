@@ -1035,7 +1035,7 @@ void play_synth(synth_node* synth_definition, double* arguments, unsigned int nu
 
 	else
 	{
-		printf("Unable to play synth because the maximum number of synths (%u) are already playing.", MAX_SYNTHS);
+		printf("Unable to play synth because the maximum number of synths (%u) are already playing.\n", MAX_SYNTHS);
 	}
 }
 
