@@ -626,7 +626,7 @@ playSynthAtJackTime sdName args time = getSynthDef sdName >>= \maybeSynthDef -> 
                 Just synthDef -> incrementNodeID >>= \nodeID -> sendMessage (StartSynth synthDef (map (CDouble) args) nodeID time) >> return (Synth nodeID synthDef)
                 Nothing -> nPrint ("SynthDef " ++ sdName ++ " not found. Unable to start synth.") >> return (Synth nullID nullSynth)
 
-playSynthAt :: String -> [Double] -> Double -> Necronomicon Synth
+playSynthAt :: String -> [Double] -> Rational -> Necronomicon Synth
 playSynthAt sdName args time = playSynthAtJackTime sdName args $ secondsToMicro time
 
 playSynth :: String -> [Double] -> Necronomicon Synth

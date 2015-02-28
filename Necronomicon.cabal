@@ -105,7 +105,7 @@ library
 executable PatternTest
     main-is:          Main.hs
     default-language: Haskell2010
-    ghc-options:      -threaded -Wall -Werror
+    ghc-options:      -threaded -Wall -Werror -debug
     hs-source-dirs:   Tests/PatternTest
     default-extensions: QuasiQuotes TemplateHaskell
     build-depends:
@@ -137,7 +137,7 @@ executable SigTest
 executable StressTest
     main-is:          Main.hs
     default-language: Haskell2010
-    ghc-options:      -threaded -O3 -Wall -Werror
+    ghc-options:      -threaded -O3 -Wall -Werror -debug
     hs-source-dirs:   Tests/StressTest
     default-extensions: QuasiQuotes TemplateHaskell ParallelListComp
     build-depends:
@@ -148,7 +148,7 @@ executable StressTest
 executable UGenTest
     main-is:          Main.hs
     default-language: Haskell2010
-    ghc-options:      -threaded -O3 -Wall -Werror
+    ghc-options:      -threaded -O3 -Wall -Werror -debug
     hs-source-dirs:   Tests/UGenTest
     default-extensions: QuasiQuotes TemplateHaskell ParallelListComp
     build-depends:
@@ -159,7 +159,7 @@ executable UGenTest
 executable CTest
     main-is:          Main.hs
     default-language: Haskell2010
-    ghc-options:      -threaded -Wall -Werror
+    ghc-options:      -threaded -Wall -Werror -debug
     hs-source-dirs:   Tests/CTest
     default-extensions:
     build-depends:
@@ -169,7 +169,7 @@ executable CTest
 executable AudioEngineTest
     main-is:          Main.hs
     default-language: Haskell2010
-    ghc-options:      -threaded -Wall -Werror
+    ghc-options:      -threaded -Wall -Werror -debug
     hs-source-dirs:   Tests/AudioEngineTest
     default-extensions:
     build-depends:
@@ -181,7 +181,7 @@ executable AudioEngineTest
 executable PriorityQueueTest
     main-is:          Main.hs
     default-language: Haskell2010
-    ghc-options:      -threaded -Wall -Werror
+    ghc-options:      -threaded -Wall -Werror -debug
     hs-source-dirs:   Tests/PriorityQueueTest
     default-extensions:
     build-depends:

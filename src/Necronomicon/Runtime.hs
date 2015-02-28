@@ -39,32 +39,32 @@ data RuntimeMessage = StartSynth SynthDef [CDouble] NodeID JackTime
 
 type RunTimeMailbox = TChan RuntimeMessage
 
-instance Show (Time -> Int -> JackTime -> Necronomicon (Maybe Double)) where
+instance Show (Time -> Int -> JackTime -> Necronomicon (Maybe Rational)) where
     show _ = "(\\PFunc ->)"
 
-instance Show (Time -> Int -> JackTime -> [PDouble] -> Necronomicon (Maybe Double)) where
+instance Show (Time -> Int -> JackTime -> [PRational] -> Necronomicon (Maybe Rational)) where
     show _ = "(\\PFuncWithArgs ->)"
 
-type PDouble = Pattern Double
+type PRational = Pattern Rational
 
 class PDefType a b where
-    applyPDefFuncArgs :: a -> [PDouble] -> Pattern (Pattern b, Double)
+    applyPDefFuncArgs :: a -> [PRational] -> Pattern (Pattern b, Rational)
 
-instance PDefType (Pattern (Pattern b, Double)) b where
+instance PDefType (Pattern (Pattern b, Rational)) b where
     applyPDefFuncArgs p _ = p
 
-instance (PDefType b c) => PDefType (PDouble -> b) c where
+instance (PDefType b c) => PDefType (PRational -> b) c where
     applyPDefFuncArgs f [] = applyPDefFuncArgs (f 0) []
     applyPDefFuncArgs f (x:xs) = applyPDefFuncArgs (f x) xs
 
-data PDef = PDefNoArgs   String (Pattern (Time -> Int -> JackTime -> Necronomicon (Maybe Double)))
-          | PDefWithArgs String (Time -> Int -> JackTime -> [PDouble] -> Necronomicon (Maybe Double)) [PDouble] deriving (Show)
+data PDef = PDefNoArgs   String (Pattern (Time -> Int -> JackTime -> Necronomicon (Maybe Rational)))
+          | PDefWithArgs String (Time -> Int -> JackTime -> [PRational] -> Necronomicon (Maybe Rational)) [PRational] deriving (Show)
 
 data ScheduledPdef = ScheduledPdef {
     scheduledPDefName :: String,
     scheduledPDefLastTime :: JackTime,
     scheduledPDefNextTime :: JackTime,
-    scheduledPDefBeat :: Double,
+    scheduledPDefBeat :: Rational,
     scheduledPDefIteration :: Int
 } deriving (Show)
 
@@ -74,7 +74,7 @@ instance Ord ScheduledPdef where
 instance Eq ScheduledPdef where
     (ScheduledPdef _ _ t1 _ _) == (ScheduledPdef _ _ t2 _ _) = t1 == t2
 
-pbeat :: String -> Pattern (Pattern (JackTime -> Necronomicon ()), Double) -> PDef
+pbeat :: String -> Pattern (Pattern (JackTime -> Necronomicon ()), Rational) -> PDef
 pbeat name layout = PDefNoArgs name (PSeq (PVal pfunc) (plength layout))
     where pfunc t _ jackTime = case collapse layout t of
               PVal (p, d) -> case collapse p t of
@@ -82,7 +82,7 @@ pbeat name layout = PDefNoArgs name (PSeq (PVal pfunc) (plength layout))
                   _ -> return (Just d)
               _ -> return Nothing
 
-pstream :: String -> Pattern (a -> JackTime -> Necronomicon ()) -> Pattern (Pattern a, Double) -> PDef
+pstream :: String -> Pattern (a -> JackTime -> Necronomicon ()) -> Pattern (Pattern a, Rational) -> PDef
 pstream name func layout = PDefNoArgs name (PSeq (PVal pfunc) (plength layout))
     where pfunc t i jackTime = case collapse layout t of
               PVal (p, d) -> case collapse p t of
@@ -92,7 +92,7 @@ pstream name func layout = PDefNoArgs name (PSeq (PVal pfunc) (plength layout))
                   _ -> return (Just d)
               _ -> return Nothing
 
-pstreamWithArgs :: PDefType p a => String -> Pattern (a -> JackTime -> Necronomicon ()) -> p -> [PDouble] -> PDef
+pstreamWithArgs :: PDefType p a => String -> Pattern (a -> JackTime -> Necronomicon ()) -> p -> [PRational] -> PDef
 pstreamWithArgs name func layoutFunc defaultArgs = PDefWithArgs name pfunc defaultArgs
     where
         applyArgs layoutArgs = applyPDefFuncArgs layoutFunc layoutArgs
@@ -104,7 +104,7 @@ pstreamWithArgs name func layoutFunc defaultArgs = PDefWithArgs name pfunc defau
                 _ -> return (Just d)
             _ -> return Nothing
 
-pbind :: String -> Pattern (JackTime -> Necronomicon ()) -> Pattern Double -> PDef
+pbind :: String -> Pattern (JackTime -> Necronomicon ()) -> Pattern Rational -> PDef
 pbind name values durs = PDefNoArgs name (PVal pfunc)
     where
         pfunc _ iteration jackTime = case collapse durs (fromIntegral iteration) of
@@ -113,7 +113,7 @@ pbind name values durs = PDefNoArgs name (PVal pfunc)
                 _ -> return Nothing
             _ -> return Nothing
 
-data PRunTimeMessage = PlayPattern PDef | StopPattern PDef | SetPatternArg PDef Int PDouble | SetPatternArgs PDef [PDouble]
+data PRunTimeMessage = PlayPattern PDef | StopPattern PDef | SetPatternArg PDef Int PRational | SetPatternArgs PDef [PRational]
 type PRunTimeMailbox = TChan PRunTimeMessage
 type PDefQueue = (PQ.PriorityQueue ScheduledPdef, M.Map String PDef)
 
@@ -126,7 +126,7 @@ data NecroVars = NecroVars {
     necroPatternThreadID :: TVar ThreadId,
     necroPatternMailbox :: PRunTimeMailbox,
     necroPatternQueue :: TVar PDefQueue,
-    necroTempo :: TVar Double
+    necroTempo :: TVar Rational
 }
 
 data Necronomicon a = Necronomicon { runNecroState :: NecroVars -> IO (a, NecroVars) } deriving (Typeable)
@@ -346,10 +346,10 @@ startNrtRuntime = do
                             necroNrtThreadFunc
                         _ -> return ()
 
-getTempo :: Necronomicon Double
+getTempo :: Necronomicon Rational
 getTempo = prGet necroTempo
 
-setTempo :: Double -> Necronomicon ()
+setTempo :: Rational -> Necronomicon ()
 setTempo newTempo = do
     tempoTVar <- prGetTVar necroTempo
     currentTempo <- nAtomically $ readTVar tempoTVar
@@ -370,15 +370,15 @@ getCurrentBeat = do
     let currentBeat = (fromIntegral currentTime / microsecondsPerSecond) / tempoSeconds
     return (floor currentBeat)
 
-floorTimeBy :: JackTime -> Double -> JackTime
+floorTimeBy :: JackTime -> Rational -> JackTime
 floorTimeBy t b = floor $ timeDividedByBeatMicros * b
     where
-        timeDividedByBeatMicros = (fromIntegral ((floor (((fromIntegral t) :: Double) / b)) :: JackTime)) :: Double
+        timeDividedByBeatMicros = (fromIntegral ((floor (((fromIntegral t) :: Rational) / b)) :: JackTime)) :: Rational
 
-ceilTimeBy :: JackTime -> Double -> JackTime
+ceilTimeBy :: JackTime -> Rational -> JackTime
 ceilTimeBy t b = floor $ timeDividedByBeatMicros * b
     where
-        timeDividedByBeatMicros = (fromIntegral ((ceiling (((fromIntegral t) :: Double) / b)) :: JackTime)) :: Double
+        timeDividedByBeatMicros = (fromIntegral ((ceiling (((fromIntegral t) :: Rational) / b)) :: JackTime)) :: Rational
 
 -- We treat all patterns as if they are running at 60 bpm.
 -- The scheduler modifies it's own rate instead of the pattern's times to account for actual tempo
@@ -415,7 +415,7 @@ setListIndex i x xs = if i >= 0 && i < length xs
                           then take i xs ++ x : drop (i + 1) xs
                           else xs
 
-pmessageSetPDefArg :: String -> [PDouble] -> Necronomicon ()
+pmessageSetPDefArg :: String -> [PRational] -> Necronomicon ()
 pmessageSetPDefArg name argValues = getPatternQueue >>= \(pqueue, pdict) ->
         case M.lookup name pdict of
             Just (PDefWithArgs _ pattern _) -> setPatternQueue (pqueue, M.insert name (PDefWithArgs name pattern argValues) pdict)
@@ -445,22 +445,22 @@ runPDef pdef = sendPMessage (PlayPattern pdef) >> return pdef
 pstop :: PDef -> Necronomicon ()
 pstop pdef = sendPMessage (StopPattern pdef)
 
-setPDefArg :: PDef -> Int -> PDouble -> Necronomicon ()
+setPDefArg :: PDef -> Int -> PRational -> Necronomicon ()
 setPDefArg pdef argIndex argValue = sendPMessage (SetPatternArg pdef argIndex argValue)
 
-setPDefArgs :: PDef -> [PDouble] -> Necronomicon ()
+setPDefArgs :: PDef -> [PRational] -> Necronomicon ()
 setPDefArgs pdef argValues = sendPMessage (SetPatternArgs pdef argValues)
 
-timeTempo :: Double
+timeTempo :: Rational
 timeTempo = 60
 
-microsecondsPerSecond :: Double
+microsecondsPerSecond :: Rational
 microsecondsPerSecond = 1000000
 
-secondsToMicro :: Double -> JackTime
+secondsToMicro :: Rational -> JackTime
 secondsToMicro s = floor $ s * microsecondsPerSecond
 
-secsToMicroDivTen :: Double -> Int
+secsToMicroDivTen :: Rational -> Int
 secsToMicroDivTen s = floor $ s * 10
 
 patternLookAhead :: JackTime
@@ -486,7 +486,7 @@ handleScheduledPatterns nextTime = getPatternQueue >>= \(pqueue, pdict) -> handl
                 if currentTime < (t - patternLookAhead) -- Check to see if any patterns are ready to be played
                    then if hasChanged -- No pattern is ready, but this could be a recursive call, so we check if we need to update the pattern queue
                         then setPatternQueue (q, m) >> return nextT
-                        else return $ floor ((fromIntegral (t - currentTime) :: Double) * 0.1) -- return wait time as a percentage of the distance to the scheduled time
+                        else return $ floor ((fromIntegral (t - currentTime) :: Rational) * 0.1) -- return wait time as a percentage of the distance to the scheduled time
                    else getTempo >>= \currentTempo -> -- The top of the queue is ready to be played
                         let tempoRatio = timeTempo / currentTempo
                             handleNothing = handlePattern q' m nextT changed -- The pattern was stopped or the pattern collapsed to PNothing, so we keep the popped queue and don't play the pattern
@@ -494,7 +494,7 @@ handleScheduledPatterns nextTime = getPatternQueue >>= \(pqueue, pdict) -> handl
                                    Just dur -> handlePattern (PQ.insert q' (ScheduledPdef n t (t + scaledDur) (b + dur) (i + 1))) m waitTime changed
                                        where
                                            scaledDur = floor $ dur * tempoRatio * microsecondsPerSecond -- Convert from beats to microseconds
-                                           waitTime = (floor (((fromIntegral scaledDur) :: Double) * 0.1)) :: JackTime -- return wait time as a percentage of the duration of this beat
+                                           waitTime = (floor (((fromIntegral scaledDur) :: Rational) * 0.1)) :: JackTime -- return wait time as a percentage of the duration of this beat
                                    Nothing -> handleNothing -- After player the pattern returns Nothing for the duration, which means it is done and ready to be removed                            
                         in case M.lookup n m of
                            Nothing -> handleNothing -- When we check the name/pdef map we find nothing, which means it was stopped 
@@ -660,7 +660,7 @@ nThreadDelay :: Int -> Necronomicon ()
 nThreadDelay = liftIO . threadDelay
 
 -- Sleep in seconds
-nSleep :: Double -> Necronomicon ()
+nSleep :: Rational -> Necronomicon ()
 nSleep = nThreadDelay . floor . (*microsecondsPerSecond)
 
 nFree :: Storable a => Ptr a -> Necronomicon ()

@@ -13,14 +13,14 @@ import Data.Monoid
 import qualified Data.Fixed as F
 import qualified Data.Vector as V
 
-type Time = Double
+type Time = Rational
 
 data Pattern a = PGen (Time -> Pattern a)
                | PSeq (Pattern a) Int
                | PVal a
                | PNothing
 
-type PNum = Pattern Double
+type PNum = Pattern Rational
 type PList a = Pattern [a]
 -- type PList a = Pattern [a]
 
@@ -80,57 +80,53 @@ runPatternDivisions n d p = mapM_ (\t -> putStrLn $ "Time: " ++ (show t) ++ ", v
 
 -- data Pbind = Pbind ([Double] -> Time -> Double) [(Time -> Pattern)] Pattern
 
-newtype Seconds = Seconds Double
+newtype Seconds = Seconds Rational
 newtype Picoseconds = Picoseconds Integer
 newtype Microseconds = Microseconds Integer
 
-type Beat = Double
+type Beat = Rational
 
-tempo :: Double
+tempo :: Rational
 tempo = 120
 
-beatsToSecondsRatio :: Double
+beatsToSecondsRatio :: Rational
 beatsToSecondsRatio = 60 / tempo
 
-secondsToBeatsRatio :: Double
+secondsToBeatsRatio :: Rational
 secondsToBeatsRatio = tempo / 60
 
-tempoMicros :: Double
+tempoMicros :: Rational
 tempoMicros = beatsToSecondsRatio * 1000000
 
-tempoPicos :: Double
+tempoPicos :: Rational
 tempoPicos = beatsToSecondsRatio * picosecondsInSecond
 
-picosecondsInSecond :: Double
+picosecondsInSecond :: Rational
 picosecondsInSecond = 10e11
 
-secondsToPicosecondsRatio :: Double
+secondsToPicosecondsRatio :: Rational
 secondsToPicosecondsRatio = 10e-12
 
 -- Microseconds
-lookAhead :: Int
+lookAhead :: Rational
 lookAhead = 5000 -- 10 milliseconds
 
 -- Picoseconds
 -- scheduleAhead :: Integer
 -- scheduleAhead = 50000000000 -- 10 milliseconds
 
--- Seconds
-scheduleAhead :: Time
-scheduleAhead = 0.04
-
 -- Beats
-cpuToBeats :: Integer -> Double
+cpuToBeats :: Integer -> Rational
 cpuToBeats t = (fromIntegral t) * (secondsToPicosecondsRatio * secondsToBeatsRatio)
 
 -- Picoseconds
-beatsToCPU :: Double -> Integer
+beatsToCPU :: Rational -> Integer
 beatsToCPU b = floor (b * (picosecondsInSecond * beatsToSecondsRatio))
 
 beatsToTime :: Beat -> Time
 beatsToTime b = b * beatsToSecondsRatio
 
-beatsToMicro :: Double -> Int
+beatsToMicro :: Rational -> Int
 beatsToMicro b = floor (b * tempoMicros)
 
 wrapResize :: [a] -> [b] -> [a]
@@ -193,7 +189,7 @@ ploop patterns = PSeq (PGen timeSeq) (floor totalRepeats)
         expandReps (t, racc, pacc) (r, p) = (r + t, racc ++ (take (floor r) $ cycle [t]), pacc ++ (take (floor r) $ cycle [p]))
         repeatAmounts = map (findRepeats) patterns
         totalRepeats = sum $ repeatAmounts
-        findRepeats :: Pattern a -> Double
+        findRepeats :: Pattern a -> Rational
         findRepeats p = case p of
             (PSeq _ n) -> fromIntegral (trace ("ploop length: " ++ show n) n)
             _ -> 1.0
@@ -211,7 +207,7 @@ pseq iterations patterns = PSeq (PGen timeSeq) totalBeats
         expandReps (t, racc, pacc) (r, p) = (r + t, racc ++ (take (floor r) $ cycle [t]), pacc ++ (take (floor r) $ cycle [p]))
         repeatAmounts = map (findRepeats) patterns
         totalRepeats = sum $ repeatAmounts
-        findRepeats :: Pattern a -> Double
+        findRepeats :: Pattern a -> Rational
         findRepeats p = case p of
             (PSeq _ n) -> fromIntegral (trace ("pseq length: " ++ show n) n)
             _ -> 1.0
@@ -222,7 +218,7 @@ pseq iterations patterns = PSeq (PGen timeSeq) totalBeats
                 currentPattern = (cycle repeatedPatterns) !! (floor t)
                 currentTime = F.mod' (t - ((cycle repeatedTimes) !! (floor t))) totalRepeats
 
-wrapRange :: Double -> Double -> Double -> Double
+wrapRange :: Rational -> Rational -> Rational -> Rational
 wrapRange lo hi value
     | value >= hi = greater
     | value < lo = lesser
@@ -257,14 +253,14 @@ prand list = PGen (\t -> collapse (list !! ((randomRs (0, range) stdGen) !! (flo
         range = (length list) - 1
 
 -- Automatically normalizes the probablity list
-pwrand :: [Double] -> [Pattern a] -> Pattern a
+pwrand :: [Rational] -> [Pattern a] -> Pattern a
 pwrand [] _ = PNothing
 pwrand _ [] = PNothing
 pwrand _ [p] = p
 pwrand prob list = if length prob /= length list then PNothing
                    else PGen (\t -> collapse (wrandValue $ rands !! (floor t)) t)
     where
-        rands = (randomRs (0.0, 1.0) stdGen)
+        rands = map toRational (randomRs (0.0, 1.0) stdGen :: [Double])
         sumProb = sum prob
         normalizedProb = map (/sumProb) prob
         randRanges = (snd $ foldl (\(rs, acc) x -> (x + rs, acc ++ [rs])) (0, []) normalizedProb)
@@ -297,7 +293,7 @@ pwhite (PSeq l _) h = PGen (\t -> collapse (pwhite (collapse l t) h) t)
 pwhite l (PSeq h _) = PGen (\t -> collapse (pwhite l (collapse h t)) t)
 pwhite (PGen l) h = PGen (\t -> collapse (pwhite (l t) h) t)
 pwhite l (PGen h) = PGen (\t -> collapse (pwhite l (h t)) t)
-pwhite (PVal l) (PVal h) = PGen (\t -> PVal ((randomRs (l, h) stdGen) !! (floor t)))
+pwhite (PVal l) (PVal h) = PGen (\t -> PVal ((map toRational (randomRs (fromRational l, fromRational h) stdGen :: [Double])) !! (floor t)))
 
 pstutter :: PNum -> Pattern a -> Pattern a
 pstutter PNothing _ = PNothing
@@ -338,7 +334,7 @@ pgeom (PSeq start' _) grow' = PGen (\t -> collapse (pgeom (collapse start' t) gr
 pgeom start' (PSeq grow' _) = PGen (\t -> collapse (pgeom start' (collapse grow' t)) t)
 pgeom (PGen start') grow' = PGen (\t -> collapse (pgeom (start' t) grow') t)
 pgeom start' (PGen grow') = PGen (\t -> collapse (pgeom start' (grow' t)) t)
-pgeom (PVal start') (PVal grow') = PGen (\t -> PVal $ start' * (grow' ** t))
+pgeom (PVal start') (PVal grow') = PGen (\t -> PVal $ start' * toRational (fromRational grow' ** fromRational t :: Double))
 
 preverse :: Pattern a -> Pattern a
 preverse pattern = PGen (\t -> collapse pattern (-t))
@@ -526,24 +522,24 @@ monadicPattern = pseq 5 [1..9] >>= mreseq
 ---------------------------------------
 
 data Scale = Scale {
-    tuning           :: V.Vector Double,
+    tuning           :: V.Vector Rational,
     degrees          :: V.Vector Int,
     pitchesPerOctave :: Int,
-    rootFreq         :: Double}
+    rootFreq         :: Rational}
 
-degree2Freq :: Scale -> Int -> Double
+degree2Freq :: Scale -> Int -> Rational
 degree2Freq scale degree = (tuning scale V.! wrapAt degree (degrees scale)) * octave * rootFreq scale
     where
         octave            = fromIntegral (2 ^ (div degree $ V.length $ degrees scale) :: Int)
         wrapAt index list = list V.! mod index (V.length list)
 
-d2f :: Scale -> Double -> Double
+d2f :: Scale -> Rational -> Rational
 d2f scale = degree2Freq scale . floor
 
-scaleTest :: [Double]
+scaleTest :: [Rational]
 scaleTest = [d2f major 8,d2f major 9,d2f major 10,d2f major 11,d2f major 12,d2f major 13,d2f major 14]
 
-justTuning :: V.Vector Double
+justTuning :: V.Vector Rational
 justTuning = V.fromList [
     1,
     16/15,
@@ -558,10 +554,10 @@ justTuning = V.fromList [
     9/5,
     15/8]
 
-equalTuning :: V.Vector Double
-equalTuning = V.fromList $ map (\x -> 2 ** (x / 12)) [0..11]
+equalTuning :: V.Vector Rational
+equalTuning = V.fromList $ map (\x -> toRational $ 2 ** (x / 12)) [0.0..11.0 :: Double]
 
-sruti :: V.Vector Double
+sruti :: V.Vector Rational
 sruti = V.fromList [
     1,
     256/243,
@@ -586,7 +582,7 @@ sruti = V.fromList [
     15/8,
     243/128]
 
-slendroTuning :: V.Vector Double
+slendroTuning :: V.Vector Rational
 slendroTuning = V.fromList [
     1,
     1.1654065573126493,
@@ -594,7 +590,7 @@ slendroTuning = V.fromList [
     1.5087286267502333,
     1.743113687764283]
 
-slendroTuning2 :: V.Vector Double
+slendroTuning2 :: V.Vector Rational
 slendroTuning2 = V.fromList [
     1,
     1.0204225362734822,
@@ -609,7 +605,7 @@ slendroTuning2 = V.fromList [
     1.7766588275058794,
     1.8118958124688056]
 
-pelogTuning :: V.Vector Double
+pelogTuning :: V.Vector Rational
 pelogTuning = V.fromList [
     1,
     1.0999973132782155,
@@ -617,7 +613,7 @@ pelogTuning = V.fromList [
     1.4581778243945491,
     1.629203328218162]
 
-ankaraTuning :: V.Vector Double
+ankaraTuning :: V.Vector Rational
 ankaraTuning = V.fromList [
     1,
     1053/1000,
@@ -654,7 +650,7 @@ ankaraTuning = V.fromList [
     951/500,
     1931/1000]
 
-flamencoTuning :: V.Vector Double
+flamencoTuning :: V.Vector Rational
 flamencoTuning = V.fromList [
     1,
     160/153,
@@ -669,7 +665,7 @@ flamencoTuning = V.fromList [
     16/9,
     4096/2187]
 
-hawaiianTuning :: V.Vector Double
+hawaiianTuning :: V.Vector Rational
 hawaiianTuning = V.fromList [
     1,
     1418440/1360773,
@@ -684,7 +680,7 @@ hawaiianTuning = V.fromList [
     90219/50399,
     846376/453591]
 
-kotoTuning :: V.Vector Double
+kotoTuning :: V.Vector Rational
 kotoTuning = V.fromList [
     107/152,
     3/4,
@@ -698,7 +694,7 @@ kotoTuning = V.fromList [
     15/8,
     143/76]
 
-mothraTuning :: V.Vector Double
+mothraTuning :: V.Vector Rational
 mothraTuning = V.fromList [
     1,
     1.1189384464207068,
@@ -712,7 +708,7 @@ mothraTuning = V.fromList [
     1.914389591456696,
     1.9567266500238074]
 
-egyptianTuning :: V.Vector Double
+egyptianTuning :: V.Vector Rational
 egyptianTuning = V.fromList [
     1/2,
     107/96,
@@ -947,5 +943,5 @@ scaleList = ["major", "ionian", "dorian", "phrygian", "lydian", "mixolydian", "m
              "indian", "pelog", "slendro", "slendro2", "alfarabi", "ankara", "archytas", "degung", "degungSejati", "spanish",
              "hawaiianMajor", "hawaiianMinor", "hijazira", "mothra", "todi", "purvi", "marva", "bhairav", "ahirbhairav", "coleJI"]
 
-pmap :: (a -> a) -> Pattern (Pattern a, Double) -> Pattern (Pattern a, Double)
+pmap :: (a -> a) -> Pattern (Pattern a, Rational) -> Pattern (Pattern a, Rational)
 pmap f p = fmap (\(p',d) -> (fmap f p',d)) p

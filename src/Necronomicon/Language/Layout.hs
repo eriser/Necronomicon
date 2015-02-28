@@ -248,6 +248,7 @@ parseRawFunction = between (char '(' *> spaces) (spaces *> char ')') (try leftSe
     -- return $ VarE name'
 
 --Don't think this can handle negative numbers right now. Oops....
+{-
 layoutToPattern :: ParsecPattern a -> NP.Pattern (NP.Pattern a,Double)
 layoutToPattern (ParsecValue a)  = NP.PVal (NP.PVal a,1)
 layoutToPattern  ParsecRest      = NP.PVal (NP.PNothing,1)
@@ -284,13 +285,12 @@ pvector totalLength vec time = go 0 vecLength
                 (prevValue,prevDur,prevTime) = vec V.! max (index-1) 0
                 (curValue ,curDur ,curTime)  = vec V.! index
                 (nextValue,nextDur,nextTime) = vec V.! min (index+1) (vecLength -1)
+-}
 
-{-
---TODO: RATIONAL PATTERN UPDATE
-layoutToPattern' :: ParsecPattern a -> NP.Pattern (NP.Pattern a,Rational)
-layoutToPattern' (ParsecValue a)  = NP.PVal (NP.PVal a,1)
-layoutToPattern'  ParsecRest      = NP.PVal (NP.PNothing,1)
-layoutToPattern' (ParsecList as)  = NP.PSeq (NP.PGen $ {-pvector' totalLength withTimes Need PGen change to Rational for this to compile-} undefined) $ round totalLength
+layoutToPattern :: ParsecPattern a -> NP.Pattern (NP.Pattern a,Rational)
+layoutToPattern (ParsecValue a)  = NP.PVal (NP.PVal a,1)
+layoutToPattern  ParsecRest      = NP.PVal (NP.PNothing,1)
+layoutToPattern (ParsecList as)  = NP.PSeq (NP.PGen $ {-pvector' totalLength withTimes Need PGen change to Rational for this to compile-} undefined) $ round totalLength
     where
         totalLength              = finalDur + timeLength
         (_,finalDur,timeLength)  = withTimes V.! (V.length withTimes - 1)
@@ -302,10 +302,10 @@ layoutToPattern' (ParsecList as)  = NP.PSeq (NP.PGen $ {-pvector' totalLength wi
         go d  ParsecRest     vs  = (NP.PNothing,d) : vs
         go d (ParsecList as') vs = foldr (go (d / (toRational $ length as'))) vs as'
         go _ _ vs                = vs
-layoutToPattern' _                = NP.PNothing
+layoutToPattern _                = NP.PNothing
 
-pvector' :: Rational -> V.Vector(NP.Pattern a,Rational,Rational) -> Rational -> NP.Pattern (NP.Pattern a,Rational)
-pvector' totalLength vec time = go 0 vecLength
+pvector :: Rational -> V.Vector(NP.Pattern a,Rational,Rational) -> Rational -> NP.Pattern (NP.Pattern a,Rational)
+pvector totalLength vec time = go 0 vecLength
     where
         vecLength = V.length vec
         go imin imax
@@ -323,7 +323,6 @@ pvector' totalLength vec time = go 0 vecLength
                 (prevValue,prevDur,prevTime) = vec V.! max (index-1) 0
                 (curValue ,curDur ,curTime)  = vec V.! index
                 (nextValue,nextDur,nextTime) = vec V.! min (index+1) (vecLength -1)
--}
 
 getValueName :: String -> Q Name
 getValueName s = do

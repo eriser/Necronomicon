@@ -172,20 +172,20 @@ sample_buffer* acquire_sample_buffer(unsigned int num_samples)
 	{
 		// printf("Reuse buffer :: ");
 		sample_buffer_pools[pool_index] = buffer->next_sample_buffer;
-		memset(buffer->samples, 0, pow_two_num_samples * DOUBLE_SIZE);
 	}
 
 	else
 	{
 		// printf("New buffer :: ");
 		buffer = malloc(SAMPLE_BUFFER_SIZE);
-		buffer->samples = calloc(pow_two_num_samples, DOUBLE_SIZE);
+		buffer->samples = malloc(pow_two_num_samples * DOUBLE_SIZE);
 		buffer->pool_index = pool_index;
 		buffer->num_samples = pow_two_num_samples;
 		buffer->num_samples_mask = pow_two_num_samples - 1;
 	}
 
 	buffer->next_sample_buffer = NULL;
+	memset(buffer->samples, 0, pow_two_num_samples * DOUBLE_SIZE);
 	// print_sample_buffer(buffer);
 	return buffer;
 }
@@ -241,7 +241,6 @@ synth_node* _necronomicon_current_node = NULL;
 const unsigned int NODE_SIZE = sizeof(synth_node);
 const unsigned int NODE_POINTER_SIZE = sizeof(synth_node*);
 synth_node* free_synths = NULL;
-synth_node* free_synths_tail = NULL;
 int num_free_synths = 0;
 const unsigned int max_free_synths = 128;
 
@@ -304,7 +303,7 @@ void free_synth(synth_node* synth)
 	// printf("free_synth -> ");
 	// print_node_alive_status(synth);
 	
-	if (synth)
+	if (synth != NULL)
 	{
 		bool found = hash_table_remove(synth_table, synth);
 		--num_synths;
@@ -338,6 +337,11 @@ void free_synth(synth_node* synth)
 			free(synth);
 			}*/
 	}
+
+	else
+	{
+		puts("free_synth() passed a NULL pointer.");
+	}
 }
 
 void free_synth_definition(synth_node* synth_definition)
@@ -350,7 +354,7 @@ void free_synth_definition(synth_node* synth_definition)
 		free(u->inputs);
 		free(u->outputs);
 
-		if (u->constructor_args)
+		if (u->constructor_args != NULL)
 			free(u->constructor_args);
 	}
 
@@ -720,24 +724,21 @@ void hash_table_insert(hash_table table, synth_node* node)
 bool hash_table_remove(hash_table table, synth_node* node)
 {
 	unsigned int index = node->table_index;
-	if (table[index] != NULL)
+	synth_node* found_node = table[index];
+	if (found_node == node)
 	{
-		synth_node* found_node = table[index];
-		if (found_node == node)
-		{
-			table[index] = NULL;
-			return true;
-		}
-
-		else
-		{
-			printf("hash_table_remove: found_node %p != node %p", found_node, node);
-		}
+		table[index] = NULL;
+		return true;
 	}
-
-	return false;
+	
+	else
+	{
+		printf("hash_table_remove: found_node %p != node %p", found_node, node);
+		return false;
+	}
 }
 
+void print_node(synth_node* node);
 synth_node* hash_table_lookup(hash_table table, unsigned int key)
 {
 	unsigned int hash = HASH_KEY(key);
@@ -746,12 +747,14 @@ synth_node* hash_table_lookup(hash_table table, unsigned int key)
 
 	while (i < MAX_SYNTHS)
 	{
+		printf("table[%u] = ", slot, table[slot]);
+		print_node(table[slot]);
 		if (table[slot] != NULL)
 		{
 			if (table[slot]->key == key)
 				return table[slot];
 			else
-				printf("Found table in hash_table_lookup, but not the one we're after. Looking up node ID %u but found %u.", key, table[slot]->key);
+				printf("Found synth node in hash_table_lookup, but not the one we're after. Looking up node ID %u but found %u.", key, table[slot]->key);
 		}
 
 		++i;
@@ -792,10 +795,10 @@ doubly_linked_list doubly_linked_list_remove(doubly_linked_list list, synth_node
 	synth_node* previous = node->previous;
 	synth_node* next = node->next;
 
-	if (previous)
+	if (previous != NULL)
 		previous->next = next;
 
-	if (next)
+	if (next != NULL)
 		next->previous = previous;
 
 	node->previous = NULL;
@@ -809,7 +812,7 @@ doubly_linked_list doubly_linked_list_remove(doubly_linked_list list, synth_node
 
 void doubly_linked_list_free(doubly_linked_list list)
 {
-	while (list)
+	while (list != NULL)
 	{
 		synth_node* next = list->next;
 		free_synth(list);
@@ -1021,13 +1024,13 @@ void play_synth(synth_node* synth_definition, double* arguments, unsigned int nu
 	if (num_synths < MAX_SYNTHS)
 	{
 		synth_node* synth = new_synth(synth_definition, arguments, num_arguments, node_id, time);
-		// printf("play_synth node id: %u.\n", synth->key);
+		++num_synths;
+		hash_table_insert(synth_table, synth);
+        // printf("play_synth node id: %u.\n", synth->key);
 		message msg;
 		msg.arg.node = synth;
 		msg.type = START_SYNTH;
 		RT_FIFO_PUSH(msg);
-		hash_table_insert(synth_table, synth);
-		++num_synths;
 	}
 
 	else
@@ -1896,20 +1899,22 @@ synth_node* new_test_synth(unsigned int time)
 
 void print_node(synth_node* node)
 {
-	if (node)
-		printf("synth_node { graph: %p, wires: %p, prev: %p, next: %p, key %i, hash: %i, num_ugens: %u, table_index: %u, num_wires: %u, time: %llu }",
+	if (node != NULL)
+		printf("synth_node { ugen_graph: %p, ugen_wires: %p, previous: %p, next: %p, time: %llu, key %u, hash: %u, table_index: %u, num_ugens: %u, num_wires: %u, previous_alive_status: %u, alive_status %u }\n",
 			   node->ugen_graph,
 			   node->ugen_wires,
 			   node->previous,
 			   node->next,
+			   node->time,
 			   node->key,
 			   node->hash,
 			   node->table_index,
 			   node->num_ugens,
 			   node->num_wires,
-			   node->time);
+			   node->previous_alive_status,
+			   node->alive_status);
 	else
-		printf("0");
+		printf("NULL");
 }
 
 void print_list(node_list list)
@@ -2001,7 +2006,7 @@ void print_hash_table(hash_table table)
 	unsigned int i;
 	for (i = 0; i < MAX_SYNTHS; ++i)
 	{
-		print_node(table[i]);
+		// print_node(table[i]);
 		if (i < (MAX_SYNTHS - 1))
 			printf(", ");
 	}
