@@ -180,23 +180,23 @@ pSynth :: UGen
 pSynth = sin 1110 |> gain (line 0.1) >>> gain 0.2 >>> out 1
 
 metallic ::UGen -> [UGen]
-metallic f = sig + sig2 + sig3 |> filt |> e |> verb |> gain 1 |> out 0
+metallic f = sig + sig2 + sig3 |> softclip 1 |> filt |> verb |> e |> gain 1 |> out 0
     where
         sig  = sin   [f * (random |> range 0.999 1.001),f * (random |> range 0.999 1.001)]      |> gain 0.1 |> auxThrough 3
         sig2 = pulse [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)] 0.85 |> gain 0.1 |> auxThrough 4
         sig3 = sin   [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)]      |> gain 0.1 |> auxThrough 2
         filt = lpf  ([f * (random |> range 2 4        ),f * (random |> range 1 2)] |> e) 2
-        e    = perc 0.01 1 2 (-3)
+        e    = perc 0.01 1 1 (-3)
         verb = freeverb 0.25 0.125 0.5
 
 metallic2 ::UGen -> [UGen]
-metallic2 f = sig + sig2 + sig3 |> filt |> e |> verb |> gain 1 |> (\[u1,u2 ]-> [u2,u1]) |> out 0
+metallic2 f = sig + sig2 + sig3 |> filt |> verb |> e |> gain 0.7 |> (\[u1,u2 ]-> [u2,u1]) |> out 0
     where
         sig  = sin   [f * (random |> range 0.999 1.001),f * (random |> range 0.999 1.001)]      |> gain 0.1 |> auxThrough 3
-        sig2 = pulse [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)] 0.85 |> gain 0.1 |> auxThrough 4
+        sig2 = pulse [f * (random |> range 0.2499 0.2501),f * (random |> range 0.2499 0.2501)] 0.85 |> gain 0.1 |> auxThrough 4
         sig3 = sin   [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)]      |> gain 0.1 |> auxThrough 2
         filt = lpf  ([f * (random |> range 2 4        ),f * (random |> range 1 2)] |> e) 2
-        e    = perc 0.01 1 2 (-3)
+        e    = perc 0.01 0.75 1 (-3)
         verb = freeverb 0.25 0.125 0.5
 
 metallicPattern :: Signal ()
