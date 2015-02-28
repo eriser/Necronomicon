@@ -1493,11 +1493,11 @@ playSynthN playSig synthName argSigs = Signal $ \state -> do
 
         updateArg index aCont synth sNecroVars update = aCont update >>= \a -> case a of
             NoChange _ -> return ()
-            Change   v -> runNecroState (setSynthArg synth index v) sNecroVars >> return ()
+            Change   v -> runNecroState (setSynthArg synth index (toRational v)) sNecroVars >> return ()
 
         playStopSynth args shouldPlay synthRef = liftIO (readIORef synthRef) >>= \ms -> case (ms,shouldPlay) of
-            (Nothing   ,True )  -> playSynth synthName args >>= \s -> liftIO (writeIORef synthRef $ Just s) >> return (Change ())
-            (Just synth,False)  -> stopSynth synth          >>        liftIO (writeIORef synthRef  Nothing) >> return (Change ())
+            (Nothing   ,True )  -> playSynth synthName (map toRational args) >>= \s -> liftIO (writeIORef synthRef $ Just s) >> return (Change ())
+            (Just synth,False)  -> stopSynth synth                           >>        liftIO (writeIORef synthRef  Nothing) >> return (Change ())
             _                   -> return $ NoChange ()
 
 synthDef :: UGenType a => String -> a -> Signal ()
