@@ -46,16 +46,15 @@ patternTest = do
     -- _ <- runPDef $ pstream "ArgsPattern2" pLineSynth (PVal (5, 1))
     -- setTempo 50000
 
-    {-
     setTempo 150
     argsPattern <- runPDef $ pstreamWithArgs "ArgsPattern" pLineSynth ((\x -> pstutter x $ pseq 10 [
-                                                                             [lich| 5 [5 5] 5 |],
-                                                                             [lich| 7 [7 7] 7 |],
-                                                                             [lich| 9 [9 9] 9 |]
-                                                                             ]) :: Pattern Double -> Pattern (Pattern Double, Double)) [1]
+                                                                             [lich| 5 [6 7] 8 |],
+                                                                             [lich| 6 [7 8] 9 |],
+                                                                             [lich| 7 [8 9] 10 |]
+                                                                             ]) :: Pattern Rational -> Pattern (Pattern Rational, Rational)) [1]
 
-    nSleep 5
-    setTempo 100
+    nSleep 10
+    -- setTempo 100
     setPDefArg argsPattern 0 2
     nSleep 10
     setTempo 175
@@ -66,10 +65,10 @@ patternTest = do
     nSleep 5
     setTempo 150
     setPDefArg argsPattern 0 1
-    runPDef $ pstreamWithArgs "ArgsPattern2" pBeatSynth ((\x -> pstutter x [lich| b p [_ b] p |]) :: Pattern Double -> Pattern (Pattern String, Double)) [1]
+    _ <- runPDef $ pstreamWithArgs "ArgsPattern2" pBeatSynth ((\x -> pstutter x [lich| b p [_ b] p |]) :: Pattern Rational -> Pattern (Pattern String, Rational)) [1]
 
     pstop argsPattern
--}
+
     setTempo 150
     _ <- runPDef $ pstream "myCoolPattern" pLineSynth $ [lich| 1 [_ 2] _ [3 [4 5]] 6
                                                                1 [_ 2] _ [3 [4 5]] 6
