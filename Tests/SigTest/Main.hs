@@ -13,6 +13,7 @@ synthDefs = synthDef "triOsc"    triOsc
          *> synthDef "p"         pSynth
          *> synthDef "metallic"  metallic
          *> synthDef "metallic2" metallic2
+         *> synthDef "metallic3" metallic3
 
 hyperTerrainSounds :: Signal ()
 hyperTerrainSounds = play             (toggle <| isDown keyW) "triOsc"    [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
@@ -180,27 +181,38 @@ pSynth :: UGen
 pSynth = sin 1110 |> gain (line 0.1) >>> gain 0.2 >>> out 1
 
 metallic ::UGen -> [UGen]
-metallic f = sig + sig2 + sig3 |> softclip 1 |> filt |> verb |> e |> gain 1 |> out 0
+metallic f = sig + sig2 + sig3 |> softclip 1 |> filt |> e |> gain 1 |> out 0
     where
         sig  = sin   [f * (random |> range 0.999 1.001),f * (random |> range 0.999 1.001)]      |> gain 0.1 |> auxThrough 3
         sig2 = pulse [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)] 0.85 |> gain 0.1 |> auxThrough 4
         sig3 = sin   [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)]      |> gain 0.1 |> auxThrough 2
         filt = lpf  ([f * (random |> range 2 4        ),f * (random |> range 1 2)] |> e) 2
         e    = perc 0.01 1 1 (-3)
-        verb = freeverb 0.25 0.125 0.5
+        -- verb = freeverb 0.25 0.125 0.5
 
 metallic2 ::UGen -> [UGen]
-metallic2 f = sig + sig2 + sig3 |> filt |> verb |> e |> gain 0.7 |> (\[u1,u2 ]-> [u2,u1]) |> out 0
+metallic2 f = sig + sig2 + sig3 |> filt |> e |> gain 0.7 |> (\[u1,u2 ]-> [u2,u1]) |> out 0
     where
         sig  = sin   [f * (random |> range 0.999 1.001),f * (random |> range 0.999 1.001)]      |> gain 0.1 |> auxThrough 3
         sig2 = pulse [f * (random |> range 0.2499 0.2501),f * (random |> range 0.2499 0.2501)] 0.85 |> gain 0.1 |> auxThrough 4
         sig3 = sin   [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)]      |> gain 0.1 |> auxThrough 2
         filt = lpf  ([f * (random |> range 2 4        ),f * (random |> range 1 2)] |> e) 2
         e    = perc 0.01 0.75 1 (-3)
-        verb = freeverb 0.25 0.125 0.5
+        -- verb = freeverb 0.25 0.125 0.5
+
+metallic3 ::UGen -> [UGen]
+metallic3 f = sig + sig2 + sig3 |> filt |> e |> gain 1 |> (\[u1,u2 ]-> [u2,u1]) |> out 0
+    where
+        sig    = sin   [f * (random |> range 0.999 1.001),f * (random |> range 0.999 1.001)]          |> gain 0.1 |> auxThrough 3
+        sig2   = pulse [f * (random |> range 0.2499 0.2501),f * (random |> range 0.2499 0.2501)] 0.85 |> gain 0.1 |> auxThrough 4
+        sig3   = sin   [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)]          |> gain 0.1 |> auxThrough 2
+        filt1  = lpf  ([f * (random |> range 2 4        ),f * (random |> range 1 2)] |> e) 2
+        filt2  = lpf  ([f * (random |> range 1 2        ),f * (random |> range 2 4)] |> e) 2
+        filt s = filt1 s + filt2 s
+        e      = perc 0.01 8 1 (-3)
 
 metallicPattern :: Signal ()
-metallicPattern = metallicPattern1 <&> metallicPattern2
+metallicPattern = metallicPattern1 <&> metallicPattern2 <&> metallicPattern3
 
 metallicPattern1 :: Signal ()
 metallicPattern1 = playSynthPattern (toggle <| isDown keyD) "metallic" [] (pmap (d2f slendro . (+0)) <| ploop [sec1])
@@ -218,61 +230,10 @@ metallicPattern2 = playSynthPattern (toggle <| isDown keyD) "metallic2" [] (pmap
                       4 _ [_ 4 4] 5
                       4 _ [_ 4 4] 0 |]
 
-{-
-testSound :: Signal ()
-testSound = play (isDown keyW)                    myCoolSynth2
-        <&> play (toggle <| isDown keyA)          myCoolSynth3
-        <&> play (isDown keyP `till` isDown keyS) myCoolSynth2
-
-testSound2 :: Signal ()
-testSound2 = play (toggle <| isDown keyW) noArgSynth
-         <&> play (toggle <| isDown keyA) oneArgSynth (mouseX ~> scale 20  3000)
-         <&> play (toggle <| isDown keyS) twoArgSynth (mouseX ~> scale 100 3000) (mouseY ~> scale 20 3000)
-         <&> play (toggle <| isDown keyD) threeSynth  440 880 66.6
-
-noArgSynth :: UGen
-noArgSynth = whiteNoise |> pluck 110 110 5.0 |> gain 0.1 |> out 0
-
--- noArgSynth = dust 10 |> out 0
--- noArgSynth = impulse 2 0.5 |> out 0
-
-oneArgSynth :: UGen -> [UGen]
-oneArgSynth f = sig |> filt |> verb |> gain 0.1 |> out 0
+metallicPattern3 :: Signal ()
+metallicPattern3 = playSynthPattern (toggle <| isDown keyD) "metallic3" [] (pmap ((*0.25) . d2f slendro) <| ploop [sec1])
     where
-        sig  = saw (noise2 3 |> range 40 1000) * (sin 0.35 |> range 0.5 1.0)
-        filt = lpf (lag 6 [f,f]) 6
-        verb = freeverb 1.0 0.95 0.95
-
--- oneArgSynth f = saw 40 |> lpf (lag 6 [f,f]) 6 +> delayN 1.0 1.0 |> gain 0.5 |> out 0
--- oneArgSynth f = saw 80 |> onePoleMS20 [f,f] >>> gain 0.25 >>> out 0
--- oneArgSynth f = saw 80 |> lpfMS20 [f,f] 1 1 >>> gain 0.25 >>> out 0
--- oneArgSynth f = saw 40 |> highshelf [f,f] (6) 6 >>> gain 0.25 >>> out 0
--- oneArgSynth f = saw 40 |> lowshelf[f,f] 6 6 >>> gain 0.25 >>> out 0
--- oneArgSynth f = saw 110 |> peakEQ [f,f] 12 0.3 >>> gain 0.25 >>> out 0
--- oneArgSynth f = saw 220 |> notch [f,f] 0 3 >>> gain 0.25 >>> out 0
--- oneArgSynth f = saw 220 |> bpf [f,f] 0 3 >>> gain 0.25 >>> out 0
--- oneArgSynth f = saw 220 |> hpf [f,f] 0 3 >>> gain 0.25 >>> out 0
--- oneArgSynth f = saw (noise2 3 |> range 200 800) |> gain 0.25 >>> out 0
--- oneArgSynth f = syncpulse [f,f] 0.5 (saw 400) |> gain 0.25 >>> out 0
--- oneArgSynth f = syncpulse [f,f] 0.5 (lfsaw 80 0) |> gain 0.25 >>> out 0
--- oneArgSynth f = syncsaw [f,f] (saw 400) |> gain 0.25 >>> out 0
--- oneArgSynth f = sin (urandom |> range 100 2000) |> gain 0.25 >>> out 0
--- oneArgSynth f = lfpulse [f,f] 0 |> gain 0.25 >>> out 0
--- oneArgSynth f = lfsaw [f,f] 0 |> gain 0.25 >>> out 0
-
-twoArgSynth :: UGen -> UGen -> [UGen]
-twoArgSynth f ff = sin [f,ff] |> crush 2 |> decimate 4096 |> env [0,1,1,0] [3,1,3] 0 |> out  0
--- twoArgSynth f ff = feedback sig |> perc 0.01 5 0.1 16.0 >>> out  0
--- twoArgSynth f ff = feedback sig |> env [0,1,1,0] [3,1,3] 0 >>> out  0
-    -- where
-        -- sig i = syncosc [f + (i * 1000),f + (i * 500)] 0 0 [ff,ff] +> delayN 0.1 0.1
-
--- twoArgSynth f ff = syncosc [f,f] 0 0 [ff,ff] |> gain 0.25 >>> out 0
--- twoArgSynth f ff = syncpulse [f,f] 0.5 (lfsaw [ff * 0.25,ff * 0.25] 0) |> lpf (lag 1 [ff,ff]) 3 >>> gain 0.25 >>> out 0
--- twoArgSynth f ff = saw (lag 1 [f,f]) |> lpf (lag 1 [ff,ff]) 3 >>> gain 0.25 >>> out 0
--- twoArgSynth f pw = pulse [f,f] [pw,pw] |> gain 0.1 >>> out 0
--- twoArgSynth fx fy = sin [fx,fy] |> gain 0.1 >>> out 0
-
-threeSynth :: UGen -> UGen -> UGen -> UGen
-threeSynth fx fy fz = sin fx + sin fy + sin fz |> gain 0.1 |> out 0
--}
+        sec1 = [lich| _ _ _ _
+                      _ _ _ 1
+                      _ _ _ _
+                      _ _ _ 0 |]
