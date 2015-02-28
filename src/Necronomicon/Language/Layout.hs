@@ -12,7 +12,6 @@ import qualified Data.Vector as V
 
 import Data.Typeable
 import Data.Data
-import Debug.Trace
 import qualified Necronomicon.Patterns as NP
 
 -- modifiers???? How to do this in new layout DSL?
@@ -309,15 +308,15 @@ pvector totalLength vec time = go 0 vecLength
     where
         vecLength = V.length vec
         go imin imax
-            | index < 0                         = trace "Less than zero" $ NP.PVal $ (\(v,d,_) -> (v,d)) $ vec V.! 0
-            | index > vecLength - 1             = trace "Past the end" $ if time < totalLength then NP.PVal $ ((\(v,d,_) -> (v,d)) $ vec V.! (vecLength - 1)) else NP.PNothing
+            | index < 0                         = NP.PVal $ (\(v,d,_) -> (v,d)) $ vec V.! 0
+            | index > vecLength - 1             = if time < totalLength then NP.PVal $ ((\(v,d,_) -> (v,d)) $ vec V.! (vecLength - 1)) else NP.PNothing
             | time == curTime                   = NP.PVal (curValue,curDur)
             | time == prevTime                  = NP.PVal (prevValue,prevDur)
             | time == nextTime                  = NP.PVal (nextValue,nextDur)
             | time < prevTime                   = go imin $ index - 1
             | time > nextTime                   = go (index + 1) imax
-            | time < curTime && time > prevTime = trace "FuzzyTime" $ NP.PVal (prevValue,prevDur)
-            | otherwise                         = trace "WTF is this thing?" $ NP.PVal (curValue ,curDur)
+            | time < curTime && time > prevTime = NP.PVal (prevValue,prevDur)
+            | otherwise                         = NP.PVal (curValue ,curDur)
             where
                 index                        = imin + floor (((fromIntegral (imax - imin)) :: Double) / 2)
                 (prevValue,prevDur,prevTime) = vec V.! max (index-1) 0
