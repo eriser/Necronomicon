@@ -187,8 +187,8 @@ metallic f = sig + sig2 + sig3 |> softclip 1 |> filt |> e |> gain 1 |> out 0
         sig  = sin   [f * (random |> range 0.999 1.001),f * (random |> range 0.999 1.001)]      |> gain 0.1 |> auxThrough 3
         sig2 = pulse [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)] 0.85 |> gain 0.1 |> auxThrough 4
         sig3 = sin   [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)]      |> gain 0.1 |> auxThrough 2
-        filt = lpf  ([f * (random |> range 2 4        ),f * (random |> range 1 2)] |> e) 2
-        e    = perc 0.01 1 1 (-3)
+        filt = lpf  ([f * (random |> range 3 5        ),f * (random |> range 1 2)] |> e) 2
+        e    = perc 0.01 1 1 (-4)
         -- verb = freeverb 0.25 0.125 0.5
 
 metallic2 :: UGen -> [UGen]
@@ -197,8 +197,8 @@ metallic2 f = sig + sig2 + sig3 |> filt |> e |> gain 0.7 |> (\[u1,u2 ]-> [u2,u1]
         sig  = sin   [f * (random |> range 0.999 1.001  ),f * (random |> range 0.999 1.001)]        |> gain 0.1 |> auxThrough 3
         sig2 = pulse [f * (random |> range 0.2499 0.2501),f * (random |> range 0.2499 0.2501)] 0.85 |> gain 0.1 |> auxThrough 4
         sig3 = sin   [f * (random |> range 0.499 0.501  ),f * (random |> range 0.499 0.501)]        |> gain 0.1 |> auxThrough 2
-        filt = lpf  ([f * (random |> range 2 4          ),f * (random |> range 1 2)] |> e) 2
-        e    = perc 0.01 0.75 1 (-3)
+        filt = lpf  ([f * (random |> range 3 5          ),f * (random |> range 1 2)] |> e) 2
+        e    = perc 0.01 0.75 1 (-4)
         -- verb = freeverb 0.25 0.125 0.5
 
 metallic3 :: UGen -> [UGen]
@@ -213,14 +213,15 @@ metallic3 f = sig + sig2 + sig3 |> filt |> e |> gain 1 |> (\[u1,u2 ]-> [u2,u1]) 
         e      = perc 0.01 8 1 (-3)
 
 shake :: UGen -> [UGen]
-shake d = sig1 + sig2 |> e |> verb |> p 0.75 |> gain 0.05  |> out 0
+shake d = sig1 + sig2 |> e |> verb |> p 0.75 |> gain 0.035  |> out 0
     where
         -- d2    = d |> linlin 0.25 1 0.75 1
         p a u = [u * (1 - a), u * a]
-        sig1  = whiteNoise |> bpf (random |> range 6000 12000) 2
-        sig2  = whiteNoise |> bpf (random |> range 6000 12000) 2
+        sig1  = whiteNoise |> bpf (9000) 0.5
+        sig2  = whiteNoise |> bpf (6000) 0.5
         e     = perc 0.01 d 1 (-5)
-        verb = freeverb 0.5 1 1
+        verb n = delayN 0.2 0.2 n + n
+        -- verb = freeverb 0.5 0.125 0.25
 
 metallicPattern :: Signal ()
 metallicPattern = metallicPattern1 <&> metallicPattern2 <&> metallicPattern3 <&> shakePattern
