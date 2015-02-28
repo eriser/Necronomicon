@@ -1678,6 +1678,84 @@ void env_calc(ugen* u)
 	}
 }
 
+void env2_calc(ugen* u)
+{
+	double       curve      = UGEN_IN(u, 0);
+	double       x          = UGEN_IN(u, 1);
+	// double       length     = UGEN_IN(u, 2) * SAMPLE_RATE;
+	int          valsLength = (int) UGEN_IN(u, 2);
+	int          dursLength = (int) UGEN_IN(u, 3);
+	int          valsOffset = 4;
+	int          dursOffset = 4 + valsLength;
+	unsigned int line_time  = *((unsigned int*) u->data);
+	double       line_timed = (double) line_time * RECIP_SAMPLE_RATE;
+	double       y          = 0;
+
+	if(valsLength == 0 || dursLength == 0)
+	{
+		if(valsLength == 0)
+			printf("Vals length 0.\n");
+
+		if(dursLength == 0)
+			printf("Durs length 0.\n");
+
+		UGEN_OUT(u,0,0);
+	}
+	else
+	{
+		double currentDuration   = 0;
+		double nextDuration      = 0;
+
+		double curTotalDuration  = 0;
+		double nextTotalDuration = 0;
+		double totalDuration     = 0;
+
+		double currentValue      = 0;
+		double nextValue         = 0;
+
+		int i;
+	    for(i=0;i<valsLength - 1;++i)
+	    {
+	    	currentDuration   = nextDuration;
+			nextDuration      = UGEN_IN(u,(i % dursLength)+dursOffset);
+
+	    	curTotalDuration += currentDuration;
+	    	nextTotalDuration = curTotalDuration + nextDuration;
+			totalDuration     = nextTotalDuration;
+
+			currentValue      = UGEN_IN(u,i     + valsOffset);
+			nextValue         = UGEN_IN(u,i + 1 + valsOffset);
+
+	    	if(nextTotalDuration > line_timed)
+	    		break;
+	    }
+
+		for(;i<valsLength - 1; ++i)
+		{
+			totalDuration += UGEN_IN(u,(i % dursLength)+dursOffset);
+		}
+
+	    // if(line_time >= length)
+		if(line_timed >= totalDuration)
+		{
+			// try_schedule_current_synth_for_removal();
+		}
+	    else
+	    {
+			if(curve < 0)
+		    	curve = 1 / ((curve * -1) + 1);
+		    else
+		    	curve = curve + 1;
+
+			double delta               = pow((line_timed - curTotalDuration) / (nextTotalDuration - curTotalDuration), curve);
+			y                          = ((1-delta) * currentValue + delta * nextValue) * x;
+	    	*((unsigned int*) u->data) = line_time + 1;
+	    }
+
+		UGEN_OUT(u, 0, y);
+	}
+}
+
 void sin_constructor(ugen* u)
 {
 	u->data = malloc(DOUBLE_SIZE); // Phase accumulator
