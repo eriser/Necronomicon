@@ -309,7 +309,7 @@ metallicPattern :: Signal ()
 metallicPattern = metallicPattern1
             --   <&> metallicPattern1_2
             --   <&> metallicPattern1_3
-              <&> metallicPattern2
+            --   <&> metallicPattern2
               <&> metallicPattern3
               <&> shakePattern
               <&> shakePattern2
@@ -320,7 +320,7 @@ metallicPattern = metallicPattern1
             --   <&> swellPattern
 
 metallicPattern1 :: Signal ()
-metallicPattern1 = playSynthPattern (toggle <| isDown keyD) "metallic" [] (pmap (d2f slendro . (+5)) <| ploop [sec1])
+metallicPattern1 = playSynthPattern (toggle <| isDown keyD) "metallic" [] (pmap (d2f slendro . (+0)) <| ploop [sec1])
     where
         sec1 = [lich| [0 1] [2 0] [1 1]   [_ 1]
                       [0 1] [2 0] [1 1 1] [2 2 1]
@@ -343,17 +343,17 @@ metallicPattern1 = playSynthPattern (toggle <| isDown keyD) "metallic" [] (pmap 
                     --   _ _ 3 _
                     --   _ _ _ 0 |]
 
-metallicPattern2 :: Signal ()
-metallicPattern2 = playSynthPattern (toggle <| isDown keyD) "metallic2" [] (pmap (d2f slendro) <| ploop [sec1])
-    where
-        sec1 = [lich| 0 _ [  0 0] 1
-                      0 _ [0 0 0] 1
-                      1 _ [  1 1] 3
-                      1 _ [1 1 1] 3
-                      3 _ [  3 3] 2
-                      3 _ [3 3 3] 2
-                      2 _ [  2 2] 1
-                      2 _ [2 2 2] 0 |]
+-- metallicPattern2 :: Signal ()
+-- metallicPattern2 = playSynthPattern (toggle <| isDown keyD) "metallic2" [] (pmap (d2f slendro) <| ploop [sec1])
+    -- where
+        -- sec1 = [lich| 0 _ [  0 0] 1
+                    --   0 _ [0 0 0] 1
+                    --   1 _ [  1 1] 3
+                    --   1 _ [1 1 1] 3
+                    --   3 _ [  3 3] 2
+                    --   3 _ [3 3 3] 2
+                    --   2 _ [  2 2] 1
+                    --   2 _ [2 2 2] 0 |]
 
 metallicPattern2_2 :: Signal ()
 metallicPattern2_2 = playSynthPattern (toggle <| isDown keyD) "metallic" [] (pmap ((*0.5) . d2f slendro) <| ploop [sec1])
