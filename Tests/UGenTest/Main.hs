@@ -42,7 +42,7 @@ printTest i
     | otherwise                       = ""
 
 switcher :: Signal Int
-switcher = count (every 10) + pure (length synthNames * 2)
+switcher = count (every 10) + pure (length synthNames * 1)
 
 ticker :: Signal Double
 ticker = fps 60

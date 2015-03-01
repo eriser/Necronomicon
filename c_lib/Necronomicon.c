@@ -1006,11 +1006,11 @@ void add_synth(synth_node* node)
 		if (node->alive_status == NODE_SPAWNING)
 		{
 			node->alive_status = NODE_ALIVE;
-			puts("add_synth print_synth_list before add: ");
-			print_synth_list();
+			// puts("add_synth print_synth_list before add: ");
+			// print_synth_list();
 			synth_list = doubly_linked_list_push(synth_list, node);
-			puts("add_synth print_synth_list after add: ");
-			print_synth_list();
+			// puts("add_synth print_synth_list after add: ");
+			// print_synth_list();
 		}
 		// Scheduled to be freed before add message was handled
 		else if (node->alive_status == NODE_SCHEDULED_FOR_REMOVAL)
@@ -1042,11 +1042,11 @@ void remove_synth(synth_node* node)
 	{
 		if (node->previous_alive_status == NODE_ALIVE)
 		{
-			puts("remove_synth print_synth_list before remove: ");
-			print_synth_list();
+			// puts("remove_synth print_synth_list before remove: ");
+			// print_synth_list();
 			synth_list = doubly_linked_list_remove(synth_list, node);
-			puts("remove_synth print_synth_list before remove: ");
-			print_synth_list();
+			// puts("remove_synth print_synth_list before remove: ");
+			// print_synth_list();
 		}
 
 		node->previous_alive_status = node->alive_status;
