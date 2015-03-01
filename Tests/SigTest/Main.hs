@@ -195,7 +195,7 @@ metallic f = sig + sig2 + sig3 |> filt |> e |> gain 0.25 |> out 0
         filt3 = lpf  ([f * (random |> range 12 24),f * (random |> range 3 6)] |> e2) 5
         filt i= filt1 i + filt2 i * 0.5 + filt3 i * 0.5
 
-        e    = perc 0.01 0.75 1 (-6)
+        e    = perc 0.01 0.5 1 (-6)
         e2   = env2 [1,1,0.75] [0.01,0.75] (-6)
 
 metallic2 :: UGen -> [UGen]
@@ -211,7 +211,7 @@ metallic2 f = sig + sig2 + sig3 |> filt |> e |> gain 0.35 |> (\[u1,u2 ]-> [u2,u1
         filt i= filt1 i + filt2 i * 0.5 + filt3 i * 0.5
 
         e     = perc 0.01 0.75 1 (-4)
-        e2   = env2 [1,1,0.25] [0.01,1] (-4)
+        e2   = env2 [1,1,0.25] [0.01,0.75] (-4)
 
 metallic3 :: UGen -> [UGen]
 metallic3 f = sig + sig2 + sig3 |> filt |> e |> gain 1 |> (\[u1,u2 ]-> [u2,u1]) |> out 0
