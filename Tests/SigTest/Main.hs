@@ -18,6 +18,7 @@ synthDefs = synthDef "triOsc"       triOsc
          *> synthDef "metallic5"    metallic5
          *> synthDef "shake"        shake
          *> synthDef "shake2"       shake2
+         *> synthDef "floorPerc"    floorPerc
          *> synthDef "reverseSwell" reverseSwell
 
 hyperTerrainSounds :: Signal ()
@@ -294,6 +295,15 @@ shake2 d = sig1 + sig2 |> e |> p 0.25 |> gain 0.015  |> out 0
         sig2  = whiteNoise |> bpf (12000 * d) 2
         e     = perc 0.01 d 1 (-5)
 
+floorPerc :: UGen -> [UGen]
+floorPerc d = sig1 + sig2 |> e |> p 0.4 |> gain 0.65  |> out 0
+    where
+        p a u = [u * (1 - a), u * a]
+        sig1  = sin 40
+        sig2  = sin 80 * 0.25
+        e     = perc 0.01 d 1 (-9)
+
+
 metallicPattern :: Signal ()
 metallicPattern = metallicPattern1
             --   <&> metallicPattern1_2
@@ -305,6 +315,7 @@ metallicPattern = metallicPattern1
               <&> shakePattern3
               <&> shakePattern4
               <&> metallicPattern2_2
+              <&> floorPattern
             --   <&> swellPattern
 
 metallicPattern1 :: Signal ()
@@ -378,10 +389,10 @@ shakePattern = playSynthPattern (toggle <| isDown keyD) "shake" [] (pmap (* 0.2)
 shakePattern2 :: Signal ()
 shakePattern2 = playSynthPattern (toggle <| isDown keyD) "shake2" [] (pmap (* 0.1) <| ploop [sec1])
     where
-        sec1 = [lich| [1 1] [_ 2] [_ 2]
-                      [1 1] [_ 2] [_ 2]
-                      [1 1] [_ 2] [_ 2]
-                      [1 1 1]  [1 1 1] [10 1] |]
+        sec1 = [lich| [3 3] [_ 4] [_ 4]
+                      [3 3] [_ 4] [_ 4]
+                      [3 3] [_ 4] [_ 4]
+                      [1 1 1]  [1 1 1] [12 1] |]
 
 
 shakePattern3 :: Signal ()
@@ -400,6 +411,11 @@ shakePattern4 = playSynthPattern (toggle <| isDown keyD) "shake" [] (pmap (* 0.0
                       [1 _ 1 1] [1 1] _         [1 _ 1 1]
                       2          _   [1 _ 1 1] [1 1]
                       _          [1 _ 1 1]    2        [1 1] |]
+
+floorPattern :: Signal ()
+floorPattern = playSynthPattern (toggle <| isDown keyD) "floorPerc" [] (pmap (* 1) <| ploop [sec1])
+    where
+        sec1 = [lich| 1 [_ 1] 1 _ |]
 
 -- swellPattern :: Signal ()
 -- swellPattern = playSynthPattern (toggle <| isDown keyD) "reverseSwell" [] (pmap ((*0.25) . d2f slendro) <| ploop [sec1])
