@@ -221,15 +221,16 @@ metallic2 f = sig + sig2 + sig3 |> filt |> e |> auxThrough 3 |> gain 0.125 |> (\
 metallic3 :: UGen -> [UGen]
 metallic3 f = sig + sig2 + sig3 |> filt |> e |> auxThrough 4 |> gain 1 |> (\[u1,u2 ]-> [u2,u1]) |> out 0
     where
-        sig    = sin   [f * (random |> range 0.999 1.001  ),f * (random |> range 0.999 1.001)]        |> gain 0.1
-        sig2   = pulse [f * (random |> range 0.2499 0.2501),f * (random |> range 0.2499 0.2501)] 0.85 |> gain 0.1
-        sig3   = sin   [f * (random |> range 0.499 0.501  ),f * (random |> range 0.499 0.501)]        |> gain 0.1
+        sig    = sin   [f * (random |> range 0.999 1.001  ),f * (random |> range 0.999 1.001)]         |> gain 0.15
+        sig2   = pulse [f * (random |> range 0.2499 0.2501),f * (random |> range 0.2499 0.2501)] 0.995 |> gain 0.15
+        sig3   = sin   [f * (random |> range 0.499 0.501  ),f * (random |> range 0.499 0.501)]         |> gain 0.15
 
-        filt1  = lpf  ([f * (random |> range 2 4),f * (random |> range 1 2)] |> e) 2
-        filt2  = lpf  ([f * (random |> range 1 2),f * (random |> range 2 4)] |> e) 2
+        filt1  = lpf  ([f * (random |> range 4 8),f * (random |> range 2 4)] |> e2) 3
+        filt2  = lpf  ([f * (random |> range 2 4),f * (random |> range 4 8)] |> e2) 3
         filt s = filt1 s + filt2 s
 
-        e      = perc 0.01 8 1 (-6)
+        e      = perc 0.01 6 1 (-12)
+        e2    = env2 [1,1,0.25,0.25] [0.01,1,5] (-4)
 
 metallic4 :: UGen -> [UGen]
 metallic4 f = sig + sig2 + sig3 |> filt |> e |> e2 |> gain 0.25 |> out 0
