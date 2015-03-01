@@ -1006,11 +1006,11 @@ void add_synth(synth_node* node)
 		if (node->alive_status == NODE_SPAWNING)
 		{
 			node->alive_status = NODE_ALIVE;
-			puts("add_synth print_synth_list before add: ");
-			print_synth_list();
+			// puts("add_synth print_synth_list before add: ");
+			// print_synth_list();
 			synth_list = doubly_linked_list_push(synth_list, node);
-			puts("add_synth print_synth_list after add: ");
-			print_synth_list();
+			// puts("add_synth print_synth_list after add: ");
+			// print_synth_list();
 		}
 		// Scheduled to be freed before add message was handled
 		else if (node->alive_status == NODE_SCHEDULED_FOR_REMOVAL)
@@ -1042,11 +1042,11 @@ void remove_synth(synth_node* node)
 	{
 		if (node->previous_alive_status == NODE_ALIVE)
 		{
-			puts("remove_synth print_synth_list before remove: ");
-			print_synth_list();
+			// puts("remove_synth print_synth_list before remove: ");
+			// print_synth_list();
 			synth_list = doubly_linked_list_remove(synth_list, node);
-			puts("remove_synth print_synth_list before remove: ");
-			print_synth_list();
+			// puts("remove_synth print_synth_list before remove: ");
+			// print_synth_list();
 		}
 
 		node->previous_alive_status = node->alive_status;
@@ -1815,7 +1815,7 @@ void perc_calc(ugen* u)
 	double       x         = UGEN_IN(u, 3);
 	unsigned int line_time = *((unsigned int*) u->data);
 	double       y         = 0;
-
+	
 	//Wtf is with negative values?
 	if(curve < 0)
 	{
@@ -1830,12 +1830,13 @@ void perc_calc(ugen* u)
 	{
 		try_schedule_current_synth_for_removal();
 	}
+	
 	else
 	{
 		y = pow(fmax(0, 1 - (line_time / length)),curve) * x * peak;
-		*((unsigned int*) u->data) = line_time + 1;
 	}
 
+	*((unsigned int*) u->data) = line_time + 1;
 	UGEN_OUT(u, 0, y);
 }
 */
