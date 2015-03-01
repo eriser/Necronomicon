@@ -769,7 +769,7 @@ runCompileSynthDef name ugenFunc = do
     compiledGraph <- newArray graph
     compiledWireBufs <- initializeWireBufs numWires constants
     let scheduledTime = 0 :: JackTime
-    let cs = CSynthDef compiledGraph compiledWireBufs nullPtr nullPtr scheduledTime 0 0 0 (fromIntegral $ length graph) (fromIntegral numWires) 0 0
+    let cs = CSynthDef compiledGraph nullPtr compiledWireBufs nullPtr nullPtr nullPtr scheduledTime 0 0 0 (fromIntegral $ length graph) (fromIntegral numWires) 0 0
     print cs
     csynthDef <- new $ cs
     return (SynthDef name numArgs csynthDef)

@@ -20,6 +20,17 @@
 
 #include "Necronomicon.h"
 
+unsigned int next_power_of_two(unsigned int v)
+{
+	--v;
+	v |= v >> 1;
+	v |= v >> 2;
+	v |= v >> 4;
+	v |= v >> 8;
+	v |= v >> 16;
+	return ++v;
+}
+
 /////////////////////
 // Constants
 /////////////////////
@@ -108,6 +119,138 @@ typedef void (*ugen_constructor)(ugen* u);
 typedef void (*ugen_deconstructor)(ugen* u);
 typedef void (*calc_func)(ugen* u);
 
+struct ugen_graph_pool_node;
+typedef struct ugen_graph_pool_node ugen_graph_pool_node;
+struct ugen_graph_pool_node
+{
+	ugen* ugen_graph;
+	ugen_graph_pool_node* next_ugen_graph_pool_node;
+	unsigned int pool_index;
+};
+
+const unsigned int UGEN_GRAPH_POOL_NODE_SIZE = sizeof(ugen_graph_pool_node);
+const unsigned int NUM_UGEN_GRAPH_POOLS = 32;
+ugen_graph_pool_node** ugen_graph_pools = NULL;
+
+void print_ugen_graph_pool_node(ugen_graph_pool_node* ugen_graph)
+{
+	if (ugen_graph != NULL)
+	{
+		printf(
+			"ugen_graph_pool_node %p { ugen_graph = %p, next_ugen_graph_pool_node = %p, pool_index = %u }\n",
+			ugen_graph, ugen_graph->ugen_graph, ugen_graph->next_ugen_graph_pool_node, ugen_graph->pool_index);   
+	}
+
+	else
+	{
+		printf("ugen_graph_pool_node = NULL\n");
+	}
+}
+
+ugen_graph_pool_node* acquire_ugen_graph(unsigned int num_ugens)
+{
+	unsigned int pow_two_num_bytes = next_power_of_two(num_ugens * UGEN_SIZE);
+	unsigned int pool_index = __builtin_ctz(pow_two_num_bytes);
+	ugen_graph_pool_node* ugen_graph = ugen_graph_pools[pool_index];
+
+	printf("acquire_ugen_graph(pooled_ugen_graph = %p, num_ugens = %u, pow_two_num_bytes = %u, pool_index = %u)\n", ugen_graph, num_ugens, pow_two_num_bytes, pool_index);
+	if (ugen_graph != NULL)
+	{
+		printf("Reuse UGen Graph :: ");
+		ugen_graph_pools[pool_index] = ugen_graph->next_ugen_graph_pool_node;
+	}
+
+	else
+	{
+		printf("New UGen Graph :: ");
+		ugen_graph = malloc(UGEN_GRAPH_POOL_NODE_SIZE);
+		ugen_graph->ugen_graph = malloc(pow_two_num_bytes);
+		ugen_graph->pool_index = pool_index;
+	}
+
+	ugen_graph->next_ugen_graph_pool_node = NULL;
+	print_ugen_graph_pool_node(ugen_graph);
+	return ugen_graph;
+}
+
+void release_ugen_graph(ugen_graph_pool_node* ugen_graph)
+{
+	printf("release_ugen_graph() :: ");
+	print_ugen_graph_pool_node(ugen_graph);
+	if (ugen_graph != NULL)
+	{
+		unsigned int pool_index = ugen_graph->pool_index;
+		ugen_graph->next_ugen_graph_pool_node = ugen_graph_pools[pool_index];
+		ugen_graph_pools[pool_index] = ugen_graph;
+	}
+}
+
+struct ugen_wires_pool_node;
+typedef struct ugen_wires_pool_node ugen_wires_pool_node;
+struct ugen_wires_pool_node
+{
+	double* ugen_wires;
+	ugen_wires_pool_node* next_ugen_wires_pool_node;
+	unsigned int pool_index;
+};
+
+const unsigned int UGEN_WIRE_POOL_NODE_SIZE = sizeof(ugen_wires_pool_node);
+const unsigned int NUM_UGEN_WIRES_POOLS = 32;
+ugen_wires_pool_node** ugen_wires_pools = NULL;
+
+void print_ugen_wires_pool_node(ugen_wires_pool_node* ugen_wires)
+{
+	if (ugen_wires != NULL)
+	{
+		printf(
+			"ugen_wires_pool_node %p { ugen_wires = %p, next_ugen_wires_pool_node = %p, pool_index = %u }\n",
+			ugen_wires, ugen_wires->ugen_wires, ugen_wires->next_ugen_wires_pool_node, ugen_wires->pool_index);   
+	}
+
+	else
+	{
+		printf("ugen_wires_pool_node = NULL\n");
+	}
+}
+
+ugen_wires_pool_node* acquire_ugen_wires(unsigned int num_wires)
+{
+	unsigned int pow_two_num_bytes = next_power_of_two(num_wires * DOUBLE_SIZE);
+	unsigned int pool_index = __builtin_ctz(pow_two_num_bytes);
+	ugen_wires_pool_node* ugen_wires = ugen_wires_pools[pool_index];
+
+	printf("acquire_ugen_wires(pooled_ugen_wires = %p, num_wires = %u, pow_two_num_bytes = %u, pool_index = %u)\n", ugen_wires, num_wires, pow_two_num_bytes, pool_index);
+	if (ugen_wires != NULL)
+	{
+		printf("Reuse Wires :: ");
+		ugen_wires_pools[pool_index] = ugen_wires->next_ugen_wires_pool_node;
+	}
+
+	else
+	{
+		printf("New Wires :: ");
+		ugen_wires = malloc(UGEN_WIRE_POOL_NODE_SIZE);
+		ugen_wires->ugen_wires = malloc(pow_two_num_bytes);
+		ugen_wires->pool_index = pool_index;
+	}
+
+	ugen_wires->next_ugen_wires_pool_node = NULL;
+	print_ugen_wires_pool_node(ugen_wires);
+	return ugen_wires;
+}
+
+void release_ugen_wires(ugen_wires_pool_node* ugen_wires)
+{
+	printf("release_ugen_wires() :: ");
+	print_ugen_wires_pool_node(ugen_wires);
+	if (ugen_wires != NULL)
+	{
+		unsigned int pool_index = ugen_wires->pool_index;
+		ugen_wires->next_ugen_wires_pool_node = ugen_wires_pools[pool_index];
+		ugen_wires_pools[pool_index] = ugen_wires;
+	}
+}
+
 /////////////////////
 // Sample Buffer
 /////////////////////
@@ -130,24 +273,13 @@ const unsigned int SAMPLE_BUFFER_POINTER_SIZE = sizeof(sample_buffer*);
 const unsigned int NUM_SAMPLE_BUFFER_POOLS = 32;
 sample_buffer** sample_buffer_pools;
 
-unsigned int next_power_of_two(unsigned int v)
-{
-	--v;
-	v |= v >> 1;
-	v |= v >> 2;
-	v |= v >> 4;
-	v |= v >> 8;
-	v |= v >> 16;
-	return ++v;
-}
-
 void print_sample_buffer(sample_buffer* buffer)
 {
 	if (buffer != NULL)
 	{
 		printf(
-			"sample_buffer { samples = %p, next_sample_buffer = %p, pool_index = %u, num_samples = %u, num_samples_mask = %u }\n",
-			buffer->samples, buffer->next_sample_buffer, buffer->pool_index, buffer->num_samples, buffer->num_samples_mask);   
+			"sample_buffer %p { samples = %p, next_sample_buffer = %p, pool_index = %u, num_samples = %u, num_samples_mask = %u }\n",
+			buffer, buffer->samples, buffer->next_sample_buffer, buffer->pool_index, buffer->num_samples, buffer->num_samples_mask);   
 	}
 
 	else
@@ -166,35 +298,34 @@ sample_buffer* acquire_sample_buffer(unsigned int num_samples)
 	assert(num_samples <= pow_two_num_samples);
 	assert(pool_index < (NUM_SAMPLE_BUFFER_POOLS - 1));
 	
-	// printf("acquire_sample_buffer(num_samples = %u, pool_index = %u, pooled_buffer = %p.\n", num_samples, pool_index, buffer);
-	
+	printf("acquire_sample_buffer(pooled_buffer = %p, num_samples = %u, pow_two_num_samples = %u, pool_index = %u)\n", buffer, num_samples, pow_two_num_samples, pool_index);
 	if (buffer != NULL)
 	{
-		// printf("Reuse buffer :: ");
+		printf("Reuse buffer :: ");
 		sample_buffer_pools[pool_index] = buffer->next_sample_buffer;
+		memset(buffer->samples, 0, pow_two_num_samples * DOUBLE_SIZE);
 	}
 
 	else
 	{
-		// printf("New buffer :: ");
+		printf("New buffer :: ");
 		buffer = malloc(SAMPLE_BUFFER_SIZE);
-		buffer->samples = malloc(pow_two_num_samples * DOUBLE_SIZE);
+		buffer->samples = calloc(pow_two_num_samples, DOUBLE_SIZE);
 		buffer->pool_index = pool_index;
 		buffer->num_samples = pow_two_num_samples;
 		buffer->num_samples_mask = pow_two_num_samples - 1;
 	}
 
 	buffer->next_sample_buffer = NULL;
-	memset(buffer->samples, 0, pow_two_num_samples * DOUBLE_SIZE);
-	// print_sample_buffer(buffer);
+	print_sample_buffer(buffer);
 	return buffer;
 }
 
 void release_sample_buffer(sample_buffer* buffer)
 {
-	// printf("release_sample_buffer: ");
-	// print_sample_buffer(buffer);
-	
+	printf("release_sample_buffer: ");
+	print_sample_buffer(buffer);
+
 	if (buffer != NULL)
 	{
 		unsigned int pool_index = buffer->pool_index;
@@ -224,7 +355,9 @@ typedef struct synth_node synth_node;
 struct synth_node
 {
 	ugen* ugen_graph; // UGen Graph
+	ugen_graph_pool_node* ugen_graph_node; // ugen graph pool node, used to release the ugen graph memory during deconstruction
 	double* ugen_wires; // UGen output wire buffers
+	ugen_wires_pool_node* ugen_wires_node; // ugen wires pool node, used to release the ugen wire memory during reconstruction
 	synth_node* previous; // Previous node, used in synth_list for the scheduler
 	synth_node* next; // Next node, used in the synth_list for the scheduler
 	jack_time_t time; // scheduled time, in microseconds
@@ -252,6 +385,7 @@ hash_table synth_table = NULL;
 bool hash_table_remove(hash_table table, synth_node* node);
 synth_node* hash_table_lookup(hash_table table, unsigned int key);
 
+void print_node(synth_node* node); // Forward declaration
 void print_node_alive_status(synth_node* node)
 {
 	if (node != NULL)
@@ -292,17 +426,20 @@ void deconstruct_synth(synth_node* synth)
 		graph_node->deconstructor(graph_node);
 	}
 
-	free(ugen_graph);
-	free(synth->ugen_wires);
+	release_ugen_graph(synth->ugen_graph_node);
+	release_ugen_wires(synth->ugen_wires_node);
+	synth->ugen_graph_node = NULL;
 	synth->ugen_graph = NULL;
+	synth->ugen_wires_node = NULL;
 	synth->ugen_wires = NULL;
 }
 
 void free_synth(synth_node* synth)
 {
-	// printf("free_synth -> ");
-	// print_node_alive_status(synth);
-	
+	puts("||| free_synth ||| ");
+	printf("free_synth -> ");
+	print_node_alive_status(synth);
+	print_node(synth);
 	if (synth != NULL)
 	{
 		bool found = hash_table_remove(synth_table, synth);
@@ -381,7 +518,8 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 	// UGens
 	unsigned int num_ugens = synth_definition->num_ugens;
 	unsigned int size_ugens = synth_definition->num_ugens * UGEN_SIZE;
-	synth->ugen_graph = malloc(size_ugens);
+	synth->ugen_graph_node = acquire_ugen_graph(num_ugens);
+	synth->ugen_graph = synth->ugen_graph_node->ugen_graph;
 	ugen* ugen_graph = synth->ugen_graph;
 	memcpy(ugen_graph, synth_definition->ugen_graph, size_ugens);
 
@@ -393,11 +531,13 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 	}
 
 	// Wires
+	unsigned int num_wires = synth->num_wires;
 	unsigned int size_wires = synth->num_wires * DOUBLE_SIZE;
-	double* ugen_wires = malloc(size_wires);
-	synth->ugen_wires = ugen_wires;
-	memcpy(ugen_wires, synth_definition->ugen_wires, size_wires);
+	synth->ugen_wires_node = acquire_ugen_wires(num_wires);
+	synth->ugen_wires = synth->ugen_wires_node->ugen_wires;
+	memcpy(synth->ugen_wires, synth_definition->ugen_wires, size_wires);
 
+	double* ugen_wires = synth->ugen_wires;
 	for (i = 0; i < num_arguments; ++i)
 	{
 		ugen_wires[i] = arguments[i];
@@ -593,7 +733,8 @@ void scheduled_list_free()
 	while (scheduled_list_read_index != scheduled_list_write_index)
 	{
 		synth_node* node = SCHEDULED_LIST_POP();
-		free_synth(node);
+		if (node != NULL)
+			free_synth(node);
 	}
 
 	free(scheduled_node_list);
@@ -704,7 +845,8 @@ void hash_table_free(hash_table table)
 	for (i = 0; i < MAX_SYNTHS; ++i)
 	{
 		synth_node* node = table[i];
-		free_synth(node);
+		if (node != NULL)
+			free_synth(node);
 	}
 
 	free(table);
@@ -738,7 +880,6 @@ bool hash_table_remove(hash_table table, synth_node* node)
 	}
 }
 
-void print_node(synth_node* node);
 synth_node* hash_table_lookup(hash_table table, unsigned int key)
 {
 	unsigned int hash = HASH_KEY(key);
@@ -747,8 +888,8 @@ synth_node* hash_table_lookup(hash_table table, unsigned int key)
 
 	while (i < MAX_SYNTHS)
 	{
-		printf("table[%u] = ", slot, table[slot]);
-		print_node(table[slot]);
+		// printf("table[%u] = ", slot, table[slot]);
+		// print_node(table[slot]);
 		if (table[slot] != NULL)
 		{
 			if (table[slot]->key == key)
@@ -836,18 +977,38 @@ int get_running()
 	return (necronomicon_running == true);
 }
 
+void print_synth_list()
+{
+	unsigned int i = 0;
+	puts("{{{print_synth_list");
+	synth_node* current_node = synth_list;
+	while(current_node != NULL)
+	{
+		print_node(current_node);
+		current_node = current_node->next;
+		++i;
+	}
+
+	printf("print_synth_list i = %u, num_synths = %u }}}\n", i, num_synths);
+}
 
 void add_synth(synth_node* node)
 {
-	// printf("add_synth -> ");
-	// print_node_alive_status(node);
+	puts("||| add_synth ||| ");
+	printf("add_synth -> ");
+	print_node_alive_status(node);
+	print_node(node);
 	if (node != NULL)
 	{
 		node->previous_alive_status = node->alive_status;
 		if (node->alive_status == NODE_SPAWNING)
 		{
 			node->alive_status = NODE_ALIVE;
+			puts("add_synth print_synth_list before add: ");
+			print_synth_list();
 			synth_list = doubly_linked_list_push(synth_list, node);
+			puts("add_synth print_synth_list after add: ");
+			print_synth_list();
 		}
 		// Scheduled to be freed before add message was handled
 		else if (node->alive_status == NODE_SCHEDULED_FOR_REMOVAL)
@@ -871,12 +1032,20 @@ void add_synth(synth_node* node)
 
 void remove_synth(synth_node* node)
 {
-	// printf("remove_synth -> ");
-	// print_node_alive_status(node);
+	puts("||| remove_synth ||| ");
+	printf("remove_synth -> ");
+	print_node_alive_status(node);
+	print_node(node);
 	if ((node != NULL) && (node->alive_status == NODE_SCHEDULED_FOR_REMOVAL))
 	{
 		if (node->previous_alive_status == NODE_ALIVE)
+		{
+			puts("remove_synth print_synth_list before remove: ");
+			print_synth_list();
 			synth_list = doubly_linked_list_remove(synth_list, node);
+			puts("remove_synth print_synth_list before remove: ");
+			print_synth_list();
+		}
 
 		node->previous_alive_status = node->alive_status;
 		node->alive_status = NODE_SCHEDULED_FOR_FREE;
@@ -903,9 +1072,10 @@ void add_scheduled_synths()
 	scheduled_list_write_index = scheduled_list_write_index & FIFO_SIZE_MASK;
 	while (scheduled_list_read_index != scheduled_list_write_index)
 	{
+		puts("||| add_scheduled_synths scheduled_list_read_index != scheduled_list_write_index |||");
 		synth_node* node = SCHEDULED_LIST_POP();
 		// Uncomment to print timing information for synths
-		// printf("add_synth: ugen_graph: %p, time: %llu, current_cycle_usecs: %llu, current_cycle_usecs - time: %llu\n", node->ugen_graph, node->time, current_cycle_usecs, current_cycle_usecs - node->time);
+		printf("add_synth: time: %llu, current_cycle_usecs: %llu, current_cycle_usecs - time: %llu\n", node->time, current_cycle_usecs, current_cycle_usecs - node->time);
 		add_synth(node);
 		scheduled_list_read_index = scheduled_list_read_index & FIFO_SIZE_MASK;
 		scheduled_list_write_index = scheduled_list_write_index & FIFO_SIZE_MASK;
@@ -920,6 +1090,7 @@ void remove_scheduled_synths()
 
 	while (removal_fifo_read_index != removal_fifo_write_index)
 	{
+		puts("||| remove_scheduled_synths removal_fifo_read_index != removal_fifo_write_index |||");
 		synth_node* node = REMOVAL_FIFO_POP();
 		--removal_fifo_size;
 		remove_synth(node);
@@ -930,9 +1101,10 @@ void remove_scheduled_synths()
 
 void try_schedule_current_synth_for_removal()
 {
-	// puts("try_schedule_current_synth_for_removal()");
+	puts("||| try_schedule_current_synth_for_removal |||");
 	if (_necronomicon_current_node && (removal_fifo_size < REMOVAL_FIFO_SIZE_MASK) && _necronomicon_current_node->alive_status == NODE_ALIVE)
 	{
+		puts("_necronomicon_current_node && (removal_fifo_size < REMOVAL_FIFO_SIZE_MASK) && _necronomicon_current_node->alive_status == NODE_ALIVE");
 		_necronomicon_current_node->previous_alive_status = _necronomicon_current_node->alive_status;
 		_necronomicon_current_node->alive_status = NODE_SCHEDULED_FOR_REMOVAL;
 		removal_fifo_size = (removal_fifo_size + 1) & REMOVAL_FIFO_SIZE_MASK;
@@ -944,7 +1116,8 @@ void shutdown_rt_runtime(); // Forward declaration
 
 void handle_rt_message(message msg)
 {
-	// print_fifo_message(msg);
+	printf("handle_rt_message ");
+	print_fifo_message(msg);
 	switch (msg.type)
 	{
 	case START_SYNTH:
@@ -988,7 +1161,8 @@ void handle_messages_in_rt_fifo()
 
 void handle_nrt_message(message msg)
 {
-	// print_fifo_message(msg);
+	printf("handle_nrt_message ");
+	print_fifo_message(msg);
 	switch (msg.type)
 	{
 	case FREE_SYNTH:
@@ -1021,12 +1195,14 @@ void handle_messages_in_nrt_fifo()
 
 void play_synth(synth_node* synth_definition, double* arguments, unsigned int num_arguments, unsigned int node_id, jack_time_t time)
 {
+	puts("||| play_synth ||| ");
 	if (num_synths < MAX_SYNTHS)
 	{
 		synth_node* synth = new_synth(synth_definition, arguments, num_arguments, node_id, time);
 		++num_synths;
 		hash_table_insert(synth_table, synth);
-        // printf("play_synth node id: %u.\n", synth->key);
+        printf("play_synth ");
+		print_node(synth);
 		message msg;
 		msg.arg.node = synth;
 		msg.type = START_SYNTH;
@@ -1041,13 +1217,16 @@ void play_synth(synth_node* synth_definition, double* arguments, unsigned int nu
 
 void stop_synth(unsigned int id)
 {
+	puts("||| stop_synth ||| ");
 	synth_node* node = hash_table_lookup(synth_table, id);
 	if ((node != NULL) && (node->alive_status == NODE_SPAWNING || node->alive_status == NODE_ALIVE))
 	{
-		// printf("stop_synth node id: %u. ", node->key);
-		// print_node_alive_status(node);
+		printf("stop_synth node id: %u. ", node->key);
+		print_node_alive_status(node);
+		print_node(node);
 		node->previous_alive_status = node->alive_status;
 		node->alive_status = NODE_SCHEDULED_FOR_REMOVAL;
+		puts("stop_synth DONE ACCESSING NODE MEMEORY");
 		message msg;
 		msg.arg.node = node;
 		msg.type = STOP_SYNTH;
@@ -1064,7 +1243,11 @@ void stop_synth(unsigned int id)
 // How to handle sample accurate setting? Use FIFO messages?
 void send_set_synth_arg(unsigned int id, double argument, unsigned int arg_index)
 {
+	puts("||| set_synth_arg ||| ");
 	synth_node* synth = hash_table_lookup(synth_table, id);
+	printf("set_synth_arg id: %u ", id);
+	print_node_alive_status(synth);
+	print_node(synth);
 	if ((synth != NULL) && (synth->alive_status == NODE_SPAWNING || synth->alive_status == NODE_ALIVE))
 	{
 		synth->ugen_wires[arg_index] = argument;
@@ -1079,7 +1262,11 @@ void send_set_synth_arg(unsigned int id, double argument, unsigned int arg_index
 
 void send_set_synth_args(unsigned int id, double* arguments, unsigned int num_arguments)
 {
+	puts("||| set_synth_args ||| ");
 	synth_node* synth = hash_table_lookup(synth_table, id);
+	printf("set_synth_args id: %u ", id);
+	print_node_alive_status(synth);
+	print_node(synth);
 	if ((synth != NULL) && (synth->alive_status == NODE_SPAWNING || synth->alive_status == NODE_ALIVE))
 	{
 		memcpy(synth->ugen_wires, arguments, num_arguments * DOUBLE_SIZE);
@@ -1111,6 +1298,8 @@ void init_rt_thread()
 	assert(removal_fifo == NULL);
 	assert(_necronomicon_buses == NULL);
 	assert(sample_buffer_pools == NULL);
+	assert(ugen_graph_pools == NULL);
+	assert(ugen_wires_pools == NULL);
 	
 	SAMPLE_RATE = jack_get_sample_rate(client);
 	RECIP_SAMPLE_RATE = 1.0 / SAMPLE_RATE;
@@ -1127,8 +1316,9 @@ void init_rt_thread()
 	_necronomicon_buses = malloc(num_audio_buses_bytes);
 	clear_necronomicon_buses();
 
-	sample_buffer_pools = (sample_buffer**) malloc(sizeof(sample_buffer*) * NUM_SAMPLE_BUFFER_POOLS);
-	memset(sample_buffer_pools, 0, sizeof(sample_buffer*) * NUM_SAMPLE_BUFFER_POOLS);
+	sample_buffer_pools = (sample_buffer**) calloc(sizeof(sample_buffer*), NUM_SAMPLE_BUFFER_POOLS);
+	ugen_graph_pools = (ugen_graph_pool_node**) calloc(sizeof(ugen_graph_pool_node*), NUM_UGEN_GRAPH_POOLS);
+	ugen_wires_pools = (ugen_wires_pool_node**) calloc(sizeof(ugen_wires_pool_node*), NUM_UGEN_WIRES_POOLS);
 	
 	initialize_wave_tables();
 	// load_audio_files();
@@ -1171,6 +1361,8 @@ void shutdown_rt_thread()
 	assert(removal_fifo != NULL);
 	assert(_necronomicon_buses != NULL);
 	assert(sample_buffer_pools != NULL);
+	assert(ugen_graph_pools != NULL);
+	assert(ugen_wires_pools != NULL);
 	
 	hash_table_free(synth_table);
 	rt_fifo_free();
@@ -1186,12 +1378,41 @@ void shutdown_rt_thread()
 		while(pooled_buffer != NULL)
 		{
 			sample_buffer* next_buffer = pooled_buffer->next_sample_buffer;
+			free(pooled_buffer->samples);
 			free(pooled_buffer);
 			pooled_buffer = next_buffer;
 		}
 	}
 	
 	free(sample_buffer_pools);
+
+	for (i = 0; i < NUM_UGEN_GRAPH_POOLS; ++i)
+	{
+		ugen_graph_pool_node* ugen_graph = ugen_graph_pools[i];
+		while(ugen_graph != NULL)
+		{
+			ugen_graph_pool_node* next_ugen_graph_pool_node = ugen_graph->next_ugen_graph_pool_node;
+			free(ugen_graph->ugen_graph);
+			free(ugen_graph);
+			ugen_graph = next_ugen_graph_pool_node;
+		}
+	}
+	
+	free(ugen_graph_pools);
+
+	for (i = 0; i < NUM_UGEN_WIRES_POOLS; ++i)
+	{
+		ugen_wires_pool_node* ugen_wires = ugen_wires_pools[i];
+		while(ugen_wires != NULL)
+		{
+			ugen_wires_pool_node* next_ugen_wires_pool_node = ugen_wires->next_ugen_wires_pool_node;
+			free(ugen_wires->ugen_wires);
+			free(ugen_wires);
+			ugen_wires = next_ugen_wires_pool_node;
+		}
+	}
+	
+	free(ugen_wires_pools);
 	
 	while (free_synths)
 	{
@@ -1213,6 +1434,10 @@ void shutdown_rt_thread()
 void shutdown_rt_runtime()
 {
 	puts("Necronomicon audio engine shutting down...");
+	puts("......................................................................................................................................................................................................");
+	puts("......................................................................................................................................................................................................");
+	puts("......................................................................................................................................................................................................");
+	puts("......................................................................................................................................................................................................");
 	shutdown_rt_thread();
 	jack_client_close(client);
 	puts("Necronomicon audio engine shut down.");
@@ -1238,32 +1463,43 @@ void jack_shutdown(void *arg)
 // Main audio process callback function
 int process(jack_nframes_t nframes, void* arg)
 {
+	// puts("p");
 	jack_get_cycle_times(client, &current_cycle_frames, &current_cycle_usecs, &next_cycle_usecs, &period_usecs); // Update time variables for the current cycle
 	// Cache the current_cycle_usecs so we can recalculate current_cycle_usecs without rounding errors from iteration
 	jack_time_t cached_cycle_usecs = current_cycle_usecs;
 
 	jack_default_audio_sample_t* out0 = (jack_default_audio_sample_t*) jack_port_get_buffer(output_port1, nframes);
 	jack_default_audio_sample_t* out1 = (jack_default_audio_sample_t*) jack_port_get_buffer(output_port2, nframes);
+	// puts("h");
 	handle_messages_in_rt_fifo(); // Handles messages including moving uge_nodes from the RT FIFO queue into the scheduled_synth_list
 
+	// puts("l");
 	unsigned int i;
 	for (i = 0; i < nframes; ++i)
     {
+		//puts("c");
 		clear_necronomicon_buses(); // Zero out the audio buses
+		//puts("a");
 		add_scheduled_synths(); // Add any synths that need to start this frame into the current synth_list
 
 		// Iterate through the synth_list, processing each synth
 		_necronomicon_current_node = synth_list;
-		
+
+		//printf("<");
 		while (_necronomicon_current_node)
 		{
+			//printf("^");
 			process_synth(_necronomicon_current_node);
 			_necronomicon_current_node = _necronomicon_current_node->next;
 		}
+		//puts(">");
 
+		//puts("o");
 		out0[i] = _necronomicon_buses[0]; // Write the output of buses 0/1 to jack buffers 0/1, which can be routed or sent directly to the main outs
 		out1[i] = _necronomicon_buses[1];
 
+		//puts("b");
+		
 		//Hand un-rolled this loop. The non-unrolled version was causing 13% cpu overhead on my machine, this doesn't make a blip...
 		out_bus_buffers[0][out_bus_buffer_index]  = _necronomicon_buses[0];
 		out_bus_buffers[1][out_bus_buffer_index]  = _necronomicon_buses[1];
@@ -1283,6 +1519,7 @@ int process(jack_nframes_t nframes, void* arg)
 		out_bus_buffers[15][out_bus_buffer_index] = _necronomicon_buses[15];
 		out_bus_buffer_index = (out_bus_buffer_index + 1) & 511;
 
+		//puts("r");
 		remove_scheduled_synths(); // Remove any synths that are scheduled for removal and send them to the NRT thread FIFO queue for freeing.
 		current_cycle_usecs = cached_cycle_usecs + (jack_time_t) ((double) i * usecs_per_frame); // update current usecs time every sample
     }
@@ -1900,9 +2137,12 @@ synth_node* new_test_synth(unsigned int time)
 void print_node(synth_node* node)
 {
 	if (node != NULL)
-		printf("synth_node { ugen_graph: %p, ugen_wires: %p, previous: %p, next: %p, time: %llu, key %u, hash: %u, table_index: %u, num_ugens: %u, num_wires: %u, previous_alive_status: %u, alive_status %u }\n",
+		printf("synth_node %p { ugen_graph: %p, ugen_graph_node: %p, ugen_wires: %p, ugen_wires_node: %p, previous: %p, next: %p, time: %llu, key %u, hash: %u, table_index: %u, num_ugens: %u, num_wires: %u, previous_alive_status: %u, alive_status %u }\n",
+			   node,
 			   node->ugen_graph,
+			   node->ugen_graph_node,
 			   node->ugen_wires,
+			   node->ugen_wires_node,
 			   node->previous,
 			   node->next,
 			   node->time,
@@ -3335,36 +3575,27 @@ typedef struct
 
 void freeverb_constructor(ugen* u)
 {
-	freeverb_data* freeverb       = malloc(sizeof(freeverb_data));
-	freeverb->combFilterDelays    = malloc(sizeof(delay_data) * 8);
-	freeverb->combz1s             = malloc(sizeof(double) * 8);
-	freeverb->allpassDelays       = malloc(sizeof(delay_data) * 4);
+	freeverb_data* freeverb       = calloc(sizeof(freeverb_data), 1);
+	freeverb->combFilterDelays    = calloc(sizeof(delay_data), 8);
+	freeverb->combz1s             = calloc(sizeof(double), 8);
+	freeverb->allpassDelays       = calloc(sizeof(delay_data), 4);
 
-	delay_data data0 = { acquire_sample_buffer(1557), 1557, 0 };
+	delay_data data0 = { acquire_sample_buffer(1557), 1556, 0 };
 	freeverb->combFilterDelays[0] = data0;
-	delay_data data1 = { acquire_sample_buffer(1617), 1617, 0 };
+	delay_data data1 = { acquire_sample_buffer(1617), 1616, 0 };
 	freeverb->combFilterDelays[1] = data1;
-	delay_data data2 = { acquire_sample_buffer(1491), 1491, 0 };
+	delay_data data2 = { acquire_sample_buffer(1491), 1490, 0 };
 	freeverb->combFilterDelays[2] = data2;
-	delay_data data3 = { acquire_sample_buffer(1422), 1422, 0 };
+	delay_data data3 = { acquire_sample_buffer(1422), 1421, 0 };
 	freeverb->combFilterDelays[3] = data3;
-	delay_data data4 = { acquire_sample_buffer(1277), 1277, 0 };
+	delay_data data4 = { acquire_sample_buffer(1277), 1276, 0 };
 	freeverb->combFilterDelays[4] = data4;
-	delay_data data5 = { acquire_sample_buffer(1356), 1356, 0 };
+	delay_data data5 = { acquire_sample_buffer(1356), 1355, 0 };
 	freeverb->combFilterDelays[5] = data5;
-	delay_data data6 = { acquire_sample_buffer(1188), 1188, 0 };
+	delay_data data6 = { acquire_sample_buffer(1188), 1187, 0 };
 	freeverb->combFilterDelays[6] = data6;
-	delay_data data7 = { acquire_sample_buffer(1116), 1116, 0 };
+	delay_data data7 = { acquire_sample_buffer(1116), 1115, 0 };
 	freeverb->combFilterDelays[7] = data7;
-
-	freeverb->combz1s[0] = 0;
-	freeverb->combz1s[1] = 0;
-	freeverb->combz1s[2] = 0;
-	freeverb->combz1s[3] = 0;
-	freeverb->combz1s[4] = 0;
-	freeverb->combz1s[5] = 0;
-	freeverb->combz1s[6] = 0;
-	freeverb->combz1s[7] = 0;
 
 	delay_data data8 = { acquire_sample_buffer(225), 225, 0 };
 	freeverb->allpassDelays[0]    = data8;
@@ -3397,58 +3628,63 @@ const double fixed_gain = 0.015;
 //Should the delayed signal in this be x or y or x + y???
 #define COMB_FILTER(X,R,D,N,DATA,ZS,I)                                                       \
 ({                                                                                           \
-	sample_buffer* buffer           = DATA[I].buffer;                                        \
-	unsigned int   write_index      = DATA[I].write_index;                                   \
-	unsigned int   num_samples_mask = buffer->num_samples_mask;                              \
-	double         damp1            = D * 0.4;                                               \
+    delay_data     data             = DATA[I];	    					                     \
+	sample_buffer  buffer           = *(data.buffer);					                     \
+	unsigned int   write_index      = data.write_index;                                      \
+	unsigned int   num_samples_mask = buffer.num_samples_mask;			                     \
+	double         damp1            = D * 0.4;							                     \
 	double         damp2            = 1 - damp1;                                             \
 	double         feedback         = R * 0.28 + 0.7;                                        \
-	double         y                = buffer->samples[write_index];                          \
+	double         y                = buffer.samples[write_index];                           \
 	ZS[I]                           = y * damp2 + ZS[I] * damp1;                             \
-	buffer->samples[write_index]    = (X * fixed_gain) + ZS[I] * feedback;                   \
-	DATA[I].write_index             = (write_index + 1) & num_samples_mask;                  \
+	buffer.samples[write_index]     = (X * fixed_gain) + ZS[I] * feedback;                   \
+	data.write_index                = (write_index + 1) & num_samples_mask;                  \
+    DATA[I]                         = data;                                                  \
 	y;                                                                                       \
 })
 
 #define ALLPASS_FEEDBACK(X,F,N,DATA,I)                                                       \
 ({                                                                                           \
-    sample_buffer* buffer           = DATA[I].buffer;                                        \
-    unsigned int   write_index      = DATA[I].write_index;                                   \
-    unsigned int   num_samples_mask = buffer->num_samples_mask;                              \
-    double         bufout           = buffer->samples[write_index];                          \
+    delay_data     data             = DATA[I];	    					                     \
+    sample_buffer  buffer           = *(data.buffer);                        				 \
+    unsigned int   write_index      = data.write_index;                                      \
+    unsigned int   num_samples_mask = buffer.num_samples_mask;                               \
+    double         bufout           = buffer.samples[write_index];                           \
 	double         y                = -X + bufout;                                           \
-    buffer->samples[write_index]    = X + bufout * F;                                        \
-	DATA[I].write_index             = (write_index + 1) & num_samples_mask;                  \
+    buffer.samples[write_index]     = X + bufout * F;                                        \
+	data.write_index                = (write_index + 1) & num_samples_mask;                  \
+	DATA[I]                         = data;                                                  \
 	y;                                                                                       \
 })
 
 
 void freeverb_calc(ugen* u)
 {
-	freeverb_data* data     = ((freeverb_data*) u->data);
+	freeverb_data  vdata    = *((freeverb_data*) u->data);
 	double         mix      = CLAMP(UGEN_IN(u, 0),0,1);
 	double         roomSize = CLAMP(UGEN_IN(u, 1),0,1);
 	double         damp     = CLAMP(UGEN_IN(u, 2),0,1);
 	double         x        = CLAMP(UGEN_IN(u, 3),0,1);
 
-	double         cf0      = COMB_FILTER(x,roomSize,damp,1557,data->combFilterDelays,data->combz1s,0);
-	double         cf1      = COMB_FILTER(x,roomSize,damp,1617,data->combFilterDelays,data->combz1s,1);
-	double         cf2      = COMB_FILTER(x,roomSize,damp,1491,data->combFilterDelays,data->combz1s,2);
-	double         cf3      = COMB_FILTER(x,roomSize,damp,1422,data->combFilterDelays,data->combz1s,3);
-	double         cf4      = COMB_FILTER(x,roomSize,damp,1277,data->combFilterDelays,data->combz1s,4);
-	double         cf5      = COMB_FILTER(x,roomSize,damp,1356,data->combFilterDelays,data->combz1s,5);
-	double         cf6      = COMB_FILTER(x,roomSize,damp,1188,data->combFilterDelays,data->combz1s,6);
-	double         cf7      = COMB_FILTER(x,roomSize,damp,1116,data->combFilterDelays,data->combz1s,7);
+	double         cf0      = COMB_FILTER(x,roomSize,damp,1557,vdata.combFilterDelays,vdata.combz1s,0);
+	double         cf1      = COMB_FILTER(x,roomSize,damp,1617,vdata.combFilterDelays,vdata.combz1s,1);
+	double         cf2      = COMB_FILTER(x,roomSize,damp,1491,vdata.combFilterDelays,vdata.combz1s,2);
+	double         cf3      = COMB_FILTER(x,roomSize,damp,1422,vdata.combFilterDelays,vdata.combz1s,3);
+	double         cf4      = COMB_FILTER(x,roomSize,damp,1277,vdata.combFilterDelays,vdata.combz1s,4);
+	double         cf5      = COMB_FILTER(x,roomSize,damp,1356,vdata.combFilterDelays,vdata.combz1s,5);
+	double         cf6      = COMB_FILTER(x,roomSize,damp,1188,vdata.combFilterDelays,vdata.combz1s,6);
+	double         cf7      = COMB_FILTER(x,roomSize,damp,1116,vdata.combFilterDelays,vdata.combz1s,7);
 
 	double         cfy      = cf0 + cf1 + cf2 + cf3 + cf3 + cf5 + cf6 + cf7;
 
-    double         ap0      = ALLPASS_FEEDBACK(cfy,0.5,225,data->allpassDelays,0);
-	double         ap1      = ALLPASS_FEEDBACK(ap0,0.5,556,data->allpassDelays,1);
-	double         ap2      = ALLPASS_FEEDBACK(ap1,0.5,441,data->allpassDelays,2);
-	double         ap3      = ALLPASS_FEEDBACK(ap2,0.5,341,data->allpassDelays,3);
+    double         ap0      = ALLPASS_FEEDBACK(cfy,0.5,225,vdata.allpassDelays,0);
+	double         ap1      = ALLPASS_FEEDBACK(ap0,0.5,556,vdata.allpassDelays,1);
+	double         ap2      = ALLPASS_FEEDBACK(ap1,0.5,441,vdata.allpassDelays,2);
+	double         ap3      = ALLPASS_FEEDBACK(ap2,0.5,341,vdata.allpassDelays,3);
 
     double         y        = (x * (1 - mix)) + (ap3 * mix * 1.0);
 
+	*((freeverb_data*) u->data) = vdata;
 	UGEN_OUT(u,0,y);
 }
 
