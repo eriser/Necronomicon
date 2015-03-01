@@ -20,9 +20,9 @@ ugenTests2 = map test <| zip synthNames [length synthNames..]
         shouldPlay     i a b = a == i && b > 0.5
 
 ugenTests3 :: [Signal Int -> Signal ()]
-ugenTests3 = map test <| zip synthNames [length synthNames * 2..]
+ugenTests3 = map test <| zip (repeat "triOscEnv") [length synthNames * 2..length synthNames * 3]
     where
-        test (synthName,i) s = foldr (<|>) playTest <| replicate 9 playTest
+        test (synthName,i) s = foldr (<|>) playTest <| replicate 7 playTest
             where
                 playTest = playSynthPattern ((== i) <~ s) synthName [] (ploop [patt])
                 patt = [lich| [0 1] [2 0] [1 1]   [_ 1]
@@ -42,7 +42,7 @@ printTest i
     | otherwise                       = ""
 
 switcher :: Signal Int
-switcher = count (every 10) + pure (length synthNames * 1)
+switcher = count (every 10) + pure (length synthNames * 2)
 
 ticker :: Signal Double
 ticker = fps 60
@@ -196,13 +196,14 @@ synthNames = [
     "atanHSynth"]
 
 triOscEnv :: UGen -> UGen -> [UGen]
-triOscEnv f1 _ = [sig1,sig2] + [sig3,sig3] |> verb |> out 0
+triOscEnv f1 _ = [sig1,sig2] + [sig3,sig3] |> out 0
     where
         sig1 = sinOsc (f1 * 1.0 + sig3 * 1000) |> e |> auxThrough 2
         sig2 = sinOsc (f1 * 0.5 - sig3 * 1000) |> e |> auxThrough 3
         sig3 = sinOsc (f1 * 0.25)              |> e |> auxThrough 4
+        -- e i  = line 0.5 + i
         e    = perc 0.01 0.5 0.1 0
-        verb = freeverb 0.25 0.5 0.5
+        -- verb = freeverb 0.25 0.5 0.5
 
 sinSynth :: UGen -> UGen -> UGen
 sinSynth a _ = sin a
