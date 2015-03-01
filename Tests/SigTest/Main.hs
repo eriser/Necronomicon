@@ -173,13 +173,13 @@ triOsc32 f1 f2 = feedback fSig |> verb |> gain 0.1 |> out 0
                 sig3 = sinOsc (f1 - f2 + i * 10) * (sinOsc (i * 0.00025)  |> range 0.5 1) |> auxThrough 4
 
 triOscEnv :: UGen -> [UGen]
-triOscEnv f1 = [sig1,sig2] + [sig3,sig3] |> verb |> out 0
+triOscEnv f1 = [sig1,sig2] + [sig3,sig3] |> out 0
     where
         sig1 = sinOsc (f1 * 1.0 + sig3 * 1000) |> e |> auxThrough 2
         sig2 = sinOsc (f1 * 0.5 - sig3 * 1000) |> e |> auxThrough 3
         sig3 = sinOsc (f1 * 0.25)              |> e |> auxThrough 4
         e    = perc 0.01 0.5 0.1 0
-        verb n = delayN 0.25 0.25 n + n
+        -- verb n = delayN 0.25 0.25 n + n
         -- verb = freeverb 0.25 0.5 0.5
 
 bSynth :: UGen
@@ -376,24 +376,22 @@ metallicPattern3 = playSynthPattern (toggle <| isDown keyD) "metallic3" [] (pmap
                       _ _ _ 0 |]
 
 shakePattern :: Signal ()
-shakePattern = playSynthPattern (toggle <| isDown keyD) "shake" [] (pmap (* 0.2) <| ploop [sec1])
+shakePattern = playSynthPattern (toggle <| isDown keyD) "shake" [] (pmap (* 0.05) <| ploop [sec1])
     where
-        sec1 = [lich| _     4     [_ 1] _
-                      4     [_ 1] _     _
-                      [_ 4] _     1     [_ 4]
-                      _     1     _      _
-                      4     [_ 1] _      4
-                      [_ 1] _     _     [_ 4]
-                      _     1     [_ 4]  _
-                      1     _      _     _ |]
+        sec1 = [lich| _
+                      8     [_ 2] [_ _ 1 1]
+                      8     [_ 2] [_ _ 1 1]
+                      8     [_ 2] [_ _ 1 1]
+                      8     [_ 2] [_ _ 1 1]
+                      8     [_ 2] [2 2 2] |]
 
 shakePattern2 :: Signal ()
-shakePattern2 = playSynthPattern (toggle <| isDown keyD) "shake2" [] (pmap (* 0.1) <| ploop [sec1])
+shakePattern2 = playSynthPattern (toggle <| isDown keyD) "shake2" [] (pmap (* 0.075) <| ploop [sec1])
     where
         sec1 = [lich| [3 3] [_ 4] [_ 4]
                       [3 3] [_ 4] [_ 4]
                       [3 3] [_ 4] [_ 4]
-                      [1 1 1]  [1 1 1] [12 1] |]
+                      [1 1 1]  [1 1 1] [2 1] |]
 
 
 shakePattern3 :: Signal ()

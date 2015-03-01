@@ -325,6 +325,14 @@ runSignal s = initWindow >>= \mw -> case mw of
         args        <- getArgs
         startNetworking signalState args (necroNetClient signalState)
         threadDelay $ 16667
+
+        _ <- runNecroState startNecronomicon $ necroVars signalState
+        _ <- runNecroState (waitForRunningStatus NecroRunning) (necroVars signalState)
+        _ <- runNecroState (setTempo 150) (necroVars signalState)
+
+        r <- atomically $ readTVar $ necroRunning $ necroVars signalState
+        putStrLn $ "Runstate: " ++ show r
+
         signalLoop  <- unSignal s signalState
 
         GLFW.setCursorPosCallback   w $ Just $ mousePosEvent   signalState
@@ -332,9 +340,6 @@ runSignal s = initWindow >>= \mw -> case mw of
         GLFW.setKeyCallback         w $ Just $ keyPressEvent   signalState
         GLFW.setWindowSizeCallback  w $ Just $ dimensionsEvent signalState
 
-        _ <- runNecroState startNecronomicon $ necroVars signalState
-        _ <- runNecroState (waitForRunningStatus NecroRunning) (necroVars signalState)
-        _ <- runNecroState (setTempo 150) (necroVars signalState)
 
         threadDelay $ 16667
 
