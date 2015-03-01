@@ -199,8 +199,8 @@ metallic f = sig + sig2 + sig3 |> filt |> e |> auxThrough 2 |> gain 0.15 |> out 
         filt3 = lpf  ([f * (random |> range 6 10),f * (random |> range 3 6)] |> e2) 3
         filt i= filt1 i + filt2 i * 0.5 + filt3 i * 0.5
 
-        e    = perc 0.01 0.75 1 (-6)
-        e2   = env2 [1,1,0.5,0.5] [0.01,0.35,0.4] (-6)
+        e    = perc 0.01 1.0 1 (-2)
+        e2   = env2 [1,1,0.35,0.35] [0.01,0.35,0.65] (-5)
 
 metallic2 :: UGen -> [UGen]
 metallic2 f = sig + sig2 + sig3 |> filt |> e |> auxThrough 3 |> gain 0.125 |> (\[u1,u2 ]-> [u2,u1]) |> out 0
