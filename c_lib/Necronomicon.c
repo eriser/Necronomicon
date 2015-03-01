@@ -138,7 +138,7 @@ void print_ugen_graph_pool_node(ugen_graph_pool_node* ugen_graph)
 	{
 		printf(
 			"ugen_graph_pool_node %p { ugen_graph = %p, next_ugen_graph_pool_node = %p, pool_index = %u }\n",
-			ugen_graph, ugen_graph->ugen_graph, ugen_graph->next_ugen_graph_pool_node, ugen_graph->pool_index);   
+			ugen_graph, ugen_graph->ugen_graph, ugen_graph->next_ugen_graph_pool_node, ugen_graph->pool_index);
 	}
 
 	else
@@ -204,7 +204,7 @@ void print_ugen_wires_pool_node(ugen_wires_pool_node* ugen_wires)
 	{
 		printf(
 			"ugen_wires_pool_node %p { ugen_wires = %p, next_ugen_wires_pool_node = %p, pool_index = %u }\n",
-			ugen_wires, ugen_wires->ugen_wires, ugen_wires->next_ugen_wires_pool_node, ugen_wires->pool_index);   
+			ugen_wires, ugen_wires->ugen_wires, ugen_wires->next_ugen_wires_pool_node, ugen_wires->pool_index);
 	}
 
 	else
@@ -279,7 +279,7 @@ void print_sample_buffer(sample_buffer* buffer)
 	{
 		printf(
 			"sample_buffer %p { samples = %p, next_sample_buffer = %p, pool_index = %u, num_samples = %u, num_samples_mask = %u }\n",
-			buffer, buffer->samples, buffer->next_sample_buffer, buffer->pool_index, buffer->num_samples, buffer->num_samples_mask);   
+			buffer, buffer->samples, buffer->next_sample_buffer, buffer->pool_index, buffer->num_samples, buffer->num_samples_mask);
 	}
 
 	else
@@ -297,7 +297,7 @@ sample_buffer* acquire_sample_buffer(unsigned int num_samples)
 
 	assert(num_samples <= pow_two_num_samples);
 	assert(pool_index < (NUM_SAMPLE_BUFFER_POOLS - 1));
-	
+
 	printf("acquire_sample_buffer(pooled_buffer = %p, num_samples = %u, pow_two_num_samples = %u, pool_index = %u)\n", buffer, num_samples, pow_two_num_samples, pool_index);
 	if (buffer != NULL)
 	{
@@ -1302,7 +1302,7 @@ void init_rt_thread()
 	assert(sample_buffer_pools == NULL);
 	assert(ugen_graph_pools == NULL);
 	assert(ugen_wires_pools == NULL);
-	
+
 	SAMPLE_RATE = jack_get_sample_rate(client);
 	RECIP_SAMPLE_RATE = 1.0 / SAMPLE_RATE;
 	TABLE_MUL_RECIP_SAMPLE_RATE = TABLE_SIZE * RECIP_SAMPLE_RATE;
@@ -1321,7 +1321,7 @@ void init_rt_thread()
 	sample_buffer_pools = (sample_buffer**) calloc(sizeof(sample_buffer*), NUM_SAMPLE_BUFFER_POOLS);
 	ugen_graph_pools = (ugen_graph_pool_node**) calloc(sizeof(ugen_graph_pool_node*), NUM_UGEN_GRAPH_POOLS);
 	ugen_wires_pools = (ugen_wires_pool_node**) calloc(sizeof(ugen_wires_pool_node*), NUM_UGEN_WIRES_POOLS);
-	
+
 	initialize_wave_tables();
 	// load_audio_files();
 
@@ -1365,7 +1365,7 @@ void shutdown_rt_thread()
 	assert(sample_buffer_pools != NULL);
 	assert(ugen_graph_pools != NULL);
 	assert(ugen_wires_pools != NULL);
-	
+
 	hash_table_free(synth_table);
 	rt_fifo_free();
 	scheduled_list_free();
@@ -1399,7 +1399,7 @@ void shutdown_rt_thread()
 			ugen_graph = next_ugen_graph_pool_node;
 		}
 	}
-	
+
 	free(ugen_graph_pools);
 
 	for (i = 0; i < NUM_UGEN_WIRES_POOLS; ++i)
@@ -1413,9 +1413,9 @@ void shutdown_rt_thread()
 			ugen_wires = next_ugen_wires_pool_node;
 		}
 	}
-	
+
 	free(ugen_wires_pools);
-	
+
 	while (free_synths)
 	{
 		synth_node* synth = free_synths;
@@ -1501,7 +1501,7 @@ int process(jack_nframes_t nframes, void* arg)
 		out1[i] = _necronomicon_buses[1];
 
 		//puts("b");
-		
+
 		//Hand un-rolled this loop. The non-unrolled version was causing 13% cpu overhead on my machine, this doesn't make a blip...
 		out_bus_buffers[0][out_bus_buffer_index]  = _necronomicon_buses[0];
 		out_bus_buffers[1][out_bus_buffer_index]  = _necronomicon_buses[1];
@@ -1806,6 +1806,7 @@ void line_calc(ugen* u)
 	UGEN_OUT(u, 0, output);
 }
 
+/*
 void perc_calc(ugen* u)
 {
 	double       length    = UGEN_IN(u, 0) * SAMPLE_RATE;
@@ -1837,15 +1838,16 @@ void perc_calc(ugen* u)
 
 	UGEN_OUT(u, 0, y);
 }
+*/
 
 #define OFF_INDEX(OFFSET,INDEX,ARRAY)
 
 typedef struct
 {
 	unsigned int time;
-	unsigned int index;
-	unsigned int numValues;
-	unsigned int numDurations;
+	int index;
+	int numValues;
+	int numDurations;
 
 	double curTotalDuration;
 	double nextTotalDuration;
@@ -1888,13 +1890,19 @@ void env_calc(ugen* u)
 	double       line_timed = (double) data.time * RECIP_SAMPLE_RATE;
 	double       y          = 0;
 
-	if(line_timed > data.nextTotalDuration)
+	// printf("env---------------------------------------------\n");
+	// printf("data.index: %i, data.numValues: %i.\n",data.index,data.numValues);
+	// printf("data.nextTotalDuration: %f\n",data.nextTotalDuration);
+	// printf("line_timed: %f\n",line_timed);
+
+	if(line_timed >= data.nextTotalDuration)
 	{
+		// printf("line_timed >= data.nextTotalDuration\n");
+
 		data.index             = data.index + 1;
 
-		// printf("env---------------------------------------------\n");
-		// printf("data.index: %u\n",data.index);
-		// printf("data.numValues: %u\n",data.numValues);
+		// printf("data.index: %i\n",data.index);
+		// printf("data.numValues: %i\n",data.numValues);
 		// printf("data.numDurations: %u\n",data.numDurations);
 
 		if(data.index < data.numValues)
@@ -1915,7 +1923,6 @@ void env_calc(ugen* u)
 			// printf("data.currentValue: %f\n",data.currentValue);
 
 			data.nextValue         = UGEN_IN(u,data.index + 1 + valsOffset);
-			// printf("data.nextValue: %f\n",data.nextValue);
 
 			data.recipDuration     = 1.0 / nextDuration;
 			// printf("data.recipDuration: %f\n",data.recipDuration);
@@ -1928,12 +1935,15 @@ void env_calc(ugen* u)
 		}
 	}
 
-	if(data.index >= data.numValues)
+	if(data.index >= data.numValues - 1)
 	{
+		// printf("!!!!!!!!!!!!!!!!!!!!env freeing synth!!!!!!!!!!!!!!!!!!!!!!!!!\n");
 		try_schedule_current_synth_for_removal();
 	}
     else
     {
+		// printf("data.index: %u, data.numValues: %u.\n",data.index,data.numValues);
+
 		double unclampedDelta    = pow((line_timed - data.curTotalDuration) * data.recipDuration, data.curve);
 		double delta             = MIN(unclampedDelta,1.0);
 		y                        = ((1-delta) * data.currentValue + delta * data.nextValue) * x;
