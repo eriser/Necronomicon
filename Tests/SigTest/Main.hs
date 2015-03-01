@@ -302,6 +302,8 @@ metallicPattern = metallicPattern1
               <&> metallicPattern3
               <&> shakePattern
               <&> shakePattern2
+              <&> shakePattern3
+              <&> shakePattern4
               <&> metallicPattern2_2
             --   <&> swellPattern
 
@@ -376,10 +378,28 @@ shakePattern = playSynthPattern (toggle <| isDown keyD) "shake" [] (pmap (* 0.2)
 shakePattern2 :: Signal ()
 shakePattern2 = playSynthPattern (toggle <| isDown keyD) "shake2" [] (pmap (* 0.1) <| ploop [sec1])
     where
-        sec1 = [lich| [1 1] [_ 1] [_ 1]
-                      [1 1] [_ 1] [_ 1]
-                      [1 1] [_ 1] [_ 1]
+        sec1 = [lich| [1 1] [_ 2] [_ 2]
+                      [1 1] [_ 2] [_ 2]
+                      [1 1] [_ 2] [_ 2]
                       [1 1 1]  [1 1 1] [10 1] |]
+
+
+shakePattern3 :: Signal ()
+shakePattern3 = playSynthPattern (toggle <| isDown keyD) "shake2" [] (pmap (* 0.025) <| ploop [sec1])
+    where
+        sec1 = [lich| [2 1] [1 1] [1 1] _
+                      [2 1] [1 1] [1 1] _
+                      [2 1] [1 1] [1 1] _
+                      [2 1] [1 1] [1 1] 4 |]
+
+shakePattern4 :: Signal ()
+shakePattern4 = playSynthPattern (toggle <| isDown keyD) "shake" [] (pmap (* 0.025) <| ploop [sec1])
+    where
+        sec1 = [lich| _ _ [1 _ 1 1] [1 1]
+                      _ [1 _ 1 1] 2 _
+                      [1 _ 1 1] [1 1] _         [1 _ 1 1]
+                      2          _   [1 _ 1 1] [1 1]
+                      _          [1 _ 1 1]    2        [1 1] |]
 
 -- swellPattern :: Signal ()
 -- swellPattern = playSynthPattern (toggle <| isDown keyD) "reverseSwell" [] (pmap ((*0.25) . d2f slendro) <| ploop [sec1])
