@@ -333,6 +333,7 @@ runSignal s = initWindow >>= \mw -> case mw of
         GLFW.setWindowSizeCallback  w $ Just $ dimensionsEvent signalState
 
         _ <- runNecroState startNecronomicon $ necroVars signalState
+        _ <- runNecroState (waitForRunningStatus NecroRunning) (necroVars signalState)
         _ <- runNecroState (setTempo 150) (necroVars signalState)
 
         threadDelay $ 16667
@@ -1570,21 +1571,21 @@ playSynthPattern playSig synthName argSigs pattern = Signal $ \state -> do
     let pFunc = return (\val t -> playSynthAtJackTime synthName [val] t >> return ())
         pDef  = pstreamWithArgs ("sigPat" ++ show pid) pFunc pattern (map (PVal . toRational) aValues)
 
-    maybePattern <- if pValue then runNecroState (runPDef pDef) (necroVars state) >>= \(pat,_) -> return (Just pat) else return Nothing
-    patternRef   <- newIORef maybePattern
+    _            <- if pValue then runNecroState (runPDef pDef) (necroVars state) >> return () else return ()
+    playingRef   <- newIORef pValue
 
-    return $ processSignal patternRef pDef pCont aConts (necroVars state)
+    return $ processSignal playingRef pDef pCont aConts (necroVars state)
     where
-        processSignal patternRef pDef pCont aConts sNecroVars update = do
-            p   <- pCont update
-            pat <- readIORef patternRef
-            playChange <- case (p,pat) of
-                (Change True ,Nothing) -> runNecroState (runPDef pDef) sNecroVars >>= \(pat',_) -> writeIORef patternRef (Just pat') >> return (Change ())
-                (Change False,Just  _) -> runNecroState (pstop   pDef) sNecroVars >>               writeIORef patternRef Nothing     >> return (Change ())
-                _                      -> return $ NoChange ()
-            readIORef patternRef >>= \pat' -> case pat' of
-                Nothing -> return ()
-                Just pat'' -> foldM (\i f -> updateArg i f pat'' sNecroVars update >> return (i+1)) 0 aConts >> return ()
+        processSignal playingRef pDef pCont aConts sNecroVars update = do
+            p         <- pCont update
+            isPlaying <- readIORef playingRef
+            playChange <- case (p,isPlaying) of
+                (Change True ,False) -> runNecroState (runPDef pDef) sNecroVars >> writeIORef playingRef True  >> return (Change ())
+                (Change False,True)  -> runNecroState (pstop   pDef) sNecroVars >> writeIORef playingRef False >> return (Change ())
+                _                    -> return $ NoChange ()
+            readIORef playingRef >>= \isPlaying' -> case isPlaying' of
+                False -> return ()
+                True  -> foldM (\i f -> updateArg i f pDef sNecroVars update >> return (i+1)) 0 aConts >> return ()
             return playChange
 
         updateArg index aCont sPattern sNecroVars update = aCont update >>= \a -> case a of
