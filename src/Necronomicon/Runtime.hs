@@ -12,6 +12,7 @@ import Necronomicon.Patterns
 import qualified Data.Map as M
 import Paths_Necronomicon
 import Data.Typeable
+import Debug.Trace
 
 data SynthDef = SynthDef {
     synthDefName :: String,
@@ -323,7 +324,7 @@ processMessages messages =  mapM_ (processMessage) messages
             SetSynthArg synth argIndex arg -> processSetSynthArg synth argIndex arg
             SetSynthArgs synth args -> processSetSynthArgs synth args
             StopSynth nodeID -> liftIO $ stopSynthInRtRuntime nodeID
-            CollectSynthDef synthDef -> addSynthDef synthDef
+            CollectSynthDef synthDef -> trace ("CollectSynthDef: " ++ show synthDef) $ addSynthDef synthDef
             ShutdownNrt -> necronomiconEndSequence
 
 startNrtRuntime :: Necronomicon ()
@@ -495,13 +496,13 @@ handleScheduledPatterns nextTime = getPatternQueue >>= \(pqueue, pdict) -> handl
                                        where
                                            scaledDur = floor $ dur * tempoRatio * microsecondsPerSecond -- Convert from beats to microseconds
                                            waitTime = (floor (((fromIntegral scaledDur) :: Rational) * 0.1)) :: JackTime -- return wait time as a percentage of the duration of this beat
-                                   Nothing -> handleNothing -- After player the pattern returns Nothing for the duration, which means it is done and ready to be removed                            
+                                   Nothing -> handleNothing -- After player the pattern returns Nothing for the duration, which means it is done and ready to be removed
                         in case M.lookup n m of
-                           Nothing -> handleNothing -- When we check the name/pdef map we find nothing, which means it was stopped 
-                           Just (PDefNoArgs _ p) -> case collapse p b of 
+                           Nothing -> handleNothing -- When we check the name/pdef map we find nothing, which means it was stopped
+                           Just (PDefNoArgs _ p) -> case collapse p b of
                                PVal pfunc -> pfunc b i t >>= schedulePattern -- play the pattern then schedule it again
                                _ -> handleNothing -- The pattern collapsed to Nothing
-                           Just (PDefWithArgs _ pfunc args) -> pfunc b i t args >>= schedulePattern -- play the pattern then schedule it again    
+                           Just (PDefWithArgs _ pfunc args) -> pfunc b i t args >>= schedulePattern -- play the pattern then schedule it again
 
 startPatternScheduler :: Necronomicon ()
 startPatternScheduler = do

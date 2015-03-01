@@ -6,20 +6,28 @@ main :: IO ()
 main = runSignal <| synthDefs *> testGUI <|> (sections <&> hyperTerrainSounds)
 
 synthDefs :: Signal ()
-synthDefs = synthDef "triOsc"    triOsc
-         *> synthDef "triOsc32"  triOsc32
-         *> synthDef "triOscEnv" triOscEnv
-         *> synthDef "b"         bSynth
-         *> synthDef "p"         pSynth
-         *> synthDef "metallic"  metallic
-         *> synthDef "metallic2" metallic2
-         *> synthDef "metallic3" metallic3
+synthDefs = synthDef "triOsc"       triOsc
+         *> synthDef "triOsc32"     triOsc32
+         *> synthDef "triOscEnv"    triOscEnv
+         *> synthDef "b"            bSynth
+         *> synthDef "p"            pSynth
+         *> synthDef "metallic"     metallic
+         *> synthDef "metallic2"    metallic2
+         *> synthDef "metallic3"    metallic3
+         *> synthDef "metallic4"    metallic4
+         *> synthDef "metallic5"    metallic5
+         *> synthDef "shake"        shake
+         *> synthDef "shake2"       shake2
+         *> synthDef "floorPerc"    floorPerc
+         *> synthDef "reverseSwell" reverseSwell
 
 hyperTerrainSounds :: Signal ()
-hyperTerrainSounds = play             (toggle <| isDown keyW) "triOsc"    [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
-                 <&> play             (toggle <| isDown keyA) "triOsc32"  [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
-                 <&> playBeatPattern  (toggle <| isDown keyE) [] (ploop [ [lich| [p p p] [p b] p b |] ])
-                 <&> metallicPattern
+hyperTerrainSounds = metallicPattern
+
+                    --  play             (toggle <| isDown keyW) "triOsc"    [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
+                --  <&> play             (toggle <| isDown keyA) "triOsc32"  [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
+                --  <&> playBeatPattern  (toggle <| isDown keyE) [] (ploop [ [lich| [p p p] [p b] p b |] ])
+                --  <&>
 
 sections :: Signal ()
 sections = switch section [section1, section2, section3]
@@ -180,55 +188,184 @@ bSynth = sin 55 |> gain (line 0.1) >>> gain 0.4 >>> out 0
 pSynth :: UGen
 pSynth = sin 1110 |> gain (line 0.1) >>> gain 0.2 >>> out 1
 
-metallic ::UGen -> [UGen]
-metallic f = sig + sig2 + sig3 |> softclip 1 |> filt |> e |> gain 1 |> out 0
+metallic :: UGen -> [UGen]
+metallic f = sig + sig2 + sig3 |> filt |> e |> auxThrough 2 |> gain 0.15 |> out 0
     where
-        sig  = sin   [f * (random |> range 0.999 1.001),f * (random |> range 0.999 1.001)]      |> gain 0.1 |> auxThrough 3
-        sig2 = pulse [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)] 0.85 |> gain 0.1 |> auxThrough 4
-        sig3 = sin   [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)]      |> gain 0.1 |> auxThrough 2
-        filt = lpf  ([f * (random |> range 2 4        ),f * (random |> range 1 2)] |> e) 2
-        e    = perc 0.01 1 1 (-3)
-        -- verb = freeverb 0.25 0.125 0.5
+        sig  = sin   [f * (random |> range 0.999 1.001),f * (random |> range 0.999 1.001)]       |> gain 0.1
+        sig2 = pulse [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)] 0.995 |> gain 0.1
+        sig3 = sin   [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)]       |> gain 0.1
 
-metallic2 ::UGen -> [UGen]
-metallic2 f = sig + sig2 + sig3 |> filt |> e |> gain 0.7 |> (\[u1,u2 ]-> [u2,u1]) |> out 0
-    where
-        sig  = sin   [f * (random |> range 0.999 1.001),f * (random |> range 0.999 1.001)]      |> gain 0.1 |> auxThrough 3
-        sig2 = pulse [f * (random |> range 0.2499 0.2501),f * (random |> range 0.2499 0.2501)] 0.85 |> gain 0.1 |> auxThrough 4
-        sig3 = sin   [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)]      |> gain 0.1 |> auxThrough 2
-        filt = lpf  ([f * (random |> range 2 4        ),f * (random |> range 1 2)] |> e) 2
-        e    = perc 0.01 0.75 1 (-3)
-        -- verb = freeverb 0.25 0.125 0.5
+        filt1 = lpf  ([f * (random |> range 1 3 ),f * (random |> range 1 2)] |> e2) 3
+        filt2 = lpf  ([f * (random |> range 3 5 ),f * (random |> range 2 4)] |> e2) 3
+        filt3 = lpf  ([f * (random |> range 6 10),f * (random |> range 3 6)] |> e2) 3
+        filt i= filt1 i + filt2 i * 0.5 + filt3 i * 0.5
 
-metallic3 ::UGen -> [UGen]
-metallic3 f = sig + sig2 + sig3 |> filt |> e |> gain 1 |> (\[u1,u2 ]-> [u2,u1]) |> out 0
+        e    = perc 0.01 1.0 1 (-2)
+        e2   = env2 [1,1,0.35,0.35] [0.01,0.35,0.65] (-5)
+
+metallic2 :: UGen -> [UGen]
+metallic2 f = sig + sig2 + sig3 |> filt |> e |> auxThrough 3 |> gain 0.125 |> (\[u1,u2 ]-> [u2,u1]) |> out 0
     where
-        sig    = sin   [f * (random |> range 0.999 1.001),f * (random |> range 0.999 1.001)]          |> gain 0.1 |> auxThrough 3
-        sig2   = pulse [f * (random |> range 0.2499 0.2501),f * (random |> range 0.2499 0.2501)] 0.85 |> gain 0.1 |> auxThrough 4
-        sig3   = sin   [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)]          |> gain 0.1 |> auxThrough 2
-        filt1  = lpf  ([f * (random |> range 2 4        ),f * (random |> range 1 2)] |> e) 2
-        filt2  = lpf  ([f * (random |> range 1 2        ),f * (random |> range 2 4)] |> e) 2
+        sig   = sin   [f * (random |> range 0.999 1.001  ),f * (random |> range 0.999 1.001)]         |> gain 0.1
+        sig2  = pulse [f * (random |> range 0.2499 0.2501),f * (random |> range 0.2499 0.2501)] 0.995 |> gain 0.1
+        sig3  = sin   [f * (random |> range 0.499 0.501  ),f * (random |> range 0.499 0.501)]         |> gain 0.1
+
+        filt1 = lpf  ([f * (random |> range 3 5 ),f * (random |> range 1 2)] |> e2) 3
+        filt2 = lpf  ([f * (random |> range 3 5 ),f * (random |> range 2 4)] |> e2) 3
+        filt3 = lpf  ([f * (random |> range 6 10),f * (random |> range 3 6)] |> e2) 3
+        filt i= filt1 i + filt2 i * 0.5 + filt3 i * 0.5
+
+        e     = perc 0.01 0.75 1 (-4)
+        e2    = env2 [1,1,0.5,0.5] [0.01,0.35,0.4] (-4)
+
+metallic3 :: UGen -> [UGen]
+metallic3 f = sig + sig2 + sig3 |> filt |> e |> auxThrough 4 |> gain 1 |> (\[u1,u2 ]-> [u2,u1]) |> out 0
+    where
+        sig    = sin   [f * (random |> range 0.999 1.001  ),f * (random |> range 0.999 1.001)]         |> gain 0.15
+        sig2   = pulse [f * (random |> range 0.2499 0.2501),f * (random |> range 0.2499 0.2501)] 0.995 |> gain 0.15
+        sig3   = sin   [f * (random |> range 0.499 0.501  ),f * (random |> range 0.499 0.501)]         |> gain 0.15
+
+        filt1  = lpf  ([f * (random |> range 4 8),f * (random |> range 2 4)] |> e2) 3
+        filt2  = lpf  ([f * (random |> range 2 4),f * (random |> range 4 8)] |> e2) 3
         filt s = filt1 s + filt2 s
-        e      = perc 0.01 8 1 (-3)
+
+        e      = perc 0.01 6 1 (-12)
+        e2    = env2 [1,1,0.25,0.25] [0.01,1,5] (-4)
+
+metallic4 :: UGen -> [UGen]
+metallic4 f = sig + sig2 + sig3 |> filt |> e |> e2 |> gain 0.25 |> out 0
+    where
+        sig  = sin   [f * (random |> range 0.999 1.001),f * (random |> range 0.999 1.001)]      |> gain 0.1 |> auxThrough 3
+        sig2 = pulse [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)] 0.975 |> gain 0.1 |> auxThrough 4
+        sig3 = sin   [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)]      |> gain 0.1 |> auxThrough 2
+
+        filt2 = bpf  ([f * (random |> range 6 10 ),f * (random |> range 2 4)]  |> e) 1
+        filt3 = bpf  ([f * (random |> range 12 24),f * (random |> range 3 6)]  |> e) 1
+        -- filt1 = bpf  ([f * (random |> range 24 36),f * (random |> range 9 12)] |> e) 1
+        filt i= filt2 i + filt3 i * 0.5
+
+        -- verb = freeverb 0.25 0.5 0.5
+        -- verb n = delayN 0.2 0.2 n + n
+        -- verb n = feedback (\i -> delayN 0.2 0.2 (n + [i,i] * 0.45) + n)
+        e    = perc 0.01 1 1 (-6)
+        e2   = env [1,1,0] [3,0.5] 0
+
+metallic5 :: UGen -> [UGen]
+metallic5 f = sig + sig2 + sig3 |> filt |> e |> verb |> e2 |> gain 0.25 |> out 0
+    where
+        sig  = sin   [f * (random |> range 0.999 1.001),f * (random |> range 0.999 1.001)]      |> gain 0.1
+        sig2 = pulse [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)] 0.975 |> gain 0.1 |> auxThrough 4
+        sig3 = sin   [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)]      |> gain 0.1 |> auxThrough 2
+
+        filt2 = lpf  ([f * (random |> range 2 4 ),f * (random |> range 6  10)] |> e) 2
+        filt3 = lpf  ([f * (random |> range 3 9 ),f * (random |> range 12 24)] |> e) 2
+        filt1 = lpf  ([f * (random |> range 9 12),f * (random |> range 24 36)] |> e) 2
+        filt i= filt1 i + filt2 i * 0.5 + filt3 i * 0.5
+
+        -- verb = freeverb 0.25 0.5 0.5
+        -- verb :: [UGen] -> [UGen]
+        verb n = feedback (\i -> delayN 0.2 0.2 (n + [i,i] * 0.45) + n)
+        e    = perc 0.8 2 1 (-6)
+        e2   = env [1,1,0] [3,0.5] 0
+
+reverseSwell :: UGen -> [UGen]
+reverseSwell f = sig |> e |> gain 0.01 |> out 0
+    where
+        -- verb n = feedback (\i -> delayN 0.2 0.2 (n + [i,i] * 0.45) + n)
+        e      = env  [0,1,0] [4,4] (0)
+        e2     = env2 [0.25,1,0.25] [4,4] (0)
+        sig    = foldr (+) (osc f) <| replicate 7 (osc f)
+        osc _  = sin [freq f,freq f] |> filt
+            where
+                freq _ = f + (sin (f * (random |> range 1 10)) |> range (f*1) (f*8))
+                filt = lpf ([f * (random |> range 2 12 ),f * (random |> range 2 12)] |> e2) 1
+
+shake :: UGen -> [UGen]
+shake d = sig1 + sig2 |> e |> p 0.75 |> gain 0.015  |> out 0
+    where
+        p a u = [u * (1 - a), u * a]
+        sig1  = whiteNoise |> bpf (9000) 0.5
+        sig2  = whiteNoise |> bpf (18000 * d) 1
+        e     = perc 0.01 d 1 (-5)
+
+shake2 :: UGen -> [UGen]
+shake2 d = sig1 + sig2 |> e |> p 0.25 |> gain 0.015  |> out 0
+    where
+        p a u = [u * (1 - a), u * a]
+        sig1  = whiteNoise |> bpf (9000) 1
+        sig2  = whiteNoise |> bpf (12000 * d) 2
+        e     = perc 0.01 d 1 (-5)
+
+floorPerc :: UGen -> [UGen]
+floorPerc d = sig1 + sig2 |> e |> p 0.4 |> gain 0.65  |> out 0
+    where
+        p a u = [u * (1 - a), u * a]
+        sig1  = sin 40
+        sig2  = sin 80 * 0.25
+        e     = perc 0.01 d 1 (-9)
+
 
 metallicPattern :: Signal ()
-metallicPattern = metallicPattern1 <&> metallicPattern2 <&> metallicPattern3
+metallicPattern = metallicPattern1
+            --   <&> metallicPattern1_2
+            --   <&> metallicPattern1_3
+              <&> metallicPattern2
+              <&> metallicPattern3
+              <&> shakePattern
+              <&> shakePattern2
+              <&> shakePattern3
+              <&> shakePattern4
+              <&> metallicPattern2_2
+              <&> floorPattern
+            --   <&> swellPattern
 
 metallicPattern1 :: Signal ()
-metallicPattern1 = playSynthPattern (toggle <| isDown keyD) "metallic" [] (pmap (d2f slendro . (+0)) <| ploop [sec1])
+metallicPattern1 = playSynthPattern (toggle <| isDown keyD) "metallic" [] (pmap (d2f slendro . (+5)) <| ploop [sec1])
     where
-        sec1 = [lich| [0 1] [3 0] [1 1]   [_ 1]
-                      [0 1] [3 0] [1 1 1] [2 2 1]
-                      [0 1] [3 0] [1 1]   [_ 1]
-                      [0 1] [3 0] [4 2]   [4 1] |]
+        sec1 = [lich| [0 1] [2 0] [1 1]   [_ 1]
+                      [0 1] [2 0] [1 1 1] [2 2 1]
+                      [0 1] [2 0] [1 1]   [_ 1]
+                      [0 1] [2 0] [4 2]   [4 1] |]
+
+-- metallicPattern1_2 :: Signal ()
+-- metallicPattern1_2 = playSynthPattern (toggle <| isDown keyD) "metallic" [] (pmap ((*0.25) . d2f slendro) <| ploop [sec1])
+    -- where
+        -- sec1 = [lich| _ 1 _ _
+                    --   _ 2 _ _
+                    --   _ 1 _ _
+                    --   _ 3 _ _ |]
+
+-- metallicPattern1_3 :: Signal ()
+-- metallicPattern1_3 = playSynthPattern (toggle <| isDown keyD) "metallic5" [] (pmap (d2f slendro . (+5)) <| ploop [sec1])
+    -- where
+        -- sec1 = [lich| _ _ 3 _
+                    --   _ _ 4 _
+                    --   _ _ 3 _
+                    --   _ _ _ 0 |]
 
 metallicPattern2 :: Signal ()
-metallicPattern2 = playSynthPattern (toggle <| isDown keyD) "metallic2" [] (pmap ((*0.5) . d2f slendro) <| ploop [sec1])
+metallicPattern2 = playSynthPattern (toggle <| isDown keyD) "metallic2" [] (pmap (d2f slendro) <| ploop [sec1])
     where
-        sec1 = [lich| 4 _ [_ 4 4] 5
-                      4 _ [_ 4 4] 3
-                      4 _ [_ 4 4] 5
-                      4 _ [_ 4 4] 0 |]
+        sec1 = [lich| 0 _ [  0 0] 1
+                      0 _ [0 0 0] 1
+                      1 _ [  1 1] 3
+                      1 _ [1 1 1] 3
+                      3 _ [  3 3] 2
+                      3 _ [3 3 3] 2
+                      2 _ [  2 2] 1
+                      2 _ [2 2 2] 0 |]
+
+metallicPattern2_2 :: Signal ()
+metallicPattern2_2 = playSynthPattern (toggle <| isDown keyD) "metallic" [] (pmap ((*0.5) . d2f slendro) <| ploop [sec1])
+    where
+        sec1 = [lich| _ 0 _ 0
+                      _ 0 _ 1
+                      _ 1 _ 1
+                      _ 1 _ 2
+                      _ 2 _ 2
+                      _ 2 _ 3
+                      _ 3 _ 3
+                      _ 3 _ 0 |]
 
 metallicPattern3 :: Signal ()
 metallicPattern3 = playSynthPattern (toggle <| isDown keyD) "metallic3" [] (pmap ((*0.25) . d2f slendro) <| ploop [sec1])
@@ -237,3 +374,54 @@ metallicPattern3 = playSynthPattern (toggle <| isDown keyD) "metallic3" [] (pmap
                       _ _ _ 1
                       _ _ _ _
                       _ _ _ 0 |]
+
+shakePattern :: Signal ()
+shakePattern = playSynthPattern (toggle <| isDown keyD) "shake" [] (pmap (* 0.2) <| ploop [sec1])
+    where
+        sec1 = [lich| _     4     [_ 1] _
+                      4     [_ 1] _     _
+                      [_ 4] _     1     [_ 4]
+                      _     1     _      _
+                      4     [_ 1] _      4
+                      [_ 1] _     _     [_ 4]
+                      _     1     [_ 4]  _
+                      1     _      _     _ |]
+
+shakePattern2 :: Signal ()
+shakePattern2 = playSynthPattern (toggle <| isDown keyD) "shake2" [] (pmap (* 0.1) <| ploop [sec1])
+    where
+        sec1 = [lich| [3 3] [_ 4] [_ 4]
+                      [3 3] [_ 4] [_ 4]
+                      [3 3] [_ 4] [_ 4]
+                      [1 1 1]  [1 1 1] [12 1] |]
+
+
+shakePattern3 :: Signal ()
+shakePattern3 = playSynthPattern (toggle <| isDown keyD) "shake2" [] (pmap (* 0.025) <| ploop [sec1])
+    where
+        sec1 = [lich| [2 1] [1 1] [1 1] _
+                      [2 1] [1 1] [1 1] _
+                      [2 1] [1 1] [1 1] _
+                      [2 1] [1 1] [1 1] 4 |]
+
+shakePattern4 :: Signal ()
+shakePattern4 = playSynthPattern (toggle <| isDown keyD) "shake" [] (pmap (* 0.025) <| ploop [sec1])
+    where
+        sec1 = [lich| _ _ [1 _ 1 1] [1 1]
+                      _ [1 _ 1 1] 2 _
+                      [1 _ 1 1] [1 1] _         [1 _ 1 1]
+                      2          _   [1 _ 1 1] [1 1]
+                      _          [1 _ 1 1]    2        [1 1] |]
+
+floorPattern :: Signal ()
+floorPattern = playSynthPattern (toggle <| isDown keyD) "floorPerc" [] (pmap (* 1) <| ploop [sec1])
+    where
+        sec1 = [lich| 1 [_ 1] 1 _ |]
+
+-- swellPattern :: Signal ()
+-- swellPattern = playSynthPattern (toggle <| isDown keyD) "reverseSwell" [] (pmap ((*0.25) . d2f slendro) <| ploop [sec1])
+    -- where
+        -- sec1 = [lich| 1 _ _ _
+                    --   _ _ _ _
+                    --   2 _ _ _
+                    --   _ _ _ _ |]

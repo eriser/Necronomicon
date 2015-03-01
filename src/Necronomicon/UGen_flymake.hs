@@ -24,7 +24,7 @@ data UGen = UGenNum Double
           | UGenFunc UGenUnit CUGenFunc CUGenFunc CUGenFunc [UGen]
           deriving (Typeable)
 
-data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Env | Out | AuxIn | Poll | LFSaw | LFPulse | Saw | Pulse
+data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Env Double Double | Env2 Double Double | Out | AuxIn | Poll | LFSaw | LFPulse | Saw | Pulse
               | SyncSaw | SyncPulse | SyncOsc | Random | NoiseN | NoiseL | NoiseC | URandom | Dust | Dust2 | Impulse | Range | ExpRange
               | LPF | HPF | BPF | Notch | AllPass | PeakEQ | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int
               | LPFMS20 | OnePoleMS20 | Clip | SoftClip | Poly3 | TanHDist | SinDist | Wrap | DelayN Double | DelayL Double | DelayC Double
@@ -56,7 +56,7 @@ instance Floating UGen where
     log     = ulog
     sin     = sinOsc
     cos     = ucos
-    asin    = uasin  
+    asin    = uasin
     acos    = uacos
     atan    = uatan
     logBase = ulogBase
@@ -289,24 +289,35 @@ line lineLength = multiChannelExpandUGen Line lineCalc lineConstructor lineDecon
 perc :: UGenType a => UGen -> UGen -> UGen -> a -> a -> a
 perc attackTime releaseTime peak curve input = env [0,peak,0] [attackTime,releaseTime] curve input
 
+perc2 :: UGenType a => UGen -> UGen -> UGen -> a -> a -> a
+perc2 attackTime releaseTime peak curve input = env2 [0,peak,0] [attackTime,releaseTime] curve input
+
 adr :: UGenType a => UGen -> UGen -> UGen -> UGen -> UGen -> a -> a -> a
 adr attackTime decayTime releaseTime peak releaseLevel curve = env [0,peak,releaseLevel] [attackTime,decayTime,releaseTime] curve
 
+foreign import ccall "&env_constructor"   envConstructor :: CUGenFunc
+foreign import ccall "&env_deconstructor" envDeconstructor :: CUGenFunc
 foreign import ccall "&env_calc" envCalc          :: CUGenFunc
 env :: UGenType a => [UGen] -> [UGen] -> a -> a -> a
-env values durations curve x = multiChannelExpandUGen Env envCalc lineConstructor lineDeconstructor args
+env values durations curve x = multiChannelExpandUGen (Env (fromIntegral valuesLength) (fromIntegral durationsLength)) envCalc envConstructor envDeconstructor args
     where
         valuesLength    = length values
         durationsLength = length durations
         args            = [curve,x]
-            `uappend` [UGenNum (fromIntegral valuesLength),UGenNum (fromIntegral durationsLength)]
+            -- `uappend` [UGenNum (fromIntegral valuesLength),UGenNum (fromIntegral durationsLength)]
             `uappend` values
             `uappend` durations
 
-        -- `uappend` [(\(len,_) -> UGenNum len) $ findDuration (0,0), UGenNum (fromIntegral valuesLength),UGenNum (fromIntegral durationsLength)]
-        -- findDuration (len,count)
-            -- | count >= valuesLength -1 = (len,count)
-            -- | otherwise                = findDuration (len + (durations !! (mod count durationsLength)),count + 1)
+foreign import ccall "&env2_calc" env2Calc          :: CUGenFunc
+env2 :: UGenType a => [UGen] -> [UGen] -> a -> a -> a
+env2 values durations curve x = multiChannelExpandUGen (Env2 (fromIntegral valuesLength) (fromIntegral durationsLength)) env2Calc envConstructor envDeconstructor args
+    where
+        valuesLength    = length values
+        durationsLength = length durations
+        args            = [curve,x]
+            -- `uappend` [UGenNum (fromIntegral valuesLength),UGenNum (fromIntegral durationsLength)]
+            `uappend` values
+            `uappend` durations
 
 foreign import ccall "&out_calc" outCalc :: CUGenFunc
 out :: UGenType a => a -> a -> a
@@ -825,6 +836,10 @@ compileUGen ugen@(UGenFunc (DelayC maxDelayTime) _ _ _ _) args key = liftIO (new
     compileUGenWithConstructorArgs ugen maxDelayTimePtr args key
 compileUGen ugen@(UGenFunc (Pluck minFreq) _ _ _ _) args key = liftIO (new $ CDouble minFreq) >>= \minFreqPtr ->
     compileUGenWithConstructorArgs ugen minFreqPtr args key
+compileUGen ugen@(UGenFunc (Env numValues numDurations) _ _ _ _) args key = liftIO (newArray [CDouble numValues,CDouble numDurations]) >>= \numDurationsPtr ->
+    compileUGenWithConstructorArgs ugen numDurationsPtr args key
+compileUGen ugen@(UGenFunc (Env2 numValues numDurations) _ _ _ _) args key = liftIO (newArray [CDouble numValues,CDouble numDurations]) >>= \numDurationsPtr ->
+    compileUGenWithConstructorArgs ugen numDurationsPtr args key
 compileUGen ugen args key = compileUGenWithConstructorArgs ugen nullPtr args key
 
 

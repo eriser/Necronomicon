@@ -411,7 +411,7 @@ synth_node* malloc_synth()
 		--num_free_synths;
 		return synth;
 	}
-	
+
 	return malloc(NODE_SIZE);
 }
 
@@ -440,17 +440,18 @@ void free_synth(synth_node* synth)
 	printf("free_synth -> ");
 	print_node_alive_status(synth);
 	print_node(synth);
+
 	if (synth != NULL)
 	{
 		bool found = hash_table_remove(synth_table, synth);
 		--num_synths;
-		
+
 		if (found == true && synth->alive_status == NODE_SCHEDULED_FOR_FREE)
 		{
 			synth->previous_alive_status = synth->alive_status;
 			synth->alive_status = NODE_DEAD;
 			deconstruct_synth(synth);
-			
+
 			// Push the synth on to the free_synth stack
 			synth->next = free_synths;
 			free_synths = synth;
@@ -514,7 +515,7 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 	synth->time = time;
 	synth->previous_alive_status = NODE_DEAD;
 	synth->alive_status = NODE_SPAWNING;
-	
+
 	// UGens
 	unsigned int num_ugens = synth_definition->num_ugens;
 	unsigned int size_ugens = synth_definition->num_ugens * UGEN_SIZE;
@@ -758,7 +759,7 @@ void scheduled_list_sort()
 	synth_node* x;
 	jack_time_t xTime, yTime;
 
-	// printf("scheduled_list size: %i\n", scheduled_list_write_index - scheduled_list_read_index); 
+	// printf("scheduled_list size: %i\n", scheduled_list_write_index - scheduled_list_read_index);
 	for (i = (scheduled_list_read_index + 1) & FIFO_SIZE_MASK; i != scheduled_list_write_index; i = (i + 1) & FIFO_SIZE_MASK)
 	{
 		x = scheduled_node_list[i];
@@ -872,7 +873,7 @@ bool hash_table_remove(hash_table table, synth_node* node)
 		table[index] = NULL;
 		return true;
 	}
-	
+
 	else
 	{
 		printf("hash_table_remove: found_node %p != node %p", found_node, node);
@@ -1049,7 +1050,7 @@ void remove_synth(synth_node* node)
 
 		node->previous_alive_status = node->alive_status;
 		node->alive_status = NODE_SCHEDULED_FOR_FREE;
-		
+
 		message msg;
 		msg.arg.node = node;
 		msg.type = FREE_SYNTH;
@@ -1211,7 +1212,7 @@ void play_synth(synth_node* synth_definition, double* arguments, unsigned int nu
 
 	else
 	{
-		printf("Unable to play synth because the maximum number of synths (%u) are already playing.", MAX_SYNTHS);
+		printf("Unable to play synth because the maximum number of synths (%u) are already playing.\n", MAX_SYNTHS);
 	}
 }
 
@@ -1383,7 +1384,7 @@ void shutdown_rt_thread()
 			pooled_buffer = next_buffer;
 		}
 	}
-	
+
 	free(sample_buffer_pools);
 
 	for (i = 0; i < NUM_UGEN_GRAPH_POOLS; ++i)
@@ -1631,6 +1632,9 @@ void shutdown_necronomicon()
 // UGens
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
+#define MAX( a, b ) ( ( a > b) ? a : b )
+#define MIN( a, b ) ( ( a < b) ? a : b )
+
 #define LINEAR_INTERP(A, B, DELTA) (A + DELTA * (B - A))
 
 #define CUBIC_INTERP(A,B,C,D,DELTA) \
@@ -1835,7 +1839,151 @@ void perc_calc(ugen* u)
 
 #define OFF_INDEX(OFFSET,INDEX,ARRAY)
 
+typedef struct
+{
+	unsigned int time;
+	unsigned int index;
+	unsigned int numValues;
+	unsigned int numDurations;
+
+	double curTotalDuration;
+	double nextTotalDuration;
+	double recipDuration;
+
+	double currentValue;
+	double nextValue;
+	double curve;
+
+} env_struct;
+
+void env_constructor(ugen* u)
+{
+	env_struct* data        = malloc(sizeof(env_struct));
+	data->time              = 0;
+	data->index             = -1;
+	data->numValues         = u->constructor_args[0];
+	data->numDurations      = u->constructor_args[1];
+	data->curTotalDuration  = -1;
+	data->nextTotalDuration = -1;
+	data->recipDuration     = 1;
+	data->currentValue      = 0;
+	data->nextValue         = 0;
+	data->curve             = 0;
+	u->data                 = data;
+}
+
+void env_deconstructor(ugen* u)
+{
+	free(u->data);
+}
+
 void env_calc(ugen* u)
+{
+	env_struct   data       = *((env_struct*) u->data);
+	double       curve      = UGEN_IN(u, 0);
+	double       x          = UGEN_IN(u, 1);
+	int          valsOffset = 2;
+	int          dursOffset = 2 + data.numValues;
+	double       line_timed = (double) data.time * RECIP_SAMPLE_RATE;
+	double       y          = 0;
+
+	if(line_timed > data.nextTotalDuration)
+	{
+		data.index             = data.index + 1;
+
+		// printf("env---------------------------------------------\n");
+		// printf("data.index: %u\n",data.index);
+		// printf("data.numValues: %u\n",data.numValues);
+		// printf("data.numDurations: %u\n",data.numDurations);
+
+		if(data.index < data.numValues)
+		{
+			double nextDuration    = UGEN_IN(u,(data.index % data.numValues) + dursOffset);
+			// printf("nextDuration: %f\n",nextDuration);
+
+			if(data.nextTotalDuration == -1)
+				data.curTotalDuration  = 0;
+			else
+				data.curTotalDuration  = data.nextTotalDuration;
+			// printf("data.curTotalDuration: %f\n",data.curTotalDuration);
+
+			data.nextTotalDuration = data.curTotalDuration + nextDuration;
+			// printf("data.nextTotalDuration: %f\n",data.nextTotalDuration);
+
+			data.currentValue      = UGEN_IN(u,data.index     + valsOffset);
+			// printf("data.currentValue: %f\n",data.currentValue);
+
+			data.nextValue         = UGEN_IN(u,data.index + 1 + valsOffset);
+			// printf("data.nextValue: %f\n",data.nextValue);
+
+			data.recipDuration     = 1.0 / nextDuration;
+			// printf("data.recipDuration: %f\n",data.recipDuration);
+
+			if(curve < 0)
+		    	data.curve = 1 / ((curve * -1) + 1);
+		    else
+		    	data.curve = curve + 1;
+			// printf("data.curve: %f\n",data.curve);
+		}
+	}
+
+	if(data.index >= data.numValues)
+	{
+		try_schedule_current_synth_for_removal();
+	}
+    else
+    {
+		double unclampedDelta    = pow((line_timed - data.curTotalDuration) * data.recipDuration, data.curve);
+		double delta             = MIN(unclampedDelta,1.0);
+		y                        = ((1-delta) * data.currentValue + delta * data.nextValue) * x;
+		data.time                = data.time + 1;
+    	*((env_struct*) u->data) = data;
+    }
+
+	UGEN_OUT(u, 0, y);
+}
+
+void env2_calc(ugen* u)
+{
+	env_struct   data       = *((env_struct*) u->data);
+	double       curve      = UGEN_IN(u, 0);
+	double       x          = UGEN_IN(u, 1);
+	int          valsOffset = 2;
+	int          dursOffset = 2 + data.numValues;
+	double       line_timed = (double) data.time * RECIP_SAMPLE_RATE;
+	double       y          = 0;
+
+	if(line_timed > data.nextTotalDuration)
+	{
+		data.index = data.index + 1;
+
+		if(data.index < data.numValues)
+		{
+			double nextDuration    = UGEN_IN(u,(data.index % data.numValues) + dursOffset);
+
+			data.curTotalDuration  = data.nextTotalDuration;
+			data.nextTotalDuration = data.curTotalDuration + nextDuration;
+			data.currentValue      = UGEN_IN(u,data.index     + valsOffset);
+			data.nextValue         = UGEN_IN(u,data.index + 1 + valsOffset);
+			data.recipDuration     = 1.0 / nextDuration;
+			if(curve < 0)
+		    	data.curve = 1 / ((curve * -1) + 1);
+		    else
+		    	data.curve = curve + 1;
+		}
+	}
+
+	double unclampedDelta    = pow((line_timed - data.curTotalDuration) * data.recipDuration, data.curve);
+	double delta             = MIN(unclampedDelta,1.0);
+	y                        = ((1-delta) * data.currentValue + delta * data.nextValue) * x;
+	data.time                = data.time + 1;
+    *((env_struct*) u->data) = data;
+
+	UGEN_OUT(u, 0, y);
+}
+
+/*
+void env2_calc(ugen* u)
 {
 	double       curve      = UGEN_IN(u, 0);
 	double       x          = UGEN_IN(u, 1);
@@ -1895,7 +2043,7 @@ void env_calc(ugen* u)
 	    // if(line_time >= length)
 		if(line_timed >= totalDuration)
 		{
-			try_schedule_current_synth_for_removal();
+			// try_schedule_current_synth_for_removal();
 		}
 	    else
 	    {
@@ -1912,6 +2060,7 @@ void env_calc(ugen* u)
 		UGEN_OUT(u, 0, y);
 	}
 }
+*/
 
 void sin_constructor(ugen* u)
 {
@@ -3120,7 +3269,7 @@ void biquad_deconstructor(ugen* u)
 void lpf_calc(ugen* u)
 {
 	double freq  = UGEN_IN(u,0);
-	double q     = UGEN_IN(u,1);
+	double q     = MAX(UGEN_IN(u,1),0.00000001);
 	double in    = UGEN_IN(u,2);
 
 	biquad_t* bi = (biquad_t*) u->data;
@@ -3150,7 +3299,7 @@ void lpf_calc(ugen* u)
 void hpf_calc(ugen* u)
 {
 	double freq  = UGEN_IN(u,0);
-	double q     = UGEN_IN(u,1);
+	double q     = MAX(UGEN_IN(u,1),0.00000001);
 	double in    = UGEN_IN(u,2);
 
 	biquad_t* bi = (biquad_t*) u->data;
@@ -3180,7 +3329,7 @@ void hpf_calc(ugen* u)
 void bpf_calc(ugen* u)
 {
 	double freq  = UGEN_IN(u,0);
-	double q     = UGEN_IN(u,1);
+	double q     = MAX(UGEN_IN(u,1),0.00000001);
 	double in    = UGEN_IN(u,2);
 
 	biquad_t* bi = (biquad_t*) u->data;
@@ -3211,7 +3360,7 @@ void notch_calc(ugen* u)
 {
 	double freq  = UGEN_IN(u,0);
 	double gain  = UGEN_IN(u,1);
-	double q     = UGEN_IN(u,2);
+	double q     = MAX(UGEN_IN(u,2),0.00000001);
 	double in    = UGEN_IN(u,3);
 
 	biquad_t* bi = (biquad_t*) u->data;
@@ -3241,7 +3390,7 @@ void notch_calc(ugen* u)
 void allpass_calc(ugen* u)
 {
 	double freq  = UGEN_IN(u,0);
-	double q     = UGEN_IN(u,1);
+	double q     = MAX(UGEN_IN(u,1),0.00000001);
 	double in    = UGEN_IN(u,2);
 
 	biquad_t* bi = (biquad_t*) u->data;
@@ -3272,7 +3421,7 @@ void peakEQ_calc(ugen* u)
 {
 	double freq  = UGEN_IN(u,0);
 	double gain  = UGEN_IN(u,1);
-	double q     = UGEN_IN(u,2);
+	double q     = MAX(UGEN_IN(u,2),0.00000001);
 	double in    = UGEN_IN(u,3);
 
 	biquad_t* bi = (biquad_t*) u->data;
@@ -3711,8 +3860,6 @@ void pluck_deconstructor(ugen* u)
 	release_sample_buffer(((pluck_data*) u->data)->buffer);
 	free(u->data);
 }
-
-#define MAX( a, b ) ( ( a > b) ? a : b )
 
 //Jaffe and Smith "Extensions of the Karplus-Strong Plucked-String* Algorithm"
 void pluck_calc(ugen* u)
