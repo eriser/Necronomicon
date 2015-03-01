@@ -1395,6 +1395,7 @@ void shutdown_necronomicon()
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #define MAX( a, b ) ( ( a > b) ? a : b )
+#define MIN( a, b ) ( ( a < b) ? a : b )
 
 #define LINEAR_INTERP(A, B, DELTA) (A + DELTA * (B - A))
 
@@ -1600,84 +1601,150 @@ void perc_calc(ugen* u)
 
 #define OFF_INDEX(OFFSET,INDEX,ARRAY)
 
-void env_calc(ugen* u)
+typedef struct
 {
-	double       curve      = UGEN_IN(u, 0);
-	double       x          = UGEN_IN(u, 1);
-	// double       length     = UGEN_IN(u, 2) * SAMPLE_RATE;
-	int          valsLength = (int) UGEN_IN(u, 2);
-	int          dursLength = (int) UGEN_IN(u, 3);
-	int          valsOffset = 4;
-	int          dursOffset = 4 + valsLength;
-	unsigned int line_time  = *((unsigned int*) u->data);
-	double       line_timed = (double) line_time * RECIP_SAMPLE_RATE;
-	double       y          = 0;
+	unsigned int time;
+	unsigned int index;
+	unsigned int numValues;
+	unsigned int numDurations;
 
-	if(valsLength == 0 || dursLength == 0)
-	{
-		if(valsLength == 0)
-			printf("Vals length 0.\n");
+	double curTotalDuration;
+	double nextTotalDuration;
+	double recipDuration;
 
-		if(dursLength == 0)
-			printf("Durs length 0.\n");
+	double currentValue;
+	double nextValue;
+	double curve;
 
-		UGEN_OUT(u,0,0);
-	}
-	else
-	{
-		double currentDuration   = 0;
-		double nextDuration      = 0;
+} env_struct;
 
-		double curTotalDuration  = 0;
-		double nextTotalDuration = 0;
-		double totalDuration     = 0;
-
-		double currentValue      = 0;
-		double nextValue         = 0;
-
-		int i;
-	    for(i=0;i<valsLength - 1;++i)
-	    {
-	    	currentDuration   = nextDuration;
-			nextDuration      = UGEN_IN(u,(i % dursLength)+dursOffset);
-
-	    	curTotalDuration += currentDuration;
-	    	nextTotalDuration = curTotalDuration + nextDuration;
-			totalDuration     = nextTotalDuration;
-
-			currentValue      = UGEN_IN(u,i     + valsOffset);
-			nextValue         = UGEN_IN(u,i + 1 + valsOffset);
-
-	    	if(nextTotalDuration > line_timed)
-	    		break;
-	    }
-
-		for(;i<valsLength - 1; ++i)
-		{
-			totalDuration += UGEN_IN(u,(i % dursLength)+dursOffset);
-		}
-
-	    // if(line_time >= length)
-		if(line_timed >= totalDuration)
-		{
-			try_schedule_current_synth_for_removal();
-		}
-	    else
-	    {
-			if(curve < 0)
-		    	curve = 1 / ((curve * -1) + 1);
-		    else
-		    	curve = curve + 1;
-
-			double delta               = pow((line_timed - curTotalDuration) / (nextTotalDuration - curTotalDuration), curve);
-			y                          = ((1-delta) * currentValue + delta * nextValue) * x;
-	    	*((unsigned int*) u->data) = line_time + 1;
-	    }
-
-		UGEN_OUT(u, 0, y);
-	}
+void env_constructor(ugen* u)
+{
+	env_struct* data        = malloc(sizeof(env_struct));
+	data->time              = 0;
+	data->index             = -1;
+	data->numValues         = u->constructor_args[0];
+	data->numDurations      = u->constructor_args[1];
+	data->curTotalDuration  = -1;
+	data->nextTotalDuration = -1;
+	data->recipDuration     = 1;
+	data->currentValue      = 0;
+	data->nextValue         = 0;
+	data->curve             = 0;
+	u->data                 = data;
 }
 
+void env_deconstructor(ugen* u)
+{
+	free(u->data);
+}
+
+void env_calc(ugen* u)
+{
+	env_struct   data       = *((env_struct*) u->data);
+	double       curve      = UGEN_IN(u, 0);
+	double       x          = UGEN_IN(u, 1);
+	int          valsOffset = 2;
+	int          dursOffset = 2 + data.numValues;
+	double       line_timed = (double) data.time * RECIP_SAMPLE_RATE;
+	double       y          = 0;
+
+	if(line_timed > data.nextTotalDuration)
+	{
+		data.index             = data.index + 1;
+
+		// printf("env---------------------------------------------\n");
+		// printf("data.index: %u\n",data.index);
+		// printf("data.numValues: %u\n",data.numValues);
+		// printf("data.numDurations: %u\n",data.numDurations);
+
+		if(data.index < data.numValues)
+		{
+			double nextDuration    = UGEN_IN(u,(data.index % data.numValues) + dursOffset);
+			// printf("nextDuration: %f\n",nextDuration);
+
+			if(data.nextTotalDuration == -1)
+				data.curTotalDuration  = 0;
+			else
+				data.curTotalDuration  = data.nextTotalDuration;
+			// printf("data.curTotalDuration: %f\n",data.curTotalDuration);
+
+			data.nextTotalDuration = data.curTotalDuration + nextDuration;
+			// printf("data.nextTotalDuration: %f\n",data.nextTotalDuration);
+
+			data.currentValue      = UGEN_IN(u,data.index     + valsOffset);
+			// printf("data.currentValue: %f\n",data.currentValue);
+
+			data.nextValue         = UGEN_IN(u,data.index + 1 + valsOffset);
+			// printf("data.nextValue: %f\n",data.nextValue);
+
+			data.recipDuration     = 1.0 / nextDuration;
+			// printf("data.recipDuration: %f\n",data.recipDuration);
+
+			if(curve < 0)
+		    	data.curve = 1 / ((curve * -1) + 1);
+		    else
+		    	data.curve = curve + 1;
+			// printf("data.curve: %f\n",data.curve);
+		}
+	}
+
+	if(data.index >= data.numValues)
+	{
+		try_schedule_current_synth_for_removal();
+	}
+    else
+    {
+		double unclampedDelta    = pow((line_timed - data.curTotalDuration) * data.recipDuration, data.curve);
+		double delta             = MIN(unclampedDelta,1.0);
+		y                        = ((1-delta) * data.currentValue + delta * data.nextValue) * x;
+		data.time                = data.time + 1;
+    	*((env_struct*) u->data) = data;
+    }
+
+	UGEN_OUT(u, 0, y);
+}
+
+void env2_calc(ugen* u)
+{
+	env_struct   data       = *((env_struct*) u->data);
+	double       curve      = UGEN_IN(u, 0);
+	double       x          = UGEN_IN(u, 1);
+	int          valsOffset = 2;
+	int          dursOffset = 2 + data.numValues;
+	double       line_timed = (double) data.time * RECIP_SAMPLE_RATE;
+	double       y          = 0;
+
+	if(line_timed > data.nextTotalDuration)
+	{
+		data.index = data.index + 1;
+
+		if(data.index < data.numValues)
+		{
+			double nextDuration    = UGEN_IN(u,(data.index % data.numValues) + dursOffset);
+
+			data.curTotalDuration  = data.nextTotalDuration;
+			data.nextTotalDuration = data.curTotalDuration + nextDuration;
+			data.currentValue      = UGEN_IN(u,data.index     + valsOffset);
+			data.nextValue         = UGEN_IN(u,data.index + 1 + valsOffset);
+			data.recipDuration     = 1.0 / nextDuration;
+			if(curve < 0)
+		    	data.curve = 1 / ((curve * -1) + 1);
+		    else
+		    	data.curve = curve + 1;
+		}
+	}
+
+	double unclampedDelta    = pow((line_timed - data.curTotalDuration) * data.recipDuration, data.curve);
+	double delta             = MIN(unclampedDelta,1.0);
+	y                        = ((1-delta) * data.currentValue + delta * data.nextValue) * x;
+	data.time                = data.time + 1;
+    *((env_struct*) u->data) = data;
+
+	UGEN_OUT(u, 0, y);
+}
+
+/*
 void env2_calc(ugen* u)
 {
 	double       curve      = UGEN_IN(u, 0);
@@ -1755,6 +1822,7 @@ void env2_calc(ugen* u)
 		UGEN_OUT(u, 0, y);
 	}
 }
+*/
 
 void sin_constructor(ugen* u)
 {
