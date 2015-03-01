@@ -19,10 +19,12 @@ synthDefs = synthDef "triOsc"    triOsc
          *> synthDef "shake"     shake
 
 hyperTerrainSounds :: Signal ()
-hyperTerrainSounds = play             (toggle <| isDown keyW) "triOsc"    [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
-                 <&> play             (toggle <| isDown keyA) "triOsc32"  [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
-                 <&> playBeatPattern  (toggle <| isDown keyE) [] (ploop [ [lich| [p p p] [p b] p b |] ])
-                 <&> metallicPattern
+hyperTerrainSounds = metallicPattern
+
+                    --  play             (toggle <| isDown keyW) "triOsc"    [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
+                --  <&> play             (toggle <| isDown keyA) "triOsc32"  [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
+                --  <&> playBeatPattern  (toggle <| isDown keyE) [] (ploop [ [lich| [p p p] [p b] p b |] ])
+                --  <&> 
 
 sections :: Signal ()
 sections = switch section [section1, section2, section3]
