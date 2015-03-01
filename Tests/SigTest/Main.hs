@@ -376,7 +376,7 @@ metallicPattern3 = playSynthPattern (toggle <| isDown keyD) "metallic3" [] (pmap
                       _ _ _ 0 |]
 
 shakePattern :: Signal ()
-shakePattern = playSynthPattern (toggle <| isDown keyD) "shake" [] (pmap (* 0.2) <| ploop [sec1])
+shakePattern = playSynthPattern (toggle <| isDown keyD) "shake" [] (pmap (* 0.1) <| ploop [sec1])
     where
         sec1 = [lich| _     4     [_ 1] _
                       4     [_ 1] _     _
@@ -388,12 +388,12 @@ shakePattern = playSynthPattern (toggle <| isDown keyD) "shake" [] (pmap (* 0.2)
                       1     _      _     _ |]
 
 shakePattern2 :: Signal ()
-shakePattern2 = playSynthPattern (toggle <| isDown keyD) "shake2" [] (pmap (* 0.1) <| ploop [sec1])
+shakePattern2 = playSynthPattern (toggle <| isDown keyD) "shake2" [] (pmap (* 0.075) <| ploop [sec1])
     where
         sec1 = [lich| [3 3] [_ 4] [_ 4]
                       [3 3] [_ 4] [_ 4]
                       [3 3] [_ 4] [_ 4]
-                      [1 1 1]  [1 1 1] [12 1] |]
+                      [1 1 1]  [1 1 1] [2 1] |]
 
 
 shakePattern3 :: Signal ()
