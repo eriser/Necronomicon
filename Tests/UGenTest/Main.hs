@@ -30,11 +30,14 @@ ugenTests3 = map test <| zip (repeat "triOscEnv") [length synthNames * 2..length
                               [0 1] [2 0] [1 1]   [_ 1]
                               [0 1] [2 0] [4 2]   [4 1] |]
 
+dividerString :: String
+dividerString = " ###################################################################################################################################################"
+
 printTest :: Int -> String
 printTest i
-    | i <  V.length synthNamesVec     = "ugenTest1 number " ++ show i ++ ": " ++ (synthNamesVec V.! mod i (V.length synthNamesVec))
-    | i <  V.length synthNamesVec * 2 = "ugenTest2 number " ++ show i ++ ": " ++ (synthNamesVec V.! mod i (V.length synthNamesVec))
-    | i <  V.length synthNamesVec * 3 = "ugenTest3 number " ++ show i ++ ": " ++ (synthNamesVec V.! mod i (V.length synthNamesVec))
+    | i <  V.length synthNamesVec     = "ugenTest1 number " ++ show i ++ ": " ++ (synthNamesVec V.! mod i (V.length synthNamesVec)) ++ dividerString
+    | i <  V.length synthNamesVec * 2 = "ugenTest2 number " ++ show i ++ ": " ++ (synthNamesVec V.! mod i (V.length synthNamesVec)) ++ dividerString
+    | i <  V.length synthNamesVec * 3 = "ugenTest3 number " ++ show i ++ ": " ++ (synthNamesVec V.! mod i (V.length synthNamesVec)) ++ dividerString
     | i == V.length synthNamesVec * 3 = "All tests complete."
     | otherwise                       = ""
 
