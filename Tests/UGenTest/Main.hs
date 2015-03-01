@@ -3,8 +3,9 @@ import qualified Data.Vector as V
 
 main :: IO ()
 main = runSignal
-   <|  synthDefs
-   *>  merges (map (<| switcher) (ugenTests1 ++ ugenTests2))
+   <|  tempo (pure 150)
+   *>  synthDefs
+   *>  merges (map (<| switcher) (ugenTests1 ++ ugenTests2 ++ ugenTests3))
    <|> sigPrint (printTest <~ switcher)
 
 ugenTests1 :: [Signal Int -> Signal ()]
@@ -18,11 +19,23 @@ ugenTests2 = map test <| zip synthNames [length synthNames..]
         test (synthName,i) s = play (shouldPlay i <~ s ~~ randFS ticker) synthName [x,y]
         shouldPlay     i a b = a == i && b > 0.5
 
+ugenTests3 :: [Signal Int -> Signal ()]
+ugenTests3 = map test <| zip synthNames [length synthNames * 2..]
+    where
+        test (synthName,i) s = foldr (<|>) playTest <| replicate 9 playTest
+            where
+                playTest = playSynthPattern ((== i) <~ s) synthName [] (ploop [patt])
+                patt = [lich| [0 1] [2 0] [1 1]   [_ 1]
+                              [0 1] [2 0] [1 1 1] [2 2 1]
+                              [0 1] [2 0] [1 1]   [_ 1]
+                              [0 1] [2 0] [4 2]   [4 1] |]
+
 printTest :: Int -> String
 printTest i
     | i <  V.length synthNamesVec     = "ugenTest1 number " ++ show i ++ ": " ++ (synthNamesVec V.! mod i (V.length synthNamesVec))
     | i <  V.length synthNamesVec * 2 = "ugenTest2 number " ++ show i ++ ": " ++ (synthNamesVec V.! mod i (V.length synthNamesVec))
-    | i == V.length synthNamesVec * 2 = "All tests complete."
+    | i <  V.length synthNamesVec * 3 = "ugenTest3 number " ++ show i ++ ": " ++ (synthNamesVec V.! mod i (V.length synthNamesVec))
+    | i == V.length synthNamesVec * 3 = "All tests complete."
     | otherwise                       = ""
 
 switcher :: Signal Int
