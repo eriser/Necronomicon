@@ -270,7 +270,7 @@ shake d = sig1 + sig2 |> e |> p 0.75 |> gain 0.02  |> out 0
 
 metallicPattern :: Signal ()
 metallicPattern = metallicPattern1
-              <&> metallicPattern1_2
+            --   <&> metallicPattern1_2
             --   <&> metallicPattern1_3
               <&> metallicPattern2
               <&> metallicPattern3
@@ -279,18 +279,18 @@ metallicPattern = metallicPattern1
 metallicPattern1 :: Signal ()
 metallicPattern1 = playSynthPattern (toggle <| isDown keyD) "metallic" [] (pmap (d2f slendro . (+0)) <| ploop [sec1])
     where
-        sec1 = [lich| [0 1] [3 0] [1 1]   [_ 1]
-                      [0 1] [3 0] [1 1 1] [2 2 1]
-                      [0 1] [3 0] [1 1]   [_ 1]
-                      [0 1] [3 0] [4 2]   [4 1] |]
+        sec1 = [lich| [0 1] [2 0] [1 1]   [_ 1]
+                      [0 1] [2 0] [1 1 1] [2 2 1]
+                      [0 1] [2 0] [1 1]   [_ 1]
+                      [0 1] [2 0] [4 2]   [4 1] |]
 
-metallicPattern1_2 :: Signal ()
-metallicPattern1_2 = playSynthPattern (toggle <| isDown keyD) "metallic4" [] (pmap (d2f slendro . (+5)) <| ploop [sec1])
-    where
-        sec1 = [lich| _ _ _ 1
-                      _ _ _ 2
-                      _ _ _ 1
-                      _ _ _ _ |]
+-- metallicPattern1_2 :: Signal ()
+-- metallicPattern1_2 = playSynthPattern (toggle <| isDown keyD) "metallic2" [] (pmap ((*0.5) . d2f slendro) <| ploop [sec1])
+    -- where
+        -- sec1 = [lich| _ 1 _ 1
+                    --   _ 2 _ 2
+                    --   _ 1 _ 1
+                    --   _ _ _ 0 |]
 
 -- metallicPattern1_3 :: Signal ()
 -- metallicPattern1_3 = playSynthPattern (toggle <| isDown keyD) "metallic5" [] (pmap (d2f slendro . (+5)) <| ploop [sec1])
