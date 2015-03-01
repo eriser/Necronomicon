@@ -518,12 +518,11 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 
 	// UGens
 	unsigned int num_ugens = synth_definition->num_ugens;
-	unsigned int size_ugens = synth_definition->num_ugens * UGEN_SIZE;
+	unsigned int size_ugens = num_ugens * UGEN_SIZE;
 	synth->ugen_graph_node = acquire_ugen_graph(num_ugens);
 	synth->ugen_graph = synth->ugen_graph_node->ugen_graph;
 	ugen* ugen_graph = synth->ugen_graph;
 	memcpy(ugen_graph, synth_definition->ugen_graph, size_ugens);
-
 
 	for (i = 0; i < num_ugens; ++i)
 	{
@@ -539,8 +538,10 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 	memcpy(synth->ugen_wires, synth_definition->ugen_wires, size_wires);
 
 	double* ugen_wires = synth->ugen_wires;
+
 	for (i = 0; i < num_arguments; ++i)
 	{
+		// printf("arguments[%u] = %f", i, arguments[i]);
 		ugen_wires[i] = arguments[i];
 	}
 

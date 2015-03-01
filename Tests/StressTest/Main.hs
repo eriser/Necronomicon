@@ -126,17 +126,17 @@ sphereObject as1 as2 as3 t latitudes = SceneObject 0 (fromEuler' 0 (t * 0.5) (t 
         mesh           = DynamicMesh "aSphere" vertices colors uvs indices
 
 triOsc :: UGen -> UGen -> [UGen]
-triOsc f1 f2 = [sig1,sig2] + [sig3,sig3] |> verb |> gain 0.1 |> out 0
+triOsc f1 f2 = [sig1,sig2] + [sig3,sig3] |> gain 0.5 |> gain 0.1 |> out 0
     where
         sig1 = sinOsc (f1 + sig3 * 1000) * (sinOsc (f1 * 0.00025)         |> range 0.5 1) |> auxThrough 2
         sig2 = sinOsc (f2 + sig3 * 1000) * (sinOsc (f2 * 0.00025)         |> range 0.5 1) |> auxThrough 3
         sig3 = sinOsc (f1 - f2)          * (sinOsc ((f1 + f2 )* 0.000125) |> range 0.5 1) |> auxThrough 4
-        verb = freeverb 0.25 0.5 0.5
+        -- verb = freeverb 0.25 0.5 0.5
 
 triOsc32 :: UGen -> UGen -> [UGen]
-triOsc32 f1 f2 = feedback fSig |> verb |> gain 0.1 |> out 0
+triOsc32 f1 f2 = feedback fSig |> gain 0.5 |> gain 0.1 |> out 0
     where
-        verb   = freeverb 0.25 0.5 0.5
+        -- verb   = freeverb 0.25 0.5 0.5
         fSig i = [sig1,sig2] + [sig3,sig3]
             where
                 sig1 = sinOsc (f1 + sig3 * 10)   * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> auxThrough 2
