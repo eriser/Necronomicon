@@ -184,32 +184,34 @@ pSynth :: UGen
 pSynth = sin 1110 |> gain (line 0.1) >>> gain 0.2 >>> out 1
 
 metallic :: UGen -> [UGen]
-metallic f = sig + sig2 + sig3 |> filt |> e |> gain 0.5 |> out 0
+metallic f = sig + sig2 + sig3 |> filt |> e |> gain 0.35 |> out 0
     where
         sig  = sin   [f * (random |> range 0.999 1.001),f * (random |> range 0.999 1.001)]      |> gain 0.1 |> auxThrough 3
         sig2 = pulse [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)] 0.975 |> gain 0.1 |> auxThrough 4
         sig3 = sin   [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)]      |> gain 0.1 |> auxThrough 2
 
-        filt1 = lpf  ([f * (random |> range 3 5  ),f * (random |> range 1 2)] |> e) 1
-        filt2 = lpf  ([f * (random |> range 6 10 ),f * (random |> range 2 4)] |> e) 1
-        filt3 = lpf  ([f * (random |> range 12 24),f * (random |> range 3 6)] |> e) 1
+        filt1 = lpf  ([f * (random |> range 3 5  ),f * (random |> range 1 2)] |> e2) 3
+        filt2 = lpf  ([f * (random |> range 6 10 ),f * (random |> range 2 4)] |> e2) 3
+        filt3 = lpf  ([f * (random |> range 12 24),f * (random |> range 3 6)] |> e2) 3
         filt i= filt1 i + filt2 i * 0.5 + filt3 i * 0.5
 
-        e    = perc 0.01 1 1 (-4)
+        e    = perc 0.01 0.5 1 (-4)
+        e2   = env2 [1,1,0.5] [0.01,0.75] (-6)
 
 metallic2 :: UGen -> [UGen]
-metallic2 f = sig + sig2 + sig3 |> filt |> e |> gain 0.5 |> (\[u1,u2 ]-> [u2,u1]) |> out 0
+metallic2 f = sig + sig2 + sig3 |> filt |> e |> gain 0.35 |> (\[u1,u2 ]-> [u2,u1]) |> out 0
     where
         sig   = sin   [f * (random |> range 0.999 1.001  ),f * (random |> range 0.999 1.001)]        |> gain 0.1 |> auxThrough 3
         sig2  = pulse [f * (random |> range 0.2499 0.2501),f * (random |> range 0.2499 0.2501)] 0.975 |> gain 0.1 |> auxThrough 4
         sig3  = sin   [f * (random |> range 0.499 0.501  ),f * (random |> range 0.499 0.501)]        |> gain 0.1 |> auxThrough 2
 
-        filt1 = lpf  ([f * (random |> range 3 5  ),f * (random |> range 1 2)] |> e) 1
-        filt2 = lpf  ([f * (random |> range 6 10 ),f * (random |> range 2 4)] |> e) 1
-        filt3 = lpf  ([f * (random |> range 12 24),f * (random |> range 3 6)] |> e) 1
+        filt1 = lpf  ([f * (random |> range 3 5  ),f * (random |> range 1 2)] |> e2) 1
+        filt2 = lpf  ([f * (random |> range 6 10 ),f * (random |> range 2 4)] |> e2) 1
+        filt3 = lpf  ([f * (random |> range 12 24),f * (random |> range 3 6)] |> e2) 1
         filt i= filt1 i + filt2 i * 0.5 + filt3 i * 0.5
 
-        e     = perc 0.01 1 1 (-4)
+        e     = perc 0.01 0.75 1 (-4)
+        e2   = env2 [1,1,0.25] [0.01,1] (-4)
 
 metallic3 :: UGen -> [UGen]
 metallic3 f = sig + sig2 + sig3 |> filt |> e |> gain 1 |> (\[u1,u2 ]-> [u2,u1]) |> out 0
@@ -222,7 +224,7 @@ metallic3 f = sig + sig2 + sig3 |> filt |> e |> gain 1 |> (\[u1,u2 ]-> [u2,u1]) 
         filt2  = lpf  ([f * (random |> range 1 2),f * (random |> range 2 4)] |> e) 2
         filt s = filt1 s + filt2 s
 
-        e      = perc 0.01 8 1 (-3)
+        e      = perc 0.01 4 1 (-4)
 
 metallic4 :: UGen -> [UGen]
 metallic4 f = sig + sig2 + sig3 |> filt |> e |> e2 |> gain 0.25 |> out 0
@@ -261,7 +263,7 @@ metallic5 f = sig + sig2 + sig3 |> filt |> e |> verb |> e2 |> gain 0.25 |> out 0
         e2   = env [1,1,0] [3,0.5] 0
 
 shake :: UGen -> [UGen]
-shake d = sig1 + sig2 |> e |> p 0.75 |> gain 0.02  |> out 0
+shake d = sig1 + sig2 |> e |> p 0.75 |> gain 0.015  |> out 0
     where
         p a u = [u * (1 - a), u * a]
         sig1  = whiteNoise |> bpf (9000) 0.5
@@ -285,12 +287,12 @@ metallicPattern1 = playSynthPattern (toggle <| isDown keyD) "metallic" [] (pmap 
                       [0 1] [2 0] [4 2]   [4 1] |]
 
 -- metallicPattern1_2 :: Signal ()
--- metallicPattern1_2 = playSynthPattern (toggle <| isDown keyD) "metallic2" [] (pmap ((*0.5) . d2f slendro) <| ploop [sec1])
+-- metallicPattern1_2 = playSynthPattern (toggle <| isDown keyD) "metallic" [] (pmap ((*0.25) . d2f slendro) <| ploop [sec1])
     -- where
-        -- sec1 = [lich| _ 1 _ 1
-                    --   _ 2 _ 2
-                    --   _ 1 _ 1
-                    --   _ _ _ 0 |]
+        -- sec1 = [lich| _ 1 _ _
+                    --   _ 2 _ _
+                    --   _ 1 _ _
+                    --   _ 3 _ _ |]
 
 -- metallicPattern1_3 :: Signal ()
 -- metallicPattern1_3 = playSynthPattern (toggle <| isDown keyD) "metallic5" [] (pmap (d2f slendro . (+5)) <| ploop [sec1])
