@@ -1814,7 +1814,7 @@ void perc_calc(ugen* u)
 	double       x         = UGEN_IN(u, 3);
 	unsigned int line_time = *((unsigned int*) u->data);
 	double       y         = 0;
-
+	
 	//Wtf is with negative values?
 	if(curve < 0)
 	{
@@ -1829,12 +1829,13 @@ void perc_calc(ugen* u)
 	{
 		try_schedule_current_synth_for_removal();
 	}
+	
 	else
 	{
 		y = pow(fmax(0, 1 - (line_time / length)),curve) * x * peak;
-		*((unsigned int*) u->data) = line_time + 1;
 	}
 
+	*((unsigned int*) u->data) = line_time + 1;
 	UGEN_OUT(u, 0, y);
 }
 
