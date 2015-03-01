@@ -3,7 +3,7 @@ import qualified Data.Vector as V
 
 main :: IO ()
 main = runSignal
-   <|  tempo (pure 150)
+   <|  tempo (pure 1500)
    *>  synthDefs
    *>  merges (map (<| switcher) (ugenTests1 ++ ugenTests2 ++ ugenTests3))
    <|> sigPrint (printTest <~ switcher)
