@@ -54,6 +54,7 @@ double SAMPLE_RATE = 44100;
 double RECIP_SAMPLE_RATE = 1.0 / 44100.0;
 double TABLE_MUL_RECIP_SAMPLE_RATE = TABLE_SIZE * (1.0 / 44100.0);
 double TWO_PI_TIMES_RECIP_SAMPLE_RATE;
+unsigned int BLOCK_SIZE = 64;
 
 /////////////////////
 // Hashing
@@ -77,7 +78,7 @@ const unsigned long SEED = 0x811C9DC5; // 2166136261
 // Global Mutables
 /////////////////////
 
-double* _necronomicon_buses = NULL;
+double** _necronomicon_buses = NULL;
 unsigned int num_audio_buses = 256;
 unsigned int last_audio_bus_index = 255;
 unsigned int num_audio_buses_bytes;
@@ -190,7 +191,7 @@ struct ugen_wires_pool_node;
 typedef struct ugen_wires_pool_node ugen_wires_pool_node;
 struct ugen_wires_pool_node
 {
-	double* ugen_wires;
+	double** ugen_wires;
 	ugen_wires_pool_node* next_ugen_wires_pool_node;
 	unsigned int pool_index;
 };
@@ -216,7 +217,7 @@ void print_ugen_wires_pool_node(ugen_wires_pool_node* ugen_wires)
 
 ugen_wires_pool_node* acquire_ugen_wires(unsigned int num_wires)
 {
-	unsigned int pow_two_num_bytes = next_power_of_two(num_wires * DOUBLE_SIZE);
+	unsigned int pow_two_num_bytes = next_power_of_two(num_wires * BLOCK_SIZE * DOUBLE_SIZE);
 	unsigned int pool_index = __builtin_ctz(pow_two_num_bytes);
 	ugen_wires_pool_node* ugen_wires = ugen_wires_pools[pool_index];
 
@@ -353,7 +354,7 @@ struct synth_node
 {
 	ugen* ugen_graph; // UGen Graph
 	ugen_graph_pool_node* ugen_graph_node; // ugen graph pool node, used to release the ugen graph memory during deconstruction
-	double* ugen_wires; // UGen output wire buffers
+	double** ugen_wires; // UGen output wire buffers
 	ugen_wires_pool_node* ugen_wires_node; // ugen wires pool node, used to release the ugen wire memory during reconstruction
 	synth_node* previous; // Previous node, used in synth_list for the scheduler
 	synth_node* next; // Next node, used in the synth_list for the scheduler
@@ -460,17 +461,6 @@ void free_synth(synth_node* synth)
 		{
 			printf("free_synth warning: Potential double free of synth with nodeID %u.\n", synth->key);
 		}
-
-		/*
-		  ++num_free_synths;
-		if (num_free_synths < max_free_synths)
-		{
-		}
-
-		else
-		{
-			free(synth);
-			}*/
 	}
 
 	else
@@ -529,22 +519,21 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 
 	// Wires
 	unsigned int num_wires = synth->num_wires;
-	unsigned int size_wires = synth->num_wires * DOUBLE_SIZE;
+	unsigned int size_wires = num_wires * BLOCK_SIZE * DOUBLE_SIZE;
 	synth->ugen_wires_node = acquire_ugen_wires(num_wires);
 	synth->ugen_wires = synth->ugen_wires_node->ugen_wires;
 	memcpy(synth->ugen_wires, synth_definition->ugen_wires, size_wires);
 
-	double* ugen_wires = synth->ugen_wires;
-
+	double** ugen_wires = synth->ugen_wires;
 	for (i = 0; i < num_arguments; ++i)
 	{
-		// printf("arguments[%u] = %f", i, arguments[i]);
-		ugen_wires[i] = arguments[i];
+		memset(ugen_wires[i], arguments[i], BLOCK_SIZE * DOUBLE_SIZE);
 	}
 
 	return synth;
 }
 
+unsigned int _block_frame = 0;
 synth_node _necronomicon_current_node_object;
 void process_synth(synth_node* synth)
 {
@@ -560,8 +549,17 @@ void process_synth(synth_node* synth)
 	}
 }
 
-#define UGEN_IN(ugen, index) _necronomicon_current_node_object.ugen_wires[ugen.inputs[index]]
-#define UGEN_OUT(ugen, index, out_value) _necronomicon_current_node_object.ugen_wires[ugen.outputs[index]] = out_value
+#define UGEN_INPUT_BUFFER(ugen, index) _necronomicon_current_node_object.ugen_wires[ugen.inputs[index]]
+#define UGEN_OUTPUT_BUFFER(ugen, index) _necronomicon_current_node_object.ugen_wires[ugen.outputs[index]]
+
+#define AUDIO_LOOP(func)										  \
+for (_block_frame = 0; _block_frame < BLOCK_SIZE; ++_block_frame) \
+{                                                                 \
+	func                                                          \
+}                                                                 \
+
+#define UGEN_IN(ugen, wire_frame_buffer) wire_frame_buffer[_block_frame]
+#define UGEN_OUT(ugen, wire_frame_buffer, out_value) wire_frame_buffer[_block_frame] = out_value
 
 void null_deconstructor(ugen* u) {} // Does nothing
 void null_constructor(ugen* u) { u->data = NULL; }
@@ -979,6 +977,11 @@ int get_running()
 	return (necronomicon_running == true);
 }
 
+unsigned int get_block_size()
+{
+	return BLOCK_SIZE;
+}
+
 void print_synth_list()
 {
 	unsigned int i = 0;
@@ -1142,9 +1145,7 @@ void handle_messages_in_rt_fifo()
 	rt_fifo_read_index = rt_fifo_read_index & FIFO_SIZE_MASK;
 	rt_fifo_write_index = rt_fifo_write_index & FIFO_SIZE_MASK;
 	if (rt_fifo_read_index == rt_fifo_write_index)
-	{
 		return;
-	}
 
 	while (rt_fifo_read_index != rt_fifo_write_index)
 	{
@@ -1198,9 +1199,9 @@ void handle_messages_in_nrt_fifo()
 void play_synth(synth_node* synth_definition, double* arguments, unsigned int num_arguments, unsigned int node_id, jack_time_t time)
 {
 	// puts("||| play_synth ||| ");
-	 //printf("(num_synths: %f)", num_synths);
-	// if (num_synths < MAX_SYNTHS)
-	// {
+	//printf("(num_synths: %f)", num_synths);
+	if (num_synths < MAX_SYNTHS)
+	{
 		synth_node* synth = new_synth(synth_definition, arguments, num_arguments, node_id, time);
 		++num_synths;
 		hash_table_insert(synth_table, synth);
@@ -1210,12 +1211,12 @@ void play_synth(synth_node* synth_definition, double* arguments, unsigned int nu
 		msg.arg.node = synth;
 		msg.type = START_SYNTH;
 		RT_FIFO_PUSH(msg);
-		// }
+	}
 
-		//else
-		//{
-		//printf("Unable to play synth because the maximum number of synths (%u) are already playing.\n", MAX_SYNTHS);
-		//}
+	else
+	{
+		printf("Unable to play synth because the maximum number of synths (%u) are already playing.\n", MAX_SYNTHS);
+	}
 }
 
 void stop_synth(unsigned int id)
@@ -1253,7 +1254,9 @@ void send_set_synth_arg(unsigned int id, double argument, unsigned int arg_index
 	// print_node(synth);
 	if ((synth != NULL) && (synth->alive_status == NODE_SPAWNING || synth->alive_status == NODE_ALIVE))
 	{
-		synth->ugen_wires[arg_index] = argument;
+		// Need to find a better way to handle constants and arguments than duplicating across frame buffers
+		memset(synth->ugen_wires[arg_index], argument, BLOCK_SIZE * DOUBLE_SIZE);
+		// synth->ugen_wires[arg_index] = argument;
 	}
 
 	else
@@ -1272,7 +1275,15 @@ void send_set_synth_args(unsigned int id, double* arguments, unsigned int num_ar
 	// print_node(synth);
 	if ((synth != NULL) && (synth->alive_status == NODE_SPAWNING || synth->alive_status == NODE_ALIVE))
 	{
-		memcpy(synth->ugen_wires, arguments, num_arguments * DOUBLE_SIZE);
+		double** ugen_wires = synth->ugen_wires;
+		unsigned int i;
+		for(i = 0; i < num_arguments; ++i)
+		{
+			// Need to find a better way to handle constants and arguments than duplicating across frame buffers
+			memset(ugen_wires[i], arguments[i], BLOCK_SIZE * DOUBLE_SIZE);
+		}
+
+		// memcpy(synth->ugen_wires, arguments, num_arguments * DOUBLE_SIZE);
 	}
 
 	else
@@ -1316,7 +1327,7 @@ void init_rt_thread()
 	removal_fifo = new_removal_fifo();
 
 	last_audio_bus_index = num_audio_buses - 1;
-	num_audio_buses_bytes = num_audio_buses * DOUBLE_SIZE;
+	num_audio_buses_bytes = num_audio_buses * BLOCK_SIZE * DOUBLE_SIZE;
 	_necronomicon_buses = malloc(num_audio_buses_bytes);
 	clear_necronomicon_buses();
 
@@ -1467,67 +1478,59 @@ void jack_shutdown(void *arg)
 // Main audio process callback function
 int process(jack_nframes_t nframes, void* arg)
 {
-	// puts("p");
 	jack_get_cycle_times(client, &current_cycle_frames, &current_cycle_usecs, &next_cycle_usecs, &period_usecs); // Update time variables for the current cycle
 	// Cache the current_cycle_usecs so we can recalculate current_cycle_usecs without rounding errors from iteration
 	jack_time_t cached_cycle_usecs = current_cycle_usecs;
 
 	jack_default_audio_sample_t* out0 = (jack_default_audio_sample_t*) jack_port_get_buffer(output_port1, nframes);
 	jack_default_audio_sample_t* out1 = (jack_default_audio_sample_t*) jack_port_get_buffer(output_port2, nframes);
-	// puts("h");
+
 	handle_messages_in_rt_fifo(); // Handles messages including moving uge_nodes from the RT FIFO queue into the scheduled_synth_list
 
-	// puts("l");
+	clear_necronomicon_buses(); // Zero out the audio buses
+	add_scheduled_synths(); // Add any synths that need to start this frame into the current synth_list
+
+	// Iterate through the synth_list, processing each synth
+	_necronomicon_current_node = synth_list;
+
+	while (_necronomicon_current_node)
+	{
+		process_synth(_necronomicon_current_node);
+		_necronomicon_current_node = _necronomicon_current_node->next;
+	}
+
+	double* _necronomicon_buses_out0 = _necronomicon_buses[0];
+	double* _necronomicon_buses_out1 = _necronomicon_buses[1];
 	unsigned int i;
 	for (i = 0; i < nframes; ++i)
     {
-		//puts("c");
-		clear_necronomicon_buses(); // Zero out the audio buses
-		//puts("a");
-		add_scheduled_synths(); // Add any synths that need to start this frame into the current synth_list
-
-		// Iterate through the synth_list, processing each synth
-		_necronomicon_current_node = synth_list;
-
-		//printf("<");
-		while (_necronomicon_current_node)
-		{
-			//printf("^");
-			process_synth(_necronomicon_current_node);
-			_necronomicon_current_node = _necronomicon_current_node->next;
-		}
-		//puts(">");
-
-		//puts("o");
-		out0[i] = _necronomicon_buses[0]; // Write the output of buses 0/1 to jack buffers 0/1, which can be routed or sent directly to the main outs
-		out1[i] = _necronomicon_buses[1];
-
-		//puts("b");
-
-		//Hand un-rolled this loop. The non-unrolled version was causing 13% cpu overhead on my machine, this doesn't make a blip...
-
-		out_bus_buffers[0][out_bus_buffer_index]  = _necronomicon_buses[0];
-		out_bus_buffers[1][out_bus_buffer_index]  = _necronomicon_buses[1];
-		out_bus_buffers[2][out_bus_buffer_index]  = _necronomicon_buses[2];
-		out_bus_buffers[3][out_bus_buffer_index]  = _necronomicon_buses[3];
-		out_bus_buffers[4][out_bus_buffer_index]  = _necronomicon_buses[4];
-		out_bus_buffers[5][out_bus_buffer_index]  = _necronomicon_buses[5];
-		out_bus_buffers[6][out_bus_buffer_index]  = _necronomicon_buses[6];
-		out_bus_buffers[7][out_bus_buffer_index]  = _necronomicon_buses[7];
-		out_bus_buffers[8][out_bus_buffer_index]  = _necronomicon_buses[8];
-		out_bus_buffers[9][out_bus_buffer_index]  = _necronomicon_buses[9];
-		out_bus_buffers[10][out_bus_buffer_index] = _necronomicon_buses[10];
-		out_bus_buffers[11][out_bus_buffer_index] = _necronomicon_buses[11];
-		out_bus_buffers[12][out_bus_buffer_index] = _necronomicon_buses[12];
-		out_bus_buffers[13][out_bus_buffer_index] = _necronomicon_buses[13];
-		out_bus_buffers[14][out_bus_buffer_index] = _necronomicon_buses[14];
-		out_bus_buffers[15][out_bus_buffer_index] = _necronomicon_buses[15];
-		out_bus_buffer_index = (out_bus_buffer_index + 1) & 511;
-
-		//puts("r");
-		remove_scheduled_synths(); // Remove any synths that are scheduled for removal and send them to the NRT thread FIFO queue for freeing.
-		current_cycle_usecs = cached_cycle_usecs + (jack_time_t) ((double) i * usecs_per_frame); // update current usecs time every sample
-    }
+		out0[i] = _necronomicon_buses_out0[i]; // Write the output of buses 0/1 to jack buffers 0/1, which can be routed or sent directly to the main outs
+		out1[i] = _necronomicon_buses_out1[i];
+	}
+	
+	/*
+	//Hand un-rolled this loop. The non-unrolled version was causing 13% cpu overhead on my machine, this doesn't make a blip...
+	out_bus_buffers[0][out_bus_buffer_index]  = _necronomicon_buses[0];
+	out_bus_buffers[1][out_bus_buffer_index]  = _necronomicon_buses[1];
+	out_bus_buffers[2][out_bus_buffer_index]  = _necronomicon_buses[2];
+	out_bus_buffers[3][out_bus_buffer_index]  = _necronomicon_buses[3];
+	out_bus_buffers[4][out_bus_buffer_index]  = _necronomicon_buses[4];
+	out_bus_buffers[5][out_bus_buffer_index]  = _necronomicon_buses[5];
+	out_bus_buffers[6][out_bus_buffer_index]  = _necronomicon_buses[6];
+	out_bus_buffers[7][out_bus_buffer_index]  = _necronomicon_buses[7];
+	out_bus_buffers[8][out_bus_buffer_index]  = _necronomicon_buses[8];
+	out_bus_buffers[9][out_bus_buffer_index]  = _necronomicon_buses[9];
+	out_bus_buffers[10][out_bus_buffer_index] = _necronomicon_buses[10];
+	out_bus_buffers[11][out_bus_buffer_index] = _necronomicon_buses[11];
+	out_bus_buffers[12][out_bus_buffer_index] = _necronomicon_buses[12];
+	out_bus_buffers[13][out_bus_buffer_index] = _necronomicon_buses[13];
+	out_bus_buffers[14][out_bus_buffer_index] = _necronomicon_buses[14];
+	out_bus_buffers[15][out_bus_buffer_index] = _necronomicon_buses[15];
+	out_bus_buffer_index = (out_bus_buffer_index + 1) & 511;
+	*/
+	
+	remove_scheduled_synths(); // Remove any synths that are scheduled for removal and send them to the NRT thread FIFO queue for freeing.
+	current_cycle_usecs = cached_cycle_usecs + (jack_time_t) ((double) i * usecs_per_frame); // update current usecs time every sample
 
 	return 0;
 }
@@ -1543,7 +1546,7 @@ void start_rt_runtime(const char* resources_path)
 	const char* server_name = NULL;
 	jack_options_t options = JackNullOption;
 	jack_status_t status;
-
+	
 	/* open a client connection to the JACK server */
 
 	client = jack_client_open(client_name, options, &status, server_name);
@@ -1557,6 +1560,7 @@ void start_rt_runtime(const char* resources_path)
 		exit (1);
 	}
 
+	BLOCK_SIZE = jack_get_buffer_size(client); // Maximum buffer size
 	init_rt_thread();
 
 	if (status & JackServerStarted)
@@ -1652,129 +1656,250 @@ void shutdown_necronomicon()
 
 void add_calc(ugen u)
 {
-	UGEN_OUT(u, 0, UGEN_IN(u, 0) + UGEN_IN(u, 1));
+	double* in0 = UGEN_INPUT_BUFFER(u, 0);
+	double* in1 = UGEN_INPUT_BUFFER(u, 1);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	
+	AUDIO_LOOP(
+		UGEN_OUT(u, out, UGEN_IN(u, in0) + UGEN_IN(u, in1));
+	);
 }
 
 void minus_calc(ugen u)
 {
-	UGEN_OUT(u, 0, UGEN_IN(u, 0) - UGEN_IN(u, 1));
+	double* in0 = UGEN_INPUT_BUFFER(u, 0);
+	double* in1 = UGEN_INPUT_BUFFER(u, 1);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	
+	AUDIO_LOOP(
+		UGEN_OUT(u, out, UGEN_IN(u, in0) - UGEN_IN(u, in1));
+	);
 }
 
 void mul_calc(ugen u)
 {
-	UGEN_OUT(u, 0, UGEN_IN(u, 0) * UGEN_IN(u, 1));
+	double* in0 = UGEN_INPUT_BUFFER(u, 0);
+	double* in1 = UGEN_INPUT_BUFFER(u, 1);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	
+	AUDIO_LOOP(
+		UGEN_OUT(u, out, UGEN_IN(u, in0) * UGEN_IN(u, in1));
+	);
 }
 
 void div_calc(ugen u)
 {
-	UGEN_OUT(u, 0, UGEN_IN(u, 0) / UGEN_IN(u, 1));
+	double* in0 = UGEN_INPUT_BUFFER(u, 0);
+	double* in1 = UGEN_INPUT_BUFFER(u, 1);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	
+	AUDIO_LOOP(
+		UGEN_OUT(u, out, UGEN_IN(u, in0) / UGEN_IN(u, in1));
+	);
 }
 
 void abs_calc(ugen u)
 {
-	UGEN_OUT(u, 0, abs(UGEN_IN(u, 0)));
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	
+	AUDIO_LOOP(
+		UGEN_OUT(u, out, abs(UGEN_IN(u, in)));
+	);
 }
 
 void signum_calc(ugen u)
 {
-	double value = UGEN_IN(u, 0);
+	double* in  = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	
+	AUDIO_LOOP(
+		double value = UGEN_IN(u, in);
 
-	if (value > 0)
-	{
-		value = 1;
-	}
+		if (value > 0)
+		{
+			value = 1;
+		}
 
-	else if (value < 0)
-	{
-		value = -1;
-	}
+		else if (value < 0)
+		{
+			value = -1;
+		}
 
-	UGEN_OUT(u, 0, value);
+		UGEN_OUT(u, out, value);
+	);
 }
 
 void negate_calc(ugen u)
 {
-	UGEN_OUT(u, 0, -(UGEN_IN(u, 0)));
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	
+	AUDIO_LOOP(
+		UGEN_OUT(u, out, -(UGEN_IN(u, in)));
+	);
 }
 
 void pow_calc(ugen u)
 {
-	UGEN_OUT(u, 0, pow(UGEN_IN(u, 0), UGEN_IN(u, 1)));
+	double* in0 = UGEN_INPUT_BUFFER(u, 0);
+	double* in1 = UGEN_INPUT_BUFFER(u, 1);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	
+	AUDIO_LOOP(
+		UGEN_OUT(u, out, pow(UGEN_IN(u, in0), UGEN_IN(u, in1)));
+	);
 }
 
 void exp_calc(ugen u)
 {
-	UGEN_OUT(u, 0, exp(UGEN_IN(u, 0)));
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	
+	AUDIO_LOOP(
+		UGEN_OUT(u, out, exp(UGEN_IN(u, in)));
+	);
 }
 
 void log_calc(ugen u)
 {
-	UGEN_OUT(u, 0, log(UGEN_IN(u, 0)));
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	
+	AUDIO_LOOP(
+		UGEN_OUT(u, out, log(UGEN_IN(u, in)));
+	);
 }
 
 void cos_calc(ugen u)
 {
-	UGEN_OUT(u, 0, cos(UGEN_IN(u, 0)));
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	
+	AUDIO_LOOP(
+		UGEN_OUT(u, out, cos(UGEN_IN(u, in)));
+	);
 }
 
 void asin_calc(ugen u)
 {
-	UGEN_OUT(u, 0, asin(UGEN_IN(u, 0)));
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	
+	AUDIO_LOOP(
+		UGEN_OUT(u, out, asin(UGEN_IN(u, in)));
+	);
 }
 
 void acos_calc(ugen u)
 {
-	UGEN_OUT(u, 0, acos(UGEN_IN(u, 0)));
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	
+	AUDIO_LOOP(
+		UGEN_OUT(u, out, acos(UGEN_IN(u, in)));
+	);
 }
 
 void atan_calc(ugen u)
 {
-	UGEN_OUT(u, 0, atan(UGEN_IN(u, 0)));
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	
+	AUDIO_LOOP(
+		UGEN_OUT(u, out, atan(UGEN_IN(u, in)));
+	);
 }
 
 void logbase_calc(ugen u)
 {
-	UGEN_OUT(u, 0, log(UGEN_IN(u, 0)) / log(UGEN_IN(u, 1)));
+	double* in0 = UGEN_INPUT_BUFFER(u, 0);
+	double* in1 = UGEN_INPUT_BUFFER(u, 1);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	
+	AUDIO_LOOP(
+		UGEN_OUT(u, out, log(UGEN_IN(u, in0)) / log(UGEN_IN(u, in1)));
+	);
 }
 
 void sqrt_calc(ugen u)
 {
-	UGEN_OUT(u, 0, sqrt(UGEN_IN(u, 0)));
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	
+	AUDIO_LOOP(
+		UGEN_OUT(u, out, sqrt(UGEN_IN(u, in)));
+	);
 }
 
 void tan_calc(ugen u)
 {
-	UGEN_OUT(u, 0, tan(UGEN_IN(u, 0)));
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	
+	AUDIO_LOOP(
+		UGEN_OUT(u, out, tan(UGEN_IN(u, in)));
+	);
 }
 
 void sinh_calc(ugen u)
 {
-	UGEN_OUT(u, 0, sinh(UGEN_IN(u, 0)));
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	
+	AUDIO_LOOP(
+		UGEN_OUT(u, out, sinh(UGEN_IN(u, in)));
+	);
 }
 
 void cosh_calc(ugen u)
 {
-	UGEN_OUT(u, 0, cosh(UGEN_IN(u, 0)));
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	
+	AUDIO_LOOP(
+		UGEN_OUT(u, out, cosh(UGEN_IN(u, in)));
+	);
 }
 
 void tanh_calc(ugen u)
 {
-	UGEN_OUT(u, 0, tanh(UGEN_IN(u, 0)));
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	
+	AUDIO_LOOP(
+		UGEN_OUT(u, out, tanh(UGEN_IN(u, in)));
+	);
 }
 
 void asinh_calc(ugen u)
 {
-	UGEN_OUT(u, 0, asinh(UGEN_IN(u, 0)));
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	
+	AUDIO_LOOP(
+		UGEN_OUT(u, out, asinh(UGEN_IN(u, in)));
+	);
 }
 
 void atanh_calc(ugen u)
 {
-	UGEN_OUT(u, 0, atanh(UGEN_IN(u, 0)));
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	
+	AUDIO_LOOP(
+		UGEN_OUT(u, out, atanh(UGEN_IN(u, in)));
+	);
 }
 
 void acosh_calc(ugen u)
 {
-	UGEN_OUT(u, 0, acosh(UGEN_IN(u, 0)));
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	
+	AUDIO_LOOP(
+		UGEN_OUT(u, out, acosh(UGEN_IN(u, in)));
+	);
 }
 
 void line_constructor(ugen* u)
@@ -1791,22 +1916,30 @@ void line_deconstructor(ugen* u)
 // To do: Give this range parameters
 void line_calc(ugen u)
 {
-	double length = UGEN_IN(u, 0) * SAMPLE_RATE;
+	double* in0 = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 	unsigned int line_time = *((unsigned int*) u.data);
-	double output = 0;
+	double length;
+	double y;
+	
+	AUDIO_LOOP(
+		length = UGEN_IN(u, in0) * SAMPLE_RATE;
+		if (line_time >= length)
+		{
+			y = 0;
+			try_schedule_current_synth_for_removal();
+		}
 
-	if (line_time >= length)
-	{
-		try_schedule_current_synth_for_removal();
-	}
+		else
+		{
+			y = fmax(0, 1 - (line_time / length));
+			++line_time;
+		};
+		
+		UGEN_OUT(u, out, y);
+	);
 
-	else
-	{
-		output = fmax(0, 1 - (line_time / length));
-		*((unsigned int*) u.data) = line_time + 1;
-	}
-
-	UGEN_OUT(u, 0, output);
+	*((unsigned int*) u.data) = line_time;
 }
 
 /*
@@ -1886,115 +2019,139 @@ void env_deconstructor(ugen* u)
 
 void env_calc(ugen u)
 {
+	double* in0 = UGEN_INPUT_BUFFER(u, 0);
+	double* in1 = UGEN_INPUT_BUFFER(u, 1);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+
 	env_struct   data       = *((env_struct*) u.data);
-	double       curve      = UGEN_IN(u, 0);
-	double       x          = UGEN_IN(u, 1);
+	double       curve;
+	double       x;
 	int          valsOffset = 2;
 	int          dursOffset = 2 + data.numValues;
-	double       line_timed = (double) data.time * RECIP_SAMPLE_RATE;
+	double       line_timed;
+	double       y          = 0;
+	
+	AUDIO_LOOP(
+		curve = UGEN_IN(u, in0);
+		x = UGEN_IN(u, in1);
+		line_timed = (double) data.time * RECIP_SAMPLE_RATE;
+
+		// printf("env---------------------------------------------\n");
+		// printf("data.index: %i, data.numValues: %i.\n",data.index,data.numValues);
+		// printf("data.nextTotalDuration: %f\n",data.nextTotalDuration);
+		// printf("line_timed: %f\n",line_timed);
+
+		if(line_timed >= data.nextTotalDuration)
+		{
+			// printf("line_timed >= data.nextTotalDuration\n");
+
+			data.index = data.index + 1;
+
+			// printf("data.index: %i\n",data.index);
+			// printf("data.numValues: %i\n",data.numValues);
+			// printf("data.numDurations: %u\n",data.numDurations);
+
+			if(data.index < data.numValues)
+			{
+				double nextDuration = UGEN_IN(u, UGEN_INPUT_BUFFER(u, data.index % data.numValues + dursOffset));
+				// printf("nextDuration: %f\n",nextDuration);
+
+				if(data.nextTotalDuration == -1)
+					data.curTotalDuration = 0;
+				else
+					data.curTotalDuration = data.nextTotalDuration;
+				// printf("data.curTotalDuration: %f\n",data.curTotalDuration);
+
+				data.nextTotalDuration = data.curTotalDuration + nextDuration;
+				// printf("data.nextTotalDuration: %f\n",data.nextTotalDuration);
+
+				data.currentValue = UGEN_IN(u, UGEN_INPUT_BUFFER(u, data.index + valsOffset));
+				// printf("data.currentValue: %f\n",data.currentValue);
+
+				data.nextValue = UGEN_IN(u, UGEN_INPUT_BUFFER(u, data.index + 1 + valsOffset));
+
+				data.recipDuration = 1.0 / nextDuration;
+				// printf("data.recipDuration: %f\n",data.recipDuration);
+
+				if(curve < 0)
+					data.curve = 1 / ((curve * -1) + 1);
+				else
+					data.curve = curve + 1;
+				// printf("data.curve: %f\n",data.curve);
+			}
+		}
+
+		if(data.index >= data.numValues - 1)
+		{
+			// printf("!!!!!!!!!!!!!!!!!!!!env freeing synth!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+			y = 0;
+			try_schedule_current_synth_for_removal();
+		}
+		
+		else
+		{
+			// printf("data.index: %u, data.numValues: %u.\n",data.index,data.numValues);
+
+			double unclampedDelta    = pow((line_timed - data.curTotalDuration) * data.recipDuration, data.curve);
+			double delta             = MIN(unclampedDelta,1.0);
+			y                        = ((1-delta) * data.currentValue + delta * data.nextValue) * x;
+			data.time                = data.time + 1;
+		}
+		
+		UGEN_OUT(u, out, y);
+	);
+
+	*((env_struct*) u.data) = data;
+}
+
+void env2_calc(ugen u)
+{
+	double* in0 = UGEN_INPUT_BUFFER(u, 0);
+	double* in1 = UGEN_INPUT_BUFFER(u, 1);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+
+	env_struct   data       = *((env_struct*) u.data);
+	double       curve;
+	double       x;
+	int          valsOffset = 2;
+	int          dursOffset = 2 + data.numValues;
+	double       line_timed;
 	double       y          = 0;
 
-	// printf("env---------------------------------------------\n");
-	// printf("data.index: %i, data.numValues: %i.\n",data.index,data.numValues);
-	// printf("data.nextTotalDuration: %f\n",data.nextTotalDuration);
-	// printf("line_timed: %f\n",line_timed);
+	AUDIO_LOOP(
+		curve = UGEN_IN(u, in0);
+		x = UGEN_IN(u, in1);
+		line_timed = (double) data.time * RECIP_SAMPLE_RATE;
 
-	if(line_timed >= data.nextTotalDuration)
-	{
-		// printf("line_timed >= data.nextTotalDuration\n");
-
-		data.index             = data.index + 1;
-
-		// printf("data.index: %i\n",data.index);
-		// printf("data.numValues: %i\n",data.numValues);
-		// printf("data.numDurations: %u\n",data.numDurations);
-
-		if(data.index < data.numValues)
+		if(line_timed > data.nextTotalDuration)
 		{
-			double nextDuration    = UGEN_IN(u,(data.index % data.numValues) + dursOffset);
-			// printf("nextDuration: %f\n",nextDuration);
+			data.index = data.index + 1;
 
-			if(data.nextTotalDuration == -1)
-				data.curTotalDuration  = 0;
-			else
+			if(data.index < data.numValues)
+			{
+				double nextDuration    = UGEN_IN(u, UGEN_INPUT_BUFFER(u, (data.index % data.numValues) + dursOffset));
+
 				data.curTotalDuration  = data.nextTotalDuration;
-			// printf("data.curTotalDuration: %f\n",data.curTotalDuration);
-
-			data.nextTotalDuration = data.curTotalDuration + nextDuration;
-			// printf("data.nextTotalDuration: %f\n",data.nextTotalDuration);
-
-			data.currentValue      = UGEN_IN(u,data.index     + valsOffset);
-			// printf("data.currentValue: %f\n",data.currentValue);
-
-			data.nextValue         = UGEN_IN(u,data.index + 1 + valsOffset);
-
-			data.recipDuration     = 1.0 / nextDuration;
-			// printf("data.recipDuration: %f\n",data.recipDuration);
-
-			if(curve < 0)
-		    	data.curve = 1 / ((curve * -1) + 1);
-		    else
-		    	data.curve = curve + 1;
-			// printf("data.curve: %f\n",data.curve);
+				data.nextTotalDuration = data.curTotalDuration + nextDuration;
+				data.currentValue      = UGEN_IN(u, UGEN_INPUT_BUFFER(u, data.index + valsOffset));
+				data.nextValue         = UGEN_IN(u, UGEN_INPUT_BUFFER(u, data.index + 1 + valsOffset));
+				data.recipDuration     = 1.0 / nextDuration;
+				if(curve < 0)
+					data.curve = 1 / ((curve * -1) + 1);
+				else
+					data.curve = curve + 1;
+			}
 		}
-	}
-
-	if(data.index >= data.numValues - 1)
-	{
-		// printf("!!!!!!!!!!!!!!!!!!!!env freeing synth!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-		try_schedule_current_synth_for_removal();
-	}
-    else
-    {
-		// printf("data.index: %u, data.numValues: %u.\n",data.index,data.numValues);
 
 		double unclampedDelta    = pow((line_timed - data.curTotalDuration) * data.recipDuration, data.curve);
 		double delta             = MIN(unclampedDelta,1.0);
 		y                        = ((1-delta) * data.currentValue + delta * data.nextValue) * x;
 		data.time                = data.time + 1;
-    	*((env_struct*) u.data) = data;
-    }
-
-	UGEN_OUT(u, 0, y);
-}
-
-void env2_calc(ugen u)
-{
-	env_struct   data       = *((env_struct*) u.data);
-	double       curve      = UGEN_IN(u, 0);
-	double       x          = UGEN_IN(u, 1);
-	int          valsOffset = 2;
-	int          dursOffset = 2 + data.numValues;
-	double       line_timed = (double) data.time * RECIP_SAMPLE_RATE;
-	double       y          = 0;
-
-	if(line_timed > data.nextTotalDuration)
-	{
-		data.index = data.index + 1;
-
-		if(data.index < data.numValues)
-		{
-			double nextDuration    = UGEN_IN(u,(data.index % data.numValues) + dursOffset);
-
-			data.curTotalDuration  = data.nextTotalDuration;
-			data.nextTotalDuration = data.curTotalDuration + nextDuration;
-			data.currentValue      = UGEN_IN(u,data.index     + valsOffset);
-			data.nextValue         = UGEN_IN(u,data.index + 1 + valsOffset);
-			data.recipDuration     = 1.0 / nextDuration;
-			if(curve < 0)
-		    	data.curve = 1 / ((curve * -1) + 1);
-		    else
-		    	data.curve = curve + 1;
-		}
-	}
-
-	double unclampedDelta    = pow((line_timed - data.curTotalDuration) * data.recipDuration, data.curve);
-	double delta             = MIN(unclampedDelta,1.0);
-	y                        = ((1-delta) * data.currentValue + delta * data.nextValue) * x;
-	data.time                = data.time + 1;
+		
+		UGEN_OUT(u, out, y);
+	);
+	
     *((env_struct*) u.data) = data;
-
-	UGEN_OUT(u, 0, y);
 }
 
 /*
@@ -2090,37 +2247,68 @@ void sin_deconstructor(ugen* u)
 
 void sin_calc(ugen u)
 {
-	double freq = UGEN_IN(u, 0);
+	double* in0 = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+
 	double phase = *((double*) u.data);
+	double freq;
+	unsigned char index1;
+	unsigned char index2;
+	double amp1;
+	double amp2;
+	double delta;
+	double y;
+	
+	AUDIO_LOOP(
+		freq = UGEN_IN(u, in0);
+		index1 = phase;
+		index2 = index1 + 1;
+		amp1 = sine_table[index1];
+		amp2 = sine_table[index2];
+		delta = phase - ((long) phase);
+		y = amp1 + delta * (amp2 - amp1);
+		
+		UGEN_OUT(u, out, y);
+		phase += TABLE_MUL_RECIP_SAMPLE_RATE * freq;
+	);
 
-	unsigned char index1 = phase;
-	unsigned char index2 = index1 + 1;
-	double amp1 = sine_table[index1];
-	double amp2 = sine_table[index2];
-	double delta = phase - ((long) phase);
-	double amplitude = amp1 + delta * (amp2 - amp1);
-
-	*((double*) u.data) = phase + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
-	UGEN_OUT(u, 0, amplitude);
+	*((double*) u.data) = phase;
 }
 
 void local_out_calc(ugen u)
 {
-	UGEN_OUT(u, 0, UGEN_IN(u, 0));
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	
+	AUDIO_LOOP(
+		UGEN_OUT(u, out, (UGEN_IN(u, in)));
+	);
 }
 
 void out_calc(ugen u)
 {
-	// Constrain bus index to the correct range
-	unsigned char bus_index = UGEN_IN(u, 0);
-	_necronomicon_buses[bus_index] += UGEN_IN(u, 1);
+	double* in0 = UGEN_INPUT_BUFFER(u, 0);
+	double* in1 = UGEN_INPUT_BUFFER(u, 1);
+	unsigned char bus_index;
+	
+	AUDIO_LOOP(
+		// Constrain bus index to the correct range
+		bus_index = UGEN_IN(u, in0);
+		_necronomicon_buses[bus_index][_block_frame] += UGEN_IN(u, in1);
+	);
 }
 
 void in_calc(ugen u)
 {
-	// Constrain bus index to the correct range
-	unsigned char bus_index = UGEN_IN(u, 0);
-	UGEN_OUT(u, 0, _necronomicon_buses[bus_index]);
+	double* in0 = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	unsigned char bus_index;
+	
+	AUDIO_LOOP(
+		// Constrain bus index to the correct range
+		bus_index = UGEN_IN(u, in0);
+		UGEN_OUT(u, out, _necronomicon_buses[bus_index][_block_frame]); 
+	);	
 }
 
 void poll_constructor(ugen* u)
@@ -2134,21 +2322,26 @@ void poll_calc(ugen u)
 {
 	unsigned int* count_buffer = (unsigned int*) u.data;
 	unsigned int count = *count_buffer;
+	double* in0 = UGEN_INPUT_BUFFER(u, 0);
+	double input;
+	message msg;
+	msg.arg.number = 0;
+	msg.type = PRINT_NUMBER;
+	
+	AUDIO_LOOP(
+		if (count >= SAMPLE_RATE)
+		{
+			input = UGEN_IN(u, in0);
+		    msg.arg.number = input;
+			NRT_FIFO_PUSH(msg);
+			count = 0;
+		}
 
-	if (count >= SAMPLE_RATE)
-	{
-		double input = UGEN_IN(u, 0);
-		message msg;
-		msg.arg.number = input;
-		msg.type = PRINT_NUMBER;
-		NRT_FIFO_PUSH(msg);
-		count = 0;
-	}
-
-	else
-	{
-		count += 10;
-	}
+		else
+		{
+			count += 10;
+		}
+	);
 
 	*count_buffer = count;
 }
@@ -2198,70 +2391,101 @@ void delay_deconstructor(ugen* u)
 }
 
 #define INIT_DELAY(u)									  \
+double* in0 = UGEN_INPUT_BUFFER(u, 0);				      \
+double* in1 = UGEN_INPUT_BUFFER(u, 1);				      \
+double* out = UGEN_OUTPUT_BUFFER(u, 0);				      \
 delay_data data = *((delay_data*) u.data);				  \
 sample_buffer buffer = *data.buffer;					  \
 long write_index = data.write_index;					  \
 unsigned int num_samples_mask = buffer.num_samples_mask;  \
-double delay_time = UGEN_IN(u, 0) * SAMPLE_RATE;		  \
-double x = UGEN_IN(u, 1);
+double delay_time;										  \
+double x;												  \
+double y;												  \
 
-#define FINISH_DELAY(u, y)								  \
-buffer.samples[write_index & num_samples_mask] = x;	      \
-data.write_index = write_index + 1;						  \
+#define FINISH_DELAY()									  \
+data.write_index = write_index;						      \
 *((delay_data*) u.data) = data;							  \
-UGEN_OUT(u, 0, y);
 
 void delayN_calc(ugen u)
 {
 	INIT_DELAY(u);
-	delay_time = fmin(data.max_delay_time, fmax(1, delay_time));
-	long iread_index = write_index - (long) delay_time;
-	double y = iread_index < 0 ? 0 : buffer.samples[iread_index & num_samples_mask];
-	FINISH_DELAY(u, y);
+	long iread_index;
+
+	AUDIO_LOOP(
+		delay_time = fmin(data.max_delay_time, fmax(1, UGEN_IN(u, in0) * SAMPLE_RATE));
+		x = UGEN_IN(u, in1);
+		iread_index = write_index - (long) delay_time;
+		y = iread_index < 0 ? 0 : buffer.samples[iread_index & num_samples_mask];
+		buffer.samples[write_index & num_samples_mask] = x;
+		++write_index;
+		UGEN_OUT(u, out, y);
+	);
+
+	FINISH_DELAY();
 }
 
 void delayL_calc(ugen u)
 {
 	INIT_DELAY(u);
-	delay_time = fmin(data.max_delay_time, fmax(1, delay_time));
-	double y;
-	double read_index = (double) write_index - delay_time;
-	long iread_index0 = (long) read_index;
+	double y0, y1;
+	double delta;
+	double read_index;
+	unsigned int iread_index0, iread_index1;
+	
+	AUDIO_LOOP(
+		delay_time = fmin(data.max_delay_time, fmax(1, UGEN_IN(u, in0) * SAMPLE_RATE));
+		read_index = (double) write_index - delay_time;
+		iread_index0 = (long) read_index;
 
-	if (iread_index0 < 0)
-	{
-		y = 0;
-	}
+		if (iread_index0 < 0)
+		{
+			y = 0;
+		}
 
-	else
-	{
-		long iread_index1 = iread_index0 - 1;
-		double delta = read_index - iread_index0;
-		double y0 = buffer.samples[iread_index0 & num_samples_mask];
-		double y1 = iread_index1 < 0 ? 0 : buffer.samples[iread_index1 & num_samples_mask];
-		y  = LINEAR_INTERP(y0, y1, delta);
-	}
+		else
+		{
+			iread_index1 = iread_index0 - 1;
+			delta = read_index - iread_index0;
+			y0 = buffer.samples[iread_index0 & num_samples_mask];
+			y1 = iread_index1 < 0 ? 0 : buffer.samples[iread_index1 & num_samples_mask];
+			y  = LINEAR_INTERP(y0, y1, delta);
+		}
 
-	FINISH_DELAY(u, y);
+		++write_index;
+		UGEN_OUT(u, out, y);
+	);
+
+	FINISH_DELAY();
 }
 
 void delayC_calc(ugen u)
 {
 	INIT_DELAY(u);
-	// Clamp delay at 1 to prevent the + 1 iread_index3 from reading on the wrong side of the write head
-	delay_time = fmin(data.max_delay_time, fmax(2, delay_time));
-	double read_index  = (double) write_index - delay_time;
-	long iread_index0 = (long) read_index;
-	long iread_index1 = iread_index0 - 1;
-	long iread_index2 = iread_index0 - 2;
-	long iread_index3 = iread_index0 + 1;
-	double delta = read_index - iread_index0;
-	double y0 = iread_index0 < 0 ? 0 : buffer.samples[iread_index0 & num_samples_mask];
-	double y1 = iread_index1 < 0 ? 0 : buffer.samples[iread_index1 & num_samples_mask];
-	double y2 = iread_index2 < 0 ? 0 : buffer.samples[iread_index2 & num_samples_mask];
-	double y3 = iread_index3 < 0 ? 0 : buffer.samples[iread_index3 & num_samples_mask];
-	double y  = CUBIC_INTERP(y0, y1, y2, y3, delta);
-	FINISH_DELAY(u, y);
+	double y0, y1, y2, y3;
+	double delta;
+	double read_index;
+	unsigned int iread_index0, iread_index1, iread_index2, iread_index3;
+
+	
+	AUDIO_LOOP(
+		// Clamp delay at 1 to prevent the + 1 iread_index3 from reading on the wrong side of the write head
+		delay_time = fmin(data.max_delay_time, fmax(2, UGEN_IN(u, in0) * SAMPLE_RATE));
+		read_index  = (double) write_index - delay_time;
+		iread_index0 = (long) read_index;
+		iread_index1 = iread_index0 - 1;
+		iread_index2 = iread_index0 - 2;
+		iread_index3 = iread_index0 + 1;
+		delta = read_index - iread_index0;
+		y0 = iread_index0 < 0 ? 0 : buffer.samples[iread_index0 & num_samples_mask];
+		y1 = iread_index1 < 0 ? 0 : buffer.samples[iread_index1 & num_samples_mask];
+		y2 = iread_index2 < 0 ? 0 : buffer.samples[iread_index2 & num_samples_mask];
+		y3 = iread_index3 < 0 ? 0 : buffer.samples[iread_index3 & num_samples_mask];
+		y  = CUBIC_INTERP(y0, y1, y2, y3, delta);
+		++write_index;
+		UGEN_OUT(u, out, y);
+	);
+
+	FINISH_DELAY();
 }
 
 void print_ugen(ugen* ugen)
@@ -2621,33 +2845,60 @@ void accumulator_deconstructor(ugen* u)
 
 //LFOS
 double RECIP_CHAR_RANGE = 1.0 / 255.0;
-void lfsaw_calc(ugen u)
+void lfsaw_calc(ugen u) //Branchless and table-less saw
 {
-	double freq     = UGEN_IN(u, 0);
-	double phaseArg = UGEN_IN(u, 1);
-	double phase    = *((double*) u.data);
+	double* in0 = UGEN_INPUT_BUFFER(u, 0);
+	double* in1 = UGEN_INPUT_BUFFER(u, 1);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	double phase = *((unsigned int*) u.data);
 
-	//Branchless and table-less saw
-	double        amp1      = ((double)((char)phase));
-	double        amp2      = ((double)(((char)phase)+1));
-	double        delta     = phase - ((long) phase);
-	double        amplitude = LERP(amp1,amp2,delta) * RECIP_CHAR_RANGE;
+	double freq;
+	double phaseArg;
+	double amp1;
+	double amp2;
+	double delta;
+	double y;
 
-	*((double*) u.data) = phase + phaseArg + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
-	UGEN_OUT(u, 0, amplitude);
+	AUDIO_LOOP(
+		freq = UGEN_IN(u, in0);
+		phaseArg = UGEN_IN(u, in1);
+
+		//Branchless and table-less saw
+	    amp1  = ((double)((char)phase));
+		amp2  = ((double)(((char)phase)+1));
+		delta = phase - ((long) phase);
+		y     = LERP(amp1,amp2,delta) * RECIP_CHAR_RANGE;
+		phase += phaseArg + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
+		
+		UGEN_OUT(u, out, y);
+	);
+
+	*((double*) u.data) = phase;
 }
 
 void lfpulse_calc(ugen u)
 {
-	double freq     = UGEN_IN(u, 0);
-	double phaseArg = UGEN_IN(u, 1);
-	double phase    = *((double*) u.data);
+	double* in0 = UGEN_INPUT_BUFFER(u, 0);
+	double* in1 = UGEN_INPUT_BUFFER(u, 1);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	double phase = *((unsigned int*) u.data);
 
-	//Branchless and table-less square
-	double amplitude = 1 | (((char)phase) >> (sizeof(char) * CHAR_BIT - 1));
+	double freq;
+	double phaseArg;
+	double y;
 
-	*((double*) u.data) = phase + phaseArg + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
-	UGEN_OUT(u, 0, amplitude);
+	AUDIO_LOOP(
+		freq = UGEN_IN(u, in0);
+		phaseArg = UGEN_IN(u, in1);
+
+		//Branchless and table-less square
+		y = 1 | (((char)phase) >> (sizeof(char) * CHAR_BIT - 1));
+		phase += phaseArg + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
+		
+		UGEN_OUT(u, out, y);
+	);
+
+	*((double*) u.data) = phase;
 }
 
 //---------------------------------------------

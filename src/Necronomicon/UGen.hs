@@ -752,9 +752,11 @@ setWireIndex wire = Compiled (\c -> return ((), c { compiledWireIndex = wire }))
 nextWireIndex :: Compiled CUInt
 nextWireIndex = getWireIndex >>= \wire -> setWireIndex (wire + 1) >> return wire
 
-initializeWireBufs :: CUInt -> [CompiledConstant] -> IO (Ptr CDouble)
-initializeWireBufs numWires constants = print ("Wire Buffers: " ++ (show folded)) >> newArray folded
+initializeWireBufs :: CUInt -> [CompiledConstant] -> IO (Ptr (Ptr CDouble))
+initializeWireBufs numWires constants = print ("Wire Buffers: " ++ (show folded)) >> getJackBlockSize >>= \blockSize ->
+    (mapM (newArray . replicate (fromIntegral blockSize)) folded) >>= newArray
     where
+        folded :: [CDouble]
         folded = snd $ foldl foldWires ((sort constants), []) [0..(numWires - 1)]
         foldWires ([], ws) _ = ([], ws ++ zero)
         foldWires (c@((CompiledConstant d ci):cs), ws) i
