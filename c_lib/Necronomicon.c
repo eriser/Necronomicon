@@ -4131,36 +4131,62 @@ void pluck_deconstructor(ugen* u)
 	free(u->data);
 }
 
-//Jaffe and Smith "Extensions of the Karplus-Strong Plucked-String* Algorithm"
+// Jaffe and Smith "Extensions of the Karplus-Strong Plucked-String* Algorithm"
 void pluck_calc(ugen u)
 {
-	pluck_data* data             = ((pluck_data*) u.data);
-	uint        write_index      = data->write_index;
-	uint        num_samples_mask = data->buffer->num_samples_mask;
-	double      freq             = MAX(UGEN_IN(u, 0),data->minFreq) * RECIP_SAMPLE_RATE;
-	uint        n                = SAMPLE_RATE / MAX(UGEN_IN(u, 0),data->minFreq);
-	double      duration         = UGEN_IN(u, 1) * SAMPLE_RATE;
-	double      x                = UGEN_IN(u, 2);
-	uint        index2           = (write_index + 1) % n;
-	double      decay            = pow(E, (-(n + 0.5) * 6.908) / duration) / cos(M_PI * freq) ;
-	double      y                = 0;
+	double* in0 = UGEN_INPUT_BUFFER(u, 0);
+	double* in1 = UGEN_INPUT_BUFFER(u, 1);
+	double* in2 = UGEN_INPUT_BUFFER(u, 2);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 
-	if(data->noiseSamples < n)
-	{
-		y = x;
-		data->noiseSamples++;
-	}
-	else
-	{
-		y = decay * (data->buffer->samples[write_index] + data->buffer->samples[index2]) / 2;
-	}
+	pluck_data  data             = *((pluck_data*) u.data);
+	double*     samples          = data.buffer->samples;
+	uint        write_index      = data.write_index;
+	uint        num_samples_mask = data.buffer->num_samples_mask;
+	double      clamped;
+	double      freq;
+	uint        n;
+	uint        index2;
+	double      decay;
+	double      duration;
+	double      x;
+	double      y;
 
-	data->buffer->samples[write_index] = y;
-	data->write_index                  = index2;
-	UGEN_OUT(u, 0, y);
+	AUDIO_LOOP(
+		clamped = MAX(UGEN_IN(u, in0), data.minFreq);
+		freq = clamped * RECIP_SAMPLE_RATE;
+		n = SAMPLE_RATE / clamped;
+		duration = UGEN_IN(u, in1) * SAMPLE_RATE;
+		x = UGEN_IN(u, in2);
+		index2 = (write_index + 1) % n;
+		decay = pow(E, (-(n + 0.5) * 6.908) / duration) / cos(M_PI * freq);
+		y = 0;
+
+		if(data.noiseSamples < n)
+		{
+			y = x;
+			data.noiseSamples++;
+		}
+		
+		else
+		{
+			y = decay * (samples[write_index] + samples[index2]) / 2;
+		}
+
+		samples[write_index] = y;
+		write_index = index2;
+		
+		UGEN_OUT(u, out, y);
+	);
+
+	data.write_index = index2;
+	*((pluck_data*) u.data) = data;
 }
 
 void white_calc(ugen u)
 {
-	UGEN_OUT(u, 0, RAND_RANGE(-1,1));
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	AUDIO_LOOP(
+		UGEN_OUT(u, out, RAND_RANGE(-1, 1));
+	);
 }
