@@ -188,11 +188,17 @@ bSynth = sin 55 |> gain (line 0.1) >>> gain 0.4 >>> out 0
 pSynth :: UGen
 pSynth = sin 1110 |> gain (line 0.1) >>> gain 0.2 >>> out 1
 
+-- metallic :: UGen -> [UGen]
+-- metallic f = [sins,sins] |> e |> gain 0.0015 |> out 0
+    -- where
+        -- sins = foldr (+) (sin f) <| replicate 500 (sin f)
+        -- e i  = line 1 * i
+
 metallic :: UGen -> [UGen]
 metallic f = sig + sig2 + sig3 |> filt |> e |> auxThrough 2 |> gain 0.15 |> out 0
     where
         sig  = sin   [f * (random |> range 0.999 1.001),f * (random |> range 0.999 1.001)]       |> gain 0.1
-        sig2 = pulse [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)] 0.995 |> gain 0.1
+        sig2 = lfpulse [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)] 0 |> gain 0.1
         sig3 = sin   [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)]       |> gain 0.1
 
         filt1 = lpf  ([f * (random |> range 1 3 ),f * (random |> range 1 2)] |> e2) 3
@@ -222,7 +228,7 @@ metallic3 :: UGen -> [UGen]
 metallic3 f = sig + sig2 + sig3 |> filt |> e |> auxThrough 4 |> gain 1 |> (\[u1,u2 ]-> [u2,u1]) |> out 0
     where
         sig    = sin   [f * (random |> range 0.999 1.001  ),f * (random |> range 0.999 1.001)]         |> gain 0.15
-        sig2   = pulse [f * (random |> range 0.2499 0.2501),f * (random |> range 0.2499 0.2501)] 0.995 |> gain 0.15
+        sig2   = pulse [f * (random |> range 0.2499 0.2501),f * (random |> range 0.2499 0.2501)] 0 |> gain 0.15
         sig3   = sin   [f * (random |> range 0.499 0.501  ),f * (random |> range 0.499 0.501)]         |> gain 0.15
 
         filt1  = lpf  ([f * (random |> range 4 8),f * (random |> range 2 4)] |> e2) 3
@@ -423,3 +429,21 @@ floorPattern = playSynthPattern (toggle <| isDown keyD) "floorPerc" [] (pmap (* 
                     --   _ _ _ _
                     --   2 _ _ _
                     --   _ _ _ _ |]
+
+
+{-
+metallic :: UGen -> [UGen]
+metallic f = sig + sig2 + sig3 |> filt |> e |> auxThrough 2 |> gain 0.15 |> out 0
+    where
+        sig  = sin   [f * (random |> range 0.999 1.001),f * (random |> range 0.999 1.001)]       |> gain 0.1
+        sig2 = pulse [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)] 0.995 |> gain 0.1
+        sig3 = sin   [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)]       |> gain 0.1
+
+        filt1 = lpf  ([f * (random |> range 1 3 ),f * (random |> range 1 2)] |> e2) 3
+        filt2 = lpf  ([f * (random |> range 3 5 ),f * (random |> range 2 4)] |> e2) 3
+        filt3 = lpf  ([f * (random |> range 6 10),f * (random |> range 3 6)] |> e2) 3
+        filt i= filt1 i + filt2 i * 0.5 + filt3 i * 0.5
+
+        e    = perc 0.01 1.0 1 (-2)
+        e2   = env2 [1,1,0.35,0.35] [0.01,0.35,0.65] (-5)
+-}
