@@ -4044,19 +4044,20 @@ void freeverb_deconstructor(ugen* u)
 
 const double fixed_gain = 0.015;
 
-//Should the delayed signal in this be x or y or x + y???
+// Should the delayed signal in this be x or y or x + y???
 #define COMB_FILTER(X,R,D,N,DATA,ZS,I)                                                       \
 ({                                                                                           \
     delay_data     data             = DATA[I];	    					                     \
 	sample_buffer  buffer           = *(data.buffer);					                     \
+	double*        samples          = buffer.samples;					                     \
 	unsigned int   write_index      = data.write_index;                                      \
 	unsigned int   num_samples_mask = buffer.num_samples_mask;			                     \
 	double         damp1            = D * 0.4;							                     \
 	double         damp2            = 1 - damp1;                                             \
 	double         feedback         = R * 0.28 + 0.7;                                        \
-	double         y                = buffer.samples[write_index];                           \
+	double         y                = samples[write_index];                                  \
 	ZS[I]                           = y * damp2 + ZS[I] * damp1;                             \
-	buffer.samples[write_index]     = (X * fixed_gain) + ZS[I] * feedback;                   \
+	samples[write_index]     = (X * fixed_gain) + ZS[I] * feedback;		                     \
 	data.write_index                = (write_index + 1) & num_samples_mask;                  \
     DATA[I]                         = data;                                                  \
 	y;                                                                                       \
@@ -4066,11 +4067,12 @@ const double fixed_gain = 0.015;
 ({                                                                                           \
     delay_data     data             = DATA[I];	    					                     \
     sample_buffer  buffer           = *(data.buffer);                        				 \
-    unsigned int   write_index      = data.write_index;                                      \
+    double*        samples          = buffer.samples;                                        \
+    unsigned int   write_index      = data.write_index;                     				 \
     unsigned int   num_samples_mask = buffer.num_samples_mask;                               \
-    double         bufout           = buffer.samples[write_index];                           \
+    double         bufout           = samples[write_index];                                  \
 	double         y                = -X + bufout;                                           \
-    buffer.samples[write_index]     = X + bufout * F;                                        \
+    samples[write_index]     = X + bufout * F;                                               \
 	data.write_index                = (write_index + 1) & num_samples_mask;                  \
 	DATA[I]                         = data;                                                  \
 	y;                                                                                       \
@@ -4079,32 +4081,47 @@ const double fixed_gain = 0.015;
 
 void freeverb_calc(ugen u)
 {
+	double* in0 = UGEN_INPUT_BUFFER(u, 0);
+	double* in1 = UGEN_INPUT_BUFFER(u, 1);
+	double* in2 = UGEN_INPUT_BUFFER(u, 2);
+	double* in3 = UGEN_INPUT_BUFFER(u, 3);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	
 	freeverb_data  vdata    = *((freeverb_data*) u.data);
-	double         mix      = CLAMP(UGEN_IN(u, 0),0,1);
-	double         roomSize = CLAMP(UGEN_IN(u, 1),0,1);
-	double         damp     = CLAMP(UGEN_IN(u, 2),0,1);
-	double         x        = CLAMP(UGEN_IN(u, 3),0,1);
+	double mix;
+	double roomSize;
+	double damp;
+	double x, y;
+	double cf0, cf1, cf2, cf3, cf4, cf5, cf6, cf7, cfy;
+	double ap0, ap1, ap2, ap3;
 
-	double         cf0      = COMB_FILTER(x,roomSize,damp,1557,vdata.combFilterDelays,vdata.combz1s,0);
-	double         cf1      = COMB_FILTER(x,roomSize,damp,1617,vdata.combFilterDelays,vdata.combz1s,1);
-	double         cf2      = COMB_FILTER(x,roomSize,damp,1491,vdata.combFilterDelays,vdata.combz1s,2);
-	double         cf3      = COMB_FILTER(x,roomSize,damp,1422,vdata.combFilterDelays,vdata.combz1s,3);
-	double         cf4      = COMB_FILTER(x,roomSize,damp,1277,vdata.combFilterDelays,vdata.combz1s,4);
-	double         cf5      = COMB_FILTER(x,roomSize,damp,1356,vdata.combFilterDelays,vdata.combz1s,5);
-	double         cf6      = COMB_FILTER(x,roomSize,damp,1188,vdata.combFilterDelays,vdata.combz1s,6);
-	double         cf7      = COMB_FILTER(x,roomSize,damp,1116,vdata.combFilterDelays,vdata.combz1s,7);
+	// NOTE: Optimize COMB_FILTER and ALLPASS_FEEDBACK by pulling declarations and ugen data access outside of audio loop
+	AUDIO_LOOP(
+		mix      = CLAMP(UGEN_IN(u, in0),0,1);
+		roomSize = CLAMP(UGEN_IN(u, in1),0,1);
+		damp     = CLAMP(UGEN_IN(u, in2),0,1);
+		x        = CLAMP(UGEN_IN(u, in3),0,1);
 
-	double         cfy      = cf0 + cf1 + cf2 + cf3 + cf3 + cf5 + cf6 + cf7;
+		cf0      = COMB_FILTER(x,roomSize,damp,1557,vdata.combFilterDelays,vdata.combz1s,0);
+		cf1      = COMB_FILTER(x,roomSize,damp,1617,vdata.combFilterDelays,vdata.combz1s,1);
+		cf2      = COMB_FILTER(x,roomSize,damp,1491,vdata.combFilterDelays,vdata.combz1s,2);
+		cf3      = COMB_FILTER(x,roomSize,damp,1422,vdata.combFilterDelays,vdata.combz1s,3);
+		cf4      = COMB_FILTER(x,roomSize,damp,1277,vdata.combFilterDelays,vdata.combz1s,4);
+		cf5      = COMB_FILTER(x,roomSize,damp,1356,vdata.combFilterDelays,vdata.combz1s,5);
+		cf6      = COMB_FILTER(x,roomSize,damp,1188,vdata.combFilterDelays,vdata.combz1s,6);
+		cf7      = COMB_FILTER(x,roomSize,damp,1116,vdata.combFilterDelays,vdata.combz1s,7);
+		cfy      = cf0 + cf1 + cf2 + cf3 + cf3 + cf5 + cf6 + cf7;
 
-    double         ap0      = ALLPASS_FEEDBACK(cfy,0.5,225,vdata.allpassDelays,0);
-	double         ap1      = ALLPASS_FEEDBACK(ap0,0.5,556,vdata.allpassDelays,1);
-	double         ap2      = ALLPASS_FEEDBACK(ap1,0.5,441,vdata.allpassDelays,2);
-	double         ap3      = ALLPASS_FEEDBACK(ap2,0.5,341,vdata.allpassDelays,3);
-
-    double         y        = (x * (1 - mix)) + (ap3 * mix * 1.0);
+		ap0      = ALLPASS_FEEDBACK(cfy,0.5,225,vdata.allpassDelays,0);
+		ap1      = ALLPASS_FEEDBACK(ap0,0.5,556,vdata.allpassDelays,1);
+		ap2      = ALLPASS_FEEDBACK(ap1,0.5,441,vdata.allpassDelays,2);
+		ap3      = ALLPASS_FEEDBACK(ap2,0.5,341,vdata.allpassDelays,3);
+		y        = (x * (1 - mix)) + (ap3 * mix * 1.0);
+		
+		UGEN_OUT(u, out, y);
+	);
 
 	*((freeverb_data*) u.data) = vdata;
-	UGEN_OUT(u,0,y);
 }
 
 #define E 2.7182818284590452353602874713527
