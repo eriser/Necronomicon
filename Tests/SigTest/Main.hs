@@ -226,7 +226,7 @@ metallic2 f = sig + sig2 + sig3 |> filt |> e |> auxThrough 3 |> gain 0.125 |> (\
         e2    = env2 [1,1,0.5,0.5] [0.01,0.35,0.4] (-4)
 
 metallic3 :: UGen -> [UGen]
-metallic3 f = sig + sig2 + sig3 |> e |> softclip 1000 |> filt |> gain 0.1 |> verb |> e |> auxThrough 4 |> gain 1 |> (\[u1,u2 ]-> [u2,u1]) |> out 0
+metallic3 f = sig + sig2 + sig3 |> e |> softclip 1000 |> filt |> gain 0.1 |> verb |> e |> gain 1 |> (\[u1,u2 ]-> [u2,u1]) |> out 0
     where
         sig    = sin   [f * (random |> range 0.999 1.001  ),f * (random |> range 0.999 1.001)]         |> gain 0.15
         sig2   = sin   [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)] |> gain 0.15
@@ -244,7 +244,7 @@ metallic3 f = sig + sig2 + sig3 |> e |> softclip 1000 |> filt |> gain 0.1 |> ver
 
 
 metallic4 :: UGen -> [UGen]
-metallic4 f = sig + sig2 + sig3 |> e |> softclip 1000 |> filt |> gain 0.1 |> verb |> e |> auxThrough 4 |> gain 1 |> out 0
+metallic4 f = sig + sig2 + sig3 |> e |> softclip 1000 |> filt |> gain 0.1 |> verb |> e |> gain 1 |> out 0
     where
         sig    = sin   [f * (random |> range 0.995 1.005  ),f * (random |> range 0.995 1.005)]         |> gain 0.15
         sig2   = sin   [f * (random |> range 0.495 0.505),f * (random |> range 0.495 0.505)] |> gain 0.15
@@ -283,6 +283,7 @@ fakePan a [u1,u2] = [(u1+u2) * (1 - a), (u1+u2) * a]
 fakePan a [u]     = [u * (1 - a),  u * a]
 fakePan _ _       = []
 
+--add sins for visuals and modulation
 reverseSwell :: UGen -> [UGen]
 reverseSwell f = sig1 + sig2 + sig3 |> e |> softclip (random |> range 1000 3000) |> filt |> verb |> e |> gain 0.0125 |> fakePan 0.75 |> out 0
     where
@@ -290,9 +291,9 @@ reverseSwell f = sig1 + sig2 + sig3 |> e |> softclip (random |> range 1000 3000)
         e      = env  [0,1,0] [4,4] (3)
         e2     = env2 [0.125,1,0.125] [4,4] (3)
         sig1   = lfpulse [f * (random |> range 0.995 1.005),f * (random |> range 0.995 1.005)] 0 * mod1
-        sig2   = lfsaw [f * (random |> range 0.995 1.005),f * (random |> range 0.995 1.005)] 0 * mod2
+        sig2   = lfsaw   [f * (random |> range 0.995 1.005),f * (random |> range 0.995 1.005)] 0 * mod2
         sig3   = lfpulse [f * (random |> range 0.995 1.005),f * (random |> range 0.995 1.005)] 0 * mod4 * 0.5
-        filt   = lpf  ([f * (random |> range 3 10),       f * (random |> range 3 10)] * mod3 |> e2) 6
+        filt   = lpf    ([f * (random |> range 3 10),       f * (random |> range 3 10)]          * mod3 |> e2) 3
         mod1   = [lfsaw (random |> range 0.5 2.0) 0 |> range 0.1 1,lfsaw (random |> range 0.5 2.0) 0 |> range 0.1 1]
         mod2   = [lfsaw (random |> range 0.5 2.0) 0 |> range 0.1 1,lfsaw (random |> range 0.5 2.0) 0 |> range 0.1 1]
         mod3   = [lfsaw (random |> range 0.5 2.0) 0 |> range 0.1 1,lfsaw (random |> range 0.5 2.0) 0 |> range 0.1 1]
@@ -305,32 +306,36 @@ reverseSwell2 f = sig1 + sig2 + sig3 |> e |> softclip (random |> range 1000 3000
         e      = env  [0,1,0] [4,4] (3)
         e2     = env2 [0.125,1,0.125] [4,4] (3)
         sig1   = lfpulse [f * (random |> range 0.995 1.005),f * (random |> range 0.995 1.005)] 0 * mod1
-        sig2   = lfsaw [f * (random |> range 0.995 1.005),f * (random |> range 0.995 1.005)] 0 * mod2
+        sig2   = lfsaw   [f * (random |> range 0.995 1.005),f * (random |> range 0.995 1.005)] 0 * mod2
         sig3   = lfpulse [f * (random |> range 0.495 0.505),f * (random |> range 0.495 0.505)] 0 * mod4 * 0.5
-        filt   = lpf  ([f * (random |> range 3 10),       f * (random |> range 3 10)] * mod3 |> e2) 6
+        filt   = lpf    ([f * (random |> range 3 10)       ,f * (random |> range 3 10)]          * mod3 |> e2) 3
         mod1   = [lfsaw (random |> range 0.5 2.0) 0 |> range 0.1 1,lfsaw (random |> range 0.5 2.0) 0 |> range 0.1 1]
         mod2   = [lfsaw (random |> range 0.5 2.0) 0 |> range 0.1 1,lfsaw (random |> range 0.5 2.0) 0 |> range 0.1 1]
         mod3   = [lfsaw (random |> range 0.5 2.0) 0 |> range 0.1 1,lfsaw (random |> range 0.5 2.0) 0 |> range 0.1 1]
         mod4   = [lfsaw (random |> range 0.5 2.0) 0 |> range 0.1 1,lfsaw (random |> range 0.5 2.0) 0 |> range 0.1 1]
 
 shake :: UGen -> [UGen]
-shake d = sig1 + sig2 |> e |> p 0.75 |> gain 0.015  |> out 0
+shake d = sig1 + sig2 |> e |> p 0.75 |> gain 0.35  |> out 0
     where
         p a u = [u * (1 - a), u * a]
-        sig1  = whiteNoise |> bpf (9000) 2
-        sig2  = whiteNoise |> bpf (18000 * d) 2
-        e     = perc 0.01 (d*0.5) 1 (-5)
+        sig1  = whiteNoise |> bpf (12000 |> e2) 3 |> gain 0.05
+        sig2  = whiteNoise |> bpf (9000 + 12000 * d |> e2) 4 |> gain 0.05
+        -- sig1  = lfpulse 41 0 |> lpf (100 |> e2) 4
+        -- sig2  = lfpulse 40 0 |> lpf (100 + 400 * d |> e2) 4
+        -- verb  = freeverb 0.5 1 1
+        e     = perc 0.01 (d*6) 1 (-24)
+        e2    = env2 [1,1,0.125] [0.01,d*6] (-24)
 
 shake2 :: UGen -> [UGen]
 shake2 d = sig1 + sig2 |> e |> p 0.25 |> gain 0.015  |> out 0
     where
         p a u = [u * (1 - a), u * a]
-        sig1  = whiteNoise |> bpf (9000) 2
-        sig2  = whiteNoise |> bpf (12000 * d) 2
-        e     = perc 0.01 (d*0.5) 1 (-5)
+        sig1  = whiteNoise |> bpf (14000) 2
+        sig2  = whiteNoise |> bpf (12000) 2
+        e     = perc 0.01 (d*0.25) 1 (-5)
 
 floorPerc :: UGen -> [UGen]
-floorPerc d = sig1 + sig2 |> e |> p 0.4 |> gain 0.65  |> out 0
+floorPerc d = sig1 + sig2 |> e |> p 0.35 |> gain 0.65  |> out 0
     where
         p a u = [u * (1 - a), u * a]
         sig1  = sin 40
@@ -347,9 +352,9 @@ metallicPattern =
               metallicPattern3
               <&> metallicPattern3_2
               <&> shakePattern
-              <&> shakePattern2
-              <&> shakePattern3
-              <&> shakePattern4
+            --   <&> shakePattern2
+            --   <&> shakePattern3
+            --   <&> shakePattern4
             --   <&> metallicPattern2_2
               <&> floorPattern
               <&> swellPattern
@@ -437,37 +442,48 @@ metallicPattern3_2 = playSynthPattern (toggle <| isDown keyD) "metallic4" [] (pm
 
 
 shakePattern :: Signal ()
-shakePattern = playSynthPattern (toggle <| isDown keyD) "shake" [] (pmap (* 0.035) <| ploop [sec1])
+shakePattern = playSynthPattern (toggle <| isDown keyD) "shake" [] (pmap (* 0.1) <| ploop [sec1])
     where
         sec1 = [lich| _
-                      3     [_ 2] [_ _ 1 1]
-                      3     [_ 2] [_ _ 1 1]
-                      3     [_ 2] [_ _ 1 1]
-                      3     [_ 2] [_ _ 1 1]
-                      3     [_ 2] [2 2 2] |]
+                      6   [_ 2] [_ 1]
+                      4   [_ 2] [_ 1]
+                      6   [_ 2] [_ 1]
+                      4   [_ 2] [_ 1]
+                      6   [_ 2] [2 2 2]
+                      4   [_ 2] [_ 1]
+                      6   [_ 2] [_ 1]
+                      4   [_ 2] [_ 1]
+                      6   [_ 2] [_ 1]
+                      4   [_ 2] [_ 1]
+                      6   [_ 2] [_ 1]
+                      4   [_ 2] [_ 1]
+                      6   [_ 2] [2 2 2]
+                      4   [_ 2] [_ 1]
+                      6   [_ 2] [_ 1]
+                      4   [_ 2]       |]
 
-shakePattern2 :: Signal ()
-shakePattern2 = playSynthPattern (toggle <| isDown keyD) "shake2" [] (pmap (* 0.075) <| ploop [sec1])
-    where
-        sec1 = [lich| [3 3] [_ 4] [_ 4]
-                      [3 3] [_ 4] [_ 4]
-                      [3 3] [_ 4] [_ 4]
-                      [1 1 1]  [1 1 1] [2 1] |]
+-- shakePattern2 :: Signal ()
+-- shakePattern2 = playSynthPattern (toggle <| isDown keyD) "shake2" [] (pmap (* 0.075) <| ploop [sec1])
+    -- where
+        -- sec1 = [lich| [3 3] [_ 4] [_ 4]
+                    --   [3 3] [_ 4] [_ 4]
+                    --   [3 3] [_ 4] [_ 4]
+                    --   [1 1 1]  [1 1 1] [2 1] |]
 
 
-shakePattern3 :: Signal ()
-shakePattern3 = playSynthPattern (toggle <| isDown keyD) "shake2" [] (pmap (* 0.025) <| ploop [sec1])
-    where
-        sec1 = [lich| [2 1] [1 1] [1 1] _
-                      [2 1] [1 1] [1 1] _
-                      [2 1] [1 1] [1 1] _
-                      [2 1] [1 1] [1 1] 4 |]
+-- shakePattern3 :: Signal ()
+-- shakePattern3 = playSynthPattern (toggle <| isDown keyD) "shake2" [] (pmap (* 0.025) <| ploop [sec1])
+    -- where
+        -- sec1 = [lich| [2 1] [1 1] [1 1] _
+                    --   [2 1] [1 1] [1 1] _
+                    --   [2 1] [1 1] [1 1] _
+                    --   [2 1] [1 1] [1 1] 4 |]
 
-shakePattern4 :: Signal ()
-shakePattern4 = playSynthPattern (toggle <| isDown keyD) "shake" [] (pmap (* 0.025) <| ploop [sec1])
-    where
-        sec1 = [lich| _ _ [1 _ 1 1] [1 1]
-                      _ _ [1 _ 1 1] 2  |]
+-- shakePattern4 :: Signal ()
+-- shakePattern4 = playSynthPattern (toggle <| isDown keyD) "shake" [] (pmap (* 0.025) <| ploop [sec1])
+    -- where
+        -- sec1 = [lich| _ _ [1 _ 1 1] [1 1]
+                    --   _ _ [1 _ 1 1] 2  |]
 
 floorPattern :: Signal ()
 floorPattern = playSynthPattern (toggle <| isDown keyD) "floorPerc" [] (pmap (* 1) <| ploop [sec1])
