@@ -3016,9 +3016,9 @@ inline void add_blep(minblep* mb, double offset, double amp)
 
 void saw_calc(ugen u)
 {
-	double*  in0 = UGEN_INPUT_BUFFER(u, 0);
-	double*  out = UGEN_OUTPUT_BUFFER(u, 0);
-	minblep* mb  = ((minblep*) u.data);
+	double* in0 = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	minblep mb  = *((minblep*) u.data);
 
 	double freq;
 	double y;
@@ -3027,37 +3027,39 @@ void saw_calc(ugen u)
 		freq  = UGEN_IN(u, in0) * RECIP_SAMPLE_RATE;
 
 		// create waveform
-		mb->phase = mb->phase + freq;
+		mb.phase += freq;
 
 		// add BLEP at end of waveform
-		if(mb->phase >= 1)
+		if(mb.phase >= 1)
 		{
-			mb->phase  = mb->phase - 1.0;
-			mb->output = 0.0;
-			add_blep(mb, mb->phase/freq,1.0);
+			mb.phase  = mb.phase - 1.0;
+			mb.output = 0.0;
+			add_blep(&mb, mb.phase/freq,1.0);
 		}
 
-		y = mb->phase;
+		y = mb.phase;
 
 		// add BLEP buffer contents
-		if(mb->nInit)
+		if(mb.nInit)
 		{
-			y += mb->buffer[mb->iBuffer];
-			mb->nInit--;
-			if(++mb->iBuffer >= mb->cBuffer)
-				mb->iBuffer=0;
+			y += mb.buffer[mb.iBuffer];
+			mb.nInit--;
+			if(++mb.iBuffer >= mb.cBuffer)
+				mb.iBuffer=0;
 		}
 
 		UGEN_OUT(u, out, y);
 	);
+
+	*((minblep*) u.data) = mb;
 }
 
 void square_calc(ugen u)
 {
-	double*  in0 = UGEN_INPUT_BUFFER(u, 0);
-	double*  in1 = UGEN_INPUT_BUFFER(u, 1);
-	double*  out = UGEN_OUTPUT_BUFFER(u, 0);
-	minblep* mb  = ((minblep*) u.data);
+	double* in0 = UGEN_INPUT_BUFFER(u, 0);
+	double* in1 = UGEN_INPUT_BUFFER(u, 1);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	minblep mb  = *((minblep*) u.data);
 
 	double freq;
 	double pwm;
@@ -3068,36 +3070,38 @@ void square_calc(ugen u)
 		pwm  = CLAMP(UGEN_IN(u, in1),0,1) * 0.5;
 
 		// create waveform
-		mb->phase = mb->phase + freq;
+		mb.phase += freq;
 
 		// add BLEP at end of waveform
-		if (mb->phase >= 1)
+		if (mb.phase >= 1)
 		{
-			mb->phase  = mb->phase - 1.0;
-			mb->output = 0.0;
-			add_blep(mb, mb->phase/freq,1.0);
+			mb.phase  = mb.phase - 1.0;
+			mb.output = 0.0;
+			add_blep(&mb, mb.phase/freq,1.0);
 		}
 
 		// add BLEP in middle of wavefor for squarewave
-		if(!mb->output && mb->phase > pwm)
+		if(!mb.output && mb.phase > pwm)
 		{
-			mb->output = 1.0;
-			add_blep(mb, (mb->phase - pwm) / freq,-1.0);
+			mb.output = 1.0;
+			add_blep(&mb, (mb.phase - pwm) / freq,-1.0);
 		}
 
-		y = mb->output;
+		y = mb.output;
 
 		// add BLEP buffer contents
-		if(mb->nInit)
+		if(mb.nInit)
 		{
-			y += mb->buffer[mb->iBuffer];
-			mb->nInit--;
-			if(++mb->iBuffer >= mb->cBuffer)
-				mb->iBuffer=0;
+			y += mb.buffer[mb.iBuffer];
+			mb.nInit--;
+			if(++mb.iBuffer >= mb.cBuffer)
+				mb.iBuffer=0;
 		}
 
 		UGEN_OUT(u, out, y);
 	);
+
+	*((minblep*) u.data) = mb;
 }
 
 void syncsaw_calc(ugen u)
