@@ -770,6 +770,7 @@ compileSynthArg argIndex = let arg = (synthArgument argIndex) in compileUGen arg
 
 runCompileSynthDef :: UGenType a => String -> a -> IO SynthDef
 runCompileSynthDef name ugenFunc = do
+    print ("Compiling synthdef " ++ name ++ " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
     (numArgs, (CompiledData table revGraph constants numWires _ _)) <- runCompile (compileSynthArgsAndUGenGraph ugenFunc) mkCompiledData
     print ("table: " ++ (show table))
     print ("Total ugens: " ++ (show $ length revGraph))
@@ -777,6 +778,7 @@ runCompileSynthDef name ugenFunc = do
     print ("Num Wires: " ++ (show numWires))
     -- Don't actually compile the arg ugens, they shouldn't be evaluated at run time. Instead they're controlled from the Haskell side.
     let graph = drop numArgs $ reverse revGraph -- Reverse the revGraph because we've been using cons during compilation.
+    print ("UGenGraph: " ++ (show graph))
     compiledGraph <- newArray graph
     compiledWireBufs <- initializeWireBufs numWires constants
     let scheduledTime = 0 :: JackTime

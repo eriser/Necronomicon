@@ -295,9 +295,6 @@ sample_buffer* acquire_sample_buffer(unsigned int num_samples)
 	unsigned int pool_index = __builtin_ctz(pow_two_num_samples);
 	sample_buffer* buffer = sample_buffer_pools[pool_index];
 
-	assert(num_samples <= pow_two_num_samples);
-	assert(pool_index < (NUM_SAMPLE_BUFFER_POOLS - 1));
-
 	// printf("acquire_sample_buffer(pooled_buffer = %p, num_samples = %u, pow_two_num_samples = %u, pool_index = %u)\n", buffer, num_samples, pow_two_num_samples, pool_index);
 	if (buffer != NULL)
 	{
@@ -435,10 +432,10 @@ void deconstruct_synth(synth_node* synth)
 
 void free_synth(synth_node* synth)
 {
-	puts("||| free_synth ||| ");
-	printf("free_synth -> ");
-	print_node_alive_status(synth);
-	print_node(synth);
+	// puts("||| free_synth ||| ");
+	// printf("free_synth -> ");
+	// print_node_alive_status(synth);
+	// print_node(synth);
 
 	if (synth != NULL)
 	{
@@ -1162,8 +1159,8 @@ void handle_messages_in_rt_fifo()
 
 void handle_nrt_message(message msg)
 {
-	printf("handle_nrt_message ");
-	print_fifo_message(msg);
+	// printf("handle_nrt_message ");
+	// print_fifo_message(msg);
 	switch (msg.type)
 	{
 	case FREE_SYNTH:
@@ -1196,38 +1193,39 @@ void handle_messages_in_nrt_fifo()
 
 void play_synth(synth_node* synth_definition, double* arguments, unsigned int num_arguments, unsigned int node_id, jack_time_t time)
 {
-	puts("||| play_synth ||| ");
-	if (num_synths < MAX_SYNTHS)
-	{
+	// puts("||| play_synth ||| ");
+	 //printf("(num_synths: %f)", num_synths); 
+	// if (num_synths < MAX_SYNTHS)
+	// {
 		synth_node* synth = new_synth(synth_definition, arguments, num_arguments, node_id, time);
 		++num_synths;
 		hash_table_insert(synth_table, synth);
-        printf("play_synth ");
-		print_node(synth);
+        // printf("play_synth ");
+		// print_node(synth);
 		message msg;
 		msg.arg.node = synth;
 		msg.type = START_SYNTH;
 		RT_FIFO_PUSH(msg);
-	}
+		// }
 
-	else
-	{
-		printf("Unable to play synth because the maximum number of synths (%u) are already playing.\n", MAX_SYNTHS);
-	}
+		//else
+		//{
+		//printf("Unable to play synth because the maximum number of synths (%u) are already playing.\n", MAX_SYNTHS);
+		//}
 }
 
 void stop_synth(unsigned int id)
 {
-	puts("||| stop_synth ||| ");
+	// puts("||| stop_synth ||| ");
 	synth_node* node = hash_table_lookup(synth_table, id);
 	if ((node != NULL) && (node->alive_status == NODE_SPAWNING || node->alive_status == NODE_ALIVE))
 	{
-		printf("stop_synth node id: %u. ", node->key);
-		print_node_alive_status(node);
-		print_node(node);
+		// printf("stop_synth node id: %u. ", node->key);
+		// print_node_alive_status(node);
+		// print_node(node);
 		node->previous_alive_status = node->alive_status;
 		node->alive_status = NODE_SCHEDULED_FOR_REMOVAL;
-		puts("stop_synth DONE ACCESSING NODE MEMEORY");
+		// puts("stop_synth DONE ACCESSING NODE MEMEORY");
 		message msg;
 		msg.arg.node = node;
 		msg.type = STOP_SYNTH;
@@ -1244,11 +1242,11 @@ void stop_synth(unsigned int id)
 // How to handle sample accurate setting? Use FIFO messages?
 void send_set_synth_arg(unsigned int id, double argument, unsigned int arg_index)
 {
-	puts("||| set_synth_arg ||| ");
+	// puts("||| set_synth_arg ||| ");
 	synth_node* synth = hash_table_lookup(synth_table, id);
-	printf("set_synth_arg id: %u ", id);
-	print_node_alive_status(synth);
-	print_node(synth);
+	// printf("set_synth_arg id: %u ", id);
+	// print_node_alive_status(synth);
+	// print_node(synth);
 	if ((synth != NULL) && (synth->alive_status == NODE_SPAWNING || synth->alive_status == NODE_ALIVE))
 	{
 		synth->ugen_wires[arg_index] = argument;
@@ -1263,11 +1261,11 @@ void send_set_synth_arg(unsigned int id, double argument, unsigned int arg_index
 
 void send_set_synth_args(unsigned int id, double* arguments, unsigned int num_arguments)
 {
-	puts("||| set_synth_args ||| ");
+	// puts("||| set_synth_args ||| ");
 	synth_node* synth = hash_table_lookup(synth_table, id);
-	printf("set_synth_args id: %u ", id);
-	print_node_alive_status(synth);
-	print_node(synth);
+	// printf("set_synth_args id: %u ", id);
+	// print_node_alive_status(synth);
+	// print_node(synth);
 	if ((synth != NULL) && (synth->alive_status == NODE_SPAWNING || synth->alive_status == NODE_ALIVE))
 	{
 		memcpy(synth->ugen_wires, arguments, num_arguments * DOUBLE_SIZE);
