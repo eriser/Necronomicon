@@ -104,7 +104,7 @@ typedef struct ugen ugen;
 
 struct ugen
 {
-	void (*calc)(ugen* u);
+	void (*calc)(ugen u);
 	void (*constructor)(ugen* u);
 	void (*deconstructor)(ugen* u);
 	void* data; // ugen defined data structure
@@ -545,20 +545,23 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 	return synth;
 }
 
+synth_node _necronomicon_current_node_object;
 void process_synth(synth_node* synth)
 {
-	ugen* ugen_graph = synth->ugen_graph;
-	unsigned int num_ugens = synth->num_ugens;
+	_necronomicon_current_node_object = *synth;
+	ugen* ugen_graph = _necronomicon_current_node_object.ugen_graph;
+	unsigned int num_ugens = _necronomicon_current_node_object.num_ugens;
 	unsigned int i;
+	ugen graph_node;
 	for (i = 0; i < num_ugens; ++i)
 	{
-		ugen* graph_node = &ugen_graph[i];
-		graph_node->calc(graph_node);
+		graph_node = ugen_graph[i];
+		graph_node.calc(graph_node);
 	}
 }
 
-#define UGEN_IN(ugen, index) _necronomicon_current_node->ugen_wires[ugen->inputs[index]]
-#define UGEN_OUT(ugen, index, out_value) _necronomicon_current_node->ugen_wires[ugen->outputs[index]] = out_value
+#define UGEN_IN(ugen, index) _necronomicon_current_node_object.ugen_wires[ugen.inputs[index]]
+#define UGEN_OUT(ugen, index, out_value) _necronomicon_current_node_object.ugen_wires[ugen.outputs[index]] = out_value
 
 void null_deconstructor(ugen* u) {} // Does nothing
 void null_constructor(ugen* u) { u->data = NULL; }
@@ -1647,32 +1650,32 @@ void shutdown_necronomicon()
 	a0 * DELTA * delta2 + a1 * delta2 + a2 * DELTA + B; \
 })
 
-void add_calc(ugen* u)
+void add_calc(ugen u)
 {
 	UGEN_OUT(u, 0, UGEN_IN(u, 0) + UGEN_IN(u, 1));
 }
 
-void minus_calc(ugen* u)
+void minus_calc(ugen u)
 {
 	UGEN_OUT(u, 0, UGEN_IN(u, 0) - UGEN_IN(u, 1));
 }
 
-void mul_calc(ugen* u)
+void mul_calc(ugen u)
 {
 	UGEN_OUT(u, 0, UGEN_IN(u, 0) * UGEN_IN(u, 1));
 }
 
-void div_calc(ugen* u)
+void div_calc(ugen u)
 {
 	UGEN_OUT(u, 0, UGEN_IN(u, 0) / UGEN_IN(u, 1));
 }
 
-void abs_calc(ugen* u)
+void abs_calc(ugen u)
 {
 	UGEN_OUT(u, 0, abs(UGEN_IN(u, 0)));
 }
 
-void signum_calc(ugen* u)
+void signum_calc(ugen u)
 {
 	double value = UGEN_IN(u, 0);
 
@@ -1689,49 +1692,89 @@ void signum_calc(ugen* u)
 	UGEN_OUT(u, 0, value);
 }
 
-void negate_calc(ugen* u)
+void negate_calc(ugen u)
 {
 	UGEN_OUT(u, 0, -(UGEN_IN(u, 0)));
 }
 
-void pow_calc(ugen* u)
+void pow_calc(ugen u)
 {
 	UGEN_OUT(u, 0, pow(UGEN_IN(u, 0), UGEN_IN(u, 1)));
 }
 
-void exp_calc(ugen* u)
+void exp_calc(ugen u)
 {
 	UGEN_OUT(u, 0, exp(UGEN_IN(u, 0)));
 }
 
-void log_calc(ugen* u)
+void log_calc(ugen u)
 {
 	UGEN_OUT(u, 0, log(UGEN_IN(u, 0)));
 }
 
-void cos_calc(ugen* u)
+void cos_calc(ugen u)
 {
 	UGEN_OUT(u, 0, cos(UGEN_IN(u, 0)));
 }
 
-void asin_calc(ugen* u)
+void asin_calc(ugen u)
 {
 	UGEN_OUT(u, 0, asin(UGEN_IN(u, 0)));
 }
 
-void acos_calc(ugen* u)
+void acos_calc(ugen u)
 {
 	UGEN_OUT(u, 0, acos(UGEN_IN(u, 0)));
 }
 
-void atan_calc(ugen* u)
+void atan_calc(ugen u)
 {
 	UGEN_OUT(u, 0, atan(UGEN_IN(u, 0)));
 }
 
-void logbase_calc(ugen* u)
+void logbase_calc(ugen u)
 {
 	UGEN_OUT(u, 0, log(UGEN_IN(u, 0)) / log(UGEN_IN(u, 1)));
+}
+
+void sqrt_calc(ugen u)
+{
+	UGEN_OUT(u, 0, sqrt(UGEN_IN(u, 0)));
+}
+
+void tan_calc(ugen u)
+{
+	UGEN_OUT(u, 0, tan(UGEN_IN(u, 0)));
+}
+
+void sinh_calc(ugen u)
+{
+	UGEN_OUT(u, 0, sinh(UGEN_IN(u, 0)));
+}
+
+void cosh_calc(ugen u)
+{
+	UGEN_OUT(u, 0, cosh(UGEN_IN(u, 0)));
+}
+
+void tanh_calc(ugen u)
+{
+	UGEN_OUT(u, 0, tanh(UGEN_IN(u, 0)));
+}
+
+void asinh_calc(ugen u)
+{
+	UGEN_OUT(u, 0, asinh(UGEN_IN(u, 0)));
+}
+
+void atanh_calc(ugen u)
+{
+	UGEN_OUT(u, 0, atanh(UGEN_IN(u, 0)));
+}
+
+void acosh_calc(ugen u)
+{
+	UGEN_OUT(u, 0, acosh(UGEN_IN(u, 0)));
 }
 
 void line_constructor(ugen* u)
@@ -1740,56 +1783,16 @@ void line_constructor(ugen* u)
 	*((unsigned int*) u->data) = 0;
 }
 
-void sqrt_calc(ugen* u)
-{
-	UGEN_OUT(u, 0, sqrt(UGEN_IN(u, 0)));
-}
-
-void tan_calc(ugen* u)
-{
-	UGEN_OUT(u, 0, tan(UGEN_IN(u, 0)));
-}
-
-void sinh_calc(ugen* u)
-{
-	UGEN_OUT(u, 0, sinh(UGEN_IN(u, 0)));
-}
-
-void cosh_calc(ugen* u)
-{
-	UGEN_OUT(u, 0, cosh(UGEN_IN(u, 0)));
-}
-
-void tanh_calc(ugen* u)
-{
-	UGEN_OUT(u, 0, tanh(UGEN_IN(u, 0)));
-}
-
-void asinh_calc(ugen* u)
-{
-	UGEN_OUT(u, 0, asinh(UGEN_IN(u, 0)));
-}
-
-void atanh_calc(ugen* u)
-{
-	UGEN_OUT(u, 0, atanh(UGEN_IN(u, 0)));
-}
-
-void acosh_calc(ugen* u)
-{
-	UGEN_OUT(u, 0, acosh(UGEN_IN(u, 0)));
-}
-
 void line_deconstructor(ugen* u)
 {
 	free(u->data);
 }
 
 // To do: Give this range parameters
-void line_calc(ugen* u)
+void line_calc(ugen u)
 {
 	double length = UGEN_IN(u, 0) * SAMPLE_RATE;
-	unsigned int line_time = *((unsigned int*) u->data);
+	unsigned int line_time = *((unsigned int*) u.data);
 	double output = 0;
 
 	if (line_time >= length)
@@ -1800,7 +1803,7 @@ void line_calc(ugen* u)
 	else
 	{
 		output = fmax(0, 1 - (line_time / length));
-		*((unsigned int*) u->data) = line_time + 1;
+		*((unsigned int*) u.data) = line_time + 1;
 	}
 
 	UGEN_OUT(u, 0, output);
@@ -1881,9 +1884,9 @@ void env_deconstructor(ugen* u)
 	free(u->data);
 }
 
-void env_calc(ugen* u)
+void env_calc(ugen u)
 {
-	env_struct   data       = *((env_struct*) u->data);
+	env_struct   data       = *((env_struct*) u.data);
 	double       curve      = UGEN_IN(u, 0);
 	double       x          = UGEN_IN(u, 1);
 	int          valsOffset = 2;
@@ -1949,15 +1952,15 @@ void env_calc(ugen* u)
 		double delta             = MIN(unclampedDelta,1.0);
 		y                        = ((1-delta) * data.currentValue + delta * data.nextValue) * x;
 		data.time                = data.time + 1;
-    	*((env_struct*) u->data) = data;
+    	*((env_struct*) u.data) = data;
     }
 
 	UGEN_OUT(u, 0, y);
 }
 
-void env2_calc(ugen* u)
+void env2_calc(ugen u)
 {
-	env_struct   data       = *((env_struct*) u->data);
+	env_struct   data       = *((env_struct*) u.data);
 	double       curve      = UGEN_IN(u, 0);
 	double       x          = UGEN_IN(u, 1);
 	int          valsOffset = 2;
@@ -1989,7 +1992,7 @@ void env2_calc(ugen* u)
 	double delta             = MIN(unclampedDelta,1.0);
 	y                        = ((1-delta) * data.currentValue + delta * data.nextValue) * x;
 	data.time                = data.time + 1;
-    *((env_struct*) u->data) = data;
+    *((env_struct*) u.data) = data;
 
 	UGEN_OUT(u, 0, y);
 }
@@ -2085,10 +2088,10 @@ void sin_deconstructor(ugen* u)
 	free(u->data);
 }
 
-void sin_calc(ugen* u)
+void sin_calc(ugen u)
 {
 	double freq = UGEN_IN(u, 0);
-	double phase = *((double*) u->data);
+	double phase = *((double*) u.data);
 
 	unsigned char index1 = phase;
 	unsigned char index2 = index1 + 1;
@@ -2097,23 +2100,23 @@ void sin_calc(ugen* u)
 	double delta = phase - ((long) phase);
 	double amplitude = amp1 + delta * (amp2 - amp1);
 
-	*((double*) u->data) = phase + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
+	*((double*) u.data) = phase + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
 	UGEN_OUT(u, 0, amplitude);
 }
 
-void local_out_calc(ugen* u)
+void local_out_calc(ugen u)
 {
 	UGEN_OUT(u, 0, UGEN_IN(u, 0));
 }
 
-void out_calc(ugen* u)
+void out_calc(ugen u)
 {
 	// Constrain bus index to the correct range
 	unsigned char bus_index = UGEN_IN(u, 0);
 	_necronomicon_buses[bus_index] += UGEN_IN(u, 1);
 }
 
-void in_calc(ugen* u)
+void in_calc(ugen u)
 {
 	// Constrain bus index to the correct range
 	unsigned char bus_index = UGEN_IN(u, 0);
@@ -2127,9 +2130,9 @@ void poll_constructor(ugen* u)
 	u->data = count_buffer;
 }
 
-void poll_calc(ugen* u)
+void poll_calc(ugen u)
 {
-	unsigned int* count_buffer = (unsigned int*) u->data;
+	unsigned int* count_buffer = (unsigned int*) u.data;
 	unsigned int count = *count_buffer;
 
 	if (count >= SAMPLE_RATE)
@@ -2195,7 +2198,7 @@ void delay_deconstructor(ugen* u)
 }
 
 #define INIT_DELAY(u)									  \
-delay_data data = *((delay_data*) u->data);				  \
+delay_data data = *((delay_data*) u.data);				  \
 sample_buffer buffer = *data.buffer;					  \
 long write_index = data.write_index;					  \
 unsigned int num_samples_mask = buffer.num_samples_mask;  \
@@ -2205,10 +2208,10 @@ double x = UGEN_IN(u, 1);
 #define FINISH_DELAY(u, y)								  \
 buffer.samples[write_index & num_samples_mask] = x;	      \
 data.write_index = write_index + 1;						  \
-*((delay_data*) u->data) = data;						  \
+*((delay_data*) u.data) = data;							  \
 UGEN_OUT(u, 0, y);
 
-void delayN_calc(ugen* u)
+void delayN_calc(ugen u)
 {
 	INIT_DELAY(u);
 	delay_time = fmin(data.max_delay_time, fmax(1, delay_time));
@@ -2217,7 +2220,7 @@ void delayN_calc(ugen* u)
 	FINISH_DELAY(u, y);
 }
 
-void delayL_calc(ugen* u)
+void delayL_calc(ugen u)
 {
 	INIT_DELAY(u);
 	delay_time = fmin(data.max_delay_time, fmax(1, delay_time));
@@ -2242,7 +2245,7 @@ void delayL_calc(ugen* u)
 	FINISH_DELAY(u, y);
 }
 
-void delayC_calc(ugen* u)
+void delayC_calc(ugen u)
 {
 	INIT_DELAY(u);
 	// Clamp delay at 1 to prevent the + 1 iread_index3 from reading on the wrong side of the write head
@@ -2618,11 +2621,11 @@ void accumulator_deconstructor(ugen* u)
 
 //LFOS
 double RECIP_CHAR_RANGE = 1.0 / 255.0;
-void lfsaw_calc(ugen* u)
+void lfsaw_calc(ugen u)
 {
 	double freq     = UGEN_IN(u, 0);
 	double phaseArg = UGEN_IN(u, 1);
-	double phase    = *((double*) u->data);
+	double phase    = *((double*) u.data);
 
 	//Branchless and table-less saw
 	double        amp1      = ((double)((char)phase));
@@ -2630,20 +2633,20 @@ void lfsaw_calc(ugen* u)
 	double        delta     = phase - ((long) phase);
 	double        amplitude = LERP(amp1,amp2,delta) * RECIP_CHAR_RANGE;
 
-	*((double*) u->data) = phase + phaseArg + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
+	*((double*) u.data) = phase + phaseArg + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
 	UGEN_OUT(u, 0, amplitude);
 }
 
-void lfpulse_calc(ugen* u)
+void lfpulse_calc(ugen u)
 {
 	double freq     = UGEN_IN(u, 0);
 	double phaseArg = UGEN_IN(u, 1);
-	double phase    = *((double*) u->data);
+	double phase    = *((double*) u.data);
 
 	//Branchless and table-less square
 	double amplitude = 1 | (((char)phase) >> (sizeof(char) * CHAR_BIT - 1));
 
-	*((double*) u->data) = phase + phaseArg + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
+	*((double*) u.data) = phase + phaseArg + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
 	UGEN_OUT(u, 0, amplitude);
 }
 
@@ -2760,11 +2763,11 @@ inline void add_blep(minblep* mb, double offset, double amp)
 	mb->nInit = cBLEP;
 }
 
-void saw_calc(ugen* u)
+void saw_calc(ugen u)
 {
 	double   freq      = UGEN_IN(u, 0) * RECIP_SAMPLE_RATE;
 	// double   pwm       = UGEN_IN(u, 1);
-	minblep* mb        = (minblep*) u->data;
+	minblep* mb        = (minblep*) u.data;
 	double   amplitude = 0.0;
 
 	// create waveform
@@ -2805,11 +2808,11 @@ void saw_calc(ugen* u)
 	UGEN_OUT(u, 0, amplitude);
 }
 
-void square_calc(ugen* u)
+void square_calc(ugen u)
 {
 	double   freq      = UGEN_IN(u, 0) * RECIP_SAMPLE_RATE;
 	double   pwm       = CLAMP(UGEN_IN(u, 1),0,1) * 0.5;
-	minblep* mb        = (minblep*) u->data;
+	minblep* mb        = (minblep*) u.data;
 	double   amplitude = 0.0;
 
 	// create waveform
@@ -2844,11 +2847,11 @@ void square_calc(ugen* u)
 	UGEN_OUT(u, 0, amplitude);
 }
 
-void syncsaw_calc(ugen* u)
+void syncsaw_calc(ugen u)
 {
 	double   freq      = UGEN_IN(u, 0) * RECIP_SAMPLE_RATE;
 	double   sync      = UGEN_IN(u, 1);
-	minblep* mb        = (minblep*) u->data;
+	minblep* mb        = (minblep*) u.data;
 	double   amplitude = 0.0;
 
 	// create waveform
@@ -2883,12 +2886,12 @@ void syncsaw_calc(ugen* u)
 	UGEN_OUT(u, 0, amplitude);
 }
 
-void syncsquare_calc(ugen* u)
+void syncsquare_calc(ugen u)
 {
 	double   freq      = UGEN_IN(u, 0) * RECIP_SAMPLE_RATE;
 	double   pwm       = CLAMP(UGEN_IN(u, 1),0,1) * 0.5;
 	double   sync      = UGEN_IN(u, 2);
-	minblep* mb        = (minblep*) u->data;
+	minblep* mb        = (minblep*) u.data;
 	double   amplitude = 0.0;
 
 	// create waveform
@@ -2931,13 +2934,13 @@ void syncsquare_calc(ugen* u)
 	UGEN_OUT(u, 0, amplitude);
 }
 
-void syncosc_calc(ugen* u)
+void syncosc_calc(ugen u)
 {
 	double   slaveFreq  = UGEN_IN(u,0);
 	int      slaveWave  = (int)UGEN_IN(u,1);
 	double   pwm        = CLAMP(UGEN_IN(u, 2),0,1) * 0.5;
 	double   masterFreq = UGEN_IN(u,3);
-	minblep* mb         = (minblep*) u->data;
+	minblep* mb         = (minblep*) u.data;
 	double   y          = 0.0;
 	double   freqN      = slaveFreq * RECIP_SAMPLE_RATE;
 
@@ -3028,15 +3031,15 @@ void rand_deconstructor(ugen* u)
 	free(u->data);
 }
 
-void rand_calc(ugen* u)
+void rand_calc(ugen u)
 {
-	UGEN_OUT(u,0,(*(rand_t*) u->data).value0);
+	UGEN_OUT(u,0,(*(rand_t*) u.data).value0);
 }
 
-void lfnoiseN_calc(ugen* u)
+void lfnoiseN_calc(ugen u)
 {
 	double  freq  = UGEN_IN(u,0);
-	rand_t* rand  = (rand_t*) u->data;
+	rand_t* rand  = (rand_t*) u.data;
 
 	if(rand->phase + RECIP_SAMPLE_RATE * freq >= 1.0)
 	{
@@ -3053,10 +3056,10 @@ void lfnoiseN_calc(ugen* u)
 	UGEN_OUT(u, 0, amp);
 }
 
-void lfnoiseL_calc(ugen* u)
+void lfnoiseL_calc(ugen u)
 {
 	double  freq  = UGEN_IN(u,0);
-	rand_t* rand  = (rand_t*) u->data;
+	rand_t* rand  = (rand_t*) u.data;
 
 	if(rand->phase + RECIP_SAMPLE_RATE * freq >= 1.0)
 	{
@@ -3074,10 +3077,10 @@ void lfnoiseL_calc(ugen* u)
 	UGEN_OUT(u, 0, amp);
 }
 
-void lfnoiseC_calc(ugen* u)
+void lfnoiseC_calc(ugen u)
 {
 	double  freq  = UGEN_IN(u,0);
-	rand_t* rand  = (rand_t*) u->data;
+	rand_t* rand  = (rand_t*) u.data;
 
 	if(rand->phase + RECIP_SAMPLE_RATE * freq >= 1.0)
 	{
@@ -3097,7 +3100,7 @@ void lfnoiseC_calc(ugen* u)
 	UGEN_OUT(u, 0, amp);
 }
 
-void range_calc(ugen* u)
+void range_calc(ugen u)
 {
 	double min   = UGEN_IN(u,0);
 	double range = UGEN_IN(u,1) - min;
@@ -3107,7 +3110,7 @@ void range_calc(ugen* u)
 	UGEN_OUT(u, 0, amp);
 }
 
-void exprange_calc(ugen* u)
+void exprange_calc(ugen u)
 {
 	double min   = UGEN_IN(u,0);
 	double range = UGEN_IN(u,1) - min;
@@ -3158,17 +3161,17 @@ void urand_deconstructor(ugen* u)
 	free(u->data);
 }
 
-void urand_calc(ugen* u)
+void urand_calc(ugen u)
 {
-	rand_t* rand = (rand_t*) u->data;
+	rand_t* rand = (rand_t*) u.data;
 	UGEN_OUT(u,0,rand->value0);
 }
 
-void impulse_calc(ugen* u)
+void impulse_calc(ugen u)
 {
 	double freqN  = UGEN_IN(u,0) * RECIP_SAMPLE_RATE;
 	double offset = UGEN_IN(u,1);
-	double phase  = *((double*) u->data);
+	double phase  = *((double*) u.data);
 	double y      = 0;
 
 	if(phase + freqN >= 1)
@@ -3176,7 +3179,7 @@ void impulse_calc(ugen* u)
 		y = 1;
 	}
 
-	(*(double*)u->data) = fmod(phase + freqN,1);
+	(*(double*)u.data) = fmod(phase + freqN,1);
 
 	UGEN_OUT(u,0,y);
 }
@@ -3200,9 +3203,9 @@ void dust_deconstructor(ugen* u)
 	free(u->data);
 }
 
-void dust_calc(ugen* u)
+void dust_calc(ugen u)
 {
-	dust_t* dust   = (dust_t*)u->data;
+	dust_t* dust   = (dust_t*)u.data;
 	double density = UGEN_IN(u,0);
 	double y       = 0;
 
@@ -3223,9 +3226,9 @@ void dust_calc(ugen* u)
 	UGEN_OUT(u,0,y);
 }
 
-void dust2_calc(ugen* u)
+void dust2_calc(ugen u)
 {
-	dust_t* dust   = (dust_t*)u->data;
+	dust_t* dust   = (dust_t*)u.data;
 	double density = UGEN_IN(u,0);
 	double y       = 0;
 
@@ -3275,13 +3278,13 @@ void biquad_deconstructor(ugen* u)
 
 #define BIQUAD(B0,B1,B2,A0,A1,A2,X,X1,X2,Y1,Y2) ( (B0/A0)*X + (B1/A0)*X1 + (B2/A0)*X2 - (A1/A0)*Y1 - (A2/A0)*Y2 )
 
-void lpf_calc(ugen* u)
+void lpf_calc(ugen u)
 {
 	double freq  = UGEN_IN(u,0);
 	double q     = MAX(UGEN_IN(u,1),0.00000001);
 	double in    = UGEN_IN(u,2);
 
-	biquad_t bi = *((biquad_t*) u->data);
+	biquad_t bi = *((biquad_t*) u.data);
 
 	double omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
 	double cs    = cos(omega);
@@ -3302,26 +3305,26 @@ void lpf_calc(ugen* u)
 	bi.x2 = bi.x1;
 	bi.x1 = in;
 
-	*((biquad_t*) u->data) = bi;
+	*((biquad_t*) u.data) = bi;
 	UGEN_OUT(u,0,out);
 }
 
-void hpf_calc(ugen* u)
+void hpf_calc(ugen u)
 {
 	double freq  = UGEN_IN(u,0);
 	double q     = MAX(UGEN_IN(u,1),0.00000001);
 	double in    = UGEN_IN(u,2);
 
-	biquad_t* bi = (biquad_t*) u->data;
+	biquad_t* bi = (biquad_t*) u.data;
 
-	double omega = 2 * M_PI * freq * RECIP_SAMPLE_RATE;
+	double omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
 	double cs    = cos(omega);
     double sn    = sin(omega);
 	double alpha = sn * sinh(1 / (2 * q));
 
-	double b0    = (1 + cs)/2;
+	double b0    = (1 + cs) * 0.5;
     double b1    = -1 - cs;
-    double b2    = (1 + cs)/2;
+    double b2    = (1 + cs) * 0.5;
     double a0    =  1 + alpha;
     double a1    = -2*cs;
     double a2    =  1 - alpha;
@@ -3336,15 +3339,15 @@ void hpf_calc(ugen* u)
 	UGEN_OUT(u,0,out);
 }
 
-void bpf_calc(ugen* u)
+void bpf_calc(ugen u)
 {
 	double freq  = UGEN_IN(u,0);
 	double q     = MAX(UGEN_IN(u,1),0.00000001);
 	double in    = UGEN_IN(u,2);
 
-	biquad_t* bi = (biquad_t*) u->data;
+	biquad_t* bi = (biquad_t*) u.data;
 
-	double omega = 2 * M_PI * freq * RECIP_SAMPLE_RATE;
+	double omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
 	double cs    = cos(omega);
     double sn    = sin(omega);
 	double alpha = sn * sinh(1 / (2 * q));
@@ -3366,16 +3369,16 @@ void bpf_calc(ugen* u)
 	UGEN_OUT(u,0,out);
 }
 
-void notch_calc(ugen* u)
+void notch_calc(ugen u)
 {
 	double freq  = UGEN_IN(u,0);
 	double gain  = UGEN_IN(u,1);
 	double q     = MAX(UGEN_IN(u,2),0.00000001);
 	double in    = UGEN_IN(u,3);
 
-	biquad_t* bi = (biquad_t*) u->data;
+	biquad_t* bi = (biquad_t*) u.data;
 
-	double omega = 2 * M_PI * freq * RECIP_SAMPLE_RATE;
+	double omega = freq * 2;
 	double cs    = cos(omega);
     double sn    = sin(omega);
 	double alpha = sn * sinh(1 / (2 * q));
@@ -3397,13 +3400,13 @@ void notch_calc(ugen* u)
 	UGEN_OUT(u,0,out);
 }
 
-void allpass_calc(ugen* u)
+void allpass_calc(ugen u)
 {
 	double freq  = UGEN_IN(u,0);
 	double q     = MAX(UGEN_IN(u,1),0.00000001);
 	double in    = UGEN_IN(u,2);
 
-	biquad_t* bi = (biquad_t*) u->data;
+	biquad_t* bi = (biquad_t*) u.data;
 
 	double omega = 2 * M_PI * freq * RECIP_SAMPLE_RATE;
 	double cs    = cos(omega);
@@ -3427,14 +3430,14 @@ void allpass_calc(ugen* u)
 	UGEN_OUT(u,0,out);
 }
 
-void peakEQ_calc(ugen* u)
+void peakEQ_calc(ugen u)
 {
 	double freq  = UGEN_IN(u,0);
 	double gain  = UGEN_IN(u,1);
 	double q     = MAX(UGEN_IN(u,2),0.00000001);
 	double in    = UGEN_IN(u,3);
 
-	biquad_t* bi = (biquad_t*) u->data;
+	biquad_t* bi = (biquad_t*) u.data;
 
 	double a     = pow(10,(gain/40));
 	double omega = 2 * M_PI * freq * RECIP_SAMPLE_RATE;
@@ -3459,17 +3462,17 @@ void peakEQ_calc(ugen* u)
 	UGEN_OUT(u,0,out);
 }
 
-void lowshelf_calc(ugen* u)
+void lowshelf_calc(ugen u)
 {
 	double freq  = UGEN_IN(u,0);
 	double gain  = UGEN_IN(u,1);
 	double slope = UGEN_IN(u,2);
 	double in    = UGEN_IN(u,3);
 
-	biquad_t* bi = (biquad_t*) u->data;
+	biquad_t* bi = (biquad_t*) u.data;
 
 	double a     = pow(10,(gain/40));
-	double omega = 2 * M_PI * freq * RECIP_SAMPLE_RATE;
+	double omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
 	double cs    = cos(omega);
     double sn    = sin(omega);
 	double beta  = sqrt( (pow(a,2) + 1) / slope - pow((a-1),2) );
@@ -3491,17 +3494,17 @@ void lowshelf_calc(ugen* u)
 	UGEN_OUT(u,0,out);
 }
 
-void highshelf_calc(ugen* u)
+void highshelf_calc(ugen u)
 {
 	double freq  = UGEN_IN(u,0);
 	double gain  = UGEN_IN(u,1);
 	double slope = UGEN_IN(u,2);
 	double in    = UGEN_IN(u,3);
 
-	biquad_t* bi = (biquad_t*) u->data;
+	biquad_t* bi = (biquad_t*) u.data;
 
 	double a     = pow(10,(gain/40));
-	double omega = 2 * M_PI * freq * RECIP_SAMPLE_RATE;
+	double omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
 	double cs    = cos(omega);
     double sn    = sin(omega);
 	double beta  = sqrt( (pow(a,2) + 1) / slope - pow((a-1),2) );
@@ -3523,15 +3526,15 @@ void highshelf_calc(ugen* u)
 	UGEN_OUT(u,0,out);
 }
 
-void lag_calc(ugen* u)
+void lag_calc(ugen u)
 {
 	double lagTime = UGEN_IN(u,0);
 	double input   = UGEN_IN(u,1);
-	double z       = *((double*) u->data);
+	double z       = *((double*) u.data);
     double a       = exp((-2 * M_PI) / (lagTime * SAMPLE_RATE));
     double b       = 1.0f - a;
 	z              = (input * b) + (z * a);
-	*((double*) u->data) = z;
+	*((double*) u.data) = z;
 	UGEN_OUT(u,0,z);
 }
 
@@ -3576,11 +3579,11 @@ inline double zERO_DELAY_ONE_POLE(double X,double G,double* SS,int I)
 //Consider different shaping functions
 #define SOFT_CLIP(X,AMOUNT) (atan(X*AMOUNT)/M_PI)
 
-void zeroDelayOnePole_calc(ugen* u)
+void zeroDelayOnePole_calc(ugen u)
 {
 	double freq                = UGEN_IN(u,0);
 	double x                   = UGEN_IN(u,1);
-	zeroDelayFilter_t* zerodft = (zeroDelayFilter_t*)u->data;
+	zeroDelayFilter_t* zerodft = (zeroDelayFilter_t*)u.data;
 
 	double warped              = PREWARP(freq,RECIP_SAMPLE_RATE);
 	double g                   = warped / (warped + 1);
@@ -3591,13 +3594,13 @@ void zeroDelayOnePole_calc(ugen* u)
 
 //Add wave shaper once this is confirmed to work.
 //Consider adding a base level amount of noise (a small amount).
-void zeroDelayLPMS20_calc(ugen* u)
+void zeroDelayLPMS20_calc(ugen u)
 {
 	double freq                = UGEN_IN(u,0);
 	double resonance           = UGEN_IN(u,1);
 	double distortion          = UGEN_IN(u,2);
 	double x                   = UGEN_IN(u,3);
-	zeroDelayFilter_t* zerodft = (zeroDelayFilter_t*)u->data;
+	zeroDelayFilter_t* zerodft = (zeroDelayFilter_t*)u.data;
 
 	double warped              = PREWARP(freq,RECIP_SAMPLE_RATE);
 	double g                   = warped / (warped + 1);
@@ -3620,7 +3623,7 @@ void zeroDelayLPMS20_calc(ugen* u)
 // Distortion
 //============================================
 
-void clip_calc(ugen* u)
+void clip_calc(ugen u)
 {
 	double amount = UGEN_IN(u,0);
 	double x      = UGEN_IN(u,1);
@@ -3628,7 +3631,7 @@ void clip_calc(ugen* u)
 	UGEN_OUT(u,0,y);
 }
 
-void softclip_calc(ugen* u)
+void softclip_calc(ugen u)
 {
 	double amount = UGEN_IN(u,0);
 	double x      = UGEN_IN(u,1);
@@ -3636,7 +3639,7 @@ void softclip_calc(ugen* u)
 	UGEN_OUT(u,0,y);
 }
 
-void poly3_calc(ugen* u)
+void poly3_calc(ugen u)
 {
 	double amount = UGEN_IN(u,0);
 	double x      = UGEN_IN(u,1);
@@ -3644,7 +3647,7 @@ void poly3_calc(ugen* u)
 	UGEN_OUT(u,0,y);
 }
 
-void tanhdist_calc(ugen* u)
+void tanhdist_calc(ugen u)
 {
 	double amount = UGEN_IN(u,0);
 	double x      = UGEN_IN(u,1);
@@ -3652,7 +3655,7 @@ void tanhdist_calc(ugen* u)
 	UGEN_OUT(u,0,y);
 }
 
-void sinDist_calc(ugen* u)
+void sinDist_calc(ugen u)
 {
 	double amount = UGEN_IN(u,0);
 	double x      = UGEN_IN(u,1);
@@ -3660,7 +3663,7 @@ void sinDist_calc(ugen* u)
 	UGEN_OUT(u,0,y);
 }
 
-void wrap_calc(ugen* u)
+void wrap_calc(ugen u)
 {
 	double amount = UGEN_IN(u,0);
 	double x      = UGEN_IN(u,1);
@@ -3670,7 +3673,7 @@ void wrap_calc(ugen* u)
 
 #define ROUND(f) ((float)((f > 0.0) ? floor(f + 0.5) : ceil(f - 0.5)))
 
-void crush_calc(ugen* u)
+void crush_calc(ugen u)
 {
     int    bitDepth = UGEN_IN(u,0);
     double x        = UGEN_IN(u,1);
@@ -3699,9 +3702,9 @@ void decimate_deconstructor(ugen* u)
 	free(u->data);
 }
 
-void decimate_calc(ugen* u)
+void decimate_calc(ugen u)
 {
-    decimate_t* decimate = (decimate_t*) u->data;
+    decimate_t* decimate = (decimate_t*) u.data;
     double      rate     = UGEN_IN(u,0) * RECIP_SAMPLE_RATE;
     double      x        = UGEN_IN(u,1);
     double      y        = 0;
@@ -3817,9 +3820,9 @@ const double fixed_gain = 0.015;
 })
 
 
-void freeverb_calc(ugen* u)
+void freeverb_calc(ugen u)
 {
-	freeverb_data  vdata    = *((freeverb_data*) u->data);
+	freeverb_data  vdata    = *((freeverb_data*) u.data);
 	double         mix      = CLAMP(UGEN_IN(u, 0),0,1);
 	double         roomSize = CLAMP(UGEN_IN(u, 1),0,1);
 	double         damp     = CLAMP(UGEN_IN(u, 2),0,1);
@@ -3843,7 +3846,7 @@ void freeverb_calc(ugen* u)
 
     double         y        = (x * (1 - mix)) + (ap3 * mix * 1.0);
 
-	*((freeverb_data*) u->data) = vdata;
+	*((freeverb_data*) u.data) = vdata;
 	UGEN_OUT(u,0,y);
 }
 
@@ -3872,9 +3875,9 @@ void pluck_deconstructor(ugen* u)
 }
 
 //Jaffe and Smith "Extensions of the Karplus-Strong Plucked-String* Algorithm"
-void pluck_calc(ugen* u)
+void pluck_calc(ugen u)
 {
-	pluck_data* data             = ((pluck_data*) u->data);
+	pluck_data* data             = ((pluck_data*) u.data);
 	uint        write_index      = data->write_index;
 	uint        num_samples_mask = data->buffer->num_samples_mask;
 	double      freq             = MAX(UGEN_IN(u, 0),data->minFreq) * RECIP_SAMPLE_RATE;
@@ -3900,7 +3903,7 @@ void pluck_calc(ugen* u)
 	UGEN_OUT(u, 0, y);
 }
 
-void white_calc(ugen* u)
+void white_calc(ugen u)
 {
 	UGEN_OUT(u, 0, RAND_RANGE(-1,1));
 }

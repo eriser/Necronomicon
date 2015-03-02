@@ -571,7 +571,9 @@ freeSynthDef (SynthDef _ _ csynthDef) = liftIO $ freeCSynthDef csynthDef
 
 type JackTime = CULLong
 type CUGenFunc = FunPtr (Ptr CUGen -> ())
-data CUGen = CUGen CUGenFunc CUGenFunc CUGenFunc (Ptr ()) (Ptr CDouble) (Ptr CUInt) (Ptr CUInt) deriving (Show)
+type CUGenConstructor = FunPtr (Ptr CUGen -> ())
+type CUGenDeconstructor = FunPtr (Ptr CUGen -> ())
+data CUGen = CUGen CUGenFunc CUGenConstructor CUGenDeconstructor (Ptr ()) (Ptr CDouble) (Ptr CUInt) (Ptr CUInt) deriving (Show)
 
 instance Storable CUGen where
     sizeOf _ = sizeOf (undefined :: CDouble) * 7

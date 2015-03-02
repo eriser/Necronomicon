@@ -11,7 +11,7 @@ dup :: UGen -> [UGen]
 dup u = [u, u]
 
 freqSynth :: UGen -> UGen
-freqSynth freq = sin freq |> perc 0.01 0.5 0.1 0 >>> gain 2 >>> out 0
+freqSynth freq = sin freq |> gain (line 0.1) >>> gain 0.2 >>> out 0
 
 bSynth :: UGen
 bSynth = sin 55 |> gain (line 0.1) >>> gain 0.2 >>> out 0
