@@ -599,7 +599,7 @@ instance Storable CUGen where
 data CSynthDef = CSynthDef {
     csynthDefUGenGraph :: Ptr CUGen,
     csynthDefUGenGraphPoolNode :: Ptr (),
-    csynthDefWireBufs :: Ptr CDouble,
+    csynthDefWireBufs :: Ptr (Ptr CDouble),
     csynthDefWiresPoolNode :: Ptr (),
     csynthDefPreviousNode :: Ptr CSynthDef,
     csynthDefNextNode :: Ptr CSynthDef,
@@ -619,7 +619,7 @@ instance Storable CSynthDef where
     peek ptr = do
         ugenGrph <- peekByteOff ptr 0  :: IO (Ptr CUGen)
         grphPlNd <- peekByteOff ptr 8  :: IO (Ptr ())
-        wireBufs <- peekByteOff ptr 16 :: IO (Ptr CDouble)
+        wireBufs <- peekByteOff ptr 16 :: IO (Ptr (Ptr CDouble))
         wirsPlNd <- peekByteOff ptr 24 :: IO (Ptr ())
         prevNode <- peekByteOff ptr 32 :: IO (Ptr CSynthDef)
         nextNode <- peekByteOff ptr 40 :: IO (Ptr CSynthDef)
@@ -660,6 +660,7 @@ foreign import ccall "stop_synth" stopSynthInRtRuntime :: NodeID -> IO ()
 foreign import ccall "get_running" getRtRunning :: IO Int
 foreign import ccall "free_synth_definition" freeCSynthDef :: Ptr CSynthDef -> IO ()
 foreign import ccall "jack_get_time" getJackTime :: IO JackTime
+foreign import ccall "get_block_size" getJackBlockSize :: IO CUInt
 
 nPrint :: (Show a) => a -> Necronomicon ()
 nPrint = liftIO . print
