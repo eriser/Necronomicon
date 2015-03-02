@@ -6,20 +6,21 @@ main :: IO ()
 main = runSignal <| synthDefs *> tempo (pure 150) *> testGUI <|> (sections <&> hyperTerrainSounds)
 
 synthDefs :: Signal ()
-synthDefs = synthDef "triOsc"       triOsc
-         *> synthDef "triOsc32"     triOsc32
-         *> synthDef "triOscEnv"    triOscEnv
-         *> synthDef "b"            bSynth
-         *> synthDef "p"            pSynth
-         *> synthDef "metallic"     metallic
-         *> synthDef "metallic2"    metallic2
-         *> synthDef "metallic3"    metallic3
-         *> synthDef "metallic4"    metallic4
-         *> synthDef "metallic5"    metallic5
-         *> synthDef "shake"        shake
-         *> synthDef "shake2"       shake2
-         *> synthDef "floorPerc"    floorPerc
-         *> synthDef "reverseSwell" reverseSwell
+synthDefs = synthDef "triOsc"        triOsc
+         *> synthDef "triOsc32"      triOsc32
+         *> synthDef "triOscEnv"     triOscEnv
+         *> synthDef "b"             bSynth
+         *> synthDef "p"             pSynth
+         *> synthDef "metallic"      metallic
+         *> synthDef "metallic2"     metallic2
+         *> synthDef "metallic3"     metallic3
+         *> synthDef "metallic4"     metallic4
+         *> synthDef "metallic5"     metallic5
+         *> synthDef "shake"         shake
+         *> synthDef "shake2"        shake2
+         *> synthDef "floorPerc"     floorPerc
+         *> synthDef "reverseSwell"  reverseSwell
+         *> synthDef "reverseSwell2" reverseSwell2
 
 hyperTerrainSounds :: Signal ()
 hyperTerrainSounds = metallicPattern
@@ -277,17 +278,40 @@ metallic5 f = sig + sig2 + sig3 |> filt |> e |> verb |> e2 |> gain 0.25 |> out 0
         e    = perc 0.8 2 1 (-6)
         e2   = env [1,1,0] [3,0.5] 0
 
+fakePan :: UGen -> [UGen] -> [UGen]
+fakePan a [u1,u2] = [(u1+u2) * (1 - a), (u1+u2) * a]
+fakePan a [u]     = [u * (1 - a),  u * a]
+fakePan _ _       = []
+
 reverseSwell :: UGen -> [UGen]
-reverseSwell f = sig |> e |> gain 0.01 |> out 0
+reverseSwell f = sig1 + sig2 + sig3 |> e |> softclip (random |> range 1000 3000) |> filt |> verb |> e |> gain 0.0125 |> fakePan 0.75 |> out 0
     where
-        -- verb n = feedback (\i -> delayN 0.2 0.2 (n + [i,i] * 0.45) + n)
-        e      = env  [0,1,0] [4,4] (0)
-        e2     = env2 [0.25,1,0.25] [4,4] (0)
-        sig    = foldr (+) (osc f) <| replicate 7 (osc f)
-        osc _  = sin [freq f,freq f] |> filt
-            where
-                freq _ = f + (sin (f * (random |> range 1 10)) |> range (f*1) (f*8))
-                filt = lpf ([f * (random |> range 2 12 ),f * (random |> range 2 12)] |> e2) 1
+        verb   = freeverb 0.5 1 1
+        e      = env  [0,1,0] [4,4] (3)
+        e2     = env2 [0.125,1,0.125] [4,4] (3)
+        sig1   = lfpulse [f * (random |> range 0.995 1.005),f * (random |> range 0.995 1.005)] 0 * mod1
+        sig2   = lfsaw [f * (random |> range 0.995 1.005),f * (random |> range 0.995 1.005)] 0 * mod2
+        sig3   = lfpulse [f * (random |> range 0.995 1.005),f * (random |> range 0.995 1.005)] 0 * mod4 * 0.5
+        filt   = lpf  ([f * (random |> range 3 10),       f * (random |> range 3 10)] * mod3 |> e2) 6
+        mod1   = [lfsaw (random |> range 0.5 2.0) 0 |> range 0.1 1,lfsaw (random |> range 0.5 2.0) 0 |> range 0.1 1]
+        mod2   = [lfsaw (random |> range 0.5 2.0) 0 |> range 0.1 1,lfsaw (random |> range 0.5 2.0) 0 |> range 0.1 1]
+        mod3   = [lfsaw (random |> range 0.5 2.0) 0 |> range 0.1 1,lfsaw (random |> range 0.5 2.0) 0 |> range 0.1 1]
+        mod4   = [lfsaw (random |> range 0.5 2.0) 0 |> range 0.1 1,lfsaw (random |> range 0.5 2.0) 0 |> range 0.1 1]
+
+reverseSwell2 :: UGen -> [UGen]
+reverseSwell2 f = sig1 + sig2 + sig3 |> e |> softclip (random |> range 1000 3000) |> filt |> verb |> e |> gain 0.0125 |> fakePan 0.25 |> out 0
+    where
+        verb   = freeverb 0.5 1 1
+        e      = env  [0,1,0] [4,4] (3)
+        e2     = env2 [0.125,1,0.125] [4,4] (3)
+        sig1   = lfpulse [f * (random |> range 0.995 1.005),f * (random |> range 0.995 1.005)] 0 * mod1
+        sig2   = lfsaw [f * (random |> range 0.995 1.005),f * (random |> range 0.995 1.005)] 0 * mod2
+        sig3   = lfpulse [f * (random |> range 0.495 0.505),f * (random |> range 0.495 0.505)] 0 * mod4 * 0.5
+        filt   = lpf  ([f * (random |> range 3 10),       f * (random |> range 3 10)] * mod3 |> e2) 6
+        mod1   = [lfsaw (random |> range 0.5 2.0) 0 |> range 0.1 1,lfsaw (random |> range 0.5 2.0) 0 |> range 0.1 1]
+        mod2   = [lfsaw (random |> range 0.5 2.0) 0 |> range 0.1 1,lfsaw (random |> range 0.5 2.0) 0 |> range 0.1 1]
+        mod3   = [lfsaw (random |> range 0.5 2.0) 0 |> range 0.1 1,lfsaw (random |> range 0.5 2.0) 0 |> range 0.1 1]
+        mod4   = [lfsaw (random |> range 0.5 2.0) 0 |> range 0.1 1,lfsaw (random |> range 0.5 2.0) 0 |> range 0.1 1]
 
 shake :: UGen -> [UGen]
 shake d = sig1 + sig2 |> e |> p 0.75 |> gain 0.015  |> out 0
@@ -328,7 +352,8 @@ metallicPattern =
               <&> shakePattern4
             --   <&> metallicPattern2_2
               <&> floorPattern
-            --   <&> swellPattern
+              <&> swellPattern
+              <&> swellPattern2
 
 -- metallicPattern1 :: Signal ()
 -- metallicPattern1 = playSynthPattern (toggle <| isDown keyD) "metallic" [] (pmap (d2f slendro . (+0)) <| ploop [sec1])
@@ -442,21 +467,52 @@ shakePattern4 :: Signal ()
 shakePattern4 = playSynthPattern (toggle <| isDown keyD) "shake" [] (pmap (* 0.025) <| ploop [sec1])
     where
         sec1 = [lich| _ _ [1 _ 1 1] [1 1]
-                      _ _ [1 _ 1 1] 2 |]
+                      _ _ [1 _ 1 1] 2  |]
 
 floorPattern :: Signal ()
 floorPattern = playSynthPattern (toggle <| isDown keyD) "floorPerc" [] (pmap (* 1) <| ploop [sec1])
     where
         sec1 = [lich| 1 [_ 1] 1 _ |]
 
--- swellPattern :: Signal ()
--- swellPattern = playSynthPattern (toggle <| isDown keyD) "reverseSwell" [] (pmap ((*0.25) . d2f slendro) <| ploop [sec1])
-    -- where
-        -- sec1 = [lich| 1 _ _ _
-                    --   _ _ _ _
-                    --   2 _ _ _
-                    --   _ _ _ _ |]
+swellPattern :: Signal ()
+swellPattern = playSynthPattern (toggle <| isDown keyD) "reverseSwell" [] (pmap ((*1) . d2f slendro) <| ploop [sec1])
+    where
+        sec1 = [lich| 0 _ _ _
+                      _ _ _ _
+                      2 _ _ _
+                      _ _ _ _
+                      1 _ _ _
+                      _ _ _ _
+                      2 _ _ _
+                      _ _ _ _
+                      0 _ _ _
+                      _ _ _ _
+                      2 _ _ _
+                      _ _ _ _
+                      4 _ _ _
+                      _ _ _ _
+                      5 _ _ _
+                      _ _ _ _|]
 
+swellPattern2 :: Signal ()
+swellPattern2 = playSynthPattern (toggle <| isDown keyD) "reverseSwell2" [] (pmap ((*1) . d2f slendro) <| ploop [sec1])
+    where
+        sec1 = [lich| 3 _ _ _
+                      _ _ _ _
+                      4 _ _ _
+                      _ _ _ _
+                      3 _ _ _
+                      _ _ _ _
+                      2 _ _ _
+                      _ _ _ _
+                      3 _ _ _
+                      _ _ _ _
+                      4 _ _ _
+                      _ _ _ _
+                      6 _ _ _
+                      _ _ _ _
+                      7 _ _ _
+                      _ _ _ _ |]
 
 {-
 metallic :: UGen -> [UGen]
