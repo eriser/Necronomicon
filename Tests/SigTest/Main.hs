@@ -243,22 +243,21 @@ metallic3 f = sig + sig2 + sig3 |> e |> softclip 1000 |> filt |> gain 0.1 |> ver
 
 
 metallic4 :: UGen -> [UGen]
-metallic4 f = sig + sig2 + sig3 |> filt |> e |> e2 |> gain 0.25 |> out 0
+metallic4 f = sig + sig2 + sig3 |> e |> softclip 1000 |> filt |> gain 0.1 |> verb |> e |> auxThrough 4 |> gain 1 |> out 0
     where
-        sig  = sin   [f * (random |> range 0.999 1.001),f * (random |> range 0.999 1.001)]      |> gain 0.1 |> auxThrough 3
-        sig2 = pulse [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)] 0.975 |> gain 0.1 |> auxThrough 4
-        sig3 = sin   [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)]      |> gain 0.1 |> auxThrough 2
+        sig    = sin   [f * (random |> range 0.995 1.005  ),f * (random |> range 0.995 1.005)]         |> gain 0.15
+        sig2   = sin   [f * (random |> range 0.495 0.505),f * (random |> range 0.495 0.505)] |> gain 0.15
+        sig3   = sin   [f * (random |> range 0.495 0.505  ),f * (random |> range 0.495 0.505)]         |> gain 0.15
 
-        filt2 = bpf  ([f * (random |> range 6 10 ),f * (random |> range 2 4)]  |> e) 1
-        filt3 = bpf  ([f * (random |> range 12 24),f * (random |> range 3 6)]  |> e) 1
-        -- filt1 = bpf  ([f * (random |> range 24 36),f * (random |> range 9 12)] |> e) 1
-        filt i= filt2 i + filt3 i * 0.5
+        filt1  = lpf  ([f * (random |> range 4  8 ),f * (random |> range 2  4)] |> e2) 6
+        filt2  = lpf  ([f * (random |> range 2  4 ),f * (random |> range 4  8)] |> e2) 6
+        filt3  = lpf  ([f * (random |> range 6  10),f * (random |> range 3  6)] |> e2) 6
+        filt4  = lpf  ([f * (random |> range 12 24),f * (random |> range 6 12)] |> e2) 6
+        filt s = filt1 s + filt2 s + filt3 s + filt4 s
 
-        -- verb = freeverb 0.25 0.5 0.5
-        -- verb n = delayN 0.2 0.2 n + n
-        -- verb n = feedback (\i -> delayN 0.2 0.2 (n + [i,i] * 0.45) + n)
-        e    = perc 0.01 1 1 (-6)
-        e2   = env [1,1,0] [3,0.5] 0
+        e      = perc 0.01 6 1 (-12)
+        e2     = env2 [1,1,0.25,0.25] [0.01,1,5] (-6)
+        verb   = freeverb 0.5 1 1
 
 metallic5 :: UGen -> [UGen]
 metallic5 f = sig + sig2 + sig3 |> filt |> e |> verb |> e2 |> gain 0.25 |> out 0
@@ -322,6 +321,7 @@ metallicPattern =
             --   <&> metallicPattern1_3
             --   <&> metallicPattern2
               metallicPattern3
+              <&> metallicPattern3_2
               <&> shakePattern
               <&> shakePattern2
               <&> shakePattern3
@@ -390,6 +390,27 @@ metallicPattern3 = playSynthPattern (toggle <| isDown keyD) "metallic3" [] (pmap
                       _ _ _ _
                       _ _ _ 0 |]
 
+metallicPattern3_2 :: Signal ()
+metallicPattern3_2 = playSynthPattern (toggle <| isDown keyD) "metallic4" [] (pmap ((*0.25) . d2f slendro) <| ploop [sec1])
+    where
+        sec1 = [lich| _ _ _ _
+                      _ _ _ _
+                      _ _ _ _
+                      _ _ _ 2
+                      _ _ _ _
+                      _ _ _ _
+                      _ _ _ _
+                      _ _ _ 0
+                      _ _ _ _
+                      _ _ _ _
+                      _ _ _ _
+                      _ _ _ 4
+                      _ _ _ _
+                      _ _ _ _
+                      _ _ _ _
+                      _ _ _ 5 |]
+
+
 shakePattern :: Signal ()
 shakePattern = playSynthPattern (toggle <| isDown keyD) "shake" [] (pmap (* 0.035) <| ploop [sec1])
     where
@@ -421,10 +442,7 @@ shakePattern4 :: Signal ()
 shakePattern4 = playSynthPattern (toggle <| isDown keyD) "shake" [] (pmap (* 0.025) <| ploop [sec1])
     where
         sec1 = [lich| _ _ [1 _ 1 1] [1 1]
-                      _ [1 _ 1 1] 2 _
-                      [1 _ 1 1] [1 1] _         [1 _ 1 1]
-                      2          _   [1 _ 1 1] [1 1]
-                      _          [1 _ 1 1]    2        [1 1] |]
+                      _ _ [1 _ 1 1] 2 |]
 
 floorPattern :: Signal ()
 floorPattern = playSynthPattern (toggle <| isDown keyD) "floorPerc" [] (pmap (* 1) <| ploop [sec1])
