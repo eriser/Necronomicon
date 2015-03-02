@@ -239,7 +239,7 @@ metallic3 f = sig + sig2 + sig3 |> e |> softclip 1000 |> filt |> gain 0.1 |> ver
 
         e      = perc 0.01 6 1 (-12)
         e2     = env2 [1,1,0.25,0.25] [0.01,1,5] (-6)
-        verb   = freeverb 0.5 0.5 0.5
+        verb   = freeverb 0.5 1 1
 
 
 metallic4 :: UGen -> [UGen]
