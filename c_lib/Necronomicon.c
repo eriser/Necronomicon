@@ -53,6 +53,7 @@ double sine_table[TABLE_SIZE];
 double SAMPLE_RATE = 44100;
 double RECIP_SAMPLE_RATE = 1.0 / 44100.0;
 double TABLE_MUL_RECIP_SAMPLE_RATE = TABLE_SIZE * (1.0 / 44100.0);
+double TWO_PI_TIMES_RECIP_SAMPLE_RATE;
 
 /////////////////////
 // Hashing
@@ -1304,7 +1305,8 @@ void init_rt_thread()
 	RECIP_SAMPLE_RATE = 1.0 / SAMPLE_RATE;
 	TABLE_MUL_RECIP_SAMPLE_RATE = TABLE_SIZE * RECIP_SAMPLE_RATE;
 	usecs_per_frame = USECS_PER_SECOND / SAMPLE_RATE;
-
+	TWO_PI_TIMES_RECIP_SAMPLE_RATE = TWO_PI * RECIP_SAMPLE_RATE;
+	
 	synth_table = hash_table_new();
 	rt_fifo = new_message_fifo();
 	scheduled_node_list = new_node_list();
@@ -1500,6 +1502,7 @@ int process(jack_nframes_t nframes, void* arg)
 		//puts("b");
 
 		//Hand un-rolled this loop. The non-unrolled version was causing 13% cpu overhead on my machine, this doesn't make a blip...
+
 		out_bus_buffers[0][out_bus_buffer_index]  = _necronomicon_buses[0];
 		out_bus_buffers[1][out_bus_buffer_index]  = _necronomicon_buses[1];
 		out_bus_buffers[2][out_bus_buffer_index]  = _necronomicon_buses[2];
@@ -3281,27 +3284,28 @@ void lpf_calc(ugen* u)
 	double q     = MAX(UGEN_IN(u,1),0.00000001);
 	double in    = UGEN_IN(u,2);
 
-	biquad_t* bi = (biquad_t*) u->data;
+	biquad_t bi = *((biquad_t*) u->data);
 
-	double omega = 2 * M_PI * freq * RECIP_SAMPLE_RATE;
+	double omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
 	double cs    = cos(omega);
     double sn    = sin(omega);
 	double alpha = sn * sinh(1 / (2 * q));
 
-    double b0    = (1 - cs)/2;
+    double b0    = (1 - cs) * 0.5;
     double b1    =  1 - cs;
-    double b2    = (1 - cs)/2;
+    double b2    = (1 - cs) * 0.5;
     double a0    =  1 + alpha;
     double a1    = -2*cs;
     double a2    =  1 - alpha;
 
-	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi->x1,bi->x2,bi->y1,bi->y2);
+	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);
 
-	bi->y2 = bi->y1;
-	bi->y1 = out;
-	bi->x2 = bi->x1;
-	bi->x1 = in;
+	bi.y2 = bi.y1;
+	bi.y1 = out;
+	bi.x2 = bi.x1;
+	bi.x1 = in;
 
+	*((biquad_t*) u->data) = bi;
 	UGEN_OUT(u,0,out);
 }
 
