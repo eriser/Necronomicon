@@ -295,7 +295,7 @@ clipSynthArgs name nodeID args numArgs = if length args > numArgs
 
 processStartSynth :: SynthDef -> [CDouble] -> NodeID -> JackTime -> Necronomicon ()
 processStartSynth (SynthDef name numArgs csynthDef) args nodeID time = clipSynthArgs name nodeID args numArgs >>= \clippedArgs ->
-    nPrint ("~~~~~~~~~~~~~~~~~~~~~~~~~~~PlaySynth: " ++ name ++ "~~~~~~~~~~~~~~~~~~~~~~~~~~~") >> liftIO (withArray clippedArgs (play . fromIntegral $ length clippedArgs))
+    liftIO (withArray clippedArgs (play . fromIntegral $ length clippedArgs))
     where
         play num ptrArgs = playSynthInRtRuntime csynthDef ptrArgs num nodeID time
 
@@ -331,7 +331,7 @@ startNrtRuntime :: Necronomicon ()
 startNrtRuntime = do
     liftIO waitForRTStarted
     vars <- getVars
-    nrtThreadID <- (liftIO $ forkIO (nrtThread vars))
+    nrtThreadID <- (liftIO $ forkOS (nrtThread vars))
     setNrtThreadID nrtThreadID
     where
         nrtThread vars = runNecroState necroWork vars >> return ()

@@ -153,30 +153,30 @@ ugen_graph_pool_node* acquire_ugen_graph(unsigned int num_ugens)
 	unsigned int pool_index = __builtin_ctz(pow_two_num_bytes);
 	ugen_graph_pool_node* ugen_graph = ugen_graph_pools[pool_index];
 
-	printf("acquire_ugen_graph(pooled_ugen_graph = %p, num_ugens = %u, pow_two_num_bytes = %u, pool_index = %u)\n", ugen_graph, num_ugens, pow_two_num_bytes, pool_index);
+	// printf("acquire_ugen_graph(pooled_ugen_graph = %p, num_ugens = %u, pow_two_num_bytes = %u, pool_index = %u)\n", ugen_graph, num_ugens, pow_two_num_bytes, pool_index);
 	if (ugen_graph != NULL)
 	{
-		printf("Reuse UGen Graph :: ");
+		// printf("Reuse UGen Graph :: ");
 		ugen_graph_pools[pool_index] = ugen_graph->next_ugen_graph_pool_node;
 	}
 
 	else
 	{
-		printf("New UGen Graph :: ");
+		// printf("New UGen Graph :: ");
 		ugen_graph = malloc(UGEN_GRAPH_POOL_NODE_SIZE);
 		ugen_graph->ugen_graph = malloc(pow_two_num_bytes);
 		ugen_graph->pool_index = pool_index;
 	}
 
 	ugen_graph->next_ugen_graph_pool_node = NULL;
-	print_ugen_graph_pool_node(ugen_graph);
+	// print_ugen_graph_pool_node(ugen_graph);
 	return ugen_graph;
 }
 
 void release_ugen_graph(ugen_graph_pool_node* ugen_graph)
 {
-	printf("release_ugen_graph() :: ");
-	print_ugen_graph_pool_node(ugen_graph);
+	// printf("release_ugen_graph() :: ");
+	// print_ugen_graph_pool_node(ugen_graph);
 	if (ugen_graph != NULL)
 	{
 		unsigned int pool_index = ugen_graph->pool_index;
@@ -219,30 +219,30 @@ ugen_wires_pool_node* acquire_ugen_wires(unsigned int num_wires)
 	unsigned int pool_index = __builtin_ctz(pow_two_num_bytes);
 	ugen_wires_pool_node* ugen_wires = ugen_wires_pools[pool_index];
 
-	printf("acquire_ugen_wires(pooled_ugen_wires = %p, num_wires = %u, pow_two_num_bytes = %u, pool_index = %u)\n", ugen_wires, num_wires, pow_two_num_bytes, pool_index);
+	// printf("acquire_ugen_wires(pooled_ugen_wires = %p, num_wires = %u, pow_two_num_bytes = %u, pool_index = %u)\n", ugen_wires, num_wires, pow_two_num_bytes, pool_index);
 	if (ugen_wires != NULL)
 	{
-		printf("Reuse Wires :: ");
+		// printf("Reuse Wires :: ");
 		ugen_wires_pools[pool_index] = ugen_wires->next_ugen_wires_pool_node;
 	}
 
 	else
 	{
-		printf("New Wires :: ");
+		// printf("New Wires :: ");
 		ugen_wires = malloc(UGEN_WIRE_POOL_NODE_SIZE);
 		ugen_wires->ugen_wires = malloc(pow_two_num_bytes);
 		ugen_wires->pool_index = pool_index;
 	}
 
 	ugen_wires->next_ugen_wires_pool_node = NULL;
-	print_ugen_wires_pool_node(ugen_wires);
+	// print_ugen_wires_pool_node(ugen_wires);
 	return ugen_wires;
 }
 
 void release_ugen_wires(ugen_wires_pool_node* ugen_wires)
 {
-	printf("release_ugen_wires() :: ");
-	print_ugen_wires_pool_node(ugen_wires);
+	// printf("release_ugen_wires() :: ");
+	// print_ugen_wires_pool_node(ugen_wires);
 	if (ugen_wires != NULL)
 	{
 		unsigned int pool_index = ugen_wires->pool_index;
@@ -295,20 +295,17 @@ sample_buffer* acquire_sample_buffer(unsigned int num_samples)
 	unsigned int pool_index = __builtin_ctz(pow_two_num_samples);
 	sample_buffer* buffer = sample_buffer_pools[pool_index];
 
-	assert(num_samples <= pow_two_num_samples);
-	assert(pool_index < (NUM_SAMPLE_BUFFER_POOLS - 1));
-
-	printf("acquire_sample_buffer(pooled_buffer = %p, num_samples = %u, pow_two_num_samples = %u, pool_index = %u)\n", buffer, num_samples, pow_two_num_samples, pool_index);
+	// printf("acquire_sample_buffer(pooled_buffer = %p, num_samples = %u, pow_two_num_samples = %u, pool_index = %u)\n", buffer, num_samples, pow_two_num_samples, pool_index);
 	if (buffer != NULL)
 	{
-		printf("Reuse buffer :: ");
+		// printf("Reuse buffer :: ");
 		sample_buffer_pools[pool_index] = buffer->next_sample_buffer;
 		memset(buffer->samples, 0, pow_two_num_samples * DOUBLE_SIZE);
 	}
 
 	else
 	{
-		printf("New buffer :: ");
+		// printf("New buffer :: ");
 		buffer = malloc(SAMPLE_BUFFER_SIZE);
 		buffer->samples = calloc(pow_two_num_samples, DOUBLE_SIZE);
 		buffer->pool_index = pool_index;
@@ -317,15 +314,14 @@ sample_buffer* acquire_sample_buffer(unsigned int num_samples)
 	}
 
 	buffer->next_sample_buffer = NULL;
-	print_sample_buffer(buffer);
+	// print_sample_buffer(buffer);
 	return buffer;
 }
 
 void release_sample_buffer(sample_buffer* buffer)
 {
-	printf("release_sample_buffer: ");
-	print_sample_buffer(buffer);
-
+	// printf("release_sample_buffer: ");
+	// print_sample_buffer(buffer);
 	if (buffer != NULL)
 	{
 		unsigned int pool_index = buffer->pool_index;
@@ -436,10 +432,10 @@ void deconstruct_synth(synth_node* synth)
 
 void free_synth(synth_node* synth)
 {
-	puts("||| free_synth ||| ");
-	printf("free_synth -> ");
-	print_node_alive_status(synth);
-	print_node(synth);
+	// puts("||| free_synth ||| ");
+	// printf("free_synth -> ");
+	// print_node_alive_status(synth);
+	// print_node(synth);
 
 	if (synth != NULL)
 	{
@@ -996,10 +992,10 @@ void print_synth_list()
 
 void add_synth(synth_node* node)
 {
-	puts("||| add_synth ||| ");
-	printf("add_synth -> ");
-	print_node_alive_status(node);
-	print_node(node);
+	// puts("||| add_synth ||| ");
+	// printf("add_synth -> ");
+	// print_node_alive_status(node);
+	// print_node(node);
 	if (node != NULL)
 	{
 		node->previous_alive_status = node->alive_status;
@@ -1034,10 +1030,10 @@ void add_synth(synth_node* node)
 
 void remove_synth(synth_node* node)
 {
-	puts("||| remove_synth ||| ");
-	printf("remove_synth -> ");
-	print_node_alive_status(node);
-	print_node(node);
+	// puts("||| remove_synth ||| ");
+	// printf("remove_synth -> ");
+	// print_node_alive_status(node);
+	// print_node(node);
 	if ((node != NULL) && (node->alive_status == NODE_SCHEDULED_FOR_REMOVAL))
 	{
 		if (node->previous_alive_status == NODE_ALIVE)
@@ -1074,10 +1070,10 @@ void add_scheduled_synths()
 	scheduled_list_write_index = scheduled_list_write_index & FIFO_SIZE_MASK;
 	while (scheduled_list_read_index != scheduled_list_write_index)
 	{
-		puts("||| add_scheduled_synths scheduled_list_read_index != scheduled_list_write_index |||");
+		// puts("||| add_scheduled_synths scheduled_list_read_index != scheduled_list_write_index |||");
 		synth_node* node = SCHEDULED_LIST_POP();
 		// Uncomment to print timing information for synths
-		printf("add_synth: time: %llu, current_cycle_usecs: %llu, current_cycle_usecs - time: %llu\n", node->time, current_cycle_usecs, current_cycle_usecs - node->time);
+		// printf("add_synth: time: %llu, current_cycle_usecs: %llu, current_cycle_usecs - time: %llu\n", node->time, current_cycle_usecs, current_cycle_usecs - node->time);
 		add_synth(node);
 		scheduled_list_read_index = scheduled_list_read_index & FIFO_SIZE_MASK;
 		scheduled_list_write_index = scheduled_list_write_index & FIFO_SIZE_MASK;
@@ -1092,7 +1088,7 @@ void remove_scheduled_synths()
 
 	while (removal_fifo_read_index != removal_fifo_write_index)
 	{
-		puts("||| remove_scheduled_synths removal_fifo_read_index != removal_fifo_write_index |||");
+		// puts("||| remove_scheduled_synths removal_fifo_read_index != removal_fifo_write_index |||");
 		synth_node* node = REMOVAL_FIFO_POP();
 		--removal_fifo_size;
 		remove_synth(node);
@@ -1103,10 +1099,10 @@ void remove_scheduled_synths()
 
 void try_schedule_current_synth_for_removal()
 {
-	puts("||| try_schedule_current_synth_for_removal |||");
+	// puts("||| try_schedule_current_synth_for_removal |||");
 	if (_necronomicon_current_node && (removal_fifo_size < REMOVAL_FIFO_SIZE_MASK) && _necronomicon_current_node->alive_status == NODE_ALIVE)
 	{
-		puts("_necronomicon_current_node && (removal_fifo_size < REMOVAL_FIFO_SIZE_MASK) && _necronomicon_current_node->alive_status == NODE_ALIVE");
+		// puts("_necronomicon_current_node && (removal_fifo_size < REMOVAL_FIFO_SIZE_MASK) && _necronomicon_current_node->alive_status == NODE_ALIVE");
 		_necronomicon_current_node->previous_alive_status = _necronomicon_current_node->alive_status;
 		_necronomicon_current_node->alive_status = NODE_SCHEDULED_FOR_REMOVAL;
 		removal_fifo_size = (removal_fifo_size + 1) & REMOVAL_FIFO_SIZE_MASK;
@@ -1118,8 +1114,8 @@ void shutdown_rt_runtime(); // Forward declaration
 
 void handle_rt_message(message msg)
 {
-	printf("handle_rt_message ");
-	print_fifo_message(msg);
+	// printf("handle_rt_message ");
+	// print_fifo_message(msg);
 	switch (msg.type)
 	{
 	case START_SYNTH:
@@ -1163,8 +1159,8 @@ void handle_messages_in_rt_fifo()
 
 void handle_nrt_message(message msg)
 {
-	printf("handle_nrt_message ");
-	print_fifo_message(msg);
+	// printf("handle_nrt_message ");
+	// print_fifo_message(msg);
 	switch (msg.type)
 	{
 	case FREE_SYNTH:
@@ -1197,38 +1193,39 @@ void handle_messages_in_nrt_fifo()
 
 void play_synth(synth_node* synth_definition, double* arguments, unsigned int num_arguments, unsigned int node_id, jack_time_t time)
 {
-	puts("||| play_synth ||| ");
-	if (num_synths < MAX_SYNTHS)
-	{
+	// puts("||| play_synth ||| ");
+	 //printf("(num_synths: %f)", num_synths); 
+	// if (num_synths < MAX_SYNTHS)
+	// {
 		synth_node* synth = new_synth(synth_definition, arguments, num_arguments, node_id, time);
 		++num_synths;
 		hash_table_insert(synth_table, synth);
-        printf("play_synth ");
-		print_node(synth);
+        // printf("play_synth ");
+		// print_node(synth);
 		message msg;
 		msg.arg.node = synth;
 		msg.type = START_SYNTH;
 		RT_FIFO_PUSH(msg);
-	}
+		// }
 
-	else
-	{
-		printf("Unable to play synth because the maximum number of synths (%u) are already playing.\n", MAX_SYNTHS);
-	}
+		//else
+		//{
+		//printf("Unable to play synth because the maximum number of synths (%u) are already playing.\n", MAX_SYNTHS);
+		//}
 }
 
 void stop_synth(unsigned int id)
 {
-	puts("||| stop_synth ||| ");
+	// puts("||| stop_synth ||| ");
 	synth_node* node = hash_table_lookup(synth_table, id);
 	if ((node != NULL) && (node->alive_status == NODE_SPAWNING || node->alive_status == NODE_ALIVE))
 	{
-		printf("stop_synth node id: %u. ", node->key);
-		print_node_alive_status(node);
-		print_node(node);
+		// printf("stop_synth node id: %u. ", node->key);
+		// print_node_alive_status(node);
+		// print_node(node);
 		node->previous_alive_status = node->alive_status;
 		node->alive_status = NODE_SCHEDULED_FOR_REMOVAL;
-		puts("stop_synth DONE ACCESSING NODE MEMEORY");
+		// puts("stop_synth DONE ACCESSING NODE MEMEORY");
 		message msg;
 		msg.arg.node = node;
 		msg.type = STOP_SYNTH;
@@ -1245,11 +1242,11 @@ void stop_synth(unsigned int id)
 // How to handle sample accurate setting? Use FIFO messages?
 void send_set_synth_arg(unsigned int id, double argument, unsigned int arg_index)
 {
-	puts("||| set_synth_arg ||| ");
+	// puts("||| set_synth_arg ||| ");
 	synth_node* synth = hash_table_lookup(synth_table, id);
-	printf("set_synth_arg id: %u ", id);
-	print_node_alive_status(synth);
-	print_node(synth);
+	// printf("set_synth_arg id: %u ", id);
+	// print_node_alive_status(synth);
+	// print_node(synth);
 	if ((synth != NULL) && (synth->alive_status == NODE_SPAWNING || synth->alive_status == NODE_ALIVE))
 	{
 		synth->ugen_wires[arg_index] = argument;
@@ -1264,11 +1261,11 @@ void send_set_synth_arg(unsigned int id, double argument, unsigned int arg_index
 
 void send_set_synth_args(unsigned int id, double* arguments, unsigned int num_arguments)
 {
-	puts("||| set_synth_args ||| ");
+	// puts("||| set_synth_args ||| ");
 	synth_node* synth = hash_table_lookup(synth_table, id);
-	printf("set_synth_args id: %u ", id);
-	print_node_alive_status(synth);
-	print_node(synth);
+	// printf("set_synth_args id: %u ", id);
+	// print_node_alive_status(synth);
+	// print_node(synth);
 	if ((synth != NULL) && (synth->alive_status == NODE_SPAWNING || synth->alive_status == NODE_ALIVE))
 	{
 		memcpy(synth->ugen_wires, arguments, num_arguments * DOUBLE_SIZE);
