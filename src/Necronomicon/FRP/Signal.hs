@@ -375,9 +375,8 @@ runSignal s = initWindow >>= \mw -> case mw of
 
                 _ <- signalLoop update
 
-                -- nscene <- atomically $ readTVar $ sceneVar signalState
-                -- gui    <- atomically $ readTVar $ guiVar   signalState
-
+                nscene <- atomically $ readTVar $ sceneVar signalState
+                gui    <- atomically $ readTVar $ guiVar   signalState
                 case (nscene,gui) of
                     (Change   ns,Change   g) -> renderGraphics window resources ns g
                     (NoChange ns,Change   g) -> renderGraphics window resources ns g

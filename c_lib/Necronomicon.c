@@ -1194,7 +1194,7 @@ void handle_messages_in_nrt_fifo()
 void play_synth(synth_node* synth_definition, double* arguments, unsigned int num_arguments, unsigned int node_id, jack_time_t time)
 {
 	// puts("||| play_synth ||| ");
-	 //printf("(num_synths: %f)", num_synths); 
+	 //printf("(num_synths: %f)", num_synths);
 	// if (num_synths < MAX_SYNTHS)
 	// {
 		synth_node* synth = new_synth(synth_definition, arguments, num_arguments, node_id, time);
@@ -3027,10 +3027,7 @@ void rand_deconstructor(ugen* u)
 
 void rand_calc(ugen* u)
 {
-	rand_t* rand  = (rand_t*) u->data;
-	double  amp   = rand->value0;// * range + min;
-
-	UGEN_OUT(u,0,amp);
+	UGEN_OUT(u,0,(*(rand_t*) u->data).value0);
 }
 
 void lfnoiseN_calc(ugen* u)
