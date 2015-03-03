@@ -44,20 +44,30 @@ section1 = scene [pure cam,oscSig]
         cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
 
 section2 :: Signal ()
-section2 = scene [pure cam,terrainSig]
+section2 = scene [camSig,terrainSig]
     where
         terrainSig     = terrainObject <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time
-        cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
+        -- cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
+        camSig         = cam <~ time * 0.125
+        cam t          = perspCamera pos rot 60 0.1 1000 black [glow]
+            where
+                pos = Vector3 (sin t * 8) (cos (t * 0.75) * 5) (sin (t * 0.333) * 4)
+                rot = inverse <| lookAt (_z_ (* (-3)) <| pos) 0
 
 section3 :: Signal ()
-section3 = scene [pure cam,sphereSig]
+section3 = scene [camSig,sphereSig]
     where
         sphereSig      = sphereObject <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time ~~ latitudes
         latitudes      = playSignalPattern (toggle <| isDown keyS) 36.6 [] <| ploop [ [lich| [36 10] [24 12] [32 37] [30 33 34 35] |] ]
-        cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
+        camSig         = cam <~ time * 0.05
+        cam t          = perspCamera pos rot 60 0.1 1000 black [glow]
+            where
+                pos = Vector3 (cos (t * 0.7453) * 5) (sin (t * 0.912) * 8) (sin (t * 0.4543) * 4)
+                rot = inverse <| lookAt (_z_ (* (-2.5)) <| pos) 0
+
 
 terrainObject :: [Double] -> [Double] -> [Double] -> Double -> SceneObject
-terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 8 (-4)) (fromEuler' (-24) 0 0) (Vector3 0.5 1 0.5) (Model mesh <| vertexColored (RGBA 1 1 1 0.35)) []
+terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 0 (-6)) (fromEuler' 0 0 0) (Vector3 0.5 1 0.5) (Model mesh <| vertexColored (RGBA 1 1 1 0.35)) []
     where
         mesh             = DynamicMesh "simplex" vertices colors uvs indices
         (w,h)            = (64.0,32.0)
@@ -113,7 +123,7 @@ oscillatorObject audioBuffer1 audioBuffer2 audioBuffer3 = SceneObject 0 identity
                 r3  = vtoc (np3 * 0.5 + 0.5) 0.35
 
 sphereObject :: [Double] -> [Double] -> [Double] -> Double -> Double -> SceneObject
-sphereObject as1 as2 as3 t latitudes = SceneObject 0 (fromEuler' 0 (t * 0.5) (t * 0.125)) 5.5 (Model mesh (vertexColored <| RGBA 1 1 1 0.25)) []
+sphereObject as1 as2 as3 t latitudes = SceneObject 0 (fromEuler' 0 (t * 0.1765) (t * 0.0825)) 5.5 (Model mesh (vertexColored <| RGBA 1 1 1 0.25)) []
     where
         colorRange     = (+0.5) . (*0.5)
         toRadians      = (* 0.0174532925)

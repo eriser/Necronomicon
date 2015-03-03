@@ -23,7 +23,8 @@ module Necronomicon.Linear.Quaternion (Quaternion(Quaternion,qw,qv),
                                        fromAA',
                                        slerp,
                                        identity,
-                                       zeroQuat) where
+                                       zeroQuat,
+                                       lookAt) where
 
 import Necronomicon.Linear.Math
 import Necronomicon.Linear.Vector
@@ -213,3 +214,14 @@ identity = Quaternion 1 (Vector3 0 0 0)
 
 zeroQuat :: Quaternion
 zeroQuat = Quaternion 0 (Vector3 0 0 0)
+
+lookAt :: Vector3 -> Vector3 -> Quaternion
+lookAt source destination
+    | abs (dotProduct - (-1)) < 0.00001 = Quaternion pi up
+    | abs (dotProduct - (1) ) < 0.00001 = identity
+    | otherwise                         = fromAxisAngle' rotAxis rotAngle
+    where
+        forwardVector = normalize $ destination - source
+        dotProduct    = dot forward forwardVector
+        rotAngle      = acos dotProduct
+        rotAxis       = normalize $ cross forward forwardVector

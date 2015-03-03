@@ -1337,10 +1337,8 @@ void init_rt_thread()
 	removal_fifo = new_removal_fifo();
 
 	last_audio_bus_index = num_audio_buses - 1;
-	printf("DOUBLE_SIZE! %u, BLOCK_SIZE! %u", BLOCK_SIZE, DOUBLE_SIZE);
 	num_audio_buses_bytes = num_audio_buses * BLOCK_SIZE * DOUBLE_SIZE;
 	_necronomicon_buses = malloc(num_audio_buses_bytes);
-	
 	clear_necronomicon_buses();
 
 	sample_buffer_pools = (sample_buffer**) calloc(sizeof(sample_buffer*), NUM_SAMPLE_BUFFER_POOLS);
@@ -1706,8 +1704,14 @@ void div_calc(ugen u)
 	double* in1 = UGEN_INPUT_BUFFER(u, 1);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 
+	double denominator;
+
 	AUDIO_LOOP(
-		UGEN_OUT(u, out, UGEN_IN(u, in0) / UGEN_IN(u, in1));
+		denominator = UGEN_IN(u, in1);
+		if(denominator == 0)
+			UGEN_OUT(u, out, 0);
+		else
+			UGEN_OUT(u, out, UGEN_IN(u, in0) / denominator);
 	);
 }
 
@@ -3607,7 +3611,7 @@ void lpf_calc(ugen u)
     double*  in1  = UGEN_INPUT_BUFFER(u, 1);
     double*  in2  = UGEN_INPUT_BUFFER(u, 2);
 	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
-	biquad_t bi = *((biquad_t*) u.data);
+	biquad_t bi   = *((biquad_t*) u.data);
 
 	double freq;
 	double q;
@@ -3645,7 +3649,7 @@ void lpf_calc(ugen u)
     	a1    = -2*cs;
     	a2    =  1 - alpha;
 
-		y   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);
+		y     = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);
 
 		bi.y2 = bi.y1;
 		bi.y1 = y;
@@ -3664,7 +3668,7 @@ void hpf_calc(ugen u)
     double*  in1  = UGEN_INPUT_BUFFER(u, 1);
     double*  in2  = UGEN_INPUT_BUFFER(u, 2);
 	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
-	biquad_t bi = *((biquad_t*) u.data);
+	biquad_t bi   = *((biquad_t*) u.data);
 
 	double freq;
 	double q;
@@ -3702,7 +3706,7 @@ void hpf_calc(ugen u)
 	    a1    = -2*cs;
 	    a2    =  1 - alpha;
 
-		y   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);
+		y     = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);
 
 		bi.y2 = bi.y1;
 		bi.y1 = y;
@@ -3721,7 +3725,7 @@ void bpf_calc(ugen u)
     double*  in1  = UGEN_INPUT_BUFFER(u, 1);
     double*  in2  = UGEN_INPUT_BUFFER(u, 2);
 	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
-	biquad_t bi = *((biquad_t*) u.data);
+	biquad_t bi   = *((biquad_t*) u.data);
 
 	double freq;
 	double q;
@@ -3758,7 +3762,7 @@ void bpf_calc(ugen u)
 	    a1    = -2*cs;
 	    a2    =  1 - alpha;
 
-		y   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);
+		y     = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);
 
 		bi.y2 = bi.y1;
 		bi.y1 = y;
@@ -3778,7 +3782,7 @@ void notch_calc(ugen u)
     double*  in2  = UGEN_INPUT_BUFFER(u, 2);
     double*  in3  = UGEN_INPUT_BUFFER(u, 3);
 	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
-	biquad_t bi = *((biquad_t*) u.data);
+	biquad_t bi   = *((biquad_t*) u.data);
 
 	double freq;
 	double gain;
@@ -3817,7 +3821,7 @@ void notch_calc(ugen u)
 	    a1    = -2*cs;
 	    a2    =  1 - alpha;
 
-		y   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);
+		y     = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);
 
 		bi.y2 = bi.y1;
 		bi.y1 = y;
@@ -3836,7 +3840,7 @@ void allpass_calc(ugen u)
     double*  in1  = UGEN_INPUT_BUFFER(u, 1);
     double*  in2  = UGEN_INPUT_BUFFER(u, 2);
 	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
-	biquad_t bi = *((biquad_t*) u.data);
+	biquad_t bi   = *((biquad_t*) u.data);
 
 	double freq;
 	double q;
@@ -3893,7 +3897,7 @@ void peakEQ_calc(ugen u)
     double*  in2  = UGEN_INPUT_BUFFER(u, 2);
     double*  in3  = UGEN_INPUT_BUFFER(u, 3);
 	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
-	biquad_t bi = *((biquad_t*) u.data);
+	biquad_t bi   = *((biquad_t*) u.data);
 
 	double freq;
 	double gain;
@@ -3954,7 +3958,7 @@ void lowshelf_calc(ugen u)
     double*  in2  = UGEN_INPUT_BUFFER(u, 2);
     double*  in3  = UGEN_INPUT_BUFFER(u, 3);
 	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
-	biquad_t bi = *((biquad_t*) u.data);
+	biquad_t bi   = *((biquad_t*) u.data);
 
 	double freq;
 	double gain;
@@ -4015,7 +4019,7 @@ void highshelf_calc(ugen u)
     double*  in2  = UGEN_INPUT_BUFFER(u, 2);
     double*  in3  = UGEN_INPUT_BUFFER(u, 3);
 	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
-	biquad_t bi = *((biquad_t*) u.data);
+	biquad_t bi   = *((biquad_t*) u.data);
 
 	double freq;
 	double gain;
