@@ -78,7 +78,7 @@ const unsigned long SEED = 0x811C9DC5; // 2166136261
 // Global Mutables
 /////////////////////
 
-double** _necronomicon_buses = NULL;
+double* _necronomicon_buses = NULL;
 unsigned int num_audio_buses = 256;
 unsigned int last_audio_bus_index = 255;
 unsigned int num_audio_buses_bytes;
@@ -191,7 +191,7 @@ struct ugen_wires_pool_node;
 typedef struct ugen_wires_pool_node ugen_wires_pool_node;
 struct ugen_wires_pool_node
 {
-	double** ugen_wires;
+	double* ugen_wires;
 	ugen_wires_pool_node* next_ugen_wires_pool_node;
 	unsigned int pool_index;
 };
@@ -354,7 +354,7 @@ struct synth_node
 {
 	ugen* ugen_graph; // UGen Graph
 	ugen_graph_pool_node* ugen_graph_node; // ugen graph pool node, used to release the ugen graph memory during deconstruction
-	double** ugen_wires; // UGen output wire buffers
+	double* ugen_wires; // UGen output wire buffers
 	ugen_wires_pool_node* ugen_wires_node; // ugen wires pool node, used to release the ugen wire memory during reconstruction
 	synth_node* previous; // Previous node, used in synth_list for the scheduler
 	synth_node* next; // Next node, used in the synth_list for the scheduler
@@ -524,11 +524,16 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 	synth->ugen_wires = synth->ugen_wires_node->ugen_wires;
 	memcpy(synth->ugen_wires, synth_definition->ugen_wires, size_wires);
 
-	double** ugen_wires = synth->ugen_wires;
+	double* ugen_wires = synth->ugen_wires;
 	for (i = 0; i < num_arguments; ++i)
-	{
-		memset(ugen_wires[i], arguments[i], BLOCK_SIZE * DOUBLE_SIZE);
-	}
+    {
+		double* wire_buffer = ugen_wires + (i * BLOCK_SIZE);
+        unsigned j;
+        for (j = 0; j < BLOCK_SIZE; ++j)
+        {
+            wire_buffer[j] = arguments[i];
+        }
+    }
 
 	return synth;
 }
@@ -549,8 +554,8 @@ void process_synth(synth_node* synth)
 	}
 }
 
-#define UGEN_INPUT_BUFFER(ugen, index) _necronomicon_current_node_object.ugen_wires[ugen.inputs[index]]
-#define UGEN_OUTPUT_BUFFER(ugen, index) _necronomicon_current_node_object.ugen_wires[ugen.outputs[index]]
+#define UGEN_INPUT_BUFFER(ugen, index) (_necronomicon_current_node_object.ugen_wires + (ugen.inputs[index] * BLOCK_SIZE))
+#define UGEN_OUTPUT_BUFFER(ugen, index) (_necronomicon_current_node_object.ugen_wires + (ugen.outputs[index] * BLOCK_SIZE))
 
 #define AUDIO_LOOP(func)										  \
 for (_block_frame = 0; _block_frame < BLOCK_SIZE; ++_block_frame) \
@@ -969,11 +974,7 @@ bool necronomicon_running = false;
 
 void clear_necronomicon_buses()
 {
-	unsigned int i;
-	for (i = 0; i < num_audio_buses; ++i)
-	{
-		memset(_necronomicon_buses[i], 0, BLOCK_SIZE * DOUBLE_SIZE);
-	}
+	memset(_necronomicon_buses, 0, num_audio_buses_bytes);
 }
 
 int get_running()
@@ -1258,9 +1259,12 @@ void send_set_synth_arg(unsigned int id, double argument, unsigned int arg_index
 	// print_node(synth);
 	if ((synth != NULL) && (synth->alive_status == NODE_SPAWNING || synth->alive_status == NODE_ALIVE))
 	{
-		// Need to find a better way to handle constants and arguments than duplicating across frame buffers
-		memset(synth->ugen_wires[arg_index], argument, BLOCK_SIZE * DOUBLE_SIZE);
-		// synth->ugen_wires[arg_index] = argument;
+		double* ugen_wires = synth->ugen_wires + (arg_index * BLOCK_SIZE);
+		unsigned j;
+		for (j = 0; j < BLOCK_SIZE; ++j)
+		{
+			ugen_wires[j] = argument;
+		}
 	}
 
 	else
@@ -1279,15 +1283,17 @@ void send_set_synth_args(unsigned int id, double* arguments, unsigned int num_ar
 	// print_node(synth);
 	if ((synth != NULL) && (synth->alive_status == NODE_SPAWNING || synth->alive_status == NODE_ALIVE))
 	{
-		double** ugen_wires = synth->ugen_wires;
+		double* ugen_wires = synth->ugen_wires;
 		unsigned int i;
-		for(i = 0; i < num_arguments; ++i)
+		for (i = 0; i < num_arguments; ++i)
 		{
-			// Need to find a better way to handle constants and arguments than duplicating across frame buffers
-			memset(ugen_wires[i], arguments[i], BLOCK_SIZE * DOUBLE_SIZE);
+			double* wire_buffer = ugen_wires + (i * BLOCK_SIZE);
+			unsigned j;
+			for (j = 0; j < BLOCK_SIZE; ++j)
+			{
+				wire_buffer[j] = arguments[i];
+			}
 		}
-
-		// memcpy(synth->ugen_wires, arguments, num_arguments * DOUBLE_SIZE);
 	}
 
 	else
@@ -1331,14 +1337,9 @@ void init_rt_thread()
 	removal_fifo = new_removal_fifo();
 
 	last_audio_bus_index = num_audio_buses - 1;
-	num_audio_buses_bytes = num_audio_buses * sizeof(double*);
+	printf("DOUBLE_SIZE! %u, BLOCK_SIZE! %u", BLOCK_SIZE, DOUBLE_SIZE);
+	num_audio_buses_bytes = num_audio_buses * BLOCK_SIZE * DOUBLE_SIZE;
 	_necronomicon_buses = malloc(num_audio_buses_bytes);
-
-	unsigned int i;
-	for (i = 0; i < num_audio_buses; ++i)
-	{
-		_necronomicon_buses[i] = (double*) malloc(BLOCK_SIZE * DOUBLE_SIZE);
-	}
 	
 	clear_necronomicon_buses();
 
@@ -1349,7 +1350,7 @@ void init_rt_thread()
 	initialize_wave_tables();
 	// load_audio_files();
 
-	memset(out_bus_buffers, 0, DOUBLE_SIZE * 16 * 512);
+	// memset(out_bus_buffers, 0, DOUBLE_SIZE * 16 * 512);
 	out_bus_buffer_index = 0;
 
 	_necronomicon_current_node = NULL;
@@ -1505,14 +1506,15 @@ int process(jack_nframes_t nframes, void* arg)
 	// Iterate through the synth_list, processing each synth
 	_necronomicon_current_node = synth_list;
 
+	
 	while (_necronomicon_current_node)
 	{
 		process_synth(_necronomicon_current_node);
 		_necronomicon_current_node = _necronomicon_current_node->next;
 	}
 
-	double* _necronomicon_buses_out0 = _necronomicon_buses[0];
-	double* _necronomicon_buses_out1 = _necronomicon_buses[1];
+	double* _necronomicon_buses_out0 = _necronomicon_buses;
+	double* _necronomicon_buses_out1 = _necronomicon_buses + BLOCK_SIZE;
 	unsigned int i;
 	for (i = 0; i < nframes; ++i)
     {
@@ -1542,7 +1544,7 @@ int process(jack_nframes_t nframes, void* arg)
 	*/
 
 	remove_scheduled_synths(); // Remove any synths that are scheduled for removal and send them to the NRT thread FIFO queue for freeing.
-	current_cycle_usecs = cached_cycle_usecs + (jack_time_t) ((double) i * usecs_per_frame); // update current usecs time every sample
+	current_cycle_usecs = cached_cycle_usecs + (jack_time_t) ((double) nframes * usecs_per_frame); // update current usecs time every sample
 	return 0;
 }
 
@@ -2305,7 +2307,7 @@ void out_calc(ugen u)
 	AUDIO_LOOP(
 		// Constrain bus index to the correct range
 		bus_index = UGEN_IN(u, in0);
-		_necronomicon_buses[bus_index][_block_frame] += UGEN_IN(u, in1);
+		_necronomicon_buses[bus_index * BLOCK_SIZE + _block_frame] += UGEN_IN(u, in1);
 	);
 }
 
@@ -2318,7 +2320,7 @@ void in_calc(ugen u)
 	AUDIO_LOOP(
 		// Constrain bus index to the correct range
 		bus_index = UGEN_IN(u, in0);
-		UGEN_OUT(u, out, _necronomicon_buses[bus_index][_block_frame]);
+		UGEN_OUT(u, out, _necronomicon_buses[bus_index * BLOCK_SIZE + _block_frame]);
 	);
 }
 

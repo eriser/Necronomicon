@@ -599,7 +599,7 @@ instance Storable CUGen where
 data CSynthDef = CSynthDef {
     csynthDefUGenGraph :: Ptr CUGen,
     csynthDefUGenGraphPoolNode :: Ptr (),
-    csynthDefWireBufs :: Ptr (Ptr CDouble),
+    csynthDefWireBufs :: Ptr CDouble,
     csynthDefWiresPoolNode :: Ptr (),
     csynthDefPreviousNode :: Ptr CSynthDef,
     csynthDefNextNode :: Ptr CSynthDef,
@@ -619,7 +619,7 @@ instance Storable CSynthDef where
     peek ptr = do
         ugenGrph <- peekByteOff ptr 0  :: IO (Ptr CUGen)
         grphPlNd <- peekByteOff ptr 8  :: IO (Ptr ())
-        wireBufs <- peekByteOff ptr 16 :: IO (Ptr (Ptr CDouble))
+        wireBufs <- peekByteOff ptr 16 :: IO (Ptr CDouble)
         wirsPlNd <- peekByteOff ptr 24 :: IO (Ptr ())
         prevNode <- peekByteOff ptr 32 :: IO (Ptr CSynthDef)
         nextNode <- peekByteOff ptr 40 :: IO (Ptr CSynthDef)
