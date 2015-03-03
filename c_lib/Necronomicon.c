@@ -2808,7 +2808,7 @@ void test_doubly_linked_list()
 	result; \
 })
 
-
+#define SOFT_CLIP(X,AMOUNT) (atan(X*AMOUNT)/M_PI)
 #define HARD_CLIP(X,AMOUNT) (CLAMP(X*AMOUNT,-1.0,1.0))
 #define POLY3_DIST(X,AMOUNT) (1.5 * X - 0.5 * pow(X,3))
 #define TANH_DIST(X,AMOUNT) (tanh(X*AMOUNT))
@@ -4124,7 +4124,6 @@ inline double zERO_DELAY_ONE_POLE(double X,double G,double* SS,int I)
 }
 
 //Consider different shaping functions
-#define SOFT_CLIP(X,AMOUNT) (atan(X*AMOUNT)/M_PI)
 
 void zeroDelayOnePole_calc(ugen u)
 {
@@ -4173,62 +4172,85 @@ void zeroDelayLPMS20_calc(ugen u)
 
 void clip_calc(ugen u)
 {
-	double amount = UGEN_IN(u,0);
-	double x      = UGEN_IN(u,1);
-	double y      = HARD_CLIP(x,amount);
-	UGEN_OUT(u,0,y);
+	double*  in0 = UGEN_INPUT_BUFFER(u, 0);
+    double*  in1 = UGEN_INPUT_BUFFER(u, 1);
+	double*  out = UGEN_OUTPUT_BUFFER(u, 0);
+
+	AUDIO_LOOP(
+		UGEN_OUT(u,out,HARD_CLIP(UGEN_IN(u,in0),UGEN_IN(u,in1)));
+	);
 }
 
 void softclip_calc(ugen u)
 {
-	double amount = UGEN_IN(u,0);
-	double x      = UGEN_IN(u,1);
-	double y      = SOFT_CLIP(x,amount);
-	UGEN_OUT(u,0,y);
+	double*  in0 = UGEN_INPUT_BUFFER(u, 0);
+    double*  in1 = UGEN_INPUT_BUFFER(u, 1);
+	double*  out = UGEN_OUTPUT_BUFFER(u, 0);
+
+	AUDIO_LOOP(
+		UGEN_OUT(u,out,SOFT_CLIP(UGEN_IN(u,in0),UGEN_IN(u,in0)));
+	);
 }
 
 void poly3_calc(ugen u)
 {
-	double amount = UGEN_IN(u,0);
-	double x      = UGEN_IN(u,1);
-	double y      = POLY3_DIST(x,amount);
-	UGEN_OUT(u,0,y);
+	double*  in0 = UGEN_INPUT_BUFFER(u, 0);
+    double*  in1 = UGEN_INPUT_BUFFER(u, 1);
+	double*  out = UGEN_OUTPUT_BUFFER(u, 0);
+
+	AUDIO_LOOP(
+		UGEN_OUT(u,out,POLY3_DIST(UGEN_IN(u,in0),UGEN_IN(u,in1)));
+	);
 }
 
 void tanhdist_calc(ugen u)
 {
-	double amount = UGEN_IN(u,0);
-	double x      = UGEN_IN(u,1);
-	double y      = TANH_DIST(x,amount);
-	UGEN_OUT(u,0,y);
+	double*  in0 = UGEN_INPUT_BUFFER(u, 0);
+    double*  in1 = UGEN_INPUT_BUFFER(u, 1);
+	double*  out = UGEN_OUTPUT_BUFFER(u, 0);
+
+	AUDIO_LOOP(
+		UGEN_OUT(u,out,TANH_DIST(UGEN_IN(u,in0),UGEN_IN(u,in1)));
+	);
+
 }
 
 void sinDist_calc(ugen u)
 {
-	double amount = UGEN_IN(u,0);
-	double x      = UGEN_IN(u,1);
-	double y      = SIN_DIST(x,amount);
-	UGEN_OUT(u,0,y);
+	double*  in0 = UGEN_INPUT_BUFFER(u, 0);
+    double*  in1 = UGEN_INPUT_BUFFER(u, 1);
+	double*  out = UGEN_OUTPUT_BUFFER(u, 0);
+
+	AUDIO_LOOP(
+		UGEN_OUT(u,out,SIN_DIST(UGEN_IN(u,in0),UGEN_IN(u,in1)));
+	);
 }
 
 void wrap_calc(ugen u)
 {
-	double amount = UGEN_IN(u,0);
-	double x      = UGEN_IN(u,1);
-	double y      = WRAP(x,amount);
-	UGEN_OUT(u,0,y);
+	double*  in0 = UGEN_INPUT_BUFFER(u, 0);
+    double*  in1 = UGEN_INPUT_BUFFER(u, 1);
+	double*  out = UGEN_OUTPUT_BUFFER(u, 0);
+
+	AUDIO_LOOP(
+		UGEN_OUT(u,out,WRAP(UGEN_IN(u,in0),UGEN_IN(u,in1)));
+	);
 }
 
 #define ROUND(f) ((float)((f > 0.0) ? floor(f + 0.5) : ceil(f - 0.5)))
 
 void crush_calc(ugen u)
 {
-    int    bitDepth = UGEN_IN(u,0);
-    double x        = UGEN_IN(u,1);
-    int    max      = pow(2, bitDepth) - 1;
-    double y        = ROUND((x + 1.0) * max) / max - 1.0;
+	double*  in0 = UGEN_INPUT_BUFFER(u, 0);
+    double*  in1 = UGEN_INPUT_BUFFER(u, 1);
+	double*  out = UGEN_OUTPUT_BUFFER(u, 0);
 
-    UGEN_OUT(u,0,y);
+    int max;
+
+	AUDIO_LOOP(
+	    max = pow(2, UGEN_IN(u,in0)) - 1;
+		UGEN_OUT(u,out,ROUND((UGEN_IN(u,in1) + 1.0) * max) / max - 1.0);
+	);
 }
 
 typedef struct
@@ -4252,24 +4274,36 @@ void decimate_deconstructor(ugen* u)
 
 void decimate_calc(ugen u)
 {
-    decimate_t* decimate = (decimate_t*) u.data;
-    double      rate     = UGEN_IN(u,0) * RECIP_SAMPLE_RATE;
-    double      x        = UGEN_IN(u,1);
-    double      y        = 0;
+	double*    in0      = UGEN_INPUT_BUFFER(u, 0);
+    double*    in1      = UGEN_INPUT_BUFFER(u, 1);
+	double*    out      = UGEN_OUTPUT_BUFFER(u, 0);
+    decimate_t decimate = *((decimate_t*) u.data);
 
-    if(decimate->samples + rate >= 1)
-    {
-        decimate->samples = fmod(decimate->samples + rate,1.0);
-        decimate->prev    = x;
-        y                 = x;
-    }
-    else
-    {
-        decimate->samples += rate;
-        y = decimate->prev;
-    }
+	double     rate;
+    double     x;
+    double     y;
 
-    UGEN_OUT(u,0,y);
+	AUDIO_LOOP(
+		rate = UGEN_IN(u,in0) * RECIP_SAMPLE_RATE;
+	    x    = UGEN_IN(u,in1);
+	    y    = 0;
+
+		if(decimate.samples + rate >= 1)
+	    {
+	        decimate.samples = fmod(decimate.samples + rate,1.0);
+	        decimate.prev    = x;
+	        y                = x;
+	    }
+	    else
+	    {
+	        decimate.samples += rate;
+	        y = decimate.prev;
+	    }
+
+		UGEN_OUT(u,out,y);
+	);
+
+	*((decimate_t*) u.data) = decimate;
 }
 
 //======================================
