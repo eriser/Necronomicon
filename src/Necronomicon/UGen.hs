@@ -25,7 +25,7 @@ data UGen = UGenNum Double
           deriving (Typeable)
 
 data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Env Double Double | Env2 Double Double | Out | AuxIn | Poll | LFSaw | LFPulse | Saw | Pulse
-              | SyncSaw | SyncPulse | SyncOsc | Random | NoiseN | NoiseL | NoiseC | URandom | Dust | Dust2 | Impulse | Range | ExpRange
+              | SyncSaw | SyncPulse | SyncOsc | Random | NoiseN | NoiseL | NoiseC | Dust | Dust2 | Impulse | Range | ExpRange
               | LPF | HPF | BPF | Notch | AllPass | PeakEQ | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int
               | LPFMS20 | OnePoleMS20 | Clip | SoftClip | Poly3 | TanHDist | SinDist | Wrap | DelayN Double | DelayL Double | DelayC Double
               | Negate | Crush | Decimate | FreeVerb | Pluck Double | WhiteNoise | Abs | Signum | Pow | Exp | Log | Cos | ASin | ACos
@@ -432,13 +432,6 @@ range low high input = multiChannelExpandUGen Range rangeCalc nullConstructor nu
 foreign import ccall "&exprange_calc" exprangeCalc :: CUGenFunc
 exprange :: UGenType a => a -> a -> a -> a
 exprange low high input = multiChannelExpandUGen ExpRange exprangeCalc nullConstructor nullDeconstructor [low,high,input]
-
-foreign import ccall "&urand_constructor"   urandConstructor   :: CUGenFunc
-foreign import ccall "&urand_deconstructor" urandDeconstructor :: CUGenFunc
-
-foreign import ccall "&urand_calc" urandCalc :: CUGenFunc
-urandom :: UGenType a => a
-urandom = multiChannelExpandUGen URandom urandCalc urandConstructor urandDeconstructor []
 
 --filters
 foreign import ccall "&biquad_constructor"   biquadConstructor   :: CUGenFunc
