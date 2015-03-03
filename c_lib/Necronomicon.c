@@ -1030,13 +1030,14 @@ void add_synth(synth_node* node)
 			NRT_FIFO_PUSH(msg); // Send ugen to NRT thread for freeign
 		}
 
-		else
+		else if (node->alive_status == NODE_ALIVE)
 		{
+			// print_node_alive_status(node);
 			message msg;
-			msg.arg.string = "warning: add_synth() was given a node with alive_status that is not NODE_SPAWNING or NODE_SCHEDULED_FOR_REMOVAL";
+			msg.arg.string = "Warning: add_synth() was given a node that is already playing.";
 			msg.type = PRINT;
 			NRT_FIFO_PUSH(msg);
-		}
+		} // node->alive_status == NODE_SCHEDULED_FOR_FREE || NODE_DEAD means remove_scheduled_synths() handled it before add_synth() could
 	}
 }
 
@@ -1068,8 +1069,9 @@ void remove_synth(synth_node* node)
 
 	else
 	{
+		print_node_alive_status(node);
 		message msg;
-		msg.arg.string = "warning: remove_synth() was given node is null or alive_status is not NODE_SCHEDULED_FOR_REMOVAL";
+		msg.arg.string = "warning: remove_synth() was given a node that is null or alive_status is not NODE_SCHEDULED_FOR_REMOVAL";
 		msg.type = PRINT;
 		NRT_FIFO_PUSH(msg);
 	}
@@ -1204,7 +1206,7 @@ void handle_messages_in_nrt_fifo()
 void play_synth(synth_node* synth_definition, double* arguments, unsigned int num_arguments, unsigned int node_id, jack_time_t time)
 {
 	// puts("||| play_synth ||| ");
-	//printf("(num_synths: %f)", num_synths);
+	// printf("(num_synths: %i)\n", num_synths);
 	if (num_synths < MAX_SYNTHS)
 	{
 		synth_node* synth = new_synth(synth_definition, arguments, num_arguments, node_id, time);
@@ -1496,9 +1498,7 @@ int process(jack_nframes_t nframes, void* arg)
 	jack_default_audio_sample_t* out1 = (jack_default_audio_sample_t*) jack_port_get_buffer(output_port2, nframes);
 
 	handle_messages_in_rt_fifo(); // Handles messages including moving uge_nodes from the RT FIFO queue into the scheduled_synth_list
-
 	clear_necronomicon_buses(); // Zero out the audio buses
-
 	add_scheduled_synths(); // Add any synths that need to start this frame into the current synth_list
 
 	// Iterate through the synth_list, processing each synth
