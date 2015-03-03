@@ -969,7 +969,11 @@ bool necronomicon_running = false;
 
 void clear_necronomicon_buses()
 {
-	memset(_necronomicon_buses, 0, num_audio_buses_bytes);
+	unsigned int i;
+	for (i = 0; i < num_audio_buses; ++i)
+	{
+		memset(_necronomicon_buses[i], 0, BLOCK_SIZE * DOUBLE_SIZE);
+	}
 }
 
 int get_running()
@@ -1327,8 +1331,15 @@ void init_rt_thread()
 	removal_fifo = new_removal_fifo();
 
 	last_audio_bus_index = num_audio_buses - 1;
-	num_audio_buses_bytes = num_audio_buses * BLOCK_SIZE * DOUBLE_SIZE;
+	num_audio_buses_bytes = num_audio_buses * sizeof(double*);
 	_necronomicon_buses = malloc(num_audio_buses_bytes);
+
+	unsigned int i;
+	for (i = 0; i < num_audio_buses; ++i)
+	{
+		_necronomicon_buses[i] = (double*) malloc(BLOCK_SIZE * DOUBLE_SIZE);
+	}
+	
 	clear_necronomicon_buses();
 
 	sample_buffer_pools = (sample_buffer**) calloc(sizeof(sample_buffer*), NUM_SAMPLE_BUFFER_POOLS);
@@ -1488,6 +1499,7 @@ int process(jack_nframes_t nframes, void* arg)
 	handle_messages_in_rt_fifo(); // Handles messages including moving uge_nodes from the RT FIFO queue into the scheduled_synth_list
 
 	clear_necronomicon_buses(); // Zero out the audio buses
+
 	add_scheduled_synths(); // Add any synths that need to start this frame into the current synth_list
 
 	// Iterate through the synth_list, processing each synth
@@ -1531,7 +1543,6 @@ int process(jack_nframes_t nframes, void* arg)
 
 	remove_scheduled_synths(); // Remove any synths that are scheduled for removal and send them to the NRT thread FIFO queue for freeing.
 	current_cycle_usecs = cached_cycle_usecs + (jack_time_t) ((double) i * usecs_per_frame); // update current usecs time every sample
-
 	return 0;
 }
 
