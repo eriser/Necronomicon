@@ -27,7 +27,7 @@ data UGen = UGenNum Double
 data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Env Double Double | Env2 Double Double | Out | AuxIn | Poll | LFSaw | LFPulse | Saw | Pulse
               | SyncSaw | SyncPulse | SyncOsc | Random | NoiseN | NoiseL | NoiseC | Dust | Dust2 | Impulse | Range | ExpRange
               | LPF | HPF | BPF | Notch | AllPass | PeakEQ | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int
-              | LPFMS20 | OnePoleMS20 | Clip | SoftClip | Poly3 | TanHDist | SinDist | Wrap | DelayN Double | DelayL Double | DelayC Double
+              | Clip | SoftClip | Poly3 | TanHDist | SinDist | Wrap | DelayN Double | DelayL Double | DelayC Double
               | Negate | Crush | Decimate | FreeVerb | Pluck Double | WhiteNoise | Abs | Signum | Pow | Exp | Log | Cos | ASin | ACos
               | ATan | LogBase | Sqrt | Tan | SinH | CosH | TanH | ASinH | ATanH | ACosH
               deriving (Show)
@@ -473,16 +473,16 @@ foreign import ccall "&lag_calc" lagCalc :: CUGenFunc
 lag :: UGenType a => a -> a -> a
 lag timeLag input = multiChannelExpandUGen LagCalc lagCalc accumulatorConstructor accumulatorDeconstructor [timeLag,input]
 
-foreign import ccall "&zeroDelayFilter_constructor"   zeroDelayFilterConstructor   :: CUGenFunc
-foreign import ccall "&zeroDelayFilter_deconstructor" zeroDelayFilterDeconstructor :: CUGenFunc
+-- foreign import ccall "&zeroDelayFilter_constructor"   zeroDelayFilterConstructor   :: CUGenFunc
+-- foreign import ccall "&zeroDelayFilter_deconstructor" zeroDelayFilterDeconstructor :: CUGenFunc
 
-foreign import ccall "&zeroDelayOnePole_calc" zeroDelayOnePoleCalc :: CUGenFunc
-onePoleMS20 :: UGenType a => a -> a -> a
-onePoleMS20 freq input = multiChannelExpandUGen OnePoleMS20 zeroDelayOnePoleCalc zeroDelayFilterConstructor zeroDelayFilterDeconstructor [freq,input]
+-- foreign import ccall "&zeroDelayOnePole_calc" zeroDelayOnePoleCalc :: CUGenFunc
+-- onePoleMS20 :: UGenType a => a -> a -> a
+-- onePoleMS20 freq input = multiChannelExpandUGen OnePoleMS20 zeroDelayOnePoleCalc zeroDelayFilterConstructor zeroDelayFilterDeconstructor [freq,input]
 
-foreign import ccall "&zeroDelayLPMS20_calc" zeroDelayLPMS20Calc :: CUGenFunc
-lpfMS20 :: UGenType a => a -> a -> a -> a -> a
-lpfMS20 freq reson dist input = multiChannelExpandUGen LPFMS20 zeroDelayLPMS20Calc zeroDelayFilterConstructor zeroDelayFilterDeconstructor [freq,reson,dist,input]
+-- foreign import ccall "&zeroDelayLPMS20_calc" zeroDelayLPMS20Calc :: CUGenFunc
+-- lpfMS20 :: UGenType a => a -> a -> a -> a -> a
+-- lpfMS20 freq reson dist input = multiChannelExpandUGen LPFMS20 zeroDelayLPMS20Calc zeroDelayFilterConstructor zeroDelayFilterDeconstructor [freq,reson,dist,input]
 
 --Distortions
 foreign import ccall "&clip_calc" clipCalc :: CUGenFunc

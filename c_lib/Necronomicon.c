@@ -3590,264 +3590,501 @@ void biquad_deconstructor(ugen* u)
 
 void lpf_calc(ugen u)
 {
-	double freq  = UGEN_IN(u,0);
-	double q     = MAX(UGEN_IN(u,1),0.00000001);
-	double in    = UGEN_IN(u,2);
-
+	double*  in0  = UGEN_INPUT_BUFFER(u, 0);
+    double*  in1  = UGEN_INPUT_BUFFER(u, 1);
+    double*  in2  = UGEN_INPUT_BUFFER(u, 2);
+	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
 	biquad_t bi = *((biquad_t*) u.data);
 
-	double omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
-	double cs    = cos(omega);
-    double sn    = sin(omega);
-	double alpha = sn * sinh(1 / (2 * q));
+	double freq;
+	double q;
+	double in;
 
-    double b0    = (1 - cs) * 0.5;
-    double b1    =  1 - cs;
-    double b2    = (1 - cs) * 0.5;
-    double a0    =  1 + alpha;
-    double a1    = -2*cs;
-    double a2    =  1 - alpha;
+	double omega;
+	double cs;
+    double sn;
+	double alpha;
 
-	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);
+    double b0;
+    double b1;
+    double b2;
+    double a0;
+    double a1;
+    double a2;
 
-	bi.y2 = bi.y1;
-	bi.y1 = out;
-	bi.x2 = bi.x1;
-	bi.x1 = in;
+	double y;
+
+
+    AUDIO_LOOP(
+		freq  = UGEN_IN(u,in0);
+		q     = MAX(UGEN_IN(u,in1),0.00000001);
+		in    = UGEN_IN(u,in2);
+
+		omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
+		cs    = cos(omega);
+    	sn    = sin(omega);
+		alpha = sn * sinh(1 / (2 * q));
+
+    	b0    = (1 - cs) * 0.5;
+    	b1    =  1 - cs;
+    	b2    = (1 - cs) * 0.5;
+    	a0    =  1 + alpha;
+    	a1    = -2*cs;
+    	a2    =  1 - alpha;
+
+		y   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);
+
+		bi.y2 = bi.y1;
+		bi.y1 = y;
+		bi.x2 = bi.x1;
+		bi.x1 = in;
+
+		UGEN_OUT(u,out,y);
+	);
 
 	*((biquad_t*) u.data) = bi;
-	UGEN_OUT(u,0,out);
 }
 
 void hpf_calc(ugen u)
 {
-	double freq  = UGEN_IN(u,0);
-	double q     = MAX(UGEN_IN(u,1),0.00000001);
-	double in    = UGEN_IN(u,2);
+	double*  in0  = UGEN_INPUT_BUFFER(u, 0);
+    double*  in1  = UGEN_INPUT_BUFFER(u, 1);
+    double*  in2  = UGEN_INPUT_BUFFER(u, 2);
+	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
+	biquad_t bi = *((biquad_t*) u.data);
 
-	biquad_t* bi = (biquad_t*) u.data;
+	double freq;
+	double q;
+	double in;
 
-	double omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
-	double cs    = cos(omega);
-    double sn    = sin(omega);
-	double alpha = sn * sinh(1 / (2 * q));
+	double omega;
+	double cs;
+    double sn;
+	double alpha;
 
-	double b0    = (1 + cs) * 0.5;
-    double b1    = -1 - cs;
-    double b2    = (1 + cs) * 0.5;
-    double a0    =  1 + alpha;
-    double a1    = -2*cs;
-    double a2    =  1 - alpha;
+    double b0;
+    double b1;
+    double b2;
+    double a0;
+    double a1;
+    double a2;
 
-	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi->x1,bi->x2,bi->y1,bi->y2);
+	double y;
 
-	bi->y2 = bi->y1;
-	bi->y1 = out;
-	bi->x2 = bi->x1;
-	bi->x1 = in;
 
-	UGEN_OUT(u,0,out);
+    AUDIO_LOOP(
+		freq  = UGEN_IN(u,in0);
+		q     = MAX(UGEN_IN(u,in1),0.00000001);
+		in    = UGEN_IN(u,in2);
+
+		omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
+		cs    = cos(omega);
+    	sn    = sin(omega);
+		alpha = sn * sinh(1 / (2 * q));
+
+		b0    = (1 + cs) * 0.5;
+	    b1    = -1 - cs;
+	    b2    = (1 + cs) * 0.5;
+	    a0    =  1 + alpha;
+	    a1    = -2*cs;
+	    a2    =  1 - alpha;
+
+		y   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);
+
+		bi.y2 = bi.y1;
+		bi.y1 = y;
+		bi.x2 = bi.x1;
+		bi.x1 = in;
+
+		UGEN_OUT(u,out,y);
+	);
+
+	*((biquad_t*) u.data) = bi;
 }
 
 void bpf_calc(ugen u)
 {
-	double freq  = UGEN_IN(u,0);
-	double q     = MAX(UGEN_IN(u,1),0.00000001);
-	double in    = UGEN_IN(u,2);
+	double*  in0  = UGEN_INPUT_BUFFER(u, 0);
+    double*  in1  = UGEN_INPUT_BUFFER(u, 1);
+    double*  in2  = UGEN_INPUT_BUFFER(u, 2);
+	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
+	biquad_t bi = *((biquad_t*) u.data);
 
-	biquad_t* bi = (biquad_t*) u.data;
+	double freq;
+	double q;
+	double in;
 
-	double omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
-	double cs    = cos(omega);
-    double sn    = sin(omega);
-	double alpha = sn * sinh(1 / (2 * q));
+	double omega;
+	double cs;
+    double sn;
+	double alpha;
 
-	double b0    =  alpha;
-    double b1    =  0;
-    double b2    = -alpha;
-    double a0    =  1 + alpha;
-    double a1    = -2*cs;
-    double a2    =  1 - alpha;
+    double b0;
+    double b1;
+    double b2;
+    double a0;
+    double a1;
+    double a2;
 
-	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi->x1,bi->x2,bi->y1,bi->y2);
+	double y;
 
-	bi->y2 = bi->y1;
-	bi->y1 = out;
-	bi->x2 = bi->x1;
-	bi->x1 = in;
+    AUDIO_LOOP(
+		freq  = UGEN_IN(u,in0);
+		q     = MAX(UGEN_IN(u,in1),0.00000001);
+		in    = UGEN_IN(u,in2);
 
-	UGEN_OUT(u,0,out);
+		omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
+		cs    = cos(omega);
+    	sn    = sin(omega);
+		alpha = sn * sinh(1 / (2 * q));
+
+		b0    =  alpha;
+	    b1    =  0;
+	    b2    = -alpha;
+	    a0    =  1 + alpha;
+	    a1    = -2*cs;
+	    a2    =  1 - alpha;
+
+		y   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);
+
+		bi.y2 = bi.y1;
+		bi.y1 = y;
+		bi.x2 = bi.x1;
+		bi.x1 = in;
+
+		UGEN_OUT(u,out,y);
+	);
+
+	*((biquad_t*) u.data) = bi;
 }
 
 void notch_calc(ugen u)
 {
-	double freq  = UGEN_IN(u,0);
-	double gain  = UGEN_IN(u,1);
-	double q     = MAX(UGEN_IN(u,2),0.00000001);
-	double in    = UGEN_IN(u,3);
+	double*  in0  = UGEN_INPUT_BUFFER(u, 0);
+    double*  in1  = UGEN_INPUT_BUFFER(u, 1);
+    double*  in2  = UGEN_INPUT_BUFFER(u, 2);
+    double*  in3  = UGEN_INPUT_BUFFER(u, 3);
+	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
+	biquad_t bi = *((biquad_t*) u.data);
 
-	biquad_t* bi = (biquad_t*) u.data;
+	double freq;
+	double gain;
+	double q;
+	double in;
 
-	double omega = freq * 2;
-	double cs    = cos(omega);
-    double sn    = sin(omega);
-	double alpha = sn * sinh(1 / (2 * q));
+	double omega;
+	double cs;
+    double sn;
+	double alpha;
 
-	double b0    =  1;
-    double b1    = -2*cs;
-    double b2    =  1;
-    double a0    =  1 + alpha;
-    double a1    = -2*cs;
-    double a2    =  1 - alpha;
+    double b0;
+    double b1;
+    double b2;
+    double a0;
+    double a1;
+    double a2;
 
-	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi->x1,bi->x2,bi->y1,bi->y2);
+	double y;
 
-	bi->y2 = bi->y1;
-	bi->y1 = out;
-	bi->x2 = bi->x1;
-	bi->x1 = in;
+    AUDIO_LOOP(
+		freq  = UGEN_IN(u,in0);
+		gain  = UGEN_IN(u,in1);
+		q     = MAX(UGEN_IN(u,in2),0.00000001);
+		in    = UGEN_IN(u,in3);
 
-	UGEN_OUT(u,0,out);
+		omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
+		cs    = cos(omega);
+    	sn    = sin(omega);
+		alpha = sn * sinh(1 / (2 * q));
+
+		b0    =  1;
+	    b1    = -2*cs;
+	    b2    =  1;
+	    a0    =  1 + alpha;
+	    a1    = -2*cs;
+	    a2    =  1 - alpha;
+
+		y   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);
+
+		bi.y2 = bi.y1;
+		bi.y1 = y;
+		bi.x2 = bi.x1;
+		bi.x1 = in;
+
+		UGEN_OUT(u,out,y);
+	);
+
+	*((biquad_t*) u.data) = bi;
 }
 
 void allpass_calc(ugen u)
 {
-	double freq  = UGEN_IN(u,0);
-	double q     = MAX(UGEN_IN(u,1),0.00000001);
-	double in    = UGEN_IN(u,2);
+	double*  in0  = UGEN_INPUT_BUFFER(u, 0);
+    double*  in1  = UGEN_INPUT_BUFFER(u, 1);
+    double*  in2  = UGEN_INPUT_BUFFER(u, 2);
+	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
+	biquad_t bi = *((biquad_t*) u.data);
 
-	biquad_t* bi = (biquad_t*) u.data;
+	double freq;
+	double q;
+	double in;
 
-	double omega = 2 * M_PI * freq * RECIP_SAMPLE_RATE;
-	double cs    = cos(omega);
-    double sn    = sin(omega);
-	double alpha = sn * sinh(1 / (2 * q));
+	double omega;
+	double cs;
+    double sn;
+	double alpha;
 
-	double b0    =   1 - alpha;
-    double b1    =  -2*cs;
-    double b2    =   1 + alpha;
-    double a0    =   1 + alpha;
-    double a1    =  -2*cs;
-    double a2    =   1 - alpha;
+    double b0;
+    double b1;
+    double b2;
+    double a0;
+    double a1;
+    double a2;
 
-	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi->x1,bi->x2,bi->y1,bi->y2);
+	double y;
 
-	bi->y2 = bi->y1;
-	bi->y1 = out;
-	bi->x2 = bi->x1;
-	bi->x1 = in;
+    AUDIO_LOOP(
+		freq  = UGEN_IN(u,in0);
+		q     = MAX(UGEN_IN(u,in1),0.00000001);
+		in    = UGEN_IN(u,in2);
 
-	UGEN_OUT(u,0,out);
+		omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
+		cs    = cos(omega);
+    	sn    = sin(omega);
+		alpha = sn * sinh(1 / (2 * q));
+
+		b0    =   1 - alpha;
+	    b1    =  -2*cs;
+	    b2    =   1 + alpha;
+	    a0    =   1 + alpha;
+	    a1    =  -2*cs;
+	    a2    =   1 - alpha;
+
+		y     = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);
+
+		bi.y2 = bi.y1;
+		bi.y1 = y;
+		bi.x2 = bi.x1;
+		bi.x1 = in;
+
+		UGEN_OUT(u,out,y);
+	);
+
+	*((biquad_t*) u.data) = bi;
 }
 
 void peakEQ_calc(ugen u)
 {
-	double freq  = UGEN_IN(u,0);
-	double gain  = UGEN_IN(u,1);
-	double q     = MAX(UGEN_IN(u,2),0.00000001);
-	double in    = UGEN_IN(u,3);
+	double*  in0  = UGEN_INPUT_BUFFER(u, 0);
+    double*  in1  = UGEN_INPUT_BUFFER(u, 1);
+    double*  in2  = UGEN_INPUT_BUFFER(u, 2);
+    double*  in3  = UGEN_INPUT_BUFFER(u, 3);
+	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
+	biquad_t bi = *((biquad_t*) u.data);
 
-	biquad_t* bi = (biquad_t*) u.data;
+	double freq;
+	double gain;
+	double q;
+	double in;
 
-	double a     = pow(10,(gain/40));
-	double omega = 2 * M_PI * freq * RECIP_SAMPLE_RATE;
-	double cs    = cos(omega);
-    double sn    = sin(omega);
-	double alpha = sn * sinh(1 / (2 * q));
+	double a;
+	double omega;
+	double cs;
+    double sn;
+	double alpha;
 
-	double b0    =  1 + alpha*a;
-    double b1    = -2*cs;
-    double b2    =  1 - alpha*a;
-    double a0    =  1 + alpha/a;
-    double a1    = -2*cs;
-    double a2    =  1 - alpha/a;
+    double b0;
+    double b1;
+    double b2;
+    double a0;
+    double a1;
+    double a2;
 
-	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi->x1,bi->x2,bi->y1,bi->y2);
+	double y;
 
-	bi->y2 = bi->y1;
-	bi->y1 = out;
-	bi->x2 = bi->x1;
-	bi->x1 = in;
+    AUDIO_LOOP(
+		freq  = UGEN_IN(u,in0);
+		gain  = UGEN_IN(u,in1);
+		q     = MAX(UGEN_IN(u,in2),0.00000001);
+		in    = UGEN_IN(u,in3);
 
-	UGEN_OUT(u,0,out);
+		a     = pow(10,(gain/40));
+		omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
+		cs    = cos(omega);
+    	sn    = sin(omega);
+		alpha = sn * sinh(1 / (2 * q));
+
+		b0    =  1 + alpha*a;
+	    b1    = -2*cs;
+	    b2    =  1 - alpha*a;
+	    a0    =  1 + alpha/a;
+	    a1    = -2*cs;
+	    a2    =  1 - alpha/a;
+
+		y     = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);
+
+		bi.y2 = bi.y1;
+		bi.y1 = y;
+		bi.x2 = bi.x1;
+		bi.x1 = in;
+
+		UGEN_OUT(u,out,y);
+	);
+
+	*((biquad_t*) u.data) = bi;
 }
 
 void lowshelf_calc(ugen u)
 {
-	double freq  = UGEN_IN(u,0);
-	double gain  = UGEN_IN(u,1);
-	double slope = UGEN_IN(u,2);
-	double in    = UGEN_IN(u,3);
+	double*  in0  = UGEN_INPUT_BUFFER(u, 0);
+    double*  in1  = UGEN_INPUT_BUFFER(u, 1);
+    double*  in2  = UGEN_INPUT_BUFFER(u, 2);
+    double*  in3  = UGEN_INPUT_BUFFER(u, 3);
+	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
+	biquad_t bi = *((biquad_t*) u.data);
 
-	biquad_t* bi = (biquad_t*) u.data;
+	double freq;
+	double gain;
+	double slope;
+	double in;
 
-	double a     = pow(10,(gain/40));
-	double omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
-	double cs    = cos(omega);
-    double sn    = sin(omega);
-	double beta  = sqrt( (pow(a,2) + 1) / slope - pow((a-1),2) );
+	double a;
+	double omega;
+	double cs;
+    double sn;
+	double beta;
 
-	double b0    =    a*( (a+1) - (a-1)*cs + beta*sn );
-    double b1    =  2*a*( (a-1) - (a+1)*cs           );
-    double b2    =    a*( (a+1) - (a-1)*cs - beta*sn );
-    double a0    =        (a+1) + (a-1)*cs + beta*sn;
-    double a1    =   -2*( (a-1) + (a+1)*cs           );
-    double a2    =        (a+1) + (a-1)*cs - beta*sn;
+    double b0;
+    double b1;
+    double b2;
+    double a0;
+    double a1;
+    double a2;
 
-	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi->x1,bi->x2,bi->y1,bi->y2);
+	double y;
 
-	bi->y2 = bi->y1;
-	bi->y1 = out;
-	bi->x2 = bi->x1;
-	bi->x1 = in;
+    AUDIO_LOOP(
+		freq  = UGEN_IN(u,in0);
+		gain  = UGEN_IN(u,in1);
+		slope = UGEN_IN(u,in2);
+		in    = UGEN_IN(u,in3);
 
-	UGEN_OUT(u,0,out);
+		a     = pow(10,(gain/40));
+		omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
+		cs    = cos(omega);
+    	sn    = sin(omega);
+		beta  = sqrt( (pow(a,2) + 1) / slope - pow((a-1),2) );
+
+		b0    =    a*( (a+1) - (a-1)*cs + beta*sn );
+		b1    =  2*a*( (a-1) - (a+1)*cs           );
+		b2    =    a*( (a+1) - (a-1)*cs - beta*sn );
+		a0    =        (a+1) + (a-1)*cs + beta*sn;
+		a1    =   -2*( (a-1) + (a+1)*cs           );
+		a2    =        (a+1) + (a-1)*cs - beta*sn;
+
+		y     = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);
+
+		bi.y2 = bi.y1;
+		bi.y1 = y;
+		bi.x2 = bi.x1;
+		bi.x1 = in;
+
+		UGEN_OUT(u,out,y);
+	);
+
+	*((biquad_t*) u.data) = bi;
 }
 
 void highshelf_calc(ugen u)
 {
-	double freq  = UGEN_IN(u,0);
-	double gain  = UGEN_IN(u,1);
-	double slope = UGEN_IN(u,2);
-	double in    = UGEN_IN(u,3);
+	double*  in0  = UGEN_INPUT_BUFFER(u, 0);
+    double*  in1  = UGEN_INPUT_BUFFER(u, 1);
+    double*  in2  = UGEN_INPUT_BUFFER(u, 2);
+    double*  in3  = UGEN_INPUT_BUFFER(u, 3);
+	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
+	biquad_t bi = *((biquad_t*) u.data);
 
-	biquad_t* bi = (biquad_t*) u.data;
+	double freq;
+	double gain;
+	double slope;
+	double in;
 
-	double a     = pow(10,(gain/40));
-	double omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
-	double cs    = cos(omega);
-    double sn    = sin(omega);
-	double beta  = sqrt( (pow(a,2) + 1) / slope - pow((a-1),2) );
+	double a;
+	double omega;
+	double cs;
+    double sn;
+	double beta;
 
-	double b0    =    a*( (a+1) + (a-1)*cs + beta*sn );
-    double b1    = -2*a*( (a-1) + (a+1)*cs           );
-    double b2    =    a*( (a+1) + (a-1)*cs - beta*sn );
-    double a0    =        (a+1) - (a-1)*cs + beta*sn;
-    double a1    =    2*( (a-1) - (a+1)*cs           );
-    double a2    =        (a+1) - (a-1)*cs - beta*sn;
+    double b0;
+    double b1;
+    double b2;
+    double a0;
+    double a1;
+    double a2;
 
-	double out   = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi->x1,bi->x2,bi->y1,bi->y2);
+	double y;
 
-	bi->y2 = bi->y1;
-	bi->y1 = out;
-	bi->x2 = bi->x1;
-	bi->x1 = in;
+    AUDIO_LOOP(
+		freq  = UGEN_IN(u,in0);
+		gain  = UGEN_IN(u,in1);
+		slope = UGEN_IN(u,in2);
+		in    = UGEN_IN(u,in3);
 
-	UGEN_OUT(u,0,out);
+		a     = pow(10,(gain/40));
+		omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
+		cs    = cos(omega);
+    	sn    = sin(omega);
+		beta  = sqrt( (pow(a,2) + 1) / slope - pow((a-1),2) );
+
+		b0    =    a*( (a+1) + (a-1)*cs + beta*sn );
+    	b1    = -2*a*( (a-1) + (a+1)*cs           );
+    	b2    =    a*( (a+1) + (a-1)*cs - beta*sn );
+    	a0    =        (a+1) - (a-1)*cs + beta*sn;
+    	a1    =    2*( (a-1) - (a+1)*cs           );
+    	a2    =        (a+1) - (a-1)*cs - beta*sn;
+
+
+		y     = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);
+
+		bi.y2 = bi.y1;
+		bi.y1 = y;
+		bi.x2 = bi.x1;
+		bi.x1 = in;
+
+		UGEN_OUT(u,out,y);
+	);
+
+	*((biquad_t*) u.data) = bi;
 }
 
 void lag_calc(ugen u)
 {
-	double lagTime = UGEN_IN(u,0);
-	double input   = UGEN_IN(u,1);
-	double z       = *((double*) u.data);
-    double a       = exp((-2 * M_PI) / (lagTime * SAMPLE_RATE));
-    double b       = 1.0f - a;
-	z              = (input * b) + (z * a);
+	double*  in0 = UGEN_INPUT_BUFFER(u, 0);
+    double*  in1 = UGEN_INPUT_BUFFER(u, 1);
+	double*  out = UGEN_OUTPUT_BUFFER(u, 0);
+	double   z   = *((double*) u.data);
+
+	double lagTime;
+	double input;
+    double a;
+    double b;
+
+	AUDIO_LOOP(
+
+		lagTime = UGEN_IN(u,in0);
+		input   = UGEN_IN(u,in1);
+	    a       = exp((-2 * M_PI) / (lagTime * SAMPLE_RATE));
+	    b       = 1.0f - a;
+		z       = (input * b) + (z * a);
+
+		UGEN_OUT(u,out,z);
+	);
+
 	*((double*) u.data) = z;
-	UGEN_OUT(u,0,z);
 }
 
+//REMOVING THESE FOR NOW AS THEY ARE NON-FUNCTIONAL AT THE MOMENT ANYWAYS
+/*
 //=====================
 // Zero delay filters
 //=====================
@@ -3928,6 +4165,7 @@ void zeroDelayLPMS20_calc(ugen u)
 
 	UGEN_OUT(u,0,y);
 }
+*/
 
 //============================================
 // Distortion
