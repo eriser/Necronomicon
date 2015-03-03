@@ -1339,7 +1339,7 @@ void init_rt_thread()
 	{
 		_necronomicon_buses[i] = (double*) malloc(BLOCK_SIZE * DOUBLE_SIZE);
 	}
-	
+
 	clear_necronomicon_buses();
 
 	sample_buffer_pools = (sample_buffer**) calloc(sizeof(sample_buffer*), NUM_SAMPLE_BUFFER_POOLS);
@@ -1704,8 +1704,14 @@ void div_calc(ugen u)
 	double* in1 = UGEN_INPUT_BUFFER(u, 1);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 
+	double denominator;
+
 	AUDIO_LOOP(
-		UGEN_OUT(u, out, UGEN_IN(u, in0) / UGEN_IN(u, in1));
+		denominator = UGEN_IN(u, in1);
+		if(denominator == 0)
+			UGEN_OUT(u, out, 0);
+		else
+			UGEN_OUT(u, out, UGEN_IN(u, in0) / denominator);
 	);
 }
 
