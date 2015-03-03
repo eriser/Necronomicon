@@ -3451,7 +3451,7 @@ void range_calc(ugen u)
 	double   min   = UGEN_IN(u,in0);
 	double   range = UGEN_IN(u,in1) - min;
 
-	printf("range, min: %f, max: %f, range: %f, in: %f, out: %f\n",min,UGEN_IN(u,in1),range,UGEN_IN(u,in2),((CLAMP(UGEN_IN(u,in2),-1,1) * 0.5 + 0.5) * range) + min);
+	// printf("range, min: %f, max: %f, range: %f, in: %f, out: %f\n",min,UGEN_IN(u,in1),range,UGEN_IN(u,in2),((CLAMP(UGEN_IN(u,in2),-1,1) * 0.5 + 0.5) * range) + min);
 
     AUDIO_LOOP(
 		min   = UGEN_IN(u,in0);
