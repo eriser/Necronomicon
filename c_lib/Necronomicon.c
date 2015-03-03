@@ -563,8 +563,8 @@ for (_block_frame = 0; _block_frame < BLOCK_SIZE; ++_block_frame) \
 	func                                                          \
 }                                                                 \
 
-#define UGEN_IN(ugen, wire_frame_buffer) wire_frame_buffer[_block_frame]
-#define UGEN_OUT(ugen, wire_frame_buffer, out_value) wire_frame_buffer[_block_frame] = out_value
+#define UGEN_IN(wire_frame_buffer) wire_frame_buffer[_block_frame]
+#define UGEN_OUT(wire_frame_buffer, out_value) wire_frame_buffer[_block_frame] = out_value
 
 void null_deconstructor(ugen* u) {} // Does nothing
 void null_constructor(ugen* u) { u->data = NULL; }
@@ -1672,7 +1672,7 @@ void add_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
-		UGEN_OUT(u, out, UGEN_IN(u, in0) + UGEN_IN(u, in1));
+		UGEN_OUT(out, UGEN_IN(in0) + UGEN_IN(in1));
 	);
 }
 
@@ -1683,7 +1683,7 @@ void minus_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
-		UGEN_OUT(u, out, UGEN_IN(u, in0) - UGEN_IN(u, in1));
+		UGEN_OUT(out, UGEN_IN(in0) - UGEN_IN(in1));
 	);
 }
 
@@ -1694,7 +1694,7 @@ void mul_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
-		UGEN_OUT(u, out, UGEN_IN(u, in0) * UGEN_IN(u, in1));
+		UGEN_OUT(out, UGEN_IN(in0) * UGEN_IN(in1));
 	);
 }
 
@@ -1707,11 +1707,11 @@ void div_calc(ugen u)
 	double denominator;
 
 	AUDIO_LOOP(
-		denominator = UGEN_IN(u, in1);
+		denominator = UGEN_IN(in1);
 		if(denominator == 0)
-			UGEN_OUT(u, out, 0);
+			UGEN_OUT(out, 0);
 		else
-			UGEN_OUT(u, out, UGEN_IN(u, in0) / denominator);
+			UGEN_OUT(out, UGEN_IN(in0) / denominator);
 	);
 }
 
@@ -1721,7 +1721,7 @@ void abs_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
-		UGEN_OUT(u, out, abs(UGEN_IN(u, in)));
+		UGEN_OUT(out, abs(UGEN_IN(in)));
 	);
 }
 
@@ -1731,7 +1731,7 @@ void signum_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
-		double value = UGEN_IN(u, in);
+		double value = UGEN_IN(in);
 
 		if (value > 0)
 		{
@@ -1743,7 +1743,7 @@ void signum_calc(ugen u)
 			value = -1;
 		}
 
-		UGEN_OUT(u, out, value);
+		UGEN_OUT(out, value);
 	);
 }
 
@@ -1753,7 +1753,7 @@ void negate_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
-		UGEN_OUT(u, out, -(UGEN_IN(u, in)));
+		UGEN_OUT(out, -(UGEN_IN(in)));
 	);
 }
 
@@ -1764,7 +1764,7 @@ void pow_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
-		UGEN_OUT(u, out, pow(UGEN_IN(u, in0), UGEN_IN(u, in1)));
+		UGEN_OUT(out, pow(UGEN_IN(in0), UGEN_IN(in1)));
 	);
 }
 
@@ -1774,7 +1774,7 @@ void exp_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
-		UGEN_OUT(u, out, exp(UGEN_IN(u, in)));
+		UGEN_OUT(out, exp(UGEN_IN(in)));
 	);
 }
 
@@ -1784,7 +1784,7 @@ void log_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
-		UGEN_OUT(u, out, log(UGEN_IN(u, in)));
+		UGEN_OUT(out, log(UGEN_IN(in)));
 	);
 }
 
@@ -1794,7 +1794,7 @@ void cos_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
-		UGEN_OUT(u, out, cos(UGEN_IN(u, in)));
+		UGEN_OUT(out, cos(UGEN_IN(in)));
 	);
 }
 
@@ -1804,7 +1804,7 @@ void asin_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
-		UGEN_OUT(u, out, asin(UGEN_IN(u, in)));
+		UGEN_OUT(out, asin(UGEN_IN(in)));
 	);
 }
 
@@ -1814,7 +1814,7 @@ void acos_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
-		UGEN_OUT(u, out, acos(UGEN_IN(u, in)));
+		UGEN_OUT(out, acos(UGEN_IN(in)));
 	);
 }
 
@@ -1824,7 +1824,7 @@ void atan_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
-		UGEN_OUT(u, out, atan(UGEN_IN(u, in)));
+		UGEN_OUT(out, atan(UGEN_IN(in)));
 	);
 }
 
@@ -1835,7 +1835,7 @@ void logbase_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
-		UGEN_OUT(u, out, log(UGEN_IN(u, in0)) / log(UGEN_IN(u, in1)));
+		UGEN_OUT(out, log(UGEN_IN(in0)) / log(UGEN_IN(in1)));
 	);
 }
 
@@ -1845,7 +1845,7 @@ void sqrt_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
-		UGEN_OUT(u, out, sqrt(UGEN_IN(u, in)));
+		UGEN_OUT(out, sqrt(UGEN_IN(in)));
 	);
 }
 
@@ -1855,7 +1855,7 @@ void tan_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
-		UGEN_OUT(u, out, tan(UGEN_IN(u, in)));
+		UGEN_OUT(out, tan(UGEN_IN(in)));
 	);
 }
 
@@ -1865,7 +1865,7 @@ void sinh_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
-		UGEN_OUT(u, out, sinh(UGEN_IN(u, in)));
+		UGEN_OUT(out, sinh(UGEN_IN(in)));
 	);
 }
 
@@ -1875,7 +1875,7 @@ void cosh_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
-		UGEN_OUT(u, out, cosh(UGEN_IN(u, in)));
+		UGEN_OUT(out, cosh(UGEN_IN(in)));
 	);
 }
 
@@ -1885,7 +1885,7 @@ void tanh_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
-		UGEN_OUT(u, out, tanh(UGEN_IN(u, in)));
+		UGEN_OUT(out, tanh(UGEN_IN(in)));
 	);
 }
 
@@ -1895,7 +1895,7 @@ void asinh_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
-		UGEN_OUT(u, out, asinh(UGEN_IN(u, in)));
+		UGEN_OUT(out, asinh(UGEN_IN(in)));
 	);
 }
 
@@ -1905,7 +1905,7 @@ void atanh_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
-		UGEN_OUT(u, out, atanh(UGEN_IN(u, in)));
+		UGEN_OUT(out, atanh(UGEN_IN(in)));
 	);
 }
 
@@ -1915,7 +1915,7 @@ void acosh_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
-		UGEN_OUT(u, out, acosh(UGEN_IN(u, in)));
+		UGEN_OUT(out, acosh(UGEN_IN(in)));
 	);
 }
 
@@ -1940,7 +1940,7 @@ void line_calc(ugen u)
 	double y;
 
 	AUDIO_LOOP(
-		length = UGEN_IN(u, in0) * SAMPLE_RATE;
+		length = UGEN_IN(in0) * SAMPLE_RATE;
 		if (line_time >= length)
 		{
 			y = 0;
@@ -1953,7 +1953,7 @@ void line_calc(ugen u)
 			++line_time;
 		};
 
-		UGEN_OUT(u, out, y);
+		UGEN_OUT(out, y);
 	);
 
 	*((unsigned int*) u.data) = line_time;
@@ -2049,8 +2049,8 @@ void env_calc(ugen u)
 	double       y          = 0;
 
 	AUDIO_LOOP(
-		curve = UGEN_IN(u, in0);
-		x = UGEN_IN(u, in1);
+		curve = UGEN_IN(in0);
+		x = UGEN_IN(in1);
 		line_timed = (double) data.time * RECIP_SAMPLE_RATE;
 
 		// printf("env---------------------------------------------\n");
@@ -2070,7 +2070,7 @@ void env_calc(ugen u)
 
 			if(data.index < data.numValues)
 			{
-				double nextDuration = UGEN_IN(u, UGEN_INPUT_BUFFER(u, data.index % data.numValues + dursOffset));
+				double nextDuration = UGEN_IN(UGEN_INPUT_BUFFER(u, data.index % data.numValues + dursOffset));
 				// printf("nextDuration: %f\n",nextDuration);
 
 				if(data.nextTotalDuration == -1)
@@ -2082,10 +2082,10 @@ void env_calc(ugen u)
 				data.nextTotalDuration = data.curTotalDuration + nextDuration;
 				// printf("data.nextTotalDuration: %f\n",data.nextTotalDuration);
 
-				data.currentValue = UGEN_IN(u, UGEN_INPUT_BUFFER(u, data.index + valsOffset));
+				data.currentValue = UGEN_IN(UGEN_INPUT_BUFFER(u, data.index + valsOffset));
 				// printf("data.currentValue: %f\n",data.currentValue);
 
-				data.nextValue = UGEN_IN(u, UGEN_INPUT_BUFFER(u, data.index + 1 + valsOffset));
+				data.nextValue = UGEN_IN(UGEN_INPUT_BUFFER(u, data.index + 1 + valsOffset));
 
 				data.recipDuration = 1.0 / nextDuration;
 				// printf("data.recipDuration: %f\n",data.recipDuration);
@@ -2115,7 +2115,7 @@ void env_calc(ugen u)
 			data.time                = data.time + 1;
 		}
 
-		UGEN_OUT(u, out, y);
+		UGEN_OUT(out, y);
 	);
 
 	*((env_struct*) u.data) = data;
@@ -2136,8 +2136,8 @@ void env2_calc(ugen u)
 	double       y          = 0;
 
 	AUDIO_LOOP(
-		curve = UGEN_IN(u, in0);
-		x = UGEN_IN(u, in1);
+		curve = UGEN_IN(in0);
+		x = UGEN_IN(in1);
 		line_timed = (double) data.time * RECIP_SAMPLE_RATE;
 
 		if(line_timed > data.nextTotalDuration)
@@ -2146,12 +2146,12 @@ void env2_calc(ugen u)
 
 			if(data.index < data.numValues)
 			{
-				double nextDuration    = UGEN_IN(u, UGEN_INPUT_BUFFER(u, (data.index % data.numValues) + dursOffset));
+				double nextDuration    = UGEN_IN(UGEN_INPUT_BUFFER(u, (data.index % data.numValues) + dursOffset));
 
 				data.curTotalDuration  = data.nextTotalDuration;
 				data.nextTotalDuration = data.curTotalDuration + nextDuration;
-				data.currentValue      = UGEN_IN(u, UGEN_INPUT_BUFFER(u, data.index + valsOffset));
-				data.nextValue         = UGEN_IN(u, UGEN_INPUT_BUFFER(u, data.index + 1 + valsOffset));
+				data.currentValue      = UGEN_IN(UGEN_INPUT_BUFFER(u, data.index + valsOffset));
+				data.nextValue         = UGEN_IN(UGEN_INPUT_BUFFER(u, data.index + 1 + valsOffset));
 				data.recipDuration     = 1.0 / nextDuration;
 				if(curve < 0)
 					data.curve = 1 / ((curve * -1) + 1);
@@ -2165,7 +2165,7 @@ void env2_calc(ugen u)
 		y                        = ((1-delta) * data.currentValue + delta * data.nextValue) * x;
 		data.time                = data.time + 1;
 
-		UGEN_OUT(u, out, y);
+		UGEN_OUT(out, y);
 	);
 
     *((env_struct*) u.data) = data;
@@ -2277,7 +2277,7 @@ void sin_calc(ugen u)
 	double y;
 
 	AUDIO_LOOP(
-		freq = UGEN_IN(u, in0);
+		freq = UGEN_IN(in0);
 		index1 = phase;
 		index2 = index1 + 1;
 		amp1 = sine_table[index1];
@@ -2285,7 +2285,7 @@ void sin_calc(ugen u)
 		delta = phase - ((long) phase);
 		y = amp1 + delta * (amp2 - amp1);
 
-		UGEN_OUT(u, out, y);
+		UGEN_OUT(out, y);
 		phase += TABLE_MUL_RECIP_SAMPLE_RATE * freq;
 	);
 
@@ -2298,7 +2298,7 @@ void local_out_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
-		UGEN_OUT(u, out, (UGEN_IN(u, in)));
+		UGEN_OUT(out, (UGEN_IN(in)));
 	);
 }
 
@@ -2310,8 +2310,8 @@ void out_calc(ugen u)
 
 	AUDIO_LOOP(
 		// Constrain bus index to the correct range
-		bus_index = UGEN_IN(u, in0);
-		_necronomicon_buses[bus_index * BLOCK_SIZE + _block_frame] += UGEN_IN(u, in1);
+		bus_index = UGEN_IN(in0);
+		_necronomicon_buses[bus_index * BLOCK_SIZE + _block_frame] += UGEN_IN(in1);
 	);
 }
 
@@ -2323,8 +2323,8 @@ void in_calc(ugen u)
 
 	AUDIO_LOOP(
 		// Constrain bus index to the correct range
-		bus_index = UGEN_IN(u, in0);
-		UGEN_OUT(u, out, _necronomicon_buses[bus_index * BLOCK_SIZE + _block_frame]);
+		bus_index = UGEN_IN(in0);
+		UGEN_OUT(out, _necronomicon_buses[bus_index * BLOCK_SIZE + _block_frame]);
 	);
 }
 
@@ -2348,7 +2348,7 @@ void poll_calc(ugen u)
 	AUDIO_LOOP(
 		if (count >= SAMPLE_RATE)
 		{
-			input = UGEN_IN(u, in0);
+			input = UGEN_IN(in0);
 		    msg.arg.number = input;
 			NRT_FIFO_PUSH(msg);
 			count = 0;
@@ -2429,13 +2429,13 @@ void delayN_calc(ugen u)
 	long iread_index;
 
 	AUDIO_LOOP(
-		delay_time = fmin(data.max_delay_time, fmax(1, UGEN_IN(u, in0) * SAMPLE_RATE));
-		x = UGEN_IN(u, in1);
+		delay_time = fmin(data.max_delay_time, fmax(1, UGEN_IN(in0) * SAMPLE_RATE));
+		x = UGEN_IN(in1);
 		iread_index = write_index - (long) delay_time;
 		y = iread_index < 0 ? 0 : buffer.samples[iread_index & num_samples_mask];
 		buffer.samples[write_index & num_samples_mask] = x;
 		++write_index;
-		UGEN_OUT(u, out, y);
+		UGEN_OUT(out, y);
 	);
 
 	FINISH_DELAY();
@@ -2450,7 +2450,7 @@ void delayL_calc(ugen u)
 	unsigned int iread_index0, iread_index1;
 
 	AUDIO_LOOP(
-		delay_time = fmin(data.max_delay_time, fmax(1, UGEN_IN(u, in0) * SAMPLE_RATE));
+		delay_time = fmin(data.max_delay_time, fmax(1, UGEN_IN(in0) * SAMPLE_RATE));
 		read_index = (double) write_index - delay_time;
 		iread_index0 = (long) read_index;
 
@@ -2469,7 +2469,7 @@ void delayL_calc(ugen u)
 		}
 
 		++write_index;
-		UGEN_OUT(u, out, y);
+		UGEN_OUT(out, y);
 	);
 
 	FINISH_DELAY();
@@ -2486,7 +2486,7 @@ void delayC_calc(ugen u)
 
 	AUDIO_LOOP(
 		// Clamp delay at 1 to prevent the + 1 iread_index3 from reading on the wrong side of the write head
-		delay_time = fmin(data.max_delay_time, fmax(2, UGEN_IN(u, in0) * SAMPLE_RATE));
+		delay_time = fmin(data.max_delay_time, fmax(2, UGEN_IN(in0) * SAMPLE_RATE));
 		read_index  = (double) write_index - delay_time;
 		iread_index0 = (long) read_index;
 		iread_index1 = iread_index0 - 1;
@@ -2499,7 +2499,7 @@ void delayC_calc(ugen u)
 		y3 = iread_index3 < 0 ? 0 : buffer.samples[iread_index3 & num_samples_mask];
 		y  = CUBIC_INTERP(y0, y1, y2, y3, delta);
 		++write_index;
-		UGEN_OUT(u, out, y);
+		UGEN_OUT(out, y);
 	);
 
 	FINISH_DELAY();
@@ -2877,8 +2877,8 @@ void lfsaw_calc(ugen u) //Branchless and table-less saw
 	double y;
 
 	AUDIO_LOOP(
-		freq = UGEN_IN(u, in0);
-		phaseArg = UGEN_IN(u, in1);
+		freq = UGEN_IN(in0);
+		phaseArg = UGEN_IN(in1);
 
 		//Branchless and table-less saw
 	    amp1  = ((double)((char)phase));
@@ -2887,7 +2887,7 @@ void lfsaw_calc(ugen u) //Branchless and table-less saw
 		y     = LERP(amp1,amp2,delta) * RECIP_CHAR_RANGE;
 		phase += phaseArg + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
 
-		UGEN_OUT(u, out, y);
+		UGEN_OUT(out, y);
 	);
 
 	*((double*) u.data) = phase;
@@ -2905,14 +2905,14 @@ void lfpulse_calc(ugen u)
 	double y;
 
 	AUDIO_LOOP(
-		freq = UGEN_IN(u, in0);
-		phaseArg = UGEN_IN(u, in1);
+		freq = UGEN_IN(in0);
+		phaseArg = UGEN_IN(in1);
 
 		//Branchless and table-less square
 		y = 1 | (((char)phase) >> (sizeof(char) * CHAR_BIT - 1));
 		phase += phaseArg + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
 
-		UGEN_OUT(u, out, y);
+		UGEN_OUT(out, y);
 	);
 
 	*((double*) u.data) = phase;
@@ -3041,7 +3041,7 @@ void saw_calc(ugen u)
 	double y;
 
 	AUDIO_LOOP(
-		freq  = UGEN_IN(u, in0) * RECIP_SAMPLE_RATE;
+		freq  = UGEN_IN(in0) * RECIP_SAMPLE_RATE;
 
 		// create waveform
 		mb.phase += freq;
@@ -3065,7 +3065,7 @@ void saw_calc(ugen u)
 				mb.iBuffer=0;
 		}
 
-		UGEN_OUT(u, out, y);
+		UGEN_OUT(out, y);
 	);
 
 	*((minblep*) u.data) = mb;
@@ -3083,8 +3083,8 @@ void square_calc(ugen u)
 	double y;
 
 	AUDIO_LOOP(
-		freq = UGEN_IN(u, in0) * RECIP_SAMPLE_RATE;
-		pwm  = CLAMP(UGEN_IN(u, in1),0,1) * 0.5;
+		freq = UGEN_IN(in0) * RECIP_SAMPLE_RATE;
+		pwm  = CLAMP(UGEN_IN(in1),0,1) * 0.5;
 
 		// create waveform
 		mb.phase += freq;
@@ -3115,7 +3115,7 @@ void square_calc(ugen u)
 				mb.iBuffer=0;
 		}
 
-		UGEN_OUT(u, out, y);
+		UGEN_OUT(out, y);
 	);
 
 	*((minblep*) u.data) = mb;
@@ -3133,8 +3133,8 @@ void syncsaw_calc(ugen u)
 	double y;
 
 	AUDIO_LOOP(
-		freq  = UGEN_IN(u, in0) * RECIP_SAMPLE_RATE;
-		sync  = UGEN_IN(u, in1);
+		freq  = UGEN_IN(in0) * RECIP_SAMPLE_RATE;
+		sync  = UGEN_IN(in1);
 
 		// create waveform
 		mb.phase += freq;
@@ -3165,7 +3165,7 @@ void syncsaw_calc(ugen u)
 		}
 
 		mb.prevSyncAmp = sync;
-		UGEN_OUT(u, out, y);
+		UGEN_OUT(out, y);
 	);
 
 	*((minblep*) u.data) = mb;
@@ -3185,9 +3185,9 @@ void syncsquare_calc(ugen u)
 	double y;
 
 	AUDIO_LOOP(
-		freq = UGEN_IN(u, in0) * RECIP_SAMPLE_RATE;
-		pwm  = CLAMP(UGEN_IN(u, in1),0,1) * 0.5;
-		sync = UGEN_IN(u, in2);
+		freq = UGEN_IN(in0) * RECIP_SAMPLE_RATE;
+		pwm  = CLAMP(UGEN_IN(in1),0,1) * 0.5;
+		sync = UGEN_IN(in2);
 
 		// create waveform
 		mb.phase += freq;
@@ -3226,7 +3226,7 @@ void syncsquare_calc(ugen u)
 		}
 
 		mb.prevSyncAmp = sync;
-		UGEN_OUT(u, out, y);
+		UGEN_OUT(out, y);
 	);
 
 	*((minblep*) u.data) = mb;
@@ -3251,10 +3251,10 @@ void syncosc_calc(ugen u)
 
 
 	AUDIO_LOOP(
-		slaveFreq  = UGEN_IN(u,in0);
-		slaveWave  = (int)UGEN_IN(u,in1);
-		pwm        = CLAMP(UGEN_IN(u, in2),0,1) * 0.5;
-		masterFreq = UGEN_IN(u,in3);
+		slaveFreq  = UGEN_IN(in0);
+		slaveWave  = (int)UGEN_IN(in1);
+		pwm        = CLAMP(UGEN_IN(in2),0,1) * 0.5;
+		masterFreq = UGEN_IN(in3);
 		freqN      = slaveFreq * RECIP_SAMPLE_RATE;
 
 		// create waveform
@@ -3301,7 +3301,7 @@ void syncosc_calc(ugen u)
 		}
 
 		mb.prevSyncAmp = mb.masterPhase;
-		UGEN_OUT(u, out, y);
+		UGEN_OUT(out, y);
 	);
 
 	*((minblep*) u.data) = mb;
@@ -3352,7 +3352,7 @@ void rand_calc(ugen u)
 	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
 	rand_t   rand = *((rand_t*) u.data);
 
-	AUDIO_LOOP(UGEN_OUT(u,out,rand.value0););
+	AUDIO_LOOP(UGEN_OUT(out,rand.value0););
 }
 
 void lfnoiseN_calc(ugen u)
@@ -3364,7 +3364,7 @@ void lfnoiseN_calc(ugen u)
 	double freq;
 
 	AUDIO_LOOP(
-        freq  = UGEN_IN(u,in0);
+        freq  = UGEN_IN(in0);
 
 		if(rand.phase + RECIP_SAMPLE_RATE * freq >= 1.0)
    		{
@@ -3376,7 +3376,7 @@ void lfnoiseN_calc(ugen u)
    			rand.phase = rand.phase + RECIP_SAMPLE_RATE * freq;
    		}
 
-   		UGEN_OUT(u, out, rand.value0);
+   		UGEN_OUT(out, rand.value0);
 	);
 
     *((rand_t*) u.data) = rand;
@@ -3391,7 +3391,7 @@ void lfnoiseL_calc(ugen u)
 	double freq;
 
     AUDIO_LOOP(
-        freq  = UGEN_IN(u,in0);
+        freq  = UGEN_IN(in0);
 
         if(rand.phase + RECIP_SAMPLE_RATE * freq >= 1.0)
    		{
@@ -3404,7 +3404,7 @@ void lfnoiseL_calc(ugen u)
    			rand.phase = rand.phase + RECIP_SAMPLE_RATE * freq;
     	}
 
-   		UGEN_OUT(u, out, LERP(rand.value1,rand.value0,rand.phase));
+   		UGEN_OUT(out, LERP(rand.value1,rand.value0,rand.phase));
     );
 
     *((rand_t*) u.data) = rand;
@@ -3420,7 +3420,7 @@ void lfnoiseC_calc(ugen u)
 
     AUDIO_LOOP(
 
-        freq  = UGEN_IN(u,in0);
+        freq  = UGEN_IN(in0);
 
    		if(rand.phase + RECIP_SAMPLE_RATE * freq >= 1.0)
     	{
@@ -3435,7 +3435,7 @@ void lfnoiseC_calc(ugen u)
     		rand.phase = rand.phase + RECIP_SAMPLE_RATE * freq;
     	}
 
-    	UGEN_OUT(u, out, CUBIC_INTERP(rand.value3,rand.value2,rand.value1,rand.value0,rand.phase));
+    	UGEN_OUT(out, CUBIC_INTERP(rand.value3,rand.value2,rand.value1,rand.value0,rand.phase));
     );
 
     *((rand_t*) u.data) = rand;
@@ -3448,16 +3448,16 @@ void range_calc(ugen u)
     double*  in2  = UGEN_INPUT_BUFFER(u, 2);
 	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
 
-	double   min   = UGEN_IN(u,in0);
-	double   range = UGEN_IN(u,in1) - min;
+	double   min   = in0[0];
+	double   range = in1[0] - min;
 
 	printf("range, min: %f, max: %f, range: %f, in: %f, out: %f\n",min,in1[0],range,in2[0],((CLAMP(in2[0],-1,1) * 0.5 + 0.5) * range) + min);
 
     AUDIO_LOOP(
-		min   = UGEN_IN(u,in0);
-		range = UGEN_IN(u,in1) - min;
+		min   = UGEN_IN(in0);
+		range = UGEN_IN(in1) - min;
 
-   		UGEN_OUT(u, out, ((CLAMP(UGEN_IN(u,in2),-1,1) * 0.5 + 0.5) * range) + min);
+   		UGEN_OUT(out, ((CLAMP(UGEN_IN(in2),-1,1) * 0.5 + 0.5) * range) + min);
     );
 }
 
@@ -3472,8 +3472,8 @@ void exprange_calc(ugen u)
 
     AUDIO_LOOP(
         // double amp   = (pow(range,in)) + min;
-		min = UGEN_IN(u,in0);
-   		UGEN_OUT(u, out, (pow(UGEN_IN(u,in1) - min,CLAMP(UGEN_IN(u,in2),-1,1) * 0.5 + 0.5)) + min);
+		min = UGEN_IN(in0);
+   		UGEN_OUT(out, (pow(UGEN_IN(in1) - min,CLAMP(UGEN_IN(in2),-1,1) * 0.5 + 0.5)) + min);
     );
 }
 
@@ -3489,13 +3489,13 @@ void impulse_calc(ugen u)
 
     AUDIO_LOOP(
 
-   		phase += UGEN_IN(u,in0) * RECIP_SAMPLE_RATE;
+   		phase += UGEN_IN(in0) * RECIP_SAMPLE_RATE;
    		// offset = UGEN_IN(u,in1);
 
    		if(phase >= 1)
-       		UGEN_OUT(u,out,1);
+       		UGEN_OUT(out,1);
         else
-       		UGEN_OUT(u,out,0);
+       		UGEN_OUT(out,0);
 
    		phase = fmod(phase,1);
     );
@@ -3534,18 +3534,18 @@ void dust_calc(ugen u)
     double density;
 
     AUDIO_LOOP(
-        double density = UGEN_IN(u,in0);
+        double density = UGEN_IN(in0);
 
     	if(dust.phase + density * RECIP_SAMPLE_RATE >= dust.period)
     	{
     		dust.phase  = 0;
     		dust.period = RAND_RANGE(0,2);
-            UGEN_OUT(u,out,RAND_RANGE(-1,1));
+            UGEN_OUT(out,RAND_RANGE(-1,1));
     	}
     	else
     	{
     		dust.phase = dust.phase + density * RECIP_SAMPLE_RATE;
-            UGEN_OUT(u,out,0);
+            UGEN_OUT(out,0);
     	}
     );
 
@@ -3564,18 +3564,18 @@ void dust2_calc(ugen u)
     double density;
 
     AUDIO_LOOP(
-        double density = UGEN_IN(u,in0);
+        double density = UGEN_IN(in0);
 
     	if(dust.phase + density * RECIP_SAMPLE_RATE >= dust.period)
     	{
     		dust.phase  = 0;
     		dust.period = RAND_RANGE(0,2);
-        	UGEN_OUT(u,out,RAND_RANGE(0,1));
+        	UGEN_OUT(out,RAND_RANGE(0,1));
     	}
     	else
     	{
     		dust.phase = dust.phase + density * RECIP_SAMPLE_RATE;
-            UGEN_OUT(u,out,0);
+            UGEN_OUT(out,0);
     	}
     );
 
@@ -3639,9 +3639,9 @@ void lpf_calc(ugen u)
 
 
     AUDIO_LOOP(
-		freq  = UGEN_IN(u,in0);
-		q     = MAX(UGEN_IN(u,in1),0.00000001);
-		in    = UGEN_IN(u,in2);
+		freq  = UGEN_IN(in0);
+		q     = MAX(UGEN_IN(in1),0.00000001);
+		in    = UGEN_IN(in2);
 
 		omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
 		cs    = cos(omega);
@@ -3662,7 +3662,7 @@ void lpf_calc(ugen u)
 		bi.x2 = bi.x1;
 		bi.x1 = in;
 
-		UGEN_OUT(u,out,y);
+		UGEN_OUT(out,y);
 	);
 
 	*((biquad_t*) u.data) = bi;
@@ -3696,9 +3696,9 @@ void hpf_calc(ugen u)
 
 
     AUDIO_LOOP(
-		freq  = UGEN_IN(u,in0);
-		q     = MAX(UGEN_IN(u,in1),0.00000001);
-		in    = UGEN_IN(u,in2);
+		freq  = UGEN_IN(in0);
+		q     = MAX(UGEN_IN(in1),0.00000001);
+		in    = UGEN_IN(in2);
 
 		omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
 		cs    = cos(omega);
@@ -3719,7 +3719,7 @@ void hpf_calc(ugen u)
 		bi.x2 = bi.x1;
 		bi.x1 = in;
 
-		UGEN_OUT(u,out,y);
+		UGEN_OUT(out,y);
 	);
 
 	*((biquad_t*) u.data) = bi;
@@ -3752,9 +3752,9 @@ void bpf_calc(ugen u)
 	double y;
 
     AUDIO_LOOP(
-		freq  = UGEN_IN(u,in0);
-		q     = MAX(UGEN_IN(u,in1),0.00000001);
-		in    = UGEN_IN(u,in2);
+		freq  = UGEN_IN(in0);
+		q     = MAX(UGEN_IN(in1),0.00000001);
+		in    = UGEN_IN(in2);
 
 		omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
 		cs    = cos(omega);
@@ -3775,7 +3775,7 @@ void bpf_calc(ugen u)
 		bi.x2 = bi.x1;
 		bi.x1 = in;
 
-		UGEN_OUT(u,out,y);
+		UGEN_OUT(out,y);
 	);
 
 	*((biquad_t*) u.data) = bi;
@@ -3810,10 +3810,10 @@ void notch_calc(ugen u)
 	double y;
 
     AUDIO_LOOP(
-		freq  = UGEN_IN(u,in0);
-		gain  = UGEN_IN(u,in1);
-		q     = MAX(UGEN_IN(u,in2),0.00000001);
-		in    = UGEN_IN(u,in3);
+		freq  = UGEN_IN(in0);
+		gain  = UGEN_IN(in1);
+		q     = MAX(UGEN_IN(in2),0.00000001);
+		in    = UGEN_IN(in3);
 
 		omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
 		cs    = cos(omega);
@@ -3834,7 +3834,7 @@ void notch_calc(ugen u)
 		bi.x2 = bi.x1;
 		bi.x1 = in;
 
-		UGEN_OUT(u,out,y);
+		UGEN_OUT(out,y);
 	);
 
 	*((biquad_t*) u.data) = bi;
@@ -3867,9 +3867,9 @@ void allpass_calc(ugen u)
 	double y;
 
     AUDIO_LOOP(
-		freq  = UGEN_IN(u,in0);
-		q     = MAX(UGEN_IN(u,in1),0.00000001);
-		in    = UGEN_IN(u,in2);
+		freq  = UGEN_IN(in0);
+		q     = MAX(UGEN_IN(in1),0.00000001);
+		in    = UGEN_IN(in2);
 
 		omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
 		cs    = cos(omega);
@@ -3890,7 +3890,7 @@ void allpass_calc(ugen u)
 		bi.x2 = bi.x1;
 		bi.x1 = in;
 
-		UGEN_OUT(u,out,y);
+		UGEN_OUT(out,y);
 	);
 
 	*((biquad_t*) u.data) = bi;
@@ -3926,10 +3926,10 @@ void peakEQ_calc(ugen u)
 	double y;
 
     AUDIO_LOOP(
-		freq  = UGEN_IN(u,in0);
-		gain  = UGEN_IN(u,in1);
-		q     = MAX(UGEN_IN(u,in2),0.00000001);
-		in    = UGEN_IN(u,in3);
+		freq  = UGEN_IN(in0);
+		gain  = UGEN_IN(in1);
+		q     = MAX(UGEN_IN(in2),0.00000001);
+		in    = UGEN_IN(in3);
 
 		a     = pow(10,(gain/40));
 		omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
@@ -3951,7 +3951,7 @@ void peakEQ_calc(ugen u)
 		bi.x2 = bi.x1;
 		bi.x1 = in;
 
-		UGEN_OUT(u,out,y);
+		UGEN_OUT(out,y);
 	);
 
 	*((biquad_t*) u.data) = bi;
@@ -3987,10 +3987,10 @@ void lowshelf_calc(ugen u)
 	double y;
 
     AUDIO_LOOP(
-		freq  = UGEN_IN(u,in0);
-		gain  = UGEN_IN(u,in1);
-		slope = UGEN_IN(u,in2);
-		in    = UGEN_IN(u,in3);
+		freq  = UGEN_IN(in0);
+		gain  = UGEN_IN(in1);
+		slope = UGEN_IN(in2);
+		in    = UGEN_IN(in3);
 
 		a     = pow(10,(gain/40));
 		omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
@@ -4012,7 +4012,7 @@ void lowshelf_calc(ugen u)
 		bi.x2 = bi.x1;
 		bi.x1 = in;
 
-		UGEN_OUT(u,out,y);
+		UGEN_OUT(out,y);
 	);
 
 	*((biquad_t*) u.data) = bi;
@@ -4048,10 +4048,10 @@ void highshelf_calc(ugen u)
 	double y;
 
     AUDIO_LOOP(
-		freq  = UGEN_IN(u,in0);
-		gain  = UGEN_IN(u,in1);
-		slope = UGEN_IN(u,in2);
-		in    = UGEN_IN(u,in3);
+		freq  = UGEN_IN(in0);
+		gain  = UGEN_IN(in1);
+		slope = UGEN_IN(in2);
+		in    = UGEN_IN(in3);
 
 		a     = pow(10,(gain/40));
 		omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
@@ -4074,7 +4074,7 @@ void highshelf_calc(ugen u)
 		bi.x2 = bi.x1;
 		bi.x1 = in;
 
-		UGEN_OUT(u,out,y);
+		UGEN_OUT(out,y);
 	);
 
 	*((biquad_t*) u.data) = bi;
@@ -4094,13 +4094,13 @@ void lag_calc(ugen u)
 
 	AUDIO_LOOP(
 
-		lagTime = UGEN_IN(u,in0);
-		input   = UGEN_IN(u,in1);
+		lagTime = UGEN_IN(in0);
+		input   = UGEN_IN(in1);
 	    a       = exp((-2 * M_PI) / (lagTime * SAMPLE_RATE));
 	    b       = 1.0f - a;
 		z       = (input * b) + (z * a);
 
-		UGEN_OUT(u,out,z);
+		UGEN_OUT(out,z);
 	);
 
 	*((double*) u.data) = z;
@@ -4200,7 +4200,7 @@ void clip_calc(ugen u)
 	double*  out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
-		UGEN_OUT(u,out,HARD_CLIP(UGEN_IN(u,in0),UGEN_IN(u,in1)));
+		UGEN_OUT(out,HARD_CLIP(UGEN_IN(in0),UGEN_IN(in1)));
 	);
 }
 
@@ -4211,7 +4211,7 @@ void softclip_calc(ugen u)
 	double*  out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
-		UGEN_OUT(u,out,SOFT_CLIP(UGEN_IN(u,in0),UGEN_IN(u,in0)));
+		UGEN_OUT(out,SOFT_CLIP(UGEN_IN(in0),UGEN_IN(in0)));
 	);
 }
 
@@ -4222,7 +4222,7 @@ void poly3_calc(ugen u)
 	double*  out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
-		UGEN_OUT(u,out,POLY3_DIST(UGEN_IN(u,in0),UGEN_IN(u,in1)));
+		UGEN_OUT(out,POLY3_DIST(UGEN_IN(in0),UGEN_IN(in1)));
 	);
 }
 
@@ -4233,7 +4233,7 @@ void tanhdist_calc(ugen u)
 	double*  out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
-		UGEN_OUT(u,out,TANH_DIST(UGEN_IN(u,in0),UGEN_IN(u,in1)));
+		UGEN_OUT(out,TANH_DIST(UGEN_IN(in0),UGEN_IN(in1)));
 	);
 
 }
@@ -4245,7 +4245,7 @@ void sinDist_calc(ugen u)
 	double*  out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
-		UGEN_OUT(u,out,SIN_DIST(UGEN_IN(u,in0),UGEN_IN(u,in1)));
+		UGEN_OUT(out,SIN_DIST(UGEN_IN(in0),UGEN_IN(in1)));
 	);
 }
 
@@ -4256,7 +4256,7 @@ void wrap_calc(ugen u)
 	double*  out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
-		UGEN_OUT(u,out,WRAP(UGEN_IN(u,in0),UGEN_IN(u,in1)));
+		UGEN_OUT(out,WRAP(UGEN_IN(in0),UGEN_IN(in1)));
 	);
 }
 
@@ -4271,8 +4271,8 @@ void crush_calc(ugen u)
     int max;
 
 	AUDIO_LOOP(
-	    max = pow(2, UGEN_IN(u,in0)) - 1;
-		UGEN_OUT(u,out,ROUND((UGEN_IN(u,in1) + 1.0) * max) / max - 1.0);
+	    max = pow(2, UGEN_IN(in0)) - 1;
+		UGEN_OUT(out,ROUND((UGEN_IN(in1) + 1.0) * max) / max - 1.0);
 	);
 }
 
@@ -4307,8 +4307,8 @@ void decimate_calc(ugen u)
     double     y;
 
 	AUDIO_LOOP(
-		rate = UGEN_IN(u,in0) * RECIP_SAMPLE_RATE;
-	    x    = UGEN_IN(u,in1);
+		rate = UGEN_IN(in0) * RECIP_SAMPLE_RATE;
+	    x    = UGEN_IN(in1);
 	    y    = 0;
 
 		if(decimate.samples + rate >= 1)
@@ -4323,7 +4323,7 @@ void decimate_calc(ugen u)
 	        y = decimate.prev;
 	    }
 
-		UGEN_OUT(u,out,y);
+		UGEN_OUT(out,y);
 	);
 
 	*((decimate_t*) u.data) = decimate;
@@ -4445,10 +4445,10 @@ void freeverb_calc(ugen u)
 
 	// NOTE: Optimize COMB_FILTER and ALLPASS_FEEDBACK by pulling declarations and ugen data access outside of audio loop
 	AUDIO_LOOP(
-		mix      = CLAMP(UGEN_IN(u, in0),0,1);
-		roomSize = CLAMP(UGEN_IN(u, in1),0,1);
-		damp     = CLAMP(UGEN_IN(u, in2),0,1);
-		x        = CLAMP(UGEN_IN(u, in3),0,1);
+		mix      = CLAMP(UGEN_IN(in0),0,1);
+		roomSize = CLAMP(UGEN_IN(in1),0,1);
+		damp     = CLAMP(UGEN_IN(in2),0,1);
+		x        = CLAMP(UGEN_IN(in3),0,1);
 
 		cf0      = COMB_FILTER(x,roomSize,damp,1557,vdata.combFilterDelays,vdata.combz1s,0);
 		cf1      = COMB_FILTER(x,roomSize,damp,1617,vdata.combFilterDelays,vdata.combz1s,1);
@@ -4466,7 +4466,7 @@ void freeverb_calc(ugen u)
 		ap3      = ALLPASS_FEEDBACK(ap2,0.5,341,vdata.allpassDelays,3);
 		y        = (x * (1 - mix)) + (ap3 * mix * 1.0);
 
-		UGEN_OUT(u, out, y);
+		UGEN_OUT(out, y);
 	);
 
 	*((freeverb_data*) u.data) = vdata;
@@ -4518,11 +4518,11 @@ void pluck_calc(ugen u)
 	double      y;
 
 	AUDIO_LOOP(
-		clamped = MAX(UGEN_IN(u, in0), data.minFreq);
+		clamped = MAX(UGEN_IN(in0), data.minFreq);
 		freq = clamped * RECIP_SAMPLE_RATE;
 		n = SAMPLE_RATE / clamped;
-		duration = UGEN_IN(u, in1) * SAMPLE_RATE;
-		x = UGEN_IN(u, in2);
+		duration = UGEN_IN(in1) * SAMPLE_RATE;
+		x = UGEN_IN(in2);
 		index2 = (write_index + 1) % n;
 		decay = pow(E, (-(n + 0.5) * 6.908) / duration) / cos(M_PI * freq);
 		y = 0;
@@ -4541,7 +4541,7 @@ void pluck_calc(ugen u)
 		samples[write_index] = y;
 		write_index = index2;
 
-		UGEN_OUT(u, out, y);
+		UGEN_OUT(out, y);
 	);
 
 	data.write_index = index2;
@@ -4552,6 +4552,6 @@ void white_calc(ugen u)
 {
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 	AUDIO_LOOP(
-		UGEN_OUT(u, out, RAND_RANGE(-1, 1));
+		UGEN_OUT(out, RAND_RANGE(-1, 1));
 	);
 }
