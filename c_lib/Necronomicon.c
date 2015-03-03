@@ -1504,7 +1504,7 @@ int process(jack_nframes_t nframes, void* arg)
 	// Iterate through the synth_list, processing each synth
 	_necronomicon_current_node = synth_list;
 
-	
+
 	while (_necronomicon_current_node)
 	{
 		process_synth(_necronomicon_current_node);
@@ -3334,7 +3334,7 @@ typedef struct
 void rand_constructor(ugen* u)
 {
 	rand_t* rand = malloc(sizeof(rand_t));
-	rand->value0 = RAND_RANGE(0,1);
+	rand->value0 = RAND_RANGE(-1,1);
 	rand->value1 = 0;
 	rand->value2 = 0;
 	rand->value3 = 0;
@@ -3369,7 +3369,7 @@ void lfnoiseN_calc(ugen u)
 		if(rand.phase + RECIP_SAMPLE_RATE * freq >= 1.0)
    		{
    			rand.phase  = fmod(rand.phase + RECIP_SAMPLE_RATE * freq,1.0);
-   			rand.value0 = RAND_RANGE(0,1);
+   			rand.value0 = RAND_RANGE(-1,1);
    		}
    		else
    		{
@@ -3397,7 +3397,7 @@ void lfnoiseL_calc(ugen u)
    		{
    			rand.phase  = fmod(rand.phase + RECIP_SAMPLE_RATE * freq,1.0);
    			rand.value1 = rand.value0;
-   			rand.value0 = RAND_RANGE(0,1);
+   			rand.value0 = RAND_RANGE(-1,1);
    		}
    		else
     	{
@@ -3428,7 +3428,7 @@ void lfnoiseC_calc(ugen u)
     		rand.value3 = rand.value2;
     		rand.value2 = rand.value1;
     		rand.value1 = rand.value0;
-    		rand.value0 = RAND_RANGE(0,1);
+    		rand.value0 = RAND_RANGE(-1,1);
     	}
     	else
     	{
@@ -3447,11 +3447,17 @@ void range_calc(ugen u)
     double*  in1  = UGEN_INPUT_BUFFER(u, 1);
     double*  in2  = UGEN_INPUT_BUFFER(u, 2);
 	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
-	double   min;
+
+	double   min   = UGEN_IN(u,in0);
+	double   range = UGEN_IN(u,in1) - min;
+
+	printf("range, min: %f, max: %f, range: %f, in: %f, out: %f\n",min,UGEN_IN(u,in1),range,UGEN_IN(u,in2),((CLAMP(UGEN_IN(u,in2),-1,1) * 0.5 + 0.5) * range) + min);
 
     AUDIO_LOOP(
-		min = UGEN_IN(u,in0);
-   		UGEN_OUT(u, out, ((CLAMP(UGEN_IN(u,in2),-1,1) * 0.5 + 0.5) * (UGEN_IN(u,in1) - min)) + min);
+		min   = UGEN_IN(u,in0);
+		range = UGEN_IN(u,in1) - min;
+
+   		UGEN_OUT(u, out, ((CLAMP(UGEN_IN(u,in2),-1,1) * 0.5 + 0.5) * range) + min);
     );
 }
 
