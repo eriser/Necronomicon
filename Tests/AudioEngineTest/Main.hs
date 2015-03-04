@@ -2,18 +2,21 @@ module Main where
 
 import Necronomicon
 
-delaySynthN :: UGen -> UGen -> UGen
-delaySynthN freq _ = s |> freeverb 0.5 1 0.1 >>> add s >>> gain 0.1 >>> out 0
+reverbSynth :: UGen -> UGen
+reverbSynth freq = s |> freeverb 0.5 1 0.5 |> gain 0.1 |> out 0
     where
         s = sin $ lag 0.1 freq
 
+delaySynthN :: UGen -> UGen -> UGen
+delaySynthN _ _ = sin (sin 0.3 |> range 440 880) |> gain 0.1 |> out 0
+
 delaySynthL :: UGen -> UGen -> UGen
-delaySynthL freq d = s |> delayL 1 (lag 0.1 d) >>> add s >>> gain 0.1 >>> out 0
+delaySynthL freq _ = s |> delayL 1 (sin 0.3 |> range 0 1) |> gain 0.1 |> out 0
     where
         s = sin $ lag 0.1 freq
 
 delaySynthC :: UGen -> UGen -> UGen
-delaySynthC freq d = s |> delayC 1 (lag 0.1 d) >>> add s >>> gain 0.1 >>> out 0
+delaySynthC freq _ = s |> delayN 1 (sin 0.3 |> range 0 1) |> gain 0.1 |> out 0
     where
         s = sin $ lag 0.1 freq
 
@@ -21,14 +24,15 @@ synthDefs :: Signal ()
 synthDefs = synthDef "delaySynthN" delaySynthN
          *> synthDef "delaySynthL" delaySynthL
          *> synthDef "delaySynthC" delaySynthC
+         *> synthDef "reverbSynth" reverbSynth
 
 main :: IO ()
 main = runSignal
-       <|  synthDefs
-        *> play (toggle <| isDown keyA) "delaySynthN" [mouseX ~> scale 20 10000, mouseY]
+       <| synthDefs
+       *> play (toggle <| isDown keyA) "delaySynthN" [mouseX ~> scale 20 10000, mouseY]
        <> play (toggle <| isDown keyW) "delaySynthL" [mouseX ~> scale 20 10000, mouseY]
        <> play (toggle <| isDown keyD) "delaySynthC" [mouseX ~> scale 20 10000, mouseY]
-       <> play (toggle <| isDown keyS) "loopSynth"   [mouseX ~> scale 20 10000, mouseY ~> scale 20 10000]
+       <> play (toggle <| isDown keyS) "reverbSynth" [mouseX ~> scale 20 10000]
 
 {-
 

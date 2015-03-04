@@ -2488,16 +2488,54 @@ void delayC_calc(ugen u)
 		// Clamp delay at 1 to prevent the + 1 iread_index3 from reading on the wrong side of the write head
 		delay_time = fmin(data.max_delay_time, fmax(2, UGEN_IN(in0) * SAMPLE_RATE));
 		read_index  = (double) write_index - delay_time;
-		iread_index0 = (long) read_index;
-		iread_index1 = iread_index0 - 1;
-		iread_index2 = iread_index0 - 2;
-		iread_index3 = iread_index0 + 1;
+		iread_index1 = (long) read_index;
+		iread_index2 = iread_index0 - 1;
+		iread_index3 = iread_index0 - 2;
+		iread_index0 = iread_index0 + 1;
 		delta = read_index - iread_index0;
-		y0 = iread_index0 < 0 ? 0 : buffer.samples[iread_index0 & num_samples_mask];
-		y1 = iread_index1 < 0 ? 0 : buffer.samples[iread_index1 & num_samples_mask];
-		y2 = iread_index2 < 0 ? 0 : buffer.samples[iread_index2 & num_samples_mask];
-		y3 = iread_index3 < 0 ? 0 : buffer.samples[iread_index3 & num_samples_mask];
-		y  = CUBIC_INTERP(y0, y1, y2, y3, delta);
+
+		if (iread_index0 < 0)
+		{
+			y = 0;
+		}
+
+		else
+		{
+			if(iread_index1 < 0)
+			{
+				y0 = buffer.samples[iread_index0 & num_samples_mask];
+				y1 = y2 = y3 = 0;
+				y  = CUBIC_INTERP(y0, y1, y2, y3, delta);
+			}
+
+			else if(iread_index2 < 0)
+			{
+				y0 = buffer.samples[iread_index0 & num_samples_mask];
+				y1 = buffer.samples[iread_index1 & num_samples_mask];
+				y2 = y3 = 0;
+				y  = CUBIC_INTERP(y0, y1, y2, y3, delta);
+			}
+
+			else if(iread_index3 < 0)
+			{
+				y0 = buffer.samples[iread_index0 & num_samples_mask];
+				y1 = buffer.samples[iread_index1 & num_samples_mask];
+				y2 = buffer.samples[iread_index1 & num_samples_mask];
+				y3 = 0;
+				y  = CUBIC_INTERP(y0, y1, y2, y3, delta);
+			}
+
+			else
+			{
+				y0 = buffer.samples[iread_index0 & num_samples_mask];
+				y1 = buffer.samples[iread_index1 & num_samples_mask];
+				y2 = buffer.samples[iread_index2 & num_samples_mask];
+				y3 = buffer.samples[iread_index3 & num_samples_mask];
+			}
+
+			y  = CUBIC_INTERP(y0, y1, y2, y3, delta);
+		}
+
 		++write_index;
 		UGEN_OUT(out, y);
 	);
@@ -3451,7 +3489,7 @@ void range_calc(ugen u)
 	double   min   = in0[0];
 	double   range = in1[0] - min;
 
-	// printf("range, min: %f, max: %f, range: %f, in: %f, out: %f\n",min,UGEN_IN(in1),range,UGEN_IN(in2),((CLAMP(in2[0],-1,1) * 0.5 + 0.5) * range) + min);
+	// printf("range, min: %f, max: %f, range: %f, in: %f, out: %f\n",min,in1[0],range,in2[0],((CLAMP(in2[0],-1,1) * 0.5 + 0.5) * range) + min);
 
     AUDIO_LOOP(
 		min   = UGEN_IN(in0);
