@@ -581,7 +581,7 @@ void initialize_wave_tables()
 
 	// Needed to initialize minblep table.
 	bool minblepInitialized = minBLEP_Init();
-	devurandom = fopen ("/dev/urandom","r");
+	// devurandom = fopen ("/dev/urandom","r");
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -2878,14 +2878,14 @@ void lfsaw_calc(ugen u) //Branchless and table-less saw
 
 	AUDIO_LOOP(
 		freq = UGEN_IN(in0);
-		phaseArg = UGEN_IN(in1);
+		// phaseArg = UGEN_IN(in1);
 
 		//Branchless and table-less saw
-	    amp1  = ((double)((char)phase));
-		amp2  = ((double)(((char)phase)+1));
-		delta = phase - ((long) phase);
-		y     = LERP(amp1,amp2,delta) * RECIP_CHAR_RANGE;
-		phase += phaseArg + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
+	    amp1   = ((double)((char)phase));
+		amp2   = ((double)(((char)phase)+1));
+		delta  = phase - ((long) phase);
+		y      = LERP(amp1,amp2,delta) * RECIP_CHAR_RANGE;
+		phase += TABLE_MUL_RECIP_SAMPLE_RATE * freq;
 
 		UGEN_OUT(out, y);
 	);
@@ -2906,11 +2906,11 @@ void lfpulse_calc(ugen u)
 
 	AUDIO_LOOP(
 		freq = UGEN_IN(in0);
-		phaseArg = UGEN_IN(in1);
+		// phaseArg = UGEN_IN(in1);
 
 		//Branchless and table-less square
 		y = 1 | (((char)phase) >> (sizeof(char) * CHAR_BIT - 1));
-		phase += phaseArg + TABLE_MUL_RECIP_SAMPLE_RATE * freq;
+		phase += TABLE_MUL_RECIP_SAMPLE_RATE * freq;
 
 		UGEN_OUT(out, y);
 	);
@@ -4211,7 +4211,7 @@ void softclip_calc(ugen u)
 	double*  out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
-		UGEN_OUT(out,SOFT_CLIP(UGEN_IN(in0),UGEN_IN(in0)));
+		UGEN_OUT(out,SOFT_CLIP(UGEN_IN(in0),UGEN_IN(in1)));
 	);
 }
 
@@ -4395,34 +4395,26 @@ const double fixed_gain = 0.015;
 // Should the delayed signal in this be x or y or x + y???
 #define COMB_FILTER(X,R,D,N,DATA,ZS,I)                                                       \
 ({                                                                                           \
-    delay_data     data             = DATA[I];	    					                     \
-	sample_buffer  buffer           = *(data.buffer);					                     \
-	double*        samples          = buffer.samples;					                     \
-	unsigned int   write_index      = data.write_index;                                      \
-	unsigned int   num_samples_mask = buffer.num_samples_mask;			                     \
-	double         damp1            = D * 0.4;							                     \
-	double         damp2            = 1 - damp1;                                             \
-	double         feedback         = R * 0.28 + 0.7;                                        \
-	double         y                = samples[write_index];                                  \
-	ZS[I]                           = y * damp2 + ZS[I] * damp1;                             \
-	samples[write_index]     = (X * fixed_gain) + ZS[I] * feedback;		                     \
-	data.write_index                = (write_index + 1) & num_samples_mask;                  \
-    DATA[I]                         = data;                                                  \
+	unsigned int   write_index           = DATA[I].write_index;                              \
+	unsigned int   num_samples_mask      = DATA[I].buffer->num_samples_mask;			     \
+	double         damp1                 = D * 0.4;							                 \
+	double         damp2                 = 1 - damp1;                                        \
+	double         feedback              = R * 0.28 + 0.7;                                   \
+	double         y                     = DATA[I].buffer->samples[write_index];             \
+	ZS[I]                                = y * damp2 + ZS[I] * damp1;                        \
+	DATA[I].buffer->samples[write_index] = (X * fixed_gain) + ZS[I] * feedback;		         \
+	DATA[I].write_index                  = (write_index + 1) & num_samples_mask;             \
 	y;                                                                                       \
 })
 
 #define ALLPASS_FEEDBACK(X,F,N,DATA,I)                                                       \
 ({                                                                                           \
-    delay_data     data             = DATA[I];	    					                     \
-    sample_buffer  buffer           = *(data.buffer);                        				 \
-    double*        samples          = buffer.samples;                                        \
-    unsigned int   write_index      = data.write_index;                     				 \
-    unsigned int   num_samples_mask = buffer.num_samples_mask;                               \
-    double         bufout           = samples[write_index];                                  \
-	double         y                = -X + bufout;                                           \
-    samples[write_index]     = X + bufout * F;                                               \
-	data.write_index                = (write_index + 1) & num_samples_mask;                  \
-	DATA[I]                         = data;                                                  \
+    unsigned int   write_index           = DATA[I].write_index;                     		 \
+    unsigned int   num_samples_mask      = DATA[I].buffer->num_samples_mask;                 \
+    double         bufout                = DATA[I].buffer->samples[write_index];             \
+	double         y                     = -X + bufout;                                      \
+    DATA[I].buffer->samples[write_index] = X + bufout * F;                                   \
+	DATA[I].write_index                  = (write_index + 1) & num_samples_mask;             \
 	y;                                                                                       \
 })
 
@@ -4448,7 +4440,7 @@ void freeverb_calc(ugen u)
 		mix      = CLAMP(UGEN_IN(in0),0,1);
 		roomSize = CLAMP(UGEN_IN(in1),0,1);
 		damp     = CLAMP(UGEN_IN(in2),0,1);
-		x        = CLAMP(UGEN_IN(in3),0,1);
+		x        = UGEN_IN(in3);
 
 		cf0      = COMB_FILTER(x,roomSize,damp,1557,vdata.combFilterDelays,vdata.combz1s,0);
 		cf1      = COMB_FILTER(x,roomSize,damp,1617,vdata.combFilterDelays,vdata.combz1s,1);
