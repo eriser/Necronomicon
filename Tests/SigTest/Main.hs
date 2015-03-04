@@ -24,8 +24,8 @@ synthDefs = synthDef "triOsc"        triOsc
 
 hyperTerrainSounds :: Signal ()
 hyperTerrainSounds = metallicPattern
-                --  <> play             (toggle <| isDown keyW) "triOsc"    [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
-                --  <> play             (toggle <| isDown keyA) "triOsc32"  [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
+                 <> play             (toggle <| isDown keyW) "triOsc"    [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
+                 <> play             (toggle <| isDown keyA) "triOsc32"  [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
                 --  <> playBeatPattern  (toggle <| isDown keyE) [] (ploop [ [lich| [p p p] [p b] p b |] ])
                 --  <>
 
