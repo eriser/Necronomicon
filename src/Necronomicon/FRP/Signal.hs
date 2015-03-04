@@ -23,7 +23,6 @@ module Necronomicon.FRP.Signal (
     (<~),
     (~~),
     (~>),
-    (<&>),
     -- (=<~),
     -- execute,
     enter,
@@ -144,12 +143,14 @@ module Necronomicon.FRP.Signal (
     users,
     testSignals,
     lagSig,
-    module Control.Applicative
+    module Control.Applicative,
+    module Data.Monoid
     ) where
 
 ------------------------------------------------------
 import           Necronomicon.FRP.Event
 import           Control.Applicative
+import           Data.Monoid
 import           Control.Concurrent
 import           Control.Concurrent.STM
 import           Control.Monad
@@ -448,6 +449,22 @@ instance Alternative Signal where
                 NoChange _ -> bCont update >>= \bValue -> case bValue of
                     Change b' -> writeIORef ref b' >>  return  (Change b')
                     NoChange _ -> readIORef  ref   >>= return . NoChange
+
+instance Monoid (Signal a) where
+    mconcat       = foldr (<>) empty
+    mempty        = Signal $ \_ -> return $ \_ -> return $ NoChange undefined
+    a `mappend` b = Signal $ \state -> do
+        aCont    <- unSignal a state
+        bCont    <- unSignal b state
+        defaultA <- unEvent <~ aCont updateZero
+        _        <- unEvent <~ bCont updateZero
+        ref      <- newIORef defaultA
+        return $ processState aCont bCont ref
+        where
+            processState aCont bCont ref update = aCont update >>= \aValue -> bCont update >>= \bValue -> case (aValue,bValue) of
+                (Change a', _) -> writeIORef ref a' >>  return (Change a')
+                (_, Change b') -> writeIORef ref b' >>  return (Change b')
+                _              -> readIORef  ref   >>= return . NoChange
 
 instance Num a => Num (Signal a) where
     (+)         = liftA2 (+)
@@ -1131,27 +1148,27 @@ foldp f bInit a = Signal $ \state -> do
                 writeIORef ref nextV
                 return $ Change nextV
 
-(<&>) :: Signal a -> Signal a -> Signal a
-a <&> b = Signal $ \state -> do
-    aCont    <- unSignal a state
-    bCont    <- unSignal b state
-    defaultA <- unEvent <~ aCont updateZero
-    _        <- unEvent <~ bCont updateZero
-    ref      <- newIORef defaultA
-    return $ processState aCont bCont ref
-    where
-        processState aCont bCont ref update = aCont update >>= \aValue -> bCont update >>= \bValue -> case (aValue,bValue) of
-            (Change a', _) -> writeIORef ref a' >>  return (Change a')
-            (_, Change b') -> writeIORef ref b' >>  return (Change b')
-            _              -> readIORef  ref   >>= return . NoChange
+-- (<>) :: Signal a -> Signal a -> Signal a
+-- a <> b = Signal $ \state -> do
+    -- aCont    <- unSignal a state
+    -- bCont    <- unSignal b state
+    -- defaultA <- unEvent <~ aCont updateZero
+    -- _        <- unEvent <~ bCont updateZero
+    -- ref      <- newIORef defaultA
+    -- return $ processState aCont bCont ref
+    -- where
+        -- processState aCont bCont ref update = aCont update >>= \aValue -> bCont update >>= \bValue -> case (aValue,bValue) of
+            -- (Change a', _) -> writeIORef ref a' >>  return (Change a')
+            -- (_, Change b') -> writeIORef ref b' >>  return (Change b')
+            -- _              -> readIORef  ref   >>= return . NoChange
 
-infixl 3 <&>
+-- infixl 3 <>
 
 merge :: Signal a -> Signal a -> Signal a
-merge = (<&>)
+merge = (<>)
 
 merges :: [Signal a] -> Signal a
-merges = foldr (<&>) empty
+merges = mconcat
 
 combine :: [Signal a] -> Signal [a]
 combine signals = Signal $ \state -> do

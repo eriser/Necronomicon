@@ -3,7 +3,7 @@ import Data.Fixed (mod')
 import Data.List (zip4)
 
 main :: IO ()
-main = runSignal <| synthDefs *> tempo (pure 150) *> testGUI <|> (sections <&> hyperTerrainSounds)
+main = runSignal <| synthDefs *> tempo (pure 150) *> testGUI <> sections <> hyperTerrainSounds
 
 synthDefs :: Signal ()
 synthDefs = synthDef "triOsc"        triOsc
@@ -24,10 +24,10 @@ synthDefs = synthDef "triOsc"        triOsc
 
 hyperTerrainSounds :: Signal ()
 hyperTerrainSounds = metallicPattern
-                 <&> play             (toggle <| isDown keyW) "triOsc"    [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
-                 <&> play             (toggle <| isDown keyA) "triOsc32"  [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
-                --  <&> playBeatPattern  (toggle <| isDown keyE) [] (ploop [ [lich| [p p p] [p b] p b |] ])
-                --  <&>
+                --  <> play             (toggle <| isDown keyW) "triOsc"    [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
+                --  <> play             (toggle <| isDown keyA) "triOsc32"  [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
+                --  <> playBeatPattern  (toggle <| isDown keyE) [] (ploop [ [lich| [p p p] [p b] p b |] ])
+                --  <>
 
 sections :: Signal ()
 sections = switch section [section1, section2, section3]
@@ -56,8 +56,8 @@ section2 = scene [camSig,terrainSig]
 section3 :: Signal ()
 section3 = scene [camSig,sphereSig]
     where
-        sphereSig      = sphereObject <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time ~~ latitudes
-        latitudes      = playSignalPattern (toggle <| isDown keyS) 36.6 [] <| ploop [ [lich| [36 10] [24 12] [32 37] [30 33 34 35] |] ]
+        sphereSig      = sphereObject <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time ~~ pure 36
+        -- latitudes      = playSignalPattern (toggle <| isDown keyS) 36.6 [] <| ploop [ [lich| [36 10] [24 12] [32 37] [30 33 34 35] |] ]
         camSig         = cam <~ time * 0.05
         cam t          = perspCamera pos rot 60 0.1 1000 black [glow]
             where
@@ -355,19 +355,19 @@ floorPerc d = sig1 + sig2 |> e |> p 0.35 |> gain 0.65  |> out 0
 metallicPattern :: Signal ()
 metallicPattern =
     -- metallicPattern1
-            --   <&> metallicPattern1_2
-            --   <&> metallicPattern1_3
-            --   <&> metallicPattern2
+            --   <> metallicPattern1_2
+            --   <> metallicPattern1_3
+            --   <> metallicPattern2
               metallicPattern3
-              <&> metallicPattern3_2
-              <&> shakePattern
-            --   <&> shakePattern2
-            --   <&> shakePattern3
-            --   <&> shakePattern4
-            --   <&> metallicPattern2_2
-              <&> floorPattern
-              <&> swellPattern
-              <&> swellPattern2
+              <> metallicPattern3_2
+              <> shakePattern
+            --   <> shakePattern2
+            --   <> shakePattern3
+            --   <> shakePattern4
+            --   <> metallicPattern2_2
+              <> floorPattern
+              <> swellPattern
+              <> swellPattern2
 
 -- metallicPattern1 :: Signal ()
 -- metallicPattern1 = playSynthPattern (toggle <| isDown keyD) "metallic" [] (pmap (d2f slendro . (+0)) <| ploop [sec1])
@@ -418,7 +418,7 @@ metallicPattern =
                     --   _ 3 _ 0 |]
 
 metallicPattern3 :: Signal ()
-metallicPattern3 = playSynthPattern (toggle <| isDown keyD) "metallic3" [] (pmap ((*0.25) . d2f slendro) <| ploop [sec1])
+metallicPattern3 = playSynthPattern (toggle <| combo [alt,isDown keyD]) "metallic3" [] (pmap ((*0.25) . d2f slendro) <| ploop [sec1])
     where
         sec1 = [lich| _ _ _ _
                       _ _ _ 1
@@ -430,7 +430,7 @@ metallicPattern3 = playSynthPattern (toggle <| isDown keyD) "metallic3" [] (pmap
                       _ _ _ 0 |]
 
 metallicPattern3_2 :: Signal ()
-metallicPattern3_2 = playSynthPattern (toggle <| isDown keyD) "metallic4" [] (pmap ((*0.25) . d2f slendro) <| ploop [sec1])
+metallicPattern3_2 = playSynthPattern (toggle <| combo [alt,isDown keyD]) "metallic4" [] (pmap ((*0.25) . d2f slendro) <| ploop [sec1])
     where
         sec1 = [lich| _ _ _ _
                       _ _ _ _
@@ -451,7 +451,7 @@ metallicPattern3_2 = playSynthPattern (toggle <| isDown keyD) "metallic4" [] (pm
 
 
 shakePattern :: Signal ()
-shakePattern = playSynthPattern (toggle <| isDown keyD) "shake" [] (pmap (* 0.1) <| ploop [sec1])
+shakePattern = playSynthPattern (toggle <| combo [alt,isDown keyD]) "shake" [] (pmap (* 0.1) <| ploop [sec1])
     where
         sec1 = [lich| _
                       6   [_ 2] [_ 1]
@@ -495,12 +495,12 @@ shakePattern = playSynthPattern (toggle <| isDown keyD) "shake" [] (pmap (* 0.1)
                     --   _ _ [1 _ 1 1] 2  |]
 
 floorPattern :: Signal ()
-floorPattern = playSynthPattern (toggle <| isDown keyD) "floorPerc" [] (pmap (* 1) <| ploop [sec1])
+floorPattern = playSynthPattern (toggle <| combo [alt,isDown keyD]) "floorPerc" [] (pmap (* 1) <| ploop [sec1])
     where
         sec1 = [lich| 1 [_ 1] 1 _ |]
 
 swellPattern :: Signal ()
-swellPattern = playSynthPattern (toggle <| isDown keyD) "reverseSwell" [] (pmap ((*1) . d2f slendro) <| ploop [sec1])
+swellPattern = playSynthPattern (toggle <| combo [alt,isDown keyD]) "reverseSwell" [] (pmap ((*1) . d2f slendro) <| ploop [sec1])
     where
         sec1 = [lich| 0 _ _ _
                       _ _ _ _
@@ -520,7 +520,7 @@ swellPattern = playSynthPattern (toggle <| isDown keyD) "reverseSwell" [] (pmap 
                       _ _ _ _|]
 
 swellPattern2 :: Signal ()
-swellPattern2 = playSynthPattern (toggle <| isDown keyD) "reverseSwell2" [] (pmap ((*1) . d2f slendro) <| ploop [sec1])
+swellPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyD]) "reverseSwell2" [] (pmap ((*1) . d2f slendro) <| ploop [sec1])
     where
         sec1 = [lich| 3 _ _ _
                       _ _ _ _

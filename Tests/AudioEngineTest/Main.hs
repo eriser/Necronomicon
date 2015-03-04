@@ -26,9 +26,9 @@ main :: IO ()
 main = runSignal
        <|  synthDefs
         *> play (toggle <| isDown keyA) "delaySynthN" [mouseX ~> scale 20 10000, 1]
-       <&> play (toggle <| isDown keyW) "delaySynthL" [mouseX ~> scale 20 10000, 1]
-       <&> play (toggle <| isDown keyD) "delaySynthC" [mouseX ~> scale 20 10000, 1]
-       <&> play (toggle <| isDown keyS) "loopSynth"   [mouseX ~> scale 20 10000, mouseY ~> scale 20 10000]
+       <> play (toggle <| isDown keyW) "delaySynthL" [mouseX ~> scale 20 10000, 1]
+       <> play (toggle <| isDown keyD) "delaySynthC" [mouseX ~> scale 20 10000, 1]
+       <> play (toggle <| isDown keyS) "loopSynth"   [mouseX ~> scale 20 10000, mouseY ~> scale 20 10000]
 
 {-
 

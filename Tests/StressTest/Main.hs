@@ -3,7 +3,7 @@ import Data.Fixed (mod')
 import Data.List (zip4)
 
 main :: IO ()
-main = runSignal <| synthDefs *> testGUI <|> (sections <&> stressSounds)
+main = runSignal <| synthDefs *> testGUI <|> (sections <> stressSounds)
 
 synthDefs :: Signal ()
 synthDefs = synthDef "triOsc"    triOsc
@@ -20,9 +20,9 @@ sections = switch (netsignal <| floor . scale 0 3 <~ randFS ticker) [section1, s
 
 stressSounds :: Signal ()
 stressSounds = play             ((> 0.5) <~ randFS ticker) "triOsc"    [randFS ticker ~> scale 20 3000, randFS ticker ~> scale 20 3000]
-           <&> play             ((> 0.5) <~ randFS ticker) "triOsc32"  [randFS ticker ~> scale 20 3000, randFS ticker ~> scale 20 3000]
-           <&> playSynthPattern ((> 0.5) <~ randFS ticker) "triOscEnv" [] (pmap (d2f bartok . (+12)) <| ploop [ [lich| [0 1] [4 3] [2 3] [2 3 4 5] |] ])
-           <&> playBeatPattern  ((> 0.5) <~ randFS ticker) [] (ploop [ [lich| b [p b] p [p p p] |] ])
+           <> play             ((> 0.5) <~ randFS ticker) "triOsc32"  [randFS ticker ~> scale 20 3000, randFS ticker ~> scale 20 3000]
+           <> playSynthPattern ((> 0.5) <~ randFS ticker) "triOscEnv" [] (pmap (d2f bartok . (+12)) <| ploop [ [lich| [0 1] [4 3] [2 3] [2 3 4 5] |] ])
+           <> playBeatPattern  ((> 0.5) <~ randFS ticker) [] (ploop [ [lich| b [p b] p [p p p] |] ])
 
 section1 :: Signal ()
 section1 = scene [pure cam,oscSig]
@@ -179,14 +179,14 @@ testGUI = gui [chatBox,netBox,ubox]
 {-
 testSound :: Signal ()
 testSound = play (isDown keyW)                    myCoolSynth2
-        <&> play (toggle <| isDown keyA)          myCoolSynth3
-        <&> play (isDown keyP `till` isDown keyS) myCoolSynth2
+        <> play (toggle <| isDown keyA)          myCoolSynth3
+        <> play (isDown keyP `till` isDown keyS) myCoolSynth2
 
 testSound2 :: Signal ()
 testSound2 = play (toggle <| isDown keyW) noArgSynth
-         <&> play (toggle <| isDown keyA) oneArgSynth (mouseX ~> scale 20  3000)
-         <&> play (toggle <| isDown keyS) twoArgSynth (mouseX ~> scale 100 3000) (mouseY ~> scale 20 3000)
-         <&> play (toggle <| isDown keyD) threeSynth  440 880 66.6
+         <> play (toggle <| isDown keyA) oneArgSynth (mouseX ~> scale 20  3000)
+         <> play (toggle <| isDown keyS) twoArgSynth (mouseX ~> scale 100 3000) (mouseY ~> scale 20 3000)
+         <> play (toggle <| isDown keyD) threeSynth  440 880 66.6
 
 noArgSynth :: UGen
 noArgSynth = whiteNoise |> pluck 110 110 5.0 |> gain 0.1 |> out 0
