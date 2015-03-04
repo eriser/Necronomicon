@@ -8,9 +8,7 @@ reverbSynth freq = s |> freeverb 0.5 1 0.5 |> gain 0.1 |> out 0
         s = sin $ lag 0.1 freq
 
 delaySynthN :: UGen -> UGen -> UGen
-delaySynthN freq _ = s |> delayN 1 (sin 0.3 |> range 0 1) |> gain 0.1 |> out 0
-    where
-        s = sin $ lag 0.1 freq
+delaySynthN _ _ = sin (sin 0.3 |> range 440 880) |> gain 0.1 |> out 0
 
 delaySynthL :: UGen -> UGen -> UGen
 delaySynthL freq _ = s |> delayL 1 (sin 0.3 |> range 0 1) |> gain 0.1 |> out 0
