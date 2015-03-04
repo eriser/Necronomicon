@@ -21,6 +21,7 @@ synthDefs = synthDef "triOsc"        triOsc
          *> synthDef "floorPerc"     floorPerc
          *> synthDef "reverseSwell"  reverseSwell
          *> synthDef "reverseSwell2" reverseSwell2
+         *> synthDef "hyperMelody"   hyperMelody
 
 hyperTerrainSounds :: Signal ()
 hyperTerrainSounds = metallicPattern
@@ -63,7 +64,6 @@ section3 = scene [camSig,sphereSig]
             where
                 pos = Vector3 (cos (t * 0.7453) * 5) (sin (t * 0.912) * 8) (sin (t * 0.4543) * 4)
                 rot = inverse <| lookAt (_z_ (* (-2.5)) <| pos) 0
-
 
 terrainObject :: [Double] -> [Double] -> [Double] -> Double -> SceneObject
 terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 0 (-6)) (fromEuler' 0 0 0) (Vector3 0.5 1 0.5) (Model mesh <| vertexColored (RGBA 1 1 1 0.35)) []
@@ -293,32 +293,41 @@ fakePan a [u1,u2] = [(u1+u2) * (1 - a), (u1+u2) * a]
 fakePan a [u]     = [u * (1 - a),  u * a]
 fakePan _ _       = []
 
+hyperMelody :: UGen -> [UGen]
+hyperMelody f = [s,s2] |> gain 0.05 |> e |> out 0
+    where
+        e   = env [0,1,0.15, 0] [0.0001,0.1, 7] 3
+        s    = sin $ add (sin 3 * 6) (f*2)
+        s2   = sin $ add (sin 6 * 9) f
+
 --add sins for visuals and modulation
 reverseSwell :: UGen -> [UGen]
-reverseSwell f =  sig1 + sig2 + sig3 |> e |> tanhDist (random 31 |> range 0.25 1) |> gain 0.03 |> filt |> verb |> e |> fakePan 0.75 |> out 0
+reverseSwell f =  sig1 + sig2 + sig3 |> e |> tanhDist (random 31 |> range 0.25 1) |> add (whiteNoise * 0.25) |> gain 0.03 |> filt |> verb |> e |> fakePan 0.75 |> out 0
     where
+        hf     = f * 0.5
         verb   = freeverb 0.5 1 0.1
         e      = env  [0,1,0] [4,4] (3)
         e2     = env2 [0.125,1,0.125] [4,4] (3)
-        sig1   = pulse [f * (random 16 |> range 0.995 1.005),f * (random 28 |> range 0.995 1.005)] 0.995 * mod1
-        sig2   = pulse [f * (random 17 |> range 0.995 1.005),f * (random 29 |> range 0.995 1.005)] 0.995 * mod2
-        sig3   = pulse [f * (random 18 |> range 0.495 0.505),f * (random 30 |> range 0.495 0.505)] 0.995 * mod4 * 0.5
-        filt   = lpf    ([f * (random 19 |> range 3 11),       f * (random 31 |> range 3 11)]          * mod3 |> e2) 5
+        sig1   = saw [f * (random 16 |> range 0.995 1.005),f * (random 28 |> range 0.995 1.005)] * mod1
+        sig2   = saw [hf * (random 17 |> range 0.995 1.005),f * (random 29 |> range 0.995 1.005)] * mod2
+        sig3   = saw [f * (random 18 |> range 0.495 0.505),f * (random 30 |> range 0.495 0.505)] * mod4 * 0.5
+        filt   = lpf    ([f * (random 19 |> range 3 11),       f * (random 31 |> range 3 11)]          * mod3 |> e2) 2
         mod1   = [saw (random 20 |> range 0.5 2.0) |> range 0.01 1,saw (random 24 |> range 0.5 2.0) |> range 0.01 1]
         mod2   = [saw (random 21 |> range 0.5 2.0) |> range 0.01 1,saw (random 25 |> range 0.5 2.0) |> range 0.01 1]
         mod3   = [saw (random 22 |> range 0.5 2.0) |> range 0.25 1,saw (random 26 |> range 0.5 2.0) |> range 0.25 1]
         mod4   = [saw (random 23 |> range 0.5 2.0) |> range 0.01 1,saw (random 27 |> range 0.5 2.0) |> range 0.01 1]
 
 reverseSwell2 :: UGen -> [UGen]
-reverseSwell2 f = sig1 + sig2 + sig3 |> e |> tanhDist (random 32 |> range 0.25 1) |> gain 0.03 |> filt |> verb |> e |> fakePan 0.25 |> out 0
+reverseSwell2 f = sig1 + sig2 + sig3 |> e |> tanhDist (random 32 |> range 0.25 1) |> add (whiteNoise * 0.25) |> gain 0.03 |> filt |> verb |> e |> fakePan 0.25 |> out 0
     where
+        hf    = f * 0.5
         verb   = freeverb 0.5 1 0.1
         e      = env  [0,1,0] [4,4] (3)
         e2     = env2 [0.125,1,0.125] [4,4] (3)
-        sig1   = pulse [f * (random 0 |> range 0.995 1.005),f * (random 1 |> range 0.995 1.005)] 0.995 * mod1
-        sig2   = pulse [f * (random 2 |> range 0.995 1.005),f * (random 3 |> range 0.995 1.005)] 0.995 * mod2
-        sig3   = pulse [f * (random 4 |> range 0.495 0.505),f * (random 5 |> range 0.495 0.505)] 0.995 * mod4 * 0.5
-        filt   = lpf    ([f * (random 6 |> range 3 11)       ,f * (random 7 |> range 3 11)]          * mod3 |> e2) 5
+        sig1   = saw [hf * (random 0 |> range 0.995 1.005),f * (random 1 |> range 0.995 1.005)] * mod1
+        sig2   = saw [f * (random 2 |> range 0.995 1.005),f * (random 3 |> range 0.995 1.005)] * mod2
+        sig3   = saw [hf * (random 4 |> range 0.495 0.505),f * (random 5 |> range 0.495 0.505)] * mod4 * 0.5
+        filt   = lpf    ([f * (random 6 |> range 3 11)       ,f * (random 7 |> range 3 11)]          * mod3 |> e2) 2
         mod1   = [saw (random 8 |> range 0.5 2.0) |> range 0.01 1,saw (random 12 |> range 0.5 2.0) |> range 0.01 1]
         mod2   = [saw (random 9 |> range 0.5 2.0) |> range 0.01 1,saw (random 13 |> range 0.5 2.0) |> range 0.01 1]
         mod3   = [saw (random 10 |> range 0.25 1.0) |> range 0.25 1,saw (random 14 |> range 0.25 1.0) |> range 0.25 1]
@@ -337,12 +346,11 @@ shake d = sig1 + sig2 |> e |> p 0.75 |> gain 0.4  |> out 0
         e2    = env2 [1,1,0.125] [0.01,d*6] (-24)
 
 shake2 :: UGen -> [UGen]
-shake2 d = sig1 + sig2 |> e |> p 0.25 |> gain 0.025  |> out 0
+shake2 d = sig1 |> e |> p 0.25 |> tanhDist 2 |> gain 0.015  |> out 0
     where
         p a u = [u * (1 - a), u * a]
-        sig1  = whiteNoise |> bpf (14000) 2
-        sig2  = whiteNoise |> bpf (12000) 2
-        e     = perc 0.01 (d*0.25) 1 (-5)
+        sig1  = sin 640 + sin 653 + sin 627 + sin 1280 + sin 1293 + sin 2560
+        e     = perc 0.001 (d*0.5) 1 (-20)
 
 floorPerc :: UGen -> [UGen]
 floorPerc d = sig1 + sig2 |> e |> p 0.35 |> gain 0.65  |> out 0
@@ -364,13 +372,14 @@ metallicPattern =
               metallicPattern3
               <> metallicPattern3_2
               <> shakePattern
-            --   <> shakePattern2
+              <> shakePattern2
             --   <> shakePattern3
             --   <> shakePattern4
             --   <> metallicPattern2_2
               <> floorPattern
               <> swellPattern
               <> swellPattern2
+              <> hyperMelodyPattern
 
 -- metallicPattern1 :: Signal ()
 -- metallicPattern1 = playSynthPattern (toggle <| isDown keyD) "metallic" [] (pmap (d2f sigScale . (+0)) <| ploop [sec1])
@@ -474,28 +483,35 @@ shakePattern = playSynthPattern (toggle <| combo [alt,isDown keyD]) "shake" [] (
                       6   [_ 2] [_ 1]
                       4   [_ 2]       |]
 
+shakePattern2 :: Signal ()
+shakePattern2 = playSynthPattern (toggle <| combo [alt, isDown keyD]) "shake2" [] (pmap (* 0.075) <| ploop [sec1])
+    where
+        sec1 = [lich| [2 2 2] [7 _ 4] [_ 3 _ ]
+                      [_ 2] [_ 2] [_ 2] [_ 2]
+                    |]
+
 -- shakePattern2 :: Signal ()
 -- shakePattern2 = playSynthPattern (toggle <| isDown keyD) "shake2" [] (pmap (* 0.075) <| ploop [sec1])
-    -- where
-        -- sec1 = [lich| [3 3] [_ 4] [_ 4]
-                    --   [3 3] [_ 4] [_ 4]
-                    --   [3 3] [_ 4] [_ 4]
-                    --   [1 1 1]  [1 1 1] [2 1] |]
+--     where
+--         sec1 = pstutter 2 $ [lich| [3 3] [_ 4] [_ 4]
+--                       [3 3] [_ 4] [_ 4]
+--                       [3 3] [_ 4] [_ 4]
+--                       [1 1 1]  [1 1 1] [2 1] |]
 
 
 -- shakePattern3 :: Signal ()
 -- shakePattern3 = playSynthPattern (toggle <| isDown keyD) "shake2" [] (pmap (* 0.025) <| ploop [sec1])
-    -- where
-        -- sec1 = [lich| [2 1] [1 1] [1 1] _
-                    --   [2 1] [1 1] [1 1] _
-                    --   [2 1] [1 1] [1 1] _
-                    --   [2 1] [1 1] [1 1] 4 |]
+--     where
+--         sec1 = [lich| [2 1] [1 1] [1 1] _
+--                       [2 1] [1 1] [1 1] _
+--                       [2 1] [1 1] [1 1] _
+--                       [2 1] [1 1] [1 1] 4 |]
 
 -- shakePattern4 :: Signal ()
 -- shakePattern4 = playSynthPattern (toggle <| isDown keyD) "shake" [] (pmap (* 0.025) <| ploop [sec1])
-    -- where
-        -- sec1 = [lich| _ _ [1 _ 1 1] [1 1]
-                    --   _ _ [1 _ 1 1] 2  |]
+--     where
+--         sec1 = [lich| _ _ [1 _ 1 1] [1 1]
+--                       _ _ [1 _ 1 1] 2  |]
 
 floorPattern :: Signal ()
 floorPattern = playSynthPattern (toggle <| combo [alt,isDown keyD]) "floorPerc" [] (pmap (* 0.5) <| ploop [sec1])
@@ -549,6 +565,17 @@ swellPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyD]) "reverseSwe
                       _ _ _ _
                       7 _ _ _
                       _ _ _ _ |]
+
+hyperMelodyPattern :: Signal ()
+hyperMelodyPattern = playSynthPattern (toggle <| combo [alt,isDown keyD]) "hyperMelody" [] (pmap ((*1) . d2f sigScale) <| ploop [sec1])
+    where
+        sec1 = [lich| [_ 3] [4 3] [_ 3] 6 7 _ [_ 3] 4 _ _ _ _ _ _
+                      [1 _ 2] [_ 3 _] [2 4 6] 5 _ _ _ _ _ _ _ _ _ _ _
+                      [4 _ _ 3] [_ _ 2 _] [_ 1 _ _] 3 _ _ _ _ 2 _ _ _ _ _ _ 1 _ _
+                      _ _ _ _ _ _ 7 5 [_ 4] 5 _ _ _ _ _
+                      _ _ _ _ 3 _ _ _ _ _ _ _ _ _ _ _ _
+                      2 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+                |]
 
 {-
 metallic :: UGen -> [UGen]

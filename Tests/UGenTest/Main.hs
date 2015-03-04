@@ -260,7 +260,7 @@ syncOscSynth :: UGen -> UGen -> UGen
 syncOscSynth a b = syncosc a 0 0.5 b
 
 randSynth :: UGen -> UGen -> UGen
-randSynth _ _ = random
+randSynth a _ = random a
 
 noise0Synth :: UGen -> UGen -> UGen
 noise0Synth a _ = noise0 a

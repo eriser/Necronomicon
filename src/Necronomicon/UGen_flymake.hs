@@ -410,8 +410,8 @@ foreign import ccall "&rand_constructor"   randConstructor   :: CUGenFunc
 foreign import ccall "&rand_deconstructor" randDeconstructor :: CUGenFunc
 
 foreign import ccall "&rand_calc" randCalc :: CUGenFunc
-random :: UGenType a => a
-random = multiChannelExpandUGen Random randCalc randConstructor randDeconstructor []
+random :: UGenType a => a -> a
+random seed = multiChannelExpandUGen Random randCalc randConstructor randDeconstructor [seed]
 
 foreign import ccall "&lfnoiseN_calc" lfnoiseNCalc :: CUGenFunc
 noise0 :: UGenType a => a -> a
