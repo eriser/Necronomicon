@@ -4393,29 +4393,35 @@ void freeverb_deconstructor(ugen* u)
 const double fixed_gain = 0.015;
 
 // Should the delayed signal in this be x or y or x + y???
-#define COMB_FILTER(X,R,D,N,DATA,ZS,I)                                                       \
-({                                                                                           \
-	unsigned int   write_index           = DATA[I].write_index;                              \
-	unsigned int   num_samples_mask      = DATA[I].buffer->num_samples_mask;			     \
-	double         damp1                 = D * 0.4;							                 \
-	double         damp2                 = 1 - damp1;                                        \
-	double         feedback              = R * 0.28 + 0.7;                                   \
-	double         y                     = DATA[I].buffer->samples[write_index];             \
-	ZS[I]                                = y * damp2 + ZS[I] * damp1;                        \
-	DATA[I].buffer->samples[write_index] = (X * fixed_gain) + ZS[I] * feedback;		         \
-	DATA[I].write_index                  = (write_index + 1) & num_samples_mask;             \
-	y;                                                                                       \
+#define COMB_FILTER(X,R,D,N,DATA,ZS,I)                                                                     \
+({                                                                                                         \
+	long           write_index              = DATA[I].write_index;					                       \
+    sample_buffer* buffer                   = DATA[I].buffer;                                              \
+	unsigned int   num_samples_mask         = buffer->num_samples_mask;                                    \
+	double*        samples                  = buffer->samples;                                             \
+	double         damp1                    = D * 0.4;                                  				   \
+	double         damp2                    = 1 - damp1;                                                   \
+	double         feedback                 = R * 0.28 + 0.7;                                              \
+	long           read_index               = write_index - N;                                             \
+	double         y                        = read_index < 0 ? 0 : samples[read_index & num_samples_mask]; \
+	ZS[I]                                   = y * damp2 + ZS[I] * damp1;                                   \
+	samples[write_index & num_samples_mask] = (X * fixed_gain) + ZS[I] * feedback;		                   \
+	DATA[I].write_index                     = write_index + 1;                                             \
+	y;                                                                                                     \
 })
 
-#define ALLPASS_FEEDBACK(X,F,N,DATA,I)                                                       \
-({                                                                                           \
-    unsigned int   write_index           = DATA[I].write_index;                     		 \
-    unsigned int   num_samples_mask      = DATA[I].buffer->num_samples_mask;                 \
-    double         bufout                = DATA[I].buffer->samples[write_index];             \
-	double         y                     = -X + bufout;                                      \
-    DATA[I].buffer->samples[write_index] = X + bufout * F;                                   \
-	DATA[I].write_index                  = (write_index + 1) & num_samples_mask;             \
-	y;                                                                                       \
+#define ALLPASS_FEEDBACK(X,F,N,DATA,I)                                                                     \
+({                                                                                                         \
+    long           write_index              = DATA[I].write_index;                     		               \
+    long           read_index               = write_index - N;                                             \
+    sample_buffer* buffer                   = DATA[I].buffer;                                              \
+	double*        samples                  = buffer->samples;                                             \
+    unsigned int   num_samples_mask         = buffer->num_samples_mask;                                    \
+    double         bufout                   = read_index < 0 ? 0 : samples[read_index & num_samples_mask]; \
+	double         y                        = -X + bufout;                                                 \
+    samples[write_index & num_samples_mask] = X + bufout * F;                                              \
+	DATA[I].write_index                     = write_index + 1;                                             \
+	y;                                                                                                     \
 })
 
 
