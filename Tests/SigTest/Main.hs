@@ -294,9 +294,9 @@ fakePan a [u]     = [u * (1 - a),  u * a]
 fakePan _ _       = []
 
 hyperMelody :: UGen -> [UGen]
-hyperMelody f = [s,s2] |> gain 0.05 |> e |> out 0
+hyperMelody f = [s,s2] |> gain 0.035 |> e |> out 0
     where
-        e   = env [0,1,0.15, 0] [0.0001,0.1, 7] 3
+        e   = env [0,1,0.15, 0] [0.0001,0.1, 7] (-3)
         s    = sin $ add (sin 3 * 6) (f*2)
         s2   = sin $ add (sin 6 * 9) f
 
@@ -334,7 +334,7 @@ reverseSwell2 f = sig1 + sig2 + sig3 |> e |> tanhDist (random 32 |> range 0.25 1
         mod4   = [saw (random 11 |> range 0.5 2.0) |> range 0.01 1,saw (random 15 |> range 0.5 2.0) |> range 0.01 1]
 
 shake :: UGen -> [UGen]
-shake d = sig1 + sig2 |> e |> p 0.75 |> gain 0.4  |> out 0
+shake d = sig1 + sig2 |> e |> gain 0.4 |> p 0.75 |> out 0
     where
         p a u = [u * (1 - a), u * a]
         sig1  = whiteNoise |> bpf (12000 |> e2) 3 |> gain 0.05
@@ -346,11 +346,19 @@ shake d = sig1 + sig2 |> e |> p 0.75 |> gain 0.4  |> out 0
         e2    = env2 [1,1,0.125] [0.01,d*6] (-24)
 
 shake2 :: UGen -> [UGen]
-shake2 d = sig1 |> e |> p 0.25 |> tanhDist 2 |> gain 0.015  |> out 0
+shake2 d = sig0 + sig1 + sig2 |> tanhDist 1 |> e |> gain 0.45 |> p 0.35 |> out 0
     where
+        f     = 261.6255653006
         p a u = [u * (1 - a), u * a]
-        sig1  = sin 640 + sin 653 + sin 627 + sin 1280 + sin 1293 + sin 2560
-        e     = perc 0.001 (d*0.5) 1 (-20)
+        -- sig0  = sin (f*1) + sin (f * 3.001) + sin (f*2.999) + (whiteNoise * 0.1) |> gain 1.5 |> e3
+        -- sig1  = sin (f*7) + sin (f*8.01)    + sin (f*6.0)     |> gain (d * 0.5) |> e
+        -- sig2  = sin (f*9) + sin (f*12.01)     + sin (f*10.999) |> gain d |> e2
+        sig0 = whiteNoise * 0.5 |> bpf (f * 8.01) 9  |> e
+        sig1 = whiteNoise * 0.5 |> bpf (f * 12.0) 9 |> gain (d * 2)   |> e2
+        sig2 = whiteNoise * 0.5 |> bpf (f * 16.0) 9  |> gain (d * 1.5) |> e3
+        e     = perc  0.001 (d*0.35) 0.5 (-1)
+        e2    = perc2 0.001 (d*0.35) 0.5 (-2)
+        e3    = perc2 0.001 (d*0.35) 0.5 (-4)
 
 floorPerc :: UGen -> [UGen]
 floorPerc d = sig1 + sig2 |> e |> p 0.35 |> gain 0.65  |> out 0
@@ -567,7 +575,7 @@ swellPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyD]) "reverseSwe
                       _ _ _ _ |]
 
 hyperMelodyPattern :: Signal ()
-hyperMelodyPattern = playSynthPattern (toggle <| combo [alt,isDown keyD]) "hyperMelody" [] (pmap ((*1) . d2f sigScale) <| ploop [sec1])
+hyperMelodyPattern = playSynthPattern (toggle <| combo [alt,isDown keyF]) "hyperMelody" [] (pmap ((*1) . d2f sigScale) <| ploop [sec1])
     where
         sec1 = [lich| [_ 3] [4 3] [_ 3] 6 7 _ [_ 3] 4 _ _ _ _ _ _
                       [1 _ 2] [_ 3 _] [2 4 6] 5 _ _ _ _ _ _ _ _ _ _ _
