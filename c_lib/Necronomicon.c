@@ -3385,12 +3385,30 @@ void rand_deconstructor(ugen* u)
 	free(u->data);
 }
 
+void rand_range_constructor(ugen* u)
+{
+	double* value = malloc(sizeof(double));
+
+	double   seed  = u->constructor_args[0];
+	double   min   = u->constructor_args[1];
+	double   max   = u->constructor_args[2];
+	double   range = max - min;
+	double   in    = RAND_RANGE(0,1);
+	*value         = (in * range) + min;
+	u->data        = value;
+}
+
+void rand_range_deconstructor(ugen* u)
+{
+	free(u->data);
+}
+
 void rand_calc(ugen u)
 {
 	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
-	rand_t   rand = *((rand_t*) u.data);
+	double   val  = *((double*) u.data);
 
-	AUDIO_LOOP(UGEN_OUT(out,rand.value0););
+	AUDIO_LOOP(UGEN_OUT(out,val););
 }
 
 void lfnoiseN_calc(ugen u)

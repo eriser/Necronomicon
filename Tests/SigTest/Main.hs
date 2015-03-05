@@ -22,6 +22,7 @@ synthDefs = synthDef "triOsc"        triOsc
          *> synthDef "reverseSwell"  reverseSwell
          *> synthDef "reverseSwell2" reverseSwell2
          *> synthDef "hyperMelody"   hyperMelody
+         *> synthDef "caveTime"      caveTime
 
 hyperTerrainSounds :: Signal ()
 hyperTerrainSounds = metallicPattern
@@ -207,13 +208,13 @@ pSynth = sin 1110 |> gain (line 0.1) >>> gain 0.2 >>> out 1
 -- metallic :: UGen -> [UGen]
 -- metallic f = sig + sig2 + sig3 |> filt |> e |> auxThrough 2 |> gain 0.15 |> out 0
     -- where
-        -- sig  = sin   [f * (random |> range 0.999 1.001),f * (random |> range 0.999 1.001)]       |> gain 0.1
-        -- sig2 = pulse [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)] 0.995 |> gain 0.1
-        -- sig3 = sin   [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)]       |> gain 0.1
+        -- sig  = sin   [f * (random 0.999 1.001),f * (random 0.999 1.001)]       |> gain 0.1
+        -- sig2 = pulse [f * (random 0.499 0.501),f * (random 0.499 0.501)] 0.995 |> gain 0.1
+        -- sig3 = sin   [f * (random 0.499 0.501),f * (random 0.499 0.501)]       |> gain 0.1
 
-        -- filt1 = lpf  ([f * (random |> range 1 3 ),f * (random |> range 1 2)] |> e2) 3
-        -- filt2 = lpf  ([f * (random |> range 3 5 ),f * (random |> range 2 4)] |> e2) 3
-        -- filt3 = lpf  ([f * (random |> range 6 10),f * (random |> range 3 6)] |> e2) 3
+        -- filt1 = lpf  ([f * (random 1 3 ),f * (random 1 2)] |> e2) 3
+        -- filt2 = lpf  ([f * (random 3 5 ),f * (random 2 4)] |> e2) 3
+        -- filt3 = lpf  ([f * (random 6 10),f * (random 3 6)] |> e2) 3
         -- filt i= filt1 i + filt2 i * 0.5 + filt3 i * 0.5
 
         -- e    = perc 0.01 1.0 1 (-2)
@@ -222,29 +223,36 @@ pSynth = sin 1110 |> gain (line 0.1) >>> gain 0.2 >>> out 1
 -- metallic2 :: UGen -> [UGen]
 -- metallic2 f = sig + sig2 + sig3 |> filt |> e |> auxThrough 3 |> gain 0.125 |> (\[u1,u2 ]-> [u2,u1]) |> out 0
     -- where
-        -- sig   = sin   [f * (random |> range 0.999 1.001  ),f * (random |> range 0.999 1.001)]         |> gain 0.1
-        -- sig2  = pulse [f * (random |> range 0.2499 0.2501),f * (random |> range 0.2499 0.2501)] 0.995 |> gain 0.1
-        -- sig3  = sin   [f * (random |> range 0.499 0.501  ),f * (random |> range 0.499 0.501)]         |> gain 0.1
+        -- sig   = sin   [f * (random 0.999 1.001  ),f * (random 0.999 1.001)]         |> gain 0.1
+        -- sig2  = pulse [f * (random 0.2499 0.2501),f * (random 0.2499 0.2501)] 0.995 |> gain 0.1
+        -- sig3  = sin   [f * (random 0.499 0.501  ),f * (random 0.499 0.501)]         |> gain 0.1
 --
-        -- filt1 = lpf  ([f * (random |> range 3 5 ),f * (random |> range 1 2)] |> e2) 3
-        -- filt2 = lpf  ([f * (random |> range 3 5 ),f * (random |> range 2 4)] |> e2) 3
-        -- filt3 = lpf  ([f * (random |> range 6 10),f * (random |> range 3 6)] |> e2) 3
+        -- filt1 = lpf  ([f * (random 3 5 ),f * (random 1 2)] |> e2) 3
+        -- filt2 = lpf  ([f * (random 3 5 ),f * (random 2 4)] |> e2) 3
+        -- filt3 = lpf  ([f * (random 6 10),f * (random 3 6)] |> e2) 3
         -- filt i= filt1 i + filt2 i * 0.5 + filt3 i * 0.5
 
         -- e     = perc 0.01 0.75 1 (-4)
         -- e2    = env2 [1,1,0.5,0.5] [0.01,0.35,0.4] (-4)
 
+caveTime :: [UGen]
+caveTime = [l * 0.875 + r * 0.125,r * 0.875 + l * 0.125] |> out 0
+    where
+        l     = auxIn 20 |> verb
+        r     = auxIn 21 |> verb
+        verb  = freeverb 0.5 1.0 0.1
+
 metallic3 :: UGen -> [UGen]
 metallic3 f = sig + sig2 + sig3 |> e |> softclip 1000 |> filt |> gain 0.1 |> verb |> e |> gain 1 |> (\[u1,u2 ]-> [u2,u1]) |> out 0
     where
-        sig    = sin   [f * (random 0 |> range 0.999 1.001  ),f * (random 7 |> range 0.999 1.001)]         |> gain 0.15
-        sig2   = sin   [f * (random 1 |> range 0.499 0.50   ),f * (random 8 |> range 0.499 0.501)]         |> gain 0.15
-        sig3   = sin   [f * (random 2 |> range 0.499 0.501  ),f * (random 9 |> range 0.499 0.501)]         |> gain 0.15
+        sig    = sin   [f * (random 0 0.999 1.001  ),f * (random 7 0.999 1.001)]         |> gain 0.15
+        sig2   = sin   [f * (random 1 0.499 0.50   ),f * (random 8 0.499 0.501)]         |> gain 0.15
+        sig3   = sin   [f * (random 2 0.499 0.501  ),f * (random 9 0.499 0.501)]         |> gain 0.15
 
-        filt1  = lpf  ([f * (random 3 |> range 4  8 ),f * (random 10 |> range 2  4)] |> e2) 6
-        filt2  = lpf  ([f * (random 4 |> range 2  4 ),f * (random 11 |> range 4  8)] |> e2) 6
-        filt3  = lpf  ([f * (random 5 |> range 6  10),f * (random 12 |> range 3  6)] |> e2) 6
-        filt4  = lpf  ([f * (random 6 |> range 12 24),f * (random 13 |> range 6 12)] |> e2) 6
+        filt1  = lpf  ([f * (random 3 4  8 ),f * (random 10 2  4)] |> e2) 6
+        filt2  = lpf  ([f * (random 4 2  4 ),f * (random 11 4  8)] |> e2) 6
+        filt3  = lpf  ([f * (random 5 6  10),f * (random 12 3  6)] |> e2) 6
+        filt4  = lpf  ([f * (random 6 12 24),f * (random 13 6 12)] |> e2) 6
         filt s = filt1 s + filt2 s + filt3 s + filt4 s
 
         e      = perc 0.01 6 1 (-12)
@@ -256,14 +264,14 @@ metallic3 f = sig + sig2 + sig3 |> e |> softclip 1000 |> filt |> gain 0.1 |> ver
 metallic4 :: UGen -> [UGen]
 metallic4 f = sig + sig2 + sig3 |> e |> softclip 1000 |> filt |> gain 0.1 |> verb |> e |> gain 1 |> out 0
     where
-        sig    = sin   [f * (random 0 |> range 0.995 1.005  ),f * (random 7 |> range 0.995 1.005)]         |> gain 0.15
-        sig2   = sin   [f * (random 1 |> range 0.495 0.505),f * (random 8 |> range 0.495 0.505)] |> gain 0.15
-        sig3   = sin   [f * (random 2 |> range 0.495 0.505  ),f * (random 9 |> range 0.495 0.505)]         |> gain 0.15
+        sig    = sin   [f * (random 0 0.995 1.005),f * (random 7 0.995 1.005)] |> gain 0.15
+        sig2   = sin   [f * (random 1 0.495 0.505),f * (random 8 0.495 0.505)] |> gain 0.15
+        sig3   = sin   [f * (random 2 0.495 0.505),f * (random 9 0.495 0.505)] |> gain 0.15
 
-        filt1  = lpf  ([f * (random 3 |> range 4  8 ),f * (random 10 |> range 2  4)] |> e2) 6
-        filt2  = lpf  ([f * (random 4 |> range 2  4 ),f * (random 11 |> range 4  8)] |> e2) 6
-        filt3  = lpf  ([f * (random 5 |> range 6  10),f * (random 12 |> range 3  6)] |> e2) 6
-        filt4  = lpf  ([f * (random 6 |> range 12 24),f * (random 13 |> range 6 12)] |> e2) 6
+        filt1  = lpf  ([f * (random 3 4  8 ),f * (random 10 2  4)] |> e2) 6
+        filt2  = lpf  ([f * (random 4 2  4 ),f * (random 11 4  8)] |> e2) 6
+        filt3  = lpf  ([f * (random 5 6  10),f * (random 12 3  6)] |> e2) 6
+        filt4  = lpf  ([f * (random 6 12 24),f * (random 13 6 12)] |> e2) 6
         filt s = filt1 s + filt2 s + filt3 s + filt4 s
 
         e      = perc 0.01 6 1 (-12)
@@ -273,13 +281,13 @@ metallic4 f = sig + sig2 + sig3 |> e |> softclip 1000 |> filt |> gain 0.1 |> ver
 -- metallic5 :: UGen -> [UGen]
 -- metallic5 f = sig + sig2 + sig3 |> filt |> e |> verb |> e2 |> gain 0.25 |> out 0
     -- where
-        -- sig  = sin   [f * (random |> range 0.999 1.001),f * (random |> range 0.999 1.001)]      |> gain 0.1
-        -- sig2 = pulse [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)] 0.975 |> gain 0.1 |> auxThrough 4
-        -- sig3 = sin   [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)]      |> gain 0.1 |> auxThrough 2
+        -- sig  = sin   [f * (random 0.999 1.001),f * (random 0.999 1.001)]      |> gain 0.1
+        -- sig2 = pulse [f * (random 0.499 0.501),f * (random 0.499 0.501)] 0.975 |> gain 0.1 |> auxThrough 4
+        -- sig3 = sin   [f * (random 0.499 0.501),f * (random 0.499 0.501)]      |> gain 0.1 |> auxThrough 2
 
-        -- filt2 = lpf  ([f * (random |> range 2 4 ),f * (random |> range 6  10)] |> e) 2
-        -- filt3 = lpf  ([f * (random |> range 3 9 ),f * (random |> range 12 24)] |> e) 2
-        -- filt1 = lpf  ([f * (random |> range 9 12),f * (random |> range 24 36)] |> e) 2
+        -- filt2 = lpf  ([f * (random 2 4 ),f * (random 6  10)] |> e) 2
+        -- filt3 = lpf  ([f * (random 3 9 ),f * (random 12 24)] |> e) 2
+        -- filt1 = lpf  ([f * (random 9 12),f * (random 24 36)] |> e) 2
         -- filt i= filt1 i + filt2 i * 0.5 + filt3 i * 0.5
 
         -- verb = freeverb 0.25 0.5 0.5
@@ -302,36 +310,36 @@ hyperMelody f = [s,s2] |> gain 0.035 |> e |> out 0
 
 --add sins for visuals and modulation
 reverseSwell :: UGen -> [UGen]
-reverseSwell f =  sig1 + sig2 + sig3 |> e |> tanhDist (random 31 |> range 0.25 1) |> add (whiteNoise * 0.25) |> gain 0.03 |> filt |> verb |> e |> fakePan 0.75 |> out 0
+reverseSwell f =  sig1 + sig2 + sig3 |> e |> tanhDist (dup <| random 31 0.25 1) |> add (whiteNoise * 0.25) |> gain 0.03 |> filt |> e |> fakePan 0.75 |> out 20
     where
         hf     = f * 0.5
-        verb   = freeverb 0.5 1 0.1
+        -- verb   = freeverb 0.5 1 0.1
         e      = env  [0,1,0] [4,4] (3)
         e2     = env2 [0.125,1,0.125] [4,4] (3)
-        sig1   = saw [f * (random 16 |> range 0.995 1.005),f * (random 28 |> range 0.995 1.005)] * mod1
-        sig2   = saw [hf * (random 17 |> range 0.995 1.005),f * (random 29 |> range 0.995 1.005)] * mod2
-        sig3   = saw [f * (random 18 |> range 0.495 0.505),f * (random 30 |> range 0.495 0.505)] * mod4 * 0.5
-        filt   = lpf    ([f * (random 19 |> range 3 11),       f * (random 31 |> range 3 11)]          * mod3 |> e2) 2
-        mod1   = [saw (random 20 |> range 0.5 2.0) |> range 0.01 1,saw (random 24 |> range 0.5 2.0) |> range 0.01 1]
-        mod2   = [saw (random 21 |> range 0.5 2.0) |> range 0.01 1,saw (random 25 |> range 0.5 2.0) |> range 0.01 1]
-        mod3   = [saw (random 22 |> range 0.5 2.0) |> range 0.25 1,saw (random 26 |> range 0.5 2.0) |> range 0.25 1]
-        mod4   = [saw (random 23 |> range 0.5 2.0) |> range 0.01 1,saw (random 27 |> range 0.5 2.0) |> range 0.01 1]
+        sig1   = saw [ f * (random 16 0.995 1.005),f * (random 28 0.995 1.005)] * mod1
+        sig2   = saw [hf * (random 17 0.995 1.005),f * (random 29 0.995 1.005)] * mod2
+        sig3   = saw [ f * (random 18 0.495 0.505),f * (random 30 0.495 0.505)] * mod4 * 0.5
+        filt   = lpf ([f * (random 19 3 11),       f * (random 31 3 11)]        * mod3 |> e2) 2
+        mod1   = [saw (random 20 0.5 2.0) |> range 0.01 1,saw (random 24 0.5 2.0) |> range 0.01 1]
+        mod2   = [saw (random 21 0.5 2.0) |> range 0.01 1,saw (random 25 0.5 2.0) |> range 0.01 1]
+        mod3   = [saw (random 22 0.5 2.0) |> range 0.25 1,saw (random 26 0.5 2.0) |> range 0.25 1]
+        mod4   = [saw (random 23 0.5 2.0) |> range 0.01 1,saw (random 27 0.5 2.0) |> range 0.01 1]
 
 reverseSwell2 :: UGen -> [UGen]
-reverseSwell2 f = sig1 + sig2 + sig3 |> e |> tanhDist (random 32 |> range 0.25 1) |> add (whiteNoise * 0.25) |> gain 0.03 |> filt |> verb |> e |> fakePan 0.25 |> out 0
+reverseSwell2 f = sig1 + sig2 + sig3 |> e |> tanhDist (dup <| random 32 0.25 1) |> add (whiteNoise * 0.25) |> gain 0.03 |> filt |> e |> fakePan 0.25 |> out 20
     where
         hf    = f * 0.5
-        verb   = freeverb 0.5 1 0.1
+        -- verb   = freeverb 0.5 1 0.1
         e      = env  [0,1,0] [4,4] (3)
         e2     = env2 [0.125,1,0.125] [4,4] (3)
-        sig1   = saw [hf * (random 0 |> range 0.995 1.005),f * (random 1 |> range 0.995 1.005)] * mod1
-        sig2   = saw [f * (random 2 |> range 0.995 1.005),f * (random 3 |> range 0.995 1.005)] * mod2
-        sig3   = saw [hf * (random 4 |> range 0.495 0.505),f * (random 5 |> range 0.495 0.505)] * mod4 * 0.5
-        filt   = lpf    ([f * (random 6 |> range 3 11)       ,f * (random 7 |> range 3 11)]          * mod3 |> e2) 2
-        mod1   = [saw (random 8 |> range 0.5 2.0) |> range 0.01 1,saw (random 12 |> range 0.5 2.0) |> range 0.01 1]
-        mod2   = [saw (random 9 |> range 0.5 2.0) |> range 0.01 1,saw (random 13 |> range 0.5 2.0) |> range 0.01 1]
-        mod3   = [saw (random 10 |> range 0.25 1.0) |> range 0.25 1,saw (random 14 |> range 0.25 1.0) |> range 0.25 1]
-        mod4   = [saw (random 11 |> range 0.5 2.0) |> range 0.01 1,saw (random 15 |> range 0.5 2.0) |> range 0.01 1]
+        sig1   = saw [hf * (random 0 0.995 1.005),f * (random 1 0.995 1.005)] * mod1
+        sig2   = saw [ f * (random 2 0.995 1.005),f * (random 3 0.995 1.005)] * mod2
+        sig3   = saw [hf * (random 4 0.495 0.505),f * (random 5 0.495 0.505)] * mod4 * 0.5
+        filt   = lpf ([f * (random 6 3 11)       ,f * (random 7 3 11)]        * mod3 |> e2) 2
+        mod1   = [saw (random 8 0.5 2.0)   |> range 0.01 1,saw (random 12 0.5 2.0)   |> range 0.01 1]
+        mod2   = [saw (random 9 0.5 2.0)   |> range 0.01 1,saw (random 13 0.5 2.0)   |> range 0.01 1]
+        mod3   = [saw (random 10 0.25 1.0) |> range 0.25 1,saw (random 14 0.25 1.0)  |> range 0.25 1]
+        mod4   = [saw (random 11 0.5 2.0)  |> range 0.01 1,saw (random 15 0.5 2.0)   |> range 0.01 1]
 
 shake :: UGen -> [UGen]
 shake d = sig1 + sig2 |> e |> gain 0.4 |> p 0.75 |> out 0
@@ -372,22 +380,15 @@ sigScale :: Scale
 sigScale = slendro
 
 metallicPattern :: Signal ()
-metallicPattern =
-    -- metallicPattern1
-            --   <> metallicPattern1_2
-            --   <> metallicPattern1_3
-            --   <> metallicPattern2
-              metallicPattern3
-              <> metallicPattern3_2
-              <> shakePattern
-              <> shakePattern2
-            --   <> shakePattern3
-            --   <> shakePattern4
-            --   <> metallicPattern2_2
-              <> floorPattern
-              <> swellPattern
-              <> swellPattern2
-              <> hyperMelodyPattern
+metallicPattern = play (toggle <| isDown keyD) "caveTime" []
+               <> metallicPattern3
+               <> metallicPattern3_2
+               <> shakePattern
+               <> shakePattern2
+               <> floorPattern
+               <> swellPattern
+               <> swellPattern2
+               <> hyperMelodyPattern
 
 -- metallicPattern1 :: Signal ()
 -- metallicPattern1 = playSynthPattern (toggle <| isDown keyD) "metallic" [] (pmap (d2f sigScale . (+0)) <| ploop [sec1])
@@ -589,13 +590,13 @@ hyperMelodyPattern = playSynthPattern (toggle <| combo [alt,isDown keyF]) "hyper
 metallic :: UGen -> [UGen]
 metallic f = sig + sig2 + sig3 |> filt |> e |> auxThrough 2 |> gain 0.15 |> out 0
     where
-        sig  = sin   [f * (random |> range 0.999 1.001),f * (random |> range 0.999 1.001)]       |> gain 0.1
-        sig2 = pulse [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)] 0.995 |> gain 0.1
-        sig3 = sin   [f * (random |> range 0.499 0.501),f * (random |> range 0.499 0.501)]       |> gain 0.1
+        sig  = sin   [f * (random 0.999 1.001),f * (random 0.999 1.001)]       |> gain 0.1
+        sig2 = pulse [f * (random 0.499 0.501),f * (random 0.499 0.501)] 0.995 |> gain 0.1
+        sig3 = sin   [f * (random 0.499 0.501),f * (random 0.499 0.501)]       |> gain 0.1
 
-        filt1 = lpf  ([f * (random |> range 1 3 ),f * (random |> range 1 2)] |> e2) 3
-        filt2 = lpf  ([f * (random |> range 3 5 ),f * (random |> range 2 4)] |> e2) 3
-        filt3 = lpf  ([f * (random |> range 6 10),f * (random |> range 3 6)] |> e2) 3
+        filt1 = lpf  ([f * (random 1 3 ),f * (random 1 2)] |> e2) 3
+        filt2 = lpf  ([f * (random 3 5 ),f * (random 2 4)] |> e2) 3
+        filt3 = lpf  ([f * (random 6 10),f * (random 3 6)] |> e2) 3
         filt i= filt1 i + filt2 i * 0.5 + filt3 i * 0.5
 
         e    = perc 0.01 1.0 1 (-2)

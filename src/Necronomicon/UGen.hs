@@ -25,7 +25,7 @@ data UGen = UGenNum Double
           deriving (Typeable)
 
 data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Env Double Double | Env2 Double Double | Out | AuxIn | Poll | LFSaw | LFPulse | Saw | Pulse
-              | SyncSaw | SyncPulse | SyncOsc | Random | NoiseN | NoiseL | NoiseC | Dust | Dust2 | Impulse | Range | ExpRange
+              | SyncSaw | SyncPulse | SyncOsc | Random Double Double Double | NoiseN | NoiseL | NoiseC | Dust | Dust2 | Impulse | Range | ExpRange
               | LPF | HPF | BPF | Notch | AllPass | PeakEQ | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int
               | Clip | SoftClip | Poly3 | TanHDist | SinDist | Wrap | DelayN Double | DelayL Double | DelayC Double
               | Negate | Crush | Decimate | FreeVerb | Pluck Double | WhiteNoise | Abs | Signum | Pow | Exp | Log | Cos | ASin | ACos
@@ -409,9 +409,11 @@ syncosc slaveFreq slaveWave slavePW masterFreq = multiChannelExpandUGen SyncOsc 
 foreign import ccall "&rand_constructor"   randConstructor   :: CUGenFunc
 foreign import ccall "&rand_deconstructor" randDeconstructor :: CUGenFunc
 
+foreign import ccall "&rand_range_constructor"   randRangeConstructor   :: CUGenFunc
+foreign import ccall "&rand_range_deconstructor" randRangeDeconstructor :: CUGenFunc
 foreign import ccall "&rand_calc" randCalc :: CUGenFunc
-random :: UGenType a => a -> a
-random seed = multiChannelExpandUGen Random randCalc randConstructor randDeconstructor [seed]
+random :: Double -> Double -> Double -> UGen
+random seed rmin rmax = multiChannelExpandUGen (Random seed rmin rmax) randCalc randRangeConstructor randRangeDeconstructor []
 
 foreign import ccall "&lfnoiseN_calc" lfnoiseNCalc :: CUGenFunc
 noise0 :: UGenType a => a -> a
@@ -553,6 +555,9 @@ foreign import ccall "&freeverb_calc" freeverbCalc :: CUGenFunc
 
 freeverb :: UGenType a => a -> a -> a -> a -> a
 freeverb mix roomSize damp input = multiChannelExpandUGen FreeVerb freeverbCalc freeverbConstructor freeverbDeconstructor [mix,roomSize,damp,input]
+
+dup :: UGen -> [UGen]
+dup u = [u,u]
 ----------------------------------------------------
 
 loopSynth :: UGen -> UGen -> [UGen]
@@ -837,6 +842,8 @@ compileUGen ugen@(UGenFunc (Env numValues numDurations) _ _ _ _) args key = lift
     compileUGenWithConstructorArgs ugen numDurationsPtr args key
 compileUGen ugen@(UGenFunc (Env2 numValues numDurations) _ _ _ _) args key = liftIO (newArray [CDouble numValues,CDouble numDurations]) >>= \numDurationsPtr ->
     compileUGenWithConstructorArgs ugen numDurationsPtr args key
+compileUGen ugen@(UGenFunc (Random seed rmin rmax) _ _ _ _) args key = liftIO (newArray [CDouble seed,CDouble rmin,CDouble rmax]) >>= \randValuesPtr ->
+    compileUGenWithConstructorArgs ugen randValuesPtr args key
 compileUGen ugen args key = compileUGenWithConstructorArgs ugen nullPtr args key
 
 
