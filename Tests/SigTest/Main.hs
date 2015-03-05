@@ -378,7 +378,7 @@ sigScale :: Scale
 sigScale = slendro
 
 metallicPattern :: Signal ()
-metallicPattern = play (toggle <| isDown keyD) "caveTime" []
+metallicPattern = play (toggle <| comb [alt,isDown keyD]) "caveTime" []
                <> metallicPattern3
                <> metallicPattern3_2
                <> shakePattern
@@ -607,9 +607,9 @@ hyperCave f1 f2 = [l * 0.875 + r * 0.125,r * 0.875 + l * 0.125] |> out 0
         -- d3    = delayN 0.8 0.8
 
 hyperMelodyPattern2 :: Signal ()
-hyperMelodyPattern2 = fx <> playSynthPattern (toggle <| combo [alt,isDown keyF]) "hyperMelody2" [] (pmap ((*1) . d2f sigScale) <| ploop [sec1])
+hyperMelodyPattern2 = fx <> playSynthPattern (toggle <| combo [alt,isDown keyG]) "hyperMelody2" [] (pmap ((*1) . d2f sigScale) <| ploop [sec1])
     where
-        fx   = play (toggle <| isDown keyD) "hyperCave" [scale 250 6000 <~ mouseX,scale 250 6000 <~ mouseY]
+        fx   = play (toggle <| combo [alt,isDown keyG]) "hyperCave" [scale 250 6000 <~ mouseX,scale 250 6000 <~ mouseY]
         sec1 = [lich| 0 _ 0 _ 0 _ 0 _
                       1 _ 1 _ 1 _ 1 _
                       0 _ 0 _ 0 _ 0 _
