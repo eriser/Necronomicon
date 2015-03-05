@@ -20,8 +20,8 @@ synthDefs = synthDef "triOsc"        triOsc
          *> synthDef "reverseSwell2" reverseSwell2
          *> synthDef "hyperMelody"   hyperMelody
          *> synthDef "caveTime"      caveTime
-         *> synthDef "hyperMelody2"  hyperMelody2
-         *> synthDef "hyperCave"     hyperCave
+         *> synthDef "pulseDemon"    pulseDemon
+         *> synthDef "demonCave"     demonCave
 
 hyperTerrainSounds :: Signal ()
 hyperTerrainSounds = metallicPattern
@@ -388,7 +388,7 @@ metallicPattern = play (toggle <| combo [alt,isDown keyD]) "caveTime" []
                <> swellPattern2
                <> hyperMelodyPattern
                <> hyperMelodyPattern2
-               <> hyperMelodyPattern3
+               <> pulseDemonPattern
 
 -- metallicPattern1 :: Signal ()
 -- metallicPattern1 = playSynthPattern (toggle <| isDown keyD) "metallic" [] (pmap (d2f sigScale . (+0)) <| ploop [sec1])
@@ -586,41 +586,8 @@ hyperMelodyPattern = playSynthPattern (toggle <| combo [alt,isDown keyF]) "hyper
                       2 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
                 |]
 
-hyperMelody2 :: UGen -> [UGen]
-hyperMelody2 f = [s,s2] |> filt |> softclip (dup <| random 31 100 200) |> gain 0.0225 |> e |> out 18
-    where
-        e    = env [0,1,0]         [0.01, 0.6] (-1)
-        e2   = env [1.0,0.1,0.001] [0.6, 0.01] 0
-        s    = pulse (f * random 4 0.995 1.005) (random 2 0.01 0.99)
-        s2   = pulse (f * random 4 0.995 1.005) (random 3 0.01 0.99)
-        filt = lpf ([f * (random 19 2 16), f * (random 31 2 16)]|> e2) 3
-
-hyperCave :: UGen -> UGen -> [UGen]
-hyperCave f1 f2 = [l * 0.875 + r * 0.125,r * 0.875 + l * 0.125] |> out 0
-    where
-        l     = auxIn 18 |> filt1 +> d2 |> verb +> d
-        r     = auxIn 19 |> filt2 +> d2 |> verb +> d
-        filt1 = lpf (lag 0.1 f1) 3
-        filt2 = lpf (lag 0.1 f2) 3
-        verb  = freeverb 0.5 1.0 0.1
-        d     = delayN 0.6 0.6
-        d2    = delayN 0.4 0.4
-        -- d3    = delayN 0.8 0.8
-
 hyperMelodyPattern2 :: Signal ()
-hyperMelodyPattern2 = fx <> playSynthPattern (toggle <| combo [alt,isDown keyG]) "hyperMelody2" [] (pmap ((*0.5) . d2f sigScale) <| ploop [sec1])
-    where
-        fx   = play (toggle <| combo [alt,isDown keyG]) "hyperCave" [scale 250 8000 <~ mouseX,scale 250 8000 <~ mouseY]
-        sec1 = [lich| 0 1 _ 0 1 _ 0 1
-                      _ 2 3 _ 2 3 _ 2
-                      3 _ 0 1 _ 0 1 _
-                      2 3 _ 2 3 _ 2 3
-                      4 [_ 5] _ 4 [_ 5] _ 4 [_ 5]
-                      _ 6 [_ 7] _ 6 [_ 7] _ 8
-                |]
-
-hyperMelodyPattern3 :: Signal ()
-hyperMelodyPattern3 = playSynthPattern (toggle <| combo [alt,isDown keyH]) "hyperMelody" [] (pmap ((*2) . d2f sigScale) <| ploop [sec1])
+hyperMelodyPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyH]) "hyperMelody" [] (pmap ((*2) . d2f sigScale) <| ploop [sec1])
     where
         sec1 = [lich| 4 _ 3 _ 2 3 1
                       4 _ 3 _ 2 3 0 0 0
@@ -635,6 +602,51 @@ hyperMelodyPattern3 = playSynthPattern (toggle <| combo [alt,isDown keyH]) "hype
                       [3 _ 2] [_ 1 _] 0 _ _ _ _ _
                       _ _ _ _ _ _ _ _
                 |]
+
+pulseDemon :: UGen -> [UGen]
+pulseDemon f = [s,s2] |> filt |> softclip (dup <| random 31 100 200) |> gain 0.0225 |> e |> out 18
+    where
+        e    = env [0,1,0]         [0.01, 0.6] (-1)
+        e2   = env [1.0,0.1,0.001] [0.6, 0.01] 0
+        s    = pulse (f * random 4 0.995 1.005) (random 2 0.01 0.99)
+        s2   = pulse (f * random 4 0.995 1.005) (random 3 0.01 0.99)
+        filt = lpf ([f * (random 19 2 16), f * (random 31 2 16)]|> e2) 3
+
+demonCave :: UGen -> UGen -> [UGen]
+demonCave f1 f2 = [l * 0.875 + r * 0.125,r * 0.875 + l * 0.125] |> out 0
+    where
+        l     = auxIn 18 |> filt1 +> d2 |> verb +> d
+        r     = auxIn 19 |> filt2 +> d2 |> verb +> d
+        filt1 = lpf (lag 0.1 f1) 3
+        filt2 = lpf (lag 0.1 f2) 3
+        verb  = freeverb 0.5 1.0 0.1
+        d     = delayN 0.6 0.6
+        d2    = delayN 0.4 0.4
+        -- d3    = delayN 0.8 0.8
+
+pulseDemonPattern :: Signal ()
+pulseDemonPattern = fx <> playSynthPattern (toggle <| combo [alt,isDown keyG]) "pulseDemon" [] (pmap ((*0.5) . d2f sigScale) <| ploop [sec1])
+    where
+        fx   = play (toggle <| combo [alt,isDown keyG]) "demonCave" [scale 250 8000 <~ mouseX,scale 250 8000 <~ mouseY]
+        sec1 = [lich| 0 1 _ 0 1 _ 0 1
+                      _ 2 3 _ 2 3 _ 2
+                      3 _ 0 1 _ 0 1 _
+                      2 3 _ 2 3 _ 2 3
+                      4 [_ 5] _ 4 [_ 5] _ 4 [_ 5]
+                      _ 6 [_ 7] _ 6 [_ 7] _ 8
+                |]
+
+-- distortedEighths2 :: Signal ()
+-- distortedEighths2 = fx <> playSynthPattern (toggle <| combo [alt,isDown keyG]) "hyperMelody2" [] (pmap ((*0.5) . d2f sigScale) <| ploop [sec1])
+    -- where
+        -- fx   = play (toggle <| combo [alt,isDown keyG]) "hyperCave" [scale 250 8000 <~ mouseX,scale 250 8000 <~ mouseY]
+        -- sec1 = [lich| 0 1 _ 0 1 _ 0 1
+                    --   _ 2 3 _ 2 3 _ 2
+                    --   3 _ 0 1 _ 0 1 _
+                    --   2 3 _ 2 3 _ 2 3
+                    --   4 [_ 5] _ 4 [_ 5] _ 4 [_ 5]
+                    --   _ 6 [_ 7] _ 6 [_ 7] _ 8
+                -- |]
 
 {-
 metallic :: UGen -> [UGen]
