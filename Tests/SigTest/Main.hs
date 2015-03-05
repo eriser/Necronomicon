@@ -388,6 +388,7 @@ metallicPattern = play (toggle <| combo [alt,isDown keyD]) "caveTime" []
                <> swellPattern2
                <> hyperMelodyPattern
                <> hyperMelodyPattern2
+               <> hyperMelodyPattern3
 
 -- metallicPattern1 :: Signal ()
 -- metallicPattern1 = playSynthPattern (toggle <| isDown keyD) "metallic" [] (pmap (d2f sigScale . (+0)) <| ploop [sec1])
@@ -616,6 +617,23 @@ hyperMelodyPattern2 = fx <> playSynthPattern (toggle <| combo [alt,isDown keyG])
                       2 3 _ 2 3 _ 2 3
                       4 [_ 5] _ 4 [_ 5] _ 4 [_ 5]
                       _ 6 [_ 7] _ 6 [_ 7] _ 8
+                |]
+
+hyperMelodyPattern3 :: Signal ()
+hyperMelodyPattern3 = playSynthPattern (toggle <| combo [alt,isDown keyH]) "hyperMelody" [] (pmap ((*2) . d2f sigScale) <| ploop [sec1])
+    where
+        sec1 = [lich| 4 _ 3 _ 2 3 1
+                      4 _ 3 _ 2 3 0 0 0
+                      [4 6 8] 7 _ _ _ _ _ _
+                      _ _ _ _ _ _ _ _
+                      4 _ 3 _ 2 3 1
+                      4 _ 3 _ 2 3 0 0 0
+                      [1 1 1] 0 _ _ _ _ _ _
+                      _ _ _ _ _ _ _ _
+                      2 _ 1 _ _ _ 1
+                      2 _ 1 _ _ _ 1 2 _
+                      [3 _ 2] [_ 1 _] 0 _ _ _ _ _
+                      _ _ _ _ _ _ _ _
                 |]
 
 {-
