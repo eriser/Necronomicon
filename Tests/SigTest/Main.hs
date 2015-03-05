@@ -586,10 +586,10 @@ hyperMelodyPattern = playSynthPattern (toggle <| combo [alt,isDown keyF]) "hyper
                 |]
 
 hyperMelody2 :: UGen -> [UGen]
-hyperMelody2 f = [s,s2] |> filt |> softclip (dup <| random 31 100 200) |> gain 0.02 |> e |> out 18
+hyperMelody2 f = [s,s2] |> filt |> softclip (dup <| random 31 100 200) |> gain 0.0225 |> e |> out 18
     where
-        e    = env [0,1,0]         [0.01, 0.5] 0
-        e2   = env [1.0,0.1,0.001] [0.4, 0.01] 0
+        e    = env [0,1,0]         [0.01, 0.6] (-1)
+        e2   = env [1.0,0.1,0.001] [0.6, 0.01] 0
         s    = pulse (f * random 4 0.995 1.005) (random 2 0.01 0.99)
         s2   = pulse (f * random 4 0.995 1.005) (random 3 0.01 0.99)
         filt = lpf ([f * (random 19 2 16), f * (random 31 2 16)]|> e2) 3
