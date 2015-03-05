@@ -389,6 +389,7 @@ metallicPattern = play (toggle <| combo [alt,isDown keyD]) "caveTime" []
                <> hyperMelodyPattern
                <> hyperMelodyPattern2
                <> pulseDemonPattern
+               <> pulseDemonPattern2
 
 -- metallicPattern1 :: Signal ()
 -- metallicPattern1 = playSynthPattern (toggle <| isDown keyD) "metallic" [] (pmap (d2f sigScale . (+0)) <| ploop [sec1])
@@ -625,9 +626,10 @@ demonCave f1 f2 = [l * 0.875 + r * 0.125,r * 0.875 + l * 0.125] |> out 0
         -- d3    = delayN 0.8 0.8
 
 pulseDemonPattern :: Signal ()
-pulseDemonPattern = fx <> playSynthPattern (toggle <| combo [alt,isDown keyG]) "pulseDemon" [] (pmap ((*0.5) . d2f sigScale) <| ploop [sec1])
+pulseDemonPattern = fx <> patt
     where
         fx   = play (toggle <| combo [alt,isDown keyG]) "demonCave" [scale 250 8000 <~ mouseX,scale 250 8000 <~ mouseY]
+        patt = playSynthPattern (toggle <| combo [alt,isDown keyG]) "pulseDemon" [] (pmap ((*0.5) . d2f sigScale) <| ploop [sec1])
         sec1 = [lich| 0 1 _ 0 1 _ 0 1
                       _ 2 3 _ 2 3 _ 2
                       3 _ 0 1 _ 0 1 _
@@ -636,17 +638,16 @@ pulseDemonPattern = fx <> playSynthPattern (toggle <| combo [alt,isDown keyG]) "
                       _ 6 [_ 7] _ 6 [_ 7] _ 8
                 |]
 
--- distortedEighths2 :: Signal ()
--- distortedEighths2 = fx <> playSynthPattern (toggle <| combo [alt,isDown keyG]) "hyperMelody2" [] (pmap ((*0.5) . d2f sigScale) <| ploop [sec1])
-    -- where
-        -- fx   = play (toggle <| combo [alt,isDown keyG]) "hyperCave" [scale 250 8000 <~ mouseX,scale 250 8000 <~ mouseY]
-        -- sec1 = [lich| 0 1 _ 0 1 _ 0 1
-                    --   _ 2 3 _ 2 3 _ 2
-                    --   3 _ 0 1 _ 0 1 _
-                    --   2 3 _ 2 3 _ 2 3
-                    --   4 [_ 5] _ 4 [_ 5] _ 4 [_ 5]
-                    --   _ 6 [_ 7] _ 6 [_ 7] _ 8
-                -- |]
+pulseDemonPattern2 :: Signal ()
+pulseDemonPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyV]) "pulseDemon" [] (pmap ((*1.0) . d2f sigScale) <| ploop [sec1])
+    where
+        sec1 = [lich| _ 2 3 _ 2 3 _ 2
+                      3 _ 0 1 _ 0 1 _
+                      2 3 _ 2 3 _ 2 3
+                      4 [_ 5] _ 4 [_ 5] _ 4 [_ 5]
+                      _ 6 [_ 7] _ 6 [_ 7] _ 8
+                      0 1 _ 0 1 _ 0 1
+                |]
 
 {-
 metallic :: UGen -> [UGen]
