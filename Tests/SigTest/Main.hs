@@ -11,11 +11,8 @@ synthDefs = synthDef "triOsc"        triOsc
          *> synthDef "triOscEnv"     triOscEnv
          *> synthDef "b"             bSynth
          *> synthDef "p"             pSynth
-        --  *> synthDef "metallic"      metallic
-        --  *> synthDef "metallic2"     metallic2
          *> synthDef "metallic3"     metallic3
          *> synthDef "metallic4"     metallic4
-        --  *> synthDef "metallic5"     metallic5
          *> synthDef "shake"         shake
          *> synthDef "shake2"        shake2
          *> synthDef "floorPerc"     floorPerc
@@ -23,13 +20,14 @@ synthDefs = synthDef "triOsc"        triOsc
          *> synthDef "reverseSwell2" reverseSwell2
          *> synthDef "hyperMelody"   hyperMelody
          *> synthDef "caveTime"      caveTime
+         *> synthDef "hyperMelody2"  hyperMelody2
+         *> synthDef "hyperCave"     hyperCave
 
 hyperTerrainSounds :: Signal ()
 hyperTerrainSounds = metallicPattern
                 --  <> play             (toggle <| isDown keyW) "triOsc"    [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
                 --  <> play             (toggle <| isDown keyA) "triOsc32"  [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
                 --  <> playBeatPattern  (toggle <| isDown keyE) [] (ploop [ [lich| [p p p] [p b] p b |] ])
-                --  <>
 
 sections :: Signal ()
 sections = switch section [section2, section1, section3]
@@ -305,8 +303,8 @@ hyperMelody :: UGen -> [UGen]
 hyperMelody f = [s,s2] |> gain 0.035 |> e |> out 0
     where
         e   = env [0,1,0.15, 0] [0.0001,0.1, 7] (-3)
-        s    = sin $ add (sin 3 * 6) (f*2)
-        s2   = sin $ add (sin 6 * 9) f
+        s    = sin <| add (sin 3 * 6) (f*2)
+        s2   = sin <| add (sin 6 * 9) f
 
 --add sins for visuals and modulation
 reverseSwell :: UGen -> [UGen]
@@ -389,6 +387,7 @@ metallicPattern = play (toggle <| isDown keyD) "caveTime" []
                <> swellPattern
                <> swellPattern2
                <> hyperMelodyPattern
+               <> hyperMelodyPattern2
 
 -- metallicPattern1 :: Signal ()
 -- metallicPattern1 = playSynthPattern (toggle <| isDown keyD) "metallic" [] (pmap (d2f sigScale . (+0)) <| ploop [sec1])
@@ -584,6 +583,46 @@ hyperMelodyPattern = playSynthPattern (toggle <| combo [alt,isDown keyF]) "hyper
                       _ _ _ _ _ _ 7 5 [_ 4] 5 _ _ _ _ _
                       _ _ _ _ 3 _ _ _ _ _ _ _ _ _ _ _ _
                       2 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+                |]
+
+hyperMelody2 :: UGen -> [UGen]
+hyperMelody2 f = [s,s2] |> filt |> softclip (dup <| random 31 100 200) |> gain 0.02 |> e |> out 18
+    where
+        e    = env [0,1,0]   [0.4, 0.01] 3
+        e2   = env [0.1,1,0.1] [0.4, 0.01] 3
+        s    = pulse (f * random 4 0.997 1.003) (random 2 0.01 0.99)
+        s2   = pulse (f * random 4 0.997 1.003) (random 3 0.01 0.99)
+        filt = lpf ([f * (random 19 2 10), f * (random 31 2 10)]|> e2) 8
+
+hyperCave :: UGen -> UGen -> [UGen]
+hyperCave f1 f2 = [l * 0.875 + r * 0.125,r * 0.875 + l * 0.125] |> out 0
+    where
+        l     = auxIn 18 |> filt1 +> d2 |> verb +> d
+        r     = auxIn 19 |> filt2 +> d2 |> verb +> d
+        filt1 = lpf (lag 0.1 f1) 3
+        filt2 = lpf (lag 0.1 f2) 3
+        verb  = freeverb 0.5 1.0 0.1
+        d     = delayN 0.4 0.4
+        d2    = delayN 0.6 0.6
+        -- d3    = delayN 0.8 0.8
+
+hyperMelodyPattern2 :: Signal ()
+hyperMelodyPattern2 = fx <> playSynthPattern (toggle <| combo [alt,isDown keyF]) "hyperMelody2" [] (pmap ((*1) . d2f sigScale) <| ploop [sec1])
+    where
+        fx   = play (toggle <| isDown keyD) "hyperCave" [scale 250 6000 <~ mouseX,scale 250 6000 <~ mouseY]
+        sec1 = [lich| 0 _ 0 _ 0 _ 0 _
+                      1 _ 1 _ 1 _ 1 _
+                      0 _ 0 _ 0 _ 0 _
+                      1 _ 1 _ 1 _ 1 _
+                      2 [_ 1] _ 3 [_ 1] _ 2 [_ 1]
+                      3 [_ 2] _ 3 [_ 2] _ 3 [_ 4]
+
+                      0 _ 0 _ 0 _ 0 _
+                      1 _ 1 _ 1 _ 1 _
+                      0 _ 0 _ 0 _ 0 _
+                      1 _ 1 _ 1 _ 1 _
+                      2 [_ 1] _ 3 [_ 1] _ 2 [_ 1]
+                      3 [_ 2] _ 3 [_ 2] _ 3 [_ 4]
                 |]
 
 {-
