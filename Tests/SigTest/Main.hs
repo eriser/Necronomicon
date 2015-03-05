@@ -378,7 +378,7 @@ sigScale :: Scale
 sigScale = slendro
 
 metallicPattern :: Signal ()
-metallicPattern = play (toggle <| comb [alt,isDown keyD]) "caveTime" []
+metallicPattern = play (toggle <| combo [alt,isDown keyD]) "caveTime" []
                <> metallicPattern3
                <> metallicPattern3_2
                <> shakePattern
@@ -588,11 +588,11 @@ hyperMelodyPattern = playSynthPattern (toggle <| combo [alt,isDown keyF]) "hyper
 hyperMelody2 :: UGen -> [UGen]
 hyperMelody2 f = [s,s2] |> filt |> softclip (dup <| random 31 100 200) |> gain 0.02 |> e |> out 18
     where
-        e    = env [0,1,0]   [0.4, 0.01] 3
-        e2   = env [0.1,1,0.1] [0.4, 0.01] 3
-        s    = pulse (f * random 4 0.997 1.003) (random 2 0.01 0.99)
-        s2   = pulse (f * random 4 0.997 1.003) (random 3 0.01 0.99)
-        filt = lpf ([f * (random 19 2 10), f * (random 31 2 10)]|> e2) 8
+        e    = env [0,1,0]         [0.01, 0.5] 0
+        e2   = env [1.0,0.1,0.001] [0.4, 0.01] 0
+        s    = pulse (f * random 4 0.995 1.005) (random 2 0.01 0.99)
+        s2   = pulse (f * random 4 0.995 1.005) (random 3 0.01 0.99)
+        filt = lpf ([f * (random 19 2 16), f * (random 31 2 16)]|> e2) 3
 
 hyperCave :: UGen -> UGen -> [UGen]
 hyperCave f1 f2 = [l * 0.875 + r * 0.125,r * 0.875 + l * 0.125] |> out 0
@@ -602,27 +602,20 @@ hyperCave f1 f2 = [l * 0.875 + r * 0.125,r * 0.875 + l * 0.125] |> out 0
         filt1 = lpf (lag 0.1 f1) 3
         filt2 = lpf (lag 0.1 f2) 3
         verb  = freeverb 0.5 1.0 0.1
-        d     = delayN 0.4 0.4
-        d2    = delayN 0.6 0.6
+        d     = delayN 0.6 0.6
+        d2    = delayN 0.4 0.4
         -- d3    = delayN 0.8 0.8
 
 hyperMelodyPattern2 :: Signal ()
-hyperMelodyPattern2 = fx <> playSynthPattern (toggle <| combo [alt,isDown keyG]) "hyperMelody2" [] (pmap ((*1) . d2f sigScale) <| ploop [sec1])
+hyperMelodyPattern2 = fx <> playSynthPattern (toggle <| combo [alt,isDown keyG]) "hyperMelody2" [] (pmap ((*0.5) . d2f sigScale) <| ploop [sec1])
     where
-        fx   = play (toggle <| combo [alt,isDown keyG]) "hyperCave" [scale 250 6000 <~ mouseX,scale 250 6000 <~ mouseY]
-        sec1 = [lich| 0 _ 0 _ 0 _ 0 _
-                      1 _ 1 _ 1 _ 1 _
-                      0 _ 0 _ 0 _ 0 _
-                      1 _ 1 _ 1 _ 1 _
-                      2 [_ 1] _ 3 [_ 1] _ 2 [_ 1]
-                      3 [_ 2] _ 3 [_ 2] _ 3 [_ 4]
-
-                      0 _ 0 _ 0 _ 0 _
-                      1 _ 1 _ 1 _ 1 _
-                      0 _ 0 _ 0 _ 0 _
-                      1 _ 1 _ 1 _ 1 _
-                      2 [_ 1] _ 3 [_ 1] _ 2 [_ 1]
-                      3 [_ 2] _ 3 [_ 2] _ 3 [_ 4]
+        fx   = play (toggle <| combo [alt,isDown keyG]) "hyperCave" [scale 250 8000 <~ mouseX,scale 250 8000 <~ mouseY]
+        sec1 = [lich| 0 1 _ 0 1 _ 0 1
+                      _ 2 3 _ 2 3 _ 2
+                      3 _ 0 1 _ 0 1 _
+                      2 3 _ 2 3 _ 2 3
+                      4 [_ 5] _ 4 [_ 5] _ 4 [_ 5]
+                      _ 6 [_ 7] _ 6 [_ 7] _ 8
                 |]
 
 {-
