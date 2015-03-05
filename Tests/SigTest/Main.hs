@@ -390,6 +390,7 @@ metallicPattern = play (toggle <| combo [alt,isDown keyD]) "caveTime" []
                <> hyperMelodyPattern2
                <> pulseDemonPattern
                <> pulseDemonPattern2
+               <> pulseDemonPattern3
 
 -- metallicPattern1 :: Signal ()
 -- metallicPattern1 = playSynthPattern (toggle <| isDown keyD) "metallic" [] (pmap (d2f sigScale . (+0)) <| ploop [sec1])
@@ -641,14 +642,27 @@ pulseDemonPattern = fx <> patt
 pulseDemonPattern2 :: Signal ()
 pulseDemonPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyV]) "pulseDemon" [] (pmap ((*1.0) . d2f sigScale) <| ploop [sec1])
     where
-        sec1 = [lich| _ 2 3 _ 2 3 _ 2
-                      3 _ 0 1 _ 0 1 _
-                      2 3 _ 2 3 _ 2 3
-                      4 [_ 5] _ 4 [_ 5] _ 4 [_ 5]
+        sec1 = [lich| 4 [_ 5] _ 4 [_ 5] _ 4 [_ 5]
                       _ 6 [_ 7] _ 6 [_ 7] _ 8
                       0 1 _ 0 1 _ 0 1
+                      _ 2 3 _ 2 3 _ 2
+                      3 _ 0 1 _ 0 1 _
+                      2 3 _ 2 3 _ 2 3
                 |]
 
+pulseDemonPattern3 :: Signal ()
+pulseDemonPattern3 = playSynthPattern (toggle <| combo [alt,isDown keyB]) "pulseDemon" [] (pmap ((*2.0) . d2f sigScale) <| ploop [sec1])
+    where
+        --try 16ths
+        sec1 = [lich| [0 0] _ [0 0] _ [0 0] _ [0 0] _
+                      [1 1] _ [1 1] _ [1 1] _ [1 1] _
+                      [2 2] _ [2 2] _ [2 2] _ [2 2] _
+                      [3 3] _ [3 3] _ [3 3] _ [3 3] _
+                      [4 4] _ [4 4] _ [4 4] _ [4 4] _
+                      [5 5] _ [5 5] _ [5 5] _ [5 5] _
+                      [6 6] _ [6 6] _ [6 6] _ [6 6] _
+                      [7 7] _ [7 7] _ [7 7] _ [7 7] _
+                |]
 {-
 metallic :: UGen -> [UGen]
 metallic f = sig + sig2 + sig3 |> filt |> e |> auxThrough 2 |> gain 0.15 |> out 0
