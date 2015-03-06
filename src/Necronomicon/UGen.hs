@@ -29,7 +29,7 @@ data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Env Double 
               | LPF | HPF | BPF | Notch | AllPass | PeakEQ | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int
               | Clip | SoftClip | Poly3 | TanHDist | SinDist | Wrap | DelayN Double | DelayL Double | DelayC Double | CombN Double | CombL Double | CombC Double
               | Negate | Crush | Decimate | FreeVerb | Pluck Double | WhiteNoise | Abs | Signum | Pow | Exp | Log | Cos | ASin | ACos
-              | ATan | LogBase | Sqrt | Tan | SinH | CosH | TanH | ASinH | ATanH | ACosH
+              | ATan | LogBase | Sqrt | Tan | SinH | CosH | TanH | ASinH | ATanH | ACosH | TimeMicros | TimeSecs
               deriving (Show)
 
 instance Show UGen where
@@ -569,6 +569,15 @@ freeverb mix roomSize damp input = multiChannelExpandUGen FreeVerb freeverbCalc 
 
 dup :: UGen -> [UGen]
 dup u = [u,u]
+
+foreign import ccall "&time_micros_calc" timeMicrosCalc :: CUGenFunc
+timeMicros :: UGen
+timeMicros = UGenFunc TimeMicros timeMicrosCalc nullConstructor nullDeconstructor []
+
+foreign import ccall "&time_secs_calc" timeSecsCalc :: CUGenFunc
+timeSecs :: UGen
+timeSecs = UGenFunc TimeSecs timeSecsCalc nullConstructor nullDeconstructor []
+
 ----------------------------------------------------
 
 loopSynth :: UGen -> UGen -> [UGen]
