@@ -8,7 +8,7 @@ reverbSynth freq = s |> freeverb 0.5 1 0.5 |> gain 0.1 |> out 0
         s = sin $ lag 0.1 freq
 
 combSynthN :: UGen -> UGen -> UGen
-combSynthN freq _ = s +> combC 1 0.5 1.5 |> gain 0.1 |> out 0
+combSynthN freq _ = s +> combC 1 0.5 1 |> gain 0.1 |> out 0
     where
         s = sin $ lag 0.1 freq
 
