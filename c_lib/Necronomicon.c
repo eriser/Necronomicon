@@ -2061,8 +2061,8 @@ void env_calc(ugen u)
 	double       y          = 0;
 
 	AUDIO_LOOP(
-		curve = UGEN_IN(in0);
-		x = UGEN_IN(in1);
+		curve      = UGEN_IN(in0);
+		x          = UGEN_IN(in1);
 		line_timed = (double) data.time * RECIP_SAMPLE_RATE;
 
 		// printf("env---------------------------------------------\n");
@@ -2085,7 +2085,7 @@ void env_calc(ugen u)
 				double nextDuration = UGEN_IN(UGEN_INPUT_BUFFER(u, (data.index % data.numValues) + dursOffset));
 				// printf("nextDuration: %f\n",nextDuration);
 
-				if(data.nextTotalDuration == -1)
+				if(data.nextTotalDuration < 0)
 					data.curTotalDuration = 0;
 				else
 					data.curTotalDuration = data.nextTotalDuration;
@@ -2162,8 +2162,8 @@ void env2_calc(ugen u)
 
 				data.curTotalDuration  = data.nextTotalDuration;
 				data.nextTotalDuration = data.curTotalDuration + nextDuration;
-				data.currentValue      = UGEN_IN(UGEN_INPUT_BUFFER(u, data.index + valsOffset));
-				data.nextValue         = UGEN_IN(UGEN_INPUT_BUFFER(u, data.index + 1 + valsOffset));
+				data.currentValue      = UGEN_IN(UGEN_INPUT_BUFFER(u, MIN(data.index,data.numValues - 1) + valsOffset));
+				data.nextValue         = UGEN_IN(UGEN_INPUT_BUFFER(u, MIN(data.index + 1,data.numValues - 1) + valsOffset));
 				data.recipDuration     = 1.0 / nextDuration;
 				if(curve < 0)
 					data.curve = 1 / ((curve * -1) + 1);
