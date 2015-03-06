@@ -765,10 +765,10 @@ subControlPattern :: Signal ()
 subControlPattern = fx <> playSynthPattern (toggle <| combo [alt,isDown keyZ]) "subControl" [] (pmap ((*0.25) . d2f egyptianRast) <| pseq (8 * 4 * 4) [sec1,sec2])
     where
         fx   = play (toggle <| combo [alt,isDown keyZ]) "subDestruction" [scale 250 8000 <~ mouseX,scale 250 8000 <~ mouseY]
-        sec1 = [lich| [0 0 0 0] [0 0 0 0] [0 0 0 0] [0 0 0 0]
-                      [1 1 1 1] [1 1 1 1] [1 1 1 1] [1 1 1 1] |]
-        sec2 = [lich| [3 3 3 3] [3 3 3 3] [3 3 3 3] [3 3 3 3]
-                      [4 4 4 4] [4 4 4 4] [4 4 4 4] [6 6 6 6] |]
+        sec1 = [lich| [0 0 0 0] [0 0 0 0] [0 0 0 0] [0 0 0 0] [0 0 0 0]
+                      [1 1 1 1] [1 1 1 1] [1 1 1 1] [1 1 1 1] [1 1 1 1] |]
+        sec2 = [lich| [3 3 3 3] [3 3 3 3] [3 3 3 3] [3 3 3 3] [3 3 3 3]
+                      [4 4 4 4] [4 4 4 4] [4 4 4 4] [6 6 6 6] [6 6 6 6] |]
 
 {-
 metallic :: UGen -> [UGen]
