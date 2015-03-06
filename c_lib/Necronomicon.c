@@ -55,6 +55,7 @@ double RECIP_SAMPLE_RATE = 1.0 / 44100.0;
 double TABLE_MUL_RECIP_SAMPLE_RATE = TABLE_SIZE * (1.0 / 44100.0);
 double TWO_PI_TIMES_RECIP_SAMPLE_RATE;
 unsigned int BLOCK_SIZE = 64;
+double LOG_001;
 
 /////////////////////
 // Hashing
@@ -1332,7 +1333,8 @@ void init_rt_thread()
 	TABLE_MUL_RECIP_SAMPLE_RATE = TABLE_SIZE * RECIP_SAMPLE_RATE;
 	usecs_per_frame = USECS_PER_SECOND / SAMPLE_RATE;
 	TWO_PI_TIMES_RECIP_SAMPLE_RATE = TWO_PI * RECIP_SAMPLE_RATE;
-
+	LOG_001 = log(0.001);
+	
 	synth_table = hash_table_new();
 	rt_fifo = new_message_fifo();
 	scheduled_node_list = new_node_list();
@@ -1656,6 +1658,7 @@ void shutdown_necronomicon()
 
 #define LINEAR_INTERP(A, B, DELTA) (A + DELTA * (B - A))
 
+/*
 #define CUBIC_INTERP(A,B,C,D,DELTA) \
 ({                                  \
 	double delta2 = DELTA * DELTA;  \
@@ -1663,7 +1666,16 @@ void shutdown_necronomicon()
 	double a1     = A - B - a0;     \
 	double a2     = C - A;          \
 	a0 * DELTA * delta2 + a1 * delta2 + a2 * DELTA + B; \
-})
+	})*/
+
+#define CUBIC_INTERP(y0, y1, y2, y3, x)                 \
+({                                                     \
+	double c0 = y1;                                     \
+	double c1 = 0.5f * (y2 - y0);                       \
+	double c2 = y0 - 2.5f * y1 + 2.f * y2 - 0.5f * y3;  \
+	double c3 = 0.5f * (y3 - y0) + 1.5f * (y1 - y2);    \
+	((c3 * x + c2) * x + c1) * x + c0;                 \
+})                                                     \
 
 void add_calc(ugen u)
 {
@@ -2451,6 +2463,7 @@ void delayL_calc(ugen u)
 
 	AUDIO_LOOP(
 		delay_time = fmin(data.max_delay_time, fmax(1, UGEN_IN(in0) * SAMPLE_RATE));
+		x = UGEN_IN(in1);
 		read_index = (double) write_index - delay_time;
 		iread_index0 = (long) read_index;
 
@@ -2468,6 +2481,7 @@ void delayL_calc(ugen u)
 			y  = LINEAR_INTERP(y0, y1, delta);
 		}
 
+		buffer.samples[write_index & num_samples_mask] = x;
 		++write_index;
 		UGEN_OUT(out, y);
 	);
@@ -2487,11 +2501,12 @@ void delayC_calc(ugen u)
 	AUDIO_LOOP(
 		// Clamp delay at 1 to prevent the + 1 iread_index3 from reading on the wrong side of the write head
 		delay_time = fmin(data.max_delay_time, fmax(2, UGEN_IN(in0) * SAMPLE_RATE));
+		x = UGEN_IN(in1);
 		read_index  = (double) write_index - delay_time;
 		iread_index1 = (long) read_index;
-		iread_index2 = iread_index0 - 1;
-		iread_index3 = iread_index0 - 2;
-		iread_index0 = iread_index0 + 1;
+		iread_index2 = iread_index1 - 1;
+		iread_index3 = iread_index1 - 2;
+		iread_index0 = iread_index1 + 1;
 		delta = read_index - iread_index0;
 
 		if (iread_index0 < 0)
@@ -2536,6 +2551,158 @@ void delayC_calc(ugen u)
 			y  = CUBIC_INTERP(y0, y1, y2, y3, delta);
 		}
 
+		buffer.samples[write_index & num_samples_mask] = x;
+		++write_index;
+		UGEN_OUT(out, y);
+	);
+
+	FINISH_DELAY();
+}
+
+#define INIT_COMB(u)				   \
+double decay_time;					   \
+double feedback;					   \
+double* in2 = UGEN_INPUT_BUFFER(u, 2); \
+
+#define CALC_FEEDBACK(delay_time, decay_time)				       \
+({															       \
+	double ret = 0;												   \
+	if ((delay_time != 0) && (decay_time != 0))					   \
+	{															   \
+		ret = exp(LOG_001 * delay_time / abs(decay_time));		   \
+		ret = copysignf(ret, decay_time);						   \
+	}															   \
+	ret;														   \
+})                                                                 \
+
+void combN_calc(ugen u)
+{
+	INIT_DELAY(u);
+	INIT_COMB(u);
+	long iread_index;
+
+	AUDIO_LOOP(
+		delay_time = fmin(data.max_delay_time, fmax(1, UGEN_IN(in0) * SAMPLE_RATE));
+		// decay_time = UGEN_IN(in1);
+		feedback = UGEN_IN(in1) * 0.1;
+		// feedback = CALC_FEEDBACK(delay_time, decay_time);
+		x = UGEN_IN(in2);
+		iread_index = write_index - (long) delay_time;
+		y = iread_index < 0 ? 0 : buffer.samples[iread_index & num_samples_mask];
+		buffer.samples[write_index & num_samples_mask] = x + (feedback * y);
+		++write_index;
+		UGEN_OUT(out, y);
+	);
+
+	FINISH_DELAY();
+}
+
+void combL_calc(ugen u)
+{
+	INIT_DELAY(u);
+	INIT_COMB(u);
+	double y0, y1;
+	double delta;
+	double read_index;
+	unsigned int iread_index0, iread_index1;
+	
+	AUDIO_LOOP(
+		delay_time = fmin(data.max_delay_time, fmax(1, UGEN_IN(in0) * SAMPLE_RATE));
+		// decay_time = UGEN_IN(in1);
+		feedback = UGEN_IN(in1) * 0.1;
+		// feedback = CALC_FEEDBACK(delay_time, decay_time);
+		x = UGEN_IN(in2);
+		read_index = (double) write_index - delay_time;
+		iread_index0 = (long) read_index;
+
+		if (iread_index0 < 0)
+		{
+			y = 0;
+		}
+
+		else
+		{
+			iread_index1 = iread_index0 - 1;
+			delta = read_index - iread_index0;
+			y0 = buffer.samples[iread_index0 & num_samples_mask];
+			y1 = iread_index1 < 0 ? 0 : buffer.samples[iread_index1 & num_samples_mask];
+			y  = LINEAR_INTERP(y0, y1, delta);
+		}
+
+		buffer.samples[write_index & num_samples_mask] = x + (feedback * y);
+		++write_index;
+		UGEN_OUT(out, y);
+	);
+
+	FINISH_DELAY();
+}
+
+void combC_calc(ugen u)
+{
+	INIT_DELAY(u);
+	INIT_COMB(u);
+	double y0, y1, y2, y3;
+	double delta;
+	double read_index;
+	unsigned int iread_index0, iread_index1, iread_index2, iread_index3;
+	
+	AUDIO_LOOP(
+		// Clamp delay at 1 to prevent the + 1 iread_index3 from reading on the wrong side of the write head
+		delay_time = fmin(data.max_delay_time, fmax(2, UGEN_IN(in0) * SAMPLE_RATE));
+		// decay_time = UGEN_IN(in1);
+		feedback = UGEN_IN(in1) * 0.1;
+		// feedback = CALC_FEEDBACK(delay_time, decay_time);
+		x = UGEN_IN(in2);
+		read_index  = (double) write_index - delay_time;
+		iread_index1 = (long) read_index;
+		iread_index2 = iread_index1 - 1;
+		iread_index3 = iread_index1 - 2;
+		iread_index0 = iread_index1 + 1;
+		delta = read_index - iread_index0;
+
+		if (iread_index0 < 0)
+		{
+			y = 0;
+		}
+
+		else
+		{
+			if(iread_index1 < 0)
+			{
+				y0 = buffer.samples[iread_index0 & num_samples_mask];
+				y1 = y2 = y3 = 0;
+				y  = CUBIC_INTERP(y0, y1, y2, y3, delta);
+			}
+
+			else if(iread_index2 < 0)
+			{
+				y0 = buffer.samples[iread_index0 & num_samples_mask];
+				y1 = buffer.samples[iread_index1 & num_samples_mask];
+				y2 = y3 = 0;
+				y  = CUBIC_INTERP(y0, y1, y2, y3, delta);
+			}
+
+			else if(iread_index3 < 0)
+			{
+				y0 = buffer.samples[iread_index0 & num_samples_mask];
+				y1 = buffer.samples[iread_index1 & num_samples_mask];
+				y2 = buffer.samples[iread_index1 & num_samples_mask];
+				y3 = 0;
+				y  = CUBIC_INTERP(y0, y1, y2, y3, delta);
+			}
+
+			else
+			{
+				y0 = buffer.samples[iread_index0 & num_samples_mask];
+				y1 = buffer.samples[iread_index1 & num_samples_mask];
+				y2 = buffer.samples[iread_index2 & num_samples_mask];
+				y3 = buffer.samples[iread_index3 & num_samples_mask];
+			}
+
+			y  = CUBIC_INTERP(y0, y1, y2, y3, delta);
+		}
+
+		buffer.samples[write_index & num_samples_mask] = x + (feedback * y);
 		++write_index;
 		UGEN_OUT(out, y);
 	);
@@ -3344,15 +3511,6 @@ void syncosc_calc(ugen u)
 
 	*((minblep*) u.data) = mb;
 }
-
-#define CUBIC_INTERP(A,B,C,D,DELTA) \
-({                                  \
-	double delta2 = DELTA * DELTA;  \
-	double a0     = D - C - A + B;  \
-	double a1     = A - B - a0;     \
-	double a2     = C - A;          \
-	a0 * DELTA * delta2 + a1 * delta2 + a2 * DELTA + B; \
-})
 
 //==========================================
 // Randomness

@@ -27,7 +27,7 @@ data UGen = UGenNum Double
 data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Env Double Double | Env2 Double Double | Out | AuxIn | Poll | LFSaw | LFPulse | Saw | Pulse
               | SyncSaw | SyncPulse | SyncOsc | Random Double Double Double | NoiseN | NoiseL | NoiseC | Dust | Dust2 | Impulse | Range | ExpRange
               | LPF | HPF | BPF | Notch | AllPass | PeakEQ | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int
-              | Clip | SoftClip | Poly3 | TanHDist | SinDist | Wrap | DelayN Double | DelayL Double | DelayC Double
+              | Clip | SoftClip | Poly3 | TanHDist | SinDist | Wrap | DelayN Double | DelayL Double | DelayC Double | CombN Double | CombL Double | CombC Double
               | Negate | Crush | Decimate | FreeVerb | Pluck Double | WhiteNoise | Abs | Signum | Pow | Exp | Log | Cos | ASin | ACos
               | ATan | LogBase | Sqrt | Tan | SinH | CosH | TanH | ASinH | ATanH | ACosH
               deriving (Show)
@@ -521,7 +521,6 @@ foreign import ccall "&decimate_calc"          decimateCalc          :: CUGenFun
 decimate :: UGenType a => a -> a -> a
 decimate rate x = multiChannelExpandUGen Decimate decimateCalc decimateConstructor decimateDeconstructor [rate,x]
 
-
 foreign import ccall "&delay_deconstructor" delayDeconstructor :: CUGenFunc
 foreign import ccall "&delayN_constructor" delayNConstructor :: CUGenFunc
 foreign import ccall "&delayN_calc" delayNCalc :: CUGenFunc
@@ -537,6 +536,18 @@ foreign import ccall "&delayC_constructor" delayCConstructor :: CUGenFunc
 foreign import ccall "&delayC_calc" delayC_calc :: CUGenFunc
 delayC :: UGenType a => Double -> a -> a -> a
 delayC maxDelayTime delayTime input = multiChannelExpandUGen (DelayC maxDelayTime) delayC_calc delayCConstructor delayDeconstructor [delayTime, input]
+
+foreign import ccall "&combN_calc" combNCalc :: CUGenFunc
+combN :: UGenType a => Double -> a -> a -> a -> a
+combN maxDelayTime delayTime decayTime input = multiChannelExpandUGen (CombN maxDelayTime) combNCalc delayNConstructor delayDeconstructor [delayTime, decayTime, input]
+
+foreign import ccall "&combL_calc" combLCalc :: CUGenFunc
+combL :: UGenType a => Double -> a -> a -> a -> a
+combL maxDelayTime delayTime decayTime input = multiChannelExpandUGen (CombL maxDelayTime) combLCalc delayLConstructor delayDeconstructor [delayTime, decayTime , input]
+
+foreign import ccall "&combC_calc" combC_calc :: CUGenFunc
+combC :: UGenType a => Double -> a -> a -> a -> a
+combC maxDelayTime delayTime decayTime input = multiChannelExpandUGen (CombC maxDelayTime) combC_calc delayCConstructor delayDeconstructor [delayTime, decayTime, input]
 
 foreign import ccall "&pluck_constructor"   pluckConstructor   :: CUGenFunc
 foreign import ccall "&pluck_deconstructor" pluckDeconstructor :: CUGenFunc
@@ -835,6 +846,12 @@ compileUGen ugen@(UGenFunc (DelayN maxDelayTime) _ _ _ _) args key = liftIO (new
 compileUGen ugen@(UGenFunc (DelayL maxDelayTime) _ _ _ _) args key = liftIO (new $ CDouble maxDelayTime) >>= \maxDelayTimePtr ->
     compileUGenWithConstructorArgs ugen maxDelayTimePtr args key
 compileUGen ugen@(UGenFunc (DelayC maxDelayTime) _ _ _ _) args key = liftIO (new $ CDouble maxDelayTime) >>= \maxDelayTimePtr ->
+    compileUGenWithConstructorArgs ugen maxDelayTimePtr args key
+compileUGen ugen@(UGenFunc (CombN maxDelayTime) _ _ _ _) args key = liftIO (new $ CDouble maxDelayTime) >>= \maxDelayTimePtr ->
+    compileUGenWithConstructorArgs ugen maxDelayTimePtr args key
+compileUGen ugen@(UGenFunc (CombL maxDelayTime) _ _ _ _) args key = liftIO (new $ CDouble maxDelayTime) >>= \maxDelayTimePtr ->
+    compileUGenWithConstructorArgs ugen maxDelayTimePtr args key
+compileUGen ugen@(UGenFunc (CombC maxDelayTime) _ _ _ _) args key = liftIO (new $ CDouble maxDelayTime) >>= \maxDelayTimePtr ->
     compileUGenWithConstructorArgs ugen maxDelayTimePtr args key
 compileUGen ugen@(UGenFunc (Pluck minFreq) _ _ _ _) args key = liftIO (new $ CDouble minFreq) >>= \minFreqPtr ->
     compileUGenWithConstructorArgs ugen minFreqPtr args key
