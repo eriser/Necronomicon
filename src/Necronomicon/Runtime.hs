@@ -300,7 +300,11 @@ processStartSynth (SynthDef name numArgs csynthDef) args nodeID time = clipSynth
         play num ptrArgs = playSynthInRtRuntime csynthDef ptrArgs num nodeID time
 
 processSetSynthArg :: Synth -> CUInt -> CDouble -> Necronomicon ()
-processSetSynthArg (Synth nodeID (SynthDef name numArgs _)) argIndex arg = clipArgIndex >>= \clippedArgIndex -> liftIO $ setSynthArgInRtRuntime nodeID arg clippedArgIndex
+processSetSynthArg (Synth nodeID (SynthDef name numArgs _)) argIndex arg =
+    if numArgs > 0 then
+        clipArgIndex >>= \clippedArgIndex -> liftIO $ setSynthArgInRtRuntime nodeID arg clippedArgIndex
+    else
+        return ()
     where
         cNumArgs = fromIntegral numArgs
         clipArgIndex = if argIndex >= cNumArgs
@@ -309,8 +313,12 @@ processSetSynthArg (Synth nodeID (SynthDef name numArgs _)) argIndex arg = clipA
         clipString = "Argument index " ++ (show argIndex) ++ " is too high for node (" ++ (show nodeID) ++ ", " ++ name ++ "), clipping to " ++ (show (numArgs - 1)) ++ "."
 
 processSetSynthArgs :: Synth -> [CDouble] -> Necronomicon ()
-processSetSynthArgs (Synth nodeID (SynthDef name numArgs _)) args = clipSynthArgs name nodeID args numArgs >>= \clippedArgs ->
-    liftIO $ withArray clippedArgs (\ptrArgs -> liftIO $ setSynthArgsInRtRuntime nodeID ptrArgs (fromIntegral $ length clippedArgs))
+processSetSynthArgs (Synth nodeID (SynthDef name numArgs _)) args =
+    if numArgs > 0 then
+        clipSynthArgs name nodeID args numArgs >>= \clippedArgs ->
+        liftIO $ withArray clippedArgs (\ptrArgs -> liftIO $ setSynthArgsInRtRuntime nodeID ptrArgs (fromIntegral $ length clippedArgs))
+    else
+        return ()
 
 processMessages :: [RuntimeMessage] -> Necronomicon ()
 processMessages messages =  mapM_ (processMessage) messages

@@ -663,6 +663,10 @@ pulseDemonPattern3 = playSynthPattern (toggle <| combo [alt,isDown keyB]) "pulse
                       [6 6 6 _] _ _ _ [6 6 6 _] _ _ _
                       [7 7 7 _] _ _ _ [7 7 7 _] _ _ _
                 |]
+
+-- broodHive :: [UGen]
+-- broodHive = auxIn [200, 201] |> combN 1  
+               
 {-
 metallic :: UGen -> [UGen]
 metallic f = sig + sig2 + sig3 |> filt |> e |> auxThrough 2 |> gain 0.15 |> out 0
