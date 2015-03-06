@@ -688,7 +688,7 @@ pulseDemonPattern3 = playSynthPattern (toggle <| combo [alt,isDown keyB]) "pulse
                       [6 6 6 _] _ _ _ [6 6 6 _] _ _ _
                       [7 7 7 _] _ _ _ [7 7 7 _] _ _ _
                 |]
-               
+
 halfVerb :: [UGen]
 halfVerb = [l * 0.9 + r * 0.1,r * 0.9 + l * 0.1] |> out 0
     where
@@ -762,7 +762,7 @@ subControl f = [s,s2] |> e |> softclip 20 |> filt |> gain 0.11 |> e |> softclip 
         filt = lpf [e2 (random 4 2 12),e2 (random 5 2 12)] (dup <| random 6 2 8)
 
 subControlPattern :: Signal ()
-subControlPattern = fx <> playSynthPattern (toggle <| combo [alt,isDown keyZ]) "subControl" [] (pmap ((*0.25) . d2f sigScale) <| pseq (8 * 4 * 4) [sec1,sec2])
+subControlPattern = fx <> playSynthPattern (toggle <| combo [alt,isDown keyZ]) "subControl" [] (pmap ((*0.25) . d2f egyptianRast) <| pseq (8 * 4 * 4) [sec1,sec2])
     where
         fx   = play (toggle <| combo [alt,isDown keyZ]) "subDestruction" [scale 250 8000 <~ mouseX,scale 250 8000 <~ mouseY]
         sec1 = [lich| [0 0 0 0] [0 0 0 0] [0 0 0 0] [0 0 0 0]
@@ -797,12 +797,12 @@ broodHive = pl |> gain 0.1 |> out 0
         aux  = [aux1, aux2]
 
 broodling :: UGen -> UGen
-broodling f = pulse [f,f/2,f/4] (dup $ p 1) |> sum |> lpf (p (f * 4)) 1 |> add (sin (f / 4) |> gain 0.5) |> p |> gain 0.7 |> out 200
+broodling f = pulse [f,f/2,f/4] (dup <| p 1) |> sum |> lpf (p (f * 4)) 1 |> add (sin (f / 4) |> gain 0.5) |> p |> gain 0.7 |> out 200
     where
         p = perc 0.01 0.75 1 (-16)
 
 broodling2 :: UGen -> UGen
-broodling2 f = pulse [f,f/2,f/4] (dup $ p 1) |> sum |> lpf (p (f * 4)) 1 |> add (sin (f / 2) |> gain 0.5) |> p |> gain 0.7 |> out 201
+broodling2 f = pulse [f,f/2,f/4] (dup <| p 1) |> sum |> lpf (p (f * 4)) 1 |> add (sin (f / 2) |> gain 0.5) |> p |> gain 0.7 |> out 201
     where
         p = perc 0.01 0.75 1 (-16)
 
@@ -817,16 +817,16 @@ bs = whiteNoise |> perc 0.001 1 2 (-16) |> decimate 1000 |> fakePan 0.75 |> out 
 
 broodlingPattern :: Signal ()
 broodlingPattern = fx
-                   <> playSynthPattern (toggle <| combo [alt,isDown keyB]) "broodling"  [] (pmap ((*4) . d2f egyptianRast) <| ploop [freqs])
-                   <> playSynthPattern (toggle <| combo [alt,isDown keyB]) "broodling2" [] (pmap ((*2) . d2f egyptianRast) <| ploop [freqs2])
+                   <> playSynthPattern (toggle <| combo [alt,isDown keyC]) "broodling"  [] (pmap ((*4) . d2f egyptianRast) <| ploop [freqs])
+                   <> playSynthPattern (toggle <| combo [alt,isDown keyC]) "broodling2" [] (pmap ((*2) . d2f egyptianRast) <| ploop [freqs2])
                    -- <> playBeatPattern  (toggle <| combo [alt,isDown keyB]) [] (ploop [broodBeat])
     where
-        fx     = play (toggle <| combo [alt,isDown keyB]) "broodHive" []
+        fx     = play (toggle <| combo [alt,isDown keyC]) "broodHive" []
         freqs  = [lich| 6 _ 6    6 _ 6     _ 6 6 _
                         1 _ 1    1 _ 1     _ 1 1 _
                         2 _ 2    2 _ 2     _ 2 2 _
                       |]
-                 
+
         freqs2 = [lich| _ 7 [7 7] _ 7 [_ 7] 7 _ _ 7
                         _ 9 [_ 9] _ 9 9     9 _ _ 9
                         _ 3 3     _ 3 3 [_ 3] 3 _ _

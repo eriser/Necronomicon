@@ -1334,7 +1334,7 @@ void init_rt_thread()
 	usecs_per_frame = USECS_PER_SECOND / SAMPLE_RATE;
 	TWO_PI_TIMES_RECIP_SAMPLE_RATE = TWO_PI * RECIP_SAMPLE_RATE;
 	LOG_001 = log(0.001);
-	
+
 	synth_table = hash_table_new();
 	rt_fifo = new_message_fifo();
 	scheduled_node_list = new_node_list();
@@ -2082,7 +2082,7 @@ void env_calc(ugen u)
 
 			if(data.index < data.numValues)
 			{
-				double nextDuration = UGEN_IN(UGEN_INPUT_BUFFER(u, data.index % data.numValues + dursOffset));
+				double nextDuration = UGEN_IN(UGEN_INPUT_BUFFER(u, (data.index % data.numValues) + dursOffset));
 				// printf("nextDuration: %f\n",nextDuration);
 
 				if(data.nextTotalDuration == -1)
@@ -2094,10 +2094,10 @@ void env_calc(ugen u)
 				data.nextTotalDuration = data.curTotalDuration + nextDuration;
 				// printf("data.nextTotalDuration: %f\n",data.nextTotalDuration);
 
-				data.currentValue = UGEN_IN(UGEN_INPUT_BUFFER(u, data.index + valsOffset));
+				data.currentValue = UGEN_IN(UGEN_INPUT_BUFFER(u, MIN(data.index,data.numValues - 1) + valsOffset));
 				// printf("data.currentValue: %f\n",data.currentValue);
 
-				data.nextValue = UGEN_IN(UGEN_INPUT_BUFFER(u, data.index + 1 + valsOffset));
+				data.nextValue = UGEN_IN(UGEN_INPUT_BUFFER(u, MIN(data.index + 1,data.numValues - 1) + valsOffset));
 
 				data.recipDuration = 1.0 / nextDuration;
 				// printf("data.recipDuration: %f\n",data.recipDuration);
@@ -2605,7 +2605,7 @@ void combL_calc(ugen u)
 	double delta;
 	double read_index;
 	unsigned int iread_index0, iread_index1;
-	
+
 	AUDIO_LOOP(
 		delay_time = fmin(data.max_delay_time, fmax(1, UGEN_IN(in0) * SAMPLE_RATE));
 		// decay_time = UGEN_IN(in1);
@@ -2645,7 +2645,7 @@ void combC_calc(ugen u)
 	double delta;
 	double read_index;
 	unsigned int iread_index0, iread_index1, iread_index2, iread_index3;
-	
+
 	AUDIO_LOOP(
 		// Clamp delay at 1 to prevent the + 1 iread_index3 from reading on the wrong side of the write head
 		delay_time = fmin(data.max_delay_time, fmax(2, UGEN_IN(in0) * SAMPLE_RATE));
@@ -4772,7 +4772,7 @@ void time_micros_calc(ugen u)
 {
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 	AUDIO_LOOP(
-		UGEN_OUT(out, current_cycle_usecs + (jack_time_t) ((double) _block_frame * usecs_per_frame)); 
+		UGEN_OUT(out, current_cycle_usecs + (jack_time_t) ((double) _block_frame * usecs_per_frame));
 	);
 }
 
@@ -4781,6 +4781,6 @@ void time_secs_calc(ugen u)
 {
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 	AUDIO_LOOP(
-		UGEN_OUT(out, ((double) current_cycle_usecs + ((double) _block_frame * usecs_per_frame)) / MICROS_PER_SECOND); 
+		UGEN_OUT(out, ((double) current_cycle_usecs + ((double) _block_frame * usecs_per_frame)) / MICROS_PER_SECOND);
 	);
 }
