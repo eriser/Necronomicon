@@ -2072,6 +2072,7 @@ void env_calc(ugen u)
 
 		if(line_timed >= data.nextTotalDuration)
 		{
+			// printf("env---------------------------------------------\n");
 			// printf("line_timed >= data.nextTotalDuration\n");
 
 			data.index = data.index + 1;
@@ -2080,8 +2081,11 @@ void env_calc(ugen u)
 			// printf("data.numValues: %i\n",data.numValues);
 			// printf("data.numDurations: %u\n",data.numDurations);
 
-			if(data.index < data.numValues)
+			if(data.index < data.numValues - 1)
 			{
+				// printf("dursOffset: %d\n",dursOffset);
+				// printf("valsOffset: %d\n",valsOffset);
+
 				double nextDuration = UGEN_IN(UGEN_INPUT_BUFFER(u, (data.index % data.numValues) + dursOffset));
 				// printf("nextDuration: %f\n",nextDuration);
 
@@ -2099,7 +2103,10 @@ void env_calc(ugen u)
 
 				data.nextValue = UGEN_IN(UGEN_INPUT_BUFFER(u, MIN(data.index + 1,data.numValues - 1) + valsOffset));
 
-				data.recipDuration = 1.0 / nextDuration;
+				if(nextDuration == 0.0)
+					data.recipDuration = 0.0;
+				else
+					data.recipDuration = 1.0 / nextDuration;
 				// printf("data.recipDuration: %f\n",data.recipDuration);
 
 				if(curve < 0)
@@ -2156,7 +2163,7 @@ void env2_calc(ugen u)
 		{
 			data.index = data.index + 1;
 
-			if(data.index < data.numValues)
+			if(data.index < data.numValues - 1)
 			{
 				double nextDuration    = UGEN_IN(UGEN_INPUT_BUFFER(u, (data.index % data.numValues) + dursOffset));
 

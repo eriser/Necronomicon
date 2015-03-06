@@ -755,7 +755,7 @@ subDestruction f1 f2 = fuse l r |> gain 0.5 |> out 0
 subControl :: UGen -> [UGen]
 subControl f = [s,s2] |> e |> softclip 20 |> filt |> gain 0.11 |> e |> softclip 20 |> e |> fakePan (random 3 0 1) |> out 24
     where
-        e    = env [0,1, 0] [0.01,1] (-3)
+        e    = env [0,1, 0] [0.05,1] (-3)
         e2   = env [523.251130601,f,f*0.25] [0.05,1] (-3)
         s    = pulse (sin (3 * 6) + e2 1 * 2) (random 0 0.1 0.9)
         s2   = pulse (sin (6 * 9) + e2 1)     (random 1 0.1 0.9)
@@ -799,12 +799,12 @@ broodHive = pl |> gain 0.1 |> out 0
 broodling :: UGen -> UGen
 broodling f = pulse [f,f/2,f/4] (dup <| p 1) |> sum |> lpf (p (f * 4)) 1 |> add (sin (f / 4) |> gain 0.5) |> p |> gain 0.7 |> out 200
     where
-        p = perc 0.01 0.75 1 (-16)
+        p = perc 0.01 1.25 1 (-8)
 
 broodling2 :: UGen -> UGen
 broodling2 f = pulse [f,f/2,f/4] (dup <| p 1) |> sum |> lpf (p (f * 4)) 1 |> add (sin (f / 2) |> gain 0.5) |> p |> gain 0.7 |> out 201
     where
-        p = perc 0.01 0.75 1 (-16)
+        p = perc 0.01 1.25 1 (-8)
 
 broodBassFreq :: [UGen]
 broodBassFreq = dup . UGenNum . (/4) . fromRational $ d2f egyptianRast 1
