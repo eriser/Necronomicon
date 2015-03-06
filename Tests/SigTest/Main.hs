@@ -653,15 +653,15 @@ pulseDemonPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyV]) "pulse
 pulseDemonPattern3 :: Signal ()
 pulseDemonPattern3 = playSynthPattern (toggle <| combo [alt,isDown keyB]) "pulseDemon" [] (pmap ((*2.0) . d2f sigScale) <| ploop [sec1])
     where
-        --try 16ths
-        sec1 = [lich| [0 0] _ [0 0] _ [0 0] _ [0 0] _
-                      [1 1] _ [1 1] _ [1 1] _ [1 1] _
-                      [2 2] _ [2 2] _ [2 2] _ [2 2] _
-                      [3 3] _ [3 3] _ [3 3] _ [3 3] _
-                      [4 4] _ [4 4] _ [4 4] _ [4 4] _
-                      [5 5] _ [5 5] _ [5 5] _ [5 5] _
-                      [6 6] _ [6 6] _ [6 6] _ [6 6] _
-                      [7 7] _ [7 7] _ [7 7] _ [7 7] _
+        --try 16ths, alternating with triplet 8ths! [0 0 0 _] _ [0 0 0] _
+        sec1 = [lich| [0 0 0 _] _ _ _ [0 0 0 _] _ _ _
+                      [1 1 1 _] _ _ _ [1 1 1 _] _ _ _
+                      [2 2 2 _] _ _ _ [2 2 2 _] _ _ _
+                      [3 3 3 _] _ _ _ [3 3 3 _] _ _ _
+                      [4 4 4 _] _ _ _ [4 4 4 _] _ _ _
+                      [5 5 5 _] _ _ _ [5 5 5 _] _ _ _
+                      [6 6 6 _] _ _ _ [6 6 6 _] _ _ _
+                      [7 7 7 _] _ _ _ [7 7 7 _] _ _ _
                 |]
 {-
 metallic :: UGen -> [UGen]
