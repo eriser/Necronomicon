@@ -29,6 +29,8 @@ synthDefs = synthDef "triOsc"           triOsc
          *> synthDef "broodHive"        broodHive
          *> synthDef "bb"               bb
          *> synthDef "bs"               bs
+         *> synthDef "subControl"       subControl
+         *> synthDef "subDestruction"   subDestruction
 
 hyperTerrainSounds :: Signal ()
 hyperTerrainSounds = metallicPattern
@@ -413,6 +415,7 @@ metallicPattern = play (toggle <| combo [alt,isDown keyD]) "caveTime" []
                <> hyperMelodyPrimePattern
                <> manaLeakPrimePattern
                <> broodlingPattern
+               <> subControlPattern
 
 -- metallicPattern1 :: Signal ()
 -- metallicPattern1 = playSynthPattern (toggle <| isDown keyD) "metallic" [] (pmap (d2f sigScale . (+0)) <| ploop [sec1])
@@ -694,7 +697,7 @@ halfVerb = [l * 0.9 + r * 0.1,r * 0.9 + l * 0.1] |> out 0
         verb  = freeverb 0.25 1.0 0.9
 
 hyperMelodyPrime :: UGen -> [UGen]
-hyperMelodyPrime f = [s,s2] |> auxThrough 40 |> softclip 30 |> filt |> gain 0.11 |> e  |> fakePan 0.2 |> out 22
+hyperMelodyPrime f = [s,s2] |> softclip 20 |> filt |> gain 0.11 |> e |> auxThrough 40 |> fakePan 0.2 |> out 22
     where
         e   = env [0,1,0] [0.01,2] (-3)
         e2  = env [523.251130601,f,f] [0.05,1.95] (-3)
@@ -703,7 +706,7 @@ hyperMelodyPrime f = [s,s2] |> auxThrough 40 |> softclip 30 |> filt |> gain 0.11
         filt = lpf ([e2 6,e2 6]) 4
 
 manaLeakPrime :: UGen -> [UGen]
-manaLeakPrime f = [s,s2] |> auxThrough 42 |> softclip 30 |> filt |> gain 0.11 |> e  |> fakePan 0.8 |> out 22
+manaLeakPrime f = [s,s2] |> softclip 20 |> filt |> gain 0.11 |> e |> auxThrough 42 |> fakePan 0.8 |> out 22
     where
         e   = env [0,1, 0] [0.01,2] (-3)
         e2  = env [523.251130601,f,f] [0.05,1.95] (-3)
@@ -720,8 +723,7 @@ hyperMelodyPrimePattern = fx <> playSynthPattern (toggle <| combo [alt,isDown ke
                       [4 _ _ 3] [_ _ 2 _] [_ 1 _ _] 3 _ _ _ _ 2 _ _ _ _ _ _ 1 _ _
                       _ _ _ _ _ _ 7 5 [_ 4] 5 _ _ _ _ _
                       _ _ _ _ 3 _ _ _ _ _ _ _ _ _ _ _ _
-                      2 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
-                |]
+                      2 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ |]
 
 manaLeakPrimePattern :: Signal ()
 manaLeakPrimePattern = playSynthPattern (toggle <| combo [alt,isDown keyT]) "manaLeakPrime" [] (pmap ((*1) . d2f sigScale) <| ploop [sec1])
@@ -737,8 +739,36 @@ manaLeakPrimePattern = playSynthPattern (toggle <| combo [alt,isDown keyT]) "man
                       2 _ 1 _ _ _ 1
                       2 _ 1 _ _ _ 1 2 _
                       [3 _ 2] [_ 1 _] 0 _ _ _ _ _
-                      _ _ _ _ _ _ _ _
-                |]
+                      _ _ _ _ _ _ _ _ |]
+
+subDestruction :: UGen -> UGen -> [UGen]
+subDestruction f1 f2 = fuse l r |> gain 0.5 |> out 0
+    where
+        l     = auxIn 24 |> df filt1
+        r     = auxIn 25 |> df filt2
+        df filt x = feedback <| \feed -> filt (freeverb 0.35 0.75 0.95 ((feed |> softclip 10 |> gain 0.425) + x))
+        filt1 = lpf (lag 0.1 f1) 3
+        filt2 = lpf (lag 0.1 f2) 3
+        fuse (x:_) (y:_) = [x,y]
+        fuse  _     _    = []
+
+subControl :: UGen -> [UGen]
+subControl f = [s,s2] |> e |> softclip 20 |> filt |> gain 0.11 |> e |> softclip 20 |> e |> fakePan (random 3 0 1) |> out 24
+    where
+        e    = env [0,1, 0] [0.01,1] (-3)
+        e2   = env [523.251130601,f,f*0.25] [0.05,1] (-3)
+        s    = pulse (sin (3 * 6) + e2 1 * 2) (random 0 0.1 0.9)
+        s2   = pulse (sin (6 * 9) + e2 1)     (random 1 0.1 0.9)
+        filt = lpf [e2 (random 4 2 12),e2 (random 5 2 12)] (dup <| random 6 2 8)
+
+subControlPattern :: Signal ()
+subControlPattern = fx <> playSynthPattern (toggle <| combo [alt,isDown keyZ]) "subControl" [] (pmap ((*0.25) . d2f sigScale) <| pseq (8 * 4 * 4) [sec1,sec2])
+    where
+        fx   = play (toggle <| combo [alt,isDown keyZ]) "subDestruction" [scale 250 8000 <~ mouseX,scale 250 8000 <~ mouseY]
+        sec1 = [lich| [0 0 0 0] [0 0 0 0] [0 0 0 0] [0 0 0 0]
+                      [1 1 1 1] [1 1 1 1] [1 1 1 1] [1 1 1 1] |]
+        sec2 = [lich| [3 3 3 3] [3 3 3 3] [3 3 3 3] [3 3 3 3]
+                      [4 4 4 4] [4 4 4 4] [4 4 4 4] [6 6 6 6] |]
 
 {-
 metallic :: UGen -> [UGen]
@@ -758,7 +788,7 @@ metallic f = sig + sig2 + sig3 |> filt |> e |> auxThrough 2 |> gain 0.15 |> out 
 -}
 
 broodHive :: [UGen]
-broodHive = pl |> tanhDist 2 |> softclip 1 |> gain 0.3 |> out 0
+broodHive = pl |> gain 0.1 |> out 0
     where
         pl = {- pluck 40 freqs 5 (aux |> bpf freqs 3) + -} combC 1.7 1.7 1.1 aux + combC 2.4 2.4 1.1 aux + combC 3.5 3.5 1.1 aux
         -- freqs = map (fromRational . d2f slendro) [1,3]
@@ -767,12 +797,12 @@ broodHive = pl |> tanhDist 2 |> softclip 1 |> gain 0.3 |> out 0
         aux  = [aux1, aux2]
 
 broodling :: UGen -> UGen
-broodling f = pulse [f,f/2,f/4] (dup $ p 1) |> sum  |> add (sin (f / 4) |> gain 0.5) |> p |> gain 0.7 |> out 200
+broodling f = pulse [f,f/2,f/4] (dup $ p 1) |> sum |> lpf (p (f * 4)) 1 |> add (sin (f / 4) |> gain 0.5) |> p |> gain 0.7 |> out 200
     where
         p = perc 0.01 0.75 1 (-16)
 
 broodling2 :: UGen -> UGen
-broodling2 f = pulse [f,f/2,f/4] (dup $ p 1) |> sum  |> add (sin (f / 2) |> gain 0.5) |> p |> gain 0.7 |> out 201
+broodling2 f = pulse [f,f/2,f/4] (dup $ p 1) |> sum |> lpf (p (f * 4)) 1 |> add (sin (f / 2) |> gain 0.5) |> p |> gain 0.7 |> out 201
     where
         p = perc 0.01 0.75 1 (-16)
 
@@ -787,8 +817,8 @@ bs = whiteNoise |> perc 0.001 1 2 (-16) |> decimate 1000 |> fakePan 0.75 |> out 
 
 broodlingPattern :: Signal ()
 broodlingPattern = fx
-                   <> playSynthPattern (toggle <| combo [alt,isDown keyB]) "broodling"  [] (pmap (d2f egyptianRast) <| ploop [freqs])
-                   <> playSynthPattern (toggle <| combo [alt,isDown keyB]) "broodling2" [] (pmap ((/2) . d2f egyptianRast) <| ploop [freqs2])
+                   <> playSynthPattern (toggle <| combo [alt,isDown keyB]) "broodling"  [] (pmap ((*4) . d2f egyptianRast) <| ploop [freqs])
+                   <> playSynthPattern (toggle <| combo [alt,isDown keyB]) "broodling2" [] (pmap ((*2) . d2f egyptianRast) <| ploop [freqs2])
                    -- <> playBeatPattern  (toggle <| combo [alt,isDown keyB]) [] (ploop [broodBeat])
     where
         fx     = play (toggle <| combo [alt,isDown keyB]) "broodHive" []
