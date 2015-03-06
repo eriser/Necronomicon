@@ -729,7 +729,7 @@ subDestruction f1 f2 = fuse l r |> gain 0.5 |> out 0
     where
         l     = auxIn 24 |> df filt1
         r     = auxIn 25 |> df filt2
-        df filt x = feedback <| \feed -> filt (freeverb 0.35 1 0.75 ((feed |> softclip 10 |> gain 0.425) + x))
+        df filt x = feedback <| \feed -> filt (freeverb 0.35 0.75 0.95 ((feed |> softclip 10 |> gain 0.425) + x))
         filt1 = lpf (lag 0.1 f1) 3
         filt2 = lpf (lag 0.1 f2) 3
         fuse (x:_) (y:_) = [x,y]
@@ -739,17 +739,19 @@ subControl :: UGen -> [UGen]
 subControl f = [s,s2] |> e |> softclip 20 |> filt |> gain 0.11 |> e |> softclip 20 |> e |> fakePan (random 3 0 1) |> out 24
     where
         e    = env [0,1, 0] [0.01,1] (-3)
-        e2   = env [523.251130601,f,f*0.1] [0.05,1] (-3)
+        e2   = env [523.251130601,f,f*0.25] [0.05,1] (-3)
         s    = pulse (sin (3 * 6) + e2 1 * 2) (random 0 0.1 0.9)
         s2   = pulse (sin (6 * 9) + e2 1)     (random 1 0.1 0.9)
         filt = lpf [e2 (random 4 2 12),e2 (random 5 2 12)] (dup <| random 6 2 8)
 
 subControlPattern :: Signal ()
-subControlPattern = fx <> playSynthPattern (toggle <| combo [alt,isDown keyZ]) "subControl" [] (pmap ((*0.25) . d2f sigScale) <| ploop [sec1])
+subControlPattern = fx <> playSynthPattern (toggle <| combo [alt,isDown keyZ]) "subControl" [] (pmap ((*0.25) . d2f sigScale) <| pseq (8 * 4 * 4) [sec1,sec2])
     where
         fx   = play (toggle <| combo [alt,isDown keyZ]) "subDestruction" [scale 250 8000 <~ mouseX,scale 250 8000 <~ mouseY]
         sec1 = [lich| [0 0 0 0] [0 0 0 0] [0 0 0 0] [0 0 0 0]
                       [1 1 1 1] [1 1 1 1] [1 1 1 1] [1 1 1 1] |]
+        sec2 = [lich| [3 3 3 3] [3 3 3 3] [3 3 3 3] [3 3 3 3]
+                      [4 4 4 4] [4 4 4 4] [4 4 4 4] [6 6 6 6] |]
 
 {-
 metallic :: UGen -> [UGen]
