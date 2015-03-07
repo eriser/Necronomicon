@@ -937,7 +937,7 @@ metallic f = sig + sig2 + sig3 |> filt |> e |> auxThrough 2 |> gain 0.15 |> out 
 -}
 
 broodHive :: [UGen]
-broodHive = pl |> gain 0.1 |> out 0
+broodHive = pl |> gain 0.06 |> out 0
     where
         pl = {- pluck 40 freqs 5 (aux |> bpf freqs 3) + -} combC 1.7 1.7 1.1 aux + combC 2.4 2.4 1.1 aux + combC 3.5 3.5 1.1 aux
         -- freqs = map (fromRational . d2f slendro) [1,3]
