@@ -73,7 +73,7 @@ mouseToSlendro :: Double -> Double
 mouseToSlendro m = fromRational . d2f slendro . toRational <| (floor <| scale 0 24 m :: Integer)
 
 sections :: Signal ()
-sections = switch section [section2, section1, section3]
+sections = switch section [section2, section3, section1]
     where
         section = netsignal <|  sampleOn (keepIf id True (combo [alt,isDown key1])) 0
                             <|> sampleOn (keepIf id True (combo [alt,isDown key2])) 1
@@ -734,7 +734,7 @@ halfVerb = [l * 0.9 + r * 0.1,r * 0.9 + l * 0.1] |> out 0
         verb  = freeverb 0.5 1.0 0.125
 
 hyperMelodyPrime :: UGen -> [UGen]
-hyperMelodyPrime f = [s,s2] |> softclip 20 |> filt |> gain 0.25 |> e |> fakePan 0.2 |> out 22
+hyperMelodyPrime f = [s,s2] |> softclip 20 |> filt |> e |> auxThrough 2 |> gain 0.25 |> fakePan 0.2 |> out 22
     where
         e   = env [0,1,0] [0.01,0.75] (-3)
         -- e2  = env [523.251130601,f,f] [0.05,3.95] (-3)
@@ -744,7 +744,7 @@ hyperMelodyPrime f = [s,s2] |> softclip 20 |> filt |> gain 0.25 |> e |> fakePan 
         filt = lpf ([e2 4,e2 4]) 2
 
 manaLeakPrime :: UGen -> [UGen]
-manaLeakPrime f = [s,s2] |> softclip 20 |> filt |> gain 0.225 |> e |> auxThrough 42 |> fakePan 0.8 |> out 22
+manaLeakPrime f = [s,s2] |> softclip 20 |> filt |> e |> auxThrough 3 |> gain 0.225 |> auxThrough 42 |> fakePan 0.8 |> out 22
     where
         e   = env [0,1, 0] [0.01,0.75] (-3)
         -- e2  = env [523.251130601,f,f] [0.05,4.95] (-3)
@@ -848,7 +848,7 @@ section2Drums = floorPattern2 <> shake2Pattern <> shake1Pattern <> omniPrimePatt
                 sec1 = [lich| [6 1] [_ 1] [_ 6] [_ 1] |]
 
 omniPrime :: UGen -> [UGen]
-omniPrime f = [s,s2] |> softclip 20 |> filt |> gain 0.75 |> e |> fakePan 0.2 |> out 0
+omniPrime f = [s,s2] |> softclip 20 |> filt |> gain 0.75 |> e |> auxThrough 4 |> fakePan 0.2 |> out 0
     where
         e   = env [0,1,0.1,0] [0.01,0.1,1.5] (-4)
         e2  = env [523.251130601,f * 1.5,f, f] [0.01,0.1,1.5] (-4)
