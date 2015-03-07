@@ -729,12 +729,12 @@ pulseDemonPattern3 = playSynthPattern (toggle <| combo [alt,isDown keyB]) "pulse
 halfVerb :: [UGen]
 halfVerb = [l * 0.9 + r * 0.1,r * 0.9 + l * 0.1] |> out 0
     where
-        l     = auxIn 22 |> verb
-        r     = auxIn 23 |> verb
+        l     = auxIn 22 |> verb |> auxThrough 2 |> auxThrough 3
+        r     = auxIn 23 |> verb |> auxThrough 3 |> auxThrough 4
         verb  = freeverb 0.5 1.0 0.125
 
 hyperMelodyPrime :: UGen -> [UGen]
-hyperMelodyPrime f = [s,s2] |> softclip 20 |> filt |> e |> auxThrough 2 |> gain 0.25 |> fakePan 0.2 |> out 22
+hyperMelodyPrime f = [s,s2] |> softclip 20 |> filt |> e |> gain 0.25 |> fakePan 0.2 |> out 22
     where
         e   = env [0,1,0] [0.01,0.75] (-3)
         -- e2  = env [523.251130601,f,f] [0.05,3.95] (-3)
@@ -744,7 +744,7 @@ hyperMelodyPrime f = [s,s2] |> softclip 20 |> filt |> e |> auxThrough 2 |> gain 
         filt = lpf ([e2 4,e2 4]) 2
 
 manaLeakPrime :: UGen -> [UGen]
-manaLeakPrime f = [s,s2] |> softclip 20 |> filt |> e |> auxThrough 3 |> gain 0.225 |> auxThrough 42 |> fakePan 0.8 |> out 22
+manaLeakPrime f = [s,s2] |> softclip 20 |> filt |> e |> gain 0.225 |> auxThrough 42 |> fakePan 0.8 |> out 22
     where
         e   = env [0,1, 0] [0.01,0.75] (-3)
         -- e2  = env [523.251130601,f,f] [0.05,4.95] (-3)
