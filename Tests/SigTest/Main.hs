@@ -35,6 +35,7 @@ synthDefs = synthDef "triOsc"           triOsc
          *> synthDef "shake2"           shake2
          *> synthDef "omniPrime"        omniPrime
          *> synthDef "shakeSnare"       shakeSnare
+         *> synthDef "distortedBassPrime" distortedBassPrime
 
 hyperTerrainSounds :: Signal ()
 hyperTerrainSounds = metallicPattern
@@ -640,13 +641,13 @@ pulseDemon f = [s,s2] |> filt |> softclip (dup <| random 31 100 200) |> gain 0.0
         s2   = pulse (f * random 4 0.995 1.005) (random 3 0.01 0.99)
         filt = lpf ([f * (random 19 2 16), f * (random 31 2 16)]|> e2) 3
 
-demonCave :: UGen -> UGen -> [UGen]
-demonCave f1 f2 = [l * 0.875 + r * 0.125,r * 0.875 + l * 0.125] |> out 0
+demonCave :: UGen -> UGen -> UGen -> [UGen]
+demonCave f1 f2 g = [l * 0.875 + r * 0.125,r * 0.875 + l * 0.125] |> gain [g,g] |> out 0
     where
         l     = auxIn 18 |> filt1 +> d2 |> verb +> d
         r     = auxIn 19 |> filt2 +> d2 |> verb +> d
-        filt1 = lpf (lag 0.1 f1) 3
-        filt2 = lpf (lag 0.1 f2) 3
+        filt1 = lpf (lag 0.1 f1) 4
+        filt2 = lpf (lag 0.1 f2) 4
         verb  = freeverb 0.5 1.0 0.1
         d     = delayN 0.6 0.6
         d2    = delayN 0.4 0.4
@@ -655,7 +656,7 @@ demonCave f1 f2 = [l * 0.875 + r * 0.125,r * 0.875 + l * 0.125] |> out 0
 pulseDemonPattern :: Signal ()
 pulseDemonPattern = fx <> patt
     where
-        fx   = play (toggle <| combo [alt,isDown keyG]) "demonCave" [scale 250 8000 <~ mouseX,scale 250 8000 <~ mouseY]
+        fx   = play (toggle <| combo [alt,isDown keyG]) "demonCave" [scale 250 8000 <~ mouseX,scale 250 8000 <~ mouseY,scale 1 1.5 <~ mouseX]
         patt = playSynthPattern (toggle <| combo [alt,isDown keyG]) "pulseDemon" [] (pmap ((*0.5) . d2f sigScale) <| ploop [sec1])
         sec1 = [lich| 0 1 _ 0 1 _ 0 1
                       _ 2 3 _ 2 3 _ 2
@@ -791,7 +792,7 @@ shake2 d = sig1 |> e |> gain 0.6 |> p 0.6 |> out 0
         e2    = env [1,0.95, 0.9] [0.01,d] (-9)
 
 section2Drums :: Signal ()
-section2Drums = floorPattern2 <> shake2Pattern <> shake1Pattern <> omniPrimePattern
+section2Drums = floorPattern2 <> shake2Pattern <> shake1Pattern <> omniPrimePattern <> distortedBassHits
     where
         shake1Pattern = playSynthPattern (toggle <| combo [alt,isDown keyW]) "shakeSnare" [] (pmap (* 0.125) <| ploop [sec1])
             where
@@ -828,6 +829,38 @@ omniPrimePattern = playSynthPattern (toggle <| combo [alt,isDown keyQ]) "omniPri
                       6 7 [_ 7] _
                       [5 5] [5 5] _ _
                 |]
+
+distortedBassPrime :: UGen -> [UGen]
+distortedBassPrime f = [s,s2] |> e |> softclip 400 |> filt |> softclip 50 |> filt2 |> gain 0.15 |> verb |> e |> out 0
+    where
+        e   = env [0,1,0] [0.1,6.75] (-4)
+        -- e2  = env [523.251130601,f,f] [0.05,3.95] (-3)
+        e2  = env [f * 1.25,f,f * 0.5] [0.1,6.75] (-4)
+        s   = pulse (f * 0.995) 0.25 + pulse (f * 0.4995) 0.25
+        s2  = pulse (f * 1.005) 0.75 + pulse (f * 0.505) 0.75
+        filt = lpf ([e2 6,e2 6]) 6
+        filt2 i = lpf ([e2 8,e2 8]) 6 i + lpf ([e2 4,e2 4]) 6 i + i * 1
+        verb = freeverb 0.5 1.0 0.75
+
+distortedBassHits :: Signal ()
+distortedBassHits = playSynthPattern (toggle <| combo [alt,isDown keyE]) "distortedBassPrime" [] (pmap ((*0.125) . d2f sigScale) <| ploop [sec1])
+    where
+        sec1 = [lich| _ _ _ 6
+                      _ _ _ _
+                      _ _ _ 7
+                      _ _ _ _
+                      _ _ _ 6
+                      _ _ _ _
+                      _ _ _ 5
+                      _ _ _ _
+                      _ _ _ 6
+                      _ _ _ _
+                      _ _ _ 7
+                      _ _ _ _
+                      _ _ _ 6
+                      _ _ _ _
+                      _ _ _ 5
+                      _ _ _ _ |]
 
 ------------------------------------
 -- Section 3
