@@ -31,6 +31,7 @@ synthDefs = synthDef "triOsc"           triOsc
          *> synthDef "bs"               bs
          *> synthDef "subControl"       subControl
          *> synthDef "subDestruction"   subDestruction
+         *> synthDef "floorPerc2"       floorPerc2
 
 hyperTerrainSounds :: Signal ()
 hyperTerrainSounds = metallicPattern
@@ -253,7 +254,6 @@ visAux :: [UGen] -> UGen -> [UGen] -> [UGen]
 visAux bus a (u1:u2:_) = auxThrough bus [u1 * a,0] * 0 + [u1,u2]
 visAux _   _  u        = u
 
-
 metallic3 :: UGen -> [UGen]
 metallic3 f = sig + sig2 + sig3 |> e |> visAux 2 2 |> softclip 1000 |> filt |> gain 0.1 |> verb |> e |> gain 1 |> (\[u1,u2 ]-> [u2,u1]) |> out 0
     where
@@ -270,8 +270,6 @@ metallic3 f = sig + sig2 + sig3 |> e |> visAux 2 2 |> softclip 1000 |> filt |> g
         e      = perc 0.01 6 1 (-12)
         e2     = env2 [1,1,0.25,0.25] [0.01,1,5] (-6)
         verb   = freeverb 0.5 1.0 0.1
-
-
 
 metallic4 :: UGen -> [UGen]
 metallic4 f = sig + sig2 + sig3 |> e |> visAux 3 2 |> softclip 1000 |> filt |> gain 0.1 |> verb |> e |> gain 1 |> out 0
@@ -422,6 +420,7 @@ metallicPattern = play (toggle <| combo [alt,isDown keyD]) "caveTime" []
                <> manaLeakPrimePattern
                <> broodlingPattern
                <> subControlPattern
+               <> floorPattern2
 
 -- metallicPattern1 :: Signal ()
 -- metallicPattern1 = playSynthPattern (toggle <| isDown keyD) "metallic" [] (pmap (d2f sigScale . (+0)) <| ploop [sec1])
@@ -757,6 +756,30 @@ subDestruction f1 f2 = fuse l r |> gain 0.5 |> out 0
         filt2 = lpf (lag 0.1 f2) 3
         fuse (x:_) (y:_) = [x,y]
         fuse  _     _    = []
+
+
+------------------------------------
+-- Section 2ish
+------------------------------------
+
+floorPerc2 :: UGen -> [UGen]
+floorPerc2 d = sig1 + sig2 |> e |> p 0.35 |> gain 0.65 |> out 0
+    where
+        p a u = [u * (1 - a), u * a]
+        sig1  = sin <| e2 90
+        sig2  = sin (e2 <| 120 * 0.25)
+        e     = perc 0.01 d 1 (-6)
+        e2    = env [1,0.9, 0] [0.01,d] (-3)
+
+floorPattern2 :: Signal ()
+floorPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyW]) "floorPerc2" [] (pmap (* 0.25) <| ploop [sec1])
+    where
+        sec1 = [lich| [6 1] [_ 1] [_ 6] [_ 1] |]
+
+
+------------------------------------
+-- Section 3
+------------------------------------
 
 subControl :: UGen -> [UGen]
 subControl f = [s,s2] |> e |> softclip 20 |> filt |> gain 0.11 |> e |> softclip 20 |> e |> fakePan (random 3 0 1) |> out 24
