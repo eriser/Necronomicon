@@ -189,19 +189,20 @@ triOsc f1 f2 = [sig1,sig2] + [sig3,sig3] |> verb |> gain 0.1 |> out 0
         verb = freeverb 0.5 1.0 0.9
 
 triOsc32 :: UGen -> UGen -> [UGen]
-triOsc32 mx my = feedback fSig |> verb |> gain 0.05 |> out 0
+triOsc32 mx my = feedback fSig |> verb |> gain 0.035 |> out 0
     where
         f1     = lag 0.25 mx
         f2     = lag 0.25 my
-        verb   = freeverb 0.25 0.75 0.95
+        verb   = freeverb 0.25 0.5 0.95
+        d      = delayN 0.6 0.6
         fSig i = [sig4,sig5] + [sig6,sig6]
             where
                 sig1 = sinOsc (f1 + sig3 * 26.162)   * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> auxThrough 2
                 sig2 = sinOsc (f2 - sig3 * 26.162)   * (sinOsc (f1 * 0.00025) |> range 0.5 1) |> auxThrough 3
                 sig3 = sinOsc (f1 - f2 + i * 26.162) * (sinOsc (i * 0.00025)  |> range 0.5 1) |> auxThrough 4
-                sig4 = sinOsc (f1 * 0.25 + sig1 * 261.6255653006) * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 60
-                sig5 = sinOsc (f2 * 0.25 - sig2 * 261.6255653006) * (sinOsc (f1 * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 60
-                sig6 = sinOsc (f1 * 0.25 - sig3 * 261.6255653006) * (sinOsc (i * 0.00025)  |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 60
+                sig4 = sinOsc (f1 * 0.25 + sig1 * 261.6255653006) * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 60 |> gain 0.5 +> d
+                sig5 = sinOsc (f2 * 0.25 - sig2 * 261.6255653006) * (sinOsc (f1 * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 60 |> gain 0.5 +> d
+                sig6 = sinOsc (f1 * 0.25 - sig3 * 261.6255653006) * (sinOsc (i * 0.00025)  |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 60 |> gain 0.5 +> d
 
 triOscEnv :: UGen -> [UGen]
 triOscEnv f1 = [sig1,sig2] + [sig3,sig3] |> out 0
