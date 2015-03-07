@@ -6,34 +6,36 @@ main :: IO ()
 main = runSignal <| synthDefs *> tempo (pure 150) *> testGUI <> sections <> hyperTerrainSounds
 
 synthDefs :: Signal ()
-synthDefs = synthDef "triOsc"            triOsc
-         *> synthDef "triOsc32"          triOsc32
-         *> synthDef "triOscEnv"         triOscEnv
-         *> synthDef "b"                 bSynth
-         *> synthDef "p"                 pSynth
-         *> synthDef "metallic3"         metallic3
-         *> synthDef "metallic4"         metallic4
-         *> synthDef "shake"             shake
-         *> synthDef "floorPerc"         floorPerc
-         *> synthDef "reverseSwell"      reverseSwell
-         *> synthDef "reverseSwell2"     reverseSwell2
-         *> synthDef "hyperMelody"       hyperMelody
-         *> synthDef "caveTime"          caveTime
-         *> synthDef "pulseDemon"        pulseDemon
-         *> synthDef "demonCave"         demonCave
-         *> synthDef "hyperMelodyPrime"  hyperMelodyPrime
-         *> synthDef "manaLeakPrime"     manaLeakPrime
-         *> synthDef "halfVerb"          halfVerb
-         *> synthDef "broodling"         broodling
-         *> synthDef "broodling2"        broodling2
-         *> synthDef "broodHive"         broodHive
-         *> synthDef "bs"                bs
-         *> synthDef "subControl"        subControl
-         *> synthDef "subDestruction"    subDestruction
-         *> synthDef "floorPerc2"        floorPerc2
-         *> synthDef "shake2"            shake2
-         *> synthDef "omniPrime"         omniPrime
-         *> synthDef "shakeSnare"        shakeSnare
+synthDefs = synthDef "triOsc"           triOsc
+         *> synthDef "triOsc32"         triOsc32
+         *> synthDef "triOscEnv"        triOscEnv
+         *> synthDef "b"                bSynth
+         *> synthDef "p"                pSynth
+         *> synthDef "metallic3"        metallic3
+         *> synthDef "metallic4"        metallic4
+         *> synthDef "shake"            shake
+         *> synthDef "floorPerc"        floorPerc
+         *> synthDef "reverseSwell"     reverseSwell
+         *> synthDef "reverseSwell2"    reverseSwell2
+         *> synthDef "hyperMelody"      hyperMelody
+         *> synthDef "caveTime"         caveTime
+         *> synthDef "pulseDemon"       pulseDemon
+         *> synthDef "demonCave"        demonCave
+         *> synthDef "hyperMelodyPrime" hyperMelodyPrime
+         *> synthDef "manaLeakPrime"    manaLeakPrime
+         *> synthDef "halfVerb"         halfVerb
+         *> synthDef "broodling"        broodling
+         *> synthDef "broodling2"       broodling2
+         *> synthDef "broodHive"        broodHive
+         *> synthDef "bb"               bb
+         *> synthDef "bs"               bs
+         *> synthDef "subControl"       subControl
+         *> synthDef "subDestruction"   subDestruction
+         *> synthDef "floorPerc2"       floorPerc2
+         *> synthDef "shake2"           shake2
+         *> synthDef "omniPrime"        omniPrime
+         *> synthDef "shakeSnare"       shakeSnare
+         *> synthDef "distortedBassPrime" distortedBassPrime
          *> synthDef "moxRuby"           moxRuby
          *> synthDef "moxRuby'"          moxRuby'
          *> synthDef "moxRuby''"         moxRuby''
@@ -64,8 +66,11 @@ synthDefs = synthDef "triOsc"            triOsc
 hyperTerrainSounds :: Signal ()
 hyperTerrainSounds = metallicPattern
                 --  <> play             (toggle <| isDown keyW) "triOsc"    [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
-                --  <> play             (toggle <| isDown keyA) "triOsc32"  [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
+                 <> play             (toggle <| isDown keyA) "triOsc32"  [mouseToSlendro <~ mouseX, mouseToSlendro <~ mouseY]
                 --  <> playBeatPattern  (toggle <| isDown keyE) [] (ploop [ [lich| [p p p] [p b] p b |] ])
+
+mouseToSlendro :: Double -> Double
+mouseToSlendro m = fromRational . d2f slendro . toRational <| (floor <| scale 0 24 m :: Integer)
 
 sections :: Signal ()
 sections = switch section [section2, section1, section3]
@@ -210,14 +215,20 @@ triOsc f1 f2 = [sig1,sig2] + [sig3,sig3] |> verb |> gain 0.1 |> out 0
         verb = freeverb 0.5 1.0 0.9
 
 triOsc32 :: UGen -> UGen -> [UGen]
-triOsc32 f1 f2 = feedback fSig |> verb |> gain 0.1 |> out 0
+triOsc32 mx my = feedback fSig |> verb |> gain 0.035 |> out 0
     where
-        verb   = freeverb 0.5 1.0 0.9
-        fSig i = [sig1,sig2] + [sig3,sig3]
+        f1     = lag 0.25 mx
+        f2     = lag 0.25 my
+        verb   = freeverb 0.25 0.5 0.95
+        d      = delayN 0.6 0.6
+        fSig i = [sig4,sig5] + [sig6,sig6]
             where
-                sig1 = sinOsc (f1 + sig3 * 10)   * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> auxThrough 2
-                sig2 = sinOsc (f2 - sig3 * 10)   * (sinOsc (f1 * 0.00025) |> range 0.5 1) |> auxThrough 3
-                sig3 = sinOsc (f1 - f2 + i * 10) * (sinOsc (i * 0.00025)  |> range 0.5 1) |> auxThrough 4
+                sig1 = sinOsc (f1 + sig3 * 26.162)   * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> auxThrough 2
+                sig2 = sinOsc (f2 - sig3 * 26.162)   * (sinOsc (f1 * 0.00025) |> range 0.5 1) |> auxThrough 3
+                sig3 = sinOsc (f1 - f2 + i * 26.162) * (sinOsc (i * 0.00025)  |> range 0.5 1) |> auxThrough 4
+                sig4 = sinOsc (f1 * 0.25 + sig1 * 261.6255653006) * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 60 |> gain 0.5 +> d
+                sig5 = sinOsc (f2 * 0.25 - sig2 * 261.6255653006) * (sinOsc (f1 * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 60 |> gain 0.5 +> d
+                sig6 = sinOsc (f1 * 0.25 - sig3 * 261.6255653006) * (sinOsc (i * 0.00025)  |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 60 |> gain 0.5 +> d
 
 triOscEnv :: UGen -> [UGen]
 triOscEnv f1 = [sig1,sig2] + [sig3,sig3] |> out 0
@@ -642,13 +653,13 @@ hyperMelodyPattern = playSynthPattern (toggle <| combo [alt,isDown keyF]) "hyper
 hyperMelodyPattern2 :: Signal ()
 hyperMelodyPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyH]) "hyperMelody" [] (pmap ((*2) . d2f sigScale) <| ploop [sec1])
     where
-        sec1 = [lich| 4 _ 3 _ 2 3 1
-                      4 _ 3 _ 2 3 0 0 0
+        sec1 = [lich| 4 _ 3 _ 2 _ _ _
+                      4 _ 3 _ 2 _ 3 _
                       [4 6 8] 7 _ _ _ _ _ _
                       _ _ _ _ _ _ _ _
-                      4 _ 3 _ 2 3 1
-                      4 _ 3 _ 2 3 0 0 0
-                      [1 1 1] 0 _ _ _ _ _ _
+                      4 _ 3 _ 2 _ _ _
+                      4 _ 3 _ 2 _ 3 _
+                      [1 1] 0 _ _ _ _ _ _
                       _ _ _ _ _ _ _ _
                       2 _ 1 _ _ _ 1
                       2 _ 1 _ _ _ 1 2 _
@@ -665,13 +676,13 @@ pulseDemon f = [s,s2] |> filt |> softclip (dup <| random 31 100 200) |> gain 0.0
         s2   = pulse (f * random 4 0.995 1.005) (random 3 0.01 0.99)
         filt = lpf ([f * (random 19 2 16), f * (random 31 2 16)]|> e2) 3
 
-demonCave :: UGen -> UGen -> [UGen]
-demonCave f1 f2 = [l * 0.875 + r * 0.125,r * 0.875 + l * 0.125] |> out 0
+demonCave :: UGen -> UGen -> UGen -> [UGen]
+demonCave f1 f2 g = [l * 0.875 + r * 0.125,r * 0.875 + l * 0.125] |> gain [g,g] |> out 0
     where
         l     = auxIn 18 |> filt1 +> d2 |> verb +> d
         r     = auxIn 19 |> filt2 +> d2 |> verb +> d
-        filt1 = lpf (lag 0.1 f1) 3
-        filt2 = lpf (lag 0.1 f2) 3
+        filt1 = lpf (lag 0.1 f1) 4
+        filt2 = lpf (lag 0.1 f2) 4
         verb  = freeverb 0.5 1.0 0.1
         d     = delayN 0.6 0.6
         d2    = delayN 0.4 0.4
@@ -680,7 +691,7 @@ demonCave f1 f2 = [l * 0.875 + r * 0.125,r * 0.875 + l * 0.125] |> out 0
 pulseDemonPattern :: Signal ()
 pulseDemonPattern = fx <> patt
     where
-        fx   = play (toggle <| combo [alt,isDown keyG]) "demonCave" [scale 250 8000 <~ mouseX,scale 250 8000 <~ mouseY]
+        fx   = play (toggle <| combo [alt,isDown keyG]) "demonCave" [scale 250 8000 <~ mouseX,scale 250 8000 <~ mouseY,scale 1 1.5 <~ mouseX]
         patt = playSynthPattern (toggle <| combo [alt,isDown keyG]) "pulseDemon" [] (pmap ((*0.5) . d2f sigScale) <| ploop [sec1])
         sec1 = [lich| 0 1 _ 0 1 _ 0 1
                       _ 2 3 _ 2 3 _ 2
@@ -720,28 +731,30 @@ halfVerb = [l * 0.9 + r * 0.1,r * 0.9 + l * 0.1] |> out 0
     where
         l     = auxIn 22 |> verb
         r     = auxIn 23 |> verb
-        verb  = freeverb 0.25 1.0 0.9
+        verb  = freeverb 0.5 1.0 0.125
 
 hyperMelodyPrime :: UGen -> [UGen]
-hyperMelodyPrime f = [s,s2] |> softclip 20 |> filt |> gain 0.11 |> e |> auxThrough 40 |> fakePan 0.2 |> out 22
+hyperMelodyPrime f = [s,s2] |> softclip 20 |> filt |> gain 0.25 |> e |> fakePan 0.2 |> out 22
     where
-        e   = env [0,1,0] [0.01,4] (-3)
-        e2  = env [523.251130601,f,f] [0.05,3.95] (-3)
-        s   = syncsaw (sin (3 * 6) + e2 1 * 2) <| auxIn 42
-        s2  = syncsaw (sin (6 * 9) + e2 1)     <| auxIn 42
-        filt = lpf ([e2 6,e2 6]) 4
+        e   = env [0,1,0] [0.01,0.75] (-3)
+        -- e2  = env [523.251130601,f,f] [0.05,3.95] (-3)
+        e2  = env [f,f,f * 0.125] [0.05,0.75] (-3)
+        s   = syncsaw (sin (3 * 6) + f * 2) <| auxIn 42
+        s2  = syncsaw (sin (6 * 9) + f)     <| auxIn 42
+        filt = lpf ([e2 4,e2 4]) 2
 
 manaLeakPrime :: UGen -> [UGen]
-manaLeakPrime f = [s,s2] |> softclip 20 |> filt |> gain 0.11 |> e |> auxThrough 42 |> fakePan 0.8 |> out 22
+manaLeakPrime f = [s,s2] |> softclip 20 |> filt |> gain 0.225 |> e |> auxThrough 42 |> fakePan 0.8 |> out 22
     where
-        e   = env [0,1, 0] [0.01,2] (-3)
-        e2  = env [523.251130601,f,f] [0.05,4.95] (-3)
-        s   = syncsaw (sin (3 * 6) + e2 1 * 2) <| auxIn 40
-        s2  = syncsaw (sin (6 * 9) + e2 1)     <| auxIn 40
-        filt = lpf ([e2 6,e2 6]) 4
+        e   = env [0,1, 0] [0.01,0.75] (-3)
+        -- e2  = env [523.251130601,f,f] [0.05,4.95] (-3)
+        e2  = env [f,f,f * 0.125] [0.05,0.75] (-3)
+        s   = saw (sin (3 * 6) + f)
+        s2  = saw (sin (6 * 9) + f * 2)
+        filt = lpf ([e2 5,e2 6]) 2
 
 hyperMelodyPrimePattern :: Signal ()
-hyperMelodyPrimePattern = fx <> playSynthPattern (toggle <| combo [alt,isDown keyR]) "hyperMelodyPrime" [] (pmap ((*0.5) . d2f sigScale) <| ploop [sec1])
+hyperMelodyPrimePattern = fx <> playSynthPattern (toggle <| combo [alt,isDown keyR]) "hyperMelodyPrime" [] (pmap ((*0.5) . d2f sigScale . (+1)) <| ploop [sec1])
     where
         fx   = play (toggle <| combo [alt,isDown keyR]) "halfVerb" []
         sec1 = [lich| [_ 3] [4 3] [_ 3] 6 7 _ [_ 3] 4 _ _ _ _ _ _
@@ -752,15 +765,15 @@ hyperMelodyPrimePattern = fx <> playSynthPattern (toggle <| combo [alt,isDown ke
                       2 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ |]
 
 manaLeakPrimePattern :: Signal ()
-manaLeakPrimePattern = playSynthPattern (toggle <| combo [alt,isDown keyT]) "manaLeakPrime" [] (pmap ((*1) . d2f sigScale) <| ploop [sec1])
+manaLeakPrimePattern = playSynthPattern (toggle <| combo [alt,isDown keyT]) "manaLeakPrime" [] (pmap ((*0.25) . d2f sigScale . (+3)) <| ploop [sec1])
     where
-        sec1 = [lich| 4 _ 3 _ 2 3 1
-                      4 _ 3 _ 2 3 0 0 0
+        sec1 = [lich| 4 _ 3 _ 2 _ _ _
+                      4 _ 3 _ 2 _ 3 _
                       [4 6 8] 7 _ _ _ _ _ _
                       _ _ _ _ _ _ _ _
-                      4 _ 3 _ 2 3 1
-                      4 _ 3 _ 2 3 0 0 0
-                      [1 1 1] 0 _ _ _ _ _ _
+                      4 _ 3 _ 2 _ _ _
+                      4 _ 3 _ 2 _ 3 _
+                      [1 1] 0 _ _ _ _ _ _
                       _ _ _ _ _ _ _ _
                       2 _ 1 _ _ _ 1
                       2 _ 1 _ _ _ 1 2 _
@@ -811,10 +824,10 @@ shake2 d = sig1 |> e |> gain 0.6 |> p 0.6 |> out 0
         p a u = [u * (1 - a), u * a]
         sig1  = whiteNoise |> bpf (12000 |> e2) 9 |> gain 0.05
         e     = perc 0.01 (d) 1 (-6)
-        e2    = env [1,0.95, 0] [0.01,d] (-9)
+        e2    = env [1,0.95, 0.9] [0.01,d] (-9)
 
 section2Drums :: Signal ()
-section2Drums = floorPattern2 <> shake2Pattern <> shake1Pattern <> omniPrimePattern
+section2Drums = floorPattern2 <> shake2Pattern <> shake1Pattern <> omniPrimePattern <> distortedBassHits
     where
         shake1Pattern = playSynthPattern (toggle <| combo [alt,isDown keyW]) "shakeSnare" [] (pmap (* 0.125) <| ploop [sec1])
             where
@@ -822,7 +835,7 @@ section2Drums = floorPattern2 <> shake2Pattern <> shake1Pattern <> omniPrimePatt
                               1 _ 1 _ 1 _ 1 [4 4]
                         ] |]
 
-        shake2Pattern = playSynthPattern (toggle <| combo [alt,isDown keyW]) "shake2" [] (pmap (* 0.125) <| ploop [sec1])
+        shake2Pattern = playSynthPattern (toggle <| combo [alt,isDown keyW]) "shake2" [] (pmap (* 0.1) <| ploop [sec1])
             where
                 sec1 = [lich| [2 1] [1 1] 1
                               [2 1] [_ 2] 1
@@ -835,26 +848,54 @@ section2Drums = floorPattern2 <> shake2Pattern <> shake1Pattern <> omniPrimePatt
                 sec1 = [lich| [6 1] [_ 1] [_ 6] [_ 1] |]
 
 omniPrime :: UGen -> [UGen]
-omniPrime f = [s,s2] |> softclip 20 |> filt |> gain 0.31 |> e |> fakePan 0.2 |> out 0
+omniPrime f = [s,s2] |> softclip 20 |> filt |> gain 0.75 |> e |> fakePan 0.2 |> out 0
     where
-        e   = env [0,1,0.1,0] [0.01,0.1,1] (-4)
-        e2  = env [523.251130601,f,f * 0.5, f * 0.5] [0.01,0.1,1.0] (-4)
+        e   = env [0,1,0.1,0] [0.01,0.1,1.5] (-4)
+        e2  = env [523.251130601,f * 1.5,f, f] [0.01,0.1,1.5] (-4)
         s   = saw (sin (3 * 6) + e2 1 * 2)
         s2  = saw (sin (6 * 9) + e2 1)
         filt = lpf ([e2 6,e2 6]) 4
 
 omniPrimePattern :: Signal ()
-omniPrimePattern = playSynthPattern (toggle <| combo [alt,isDown keyQ]) "omniPrime" [] (pmap ((* 0.25) . d2f slendro) <| ploop [sec1])
+omniPrimePattern = playSynthPattern (toggle <| combo [alt,isDown keyQ]) "omniPrime" [] (pmap ((* 0.03125) . d2f slendro) <| ploop [sec1])
     where
-        sec1 = [lich| 1 2 0 _
-                      _ _ _ [_ 3]
-                      2 3 4 _
-                      [4 4] [5 5] _ _
-                      1 2 0 _
-                      _ _ _ [_ 3]
-                      2 3 4 _
-                                    [4 4] [5 5] _ _
-                ] |]
+        sec1 = [lich| 6 7 5 _
+                      _ _ _ [_ 7]
+                      6 7 [_ 7] _
+                      [5 5] [5 5] _ _
+                |]
+
+distortedBassPrime :: UGen -> [UGen]
+distortedBassPrime f = [s,s2] |> e |> softclip 400 |> filt |> softclip 50 |> filt2 |> gain 0.15 |> verb |> e |> out 0
+    where
+        e   = env [0,1,0] [0.1,6.75] (-4)
+        -- e2  = env [523.251130601,f,f] [0.05,3.95] (-3)
+        e2  = env [f * 1.25,f,f * 0.5] [0.1,6.75] (-4)
+        s   = pulse (f * 0.995) 0.25 + pulse (f * 0.4995) 0.25
+        s2  = pulse (f * 1.005) 0.75 + pulse (f * 0.505) 0.75
+        filt = lpf ([e2 6,e2 6]) 6
+        filt2 i = lpf ([e2 8,e2 8]) 6 i + lpf ([e2 4,e2 4]) 6 i + i * 1
+        verb = freeverb 0.5 1.0 0.75
+
+distortedBassHits :: Signal ()
+distortedBassHits = playSynthPattern (toggle <| combo [alt,isDown keyE]) "distortedBassPrime" [] (pmap ((*0.125) . d2f sigScale) <| ploop [sec1])
+    where
+        sec1 = [lich| _ _ _ 6
+                      _ _ _ _
+                      _ _ _ 7
+                      _ _ _ _
+                      _ _ _ 6
+                      _ _ _ _
+                      _ _ _ 5
+                      _ _ _ _
+                      _ _ _ 6
+                      _ _ _ _
+                      _ _ _ 7
+                      _ _ _ _
+                      _ _ _ 6
+                      _ _ _ _
+                      _ _ _ 5
+                      _ _ _ _ |]
 
 ------------------------------------
 -- Section 3
