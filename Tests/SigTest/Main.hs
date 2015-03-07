@@ -937,7 +937,7 @@ metallic f = sig + sig2 + sig3 |> filt |> e |> auxThrough 2 |> gain 0.15 |> out 
 -}
 
 broodHive :: [UGen]
-broodHive = pl |> gain 0.1 |> out 0
+broodHive = pl |> gain 0.06 |> out 0
     where
         pl = {- pluck 40 freqs 5 (aux |> bpf freqs 3) + -} combC 1.7 1.7 1.1 aux + combC 2.4 2.4 1.1 aux + combC 3.5 3.5 1.1 aux
         -- freqs = map (fromRational . d2f slendro) [1,3]
@@ -1041,33 +1041,33 @@ manaVault :: UGen
 manaVault = sin broodBassFreq + (saw broodBassFreq |> gain 0.1) |> perc 0.001 0.1 1 (-8) |> artifactOut
 
 trinisphere :: UGen
-trinisphere = auxIn 150 |> hpf (moxFreq 0 0.5) 9 |> gain 0.2 |> out 0
+trinisphere = auxIn 150 |> hpf (moxFreq 0 0.5) 9 |> gain 0.15 |> out 0
 
 trinisphere' :: UGen
-trinisphere' = auxIn 151 |> bpf (moxFreq 1 0.5) 9 |> gain 0.2 |> out 1
+trinisphere' = auxIn 151 |> bpf (moxFreq 1 0.5) 9 |> gain 0.15 |> out 1
 
 trinisphere'' :: [UGen]
-trinisphere'' = auxIn 152 |> lpf (moxFreq 4 1) 9 |> dup |> gain 0.5 |> gain 0.2 |> out 0
+trinisphere'' = auxIn 152 |> lpf (moxFreq 4 1) 9 |> dup |> gain 0.5 |> gain 0.15 |> out 0
 
 gitaxianProbe :: UGen
-gitaxianProbe = auxIn 153 |> gain (saw (moxFreq 7 0) + saw (moxFreq 8 0)) +> combC 0.8 0.8 1.1 |> gain 0.2 |> out 0
+gitaxianProbe = auxIn 153 |> gain (saw (moxFreq 7 0) + saw (moxFreq 8 0)) +> combC 0.8 0.8 1.1 |> gain 0.15 |> out 0
 
 expeditionMap :: [UGen]
-expeditionMap = auxIn 154 |> decimate [noise0 0.25 |> range 100 10000, noise0 0.5 |> range 100 10000] |> gain 0.2 |> out 0
+expeditionMap = auxIn 154 |> decimate [noise0 0.25 |> range 100 10000, noise0 0.5 |> range 100 10000] |> gain 0.15 |> out 0
 
 goblinCharBelcher :: [UGen]
-goblinCharBelcher = auxIn 155 |> crush 8 |> fakePan 0.75 |> gain 0.2 |> out 0
+goblinCharBelcher = auxIn 155 |> crush 8 |> fakePan 0.75 |> gain 0.15 |> out 0
 
 tolarianAcademy :: [UGen]
-tolarianAcademy = [combC 1.7 1.7 1.1 aux, combC 2.4 2.4 1.1 aux] |> add (dup aux) |> gain 0.2 |> out 0
+tolarianAcademy = [combC 1.7 1.7 1.1 aux, combC 2.4 2.4 1.1 aux] |> add (dup aux) |> gain 0.15 |> out 0
     where
         aux = auxIn 156
 
 bs :: UGen
-bs = whiteNoise |> perc 0.001 1 1 (-64) |> crush 8 |> decimate 5000 |> out 1
+bs = whiteNoise |> perc 0.001 0.75 1 (-64) |> crush 8 |> decimate 5000 |> out 1
 
 bb :: [UGen]
-bb = sin (moxFreq 0 0.125) + (saw (moxFreq 0 0.125) |> gain 0.3) +> clip 20 +> tanhDist 5 |> perc 0.001 0.75 0.3 (-32) |> dup |> out 0
+bb = sin (moxFreq 0 0.125) + (saw (moxFreq 0 0.125) |> gain 0.3) +> clip 20 +> tanhDist 5 |> perc 0.001 0.5 0.3 (-32) |> dup |> out 0
 
 terraNovaPattern :: Signal ()
 terraNovaPattern = fxSynth "trinisphere"
