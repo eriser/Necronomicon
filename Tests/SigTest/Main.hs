@@ -6,35 +6,60 @@ main :: IO ()
 main = runSignal <| synthDefs *> tempo (pure 150) *> testGUI <> sections <> hyperTerrainSounds
 
 synthDefs :: Signal ()
-synthDefs = synthDef "triOsc"           triOsc
-         *> synthDef "triOsc32"         triOsc32
-         *> synthDef "triOscEnv"        triOscEnv
-         *> synthDef "b"                bSynth
-         *> synthDef "p"                pSynth
-         *> synthDef "metallic3"        metallic3
-         *> synthDef "metallic4"        metallic4
-         *> synthDef "shake"            shake
-         *> synthDef "floorPerc"        floorPerc
-         *> synthDef "reverseSwell"     reverseSwell
-         *> synthDef "reverseSwell2"    reverseSwell2
-         *> synthDef "hyperMelody"      hyperMelody
-         *> synthDef "caveTime"         caveTime
-         *> synthDef "pulseDemon"       pulseDemon
-         *> synthDef "demonCave"        demonCave
-         *> synthDef "hyperMelodyPrime" hyperMelodyPrime
-         *> synthDef "manaLeakPrime"    manaLeakPrime
-         *> synthDef "halfVerb"         halfVerb
-         *> synthDef "broodling"        broodling
-         *> synthDef "broodling2"       broodling2
-         *> synthDef "broodHive"        broodHive
-         *> synthDef "bb"               bb
-         *> synthDef "bs"               bs
-         *> synthDef "subControl"       subControl
-         *> synthDef "subDestruction"   subDestruction
-         *> synthDef "floorPerc2"       floorPerc2
-         *> synthDef "shake2"           shake2
-         *> synthDef "omniPrime"        omniPrime
-         *> synthDef "shakeSnare"       shakeSnare
+synthDefs = synthDef "triOsc"            triOsc
+         *> synthDef "triOsc32"          triOsc32
+         *> synthDef "triOscEnv"         triOscEnv
+         *> synthDef "b"                 bSynth
+         *> synthDef "p"                 pSynth
+         *> synthDef "metallic3"         metallic3
+         *> synthDef "metallic4"         metallic4
+         *> synthDef "shake"             shake
+         *> synthDef "floorPerc"         floorPerc
+         *> synthDef "reverseSwell"      reverseSwell
+         *> synthDef "reverseSwell2"     reverseSwell2
+         *> synthDef "hyperMelody"       hyperMelody
+         *> synthDef "caveTime"          caveTime
+         *> synthDef "pulseDemon"        pulseDemon
+         *> synthDef "demonCave"         demonCave
+         *> synthDef "hyperMelodyPrime"  hyperMelodyPrime
+         *> synthDef "manaLeakPrime"     manaLeakPrime
+         *> synthDef "halfVerb"          halfVerb
+         *> synthDef "broodling"         broodling
+         *> synthDef "broodling2"        broodling2
+         *> synthDef "broodHive"         broodHive
+         *> synthDef "bs"                bs
+         *> synthDef "subControl"        subControl
+         *> synthDef "subDestruction"    subDestruction
+         *> synthDef "floorPerc2"        floorPerc2
+         *> synthDef "shake2"            shake2
+         *> synthDef "omniPrime"         omniPrime
+         *> synthDef "shakeSnare"        shakeSnare
+         *> synthDef "moxRuby"           moxRuby
+         *> synthDef "moxRuby'"          moxRuby'
+         *> synthDef "moxRuby''"         moxRuby''
+         *> synthDef "moxRuby'''"        moxRuby'''
+         *> synthDef "moxRuby''''"       moxRuby''''
+         *> synthDef "moxRuby'''''"      moxRuby'''''
+         *> synthDef "moxPearl"          moxPearl
+         *> synthDef "moxPearl'"         moxPearl'
+         *> synthDef "moxPearl''"        moxPearl''
+         *> synthDef "moxSapphire"       moxSapphire
+         *> synthDef "moxSapphire'"      moxSapphire'
+         *> synthDef "moxSapphire''"     moxSapphire''
+         *> synthDef "moxJet"            moxJet
+         *> synthDef "moxJet'"           moxJet'
+         *> synthDef "moxEmerald"        moxEmerald
+         *> synthDef "moxEmerald'"       moxEmerald'
+         *> synthDef "moxEmerald''"      moxEmerald''
+         *> synthDef "manaVault"         manaVault
+         *> synthDef "bb"                bb
+         *> synthDef "trinisphere"       trinisphere
+         *> synthDef "trinisphere'"      trinisphere'
+         *> synthDef "trinisphere''"     trinisphere''
+         *> synthDef "gitaxianProbe"     gitaxianProbe
+         *> synthDef "expeditionMap"     expeditionMap
+         *> synthDef "goblinCharBelcher" goblinCharBelcher
+         *> synthDef "tolarianAcademy"   tolarianAcademy
 
 hyperTerrainSounds :: Signal ()
 hyperTerrainSounds = metallicPattern
@@ -889,20 +914,14 @@ broodling2 f = pulse [f,f/2,f/4] (dup <| p 1) |> sum |> lpf (p (f * 4)) 1 |> add
     where
         p = perc 0.01 1.25 1 (-8)
 
-broodBassFreq :: [UGen]
-broodBassFreq = dup . UGenNum . (/4) . fromRational $ d2f egyptianRast 1
-
-bb :: [UGen]
-bb = sin broodBassFreq + (saw broodBassFreq |> gain 0.1) |> perc 0.001 1 1 (-16) |> decimate 1000 |> tanhDist 5 |> fakePan 0.25 |> gain 0.2 |> out 0
-
-bs :: [UGen]
-bs = whiteNoise |> perc 0.001 1 2 (-16) |> decimate 1000 |> fakePan 0.75 |> out 0
+broodBassFreq :: UGen
+broodBassFreq = UGenNum . (/4) . fromRational $ d2f slendro 1
 
 broodlingPattern :: Signal ()
 broodlingPattern = fx
-                   <> playSynthPattern (toggle <| combo [alt,isDown keyC]) "broodling"  [] (pmap ((*4) . d2f egyptianRast) <| ploop [freqs])
-                   <> playSynthPattern (toggle <| combo [alt,isDown keyC]) "broodling2" [] (pmap ((*2) . d2f egyptianRast) <| ploop [freqs2])
-                   -- <> playBeatPattern  (toggle <| combo [alt,isDown keyB]) [] (ploop [broodBeat])
+                   <> playSynthPattern (toggle <| combo [alt,isDown keyC]) "broodling"  [] (pmap ((*4) . d2f slendro) <| ploop [freqs])
+                   <> playSynthPattern (toggle <| combo [alt,isDown keyC]) "broodling2" [] (pmap ((*2) . d2f slendro) <| ploop [freqs2])
+                   <> terraNovaPattern
     where
         fx     = play (toggle <| combo [alt,isDown keyC]) "broodHive" []
         freqs  = [lich| 6 _ 6    6 _ 6     _ 6 6 _
@@ -911,8 +930,123 @@ broodlingPattern = fx
                       |]
 
         freqs2 = [lich| _ 7 [7 7] _ 7 [_ 7] 7 _ _ 7
-                        _ 9 [_ 9] _ 9 9     9 _ _ 9
+                        _ 8 [_ 8] _ 8 8     8 _ _ 8
                         _ 3 3     _ 3 3 [_ 3] 3 _ _
                   |]
 
         -- broodBeat = [lich| bb _ [_ bb] bs _ _ [_ bb] _ bs |]
+
+artifactOut :: UGen -> UGen
+artifactOut = out $ random 0 150 158
+
+squareEnv :: UGen -> UGen
+squareEnv = env [0,1,1,0] [0,0.4,0] 0
+
+moxFreq :: Rational -> Double -> UGen
+moxFreq degree scalar = UGenNum . (*scalar) . fromRational $ d2f slendro degree
+
+moxRuby :: UGen
+moxRuby = pulse 2.5 0.5 |> squareEnv |> artifactOut
+
+moxRuby' :: UGen
+moxRuby' = pulse 5 0.5 |> squareEnv |> artifactOut
+
+moxRuby'' :: UGen
+moxRuby'' = pulse 10 0.5 |> squareEnv |> artifactOut
+
+moxRuby''' :: UGen
+moxRuby''' = lfpulse 5 0 |> squareEnv |> artifactOut
+
+moxRuby'''' :: UGen
+moxRuby'''' = lfpulse 10 0 |> squareEnv |> negate |> artifactOut
+
+moxRuby''''' :: UGen
+moxRuby''''' = lfpulse 20 0 |> squareEnv |> artifactOut
+
+moxPearl :: UGen
+moxPearl = whiteNoise |> perc 0.001 (random 0 0.1 1) 1 (-24) |> artifactOut
+
+moxPearl' :: UGen
+moxPearl' = noise0 (moxFreq 8 0.25) |> perc 0.001 0.1 1 (-8) |> artifactOut
+
+moxPearl'' :: UGen
+moxPearl'' = noise2 (moxFreq 7 0.25) |> perc 0.001 0.1 1 (-8) |> artifactOut
+
+moxSapphire :: UGen
+moxSapphire = sin (moxFreq 6 1) + sin (moxFreq 7 1) |> perc 0.001 0.2 1 (-8) |> artifactOut
+
+moxSapphire' :: UGen
+moxSapphire' = sin (moxFreq 12 1) + sin (moxFreq 13 1) |> perc 0.001 0.1 1 (-8) |> artifactOut
+
+moxSapphire'' :: UGen
+moxSapphire'' = sin (moxFreq 16 1) + sin (moxFreq 17 1) |> perc 0.001 0.1 1 (-8) |> artifactOut
+
+moxJet :: UGen
+moxJet = noise0 (moxFreq 1 0.25) |> perc 0.001 0.1 1 (-8) |> artifactOut
+
+moxJet' :: UGen
+moxJet' = noise0 (moxFreq 0 0.25) |> perc 0.001 0.1 1 (-8) |> artifactOut
+
+moxEmerald :: UGen
+moxEmerald = lfsaw (moxFreq 0 0.5) 0 |> perc 0.001 0.1 1 (-16) |> artifactOut
+
+moxEmerald' :: UGen
+moxEmerald' = lfsaw (moxFreq 1 0.5) 0 |> negate |> perc 0.001 0.1 1 (-8) |> artifactOut
+
+moxEmerald'' :: UGen
+moxEmerald'' = lfsaw (moxFreq 5 0.5) 0 |> perc 0.001 0.1 1 (-8) |> artifactOut
+
+manaVault :: UGen
+manaVault = sin broodBassFreq + (saw broodBassFreq |> gain 0.1) |> perc 0.001 0.1 1 (-8) |> artifactOut
+
+trinisphere :: UGen
+trinisphere = auxIn 150 |> hpf (moxFreq 0 0.5) 9 |> gain 0.2 |> out 0
+
+trinisphere' :: UGen
+trinisphere' = auxIn 151 |> bpf (moxFreq 1 0.5) 9 |> gain 0.2 |> out 1
+
+trinisphere'' :: [UGen]
+trinisphere'' = auxIn 152 |> lpf (moxFreq 4 1) 9 |> dup |> gain 0.5 |> gain 0.2 |> out 0
+
+gitaxianProbe :: UGen
+gitaxianProbe = auxIn 153 |> gain (saw (moxFreq 7 0) + saw (moxFreq 8 0)) +> combC 0.8 0.8 1.1 |> gain 0.2 |> out 0
+
+expeditionMap :: [UGen]
+expeditionMap = auxIn 154 |> decimate [noise0 0.25 |> range 100 10000, noise0 0.5 |> range 100 10000] |> gain 0.2 |> out 0
+
+goblinCharBelcher :: [UGen]
+goblinCharBelcher = auxIn 155 |> crush 8 |> fakePan 0.75 |> gain 0.2 |> out 0
+
+tolarianAcademy :: [UGen]
+tolarianAcademy = [combC 1.7 1.7 1.1 aux, combC 2.4 2.4 1.1 aux] |> add (dup aux) |> gain 0.2 |> out 0
+    where
+        aux = auxIn 156
+
+bs :: UGen
+bs = whiteNoise |> perc 0.001 1 1 (-64) |> crush 8 |> decimate 5000 |> out 1
+
+bb :: [UGen]
+bb = sin (moxFreq 0 0.125) + (saw (moxFreq 0 0.125) |> gain 0.3) +> clip 20 +> tanhDist 5 |> perc 0.001 0.75 0.3 (-32) |> dup |> out 0
+
+terraNovaPattern :: Signal ()
+terraNovaPattern = fxSynth "trinisphere"
+                <> fxSynth "trinisphere'"
+                <> fxSynth "trinisphere''"
+                <> fxSynth "gitaxianProbe"
+                <> fxSynth "expeditionMap"
+                <> fxSynth "goblinCharBelcher"
+                <> fxSynth "tolarianAcademy"
+                <> (playBeatPattern (toggle <| combo [alt,isDown keyC]) [] <| ploop [PVal (ploop moxes, 0.25)])
+                <> (playBeatPattern (toggle <| combo [alt,isDown keyC]) [] <| ploop [timeVaultBeat])
+    where
+        moxes = map PVal [
+            "moxRuby", "moxRuby'", "moxRuby''", "moxRuby'''", "moxRuby''''", "moxRuby'''''",
+            "moxPearl", "moxPearl'", "moxPearl''",
+            "moxSapphire", "moxSapphire'", "moxSapphire''",
+            "moxJet", "moxJet'",
+            "moxEmerald", "moxEmerald'", "moxEmerald''",
+            "manaVault"
+            ]
+        fxSynth :: String -> Signal ()
+        fxSynth name = play (toggle <| combo [alt,isDown keyC]) name []
+        timeVaultBeat = [lich| bb [_ bb] bs _ _ [_ bb] bs _ |]
