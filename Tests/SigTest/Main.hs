@@ -587,7 +587,7 @@ shakePattern2 = playSynthPattern (toggle <| combo [alt, isDown keyD]) "shake2" [
 --                       _ _ [1 _ 1 1] 2  |]
 
 floorPattern :: Signal ()
-floorPattern = playSynthPattern (toggle <| combo [alt,isDown keyD]) "floorPerc" [] (pmap (* 0.5) <| ploop [sec1])
+floorPattern = playSynthPattern (toggle <| combo [alt,isDown keyO]) "floorPerc" [] (pmap (* 0.5) <| ploop [sec1])
     where
         sec1 = [lich| 2     [_ 1] 1 _
                       2     [_ 1] 1 _
