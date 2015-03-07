@@ -33,6 +33,8 @@ synthDefs = synthDef "triOsc"           triOsc
          *> synthDef "subDestruction"   subDestruction
          *> synthDef "floorPerc2"       floorPerc2
          *> synthDef "shake2"           shake2
+         *> synthDef "omniPrime"        omniPrime
+         *> synthDef "shakeSnare"       shakeSnare
 
 hyperTerrainSounds :: Signal ()
 hyperTerrainSounds = metallicPattern
@@ -765,8 +767,21 @@ floorPerc2 d = sig1 + sig2 |> e |> p 0.35 |> gain 0.45 |> out 0
         e     = perc 0.01 d 1 (-6)
         e2    = env [1,0.9, 0] [0.01,d] (-3)
 
+shakeSnare :: UGen -> [UGen]
+shakeSnare d = sig1 + sig2 |> e |> gain 0.9 |> p 0.75 |> out 0
+    where
+        p a u = [u * (1 - a), u * a]
+        sig1  = whiteNoise |> bpf (12000 |> e2) 3 |> gain 0.05
+        sig2  = whiteNoise |> bpf (9000 + 12000 * d |> e2) 4 |> gain 0.05
+        -- sig1  = lfpulse 41 0 |> lpf (100 |> e2) 4
+        -- sig2  = lfpulse 40 0 |> lpf (100 + 400 * d |> e2) 4
+        -- verb  = freeverb 0.5 1 1
+        e     = perc 0.01 (d*4) 1 (-24)
+        e2    = env2 [1,1,0.125] [0.01,d*4] (-24)
+
+
 shake2 :: UGen -> [UGen]
-shake2 d = sig1 |> e |> gain 0.6 |> p 0.25 |> out 0
+shake2 d = sig1 |> e |> gain 0.6 |> p 0.6 |> out 0
     where
         p a u = [u * (1 - a), u * a]
         sig1  = whiteNoise |> bpf (12000 |> e2) 9 |> gain 0.05
@@ -774,9 +789,9 @@ shake2 d = sig1 |> e |> gain 0.6 |> p 0.25 |> out 0
         e2    = env [1,0.95, 0] [0.01,d] (-9)
 
 section2Drums :: Signal ()
-section2Drums = floorPattern2 <> shake2Pattern <> shake1Pattern
+section2Drums = floorPattern2 <> shake2Pattern <> shake1Pattern <> omniPrimePattern
     where
-        shake1Pattern = playSynthPattern (toggle <| combo [alt,isDown keyW]) "shake" [] (pmap (* 0.125) <| ploop [sec1])
+        shake1Pattern = playSynthPattern (toggle <| combo [alt,isDown keyW]) "shakeSnare" [] (pmap (* 0.125) <| ploop [sec1])
             where
                 sec1 = [lich| 1 _ 1 _ 1 _ 1 _
                               1 _ 1 _ 1 _ 1 [4 4]
@@ -794,6 +809,23 @@ section2Drums = floorPattern2 <> shake2Pattern <> shake1Pattern
             where
                 sec1 = [lich| [6 1] [_ 1] [_ 6] [_ 1] |]
 
+omniPrime :: UGen -> [UGen]
+omniPrime f = [s,s2] |> softclip 20 |> filt |> gain 0.31 |> e |> fakePan 0.2 |> out 0
+    where
+        e   = env [0,1,0.1,0] [0.01,0.1,1] (-4)
+        e2  = env [523.251130601,f,f * 0.5, f * 0.5] [0.01,0.1,1.0] (-4)
+        s   = saw (sin (3 * 6) + e2 1 * 2)
+        s2  = saw (sin (6 * 9) + e2 1)
+        filt = lpf ([e2 6,e2 6]) 4
+
+omniPrimePattern :: Signal ()
+omniPrimePattern = playSynthPattern (toggle <| combo [alt,isDown keyQ]) "omniPrime" [] (pmap ((* 0.25) . d2f slendro) <| ploop [sec1])
+    where
+        sec1 = [lich| 1 2 0 _
+                      _ _ _ [_ 3]
+                      2 3 4 _
+                      [4 4] [5 5] _ _
+                ] |]
 
 ------------------------------------
 -- Section 3
