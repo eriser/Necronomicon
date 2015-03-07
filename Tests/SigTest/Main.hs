@@ -32,6 +32,7 @@ synthDefs = synthDef "triOsc"           triOsc
          *> synthDef "subControl"       subControl
          *> synthDef "subDestruction"   subDestruction
          *> synthDef "floorPerc2"       floorPerc2
+         *> synthDef "shake2"           shake2
 
 hyperTerrainSounds :: Signal ()
 hyperTerrainSounds = metallicPattern
@@ -381,13 +382,6 @@ shake2 d = sig0 + sig1 + sig2 |> tanhDist 1 |> e |> gain 0.45 |> p 0.35 |> out 0
         e3    = perc2 0.001 (d*0.35) 0.5 (-4)
 -}
 
-{-
-shake2 :: UGen -> UGen
-shake2 d = sig1 |> e |> gain 0.4 |> out 0
-    where
-        sig1  = whiteNoise |> bpf (120000 |> e2) 10 |> gain 0.05
-        e     = perc 0.01 (d) 1 (-3)
--}
 
 -- shake2 :: UGen -> [UGen]
 -- shake2 d = pulse ((/16). fromRational $ d2f slendro 1) 0.5 |> bpf (fromRational $ d2f slendro 1) 10 |> perc 0.01 d 0.05 (-3) |> out 0
@@ -420,7 +414,7 @@ metallicPattern = play (toggle <| combo [alt,isDown keyD]) "caveTime" []
                <> manaLeakPrimePattern
                <> broodlingPattern
                <> subControlPattern
-               <> floorPattern2
+               <> section2Drums
 
 -- metallicPattern1 :: Signal ()
 -- metallicPattern1 = playSynthPattern (toggle <| isDown keyD) "metallic" [] (pmap (d2f sigScale . (+0)) <| ploop [sec1])
@@ -704,8 +698,8 @@ halfVerb = [l * 0.9 + r * 0.1,r * 0.9 + l * 0.1] |> out 0
 hyperMelodyPrime :: UGen -> [UGen]
 hyperMelodyPrime f = [s,s2] |> softclip 20 |> filt |> gain 0.11 |> e |> auxThrough 40 |> fakePan 0.2 |> out 22
     where
-        e   = env [0,1,0] [0.01,2] (-3)
-        e2  = env [523.251130601,f,f] [0.05,1.95] (-3)
+        e   = env [0,1,0] [0.01,4] (-3)
+        e2  = env [523.251130601,f,f] [0.05,3.95] (-3)
         s   = syncsaw (sin (3 * 6) + e2 1 * 2) <| auxIn 42
         s2  = syncsaw (sin (6 * 9) + e2 1)     <| auxIn 42
         filt = lpf ([e2 6,e2 6]) 4
@@ -714,7 +708,7 @@ manaLeakPrime :: UGen -> [UGen]
 manaLeakPrime f = [s,s2] |> softclip 20 |> filt |> gain 0.11 |> e |> auxThrough 42 |> fakePan 0.8 |> out 22
     where
         e   = env [0,1, 0] [0.01,2] (-3)
-        e2  = env [523.251130601,f,f] [0.05,1.95] (-3)
+        e2  = env [523.251130601,f,f] [0.05,4.95] (-3)
         s   = syncsaw (sin (3 * 6) + e2 1 * 2) <| auxIn 40
         s2  = syncsaw (sin (6 * 9) + e2 1)     <| auxIn 40
         filt = lpf ([e2 6,e2 6]) 4
@@ -763,7 +757,7 @@ subDestruction f1 f2 = fuse l r |> gain 0.5 |> out 0
 ------------------------------------
 
 floorPerc2 :: UGen -> [UGen]
-floorPerc2 d = sig1 + sig2 |> e |> p 0.35 |> gain 0.65 |> out 0
+floorPerc2 d = sig1 + sig2 |> e |> p 0.35 |> gain 0.45 |> out 0
     where
         p a u = [u * (1 - a), u * a]
         sig1  = sin <| e2 90
@@ -771,10 +765,34 @@ floorPerc2 d = sig1 + sig2 |> e |> p 0.35 |> gain 0.65 |> out 0
         e     = perc 0.01 d 1 (-6)
         e2    = env [1,0.9, 0] [0.01,d] (-3)
 
-floorPattern2 :: Signal ()
-floorPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyW]) "floorPerc2" [] (pmap (* 0.25) <| ploop [sec1])
+shake2 :: UGen -> [UGen]
+shake2 d = sig1 |> e |> gain 0.6 |> p 0.25 |> out 0
     where
-        sec1 = [lich| [6 1] [_ 1] [_ 6] [_ 1] |]
+        p a u = [u * (1 - a), u * a]
+        sig1  = whiteNoise |> bpf (12000 |> e2) 9 |> gain 0.05
+        e     = perc 0.01 (d) 1 (-6)
+        e2    = env [1,0.95, 0] [0.01,d] (-9)
+
+section2Drums :: Signal ()
+section2Drums = floorPattern2 <> shake2Pattern <> shake1Pattern
+    where
+        shake1Pattern = playSynthPattern (toggle <| combo [alt,isDown keyW]) "shake" [] (pmap (* 0.125) <| ploop [sec1])
+            where
+                sec1 = [lich| 1 _ 1 _ 1 _ 1 _
+                              1 _ 1 _ 1 _ 1 [4 4]
+                        ] |]
+
+        shake2Pattern = playSynthPattern (toggle <| combo [alt,isDown keyW]) "shake2" [] (pmap (* 0.125) <| ploop [sec1])
+            where
+                sec1 = [lich| [2 1] [1 1] 1
+                              [2 1] [_ 2] 1
+                              [_ 1] [_ 1] 1
+                              _ _ _
+                        ] |]
+
+        floorPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyW]) "floorPerc2" [] (pmap (* 0.25) <| ploop [sec1])
+            where
+                sec1 = [lich| [6 1] [_ 1] [_ 6] [_ 1] |]
 
 
 ------------------------------------
