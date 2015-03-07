@@ -825,6 +825,10 @@ omniPrimePattern = playSynthPattern (toggle <| combo [alt,isDown keyQ]) "omniPri
                       _ _ _ [_ 3]
                       2 3 4 _
                       [4 4] [5 5] _ _
+                      1 2 0 _
+                      _ _ _ [_ 3]
+                      2 3 4 _
+                                    [4 4] [5 5] _ _
                 ] |]
 
 ------------------------------------
