@@ -1515,33 +1515,33 @@ int process(jack_nframes_t nframes, void* arg)
 
 	double* _necronomicon_buses_out0 = _necronomicon_buses;
 	double* _necronomicon_buses_out1 = _necronomicon_buses + BLOCK_SIZE;
+
+	double* _necronomicon_buses_out2 = _necronomicon_buses + BLOCK_SIZE * 2;
+	double* _necronomicon_buses_out3 = _necronomicon_buses + BLOCK_SIZE * 3;
+
+	double* _necronomicon_buses_out4 = _necronomicon_buses + BLOCK_SIZE * 4;
+	double* _necronomicon_buses_out5 = _necronomicon_buses + BLOCK_SIZE * 5;
+
+	double* _necronomicon_buses_out6 = _necronomicon_buses + BLOCK_SIZE * 6;
+	double* _necronomicon_buses_out7 = _necronomicon_buses + BLOCK_SIZE * 7;
+
 	unsigned int i;
 	for (i = 0; i < nframes; ++i)
     {
 		out0[i] = _necronomicon_buses_out0[i]; // Write the output of buses 0/1 to jack buffers 0/1, which can be routed or sent directly to the main outs
 		out1[i] = _necronomicon_buses_out1[i];
-	}
 
-	/*
-	//Hand un-rolled this loop. The non-unrolled version was causing 13% cpu overhead on my machine, this doesn't make a blip...
-	out_bus_buffers[0][out_bus_buffer_index]  = _necronomicon_buses[0];
-	out_bus_buffers[1][out_bus_buffer_index]  = _necronomicon_buses[1];
-	out_bus_buffers[2][out_bus_buffer_index]  = _necronomicon_buses[2];
-	out_bus_buffers[3][out_bus_buffer_index]  = _necronomicon_buses[3];
-	out_bus_buffers[4][out_bus_buffer_index]  = _necronomicon_buses[4];
-	out_bus_buffers[5][out_bus_buffer_index]  = _necronomicon_buses[5];
-	out_bus_buffers[6][out_bus_buffer_index]  = _necronomicon_buses[6];
-	out_bus_buffers[7][out_bus_buffer_index]  = _necronomicon_buses[7];
-	out_bus_buffers[8][out_bus_buffer_index]  = _necronomicon_buses[8];
-	out_bus_buffers[9][out_bus_buffer_index]  = _necronomicon_buses[9];
-	out_bus_buffers[10][out_bus_buffer_index] = _necronomicon_buses[10];
-	out_bus_buffers[11][out_bus_buffer_index] = _necronomicon_buses[11];
-	out_bus_buffers[12][out_bus_buffer_index] = _necronomicon_buses[12];
-	out_bus_buffers[13][out_bus_buffer_index] = _necronomicon_buses[13];
-	out_bus_buffers[14][out_bus_buffer_index] = _necronomicon_buses[14];
-	out_bus_buffers[15][out_bus_buffer_index] = _necronomicon_buses[15];
-	out_bus_buffer_index = (out_bus_buffer_index + 1) & 511;
-	*/
+		//Hand un-rolled this loop. The non-unrolled version was causing 13% cpu overhead on my machine, this doesn't make a blip...
+		out_bus_buffers[0][out_bus_buffer_index]  = _necronomicon_buses_out0[i];
+		out_bus_buffers[1][out_bus_buffer_index]  = _necronomicon_buses_out1[i];
+		out_bus_buffers[2][out_bus_buffer_index]  = _necronomicon_buses_out2[i];
+		out_bus_buffers[3][out_bus_buffer_index]  = _necronomicon_buses_out3[i];
+		out_bus_buffers[4][out_bus_buffer_index]  = _necronomicon_buses_out4[i];
+		out_bus_buffers[5][out_bus_buffer_index]  = _necronomicon_buses_out5[i];
+		out_bus_buffers[6][out_bus_buffer_index]  = _necronomicon_buses_out6[i];
+		out_bus_buffers[7][out_bus_buffer_index]  = _necronomicon_buses_out7[i];
+		out_bus_buffer_index = (out_bus_buffer_index + 1) & 511;
+	}
 
 	remove_scheduled_synths(); // Remove any synths that are scheduled for removal and send them to the NRT thread FIFO queue for freeing.
 	current_cycle_usecs = cached_cycle_usecs + (jack_time_t) ((double) nframes * usecs_per_frame); // update current usecs time every sample

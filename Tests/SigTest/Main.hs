@@ -249,8 +249,13 @@ caveTime = [l * 0.875 + r * 0.125,r * 0.875 + l * 0.125] |> out 0
         r     = auxIn 21 |> verb
         verb  = freeverb 0.5 1.0 0.1
 
+visAux :: [UGen] -> UGen -> [UGen] -> [UGen]
+visAux bus a (u1:u2:_) = auxThrough bus [u1 * a,0] * 0 + [u1,u2]
+visAux _   _  u        = u
+
+
 metallic3 :: UGen -> [UGen]
-metallic3 f = sig + sig2 + sig3 |> e |> softclip 1000 |> filt |> gain 0.1 |> verb |> e |> gain 1 |> (\[u1,u2 ]-> [u2,u1]) |> out 0
+metallic3 f = sig + sig2 + sig3 |> e |> visAux 2 2 |> softclip 1000 |> filt |> gain 0.1 |> verb |> e |> gain 1 |> (\[u1,u2 ]-> [u2,u1]) |> out 0
     where
         sig    = sin   [f * (random 0 0.999 1.001  ),f * (random 7 0.999 1.001)]         |> gain 0.15
         sig2   = sin   [f * (random 1 0.499 0.50   ),f * (random 8 0.499 0.501)]         |> gain 0.15
@@ -269,7 +274,7 @@ metallic3 f = sig + sig2 + sig3 |> e |> softclip 1000 |> filt |> gain 0.1 |> ver
 
 
 metallic4 :: UGen -> [UGen]
-metallic4 f = sig + sig2 + sig3 |> e |> softclip 1000 |> filt |> gain 0.1 |> verb |> e |> gain 1 |> out 0
+metallic4 f = sig + sig2 + sig3 |> e |> visAux 3 2 |> softclip 1000 |> filt |> gain 0.1 |> verb |> e |> gain 1 |> out 0
     where
         sig    = sin   [f * (random 0 0.995 1.005),f * (random 7 0.995 1.005)] |> gain 0.15
         sig2   = sin   [f * (random 1 0.495 0.505),f * (random 8 0.495 0.505)] |> gain 0.15
@@ -309,11 +314,12 @@ fakePan a [u]     = [u * (1 - a),  u * a]
 fakePan _ _       = []
 
 hyperMelody :: UGen -> [UGen]
-hyperMelody f = [s,s2] |> gain 0.04 |> e |> out 0
+hyperMelody f = [s,s2] |> gain 0.04 |> e |> visAux (dup <| random 0 2 4.99) 20 |> out 0
     where
         e   = env [0,1,0.15, 0] [0.0001,0.1, 7] (-1.5)
         s    = sin <| add (sin 3 * 6) (f*2)
         s2   = sin <| add (sin 6 * 9) f
+
 
 --add sins for visuals and modulation
 reverseSwell :: UGen -> [UGen]
@@ -389,7 +395,7 @@ shake2 d = sig1 |> e |> gain 0.4 |> out 0
 -- shake2 d = pulse ((/16). fromRational $ d2f slendro 1) 0.5 |> bpf (fromRational $ d2f slendro 1) 10 |> perc 0.01 d 0.05 (-3) |> out 0
 
 floorPerc :: UGen -> [UGen]
-floorPerc d = sig1 + sig2 |> e |> p 0.35 |> gain 0.65  |> out 0
+floorPerc d = sig1 + sig2 |> e |> p 0.35 |> gain 0.65 |> out 0
     where
         p a u = [u * (1 - a), u * a]
         sig1  = sin 40
