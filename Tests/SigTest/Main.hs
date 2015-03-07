@@ -40,8 +40,11 @@ synthDefs = synthDef "triOsc"           triOsc
 hyperTerrainSounds :: Signal ()
 hyperTerrainSounds = metallicPattern
                 --  <> play             (toggle <| isDown keyW) "triOsc"    [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
-                --  <> play             (toggle <| isDown keyA) "triOsc32"  [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
+                 <> play             (toggle <| isDown keyA) "triOsc32"  [mouseToSlendro <~ mouseX, mouseToSlendro <~ mouseY]
                 --  <> playBeatPattern  (toggle <| isDown keyE) [] (ploop [ [lich| [p p p] [p b] p b |] ])
+
+mouseToSlendro :: Double -> Double
+mouseToSlendro m = fromRational . d2f slendro . toRational <| (floor <| scale 0 24 m :: Integer)
 
 sections :: Signal ()
 sections = switch section [section2, section1, section3]
@@ -186,14 +189,19 @@ triOsc f1 f2 = [sig1,sig2] + [sig3,sig3] |> verb |> gain 0.1 |> out 0
         verb = freeverb 0.5 1.0 0.9
 
 triOsc32 :: UGen -> UGen -> [UGen]
-triOsc32 f1 f2 = feedback fSig |> verb |> gain 0.1 |> out 0
+triOsc32 mx my = feedback fSig |> verb |> gain 0.05 |> out 0
     where
-        verb   = freeverb 0.5 1.0 0.9
-        fSig i = [sig1,sig2] + [sig3,sig3]
+        f1     = lag 0.25 mx
+        f2     = lag 0.25 my
+        verb   = freeverb 0.25 0.75 0.95
+        fSig i = [sig4,sig5] + [sig6,sig6]
             where
-                sig1 = sinOsc (f1 + sig3 * 10)   * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> auxThrough 2
-                sig2 = sinOsc (f2 - sig3 * 10)   * (sinOsc (f1 * 0.00025) |> range 0.5 1) |> auxThrough 3
-                sig3 = sinOsc (f1 - f2 + i * 10) * (sinOsc (i * 0.00025)  |> range 0.5 1) |> auxThrough 4
+                sig1 = sinOsc (f1 + sig3 * 26.162)   * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> auxThrough 2
+                sig2 = sinOsc (f2 - sig3 * 26.162)   * (sinOsc (f1 * 0.00025) |> range 0.5 1) |> auxThrough 3
+                sig3 = sinOsc (f1 - f2 + i * 26.162) * (sinOsc (i * 0.00025)  |> range 0.5 1) |> auxThrough 4
+                sig4 = sinOsc (f1 * 0.25 + sig1 * 261.6255653006) * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 60
+                sig5 = sinOsc (f2 * 0.25 - sig2 * 261.6255653006) * (sinOsc (f1 * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 60
+                sig6 = sinOsc (f1 * 0.25 - sig3 * 261.6255653006) * (sinOsc (i * 0.00025)  |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 60
 
 triOscEnv :: UGen -> [UGen]
 triOscEnv f1 = [sig1,sig2] + [sig3,sig3] |> out 0
