@@ -617,13 +617,13 @@ hyperMelodyPattern = playSynthPattern (toggle <| combo [alt,isDown keyF]) "hyper
 hyperMelodyPattern2 :: Signal ()
 hyperMelodyPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyH]) "hyperMelody" [] (pmap ((*2) . d2f sigScale) <| ploop [sec1])
     where
-        sec1 = [lich| 4 _ 3 _ 2 3 1
-                      4 _ 3 _ 2 3 0 0 0
+        sec1 = [lich| 4 _ 3 _ 2 _ _ _
+                      4 _ 3 _ 2 _ 3 _
                       [4 6 8] 7 _ _ _ _ _ _
                       _ _ _ _ _ _ _ _
-                      4 _ 3 _ 2 3 1
-                      4 _ 3 _ 2 3 0 0 0
-                      [1 1 1] 0 _ _ _ _ _ _
+                      4 _ 3 _ 2 _ _ _
+                      4 _ 3 _ 2 _ 3 _
+                      [1 1] 0 _ _ _ _ _ _
                       _ _ _ _ _ _ _ _
                       2 _ 1 _ _ _ 1
                       2 _ 1 _ _ _ 1 2 _
@@ -695,28 +695,30 @@ halfVerb = [l * 0.9 + r * 0.1,r * 0.9 + l * 0.1] |> out 0
     where
         l     = auxIn 22 |> verb
         r     = auxIn 23 |> verb
-        verb  = freeverb 0.25 1.0 0.9
+        verb  = freeverb 0.5 1.0 0.125
 
 hyperMelodyPrime :: UGen -> [UGen]
-hyperMelodyPrime f = [s,s2] |> softclip 20 |> filt |> gain 0.11 |> e |> auxThrough 40 |> fakePan 0.2 |> out 22
+hyperMelodyPrime f = [s,s2] |> softclip 20 |> filt |> gain 0.25 |> e |> fakePan 0.2 |> out 22
     where
-        e   = env [0,1,0] [0.01,4] (-3)
-        e2  = env [523.251130601,f,f] [0.05,3.95] (-3)
-        s   = syncsaw (sin (3 * 6) + e2 1 * 2) <| auxIn 42
-        s2  = syncsaw (sin (6 * 9) + e2 1)     <| auxIn 42
-        filt = lpf ([e2 6,e2 6]) 4
+        e   = env [0,1,0] [0.01,0.75] (-3)
+        -- e2  = env [523.251130601,f,f] [0.05,3.95] (-3)
+        e2  = env [f,f,f * 0.125] [0.05,0.75] (-3)
+        s   = syncsaw (sin (3 * 6) + f * 2) <| auxIn 42
+        s2  = syncsaw (sin (6 * 9) + f)     <| auxIn 42
+        filt = lpf ([e2 4,e2 4]) 2
 
 manaLeakPrime :: UGen -> [UGen]
-manaLeakPrime f = [s,s2] |> softclip 20 |> filt |> gain 0.11 |> e |> auxThrough 42 |> fakePan 0.8 |> out 22
+manaLeakPrime f = [s,s2] |> softclip 20 |> filt |> gain 0.225 |> e |> auxThrough 42 |> fakePan 0.8 |> out 22
     where
-        e   = env [0,1, 0] [0.01,2] (-3)
-        e2  = env [523.251130601,f,f] [0.05,4.95] (-3)
-        s   = syncsaw (sin (3 * 6) + e2 1 * 2) <| auxIn 40
-        s2  = syncsaw (sin (6 * 9) + e2 1)     <| auxIn 40
-        filt = lpf ([e2 6,e2 6]) 4
+        e   = env [0,1, 0] [0.01,0.75] (-3)
+        -- e2  = env [523.251130601,f,f] [0.05,4.95] (-3)
+        e2  = env [f,f,f * 0.125] [0.05,0.75] (-3)
+        s   = saw (sin (3 * 6) + f)
+        s2  = saw (sin (6 * 9) + f * 2)
+        filt = lpf ([e2 5,e2 6]) 2
 
 hyperMelodyPrimePattern :: Signal ()
-hyperMelodyPrimePattern = fx <> playSynthPattern (toggle <| combo [alt,isDown keyR]) "hyperMelodyPrime" [] (pmap ((*0.5) . d2f sigScale) <| ploop [sec1])
+hyperMelodyPrimePattern = fx <> playSynthPattern (toggle <| combo [alt,isDown keyR]) "hyperMelodyPrime" [] (pmap ((*0.5) . d2f sigScale . (+1)) <| ploop [sec1])
     where
         fx   = play (toggle <| combo [alt,isDown keyR]) "halfVerb" []
         sec1 = [lich| [_ 3] [4 3] [_ 3] 6 7 _ [_ 3] 4 _ _ _ _ _ _
@@ -727,15 +729,15 @@ hyperMelodyPrimePattern = fx <> playSynthPattern (toggle <| combo [alt,isDown ke
                       2 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ |]
 
 manaLeakPrimePattern :: Signal ()
-manaLeakPrimePattern = playSynthPattern (toggle <| combo [alt,isDown keyT]) "manaLeakPrime" [] (pmap ((*1) . d2f sigScale) <| ploop [sec1])
+manaLeakPrimePattern = playSynthPattern (toggle <| combo [alt,isDown keyT]) "manaLeakPrime" [] (pmap ((*0.25) . d2f sigScale . (+3)) <| ploop [sec1])
     where
-        sec1 = [lich| 4 _ 3 _ 2 3 1
-                      4 _ 3 _ 2 3 0 0 0
+        sec1 = [lich| 4 _ 3 _ 2 _ _ _
+                      4 _ 3 _ 2 _ 3 _
                       [4 6 8] 7 _ _ _ _ _ _
                       _ _ _ _ _ _ _ _
-                      4 _ 3 _ 2 3 1
-                      4 _ 3 _ 2 3 0 0 0
-                      [1 1 1] 0 _ _ _ _ _ _
+                      4 _ 3 _ 2 _ _ _
+                      4 _ 3 _ 2 _ 3 _
+                      [1 1] 0 _ _ _ _ _ _
                       _ _ _ _ _ _ _ _
                       2 _ 1 _ _ _ 1
                       2 _ 1 _ _ _ 1 2 _
@@ -786,7 +788,7 @@ shake2 d = sig1 |> e |> gain 0.6 |> p 0.6 |> out 0
         p a u = [u * (1 - a), u * a]
         sig1  = whiteNoise |> bpf (12000 |> e2) 9 |> gain 0.05
         e     = perc 0.01 (d) 1 (-6)
-        e2    = env [1,0.95, 0] [0.01,d] (-9)
+        e2    = env [1,0.95, 0.9] [0.01,d] (-9)
 
 section2Drums :: Signal ()
 section2Drums = floorPattern2 <> shake2Pattern <> shake1Pattern <> omniPrimePattern
@@ -797,7 +799,7 @@ section2Drums = floorPattern2 <> shake2Pattern <> shake1Pattern <> omniPrimePatt
                               1 _ 1 _ 1 _ 1 [4 4]
                         ] |]
 
-        shake2Pattern = playSynthPattern (toggle <| combo [alt,isDown keyW]) "shake2" [] (pmap (* 0.125) <| ploop [sec1])
+        shake2Pattern = playSynthPattern (toggle <| combo [alt,isDown keyW]) "shake2" [] (pmap (* 0.1) <| ploop [sec1])
             where
                 sec1 = [lich| [2 1] [1 1] 1
                               [2 1] [_ 2] 1
@@ -810,26 +812,22 @@ section2Drums = floorPattern2 <> shake2Pattern <> shake1Pattern <> omniPrimePatt
                 sec1 = [lich| [6 1] [_ 1] [_ 6] [_ 1] |]
 
 omniPrime :: UGen -> [UGen]
-omniPrime f = [s,s2] |> softclip 20 |> filt |> gain 0.31 |> e |> fakePan 0.2 |> out 0
+omniPrime f = [s,s2] |> softclip 20 |> filt |> gain 0.75 |> e |> fakePan 0.2 |> out 0
     where
-        e   = env [0,1,0.1,0] [0.01,0.1,1] (-4)
-        e2  = env [523.251130601,f,f * 0.5, f * 0.5] [0.01,0.1,1.0] (-4)
+        e   = env [0,1,0.1,0] [0.01,0.1,1.5] (-4)
+        e2  = env [523.251130601,f * 1.5,f, f] [0.01,0.1,1.5] (-4)
         s   = saw (sin (3 * 6) + e2 1 * 2)
         s2  = saw (sin (6 * 9) + e2 1)
         filt = lpf ([e2 6,e2 6]) 4
 
 omniPrimePattern :: Signal ()
-omniPrimePattern = playSynthPattern (toggle <| combo [alt,isDown keyQ]) "omniPrime" [] (pmap ((* 0.25) . d2f slendro) <| ploop [sec1])
+omniPrimePattern = playSynthPattern (toggle <| combo [alt,isDown keyQ]) "omniPrime" [] (pmap ((* 0.03125) . d2f slendro) <| ploop [sec1])
     where
-        sec1 = [lich| 1 2 0 _
-                      _ _ _ [_ 3]
-                      2 3 4 _
-                      [4 4] [5 5] _ _
-                      1 2 0 _
-                      _ _ _ [_ 3]
-                      2 3 4 _
-                                    [4 4] [5 5] _ _
-                ] |]
+        sec1 = [lich| 6 7 5 _
+                      _ _ _ [_ 7]
+                      6 7 [_ 7] _
+                      [5 5] [5 5] _ _
+                |]
 
 ------------------------------------
 -- Section 3
