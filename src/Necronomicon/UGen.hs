@@ -10,8 +10,8 @@ import Control.Applicative
 import Necronomicon.Runtime
 import Necronomicon.Utility
 import qualified Data.Map as M
-import Data.Typeable
 import Control.Arrow
+import Data.Monoid
 
 (+>) :: UGenType a => a -> (a -> a) -> a
 (+>) a f = add a (f a)
@@ -22,7 +22,6 @@ infixl 0 +>
 --------------------------------------------------------------------------------------
 data UGen = UGenNum Double
           | UGenFunc UGenUnit CUGenFunc CUGenFunc CUGenFunc [UGen]
-          deriving (Typeable)
 
 data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Env Double Double | Env2 Double Double | Out | AuxIn | Poll | LFSaw | LFPulse | Saw | Pulse
               | SyncSaw | SyncPulse | SyncOsc | Random Double Double Double | NoiseN | NoiseL | NoiseC | Dust | Dust2 | Impulse | Range | ExpRange
@@ -892,6 +891,27 @@ testSynth synth args necroVars = do
 stopTestSynth :: Synth -> NecroVars -> IO()
 stopTestSynth synth necroVars = runNecroState (stopSynth synth) necroVars >> return ()
 
+
 ------------------------------------------
 -- Experimental
 ------------------------------------------
+
+newtype UGen' = UGen'{ unUGen' :: [UGen] }
+
+instance Monoid UGen' where
+    mempty                      = UGen' $ []
+    UGen' s1 `mappend` UGen' s2 = UGen' $ s1 ++ s2
+
+applyLeft :: (UGen' -> UGen') -> UGen' -> UGen'
+applyLeft = applyChan 0
+
+applyRight :: (UGen' -> UGen') -> UGen' -> UGen'
+applyRight = applyChan 1
+
+applyChan :: Int -> (UGen' -> UGen') -> UGen' -> UGen'
+applyChan chan f (UGen' us) = UGen' (take chan us)
+                           <> f     (UGen' $ take 1 $ drop chan us)
+                           <> UGen' (drop (chan + 1) us)
+
+-- myCoolSynth' :: UGen' -> UGen' -> UGen'
+-- myCoolSynth' f1 f2 = sinOsc (f1 <> f2) + sinOsc (f1 <> 0)

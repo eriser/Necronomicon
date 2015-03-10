@@ -215,7 +215,7 @@ triOsc f1 f2 = [sig1,sig2] + [sig3,sig3] |> verb |> gain 0.1 |> out 0
         verb = freeverb 0.5 1.0 0.9
 
 triOsc32 :: UGen -> UGen -> [UGen]
-triOsc32 mx my = feedback fSig |> verb |> gain 0.035 |> out 0
+triOsc32 mx my = feedback fSig |> verb |> gain 0.0385 |> out 0
     where
         f1     = lag 0.25 mx
         f2     = lag 0.25 my
@@ -294,37 +294,39 @@ visAux bus a (u1:u2:_) = auxThrough bus [u1 * a,0] * 0 + [u1,u2]
 visAux _   _  u        = u
 
 metallic3 :: UGen -> [UGen]
-metallic3 f = sig + sig2 + sig3 |> e |> visAux 2 2 |> softclip 1000 |> filt |> gain 0.1 |> verb |> e |> gain 1 |> (\[u1,u2 ]-> [u2,u1]) |> out 0
+metallic3 f = sig + sig2 + sig3 |> e |> visAux 2 2 |> softclip 1000 |> filt |> gain 0.045 |> verb |> e |> gain 1 |> (\[u1,u2 ]-> [u2,u1]) |> out 0
     where
         sig    = sin   [f * (random 0 0.999 1.001  ),f * (random 7 0.999 1.001)]         |> gain 0.15
         sig2   = sin   [f * (random 1 0.499 0.50   ),f * (random 8 0.499 0.501)]         |> gain 0.15
         sig3   = sin   [f * (random 2 0.499 0.501  ),f * (random 9 0.499 0.501)]         |> gain 0.15
 
-        filt1  = lpf  ([f * (random 3 4  8 ),f * (random 10 2  4)] |> e2) 6
-        filt2  = lpf  ([f * (random 4 2  4 ),f * (random 11 4  8)] |> e2) 6
-        filt3  = lpf  ([f * (random 5 6  10),f * (random 12 3  6)] |> e2) 6
-        filt4  = lpf  ([f * (random 6 12 24),f * (random 13 6 12)] |> e2) 6
+        filt1  i = lpf  ([f * (random 3 4  8 ),f * (random 10 2  4)] |> e2) 2 i |> gain 0.1
+        filt2  i = lpf  ([f * (random 4 2  4 ),f * (random 11 4  8)] |> e2) 3 i |> gain 0.2
+        filt3  = lpf  ([f * (random 5 6  10),f * (random 12 3  6)] |> e2) 3
+        filt4  = lpf  ([f * (random 6 12 24),f * (random 13 6 12)] |> e2) 3
         filt s = filt1 s + filt2 s + filt3 s + filt4 s
 
-        e      = perc 0.01 6 1 (-12)
-        e2     = env2 [1,1,0.25,0.25] [0.01,1,5] (-6)
+        -- e      = perc 0.05 6 1 (-9)
+        e      = env [0,1,0.01,0] [0.1, 6,0.1] (-1)
+        e2     = env2 [1,1,0.25,0.25] [0.01,1,5] (-3)
         verb   = freeverb 0.5 1.0 0.1
 
 metallic4 :: UGen -> [UGen]
-metallic4 f = sig + sig2 + sig3 |> e |> visAux 3 2 |> softclip 1000 |> filt |> gain 0.1 |> verb |> e |> gain 1 |> out 0
+metallic4 f = sig + sig2 + sig3 |> e |> visAux 3 2 |> softclip 1000 |> filt |> gain 0.045 |> verb |> e |> gain 1 |> out 0
     where
         sig    = sin   [f * (random 0 0.995 1.005),f * (random 7 0.995 1.005)] |> gain 0.15
         sig2   = sin   [f * (random 1 0.495 0.505),f * (random 8 0.495 0.505)] |> gain 0.15
         sig3   = sin   [f * (random 2 0.495 0.505),f * (random 9 0.495 0.505)] |> gain 0.15
 
-        filt1  = lpf  ([f * (random 3 4  8 ),f * (random 10 2  4)] |> e2) 6
-        filt2  = lpf  ([f * (random 4 2  4 ),f * (random 11 4  8)] |> e2) 6
-        filt3  = lpf  ([f * (random 5 6  10),f * (random 12 3  6)] |> e2) 6
-        filt4  = lpf  ([f * (random 6 12 24),f * (random 13 6 12)] |> e2) 6
+        filt1  i = lpf  ([f * (random 3 4  8 ),f * (random 10 2  4)] |> e2) 2 i |> gain 0.1
+        filt2  i = lpf  ([f * (random 4 2  4 ),f * (random 11 4  8)] |> e2) 3 i |> gain 0.2
+        filt3  = lpf  ([f * (random 5 6  10),f * (random 12 3  6)] |> e2) 3
+        filt4  = lpf  ([f * (random 6 12 24),f * (random 13 6 12)] |> e2) 3
         filt s = filt1 s + filt2 s + filt3 s + filt4 s
 
-        e      = perc 0.01 6 1 (-12)
-        e2     = env2 [1,1,0.25,0.25] [0.01,1,5] (-6)
+        -- e      = perc 0.05 6 1 (-4)
+        e      = env [0,1,0.01,0] [0.1, 6,0.1] (-1)
+        e2     = env2 [1,1,0.25,0.25] [0.01,1,5] (-3)
         verb   = freeverb 0.5 1.0 0.1
 
 -- metallic5 :: UGen -> [UGen]
@@ -425,12 +427,13 @@ shake2 d = sig0 + sig1 + sig2 |> tanhDist 1 |> e |> gain 0.45 |> p 0.35 |> out 0
 -- shake2 d = pulse ((/16). fromRational $ d2f slendro 1) 0.5 |> bpf (fromRational $ d2f slendro 1) 10 |> perc 0.01 d 0.05 (-3) |> out 0
 
 floorPerc :: UGen -> [UGen]
-floorPerc d = sig1 + sig2 |> e |> p 0.35 |> gain 0.65 |> out 0
+floorPerc d = sig1 + sig2 |> e |> p 0.35 |> gain 0.3 |> out 0
     where
         p a u = [u * (1 - a), u * a]
         sig1  = sin 40
         sig2  = sin 80 * 0.25
-        e     = perc 0.01 d 1 (-9)
+        -- e     = perc 0.04 d 1 (-9)
+        e     = env [0,1,0.01,0] [0.05, d,0.1] (-9)
 
 sigScale :: Scale
 sigScale = slendro
@@ -866,7 +869,7 @@ omniPrimePattern = playSynthPattern (toggle <| combo [alt,isDown keyQ]) "omniPri
                 |]
 
 distortedBassPrime :: UGen -> [UGen]
-distortedBassPrime f = [s,s2] |> e |> softclip 400 |> filt |> softclip 50 |> filt2 |> gain 0.15 |> verb |> e |> out 0
+distortedBassPrime f = [s,s2] |> e |> softclip 400 |> filt |> softclip 50 |> filt2 |> gain 0.1 |> verb |> e |> out 0
     where
         e   = env [0,1,0] [0.1,6.75] (-4)
         -- e2  = env [523.251130601,f,f] [0.05,3.95] (-3)
@@ -937,7 +940,7 @@ metallic f = sig + sig2 + sig3 |> filt |> e |> auxThrough 2 |> gain 0.15 |> out 
 -}
 
 broodHive :: [UGen]
-broodHive = pl |> gain 0.06 |> out 0
+broodHive = pl |> gain 0.1 |> out 0
     where
         pl = {- pluck 40 freqs 5 (aux |> bpf freqs 3) + -} combC 1.7 1.7 1.1 aux + combC 2.4 2.4 1.1 aux + combC 3.5 3.5 1.1 aux
         -- freqs = map (fromRational . d2f slendro) [1,3]
@@ -1038,36 +1041,36 @@ moxEmerald'' :: UGen
 moxEmerald'' = lfsaw (moxFreq 5 0.5) 0 |> perc 0.001 0.1 1 (-8) |> artifactOut
 
 manaVault :: UGen
-manaVault = sin broodBassFreq + (saw broodBassFreq |> gain 0.1) |> perc 0.001 0.1 1 (-8) |> artifactOut
+manaVault = sin broodBassFreq + (saw broodBassFreq |> gain 0.1) |> perc 0.04 0.1 0.5 (-8) |> artifactOut
 
 trinisphere :: UGen
-trinisphere = auxIn 150 |> hpf (moxFreq 0 0.5) 9 |> gain 0.15 |> out 0
+trinisphere = auxIn 150 |> hpf (moxFreq 0 0.5) 9 |> gain 0.2 |> out 0
 
 trinisphere' :: UGen
-trinisphere' = auxIn 151 |> bpf (moxFreq 1 0.5) 9 |> gain 0.15 |> out 1
+trinisphere' = auxIn 151 |> bpf (moxFreq 1 0.5) 9 |> gain 0.2 |> out 1
 
 trinisphere'' :: [UGen]
-trinisphere'' = auxIn 152 |> lpf (moxFreq 4 1) 9 |> dup |> gain 0.5 |> gain 0.15 |> out 0
+trinisphere'' = auxIn 152 |> lpf (moxFreq 4 1) 9 |> dup |> gain 0.5 |> gain 0.2 |> out 0
 
 gitaxianProbe :: UGen
-gitaxianProbe = auxIn 153 |> gain (saw (moxFreq 7 0) + saw (moxFreq 8 0)) +> combC 0.8 0.8 1.1 |> gain 0.15 |> out 0
+gitaxianProbe = auxIn 153 |> gain (saw (moxFreq 7 0) + saw (moxFreq 8 0)) +> combC 0.8 0.8 1.1 |> gain 0.2 |> out 0
 
 expeditionMap :: [UGen]
-expeditionMap = auxIn 154 |> decimate [noise0 0.25 |> range 100 10000, noise0 0.5 |> range 100 10000] |> gain 0.15 |> out 0
+expeditionMap = auxIn 154 |> decimate [noise0 0.25 |> range 100 10000, noise0 0.5 |> range 100 10000] |> gain 0.2 |> out 0
 
 goblinCharBelcher :: [UGen]
-goblinCharBelcher = auxIn 155 |> crush 8 |> fakePan 0.75 |> gain 0.15 |> out 0
+goblinCharBelcher = auxIn 155 |> crush 8 |> fakePan 0.75 |> gain 0.2 |> out 0
 
 tolarianAcademy :: [UGen]
-tolarianAcademy = [combC 1.7 1.7 1.1 aux, combC 2.4 2.4 1.1 aux] |> add (dup aux) |> gain 0.15 |> out 0
+tolarianAcademy = [combC 1.7 1.7 1.1 aux, combC 2.4 2.4 1.1 aux] |> add (dup aux) |> gain 0.2 |> out 0
     where
         aux = auxIn 156
 
 bs :: UGen
-bs = whiteNoise |> perc 0.001 0.75 1 (-64) |> crush 8 |> decimate 5000 |> out 1
+bs = whiteNoise |> perc 0.001 1 1 (-64) |> crush 8 |> decimate 5000 |> out 1
 
 bb :: [UGen]
-bb = sin (moxFreq 0 0.125) + (saw (moxFreq 0 0.125) |> gain 0.3) +> clip 20 +> tanhDist 5 |> perc 0.001 0.5 0.3 (-32) |> dup |> out 0
+bb = sin (moxFreq 0 0.125) + (saw (moxFreq 0 0.125) |> gain 0.3) +> clip 20 +> tanhDist 5 |> perc 0.04 0.75 0.15 (-8) |> dup |> out 0
 
 terraNovaPattern :: Signal ()
 terraNovaPattern = fxSynth "trinisphere"
