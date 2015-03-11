@@ -206,32 +206,32 @@ testGUI = gui [chatBox,netBox,ubox]
                           <| Font   "OCRA.ttf" 24
                           <| vertexColored (RGBA 1 1 1 0.1)
 
-triOsc :: UGen -> UGen -> [UGen]
-triOsc f1 f2 = [sig1,sig2] + [sig3,sig3] |> verb |> gain 0.1 |> out 0
+triOsc :: UGen -> UGen -> UGen
+triOsc f1 f2 = (sig1 <> sig2) + (sig3 <> sig3) |> verb |> gain 0.1 |> out 0
     where
         sig1 = sinOsc (f1 + sig3 * 1000) * (sinOsc (f1 * 0.00025)         |> range 0.5 1) |> auxThrough 2
         sig2 = sinOsc (f2 + sig3 * 1000) * (sinOsc (f2 * 0.00025)         |> range 0.5 1) |> auxThrough 3
         sig3 = sinOsc (f1 - f2)          * (sinOsc ((f1 + f2 )* 0.000125) |> range 0.5 1) |> auxThrough 4
         verb = freeverb 0.5 1.0 0.9
 
-triOsc32 :: UGen -> UGen -> [UGen]
+triOsc32 :: UGen -> UGen -> UGen
 triOsc32 mx my = feedback fSig |> verb |> gain 0.0385 |> out 0
     where
         f1     = lag 0.25 mx
         f2     = lag 0.25 my
         verb   = freeverb 0.25 0.5 0.95
         d      = delayN 0.6 0.6
-        fSig i = [sig4,sig5] + [sig6,sig6]
+        fSig i = (sig4 + sig6) <> (sig5 + sig6)
             where
                 sig1 = sinOsc (f1 + sig3 * 26.162)   * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> auxThrough 2
                 sig2 = sinOsc (f2 - sig3 * 26.162)   * (sinOsc (f1 * 0.00025) |> range 0.5 1) |> auxThrough 3
-                sig3 = sinOsc (f1 - f2 + i * 26.162) * (sinOsc (i * 0.00025)  |> range 0.5 1) |> auxThrough 4
+                sig3 = sinOsc (f1 - f2 +  i * 26.162) * (sinOsc ( i * 0.00025)  |> range 0.5 1) |> auxThrough 4
                 sig4 = sinOsc (f1 * 0.25 + sig1 * 261.6255653006) * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 60 |> gain 0.5 +> d
                 sig5 = sinOsc (f2 * 0.25 - sig2 * 261.6255653006) * (sinOsc (f1 * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 60 |> gain 0.5 +> d
-                sig6 = sinOsc (f1 * 0.25 - sig3 * 261.6255653006) * (sinOsc (i * 0.00025)  |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 60 |> gain 0.5 +> d
+                sig6 = sinOsc (f1 * 0.25 - sig3 * 261.6255653006) * (sinOsc ( i * 0.00025)  |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 60 |> gain 0.5 +> d
 
-triOscEnv :: UGen -> [UGen]
-triOscEnv f1 = [sig1,sig2] + [sig3,sig3] |> out 0
+triOscEnv :: UGen -> UGen
+triOscEnv f1 = (sig1 <> sig2) + (sig3 <> sig3) |> out 0
     where
         sig1 = sinOsc (f1 * 1.0 + sig3 * 1000) |> e |> auxThrough 2
         sig2 = sinOsc (f1 * 0.5 - sig3 * 1000) |> e |> auxThrough 3
@@ -282,51 +282,48 @@ pSynth = sin 1110 |> gain (line 0.1) >>> gain 0.2 >>> out 1
         -- e     = perc 0.01 0.75 1 (-4)
         -- e2    = env2 [1,1,0.5,0.5] [0.01,0.35,0.4] (-4)
 
-caveTime :: [UGen]
-caveTime = [l * 0.875 + r * 0.125,r * 0.875 + l * 0.125] |> out 0
+caveTime :: UGen
+caveTime = (l * 0.875 + r * 0.125) <> (r * 0.875 + l * 0.125) |> out 0
     where
         l     = auxIn 20 |> verb
         r     = auxIn 21 |> verb
         verb  = freeverb 0.5 1.0 0.1
 
-visAux :: [UGen] -> UGen -> [UGen] -> [UGen]
-visAux bus a (u1:u2:_) = auxThrough bus [u1 * a,0] * 0 + [u1,u2]
-visAux _   _  u        = u
+visAux :: UGen -> UGen -> UGen -> UGen
+visAux bus a u = applyLeft (auxThrough bus . (* a)) u * 0 + u
 
-metallic3 :: UGen -> [UGen]
-metallic3 f = sig + sig2 + sig3 |> e |> visAux 2 2 |> softclip 1000 |> filt |> gain 0.045 |> verb |> e |> gain 1 |> (\[u1,u2 ]-> [u2,u1]) |> out 0
+metallic3 :: UGen -> UGen
+metallic3 f = sig + sig2 + sig3 |> e |> visAux 2 2 |> softclip 1000 |> filt |> gain 0.045 |> verb |> e |> gain 1 |> dup |> out 0
     where
-        sig    = sin   [f * (random 0 0.999 1.001  ),f * (random 7 0.999 1.001)]         |> gain 0.15
-        sig2   = sin   [f * (random 1 0.499 0.50   ),f * (random 8 0.499 0.501)]         |> gain 0.15
-        sig3   = sin   [f * (random 2 0.499 0.501  ),f * (random 9 0.499 0.501)]         |> gain 0.15
+        sig    = sin (f * random 0 0.999 1.001) |> gain 0.15
+        sig2   = sin (f * random 1 0.499 0.500) |> gain 0.15
+        sig3   = sin (f * random 2 0.499 0.501) |> gain 0.15
 
-        filt1  i = lpf  ([f * (random 3 4  8 ),f * (random 10 2  4)] |> e2) 2 i |> gain 0.1
-        filt2  i = lpf  ([f * (random 4 2  4 ),f * (random 11 4  8)] |> e2) 3 i |> gain 0.2
-        filt3  = lpf  ([f * (random 5 6  10),f * (random 12 3  6)] |> e2) 3
-        filt4  = lpf  ([f * (random 6 12 24),f * (random 13 6 12)] |> e2) 3
+        filt1  = lpf (f * random 3 4  8  |> e2) 2 >>> gain 0.1
+        filt2  = lpf (f * random 4 2  4  |> e2) 3 >>> gain 0.2
+        filt3  = lpf (f * random 5 6  10 |> e2) 3
+        filt4  = lpf (f * random 6 12 24 |> e2) 3
         filt s = filt1 s + filt2 s + filt3 s + filt4 s
 
-        -- e      = perc 0.05 6 1 (-9)
-        e      = env [0,1,0.01,0] [0.1, 6,0.1] (-1)
-        e2     = env2 [1,1,0.25,0.25] [0.01,1,5] (-3)
+        e      = env      [0,1,0.01,0]    [0.1, 6,0.1] (-1)
+        e2     = env2     [1,1,0.25,0.25] [0.01,1,5]   (-3)
         verb   = freeverb 0.5 1.0 0.1
 
-metallic4 :: UGen -> [UGen]
-metallic4 f = sig + sig2 + sig3 |> e |> visAux 3 2 |> softclip 1000 |> filt |> gain 0.045 |> verb |> e |> gain 1 |> out 0
+metallic4 :: UGen -> UGen
+metallic4 f = sig + sig2 + sig3 |> e |> visAux 3 2 |> softclip 1000 |> filt |> gain 0.045 |> verb |> e |> gain 1 |> dup |> out 0
     where
-        sig    = sin   [f * (random 0 0.995 1.005),f * (random 7 0.995 1.005)] |> gain 0.15
-        sig2   = sin   [f * (random 1 0.495 0.505),f * (random 8 0.495 0.505)] |> gain 0.15
-        sig3   = sin   [f * (random 2 0.495 0.505),f * (random 9 0.495 0.505)] |> gain 0.15
+        sig    = sin (f * random 0 0.999 1.001) |> gain 0.15
+        sig2   = sin (f * random 1 0.499 0.500) |> gain 0.15
+        sig3   = sin (f * random 2 0.499 0.501) |> gain 0.15
 
-        filt1  i = lpf  ([f * (random 3 4  8 ),f * (random 10 2  4)] |> e2) 2 i |> gain 0.1
-        filt2  i = lpf  ([f * (random 4 2  4 ),f * (random 11 4  8)] |> e2) 3 i |> gain 0.2
-        filt3  = lpf  ([f * (random 5 6  10),f * (random 12 3  6)] |> e2) 3
-        filt4  = lpf  ([f * (random 6 12 24),f * (random 13 6 12)] |> e2) 3
+        filt1  = lpf (f * random 3 4  8  |> e2) 2 >>> gain 0.1
+        filt2  = lpf (f * random 4 2  4  |> e2) 3 >>> gain 0.2
+        filt3  = lpf (f * random 5 6  10 |> e2) 3
+        filt4  = lpf (f * random 6 12 24 |> e2) 3
         filt s = filt1 s + filt2 s + filt3 s + filt4 s
 
-        -- e      = perc 0.05 6 1 (-4)
-        e      = env [0,1,0.01,0] [0.1, 6,0.1] (-1)
-        e2     = env2 [1,1,0.25,0.25] [0.01,1,5] (-3)
+        e      = env      [0,1,0.01,0]    [0.1, 6,0.1] (-1)
+        e2     = env2     [1,1,0.25,0.25] [0.01,1,5] (-3)
         verb   = freeverb 0.5 1.0 0.1
 
 -- metallic5 :: UGen -> [UGen]
@@ -347,13 +344,8 @@ metallic4 f = sig + sig2 + sig3 |> e |> visAux 3 2 |> softclip 1000 |> filt |> g
         -- e    = perc 0.8 2 1 (-6)
         -- e2   = env [1,1,0] [3,0.5] 0
 
-fakePan :: UGen -> [UGen] -> [UGen]
-fakePan a [u1,u2] = [(u1+u2) * (1 - a), (u1+u2) * a]
-fakePan a [u]     = [u * (1 - a),  u * a]
-fakePan _ _       = []
-
-hyperMelody :: UGen -> [UGen]
-hyperMelody f = [s,s2] |> gain 0.04 |> e |> visAux (dup <| random 0 2 4.99) 20 |> out 0
+hyperMelody :: UGen -> UGen
+hyperMelody f = s <> s2 |> gain 0.04 |> e |> visAux (random 0 2 4.99) 20 |> out 0
     where
         e   = env [0,1,0.15, 0] [0.0001,0.1, 7] (-1.5)
         s    = sin <| add (sin 3 * 6) (f*2)
@@ -361,47 +353,41 @@ hyperMelody f = [s,s2] |> gain 0.04 |> e |> visAux (dup <| random 0 2 4.99) 20 |
 
 
 --add sins for visuals and modulation
-reverseSwell :: UGen -> [UGen]
-reverseSwell f =  sig1 + sig2 + sig3 |> e |> tanhDist (dup <| random 31 0.25 1) |> add (whiteNoise * 0.25) |> gain 0.03 |> filt |> e |> fakePan 0.75 |> out 20
-    where
-        hf     = f * 0.5
-        -- verb   = freeverb 0.5 1 0.1
-        e      = env  [0,1,0] [4,4] (3)
-        e2     = env2 [0.125,1,0.125] [4,4] (3)
-        sig1   = saw [ f * (random 16 0.995 1.005),f * (random 28 0.995 1.005)] * mod1
-        sig2   = saw [hf * (random 17 0.995 1.005),f * (random 29 0.995 1.005)] * mod2
-        sig3   = saw [ f * (random 18 0.495 0.505),f * (random 30 0.495 0.505)] * mod4 * 0.5
-        filt   = lpf ([f * (random 19 3 11),       f * (random 31 3 11)]        * mod3 |> e2) 2
-        mod1   = [saw (random 20 0.5 2.0) |> range 0.01 1,saw (random 24 0.5 2.0) |> range 0.01 1]
-        mod2   = [saw (random 21 0.5 2.0) |> range 0.01 1,saw (random 25 0.5 2.0) |> range 0.01 1]
-        mod3   = [saw (random 22 0.5 2.0) |> range 0.25 1,saw (random 26 0.5 2.0) |> range 0.25 1]
-        mod4   = [saw (random 23 0.5 2.0) |> range 0.01 1,saw (random 27 0.5 2.0) |> range 0.01 1]
-
-reverseSwell2 :: UGen -> [UGen]
-reverseSwell2 f = sig1 + sig2 + sig3 |> e |> tanhDist (dup <| random 32 0.25 1) |> add (whiteNoise * 0.25) |> gain 0.03 |> filt |> e |> fakePan 0.25 |> out 20
+reverseSwell :: UGen -> UGen
+reverseSwell f =  sig1 + sig2 + sig3 |> e |> tanhDist (dup <| random 31 0.25 1) |> add (whiteNoise * 0.25) |> gain 0.03 |> filt |> e |> dup |> fakePan 0.75 |> out 20
     where
         hf    = f * 0.5
-        -- verb   = freeverb 0.5 1 0.1
-        e      = env  [0,1,0] [4,4] (3)
+        e      = env  [0,1,0]         [4,4] (3)
         e2     = env2 [0.125,1,0.125] [4,4] (3)
-        sig1   = saw [hf * (random 0 0.995 1.005),f * (random 1 0.995 1.005)] * mod1
-        sig2   = saw [ f * (random 2 0.995 1.005),f * (random 3 0.995 1.005)] * mod2
-        sig3   = saw [hf * (random 4 0.495 0.505),f * (random 5 0.495 0.505)] * mod4 * 0.5
-        filt   = lpf ([f * (random 6 3 11)       ,f * (random 7 3 11)]        * mod3 |> e2) 2
-        mod1   = [saw (random 8 0.5 2.0)   |> range 0.01 1,saw (random 12 0.5 2.0)   |> range 0.01 1]
-        mod2   = [saw (random 9 0.5 2.0)   |> range 0.01 1,saw (random 13 0.5 2.0)   |> range 0.01 1]
-        mod3   = [saw (random 10 0.25 1.0) |> range 0.25 1,saw (random 14 0.25 1.0)  |> range 0.25 1]
-        mod4   = [saw (random 11 0.5 2.0)  |> range 0.01 1,saw (random 15 0.5 2.0)   |> range 0.01 1]
+        sig1   = saw (hf * random 0 0.995 1.005) * mod1
+        sig2   = saw (f  * random 2 0.995 1.005) * mod2
+        sig3   = saw (hf * random 4 0.495 0.505) * mod4 * 0.5
+        filt   = lpf (f  * random 6 3 11         * mod3 |> e2) 2
+        mod1   = saw (random 8 0.5 2.0)   |> range 0.01 1
+        mod2   = saw (random 9 0.5 2.0)   |> range 0.01 1
+        mod3   = saw (random 10 0.25 1.0) |> range 0.25 1
+        mod4   = saw (random 11 0.5 2.0)  |> range 0.01 1
 
-shake :: UGen -> [UGen]
-shake d = sig1 + sig2 |> e |> gain 0.4 |> p 0.75 |> out 0
+reverseSwell2 :: UGen -> UGen
+reverseSwell2 f = sig1 + sig2 + sig3 |> e |> tanhDist (random 32 0.25 1) |> add (whiteNoise * 0.25) |> gain 0.03 |> filt |> e |> dup |> fakePan 0.25 |> out 20
     where
-        p a u = [u * (1 - a), u * a]
-        sig1  = whiteNoise |> bpf (12000 |> e2) 3 |> gain 0.05
+        hf    = f * 0.5
+        e      = env  [0,1,0]         [4,4] (3)
+        e2     = env2 [0.125,1,0.125] [4,4] (3)
+        sig1   = saw (hf * random 0 0.995 1.005) * mod1
+        sig2   = saw (f  * random 2 0.995 1.005) * mod2
+        sig3   = saw (hf * random 4 0.495 0.505) * mod4 * 0.5
+        filt   = lpf (f  * random 6 3 11         * mod3 |> e2) 2
+        mod1   = saw (random 8 0.5 2.0)   |> range 0.01 1
+        mod2   = saw (random 9 0.5 2.0)   |> range 0.01 1
+        mod3   = saw (random 10 0.25 1.0) |> range 0.25 1
+        mod4   = saw (random 11 0.5 2.0)  |> range 0.01 1
+
+shake :: UGen -> UGen
+shake d = sig1 + sig2 |> e |> gain 0.4 |> fakePan 0.75 |> out 0
+    where
+        sig1  = whiteNoise |> bpf (12000 |> e2)            3 |> gain 0.05
         sig2  = whiteNoise |> bpf (9000 + 12000 * d |> e2) 4 |> gain 0.05
-        -- sig1  = lfpulse 41 0 |> lpf (100 |> e2) 4
-        -- sig2  = lfpulse 40 0 |> lpf (100 + 400 * d |> e2) 4
-        -- verb  = freeverb 0.5 1 1
         e     = perc 0.01 (d*6) 1 (-24)
         e2    = env2 [1,1,0.125] [0.01,d*6] (-24)
 
@@ -426,10 +412,10 @@ shake2 d = sig0 + sig1 + sig2 |> tanhDist 1 |> e |> gain 0.45 |> p 0.35 |> out 0
 -- shake2 :: UGen -> [UGen]
 -- shake2 d = pulse ((/16). fromRational $ d2f slendro 1) 0.5 |> bpf (fromRational $ d2f slendro 1) 10 |> perc 0.01 d 0.05 (-3) |> out 0
 
-floorPerc :: UGen -> [UGen]
-floorPerc d = sig1 + sig2 |> e |> p 0.35 |> gain 0.3 |> out 0
+floorPerc :: UGen -> UGen
+floorPerc d = sig1 + sig2 |> e |> fakePan 0.35 |> gain 0.3 |> out 0
     where
-        p a u = [u * (1 - a), u * a]
+        -- p a u = [u * (1 - a), u * a]
         sig1  = sin 40
         sig2  = sin 80 * 0.25
         -- e     = perc 0.04 d 1 (-9)
@@ -670,17 +656,17 @@ hyperMelodyPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyH]) "hype
                       _ _ _ _ _ _ _ _
                 |]
 
-pulseDemon :: UGen -> [UGen]
-pulseDemon f = [s,s2] |> filt |> softclip (dup <| random 31 100 200) |> gain 0.0225 |> e |> out 18
+pulseDemon :: UGen -> UGen
+pulseDemon f = s <> s2 |> filt |> softclip (dup <| random 31 100 200) |> gain 0.0225 |> e |> out 18
     where
-        e    = env [0,1,0]         [0.01, 0.6] (-1)
-        e2   = env [1.0,0.1,0.001] [0.6, 0.01] 0
+        e    = env   [0,1,0]         [0.01, 0.6] (-1)
+        e2   = env   [1.0,0.1,0.001] [0.6, 0.01] 0
         s    = pulse (f * random 4 0.995 1.005) (random 2 0.01 0.99)
         s2   = pulse (f * random 4 0.995 1.005) (random 3 0.01 0.99)
-        filt = lpf ([f * (random 19 2 16), f * (random 31 2 16)]|> e2) 3
+        filt = lpf   (f * random 19 2 16 |> e2) 3
 
-demonCave :: UGen -> UGen -> UGen -> [UGen]
-demonCave f1 f2 g = [l * 0.875 + r * 0.125,r * 0.875 + l * 0.125] |> gain [g,g] |> out 0
+demonCave :: UGen -> UGen -> UGen -> UGen
+demonCave f1 f2 g = (l * 0.875 + r * 0.125) <> (r * 0.875 + l * 0.125) |> gain g |> out 0
     where
         l     = auxIn 18 |> filt1 +> d2 |> verb +> d
         r     = auxIn 19 |> filt2 +> d2 |> verb +> d
@@ -729,32 +715,32 @@ pulseDemonPattern3 = playSynthPattern (toggle <| combo [alt,isDown keyB]) "pulse
                       [7 7 7 _] _ _ _ [7 7 7 _] _ _ _
                 |]
 
-halfVerb :: [UGen]
-halfVerb = [l * 0.9 + r * 0.1,r * 0.9 + l * 0.1] |> out 0
+halfVerb :: UGen
+halfVerb = (l * 0.9 + r * 0.1) <> (r * 0.9 + l * 0.1) |> out 0
     where
         l     = auxIn 22 |> verb |> auxThrough 2 |> auxThrough 3
         r     = auxIn 23 |> verb |> auxThrough 3 |> auxThrough 4
         verb  = freeverb 0.5 1.0 0.125
 
-hyperMelodyPrime :: UGen -> [UGen]
-hyperMelodyPrime f = [s,s2] |> softclip 20 |> filt |> e |> gain 0.25 |> fakePan 0.2 |> out 22
+hyperMelodyPrime :: UGen -> UGen
+hyperMelodyPrime f = s <> s2 |> softclip 20 |> filt |> e |> gain 0.25 |> fakePan 0.2 |> out 22
     where
         e   = env [0,1,0] [0.01,0.75] (-3)
         -- e2  = env [523.251130601,f,f] [0.05,3.95] (-3)
         e2  = env [f,f,f * 0.125] [0.05,0.75] (-3)
         s   = syncsaw (sin (3 * 6) + f * 2) <| auxIn 42
         s2  = syncsaw (sin (6 * 9) + f)     <| auxIn 42
-        filt = lpf ([e2 4,e2 4]) 2
+        filt = lpf (e2 4 <> e2 4) 2
 
-manaLeakPrime :: UGen -> [UGen]
-manaLeakPrime f = [s,s2] |> softclip 20 |> filt |> e |> gain 0.225 |> auxThrough 42 |> fakePan 0.8 |> out 22
+manaLeakPrime :: UGen -> UGen
+manaLeakPrime f = s <> s2 |> softclip 20 |> filt |> e |> gain 0.225 |> auxThrough 42 |> fakePan 0.8 |> out 22
     where
         e   = env [0,1, 0] [0.01,0.75] (-3)
         -- e2  = env [523.251130601,f,f] [0.05,4.95] (-3)
         e2  = env [f,f,f * 0.125] [0.05,0.75] (-3)
         s   = saw (sin (3 * 6) + f)
         s2  = saw (sin (6 * 9) + f * 2)
-        filt = lpf ([e2 5,e2 6]) 2
+        filt = lpf (e2 5 <> e2 6) 2
 
 hyperMelodyPrimePattern :: Signal ()
 hyperMelodyPrimePattern = fx <> playSynthPattern (toggle <| combo [alt,isDown keyR]) "hyperMelodyPrime" [] (pmap ((*0.5) . d2f sigScale . (+1)) <| ploop [sec1])
@@ -783,35 +769,32 @@ manaLeakPrimePattern = playSynthPattern (toggle <| combo [alt,isDown keyT]) "man
                       [3 _ 2] [_ 1 _] 0 _ _ _ _ _
                       _ _ _ _ _ _ _ _ |]
 
-subDestruction :: UGen -> UGen -> [UGen]
-subDestruction f1 f2 = fuse l r |> gain 0.5 |> out 0
+subDestruction :: UGen -> UGen -> UGen
+subDestruction f1 f2 = l <> r |> gain 0.5 |> out 0
     where
-        l     = auxIn 24 |> df filt1
-        r     = auxIn 25 |> df filt2
+        l         = auxIn 24 |> df filt1
+        r         = auxIn 25 |> df filt2
         df filt x = feedback <| \feed -> filt (freeverb 0.35 0.75 0.95 ((feed |> softclip 10 |> gain 0.425) + x))
-        filt1 = lpf (lag 0.1 f1) 3
-        filt2 = lpf (lag 0.1 f2) 3
-        fuse (x:_) (y:_) = [x,y]
-        fuse  _     _    = []
-
+        filt1     = lpf (lag 0.1 f1) 3
+        filt2     = lpf (lag 0.1 f2) 3
 
 ------------------------------------
 -- Section 2ish
 ------------------------------------
 
-floorPerc2 :: UGen -> [UGen]
-floorPerc2 d = sig1 + sig2 |> e |> p 0.35 |> gain 0.45 |> out 0
+floorPerc2 :: UGen -> UGen
+floorPerc2 d = sig1 + sig2 |> e |> fakePan 0.35 |> gain 0.45 |> out 0
     where
-        p a u = [u * (1 - a), u * a]
+        -- p a u = [u * (1 - a), u * a]
         sig1  = sin <| e2 90
         sig2  = sin (e2 <| 120 * 0.25)
         e     = perc 0.01 d 1 (-6)
         e2    = env [1,0.9, 0] [0.01,d] (-3)
 
-shakeSnare :: UGen -> [UGen]
-shakeSnare d = sig1 + sig2 |> e |> gain 0.9 |> p 0.75 |> out 0
+shakeSnare :: UGen -> UGen
+shakeSnare d = sig1 + sig2 |> e |> gain 0.9 |> fakePan 0.75 |> out 0
     where
-        p a u = [u * (1 - a), u * a]
+        -- p a u = [u * (1 - a), u * a]
         sig1  = whiteNoise |> bpf (12000 |> e2) 3 |> gain 0.05
         sig2  = whiteNoise |> bpf (9000 + 12000 * d |> e2) 4 |> gain 0.05
         -- sig1  = lfpulse 41 0 |> lpf (100 |> e2) 4
@@ -821,10 +804,10 @@ shakeSnare d = sig1 + sig2 |> e |> gain 0.9 |> p 0.75 |> out 0
         e2    = env2 [1,1,0.125] [0.01,d*4] (-24)
 
 
-shake2 :: UGen -> [UGen]
-shake2 d = sig1 |> e |> gain 0.6 |> p 0.6 |> out 0
+shake2 :: UGen -> UGen
+shake2 d = sig1 |> e |> gain 0.6 |> fakePan 0.6 |> out 0
     where
-        p a u = [u * (1 - a), u * a]
+        -- p a u = [u * (1 - a), u * a]
         sig1  = whiteNoise |> bpf (12000 |> e2) 9 |> gain 0.05
         e     = perc 0.01 (d) 1 (-6)
         e2    = env [1,0.95, 0.9] [0.01,d] (-9)
@@ -850,14 +833,14 @@ section2Drums = floorPattern2 <> shake2Pattern <> shake1Pattern <> omniPrimePatt
             where
                 sec1 = [lich| [6 1] [_ 1] [_ 6] [_ 1] |]
 
-omniPrime :: UGen -> [UGen]
-omniPrime f = [s,s2] |> softclip 20 |> filt |> gain 0.75 |> e |> auxThrough 4 |> fakePan 0.2 |> out 0
+omniPrime :: UGen -> UGen
+omniPrime f = s <> s2 |> softclip 20 |> filt |> gain 0.75 |> e |> auxThrough 4 |> fakePan 0.2 |> out 0
     where
         e   = env [0,1,0.1,0] [0.01,0.1,1.5] (-4)
         e2  = env [523.251130601,f * 1.5,f, f] [0.01,0.1,1.5] (-4)
         s   = saw (sin (3 * 6) + e2 1 * 2)
         s2  = saw (sin (6 * 9) + e2 1)
-        filt = lpf ([e2 6,e2 6]) 4
+        filt = lpf (e2 6) 4
 
 omniPrimePattern :: Signal ()
 omniPrimePattern = playSynthPattern (toggle <| combo [alt,isDown keyQ]) "omniPrime" [] (pmap ((* 0.03125) . d2f slendro) <| ploop [sec1])
@@ -868,16 +851,16 @@ omniPrimePattern = playSynthPattern (toggle <| combo [alt,isDown keyQ]) "omniPri
                       [5 5] [5 5] _ _
                 |]
 
-distortedBassPrime :: UGen -> [UGen]
-distortedBassPrime f = [s,s2] |> e |> softclip 400 |> filt |> softclip 50 |> filt2 |> gain 0.1 |> verb |> e |> out 0
+distortedBassPrime :: UGen -> UGen
+distortedBassPrime f = s <> s2 |> e |> softclip 400 |> filt |> softclip 50 |> filt2 |> gain 0.1 |> verb |> e |> out 0
     where
         e   = env [0,1,0] [0.1,6.75] (-4)
         -- e2  = env [523.251130601,f,f] [0.05,3.95] (-3)
         e2  = env [f * 1.25,f,f * 0.5] [0.1,6.75] (-4)
         s   = pulse (f * 0.995) 0.25 + pulse (f * 0.4995) 0.25
-        s2  = pulse (f * 1.005) 0.75 + pulse (f * 0.505) 0.75
-        filt = lpf ([e2 6,e2 6]) 6
-        filt2 i = lpf ([e2 8,e2 8]) 6 i + lpf ([e2 4,e2 4]) 6 i + i * 1
+        s2  = pulse (f * 1.005) 0.75 + pulse (f * 0.505)  0.75
+        filt = lpf (e2 6) 6
+        filt2 i = lpf (e2 8) 6 i + lpf (e2 4) 6 i + i * 1
         verb = freeverb 0.5 1.0 0.75
 
 distortedBassHits :: Signal ()
@@ -904,14 +887,14 @@ distortedBassHits = playSynthPattern (toggle <| combo [alt,isDown keyE]) "distor
 -- Section 3
 ------------------------------------
 
-subControl :: UGen -> [UGen]
-subControl f = [s,s2] |> e |> softclip 20 |> filt |> gain 0.11 |> e |> softclip 20 |> e |> fakePan (random 3 0 1) |> out 24
+subControl :: UGen -> UGen
+subControl f = s <> s2 |> e |> softclip 20 |> filt |> gain 0.11 |> e |> softclip 20 |> e |> fakePan (random 3 0 1) |> out 24
     where
-        e    = env [0,1, 0] [0.05,1] (-3)
-        e2   = env [523.251130601,f,f*0.25] [0.05,1] (-3)
+        e    = env   [0, 1, 0] [0.05, 1]      (-3)
+        e2   = env   [523.251130601,f,f*0.25] [0.05,1] (-3)
         s    = pulse (sin (3 * 6) + e2 1 * 2) (random 0 0.1 0.9)
         s2   = pulse (sin (6 * 9) + e2 1)     (random 1 0.1 0.9)
-        filt = lpf [e2 (random 4 2 12),e2 (random 5 2 12)] (dup <| random 6 2 8)
+        filt = lpf   (random 4 2 12 |> e2 )   (random 6 2 8)
 
 subControlPattern :: Signal ()
 subControlPattern = fx <> playSynthPattern (toggle <| combo [alt,isDown keyZ]) "subControl" [] (pmap ((*0.25) . d2f egyptianRast) <| pseq (8 * 4 * 4) [sec1,sec2])
@@ -939,27 +922,27 @@ metallic f = sig + sig2 + sig3 |> filt |> e |> auxThrough 2 |> gain 0.15 |> out 
         e2   = env2 [1,1,0.35,0.35] [0.01,0.35,0.65] (-5)
 -}
 
-broodHive :: [UGen]
+broodHive :: UGen
 broodHive = pl |> gain 0.1 |> out 0
     where
         pl = {- pluck 40 freqs 5 (aux |> bpf freqs 3) + -} combC 1.7 1.7 1.1 aux + combC 2.4 2.4 1.1 aux + combC 3.5 3.5 1.1 aux
         -- freqs = map (fromRational . d2f slendro) [1,3]
         aux1 = auxIn 200
         aux2 = auxIn 201
-        aux  = [aux1, aux2]
+        aux  = aux1 <> aux2
 
 broodling :: UGen -> UGen
-broodling f = pulse [f,f/2,f/4] (dup <| p 1) |> sum |> lpf (p (f * 4)) 1 |> add (sin (f / 4) |> gain 0.5) |> p |> gain 0.7 |> out 200
+broodling f = pulse (f <> f/2 <> f/4) (p 1) |> mix |> lpf (p (f * 4)) 1 |> add (sin (f / 4) |> gain 0.5) |> p |> gain 0.7 |> out 200
     where
         p = perc 0.01 1.25 1 (-8)
 
 broodling2 :: UGen -> UGen
-broodling2 f = pulse [f,f/2,f/4] (dup <| p 1) |> sum |> lpf (p (f * 4)) 1 |> add (sin (f / 2) |> gain 0.5) |> p |> gain 0.7 |> out 201
+broodling2 f = pulse (f <> f/2 <> f/4) (p 1) |> mix |> lpf (p (f * 4)) 1 |> add (sin (f / 2) |> gain 0.5) |> p |> gain 0.7 |> out 201
     where
         p = perc 0.01 1.25 1 (-8)
 
 broodBassFreq :: UGen
-broodBassFreq = UGenNum . (/4) . fromRational $ d2f slendro 1
+broodBassFreq = UGen [UGenNum . (/4) . fromRational $ d2f slendro 1]
 
 broodlingPattern :: Signal ()
 broodlingPattern = fx
@@ -987,7 +970,7 @@ squareEnv :: UGen -> UGen
 squareEnv = env [0,1,1,0] [0,0.4,0] 0
 
 moxFreq :: Rational -> Double -> UGen
-moxFreq degree scalar = UGenNum . (*scalar) . fromRational $ d2f slendro degree
+moxFreq degree scalar = UGen [UGenNum . (*scalar) . fromRational $ d2f slendro degree]
 
 moxRuby :: UGen
 moxRuby = pulse 2.5 0.5 |> squareEnv |> artifactOut
@@ -1049,27 +1032,27 @@ trinisphere = auxIn 150 |> hpf (moxFreq 0 0.5) 9 |> gain 0.2 |> out 0
 trinisphere' :: UGen
 trinisphere' = auxIn 151 |> bpf (moxFreq 1 0.5) 9 |> gain 0.2 |> out 1
 
-trinisphere'' :: [UGen]
+trinisphere'' :: UGen
 trinisphere'' = auxIn 152 |> lpf (moxFreq 4 1) 9 |> dup |> gain 0.5 |> gain 0.2 |> out 0
 
 gitaxianProbe :: UGen
 gitaxianProbe = auxIn 153 |> gain (saw (moxFreq 7 0) + saw (moxFreq 8 0)) +> combC 0.8 0.8 1.1 |> gain 0.2 |> out 0
 
-expeditionMap :: [UGen]
-expeditionMap = auxIn 154 |> decimate [noise0 0.25 |> range 100 10000, noise0 0.5 |> range 100 10000] |> gain 0.2 |> out 0
+expeditionMap :: UGen
+expeditionMap = auxIn 154 |> decimate ((noise0 0.25 |> range 100 10000) <> (noise0 0.5 |> range 100 10000)) |> gain 0.2 |> out 0
 
-goblinCharBelcher :: [UGen]
+goblinCharBelcher :: UGen
 goblinCharBelcher = auxIn 155 |> crush 8 |> fakePan 0.75 |> gain 0.2 |> out 0
 
-tolarianAcademy :: [UGen]
-tolarianAcademy = [combC 1.7 1.7 1.1 aux, combC 2.4 2.4 1.1 aux] |> add (dup aux) |> gain 0.2 |> out 0
+tolarianAcademy :: UGen
+tolarianAcademy = combC 1.7 1.7 1.1 aux <> combC 2.4 2.4 1.1 aux |> add (dup aux) |> gain 0.2 |> out 0
     where
         aux = auxIn 156
 
 bs :: UGen
 bs = whiteNoise |> perc 0.001 1 1 (-64) |> crush 8 |> decimate 5000 |> out 1
 
-bb :: [UGen]
+bb :: UGen
 bb = sin (moxFreq 0 0.125) + (saw (moxFreq 0 0.125) |> gain 0.3) +> clip 20 +> tanhDist 5 |> perc 0.04 0.75 0.15 (-8) |> dup |> out 0
 
 terraNovaPattern :: Signal ()

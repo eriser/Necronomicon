@@ -130,7 +130,7 @@ instance Vector Vector4 where
 
     _swizzle2  get get' v = Vector2 (get v) (get' v)
     swizzle2_  set set' v = set' (_y v) . set (_x v)
-    _swizzle2_ mdf mdf' f = mdf' f . mdf f 
+    _swizzle2_ mdf mdf' f = mdf' f . mdf f
 
     _swizzle3  get get' get'' v = Vector3 (get v) (get' v) (get'' v)
     swizzle3_  set set' set'' v = set'' (_z v) . set' (_y v) . set (_x v)
@@ -145,7 +145,7 @@ instance Num Vector2 where
     (+)         (Vector2 x1 y1) (Vector2 x2 y2) = Vector2 (x1+x2) (y1+y2)
     (*)         (Vector2 x1 y1) (Vector2 x2 y2) = Vector2 (x1*x2) (y1*y2)
     (-)         (Vector2 x1 y1) (Vector2 x2 y2) = Vector2 (x1-x2) (y1-y2)
-    negate      (Vector2 x  y )                 = Vector2 (-x) (-y) 
+    negate      (Vector2 x  y )                 = Vector2 (-x) (-y)
     abs         (Vector2 x  y )                 = Vector2 (abs x) (abs y)
     signum      (Vector2 x  y )                 = Vector2 (signum x) (signum y)
     fromInteger i                               = Vector2 (fromInteger i) (fromInteger i)
@@ -354,11 +354,11 @@ down     = Vector3   0 (-1)  0
 forward :: Vector3
 forward  = Vector3   0   0   1
 
-left :: Vector3
-left     = Vector3 (-1)  0   0
+left3 :: Vector3
+left3     = Vector3 (-1)  0   0
 
-right :: Vector3
-right    = Vector3   1   0   0
+right3 :: Vector3
+right3    = Vector3   1   0   0
 
 up :: Vector3
 up       = Vector3   0   1   0

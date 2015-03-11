@@ -20,9 +20,9 @@ sections = switch (netsignal <| floor . scale 0 3 <~ randFS ticker) [section1, s
 
 stressSounds :: Signal ()
 stressSounds = play             ((> 0.5) <~ randFS ticker) "triOsc"    [randFS ticker ~> scale 20 3000, randFS ticker ~> scale 20 3000]
-           <> play             ((> 0.5) <~ randFS ticker) "triOsc32"  [randFS ticker ~> scale 20 3000, randFS ticker ~> scale 20 3000]
-           <> playSynthPattern ((> 0.5) <~ randFS ticker) "triOscEnv" [] (pmap (d2f bartok . (+12)) <| ploop [ [lich| [0 1] [4 3] [2 3] [2 3 4 5] |] ])
-           <> playBeatPattern  ((> 0.5) <~ randFS ticker) [] (ploop [ [lich| b [p b] p [p p p] |] ])
+            <> play             ((> 0.5) <~ randFS ticker) "triOsc32"  [randFS ticker ~> scale 20 3000, randFS ticker ~> scale 20 3000]
+            <> playSynthPattern ((> 0.5) <~ randFS ticker) "triOscEnv" [] (pmap (d2f bartok . (+12)) <| ploop [ [lich| [0 1] [4 3] [2 3] [2 3 4 5] |] ])
+            <> playBeatPattern  ((> 0.5) <~ randFS ticker) [] (ploop [ [lich| b [p b] p [p p p] |] ])
 
 section1 :: Signal ()
 section1 = scene [pure cam,oscSig]
@@ -125,26 +125,26 @@ sphereObject as1 as2 as3 t latitudes = SceneObject 0 (fromEuler' 0 (t * 0.5) (t 
         indices        = foldr (\i acc -> i + 1 : i + l : i + l + 1 : i + 1 : i + 0 : i + l : acc) [] [0,4..floor (latitudes * longitudes) - l]
         mesh           = DynamicMesh "aSphere" vertices colors uvs indices
 
-triOsc :: UGen -> UGen -> [UGen]
-triOsc f1 f2 = [sig1,sig2] + [sig3,sig3] |> gain 0.5 |> gain 0.1 |> out 0
+triOsc :: UGen -> UGen -> UGen
+triOsc f1 f2 = (sig1 <> sig2) + (sig3 <> sig3) |> gain 0.5 |> gain 0.1 |> out 0
     where
         sig1 = sinOsc (f1 + sig3 * 1000) * (sinOsc (f1 * 0.00025)         |> range 0.5 1) |> auxThrough 2
         sig2 = sinOsc (f2 + sig3 * 1000) * (sinOsc (f2 * 0.00025)         |> range 0.5 1) |> auxThrough 3
         sig3 = sinOsc (f1 - f2)          * (sinOsc ((f1 + f2 )* 0.000125) |> range 0.5 1) |> auxThrough 4
         -- verb = freeverb 0.25 0.5 0.5
 
-triOsc32 :: UGen -> UGen -> [UGen]
+triOsc32 :: UGen -> UGen -> UGen
 triOsc32 f1 f2 = feedback fSig |> gain 0.5 |> gain 0.1 |> out 0
     where
         -- verb   = freeverb 0.25 0.5 0.5
-        fSig i = [sig1,sig2] + [sig3,sig3]
+        fSig i = (sig1 <> sig2) + (sig3 <> sig3)
             where
                 sig1 = sinOsc (f1 + sig3 * 10)   * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> auxThrough 2
                 sig2 = sinOsc (f2 - sig3 * 10)   * (sinOsc (f1 * 0.00025) |> range 0.5 1) |> auxThrough 3
                 sig3 = sinOsc (f1 - f2 + i * 10) * (sinOsc (i * 0.00025)  |> range 0.5 1) |> auxThrough 4
 
-triOscEnv :: UGen -> [UGen]
-triOscEnv f1 = [sig1,sig2] + [sig3,sig3] |> gain 0.2 |> gain 0.1 |> out 0
+triOscEnv :: UGen -> UGen
+triOscEnv f1 = (sig1 <> sig2) + (sig3 <> sig3) |> gain 0.2 |> gain 0.1 |> out 0
     where
         sig1 = sinOsc (f1 * 1.0 + sig3 * 1000) |> e |> auxThrough 2
         sig2 = sinOsc (f1 * 0.5 - sig3 * 1000) |> e |> auxThrough 3

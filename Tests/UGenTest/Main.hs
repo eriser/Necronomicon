@@ -195,15 +195,13 @@ synthNames = [
     "acosHSynth",
     "atanHSynth"]
 
-triOscEnv :: UGen -> UGen -> [UGen]
-triOscEnv f1 _ = [sig1,sig2] + [sig3,sig3] |> out 0
+triOscEnv :: UGen -> UGen -> UGen
+triOscEnv f1 _ = (sig1 <> sig2) + (sig3 <> sig3) |> out 0
     where
         sig1 = sinOsc (f1 * 1.0 + sig3 * 1000) |> e |> auxThrough 2
         sig2 = sinOsc (f1 * 0.5 - sig3 * 1000) |> e |> auxThrough 3
         sig3 = sinOsc (f1 * 0.25)              |> e |> auxThrough 4
-        -- e i  = line 0.5 + i
         e    = perc 0.01 0.5 0.1 0
-        -- verb = freeverb 0.25 0.5 0.5
 
 sinSynth :: UGen -> UGen -> UGen
 sinSynth a _ = sin a
