@@ -207,7 +207,7 @@ testGUI = gui [chatBox,netBox,ubox]
                           <| vertexColored (RGBA 1 1 1 0.1)
 
 triOsc :: UGen -> UGen -> UGen
-triOsc f1 f2 = (sig1 <> sig2) + (sig3 <> sig3) |> verb |> gain 0.1 |> out 0
+triOsc f1 f2 = [sig1, sig2] + [sig3, sig3] |> verb |> gain 0.1 |> out 0
     where
         sig1 = sinOsc (f1 + sig3 * 1000) * (sinOsc (f1 * 0.00025)         |> range 0.5 1) |> auxThrough 2
         sig2 = sinOsc (f2 + sig3 * 1000) * (sinOsc (f2 * 0.00025)         |> range 0.5 1) |> auxThrough 3
@@ -221,7 +221,7 @@ triOsc32 mx my = feedback fSig |> verb |> gain 0.0385 |> out 0
         f2     = lag 0.25 my
         verb   = freeverb 0.25 0.5 0.95
         d      = delayN 0.6 0.6
-        fSig i = (sig4 + sig6) <> (sig5 + sig6)
+        fSig i = [sig4 + sig6, sig5 + sig6]
             where
                 sig1 = sinOsc (f1 + sig3 * 26.162)   * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> auxThrough 2
                 sig2 = sinOsc (f2 - sig3 * 26.162)   * (sinOsc (f1 * 0.00025) |> range 0.5 1) |> auxThrough 3
@@ -231,7 +231,7 @@ triOsc32 mx my = feedback fSig |> verb |> gain 0.0385 |> out 0
                 sig6 = sinOsc (f1 * 0.25 - sig3 * 261.6255653006) * (sinOsc ( i * 0.00025)  |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 60 |> gain 0.5 +> d
 
 triOscEnv :: UGen -> UGen
-triOscEnv f1 = (sig1 <> sig2) + (sig3 <> sig3) |> out 0
+triOscEnv f1 = [sig1,sig2] + [sig3,sig3] |> out 0
     where
         sig1 = sinOsc (f1 * 1.0 + sig3 * 1000) |> e |> auxThrough 2
         sig2 = sinOsc (f1 * 0.5 - sig3 * 1000) |> e |> auxThrough 3
@@ -283,7 +283,7 @@ pSynth = sin 1110 |> gain (line 0.1) >>> gain 0.2 >>> out 1
         -- e2    = env2 [1,1,0.5,0.5] [0.01,0.35,0.4] (-4)
 
 caveTime :: UGen
-caveTime = (l * 0.875 + r * 0.125) <> (r * 0.875 + l * 0.125) |> out 0
+caveTime = [l * 0.875 + r * 0.125, r * 0.875 + l * 0.125] |> out 0
     where
         l     = auxIn 20 |> verb
         r     = auxIn 21 |> verb
@@ -345,7 +345,7 @@ metallic4 f = sig + sig2 + sig3 |> e |> visAux 3 2 |> softclip 1000 |> filt |> g
         -- e2   = env [1,1,0] [3,0.5] 0
 
 hyperMelody :: UGen -> UGen
-hyperMelody f = s <> s2 |> gain 0.04 |> e |> visAux (random 0 2 4.99) 20 |> out 0
+hyperMelody f = [s,s2] |> gain 0.04 |> e |> visAux (random 0 2 4.99) 20 |> out 0
     where
         e   = env [0,1,0.15, 0] [0.0001,0.1, 7] (-1.5)
         s    = sin <| add (sin 3 * 6) (f*2)
@@ -657,7 +657,7 @@ hyperMelodyPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyH]) "hype
                 |]
 
 pulseDemon :: UGen -> UGen
-pulseDemon f = s <> s2 |> filt |> softclip (dup <| random 31 100 200) |> gain 0.0225 |> e |> out 18
+pulseDemon f = [s, s2] |> filt |> softclip (random 31 100 200) |> gain 0.0225 |> e |> dup |> out 18
     where
         e    = env   [0,1,0]         [0.01, 0.6] (-1)
         e2   = env   [1.0,0.1,0.001] [0.6, 0.01] 0
@@ -666,7 +666,7 @@ pulseDemon f = s <> s2 |> filt |> softclip (dup <| random 31 100 200) |> gain 0.
         filt = lpf   (f * random 19 2 16 |> e2) 3
 
 demonCave :: UGen -> UGen -> UGen -> UGen
-demonCave f1 f2 g = (l * 0.875 + r * 0.125) <> (r * 0.875 + l * 0.125) |> gain g |> out 0
+demonCave f1 f2 g = [l * 0.875 + r * 0.125, r * 0.875 + l * 0.125] |> gain g |> out 0
     where
         l     = auxIn 18 |> filt1 +> d2 |> verb +> d
         r     = auxIn 19 |> filt2 +> d2 |> verb +> d
@@ -675,7 +675,6 @@ demonCave f1 f2 g = (l * 0.875 + r * 0.125) <> (r * 0.875 + l * 0.125) |> gain g
         verb  = freeverb 0.5 1.0 0.1
         d     = delayN 0.6 0.6
         d2    = delayN 0.4 0.4
-        -- d3    = delayN 0.8 0.8
 
 pulseDemonPattern :: Signal ()
 pulseDemonPattern = fx <> patt
@@ -716,31 +715,29 @@ pulseDemonPattern3 = playSynthPattern (toggle <| combo [alt,isDown keyB]) "pulse
                 |]
 
 halfVerb :: UGen
-halfVerb = (l * 0.9 + r * 0.1) <> (r * 0.9 + l * 0.1) |> out 0
+halfVerb = [l * 0.9 + r * 0.1, r * 0.9 + l * 0.1] |> out 0
     where
         l     = auxIn 22 |> verb |> auxThrough 2 |> auxThrough 3
         r     = auxIn 23 |> verb |> auxThrough 3 |> auxThrough 4
         verb  = freeverb 0.5 1.0 0.125
 
 hyperMelodyPrime :: UGen -> UGen
-hyperMelodyPrime f = s <> s2 |> softclip 20 |> filt |> e |> gain 0.25 |> fakePan 0.2 |> out 22
+hyperMelodyPrime f = [s, s2] |> softclip 20 |> filt |> e |> gain 0.25 |> fakePan 0.2 |> out 22
     where
-        e   = env [0,1,0] [0.01,0.75] (-3)
-        -- e2  = env [523.251130601,f,f] [0.05,3.95] (-3)
-        e2  = env [f,f,f * 0.125] [0.05,0.75] (-3)
-        s   = syncsaw (sin (3 * 6) + f * 2) <| auxIn 42
-        s2  = syncsaw (sin (6 * 9) + f)     <| auxIn 42
-        filt = lpf (e2 4 <> e2 4) 2
+        e    = env [0,1,0]         [0.01,0.75] (-3)
+        e2   = env [f,f,f * 0.125] [0.05,0.75] (-3)
+        s    = syncsaw (sin (3 * 6) + f * 2) <| auxIn 42
+        s2   = syncsaw (sin (6 * 9) + f)     <| auxIn 42
+        filt = lpf (e2 4) 2
 
 manaLeakPrime :: UGen -> UGen
-manaLeakPrime f = s <> s2 |> softclip 20 |> filt |> e |> gain 0.225 |> auxThrough 42 |> fakePan 0.8 |> out 22
+manaLeakPrime f = [s, s2] |> softclip 20 |> filt |> e |> gain 0.225 |> auxThrough 42 |> fakePan 0.8 |> out 22
     where
-        e   = env [0,1, 0] [0.01,0.75] (-3)
-        -- e2  = env [523.251130601,f,f] [0.05,4.95] (-3)
-        e2  = env [f,f,f * 0.125] [0.05,0.75] (-3)
-        s   = saw (sin (3 * 6) + f)
-        s2  = saw (sin (6 * 9) + f * 2)
-        filt = lpf (e2 5 <> e2 6) 2
+        e    = env [0,1, 0]        [0.01,0.75] (-3)
+        e2   = env [f,f,f * 0.125] [0.05,0.75] (-3)
+        s    = saw (sin (3 * 6) + f)
+        s2   = saw (sin (6 * 9) + f * 2)
+        filt = lpf (e2 [5, 6]) 2
 
 hyperMelodyPrimePattern :: Signal ()
 hyperMelodyPrimePattern = fx <> playSynthPattern (toggle <| combo [alt,isDown keyR]) "hyperMelodyPrime" [] (pmap ((*0.5) . d2f sigScale . (+1)) <| ploop [sec1])
@@ -770,7 +767,7 @@ manaLeakPrimePattern = playSynthPattern (toggle <| combo [alt,isDown keyT]) "man
                       _ _ _ _ _ _ _ _ |]
 
 subDestruction :: UGen -> UGen -> UGen
-subDestruction f1 f2 = l <> r |> gain 0.5 |> out 0
+subDestruction f1 f2 = [l, r] |> gain 0.5 |> out 0
     where
         l         = auxIn 24 |> df filt1
         r         = auxIn 25 |> df filt2
@@ -797,9 +794,6 @@ shakeSnare d = sig1 + sig2 |> e |> gain 0.9 |> fakePan 0.75 |> out 0
         -- p a u = [u * (1 - a), u * a]
         sig1  = whiteNoise |> bpf (12000 |> e2) 3 |> gain 0.05
         sig2  = whiteNoise |> bpf (9000 + 12000 * d |> e2) 4 |> gain 0.05
-        -- sig1  = lfpulse 41 0 |> lpf (100 |> e2) 4
-        -- sig2  = lfpulse 40 0 |> lpf (100 + 400 * d |> e2) 4
-        -- verb  = freeverb 0.5 1 1
         e     = perc 0.01 (d*4) 1 (-24)
         e2    = env2 [1,1,0.125] [0.01,d*4] (-24)
 
@@ -834,7 +828,7 @@ section2Drums = floorPattern2 <> shake2Pattern <> shake1Pattern <> omniPrimePatt
                 sec1 = [lich| [6 1] [_ 1] [_ 6] [_ 1] |]
 
 omniPrime :: UGen -> UGen
-omniPrime f = s <> s2 |> softclip 20 |> filt |> gain 0.75 |> e |> auxThrough 4 |> fakePan 0.2 |> out 0
+omniPrime f = [s, s2] |> softclip 20 |> filt |> gain 0.75 |> e |> auxThrough 4 |> fakePan 0.2 |> out 0
     where
         e   = env [0,1,0.1,0] [0.01,0.1,1.5] (-4)
         e2  = env [523.251130601,f * 1.5,f, f] [0.01,0.1,1.5] (-4)
@@ -852,7 +846,7 @@ omniPrimePattern = playSynthPattern (toggle <| combo [alt,isDown keyQ]) "omniPri
                 |]
 
 distortedBassPrime :: UGen -> UGen
-distortedBassPrime f = s <> s2 |> e |> softclip 400 |> filt |> softclip 50 |> filt2 |> gain 0.1 |> verb |> e |> out 0
+distortedBassPrime f = [s, s2] |> e |> softclip 400 |> filt |> softclip 50 |> filt2 |> gain 0.1 |> verb |> e |> out 0
     where
         e   = env [0,1,0] [0.1,6.75] (-4)
         -- e2  = env [523.251130601,f,f] [0.05,3.95] (-3)
@@ -888,10 +882,10 @@ distortedBassHits = playSynthPattern (toggle <| combo [alt,isDown keyE]) "distor
 ------------------------------------
 
 subControl :: UGen -> UGen
-subControl f = s <> s2 |> e |> softclip 20 |> filt |> gain 0.11 |> e |> softclip 20 |> e |> fakePan (random 3 0 1) |> out 24
+subControl f = [s, s2] |> e |> softclip 20 |> filt |> gain 0.11 |> e |> softclip 20 |> e |> fakePan (random 3 0 1) |> out 24
     where
-        e    = env   [0, 1, 0] [0.05, 1]      (-3)
-        e2   = env   [523.251130601,f,f*0.25] [0.05,1] (-3)
+        e    = env   [0, 1, 0]                [0.05, 1] (-3)
+        e2   = env   [523.251130601,f,f*0.25] [0.05,1]  (-3)
         s    = pulse (sin (3 * 6) + e2 1 * 2) (random 0 0.1 0.9)
         s2   = pulse (sin (6 * 9) + e2 1)     (random 1 0.1 0.9)
         filt = lpf   (random 4 2 12 |> e2 )   (random 6 2 8)
@@ -929,15 +923,15 @@ broodHive = pl |> gain 0.1 |> out 0
         -- freqs = map (fromRational . d2f slendro) [1,3]
         aux1 = auxIn 200
         aux2 = auxIn 201
-        aux  = aux1 <> aux2
+        aux  = [aux1, aux2]
 
 broodling :: UGen -> UGen
-broodling f = pulse (f <> f/2 <> f/4) (p 1) |> mix |> lpf (p (f * 4)) 1 |> add (sin (f / 4) |> gain 0.5) |> p |> gain 0.7 |> out 200
+broodling f = pulse [f, f/2, f/4] (p 1) |> mix |> lpf (p (f * 4)) 1 |> add (sin (f / 4) |> gain 0.5) |> p |> gain 0.7 |> out 200
     where
         p = perc 0.01 1.25 1 (-8)
 
 broodling2 :: UGen -> UGen
-broodling2 f = pulse (f <> f/2 <> f/4) (p 1) |> mix |> lpf (p (f * 4)) 1 |> add (sin (f / 2) |> gain 0.5) |> p |> gain 0.7 |> out 201
+broodling2 f = pulse [f, f/2, f/4] (p 1) |> mix |> lpf (p (f * 4)) 1 |> add (sin (f / 2) |> gain 0.5) |> p |> gain 0.7 |> out 201
     where
         p = perc 0.01 1.25 1 (-8)
 
@@ -1039,13 +1033,13 @@ gitaxianProbe :: UGen
 gitaxianProbe = auxIn 153 |> gain (saw (moxFreq 7 0) + saw (moxFreq 8 0)) +> combC 0.8 0.8 1.1 |> gain 0.2 |> out 0
 
 expeditionMap :: UGen
-expeditionMap = auxIn 154 |> decimate ((noise0 0.25 |> range 100 10000) <> (noise0 0.5 |> range 100 10000)) |> gain 0.2 |> out 0
+expeditionMap = auxIn 154 |> decimate [noise0 0.25 |> range 100 10000, noise0 0.5 |> range 100 10000] |> gain 0.2 |> out 0
 
 goblinCharBelcher :: UGen
 goblinCharBelcher = auxIn 155 |> crush 8 |> fakePan 0.75 |> gain 0.2 |> out 0
 
 tolarianAcademy :: UGen
-tolarianAcademy = combC 1.7 1.7 1.1 aux <> combC 2.4 2.4 1.1 aux |> add (dup aux) |> gain 0.2 |> out 0
+tolarianAcademy = [combC 1.7 1.7 1.1 aux, combC 2.4 2.4 1.1 aux] |> add (dup aux) |> gain 0.2 |> out 0
     where
         aux = auxIn 156
 

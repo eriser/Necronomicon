@@ -128,7 +128,7 @@ executable SigTest
     default-language: Haskell2010
     ghc-options:      -threaded -O3 -Wall -Werror
     hs-source-dirs:   Tests/SigTest
-    default-extensions: QuasiQuotes TemplateHaskell ParallelListComp
+    default-extensions: QuasiQuotes TemplateHaskell ParallelListComp OverloadedLists
     build-depends:
         base             == 4.*,
         Necronomicon,

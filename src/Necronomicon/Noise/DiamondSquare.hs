@@ -42,7 +42,7 @@ square !scale !w !h !fs !x !y ((r:rs),!t) = (rs,setSample x y w h v' t)
 
 -- | Same as the square function, however the pattern is rotated to diamond pattern instead.
 diamond :: Float -> Int -> Int -> Int -> Int -> Int -> ([Float],Seq Float) -> ([Float],Seq Float)
-diamond !scale !w !h !fs !x !y ([],!t) = diamond scale w h fs x y ([0],t) 
+diamond !scale !w !h !fs !x !y ([],!t) = diamond scale w h fs x y ([0],t)
 diamond !scale !w !h !fs !x !y ((r:rs),!t) = (rs,setSample x y w h v' t)
     where
         hs	= fs `div` 2

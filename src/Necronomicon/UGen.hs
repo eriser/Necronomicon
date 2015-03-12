@@ -1,4 +1,5 @@
 {-# LANGUAGE ForeignFunctionInterface #-}
+{-# LANGUAGE OverloadedLists #-}
 module Necronomicon.UGen where
 
 import GHC.Exts
@@ -328,7 +329,7 @@ TODO: Fix Feedack
 -}
 
 feedback :: (UGen -> UGen) -> UGen
-feedback = undefined
+feedback _ = 0
 
 --oscillators
 --dictionary passing style ugens?
@@ -755,6 +756,7 @@ initializeWireBufs numWires constants = print ("Wire Buffers: " ++ (show folded)
         foldWires (c@((CompiledConstant d ci):cs), ws) i
             | ci == i = (cs, (ws ++ [d]))
             | otherwise = (c, ws ++ zero)
+        foldWires (_,_) _ = ([], [])
         zero = [0]
 
 synthArgument :: Int -> UGenChannel
@@ -911,4 +913,10 @@ fakePan _ us                = us
 mix :: UGen -> UGen
 mix (UGen us) = sum $ map (\u -> UGen [u]) us
 
+instance IsList UGen where
+    type Item    UGen  = UGen
+    fromList     list  = UGen $ foldl (\acc (UGen u) -> acc ++ u) [] list
+    toList (UGen list) = [UGen list]
+
 --combinator function for creating multiple oscillators with frequency variations in stereo, etc
+--spread, spreadN, spreadL, spreadC
