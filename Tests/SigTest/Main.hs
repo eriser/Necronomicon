@@ -121,7 +121,6 @@ terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 0 (-6)) (fromEuler' 0 0 0) 
 
         toVertex (x,y,z) = Vector3 (x*tscale*3) (y*vscale) (z*tscale*3)
         toColor  (x,y,z) = RGBA    ((x * 1.75) / w * (y * 0.6 + 0.4)) (y * 0.75 + 0.25) (z / h * (y * 0.75 + 0.25)) 0.3
-        -- toUV     (x,y,_) = Vector2 (x / w) (y / h)
 
         addIndices w' i indicesList
             | mod i w' < (w'-1) = i + 1 : i + w' : i + w' + 1 : i + 1 : i : i + w' : indicesList
@@ -129,7 +128,6 @@ terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 0 (-6)) (fromEuler' 0 0 0) 
 
         vertices = map toVertex values
         colors   = map toColor  values
-        -- uvs      = map toUV     values
         uvs      = repeat 0
         indices  = foldr (addIndices <| floor w) [] [0..length values - floor (w + 2)]
 
@@ -350,49 +348,49 @@ hyperMelody :: UGen -> UGen
 -- hyperMelody f = [s,s2] |> gain 0.04 |> e |> visAux (random 0 2 4.99) 20 |> out 0
 hyperMelody f = [s,s2] |> gain 0.04 |> e |> visAux (random 0 2 4.99) 20 |> out 0
     where
-        e   = env [0,1,0.15, 0] [0.0001,0.1, 7] (-1.5)
-        s    = sin <| add (sin 3 * 6) (f*2)
-        s2   = sin <| add (sin 6 * 9) f
+        e  = env [0,1,0.15, 0] [0.0001,0.1, 7] (-1.5)
+        s  = sin <| add (sin 3 * 6) (f*2)
+        s2 = sin <| add (sin 6 * 9) f
 
 
 --add sins for visuals and modulation
 reverseSwell :: UGen -> UGen
-reverseSwell f =  sig1 + sig2 + sig3 |> e |> tanhDist (dup <| random 31 0.25 1) |> add (whiteNoise * 0.25) |> gain 0.03 |> filt |> e |> dup |> pan 0.75 |> out 20
+reverseSwell f =  sig1 + sig2 + sig3 |> e |> tanhDist (dup <| random 31 0.25 1) |> add (whiteNoise * 0.25) |> gain 0.03 |> filt |> e |> pan 0.75 |> out 20
     where
-        hf    = f * 0.5
-        e      = env  [0,1,0]         [4,4] (3)
-        e2     = env2 [0.125,1,0.125] [4,4] (3)
-        sig1   = saw (hf * random 0 0.995 1.005) * mod1
-        sig2   = saw (f  * random 2 0.995 1.005) * mod2
-        sig3   = saw (hf * random 4 0.495 0.505) * mod4 * 0.5
-        filt   = lpf (f  * random 6 3 11         * mod3 |> e2) 2
-        mod1   = saw (random 8 0.5 2.0)   |> range 0.01 1
-        mod2   = saw (random 9 0.5 2.0)   |> range 0.01 1
-        mod3   = saw (random 10 0.25 1.0) |> range 0.25 1
-        mod4   = saw (random 11 0.5 2.0)  |> range 0.01 1
+        hf   = f * 0.5
+        e    = env  [0,1,0]         [4,4] (3)
+        e2   = env2 [0.125,1,0.125] [4,4] (3)
+        sig1 = saw (hf * random 0 0.995 1.005) * mod1
+        sig2 = saw (f  * random 2 0.995 1.005) * mod2
+        sig3 = saw (hf * random 4 0.495 0.505) * mod4 * 0.5
+        filt = lpf (f  * random 6 3 11         * mod3 |> e2) 2
+        mod1 = saw (random 8 0.5 2.0)   |> range 0.01 1
+        mod2 = saw (random 9 0.5 2.0)   |> range 0.01 1
+        mod3 = saw (random 10 0.25 1.0) |> range 0.25 1
+        mod4 = saw (random 11 0.5 2.0)  |> range 0.01 1
 
 reverseSwell2 :: UGen -> UGen
-reverseSwell2 f = sig1 + sig2 + sig3 |> e |> tanhDist (random 32 0.25 1) |> add (whiteNoise * 0.25) |> gain 0.03 |> filt |> e |> dup |> pan 0.25 |> out 20
+reverseSwell2 f = sig1 + sig2 + sig3 |> e |> tanhDist (random 32 0.25 1) |> add (whiteNoise * 0.25) |> gain 0.03 |> filt |> e |> pan 0.25 |> out 20
     where
-        hf    = f * 0.5
-        e      = env  [0,1,0]         [4,4] (3)
-        e2     = env2 [0.125,1,0.125] [4,4] (3)
-        sig1   = saw (hf * random 0 0.995 1.005) * mod1
-        sig2   = saw (f  * random 2 0.995 1.005) * mod2
-        sig3   = saw (hf * random 4 0.495 0.505) * mod4 * 0.5
-        filt   = lpf (f  * random 6 3 11         * mod3 |> e2) 2
-        mod1   = saw (random 8 0.5 2.0)   |> range 0.01 1
-        mod2   = saw (random 9 0.5 2.0)   |> range 0.01 1
-        mod3   = saw (random 10 0.25 1.0) |> range 0.25 1
-        mod4   = saw (random 11 0.5 2.0)  |> range 0.01 1
+        hf   = f * 0.5
+        e    = env  [0,1,0]         [4,4] (3)
+        e2   = env2 [0.125,1,0.125] [4,4] (3)
+        sig1 = saw (hf * random 0 0.995 1.005) * mod1
+        sig2 = saw (f  * random 2 0.995 1.005) * mod2
+        sig3 = saw (hf * random 4 0.495 0.505) * mod4 * 0.5
+        filt = lpf (f  * random 6 3 11         * mod3 |> e2) 2
+        mod1 = saw (random 8 0.5 2.0)   |> range 0.01 1
+        mod2 = saw (random 9 0.5 2.0)   |> range 0.01 1
+        mod3 = saw (random 10 0.25 1.0) |> range 0.25 1
+        mod4 = saw (random 11 0.5 2.0)  |> range 0.01 1
 
 shake :: UGen -> UGen
 shake d = sig1 + sig2 |> e |> gain 0.4 |> pan 0.75 |> out 0
     where
-        sig1  = whiteNoise |> bpf (12000 |> e2)            3 |> gain 0.05
-        sig2  = whiteNoise |> bpf (9000 + 12000 * d |> e2) 4 |> gain 0.05
-        e     = perc 0.01 (d*6) 1 (-24)
-        e2    = env2 [1,1,0.125] [0.01,d*6] (-24)
+        sig1 = whiteNoise |> bpf (12000 |> e2)            3 |> gain 0.05
+        sig2 = whiteNoise |> bpf (9000 + 12000 * d |> e2) 4 |> gain 0.05
+        e    = perc 0.01 (d*6) 1 (-24)
+        e2   = env2 [1,1,0.125] [0.01,d*6] (-24)
 
 {-
 shake2 :: UGen -> [UGen]
@@ -1073,3 +1071,10 @@ terraNovaPattern = fxSynth "trinisphere"
         fxSynth :: String -> Signal ()
         fxSynth name = play (toggle <| combo [alt,isDown keyC]) name []
         timeVaultBeat = [lich| bb [_ bb] bs _ _ [_ bb] bs _ |]
+
+
+-- testOsc :: UGen -> UGen -> UGen
+-- testOsc f1 f2 = sinOsc (f1 * 1000) + [f1, f2]
+
+-- testPlay :: Signal ()
+-- testPlay = play (isDown keyI) testOsc mouseX mouseY

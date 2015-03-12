@@ -16,6 +16,7 @@ module Necronomicon.FRP.Signal (
     foldn,
     -- playPattern,
     play,
+    play',
     -- oneShot,
     render,
     renderGUI,
@@ -1705,3 +1706,38 @@ instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> [UGen]) where
     type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> [UGen]) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
     play playSig synth x y z w p q = playSynthN synth playSig [x,y,z,w,p,q]
 -}
+
+playSynthPattern' :: UGenType a => a -> Signal Bool -> [Signal Double] -> Signal ()
+playSynthPattern' = undefined
+
+class Play a where
+    type PlayRet a :: *
+    play' :: Signal Bool -> a -> PlayRet a
+
+instance Play UGen where
+    type PlayRet UGen = Signal ()
+    play' playSig synth = playSynthPattern' synth playSig []
+
+instance Play (UGen -> UGen) where
+    type PlayRet (UGen -> UGen) = Signal Double -> Signal ()
+    play' playSig synth x = playSynthPattern' synth playSig [x]
+
+instance Play (UGen -> UGen -> UGen) where
+    type PlayRet (UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal ()
+    play' playSig synth x y = playSynthPattern' synth playSig [x,y]
+
+instance Play (UGen -> UGen -> UGen -> UGen) where
+    type PlayRet (UGen -> UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal Double -> Signal ()
+    play' playSig synth x y z = playSynthPattern' synth playSig [x,y,z]
+
+instance Play (UGen -> UGen -> UGen -> UGen -> UGen) where
+    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    play' playSig synth x y z w = playSynthPattern' synth playSig [x,y,z,w]
+
+instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
+    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    play' playSig synth x y z w p = playSynthPattern' synth playSig [x,y,z,w,p]
+
+instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
+    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    play' playSig synth x y z w p q = playSynthPattern' synth playSig [x,y,z,w,p,q]

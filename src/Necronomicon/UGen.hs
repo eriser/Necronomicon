@@ -390,7 +390,7 @@ foreign import ccall "&rand_range_constructor"   randRangeConstructor   :: CUGen
 foreign import ccall "&rand_range_deconstructor" randRangeDeconstructor :: CUGenFunc
 foreign import ccall "&rand_calc" randCalc :: CUGenFunc
 random :: Double -> Double -> Double -> UGen
-random seed rmin rmax = multiChannelExpandUGen (Random seed rmin rmax) randCalc randRangeConstructor randRangeDeconstructor []
+random seed rmin rmax = multiChannelExpandUGen (Random seed rmin rmax) randCalc randRangeConstructor randRangeDeconstructor [UGen [UGenNum seed]]
 
 foreign import ccall "&lfnoiseN_calc" lfnoiseNCalc :: CUGenFunc
 noise0 :: UGen -> UGen
