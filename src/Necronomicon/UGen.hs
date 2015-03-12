@@ -905,10 +905,10 @@ mapUGen f (UGen us) = foldl (\acc u -> acc <> f (UGen [u])) mempty us
 -- myCoolSynth' :: UGen' -> UGen' -> UGen'
 -- myCoolSynth' f1 f2 = sinOsc (f1 <> f2) + sinOsc (f1 <> 0)
 
-fakePan :: UGen -> UGen -> UGen
-fakePan a (UGen (u1:u2:us)) = (UGen [u1] * a + UGen [u2] * (1 - a)) <> (UGen [u1] * (1 - a) + UGen [u2] * a) <> UGen us
-fakePan a (UGen (u:us))     = (UGen [u] * (1 - a)) <> (UGen [u] * a) <> UGen us
-fakePan _ us                = us
+pan :: UGen -> UGen -> UGen
+pan a (UGen (u1:u2:us)) = (UGen [u1] * a + UGen [u2] * (1 - a)) <> (UGen [u1] * (1 - a) + UGen [u2] * a) <> UGen us
+pan a (UGen (u:us))     = (UGen [u] * (1 - a)) <> (UGen [u] * a) <> UGen us
+pan _ us                = us
 
 mix :: UGen -> UGen
 mix (UGen us) = sum $ map (\u -> UGen [u]) us

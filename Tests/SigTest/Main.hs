@@ -290,7 +290,9 @@ caveTime = [l * 0.875 + r * 0.125, r * 0.875 + l * 0.125] |> out 0
         verb  = freeverb 0.5 1.0 0.1
 
 visAux :: UGen -> UGen -> UGen -> UGen
-visAux bus a u = applyLeft (auxThrough bus . (* a)) u * 0 + u
+--TODO: Fix visAux
+-- visAux bus a u = (applyLeft (auxThrough bus . (* a)) u * 0) + u
+visAux _ _ u = u
 
 metallic3 :: UGen -> UGen
 metallic3 f = sig + sig2 + sig3 |> e |> visAux 2 2 |> softclip 1000 |> filt |> gain 0.045 |> verb |> e |> gain 1 |> dup |> out 0
@@ -345,6 +347,7 @@ metallic4 f = sig + sig2 + sig3 |> e |> visAux 3 2 |> softclip 1000 |> filt |> g
         -- e2   = env [1,1,0] [3,0.5] 0
 
 hyperMelody :: UGen -> UGen
+-- hyperMelody f = [s,s2] |> gain 0.04 |> e |> visAux (random 0 2 4.99) 20 |> out 0
 hyperMelody f = [s,s2] |> gain 0.04 |> e |> visAux (random 0 2 4.99) 20 |> out 0
     where
         e   = env [0,1,0.15, 0] [0.0001,0.1, 7] (-1.5)
@@ -354,7 +357,7 @@ hyperMelody f = [s,s2] |> gain 0.04 |> e |> visAux (random 0 2 4.99) 20 |> out 0
 
 --add sins for visuals and modulation
 reverseSwell :: UGen -> UGen
-reverseSwell f =  sig1 + sig2 + sig3 |> e |> tanhDist (dup <| random 31 0.25 1) |> add (whiteNoise * 0.25) |> gain 0.03 |> filt |> e |> dup |> fakePan 0.75 |> out 20
+reverseSwell f =  sig1 + sig2 + sig3 |> e |> tanhDist (dup <| random 31 0.25 1) |> add (whiteNoise * 0.25) |> gain 0.03 |> filt |> e |> dup |> pan 0.75 |> out 20
     where
         hf    = f * 0.5
         e      = env  [0,1,0]         [4,4] (3)
@@ -369,7 +372,7 @@ reverseSwell f =  sig1 + sig2 + sig3 |> e |> tanhDist (dup <| random 31 0.25 1) 
         mod4   = saw (random 11 0.5 2.0)  |> range 0.01 1
 
 reverseSwell2 :: UGen -> UGen
-reverseSwell2 f = sig1 + sig2 + sig3 |> e |> tanhDist (random 32 0.25 1) |> add (whiteNoise * 0.25) |> gain 0.03 |> filt |> e |> dup |> fakePan 0.25 |> out 20
+reverseSwell2 f = sig1 + sig2 + sig3 |> e |> tanhDist (random 32 0.25 1) |> add (whiteNoise * 0.25) |> gain 0.03 |> filt |> e |> dup |> pan 0.25 |> out 20
     where
         hf    = f * 0.5
         e      = env  [0,1,0]         [4,4] (3)
@@ -384,7 +387,7 @@ reverseSwell2 f = sig1 + sig2 + sig3 |> e |> tanhDist (random 32 0.25 1) |> add 
         mod4   = saw (random 11 0.5 2.0)  |> range 0.01 1
 
 shake :: UGen -> UGen
-shake d = sig1 + sig2 |> e |> gain 0.4 |> fakePan 0.75 |> out 0
+shake d = sig1 + sig2 |> e |> gain 0.4 |> pan 0.75 |> out 0
     where
         sig1  = whiteNoise |> bpf (12000 |> e2)            3 |> gain 0.05
         sig2  = whiteNoise |> bpf (9000 + 12000 * d |> e2) 4 |> gain 0.05
@@ -413,12 +416,11 @@ shake2 d = sig0 + sig1 + sig2 |> tanhDist 1 |> e |> gain 0.45 |> p 0.35 |> out 0
 -- shake2 d = pulse ((/16). fromRational $ d2f slendro 1) 0.5 |> bpf (fromRational $ d2f slendro 1) 10 |> perc 0.01 d 0.05 (-3) |> out 0
 
 floorPerc :: UGen -> UGen
-floorPerc d = sig1 + sig2 |> e |> fakePan 0.35 |> gain 0.3 |> out 0
+floorPerc d = sig1 + sig2 |> e |> pan 0.35 |> gain 0.3 |> out 0
     where
         -- p a u = [u * (1 - a), u * a]
         sig1  = sin 40
         sig2  = sin 80 * 0.25
-        -- e     = perc 0.04 d 1 (-9)
         e     = env [0,1,0.01,0] [0.05, d,0.1] (-9)
 
 sigScale :: Scale
@@ -722,7 +724,7 @@ halfVerb = [l * 0.9 + r * 0.1, r * 0.9 + l * 0.1] |> out 0
         verb  = freeverb 0.5 1.0 0.125
 
 hyperMelodyPrime :: UGen -> UGen
-hyperMelodyPrime f = [s, s2] |> softclip 20 |> filt |> e |> gain 0.25 |> fakePan 0.2 |> out 22
+hyperMelodyPrime f = [s, s2] |> softclip 20 |> filt |> e |> gain 0.25 |> pan 0.2 |> out 22
     where
         e    = env [0,1,0]         [0.01,0.75] (-3)
         e2   = env [f,f,f * 0.125] [0.05,0.75] (-3)
@@ -731,12 +733,12 @@ hyperMelodyPrime f = [s, s2] |> softclip 20 |> filt |> e |> gain 0.25 |> fakePan
         filt = lpf (e2 4) 2
 
 manaLeakPrime :: UGen -> UGen
-manaLeakPrime f = [s, s2] |> softclip 20 |> filt |> e |> gain 0.225 |> auxThrough 42 |> fakePan 0.8 |> out 22
+manaLeakPrime f = [s, s2] |> softclip 20 |> filt |> e |> gain 0.225 |> auxThrough 42 |> pan 0.8 |> out 22
     where
         e    = env [0,1, 0]        [0.01,0.75] (-3)
         e2   = env [f,f,f * 0.125] [0.05,0.75] (-3)
-        s    = saw (sin (3 * 6) + f)
-        s2   = saw (sin (6 * 9) + f * 2)
+        s    = saw <| sin (3 * 6) + f
+        s2   = saw <| sin (6 * 9) + f * 2
         filt = lpf (e2 [5, 6]) 2
 
 hyperMelodyPrimePattern :: Signal ()
@@ -780,7 +782,7 @@ subDestruction f1 f2 = [l, r] |> gain 0.5 |> out 0
 ------------------------------------
 
 floorPerc2 :: UGen -> UGen
-floorPerc2 d = sig1 + sig2 |> e |> fakePan 0.35 |> gain 0.45 |> out 0
+floorPerc2 d = sig1 + sig2 |> e |> pan 0.35 |> gain 0.45 |> out 0
     where
         -- p a u = [u * (1 - a), u * a]
         sig1  = sin <| e2 90
@@ -789,7 +791,7 @@ floorPerc2 d = sig1 + sig2 |> e |> fakePan 0.35 |> gain 0.45 |> out 0
         e2    = env [1,0.9, 0] [0.01,d] (-3)
 
 shakeSnare :: UGen -> UGen
-shakeSnare d = sig1 + sig2 |> e |> gain 0.9 |> fakePan 0.75 |> out 0
+shakeSnare d = sig1 + sig2 |> e |> gain 0.9 |> pan 0.75 |> out 0
     where
         -- p a u = [u * (1 - a), u * a]
         sig1  = whiteNoise |> bpf (12000 |> e2) 3 |> gain 0.05
@@ -799,7 +801,7 @@ shakeSnare d = sig1 + sig2 |> e |> gain 0.9 |> fakePan 0.75 |> out 0
 
 
 shake2 :: UGen -> UGen
-shake2 d = sig1 |> e |> gain 0.6 |> fakePan 0.6 |> out 0
+shake2 d = sig1 |> e |> gain 0.6 |> pan 0.6 |> out 0
     where
         -- p a u = [u * (1 - a), u * a]
         sig1  = whiteNoise |> bpf (12000 |> e2) 9 |> gain 0.05
@@ -828,7 +830,7 @@ section2Drums = floorPattern2 <> shake2Pattern <> shake1Pattern <> omniPrimePatt
                 sec1 = [lich| [6 1] [_ 1] [_ 6] [_ 1] |]
 
 omniPrime :: UGen -> UGen
-omniPrime f = [s, s2] |> softclip 20 |> filt |> gain 0.75 |> e |> auxThrough 4 |> fakePan 0.2 |> out 0
+omniPrime f = [s, s2] |> softclip 20 |> filt |> gain 0.75 |> e |> auxThrough 4 |> pan 0.2 |> out 0
     where
         e   = env [0,1,0.1,0] [0.01,0.1,1.5] (-4)
         e2  = env [523.251130601,f * 1.5,f, f] [0.01,0.1,1.5] (-4)
@@ -882,7 +884,7 @@ distortedBassHits = playSynthPattern (toggle <| combo [alt,isDown keyE]) "distor
 ------------------------------------
 
 subControl :: UGen -> UGen
-subControl f = [s, s2] |> e |> softclip 20 |> filt |> gain 0.11 |> e |> softclip 20 |> e |> fakePan (random 3 0 1) |> out 24
+subControl f = [s, s2] |> e |> softclip 20 |> filt |> gain 0.11 |> e |> softclip 20 |> e |> pan (random 3 0 1) |> out 24
     where
         e    = env   [0, 1, 0]                [0.05, 1] (-3)
         e2   = env   [523.251130601,f,f*0.25] [0.05,1]  (-3)
@@ -1036,7 +1038,7 @@ expeditionMap :: UGen
 expeditionMap = auxIn 154 |> decimate [noise0 0.25 |> range 100 10000, noise0 0.5 |> range 100 10000] |> gain 0.2 |> out 0
 
 goblinCharBelcher :: UGen
-goblinCharBelcher = auxIn 155 |> crush 8 |> fakePan 0.75 |> gain 0.2 |> out 0
+goblinCharBelcher = auxIn 155 |> crush 8 |> pan 0.75 |> gain 0.2 |> out 0
 
 tolarianAcademy :: UGen
 tolarianAcademy = [combC 1.7 1.7 1.1 aux, combC 2.4 2.4 1.1 aux] |> add (dup aux) |> gain 0.2 |> out 0
