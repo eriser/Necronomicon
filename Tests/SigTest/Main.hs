@@ -66,7 +66,7 @@ synthDefs = synthDef "triOsc"           triOsc
 hyperTerrainSounds :: Signal ()
 hyperTerrainSounds = metallicPattern
                 --  <> play             (toggle <| isDown keyW) "triOsc"    [mouseX ~> scale 20 3000, mouseY ~> scale 20 3000]
-                 <> play             (toggle <| combo [alt,isDown keyA]) "triOsc32"  [mouseToSlendro <~ mouseX, mouseToSlendro <~ mouseY]
+                 <> play             (toggle <| combo [alt,isDown keyA]) triOsc32  (mouseToSlendro <~ mouseX) (mouseToSlendro <~ mouseY)
                 --  <> playBeatPattern  (toggle <| isDown keyE) [] (ploop [ [lich| [p p p] [p b] p b |] ])
 
 mouseToSlendro :: Double -> Double
@@ -425,7 +425,7 @@ sigScale :: Scale
 sigScale = slendro
 
 metallicPattern :: Signal ()
-metallicPattern = play (toggle <| combo [alt,isDown keyD]) "caveTime" []
+metallicPattern = play (toggle <| combo [alt,isDown keyD]) caveTime
                <> metallicPattern3
                <> metallicPattern3_2
                <> shakePattern
@@ -679,7 +679,7 @@ demonCave f1 f2 g = [l * 0.875 + r * 0.125, r * 0.875 + l * 0.125] |> gain g |> 
 pulseDemonPattern :: Signal ()
 pulseDemonPattern = fx <> patt
     where
-        fx   = play (toggle <| combo [alt,isDown keyG]) "demonCave" [scale 250 8000 <~ mouseX,scale 250 8000 <~ mouseY,scale 1 1.5 <~ mouseX]
+        fx   = play (toggle <| combo [alt,isDown keyG]) demonCave (scale 250 8000 <~ mouseX) (scale 250 8000 <~ mouseY) (scale 1 1.5 <~ mouseX)
         patt = playSynthPattern (toggle <| combo [alt,isDown keyG]) "pulseDemon" [] (pmap ((*0.5) . d2f sigScale) <| ploop [sec1])
         sec1 = [lich| 0 1 _ 0 1 _ 0 1
                       _ 2 3 _ 2 3 _ 2
@@ -742,7 +742,7 @@ manaLeakPrime f = [s, s2] |> softclip 20 |> filt |> e |> gain 0.225 |> auxThroug
 hyperMelodyPrimePattern :: Signal ()
 hyperMelodyPrimePattern = fx <> playSynthPattern (toggle <| combo [alt,isDown keyR]) "hyperMelodyPrime" [] (pmap ((*0.5) . d2f sigScale . (+1)) <| ploop [sec1])
     where
-        fx   = play (toggle <| combo [alt,isDown keyR]) "halfVerb" []
+        fx   = play (toggle <| combo [alt,isDown keyR]) halfVerb
         sec1 = [lich| [_ 3] [4 3] [_ 3] 6 7 _ [_ 3] 4 _ _ _ _ _ _
                       [1 _ 2] [_ 3 _] [2 4 6] 5 _ _ _ _ _ _ _ _ _ _ _
                       [4 _ _ 3] [_ _ 2 _] [_ 1 _ _] 3 _ _ _ _ 2 _ _ _ _ _ _ 1 _ _
@@ -893,7 +893,7 @@ subControl f = [s, s2] |> e |> softclip 20 |> filt |> gain 0.11 |> e |> softclip
 subControlPattern :: Signal ()
 subControlPattern = fx <> playSynthPattern (toggle <| combo [alt,isDown keyZ]) "subControl" [] (pmap ((*0.25) . d2f egyptianRast) <| pseq (8 * 4 * 4) [sec1,sec2])
     where
-        fx   = play (toggle <| combo [alt,isDown keyZ]) "subDestruction" [scale 250 8000 <~ mouseX,scale 250 8000 <~ mouseY]
+        fx   = play (toggle <| combo [alt,isDown keyZ]) subDestruction (scale 250 8000 <~ mouseX) (scale 250 8000 <~ mouseY)
         sec1 = [lich| [0 0 0 0] [0 0 0 0] [0 0 0 0] [0 0 0 0] [0 0 0 0]
                       [1 1 1 1] [1 1 1 1] [1 1 1 1] [1 1 1 1] [1 1 1 1] |]
         sec2 = [lich| [3 3 3 3] [3 3 3 3] [3 3 3 3] [3 3 3 3] [3 3 3 3]
@@ -944,7 +944,7 @@ broodlingPattern = fx
                    <> playSynthPattern (toggle <| combo [alt,isDown keyC]) "broodling2" [] (pmap ((*2) . d2f slendro) <| ploop [freqs2])
                    <> terraNovaPattern
     where
-        fx     = play (toggle <| combo [alt,isDown keyC]) "broodHive" []
+        fx     = play (toggle <| combo [alt,isDown keyC]) broodHive
         freqs  = [lich| 6 _ 6    6 _ 6     _ 6 6 _
                         1 _ 1    1 _ 1     _ 1 1 _
                         2 _ 2    2 _ 2     _ 2 2 _
@@ -1050,13 +1050,13 @@ bb :: UGen
 bb = sin (moxFreq 0 0.125) + (saw (moxFreq 0 0.125) |> gain 0.3) +> clip 20 +> tanhDist 5 |> perc 0.04 0.75 0.15 (-8) |> dup |> out 0
 
 terraNovaPattern :: Signal ()
-terraNovaPattern = fxSynth "trinisphere"
-                <> fxSynth "trinisphere'"
-                <> fxSynth "trinisphere''"
-                <> fxSynth "gitaxianProbe"
-                <> fxSynth "expeditionMap"
-                <> fxSynth "goblinCharBelcher"
-                <> fxSynth "tolarianAcademy"
+terraNovaPattern = fxSynth trinisphere
+                <> fxSynth trinisphere'
+                <> fxSynth trinisphere''
+                <> fxSynth gitaxianProbe
+                <> fxSynth expeditionMap
+                <> fxSynth goblinCharBelcher
+                <> fxSynth tolarianAcademy
                 <> (playBeatPattern (toggle <| combo [alt,isDown keyC]) [] <| ploop [PVal (ploop moxes, 0.25)])
                 <> (playBeatPattern (toggle <| combo [alt,isDown keyC]) [] <| ploop [timeVaultBeat])
     where
@@ -1068,8 +1068,7 @@ terraNovaPattern = fxSynth "trinisphere"
             "moxEmerald", "moxEmerald'", "moxEmerald''",
             "manaVault"
             ]
-        fxSynth :: String -> Signal ()
-        fxSynth name = play (toggle <| combo [alt,isDown keyC]) name []
+        fxSynth name = play (toggle <| combo [alt,isDown keyC]) name
         timeVaultBeat = [lich| bb [_ bb] bs _ _ [_ bb] bs _ |]
 
 
@@ -1078,3 +1077,7 @@ terraNovaPattern = fxSynth "trinisphere"
 
 -- testPlay :: Signal ()
 -- testPlay = play (isDown keyI) testOsc mouseX mouseY
+
+-- [lich| [2 1] [1 1] 1 _  [3 4] |]
+
+-- [ [2, 1], [r, 1], 1, r, [3, 4] ]

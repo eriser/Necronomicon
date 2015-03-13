@@ -1532,8 +1532,8 @@ synthDef name synth = Signal $ \state -> do
     print $ "Compiling synthDef: " ++ name
     return $ \_ -> return $ NoChange ()
 
-play :: Signal Bool -> String -> [Signal Double] -> Signal ()
-play = playSynthN
+play' :: Signal Bool -> String -> [Signal Double] -> Signal ()
+play' = playSynthN
 
 tempo :: Signal Rational -> Signal Rational
 tempo tempoSignal = Signal $ \state -> do
@@ -1707,37 +1707,61 @@ instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> [UGen]) where
     play playSig synth x y z w p q = playSynthN synth playSig [x,y,z,w,p,q]
 -}
 
-playSynthPattern' :: UGenType a => a -> Signal Bool -> [Signal Double] -> Signal ()
-playSynthPattern' = undefined
-
 class Play a where
     type PlayRet a :: *
-    play' :: Signal Bool -> a -> PlayRet a
+    play :: Signal Bool -> a -> PlayRet a
 
 instance Play UGen where
     type PlayRet UGen = Signal ()
-    play' playSig synth = playSynthPattern' synth playSig []
+    play playSig synth = playSynth' playSig synth []
 
 instance Play (UGen -> UGen) where
     type PlayRet (UGen -> UGen) = Signal Double -> Signal ()
-    play' playSig synth x = playSynthPattern' synth playSig [x]
+    play playSig synth x = playSynth' playSig synth [x]
 
 instance Play (UGen -> UGen -> UGen) where
     type PlayRet (UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal ()
-    play' playSig synth x y = playSynthPattern' synth playSig [x,y]
+    play playSig synth x y = playSynth' playSig synth [x,y]
 
 instance Play (UGen -> UGen -> UGen -> UGen) where
     type PlayRet (UGen -> UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal Double -> Signal ()
-    play' playSig synth x y z = playSynthPattern' synth playSig [x,y,z]
+    play playSig synth x y z = playSynth' playSig synth [x,y,z]
 
 instance Play (UGen -> UGen -> UGen -> UGen -> UGen) where
     type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
-    play' playSig synth x y z w = playSynthPattern' synth playSig [x,y,z,w]
+    play playSig synth x y z w = playSynth' playSig synth [x,y,z,w]
 
 instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
     type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
-    play' playSig synth x y z w p = playSynthPattern' synth playSig [x,y,z,w,p]
+    play playSig synth x y z w p = playSynth' playSig synth [x,y,z,w,p]
 
 instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
     type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
-    play' playSig synth x y z w p q = playSynthPattern' synth playSig [x,y,z,w,p,q]
+    play playSig synth x y z w p q = playSynth' playSig synth [x,y,z,w,p,q]
+
+playSynth' :: UGenType a => Signal Bool -> a -> [Signal Double] -> Signal ()
+playSynth' playSig u argSigs = Signal $ \state -> do
+
+    pCont     <- unSignal (netsignal playSig) state
+    aConts    <- mapM (\a -> unSignal (netsignal a) state) argSigs
+    synthRef  <- newIORef Nothing
+    synthName <- getNextID state ~> \uid -> "~p" ++ show uid
+    _         <- runNecroState (compileSynthDef synthName u) (necroVars state)
+    print $ "Compiling synthDef: " ++ synthName
+
+    return $ processSignal pCont aConts synthRef synthName (necroVars state)
+    where
+        processSignal pCont aConts synthRef synthName sNecroVars update = pCont update >>= \p -> case p of
+            Change   p'  -> mapM (\f -> unEvent <~ f update) aConts >>= \args -> runNecroState (playStopSynth args p' synthRef synthName) sNecroVars >>= \(e,_) -> return e
+            NoChange _   -> readIORef synthRef >>= \s -> case s of
+                Nothing  -> return $ NoChange ()
+                Just  s' -> foldM (\i f -> updateArg i f s' sNecroVars update >> return (i+1)) 0 aConts >> return (NoChange ())
+
+        updateArg index aCont synth sNecroVars update = aCont update >>= \a -> case a of
+            NoChange _ -> return ()
+            Change   v -> runNecroState (setSynthArg synth index (toRational v)) sNecroVars >> return ()
+
+        playStopSynth args shouldPlay synthRef synthName = liftIO (readIORef synthRef) >>= \ms -> case (ms,shouldPlay) of
+            (Nothing   ,True )  -> playSynth synthName (map toRational args) >>= \s -> liftIO (writeIORef synthRef $ Just s) >> return (Change ())
+            (Just synth,False)  -> stopSynth synth                           >>        liftIO (writeIORef synthRef  Nothing) >> return (Change ())
+            _                   -> return $ NoChange ()

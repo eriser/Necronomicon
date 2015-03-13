@@ -11,12 +11,12 @@ main = runSignal
 ugenTests1 :: [Signal Int -> Signal ()]
 ugenTests1 = map test <| zip synthNames [0..]
     where
-        test (synthName,i) s = play ((== i) <~ s) synthName [x,y]
+        test (synthName,i) s = play' ((== i) <~ s) synthName [x,y]
 
 ugenTests2 :: [Signal Int -> Signal ()]
 ugenTests2 = map test <| zip synthNames [length synthNames..]
     where
-        test (synthName,i) s = play (shouldPlay i <~ s ~~ randFS ticker) synthName [x,y]
+        test (synthName,i) s = play' (shouldPlay i <~ s ~~ randFS ticker) synthName [x,y]
         shouldPlay     i a b = a == i && b > 0.5
 
 ugenTests3 :: [Signal Int -> Signal ()]

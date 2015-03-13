@@ -127,7 +127,7 @@ incrementArgWithChannels incrementedArgIndex (UGen ugens) = UGen $ map (incremen
                 increment (UGenNum num) = UGenNum $ num + channelOffset
                 increment ugenFunc = if channelOffset == 0
                                          then ugenFunc
-                                         else UGenFunc Add addCalc nullConstructor nullDeconstructor [ugenFunc, (UGenNum channelOffset)]
+                                         else UGenFunc Add addCalc nullConstructor nullDeconstructor [ugenFunc, UGenNum channelOffset]
 -- toUGenList us = us
 
 -- used during compiling to correctly handle synth argument compilation
