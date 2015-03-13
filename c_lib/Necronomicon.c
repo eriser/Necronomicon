@@ -1669,23 +1669,33 @@ void shutdown_necronomicon()
 	})*/
 
 #define CUBIC_INTERP(y0, y1, y2, y3, x)                 \
-({                                                     \
+({                                                      \
 	double c0 = y1;                                     \
 	double c1 = 0.5f * (y2 - y0);                       \
 	double c2 = y0 - 2.5f * y1 + 2.f * y2 - 0.5f * y3;  \
 	double c3 = 0.5f * (y3 - y0) + 1.5f * (y1 - y2);    \
-	((c3 * x + c2) * x + c1) * x + c0;                 \
-})                                                     \
+	((c3 * x + c2) * x + c1) * x + c0;					\
+})														\
+
+#define BIN_OP_CALC(OP, CONTROL_ARGS, AUDIO_ARGS) \
+double* in0 = UGEN_INPUT_BUFFER(u, 0);            \
+double* in1 = UGEN_INPUT_BUFFER(u, 1);            \
+double* out = UGEN_OUTPUT_BUFFER(u, 0);           \
+double a,b;                                       \
+CONTROL_ARGS                                      \
+AUDIO_LOOP(                                       \
+	AUDIO_ARGS                                    \
+	UGEN_OUT(out, a OP b);                        \
+);                                                \
 
 void add_calc(ugen u)
 {
-	double* in0 = UGEN_INPUT_BUFFER(u, 0);
-	double* in1 = UGEN_INPUT_BUFFER(u, 1);
-	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-
-	AUDIO_LOOP(
-		UGEN_OUT(out, UGEN_IN(in0) + UGEN_IN(in1));
-	);
+	BIN_OP_CALC(
+		+,
+		/*no control args*/,
+		a = UGEN_IN(in0);
+		b = UGEN_IN(in1);
+    );
 }
 
 void minus_calc(ugen u)
@@ -2281,34 +2291,50 @@ void sin_deconstructor(ugen* u)
 	free(u->data);
 }
 
+#define SIN_CALC(CONTROL_ARGS, AUDIO_ARGS)       \
+double* in0 = UGEN_INPUT_BUFFER(u, 0);           \
+double* out = UGEN_OUTPUT_BUFFER(u, 0);			 \
+												 \
+double phase = *((double*) u.data);				 \
+double freq;									 \
+unsigned char index1;							 \
+unsigned char index2;							 \
+double amp1;									 \
+double amp2;									 \
+double delta;									 \
+double y;										 \
+												 \
+CONTROL_ARGS									 \
+												 \
+AUDIO_LOOP(										 \
+	AUDIO_ARGS									 \
+	index1 = phase;								 \
+	index2 = index1 + 1;						 \
+	amp1 = sine_table[index1];					 \
+	amp2 = sine_table[index2];					 \
+	delta = phase - ((long) phase);				 \
+	y = amp1 + delta * (amp2 - amp1);			 \
+												 \
+	UGEN_OUT(out, y);                            \
+	phase += TABLE_MUL_RECIP_SAMPLE_RATE * freq; \
+);                                               \
+                                                 \
+*((double*) u.data) = phase;                     \
+
 void sin_calc(ugen u)
 {
-	double* in0 = UGEN_INPUT_BUFFER(u, 0);
-	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-
-	double phase = *((double*) u.data);
-	double freq;
-	unsigned char index1;
-	unsigned char index2;
-	double amp1;
-	double amp2;
-	double delta;
-	double y;
-
-	AUDIO_LOOP(
-		freq = UGEN_IN(in0);
-		index1 = phase;
-		index2 = index1 + 1;
-		amp1 = sine_table[index1];
-		amp2 = sine_table[index2];
-		delta = phase - ((long) phase);
-		y = amp1 + delta * (amp2 - amp1);
-
-		UGEN_OUT(out, y);
-		phase += TABLE_MUL_RECIP_SAMPLE_RATE * freq;
+	SIN_CALC(
+		/*no control args*/, // Control Args
+		freq = UGEN_IN(in0); // Audio Args
 	);
+}
 
-	*((double*) u.data) = phase;
+void sin_k_calc(ugen u)
+{
+	SIN_CALC(
+		freq = in0[0];,    // Control Args
+		/*no audio args*/ // Audio Args
+	);
 }
 
 void local_out_calc(ugen u)
