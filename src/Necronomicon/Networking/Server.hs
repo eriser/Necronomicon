@@ -31,7 +31,7 @@ data User = User {
     }
 
 instance Show User where
-    show (User s a _ n i t) = "(User " ++ show s ++ " " ++ show a ++ " (TMVar ()) " ++ show n ++ " " ++ show i ++ " " ++ show t ++ ")" 
+    show (User s a _ n i t) = "(User " ++ show s ++ " " ++ show a ++ " (TMVar ()) " ++ show n ++ " " ++ show i ++ " " ++ show t ++ ")"
 
 data Server = Server {
     serverUsers           :: TVar  (Map.Map SockAddr User),

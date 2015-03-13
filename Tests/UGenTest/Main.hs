@@ -11,12 +11,12 @@ main = runSignal
 ugenTests1 :: [Signal Int -> Signal ()]
 ugenTests1 = map test <| zip synthNames [0..]
     where
-        test (synthName,i) s = play ((== i) <~ s) synthName [x,y]
+        test (synthName,i) s = play' ((== i) <~ s) synthName [x,y]
 
 ugenTests2 :: [Signal Int -> Signal ()]
 ugenTests2 = map test <| zip synthNames [length synthNames..]
     where
-        test (synthName,i) s = play (shouldPlay i <~ s ~~ randFS ticker) synthName [x,y]
+        test (synthName,i) s = play' (shouldPlay i <~ s ~~ randFS ticker) synthName [x,y]
         shouldPlay     i a b = a == i && b > 0.5
 
 ugenTests3 :: [Signal Int -> Signal ()]
@@ -195,15 +195,13 @@ synthNames = [
     "acosHSynth",
     "atanHSynth"]
 
-triOscEnv :: UGen -> UGen -> [UGen]
-triOscEnv f1 _ = [sig1,sig2] + [sig3,sig3] |> out 0
+triOscEnv :: UGen -> UGen -> UGen
+triOscEnv f1 _ = (sig1 <> sig2) + (sig3 <> sig3) |> out 0
     where
         sig1 = sinOsc (f1 * 1.0 + sig3 * 1000) |> e |> auxThrough 2
         sig2 = sinOsc (f1 * 0.5 - sig3 * 1000) |> e |> auxThrough 3
         sig3 = sinOsc (f1 * 0.25)              |> e |> auxThrough 4
-        -- e i  = line 0.5 + i
         e    = perc 0.01 0.5 0.1 0
-        -- verb = freeverb 0.25 0.5 0.5
 
 sinSynth :: UGen -> UGen -> UGen
 sinSynth a _ = sin a

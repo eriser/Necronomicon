@@ -9,11 +9,11 @@ import qualified Data.ByteString.Char8 as C (unpack,pack)
 import qualified Data.ByteString.Lazy  as B  (null)
 import Control.Exception
 import qualified Data.IntMap   as IntMap
-import Sound.OSC.Core
 import Necronomicon.Networking.Server (serverPort)
 import Necronomicon.Networking.Message
 import Necronomicon.FRP.Event
 import Data.Binary (encode,decode)
+import Sound.OSC.Core
 
 --fix lazy chat and chat in general
 --Create reconnection scheme in case of disconnection
