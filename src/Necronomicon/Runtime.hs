@@ -500,13 +500,15 @@ handleScheduledPatterns nextTime = getPatternQueue >>= \(pqueue, pdict) -> handl
                         else return $ floor ((fromIntegral (t - currentTime) :: Rational) * 0.1) -- return wait time as a percentage of the distance to the scheduled time
                    else getTempo >>= \currentTempo -> -- The top of the queue is ready to be played
                         let tempoRatio = timeTempo / currentTempo
-                            handleNothing = handlePattern q' m nextT changed -- The pattern was stopped or the pattern collapsed to PNothing, so we keep the popped queue and don't play the pattern
+                            -- The pattern was stopped or the pattern collapsed to PNothing, so we keep the popped queue and don't play the pattern
+                            handleNothing = handlePattern q' m nextT changed
                             schedulePattern maybeDur = case maybeDur of -- Schedule the pattern to be played again
-                                   Just dur -> handlePattern (PQ.insert q' (ScheduledPdef n t (t + scaledDur) (b + dur) (i + 1))) m waitTime changed
-                                       where
-                                           scaledDur = floor $ dur * tempoRatio * microsecondsPerSecond -- Convert from beats to microseconds
-                                           waitTime = (floor (((fromIntegral scaledDur) :: Rational) * 0.1)) :: JackTime -- return wait time as a percentage of the duration of this beat
-                                   Nothing -> handleNothing -- After player the pattern returns Nothing for the duration, which means it is done and ready to be removed
+                                    Just dur -> handlePattern (PQ.insert q' (ScheduledPdef n t (t + scaledDur) (b + dur) (i + 1))) m waitTime changed
+                                        where
+                                            scaledDur = floor $ dur * tempoRatio * microsecondsPerSecond -- Convert from beats to microseconds
+                                            -- return wait time as a percentage of the duration of this beat
+                                            waitTime = (floor (((fromIntegral scaledDur) :: Rational) * 0.1)) :: JackTime
+                                    Nothing -> handleNothing -- After player the pattern returns Nothing for the duration, which means it is done and ready to be removed
                         in case M.lookup n m of
                            Nothing -> handleNothing -- When we check the name/pdef map we find nothing, which means it was stopped
                            Just (PDefNoArgs _ p) -> case collapse p b of

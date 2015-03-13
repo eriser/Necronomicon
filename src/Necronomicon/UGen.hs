@@ -120,7 +120,7 @@ class UGenType a where
     consume :: a -> Int -> Compiled ([UGen], Int) -- used during compiling to correctly handle synth argument compilation
     prFeedback :: a -> Int -> ([UGen], Int)
     uappend :: [a] -> [UGen] -> [a]
-
+    ugenLength :: a -> Int
 
 instance (UGenType b) => UGenType (UGen -> b)  where
     multiChannelExpandUGen _ _ _ _ _ = undefined -- Should never be reached
@@ -129,6 +129,7 @@ instance (UGenType b) => UGenType (UGen -> b)  where
     consume f i = compileSynthArg i >>= \arg -> consume (f arg) (i + 1)
     prFeedback f i = prFeedback (f $ localIn i) (i + 1)
     uappend us _ = us
+    ugenLength _ = 1
 
 instance UGenType UGen where
     multiChannelExpandUGen name calc constructor deconstructor args = UGenFunc name calc constructor deconstructor args
@@ -137,6 +138,7 @@ instance UGenType UGen where
     consume u i = return ([u], i)
     prFeedback u i = ([u], i)
     uappend us us' = us ++ us'
+    ugenLength _ = 1
 
 instance UGenType [UGen] where
     multiChannelExpandUGen name calc constructor deconstructor args = expand 0
@@ -161,6 +163,7 @@ instance UGenType [UGen] where
     consume us i = return (us, i)
     prFeedback us i = (us, i)
     uappend us us' = us ++ map (: []) us'
+    ugenLength us = length us
 
 ----------------------------------------------------
 -- UGen Bindings
@@ -321,11 +324,13 @@ env2 values durations curve x = multiChannelExpandUGen (Env2 (fromIntegral value
 
 foreign import ccall "&out_calc" outCalc :: CUGenFunc
 out :: UGenType a => a -> a -> a
-out channel input = incrementArgWithChannels 0 $ multiChannelExpandUGen Out outCalc nullConstructor nullDeconstructor [channel, input]
+out channel input = if ugenLength channel < ugenLength input then incrementArgWithChannels 0 u else u
+    where
+        u = multiChannelExpandUGen Out outCalc nullConstructor nullDeconstructor [channel, input]
 
 foreign import ccall "&in_calc" inCalc :: CUGenFunc
 auxIn :: UGenType a => a -> a
-auxIn channel = incrementArgWithChannels 0 $ multiChannelExpandUGen AuxIn inCalc nullConstructor nullDeconstructor [channel]
+auxIn channel = multiChannelExpandUGen AuxIn inCalc nullConstructor nullDeconstructor [channel]
 
 auxThrough :: UGenType a => a -> a -> a
 auxThrough channel input = add (out channel input) input
