@@ -3,14 +3,16 @@ import Data.Fixed (mod')
 import Data.List (zip4)
 
 main :: IO ()
-main = runSignal <| synthDefs *> testGUI <|> (sections <> stressSounds)
+main = runSignal <| testGUI <|> (sections <> stressSounds)
 
+{-
 synthDefs :: Signal ()
 synthDefs = synthDef "triOsc"    triOsc
          *> synthDef "triOsc32"  triOsc32
          *> synthDef "triOscEnv" triOscEnv
-         *> synthDef "b"         bSynth
-         *> synthDef "p"         pSynth
+        --  *> synthDef "b"         bSynth
+        --  *> synthDef "p"         pSynth
+-}
 
 ticker :: Signal Double
 ticker = fps 30
@@ -21,8 +23,11 @@ sections = switch (netsignal <| floor . scale 0 3 <~ randFS ticker) [section1, s
 stressSounds :: Signal ()
 stressSounds = play             ((> 0.5) <~ randFS ticker) triOsc    (randFS ticker ~> scale 20 3000) (randFS ticker ~> scale 20 3000)
             <> play             ((> 0.5) <~ randFS ticker) triOsc32  (randFS ticker ~> scale 20 3000)  (randFS ticker ~> scale 20 3000)
-            <> playSynthPattern ((> 0.5) <~ randFS ticker) "triOscEnv" [] (PFunc0 (pmap (d2f bartok . (+12)) <| ploop [ [lich| [0 1] [4 3] [2 3] [2 3 4 5] |] ]))
+            <> playSynthPattern ((> 0.5) <~ randFS ticker) triOscEnv [] (PFunc0 (pmap (d2f bartok . (+12)) <| ploop [ [lich| [0 1] [4 3] [2 3] [2 3 4 5] |] ]))
             <> playBeatPattern  ((> 0.5) <~ randFS ticker) [] (PFunc0 (ploop [ [lich| b [p b] p [p p p] |] ]))
+    where
+        b = sin 55   |> gain (line 0.1) >>> gain 0.4 >>> out 0
+        p = sin 1110 |> gain (line 0.1) >>> gain 0.2 >>> out 1
 
 section1 :: Signal ()
 section1 = scene [pure cam,oscSig]
@@ -152,12 +157,6 @@ triOscEnv f1 = (sig1 <> sig2) + (sig3 <> sig3) |> gain 0.2 |> gain 0.1 |> out 0
         e    = perc 0.01 0.5 0.1 0
         -- verb dIn = delayC 0.25 0.25 dIn + dIn
         -- verb = freeverb 0.25 0.5 0.5
-
-bSynth :: UGen
-bSynth = sin 55 |> gain (line 0.1) >>> gain 0.4 >>> out 0
-
-pSynth :: UGen
-pSynth = sin 1110 |> gain (line 0.1) >>> gain 0.2 >>> out 1
 
 testGUI :: Signal ()
 testGUI = gui [chatBox,netBox,ubox]

@@ -13,11 +13,11 @@ dup u = [u, u]
 freqSynth :: UGen -> UGen
 freqSynth freq = sin freq |> gain (line 0.1) >>> gain 0.2 >>> out 0
 
-bSynth :: UGen
-bSynth = sin 55 |> gain (line 0.1) >>> gain 0.2 >>> out 0
+b :: UGen
+b = sin 55 |> gain (line 0.1) >>> gain 0.2 >>> out 0
 
-pSynth :: UGen
-pSynth = sin 1110 |> gain (line 0.1) >>> gain 0.2 >>> out 1
+p :: UGen
+p = sin 1110 |> gain (line 0.1) >>> gain 0.2 >>> out 1
 
 one :: UGen
 one = sin 220 |> gain (line 0.1) >>> gain 0.2 >>> out 0
@@ -34,14 +34,14 @@ four = sin 990 |> gain (line 0.1) >>> gain 0.2 >>> out 1
 patternTest :: Necronomicon ()
 patternTest = do
     compileSynthDef "FreqSynth" freqSynth
-    compileSynthDef "b" bSynth
-    compileSynthDef "p" pSynth
+    -- compileSynthDef "b" bSynth
+    -- compileSynthDef "p" pSynth
     compileSynthDef "one" one
     compileSynthDef "two" two
     compileSynthDef "three" three
     compileSynthDef "four" four
     let pLineSynth = return (\degree t -> playSynthAtJackTime "FreqSynth" [degree * 55] t >> return ())
-    let pBeatSynth = return (\synth t -> playSynthAtJackTime synth [] t >> return ())
+    let pBeatSynth = return (\synth t -> playSynthAtJackTimeAndMaybeCompile synth [] t >> return ())
 
     -- _ <- runPDef $ pstream "ArgsPattern2" pLineSynth (PVal (5, 1))
     -- setTempo 50000
