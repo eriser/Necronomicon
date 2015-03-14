@@ -33,6 +33,8 @@ data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Env Double 
               | ATan | LogBase | Sqrt | Tan | SinH | CosH | TanH | ASinH | ATanH | ACosH | TimeMicros | TimeSecs
               deriving (Show, Eq)
 
+data UGenRate = ControlRate | AudioRate deriving (Show, Enum, Eq, Ord)
+
 instance Show UGenChannel where
     show (UGenNum d) = show d
     show (UGenFunc u _ _ _ us) = "(" ++ (show u) ++ " (" ++ foldl (\acc ug -> acc ++ show ug ++ " ") " " us ++ "))"
@@ -114,6 +116,34 @@ incrementArgWithChannels incrementedArgIndex (UGen ugens) = UGen $ map (incremen
                 increment ugenFunc = if channelOffset == 0
                                          then ugenFunc
                                          else UGenFunc Add addCalc nullConstructor nullDeconstructor [ugenFunc, UGenNum channelOffset]
+
+isControlRate :: UGenChannel -> Bool
+isControlRate u = getUGenRate u == ControlRate
+
+isAudioRate :: UGenChannel -> Bool
+isAudioRate u = getUGenRate u == AudioRate
+
+getUGenRate :: UGenChannel -> UGenRate
+getUGenRate (UGenNum _) = ControlRate
+getUGenRate (UGenFunc (Arg _) _ _ _ _) = ControlRate
+getUGenRate _ = AudioRate
+
+-- Converts the arguments of a ugen into a Little Endian bit field based on their UGenRate
+-- This is used to look up the correct calc function to use based on the rates of the ugen's arguments
+argsToCalcIndex :: UGenChannel -> Int
+argsToCalcIndex (UGenNum _) = 0
+argsToCalcIndex (UGenFunc _ _ _ _ args) = foldl (\acc (x,i) -> acc + (if x > 0 then 2 ^ i else 0)) 0 $ zip bitArgs indexes
+    where
+        bitArgs = map (fromEnum . getUGenRate) args
+        indexes = [0..] :: [Int]
+
+-- Choose a calc function for a ugen based on the combination of calc rates of the arguments
+-- The indexes work up from all ControlRate arguments to all AudioRate arguments, using Little Endian bitfield interpretation
+chooseCalcFunc :: UGenChannel -> [CUGenFunc] -> CUGenFunc
+chooseCalcFunc (UGenNum _) _ = nullFunPtr
+chooseCalcFunc _ [] = nullFunPtr
+chooseCalcFunc u cfuncs = cfuncs !! (max 0 (min (max 0 ((length cfuncs) - 1)) $ argsToCalcIndex u))
+
 -- toUGenList us = us
 
 -- used during compiling to correctly handle synth argument compilation
