@@ -40,23 +40,25 @@ data RuntimeMessage = StartSynth SynthDef [CDouble] NodeID JackTime
 
 type RunTimeMailbox = TChan RuntimeMessage
 
+type PRational = Pattern Rational
+
 instance Show (Time -> Int -> JackTime -> Necronomicon (Maybe Rational)) where
     show _ = "(\\PFunc ->)"
 
 instance Show (Time -> Int -> JackTime -> [PRational] -> Necronomicon (Maybe Rational)) where
     show _ = "(\\PFuncWithArgs ->)"
 
-type PRational = Pattern Rational
+data PFunc b = PFunc0 (Pattern (Pattern b, Rational))
+             | PFunc1 (PRational -> Pattern (Pattern b, Rational))
+             | PFunc2 (PRational -> PRational -> Pattern (Pattern b, Rational))
+             | PFunc3 (PRational -> PRational -> PRational -> Pattern (Pattern b, Rational))
 
-class PDefType a b where
-    applyPDefFuncArgs :: a -> [PRational] -> Pattern (Pattern b, Rational)
-
-instance PDefType (Pattern (Pattern b, Rational)) b where
-    applyPDefFuncArgs p _ = p
-
-instance (PDefType b c) => PDefType (PRational -> b) c where
-    applyPDefFuncArgs f [] = applyPDefFuncArgs (f 0) []
-    applyPDefFuncArgs f (x:xs) = applyPDefFuncArgs (f x) xs
+applyPDefFuncArgs :: PFunc a -> [PRational] -> Pattern (Pattern a, Rational)
+applyPDefFuncArgs (PFunc0 pfunc) _ = pfunc
+applyPDefFuncArgs (PFunc1 pfunc) (a:_) = pfunc a
+applyPDefFuncArgs (PFunc2 pfunc) (a:b:_) = pfunc a b
+applyPDefFuncArgs (PFunc3 pfunc) (a:b:c:_) = pfunc a b c
+applyPDefFuncArgs _ _ = PNothing
 
 data PDef = PDefNoArgs   String (Pattern (Time -> Int -> JackTime -> Necronomicon (Maybe Rational)))
           | PDefWithArgs String (Time -> Int -> JackTime -> [PRational] -> Necronomicon (Maybe Rational)) [PRational] deriving (Show)
@@ -93,7 +95,7 @@ pstream name func layout = PDefNoArgs name (PSeq (PVal pfunc) (plength layout))
                   _ -> return (Just d)
               _ -> return Nothing
 
-pstreamWithArgs :: PDefType p a => String -> Pattern (a -> JackTime -> Necronomicon ()) -> p -> [PRational] -> PDef
+pstreamWithArgs :: String -> Pattern (a -> JackTime -> Necronomicon ()) -> PFunc a -> [PRational] -> PDef
 pstreamWithArgs name func layoutFunc defaultArgs = PDefWithArgs name pfunc defaultArgs
     where
         applyArgs layoutArgs = applyPDefFuncArgs layoutFunc layoutArgs

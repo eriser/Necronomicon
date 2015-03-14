@@ -1546,7 +1546,7 @@ tempo tempoSignal = Signal $ \state -> do
             NoChange t' -> return $ NoChange t'
             Change   t' -> runNecroState (setTempo t') sNecroVars >> return (Change t')
 
-playSignalPattern :: (Show a,Eq a) => Signal Bool -> a -> [Signal Double] -> Pattern (Pattern a,Rational) -> Signal a
+playSignalPattern :: (Show a,Eq a) => Signal Bool -> a -> [Signal Double] -> PFunc a -> Signal a
 playSignalPattern playSig initValue argSigs pattern = Signal $ \state -> do
 
     pCont   <- unSignal (netsignal playSig) state
@@ -1585,7 +1585,7 @@ playSignalPattern playSig initValue argSigs pattern = Signal $ \state -> do
             NoChange _ -> return ()
             Change val -> runNecroState (setPDefArg sPattern index $ PVal $ toRational val) sNecroVars >> return ()
 
-playSynthPattern :: Signal Bool -> String -> [Signal Double] -> Pattern (Pattern Rational,Rational) -> Signal ()
+playSynthPattern :: Signal Bool -> String -> [Signal Double] -> PFunc Rational -> Signal ()
 playSynthPattern playSig synthName argSigs pattern = Signal $ \state -> do
 
     pCont   <- unSignal (netsignal playSig) state
@@ -1617,7 +1617,7 @@ playSynthPattern playSig synthName argSigs pattern = Signal $ \state -> do
             NoChange _ -> return ()
             Change val -> runNecroState (setPDefArg sPattern index $ PVal $ toRational val) sNecroVars >> return ()
 
-playBeatPattern :: Signal Bool -> [Signal Double] -> Pattern (Pattern String, Rational) -> Signal ()
+playBeatPattern :: Signal Bool -> [Signal Double] -> PFunc String -> Signal ()
 playBeatPattern playSig argSigs pattern = Signal $ \state -> do
 
     pCont   <- unSignal (netsignal playSig) state

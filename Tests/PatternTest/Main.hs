@@ -47,15 +47,19 @@ patternTest = do
     -- setTempo 50000
 
     setTempo 150
-    argsPattern <- runPDef $ pstreamWithArgs "ArgsPattern" pLineSynth ((\x -> pstutter x $ pseq 10 [
-                                                                             [lich| 5 [6 7] 8 |],
-                                                                             [lich| 6 [7 8] 9 |],
-                                                                             [lich| 7 [8 9] 10 |]
-                                                                             ]) :: Pattern Rational -> Pattern (Pattern Rational, Rational)) [1]
+    argsPattern <- runPDef $ pstreamWithArgs "ArgsPattern" pLineSynth (PFunc2 (\x y -> pstutter x <| ploop [
+                                                                             PVal (pmod (pseries 1 y) 17, 0.25),
+                                                                             PVal (pmod (pgeom 1 y) 17, 0.25)
+                                                                             ])) [1, 1]
 
-    nSleep 10
-    -- setTempo 100
+    nSleep 3
     setPDefArg argsPattern 0 2
+    nSleep 3
+    setPDefArg argsPattern 1 7
+    nSleep 3
+    setPDefArg argsPattern 1 5
+    nSleep 3
+    setPDefArg argsPattern 1 1
     nSleep 10
     setTempo 175
     setPDefArg argsPattern 0 5
@@ -65,8 +69,9 @@ patternTest = do
     nSleep 5
     setTempo 150
     setPDefArg argsPattern 0 1
-    _ <- runPDef $ pstreamWithArgs "ArgsPattern2" pBeatSynth ((\x -> pstutter x [lich| b p [_ b] p |]) :: Pattern Rational -> Pattern (Pattern String, Rational)) [1]
+    _ <- runPDef $ pstreamWithArgs "ArgsPattern2" pBeatSynth (PFunc1 (\x -> pstutter x [lich| b p [_ b] p |])) [1]
 
+    nSleep 10
     pstop argsPattern
 
     setTempo 150

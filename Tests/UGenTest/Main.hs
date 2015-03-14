@@ -24,7 +24,7 @@ ugenTests3 = map test <| zip (repeat "triOscEnv") [length synthNames * 2..length
     where
         test (synthName,i) s = foldr (<|>) playTest <| replicate 7 playTest
             where
-                playTest = playSynthPattern ((== i) <~ s) synthName [] (ploop [patt])
+                playTest = playSynthPattern ((== i) <~ s) synthName [] <| PFunc0 (ploop [patt])
                 patt = [lich| [0 1] [2 0] [1 1]   [_ 1]
                               [0 1] [2 0] [1 1 1] [2 2 1]
                               [0 1] [2 0] [1 1]   [_ 1]

@@ -21,8 +21,8 @@ sections = switch (netsignal <| floor . scale 0 3 <~ randFS ticker) [section1, s
 stressSounds :: Signal ()
 stressSounds = play             ((> 0.5) <~ randFS ticker) triOsc    (randFS ticker ~> scale 20 3000) (randFS ticker ~> scale 20 3000)
             <> play             ((> 0.5) <~ randFS ticker) triOsc32  (randFS ticker ~> scale 20 3000)  (randFS ticker ~> scale 20 3000)
-            <> playSynthPattern ((> 0.5) <~ randFS ticker) "triOscEnv" [] (pmap (d2f bartok . (+12)) <| ploop [ [lich| [0 1] [4 3] [2 3] [2 3 4 5] |] ])
-            <> playBeatPattern  ((> 0.5) <~ randFS ticker) [] (ploop [ [lich| b [p b] p [p p p] |] ])
+            <> playSynthPattern ((> 0.5) <~ randFS ticker) "triOscEnv" [] (PFunc0 (pmap (d2f bartok . (+12)) <| ploop [ [lich| [0 1] [4 3] [2 3] [2 3 4 5] |] ]))
+            <> playBeatPattern  ((> 0.5) <~ randFS ticker) [] (PFunc0 (ploop [ [lich| b [p b] p [p p p] |] ]))
 
 section1 :: Signal ()
 section1 = scene [pure cam,oscSig]
@@ -40,7 +40,7 @@ section3 :: Signal ()
 section3 = scene [pure cam,sphereSig]
     where
         sphereSig      = sphereObject <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time ~~ latitudes
-        latitudes      = playSignalPattern (toggle <| isDown keyS) 36.6 [] <| ploop [ [lich| [36 10] [24 12] [32 37] [30 33 34 35] |] ]
+        latitudes      = playSignalPattern (toggle <| isDown keyS) 36.6 [] <| (PFunc0 <| ploop [ [lich| [36 10] [24 12] [32 37] [30 33 34 35] |] ])
         cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
 
 terrainObject :: [Double] -> [Double] -> [Double] -> Double -> SceneObject
