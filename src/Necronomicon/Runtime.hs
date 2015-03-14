@@ -48,16 +48,32 @@ instance Show (Time -> Int -> JackTime -> Necronomicon (Maybe Rational)) where
 instance Show (Time -> Int -> JackTime -> [PRational] -> Necronomicon (Maybe Rational)) where
     show _ = "(\\PFuncWithArgs ->)"
 
-data PFunc b = PFunc0 (Pattern (Pattern b, Rational))
-             | PFunc1 (PRational -> Pattern (Pattern b, Rational))
-             | PFunc2 (PRational -> PRational -> Pattern (Pattern b, Rational))
-             | PFunc3 (PRational -> PRational -> PRational -> Pattern (Pattern b, Rational))
+type PStream a = Pattern (Pattern a, Rational)
 
-applyPDefFuncArgs :: PFunc a -> [PRational] -> Pattern (Pattern a, Rational)
-applyPDefFuncArgs (PFunc0 pfunc) _ = pfunc
-applyPDefFuncArgs (PFunc1 pfunc) (a:_) = pfunc a
-applyPDefFuncArgs (PFunc2 pfunc) (a:b:_) = pfunc a b
-applyPDefFuncArgs (PFunc3 pfunc) (a:b:c:_) = pfunc a b c
+data PFunc a = PFunc0  (PStream a)
+             | PFunc1  (PRational -> PStream a)
+             | PFunc2  (PRational -> PRational -> PStream a)
+             | PFunc3  (PRational -> PRational -> PRational -> PStream a)
+             | PFunc4  (PRational -> PRational -> PRational -> PRational -> PStream a)
+             | PFunc5  (PRational -> PRational -> PRational -> PRational -> PRational -> PStream a)
+             | PFunc6  (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PStream a)
+             | PFunc7  (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PStream a)
+             | PFunc8  (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PStream a)
+             | PFunc9  (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PStream a)
+             | PFunc10 (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PStream a)
+
+applyPDefFuncArgs :: PFunc a -> [PRational] -> PStream a
+applyPDefFuncArgs (PFunc0  pfunc) _ = pfunc
+applyPDefFuncArgs (PFunc1  pfunc) (a:_) = pfunc a
+applyPDefFuncArgs (PFunc2  pfunc) (a:b:_) = pfunc a b
+applyPDefFuncArgs (PFunc3  pfunc) (a:b:c:_) = pfunc a b c
+applyPDefFuncArgs (PFunc4  pfunc) (a:b:c:d:_) = pfunc a b c d
+applyPDefFuncArgs (PFunc5  pfunc) (a:b:c:d:e:_) = pfunc a b c d e
+applyPDefFuncArgs (PFunc6  pfunc) (a:b:c:d:e:f:_) = pfunc a b c d e f
+applyPDefFuncArgs (PFunc7  pfunc) (a:b:c:d:e:f:g:_) = pfunc a b c d e f g
+applyPDefFuncArgs (PFunc8  pfunc) (a:b:c:d:e:f:g:h:_) = pfunc a b c d e f g h
+applyPDefFuncArgs (PFunc9  pfunc) (a:b:c:d:e:f:g:h:i:_) = pfunc a b c d e f g h i
+applyPDefFuncArgs (PFunc10 pfunc) (a:b:c:d:e:f:g:h:i:j:_) = pfunc a b c d e f g h i j
 applyPDefFuncArgs _ _ = PNothing
 
 data PDef = PDefNoArgs   String (Pattern (Time -> Int -> JackTime -> Necronomicon (Maybe Rational)))
@@ -85,7 +101,7 @@ pbeat name layout = PDefNoArgs name (PSeq (PVal pfunc) (plength layout))
                   _ -> return (Just d)
               _ -> return Nothing
 
-pstream :: String -> Pattern (a -> JackTime -> Necronomicon ()) -> Pattern (Pattern a, Rational) -> PDef
+pstream :: String -> Pattern (a -> JackTime -> Necronomicon ()) -> PStream a -> PDef
 pstream name func layout = PDefNoArgs name (PSeq (PVal pfunc) (plength layout))
     where pfunc t i jackTime = case collapse layout t of
               PVal (p, d) -> case collapse p t of
