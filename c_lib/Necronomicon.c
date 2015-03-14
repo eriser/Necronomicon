@@ -1692,32 +1692,114 @@ void add_calc(ugen u)
 {
 	BIN_OP_CALC(
 		+,
-		/*no control args*/,
-		a = UGEN_IN(in0);
+		/* no control args */,
+		a = UGEN_IN(in0); // Audio args
 		b = UGEN_IN(in1);
+    );
+}
+
+void add_ak_calc(ugen u)
+{
+	BIN_OP_CALC(
+		+,
+		b = in1[0];, // Control arg
+		a = UGEN_IN(in0); // Audio arg
+    );
+}
+
+void add_ka_calc(ugen u)
+{
+	BIN_OP_CALC(
+		+,
+		a = in0[0];, // Control arg
+		b = UGEN_IN(in1); // Audio arg
+    );
+}
+
+void add_kk_calc(ugen u)
+{
+	BIN_OP_CALC(
+		+,
+		a = in0[0]; // Control args
+		b = in1[0];,
+		/* no audio args */
     );
 }
 
 void minus_calc(ugen u)
 {
-	double* in0 = UGEN_INPUT_BUFFER(u, 0);
-	double* in1 = UGEN_INPUT_BUFFER(u, 1);
-	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	BIN_OP_CALC(
+		-,
+		/* no control args */,
+		a = UGEN_IN(in0); // Audio args
+		b = UGEN_IN(in1);
+    );
+}
 
-	AUDIO_LOOP(
-		UGEN_OUT(out, UGEN_IN(in0) - UGEN_IN(in1));
-	);
+void minus_ak_calc(ugen u)
+{
+	BIN_OP_CALC(
+		-,
+		b = in1[0];, // Control arg
+		a = UGEN_IN(in0); // Audio arg
+    );
+}
+
+void minus_ka_calc(ugen u)
+{
+	BIN_OP_CALC(
+		-,
+		a = in0[0];, // Control arg
+		b = UGEN_IN(in1); // Audio arg
+    );
+}
+
+void minus_kk_calc(ugen u)
+{
+	BIN_OP_CALC(
+		-,
+		a = in0[0]; // Control args
+		b = in1[0];,
+		/* no audio args */
+    );
 }
 
 void mul_calc(ugen u)
 {
-	double* in0 = UGEN_INPUT_BUFFER(u, 0);
-	double* in1 = UGEN_INPUT_BUFFER(u, 1);
-	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	BIN_OP_CALC(
+		*,
+		/* no control args */,
+		a = UGEN_IN(in0); // Audio args
+		b = UGEN_IN(in1);
+    );
+}
 
-	AUDIO_LOOP(
-		UGEN_OUT(out, UGEN_IN(in0) * UGEN_IN(in1));
-	);
+void mul_ak_calc(ugen u)
+{
+	BIN_OP_CALC(
+		*,
+		b = in1[0];, // Control arg
+		a = UGEN_IN(in0); // Audio arg
+    );
+}
+
+void mul_ka_calc(ugen u)
+{
+	BIN_OP_CALC(
+		*,
+		a = in0[0];, // Control arg
+		b = UGEN_IN(in1); // Audio arg
+    );
+}
+
+void mul_kk_calc(ugen u)
+{
+	BIN_OP_CALC(
+		*,
+		a = in0[0]; // Control args
+		b = in1[0];,
+		/* no audio args */
+    );
 }
 
 void div_calc(ugen u)
@@ -2780,7 +2862,8 @@ synth_node* new_test_synth(unsigned int time)
 void print_node(synth_node* node)
 {
 	if (node != NULL)
-		printf("synth_node %p { ugen_graph: %p, ugen_graph_node: %p, ugen_wires: %p, ugen_wires_node: %p, previous: %p, next: %p, time: %llu, key %u, hash: %u, table_index: %u, num_ugens: %u, num_wires: %u, previous_alive_status: %u, alive_status %u }\n",
+		printf("synth_node %p { ugen_graph: %p, ugen_graph_node: %p, ugen_wires: %p, ugen_wires_node: %p, previous: %p, next: %p, time: %llu, "
+			   "key %u, hash: %u, table_index: %u, num_ugens: %u, num_wires: %u, previous_alive_status: %u, alive_status %u }\n",
 			   node,
 			   node->ugen_graph,
 			   node->ugen_graph_node,
