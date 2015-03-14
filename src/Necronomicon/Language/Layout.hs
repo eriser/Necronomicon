@@ -71,7 +71,7 @@ parseParsecPattern input =
 parseExpr :: Parser (Q Exp)
 -- parseExpr = (parsecPatternToQExpr <$> try synthPattern) <|> (parsecPatternToQExpr <$> try functionPattern) <|> (parsecPatternToQExpr <$> notePattern)
 -- parseExpr = (dataToExpQ (const Nothing) <$> try synthPattern) <|> (dataToExpQ (const Nothing) <$> try functionPattern) <|> (dataToExpQ (const Nothing) <$> notePattern)
-parseExpr = try synthPatternExp <|> (dataToExpQ (const Nothing) <$> try functionPattern) <|> (dataToExpQ (const Nothing) <$> notePattern)
+parseExpr = try notePatternExp <|> try synthPatternExp <|> (dataToExpQ (const Nothing) <$> try functionPattern)
 
 synthPatternExp :: Parser (Q Exp)
 synthPatternExp = synthPattern >>= return . patToExp
@@ -90,9 +90,22 @@ synthPatternExp = synthPattern >>= return . patToExp
             list <- mapM (\n -> getValueName n >>= \vn -> return (TupE [LitE (StringL n), VarE vn])) ps
             return $ AppE (ConE name) (ListE list)
 
-        -- name <- getName "Necronomicon.Patterns.Node"
-        -- list <- sequence $ map parsecPatternToQExpr ps
-        -- return $ AppE (AppE (ConE name) (ListE list)) (LitE . IntegerL $ fromIntegral $ length ps)
+notePatternExp :: Parser (Q Exp)
+notePatternExp = notePattern >>= return . patToExp
+    where
+        patToExp (ParsecRest    ) = getValueName "ParsecRest" >>= return . ConE
+        patToExp (ParsecValue  p) = do
+            pv    <- getValueName "ParsecValue"
+            rName <- getTypeName "Rational"
+            return . AppE (ConE pv) . (flip SigE) (ConT rName) . LitE . RationalL $ toRational p
+        patToExp (ParsecList  ps) = do
+            name <- getValueName "ParsecList"
+            list <- mapM patToExp ps
+            return $ AppE (ConE name) (ListE list)
+        patToExp (ParsecChord ps) = do
+            name  <- getValueName "ParsecChord"
+            rName <- getTypeName "Rational"
+            return $ AppE (ConE name) (ListE $ map ((flip SigE) (ConT rName) . LitE . RationalL . toRational) ps)
 
 synthPattern :: Parser (ParsecPattern String)
 synthPattern = parseSynthArray <|> parseSynthChordTuples <|> parseSynthRest <|> parseSynthPattern
@@ -353,9 +366,9 @@ getValueName s = do
         Just n  -> n
         Nothing -> mkName s
 
--- getName :: String -> Q Name
--- getName s = do
-    -- name <- lookupName s
-    -- return $ case name of
-        -- Just n  -> n
-        -- Nothing -> mkName s
+getTypeName :: String -> Q Name
+getTypeName s = do
+    name <- lookupTypeName s
+    return $ case name of
+        Just n  -> n
+        Nothing -> mkName s

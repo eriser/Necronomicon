@@ -529,7 +529,7 @@ data Scale = Scale {
 degree2Freq :: Scale -> Int -> Rational
 degree2Freq scale degree = (tuning scale V.! wrapAt degree (degrees scale)) * octave * rootFreq scale
     where
-        octave            = fromIntegral (2 ^ (div degree $ V.length $ degrees scale) :: Int)
+        octave            = fromIntegral (2 ^ max (div degree $ V.length $ degrees scale) 0 :: Int)
         wrapAt index list = list V.! mod index (V.length list)
 
 d2f :: Scale -> Rational -> Rational
