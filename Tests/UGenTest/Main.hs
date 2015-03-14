@@ -20,7 +20,7 @@ ugenTests2 = map test <| zip synthNames [length synthNames..]
         shouldPlay     i a b = a == i && b > 0.5
 
 ugenTests3 :: [Signal Int -> Signal ()]
-ugenTests3 = map test <| zip (repeat "triOscEnv") [length synthNames * 2..length synthNames * 3]
+ugenTests3 = map test <| zip (repeat triOscEnv2) [length synthNames * 2..length synthNames * 3]
     where
         test (synthName,i) s = foldr (<|>) playTest <| replicate 7 playTest
             where
@@ -197,6 +197,14 @@ synthNames = [
 
 triOscEnv :: UGen -> UGen -> UGen
 triOscEnv f1 _ = (sig1 <> sig2) + (sig3 <> sig3) |> out 0
+    where
+        sig1 = sinOsc (f1 * 1.0 + sig3 * 1000) |> e |> auxThrough 2
+        sig2 = sinOsc (f1 * 0.5 - sig3 * 1000) |> e |> auxThrough 3
+        sig3 = sinOsc (f1 * 0.25)              |> e |> auxThrough 4
+        e    = perc 0.01 0.5 0.1 0
+
+triOscEnv2 :: UGen -> UGen
+triOscEnv2 f1 = (sig1 <> sig2) + (sig3 <> sig3) |> out 0
     where
         sig1 = sinOsc (f1 * 1.0 + sig3 * 1000) |> e |> auxThrough 2
         sig2 = sinOsc (f1 * 0.5 - sig3 * 1000) |> e |> auxThrough 3

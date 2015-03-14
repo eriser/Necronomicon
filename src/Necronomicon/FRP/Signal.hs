@@ -1585,16 +1585,21 @@ playSignalPattern playSig initValue argSigs pattern = Signal $ \state -> do
             NoChange _ -> return ()
             Change val -> runNecroState (setPDefArg sPattern index $ PVal $ toRational val) sNecroVars >> return ()
 
-playSynthPattern :: Signal Bool -> String -> [Signal Double] -> PFunc Rational -> Signal ()
-playSynthPattern playSig synthName argSigs pattern = Signal $ \state -> do
+playSynthPattern :: Signal Bool -> (UGen -> UGen) -> [Signal Double] -> PFunc Rational -> Signal ()
+playSynthPattern playSig u argSigs pattern = Signal $ \state -> do
 
-    pCont   <- unSignal (netsignal playSig) state
-    pValue  <- unEvent <~ pCont updateZero
-    aConts  <- mapM (\a -> unSignal (netsignal a) state) argSigs
-    aValues <- mapM (\f -> unEvent <~ f updateZero) aConts
-    pid     <- getNextID state
-    let pFunc = return (\val t -> playSynthAtJackTime synthName [val] t >> return ())
-        pDef  = pstreamWithArgs ("sigPat" ++ show pid) pFunc pattern (map (PVal . toRational) aValues)
+    pCont        <- unSignal (netsignal playSig) state
+    pValue       <- unEvent <~ pCont updateZero
+    aConts       <- mapM (\a -> unSignal (netsignal a) state) argSigs
+    aValues      <- mapM (\f -> unEvent <~ f updateZero) aConts
+    pid          <- getNextID state
+
+    let synthName = "~p" ++ show pid
+
+    _            <- runNecroState (compileSynthDef synthName u) (necroVars state)
+
+    let pFunc     = return (\val t -> playSynthAtJackTime synthName [val] t >> return ())
+        pDef      = pstreamWithArgs ("sigPat" ++ show pid) pFunc pattern (map (PVal . toRational) aValues)
 
     _            <- if pValue then runNecroState (runPDef pDef) (necroVars state) >> return () else return ()
     playingRef   <- newIORef pValue
@@ -1617,7 +1622,7 @@ playSynthPattern playSig synthName argSigs pattern = Signal $ \state -> do
             NoChange _ -> return ()
             Change val -> runNecroState (setPDefArg sPattern index $ PVal $ toRational val) sNecroVars >> return ()
 
-playBeatPattern :: Signal Bool -> [Signal Double] -> PFunc String -> Signal ()
+playBeatPattern :: Signal Bool -> [Signal Double] -> PFunc (String, UGen) -> Signal ()
 playBeatPattern playSig argSigs pattern = Signal $ \state -> do
 
     pCont   <- unSignal (netsignal playSig) state
@@ -1625,7 +1630,7 @@ playBeatPattern playSig argSigs pattern = Signal $ \state -> do
     aConts  <- mapM (\a -> unSignal (netsignal a) state) argSigs
     aValues <- mapM (\f -> unEvent <~ f updateZero) aConts
     pid     <- getNextID state
-    let pFunc = return (\synth t -> playSynthAtJackTime synth [] t >> return ())
+    let pFunc = return (\synth t -> playSynthAtJackTimeAndMaybeCompile synth [] t >> return ())
         pDef  = pstreamWithArgs ("sigPat" ++ show pid) pFunc pattern (map (PVal . toRational) aValues)
 
     maybePattern <- if pValue then runNecroState (runPDef pDef) (necroVars state) >>= \(pat,_) -> return (Just pat) else return Nothing
@@ -1649,64 +1654,7 @@ playBeatPattern playSig argSigs pattern = Signal $ \state -> do
             NoChange _ -> return ()
             Change val -> runNecroState (setPDefArg sPattern index $ PVal $ toRational val) sNecroVars >> return ()
 
-{-
-instance Play UGen where
-    type PlayRet UGen = Signal ()
-    play playSig synth = playSynthN synth playSig []
-
-instance Play (UGen -> UGen) where
-    type PlayRet (UGen -> UGen) = Signal Double -> Signal ()
-    play playSig synth x = playSynthN synth playSig [x]
-
-instance Play (UGen -> UGen -> UGen) where
-    type PlayRet (UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal ()
-    play playSig synth x y = playSynthN synth playSig [x,y]
-
-instance Play (UGen -> UGen -> UGen -> UGen) where
-    type PlayRet (UGen -> UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal Double -> Signal ()
-    play playSig synth x y z = playSynthN synth playSig [x,y,z]
-
-instance Play (UGen -> UGen -> UGen -> UGen -> UGen) where
-    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
-    play playSig synth x y z w = playSynthN synth playSig [x,y,z,w]
-
-instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
-    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
-    play playSig synth x y z w p = playSynthN synth playSig [x,y,z,w,p]
-
-instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
-    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
-    play playSig synth x y z w p q = playSynthN synth playSig [x,y,z,w,p,q]
-
-instance Play [UGen] where
-    type PlayRet [UGen] = Signal ()
-    play playSig synth = playSynthN synth playSig []
-
-instance Play (UGen -> [UGen]) where
-    type PlayRet (UGen -> [UGen]) = Signal Double -> Signal ()
-    play playSig synth x = playSynthN synth playSig [x]
-
-instance Play (UGen -> UGen -> [UGen]) where
-    type PlayRet (UGen -> UGen -> [UGen]) = Signal Double -> Signal Double -> Signal ()
-    play playSig synth x y = playSynthN synth playSig [x,y]
-
-instance Play (UGen -> UGen -> UGen -> [UGen]) where
-    type PlayRet (UGen -> UGen -> UGen -> [UGen]) = Signal Double -> Signal Double -> Signal Double -> Signal ()
-    play playSig synth x y z = playSynthN synth playSig [x,y,z]
-
-instance Play (UGen -> UGen -> UGen -> UGen -> [UGen]) where
-    type PlayRet (UGen -> UGen -> UGen -> UGen -> [UGen]) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
-    play playSig synth x y z w = playSynthN synth playSig [x,y,z,w]
-
-instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> [UGen]) where
-    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> [UGen]) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
-    play playSig synth x y z w p = playSynthN synth playSig [x,y,z,w,p]
-
-instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> [UGen]) where
-    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> [UGen]) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
-    play playSig synth x y z w p q = playSynthN synth playSig [x,y,z,w,p,q]
--}
-
+--Maybe this can be done recursively without type families?
 class Play a where
     type PlayRet a :: *
     play :: Signal Bool -> a -> PlayRet a

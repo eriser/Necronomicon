@@ -23,6 +23,7 @@ infixl 0 +>
 --------------------------------------------------------------------------------------
 data UGenChannel = UGenNum Double
                  | UGenFunc UGenUnit CUGenFunc CUGenFunc CUGenFunc [UGenChannel]
+                 deriving (Eq)
 
 data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Env Double Double | Env2 Double Double | Out | AuxIn | Poll | LFSaw | LFPulse | Saw | Pulse
               | SyncSaw | SyncPulse | SyncOsc | Random Double Double Double | NoiseN | NoiseL | NoiseC | Dust | Dust2 | Impulse | Range | ExpRange
@@ -30,7 +31,7 @@ data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Env Double 
               | Clip | SoftClip | Poly3 | TanHDist | SinDist | Wrap | DelayN Double | DelayL Double | DelayC Double | CombN Double | CombL Double | CombC Double
               | Negate | Crush | Decimate | FreeVerb | Pluck Double | WhiteNoise | Abs | Signum | Pow | Exp | Log | Cos | ASin | ACos
               | ATan | LogBase | Sqrt | Tan | SinH | CosH | TanH | ASinH | ATanH | ACosH | TimeMicros | TimeSecs
-              deriving (Show)
+              deriving (Show, Eq)
 
 instance Show UGenChannel where
     show (UGenNum d) = show d
@@ -618,6 +619,11 @@ playSynthAtJackTime sdName args time = getSynthDef sdName >>= \maybeSynthDef -> 
                 Just synthDef -> incrementNodeID >>= \nodeID -> sendMessage (StartSynth synthDef (map (CDouble . fromRational) args) nodeID time) >> return (Synth nodeID synthDef)
                 Nothing -> nPrint ("SynthDef " ++ sdName ++ " not found. Unable to start synth.") >> return (Synth nullID nullSynth)
 
+playSynthAtJackTimeAndMaybeCompile :: (String, UGen) -> [Rational] -> JackTime -> Necronomicon Synth
+playSynthAtJackTimeAndMaybeCompile (sdName, u) args time = getSynthDef sdName >>= \maybeSynthDef -> case maybeSynthDef of
+                Just synthDef -> incrementNodeID >>= \nodeID -> sendMessage (StartSynth synthDef (map (CDouble . fromRational) args) nodeID time) >> return (Synth nodeID synthDef)
+                Nothing       -> compileSynthDef sdName u >> playSynthAtJackTime sdName args time
+
 playSynthAt :: String -> [Rational] -> Rational -> Necronomicon Synth
 playSynthAt sdName args time = playSynthAtJackTime sdName args $ secondsToMicro time
 
@@ -861,7 +867,7 @@ stopTestSynth synth necroVars = runNecroState (stopSynth synth) necroVars >> ret
 -- Experimental
 ------------------------------------------
 
-newtype UGen = UGen{ unUGen :: [UGenChannel] } deriving (Show)
+newtype UGen = UGen{ unUGen :: [UGenChannel] } deriving (Show, Eq)
 
 instance Monoid UGen where
     mempty                    = UGen []

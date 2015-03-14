@@ -1,7 +1,8 @@
-module Necronomicon.Language.Layout
-       -- (Pattern(PatternValue,PatternRest,PatternChord,PatternList),
-        (lich,layoutToPattern,pvector)
-       where
+module Necronomicon.Language.Layout (
+    ParsecPattern(..),
+    lich,
+    layoutToPattern,
+    pvector) where
 
 import Prelude
 import Language.Haskell.TH.Syntax
@@ -63,13 +64,35 @@ parseParsecPattern input =
         Left  err -> fail $ show err
         Right val -> do
             name <- getValueName "layoutToPattern"
-            v <- val
+            v    <- val
             return $ AppE (VarE name) v
 
 -- | The main paring combinator of the layout pattern DSL
 parseExpr :: Parser (Q Exp)
 -- parseExpr = (parsecPatternToQExpr <$> try synthPattern) <|> (parsecPatternToQExpr <$> try functionPattern) <|> (parsecPatternToQExpr <$> notePattern)
-parseExpr = (dataToExpQ (const Nothing) <$> try synthPattern) <|> (dataToExpQ (const Nothing) <$> try functionPattern) <|> (dataToExpQ (const Nothing) <$> notePattern)
+-- parseExpr = (dataToExpQ (const Nothing) <$> try synthPattern) <|> (dataToExpQ (const Nothing) <$> try functionPattern) <|> (dataToExpQ (const Nothing) <$> notePattern)
+parseExpr = try synthPatternExp <|> (dataToExpQ (const Nothing) <$> try functionPattern) <|> (dataToExpQ (const Nothing) <$> notePattern)
+
+synthPatternExp :: Parser (Q Exp)
+synthPatternExp = synthPattern >>= return . patToExp
+    where
+        patToExp (ParsecRest    ) = getValueName "ParsecRest" >>= return . ConE
+        patToExp (ParsecValue  p) = do
+            pv <- getValueName "ParsecValue"
+            qp <- getValueName p
+            return $ AppE (ConE pv) $ TupE [LitE (StringL p), VarE qp]
+        patToExp (ParsecList  ps) = do
+            name <- getValueName "ParsecList"
+            list <- mapM patToExp ps
+            return $ AppE (ConE name) (ListE list)
+        patToExp (ParsecChord ps) = do
+            name <- getValueName "ParsecChord"
+            list <- mapM (\n -> getValueName n >>= \vn -> return (TupE [LitE (StringL n), VarE vn])) ps
+            return $ AppE (ConE name) (ListE list)
+
+        -- name <- getName "Necronomicon.Patterns.Node"
+        -- list <- sequence $ map parsecPatternToQExpr ps
+        -- return $ AppE (AppE (ConE name) (ListE list)) (LitE . IntegerL $ fromIntegral $ length ps)
 
 synthPattern :: Parser (ParsecPattern String)
 synthPattern = parseSynthArray <|> parseSynthChordTuples <|> parseSynthRest <|> parseSynthPattern
@@ -329,3 +352,10 @@ getValueName s = do
     return $ case name of
         Just n  -> n
         Nothing -> mkName s
+
+-- getName :: String -> Q Name
+-- getName s = do
+    -- name <- lookupName s
+    -- return $ case name of
+        -- Just n  -> n
+        -- Nothing -> mkName s
