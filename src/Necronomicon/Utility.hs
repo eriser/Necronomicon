@@ -2,11 +2,13 @@ module Necronomicon.Utility (hash,
                              (|>),
                              (<|),
                              scale,
-                             linlin) where
+                             linlin,
+                             getCurrentTime) where
 
 import Prelude
 import Data.Bits
 import Data.List (foldl')
+import Graphics.UI.GLFW (getTime)
 
 class Hashable a where
     hash :: a -> Int
@@ -34,6 +36,10 @@ a <| b = a b
 
 infixl 0 <|
 
+getCurrentTime :: IO Double
+getCurrentTime = getTime >>= \currentTime -> case currentTime of
+    Nothing -> return 0
+    Just t  -> return t
 
 ------------------------------------------------------------
 -- Generally useful numeric functions

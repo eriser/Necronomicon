@@ -3,7 +3,7 @@ module Necronomicon.Networking.Message where
 import Prelude
 import Network.Socket hiding (send,recv,recvFrom,sendTo)
 import Network.Socket.ByteString.Lazy
-import Sound.OSC.Core
+-- import Sound.OSC.Core
 import Data.Binary (Binary,encode,decode,get,put,Get)
 import Data.Int    (Int32,Int64)
 import Control.Monad (when)
@@ -15,13 +15,13 @@ import Necronomicon.Linear.Vector (Vector2(..),Vector3(..),Vector4(..))
 -- import Necronomicon.FRP.Event
 import qualified Data.IntMap as IntMap
 
-toOSCString :: String -> Datum
-toOSCString = d_put . C.pack --ASCII_String . C.pack
+-- toOSCString :: String -> Datum
+-- toOSCString = d_put . C.pack --ASCII_String . C.pack
 
-datumToString :: Datum -> Maybe String
-datumToString d = case d_get d of
-    Just s  -> Just $ C.unpack s
-    Nothing -> Nothing
+-- datumToString :: Datum -> Maybe String
+-- datumToString d = case d_get d of
+    -- Just s  -> Just $ C.unpack s
+    -- Nothing -> Nothing
 
 lengthOfMessageLength :: Int64
 lengthOfMessageLength = 2

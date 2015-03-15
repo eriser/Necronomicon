@@ -53,7 +53,6 @@ library
         Necronomicon.Networking
         Necronomicon.Networking.Client
         Necronomicon.Networking.Server
-        Necronomicon.Networking.SyncObject
         Necronomicon.Networking.Message
         Necronomicon.Patterns
         Necronomicon.FRP
@@ -94,7 +93,6 @@ library
         parsec           >= 3.1.0,
         network          >= 2.6.0.0,
         bytestring       >= 0.9.1.4,
-        hosc             >= 0.14,
         GLFW-b           >= 1.4.0,
         OpenGL           >= 2.8,
         OpenGLRaw        >= 1.5.0,

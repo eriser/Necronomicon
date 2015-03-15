@@ -167,6 +167,7 @@ import           Necronomicon.Patterns             (Pattern (..))
 import           Necronomicon.Runtime
 import           Necronomicon.UGen
 import           Necronomicon.Networking
+import           Necronomicon.Utility              (getCurrentTime)
 import           System.Random
 import           Foreign hiding (shift)
 import           Foreign.C
@@ -391,11 +392,6 @@ runSignal s = initWindow >>= \mw -> case mw of
                 threadDelay $ 33334
 
                 renderNecronomicon q window signalLoop signalState resources currentTime
-
-getCurrentTime :: IO Double
-getCurrentTime = GLFW.getTime >>= \currentTime -> case currentTime of
-    Nothing -> return 0
-    Just t  -> return t
 
 -----------------------------------------------------------------
 -- Instances

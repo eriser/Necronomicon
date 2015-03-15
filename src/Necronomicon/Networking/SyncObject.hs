@@ -3,7 +3,6 @@ module Necronomicon.Networking.SyncObject where
 import Prelude
 import qualified Data.ByteString.Lazy as BL
 import qualified Data.ByteString.Char8 as C
-import Sound.OSC.Core
 import Necronomicon.Networking.Message
 import qualified Data.Map as Map
 import qualified Data.Sequence as Seq
@@ -34,20 +33,6 @@ removeObjectMessage objID = Message "removeSyncObject" [Int32 $ fromIntegral obj
 
 setArg :: Int -> SyncValue -> SyncObject -> SyncObject
 setArg index v (SyncObject objID ty st as) = SyncObject objID ty st $ Seq.update index v as
-
-argToDatum :: SyncValue -> Datum
-argToDatum (SyncString v) = toOSCString v
-argToDatum (SyncFloat  v) = Float v
-argToDatum (SyncDouble v) = Double v
-argToDatum (SyncInt    v) = Int32 (fromIntegral v)
-
-datumToArg :: Datum -> SyncValue
-datumToArg (ASCII_String v) = SyncString $ C.unpack   v
-datumToArg (Float        v) = SyncFloat  v
-datumToArg (Double       v) = SyncDouble v
-datumToArg (Int32        v) = SyncInt    (fromIntegral v)
-datumToArg (Int64        v) = SyncInt (fromIntegral v)
-datumToArg _                = SyncInt 0
 
 syncObjectMessage :: SyncObject -> Message
 syncObjectMessage (SyncObject objID t st as) = Message "addSyncObject" $ Int32 (fromIntegral objID) : toOSCString t : toOSCString st : map argToDatum (F.toList as)

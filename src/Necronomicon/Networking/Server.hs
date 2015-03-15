@@ -15,7 +15,7 @@ import Data.Binary (encode,decode)
 
 -- import Necronomicon.Networking.User
 import Necronomicon.Networking.Message
-import Sound.OSC.Core
+import Necronomicon.Utility
 
 ------------------------------
 --Server data
@@ -97,7 +97,7 @@ synchronize server = forever $ do
     broadcast (Nothing,encode $ SyncNetSignals netSignals) server
     broadcast (Nothing,encode $ UserList $ Prelude.map (\(_,u) -> userName u) (Map.toList users)) server
 
-    currentTime <- time
+    currentTime <- getCurrentTime
     let users' = Map.filter (\u -> (currentTime - userAliveTime u < 6)) users
     atomically $ writeTVar (serverUsers server) users'
     mapM_ (sendRemoveMessage currentTime) $ Map.toList users'
@@ -118,7 +118,7 @@ acceptLoop server nsocket = forever $ do
             setSocketOption newUserSocket NoDelay   1
             putStrLn $ "Accepting connection from user at: " ++ show newUserAddress
             stopVar <- atomically newEmptyTMVar
-            t       <- time
+            t       <- getCurrentTime
             atomically $ do
                 users'  <- readTVar $ serverUsers server
                 uid     <- (readTVar $ serverUserIdCounter server) >>= return . (+1)
@@ -168,7 +168,7 @@ messageProcessor server _ = forever $ do
 ------------------------------
 parseMessage :: B.ByteString -> NetMessage -> User -> Server -> IO()
 parseMessage m (Login n) user server = do
-    t <- time
+    t <- getCurrentTime
     let user' = User (userSocket user) (userAddress user) (userStopVar user) n (userId user) t
     atomically $ readTVar (serverUsers server) >>= \users -> writeTVar (serverUsers server) (Map.insert (userAddress user) user' users)
     sendMessage user m server
@@ -189,7 +189,7 @@ parseMessage _ (Logout _) user server = do
     print $ users
 
 parseMessage m Alive user server = do
-    t <- time
+    t <- getCurrentTime
     sendMessage user m server
     let user' = User (userSocket user) (userAddress user) (userStopVar user) (userName user) (userId user) t
     atomically $ readTVar (serverUsers server) >>= \users -> writeTVar (serverUsers server) (Map.insert (userAddress user) user' users)

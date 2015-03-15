@@ -13,7 +13,7 @@ import Necronomicon.Networking.Server (serverPort)
 import Necronomicon.Networking.Message
 import Necronomicon.FRP.Event
 import Data.Binary (encode,decode)
-import Sound.OSC.Core
+import Necronomicon.Utility (getCurrentTime)
 
 --fix lazy chat and chat in general
 --Create reconnection scheme in case of disconnection
@@ -40,7 +40,7 @@ startup client serverIPAddress sigstate = do
     (sock,serverAddr) <- getSocket
     atomically $ writeTChan (netStatusBuffer sigstate) Connecting
     connectionLoop            client sock serverAddr
-    time >>= \t -> atomically $ writeTVar (clientAliveTime client) t
+    getCurrentTime >>= \t -> atomically $ writeTVar (clientAliveTime client) t
     _ <- forkIO $ messageProcessor client sigstate
     _ <- forkIO $ listener         client sock
     _ <- forkIO $ aliveLoop        client sock
@@ -87,10 +87,10 @@ sender client sock = executeIfConnected client (readTChan $ clientOutBox client)
 
 --put into disconnect mode if too much time has passed
 aliveLoop :: Client -> Socket -> IO ()
-aliveLoop client sock = time >>= \t -> executeIfConnected client (sendAliveMessage t) >>= \cont -> case cont of
+aliveLoop client sock = getCurrentTime >>= \t -> executeIfConnected client (sendAliveMessage t) >>= \cont -> case cont of
     Nothing -> putStrLn "Shutting down aliveLoop"
     Just () -> do
-        currentTime   <- time
+        currentTime   <- getCurrentTime
         lastAliveTime <- atomically $ readTVar (clientAliveTime client)
         let delta = currentTime - lastAliveTime
         -- putStrLn $ "Time since last alive message: " ++ show delta
@@ -179,7 +179,7 @@ parseMessage (UserList ul) client sigstate = do
         userStringList = map C.unpack ul
 
 parseMessage Alive client _ = do
-    currentTime  <- time
+    currentTime  <- getCurrentTime
     atomically $ writeTVar (clientAliveTime client) currentTime
 
 parseMessage (Login _) _ _ = putStrLn "Succesfully logged in."
