@@ -36,7 +36,7 @@ library
     Install-Includes:	Necronomicon.h
     C-Sources:    		c_lib/Necronomicon.c
     ghc-options:        -threaded -O3 -Wall -Werror
-    default-extensions: FunctionalDependencies FlexibleInstances MultiParamTypeClasses ForeignFunctionInterface QuasiQuotes TemplateHaskell TypeFamilies BangPatterns
+    default-extensions: FlexibleInstances MultiParamTypeClasses ForeignFunctionInterface QuasiQuotes TemplateHaskell TypeFamilies BangPatterns
 
     exposed-modules:
         Necronomicon
