@@ -9,7 +9,7 @@ main = runSignal <| tempo (pure 150) *> testGUI <> sections <> hyperTerrainSound
 
 hyperTerrainSounds :: Signal ()
 hyperTerrainSounds = metallicPattern
-                 <> play (toggle <| combo [alt,isDown keyA]) triOsc32  (mouseToSlendro <~ mouseX) (mouseToSlendro <~ mouseY)
+                  <> play (toggle <| combo [alt,isDown keyA]) triOsc32  (mouseToSlendro <~ mouseX) (mouseToSlendro <~ mouseY)
 
 mouseToSlendro :: Double -> Double
 mouseToSlendro m = fromRational . d2f slendro . toRational <| (floor <| scale 0 24 m :: Integer)
