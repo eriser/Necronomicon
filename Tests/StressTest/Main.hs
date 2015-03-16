@@ -22,7 +22,7 @@ sections = switch (netsignal <| floor . scale 0 3 <~ randFS ticker) [section1, s
 
 stressSounds :: Signal ()
 stressSounds = play             ((> 0.5) <~ randFS ticker) triOsc    (randFS ticker ~> scale 20 3000) (randFS ticker ~> scale 20 3000)
-            <> play             ((> 0.5) <~ randFS ticker) triOsc32  (randFS ticker ~> scale 20 3000)  (randFS ticker ~> scale 20 3000)
+            <> play             ((> 0.5) <~ randFS ticker) triOsc32  (randFS ticker ~> scale 20 3000) (randFS ticker ~> scale 20 3000)
             <> playSynthPattern ((> 0.5) <~ randFS ticker) triOscEnv (pmap (d2f bartok . (+12)) <| ploop [ [lich| [0 1] [4 3] [2 3] [2 3 4 5] |] ])
             <> playBeatPattern  ((> 0.5) <~ randFS ticker) (ploop [ [lich| b [p b] p [p p p] |] ])
     where

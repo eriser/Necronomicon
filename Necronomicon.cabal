@@ -186,3 +186,14 @@ executable PriorityQueueTest
         base             == 4.*,
         Necronomicon,
         QuickCheck
+
+executable Shootout
+    main-is:          Main.hs
+    default-language: Haskell2010
+    ghc-options:      -threaded -O3 -Wall -Werror
+    hs-source-dirs:   Tests/Shootout
+    default-extensions: QuasiQuotes TemplateHaskell ParallelListComp OverloadedLists
+    build-depends:
+        base             == 4.*,
+        Necronomicon,
+        vector

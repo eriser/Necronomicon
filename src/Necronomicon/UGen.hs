@@ -36,7 +36,7 @@ data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Env Double 
 data UGenRate = ControlRate | AudioRate deriving (Show, Enum, Eq, Ord)
 
 instance Show UGenChannel where
-    show (UGenNum d) = show d
+    show (UGenNum d)           = show d
     show (UGenFunc u _ _ _ us) = "(" ++ (show u) ++ " (" ++ foldl (\acc ug -> acc ++ show ug ++ " ") " " us ++ "))"
 
 instance Num UGen where

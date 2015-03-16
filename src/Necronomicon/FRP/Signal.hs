@@ -1733,7 +1733,6 @@ playSynthPattern' playSig u pattern argSigs = Signal $ \state -> do
     pid          <- getNextID state
 
     let synthName = "~p" ++ show pid
-
     _            <- runNecroState (compileSynthDef synthName u) (necroVars state)
 
     let pFunc     = return (\val t -> playSynthAtJackTime synthName [val] t >> return ())
