@@ -19,7 +19,7 @@ switcher :: Signal Int
 switcher = count (every 4)
 
 ticker :: Signal Double
-ticker = fps 60
+ticker = fps 1
 
 x :: Signal Double
 x = randFS ticker ~> scale (-3000) 3000
