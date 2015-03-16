@@ -16,7 +16,7 @@ printTest i
     | otherwise               = ""
 
 switcher :: Signal Int
-switcher = count (every 4)
+switcher = count (every 5)
 
 ticker :: Signal Double
 ticker = fps 1

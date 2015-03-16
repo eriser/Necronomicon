@@ -813,7 +813,7 @@ nextWireIndex :: Compiled CUInt
 nextWireIndex = getWireIndex >>= \wire -> setWireIndex (wire + 1) >> return wire
 
 initializeWireBufs :: CUInt -> [CompiledConstant] -> IO (Ptr CDouble)
-initializeWireBufs numWires constants = print ("Wire Buffers: " ++ (show folded)) >> getJackBlockSize >>= \blockSize ->
+initializeWireBufs numWires constants = {-print ("Wire Buffers: " ++ (show folded)) >> -}getJackBlockSize >>= \blockSize ->
     let wires = foldl (++) [] $ map (replicate (fromIntegral blockSize)) folded in newArray wires
     where
         folded :: [CDouble]
@@ -833,20 +833,20 @@ compileSynthArg argIndex = let arg = (synthArgument argIndex) in compileUGen arg
 
 runCompileSynthDef :: UGenType a => String -> a -> IO SynthDef
 runCompileSynthDef name ugenFunc = do
-    print ("Compiling synthdef " ++ name ++ " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-    (numArgs, (CompiledData table revGraph constants numWires _ _)) <- runCompile (compileSynthArgsAndUGenGraph ugenFunc) mkCompiledData
-    print ("table: " ++ (show table))
-    print ("Total ugens: " ++ (show $ length revGraph))
-    print ("Total constants: " ++ (show $ length constants))
-    print ("Num Wires: " ++ (show numWires))
+    -- print ("Compiling synthdef " ++ name ++ " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
+    (numArgs, (CompiledData {-table-}_ revGraph constants numWires _ _)) <- runCompile (compileSynthArgsAndUGenGraph ugenFunc) mkCompiledData
+    -- print ("table: " ++ (show table))
+    -- print ("Total ugens: " ++ (show $ length revGraph))
+    -- print ("Total constants: " ++ (show $ length constants))
+    -- print ("Num Wires: " ++ (show numWires))
     -- Don't actually compile the arg ugens, they shouldn't be evaluated at run time. Instead they're controlled from the Haskell side.
     let graph = drop numArgs $ reverse revGraph -- Reverse the revGraph because we've been using cons during compilation.
-    print ("UGenGraph: " ++ (show graph))
+    -- print ("UGenGraph: " ++ (show graph))
     compiledGraph <- newArray graph
     compiledWireBufs <- initializeWireBufs numWires constants
     let scheduledTime = 0 :: JackTime
     let cs = CSynthDef compiledGraph nullPtr compiledWireBufs nullPtr nullPtr nullPtr scheduledTime 0 0 0 (fromIntegral $ length graph) (fromIntegral numWires) 0 0
-    print cs
+    -- print cs
     csynthDef <- new $ cs
     return (SynthDef name numArgs csynthDef)
 
