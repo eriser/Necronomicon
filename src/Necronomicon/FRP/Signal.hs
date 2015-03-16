@@ -167,6 +167,7 @@ import           Necronomicon.Patterns             (Pattern (..))
 import           Necronomicon.Runtime
 import           Necronomicon.UGen
 import           Necronomicon.Networking
+import           Necronomicon.Utility              (getCurrentTime)
 import           System.Random
 import           Foreign hiding (shift)
 import           Foreign.C
@@ -391,11 +392,6 @@ runSignal s = initWindow >>= \mw -> case mw of
                 threadDelay $ 33334
 
                 renderNecronomicon q window signalLoop signalState resources currentTime
-
-getCurrentTime :: IO Double
-getCurrentTime = GLFW.getTime >>= \currentTime -> case currentTime of
-    Nothing -> return 0
-    Just t  -> return t
 
 -----------------------------------------------------------------
 -- Instances
@@ -1591,32 +1587,59 @@ class Play a where
     play :: Signal Bool -> a -> PlayRet a
 
 instance Play UGen where
-    type PlayRet UGen = Signal ()
+    type PlayRet UGen =
+        Signal ()
     play playSig synth = playSynth' playSig synth []
 
 instance Play (UGen -> UGen) where
-    type PlayRet (UGen -> UGen) = Signal Double -> Signal ()
+    type PlayRet (UGen -> UGen) =
+        Signal Double -> Signal ()
     play playSig synth x = playSynth' playSig synth [x]
 
 instance Play (UGen -> UGen -> UGen) where
-    type PlayRet (UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal ()
+    type PlayRet (UGen -> UGen -> UGen) =
+        Signal Double -> Signal Double -> Signal ()
     play playSig synth x y = playSynth' playSig synth [x,y]
 
 instance Play (UGen -> UGen -> UGen -> UGen) where
-    type PlayRet (UGen -> UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal Double -> Signal ()
+    type PlayRet (UGen -> UGen -> UGen -> UGen) =
+        Signal Double -> Signal Double -> Signal Double -> Signal ()
     play playSig synth x y z = playSynth' playSig synth [x,y,z]
 
 instance Play (UGen -> UGen -> UGen -> UGen -> UGen) where
-    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
     play playSig synth x y z w = playSynth' playSig synth [x,y,z,w]
 
 instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
-    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
     play playSig synth x y z w p = playSynth' playSig synth [x,y,z,w,p]
 
 instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
-    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) = Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
     play playSig synth x y z w p q = playSynth' playSig synth [x,y,z,w,p,q]
+
+instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
+    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    play playSig synth x y z w p q s = playSynth' playSig synth [x,y,z,w,p,q,s]
+
+instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
+    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    play playSig synth x y z w p q s t = playSynth' playSig synth [x,y,z,w,p,q,s,t]
+
+instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
+    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    play playSig synth x y z w p q s t u = playSynth' playSig synth [x,y,z,w,p,q,s,t,u]
+
+instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
+    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    play playSig synth x y z w p q s t u v = playSynth' playSig synth [x,y,z,w,p,q,s,t,u,v]
 
 playSynth' :: UGenType a => Signal Bool -> a -> [Signal Double] -> Signal ()
 playSynth' playSig u argSigs = Signal $ \state -> do
@@ -1665,6 +1688,41 @@ instance PlaySynthPattern (PRational -> PRational -> PRational -> Pattern (Patte
     type PlayPatRet  (PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) = Signal Double -> Signal Double -> Signal Double -> Signal ()
     playSynthPattern playSig synth p x y z = playSynthPattern' playSig synth (PFunc3 p) [x,y,z]
 
+instance PlaySynthPattern (PRational -> PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) where
+    type PlayPatRet (PRational -> PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playSynthPattern  playSig synth p a b c d = playSynthPattern' playSig synth (PFunc4 p) [a, b, c ,d]
+
+instance PlaySynthPattern (PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) where
+    type PlayPatRet (PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playSynthPattern  playSig synth p a b c d e = playSynthPattern' playSig synth (PFunc5 p) [a, b, c, d, e]
+
+instance PlaySynthPattern (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) where
+    type PlayPatRet (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playSynthPattern  playSig synth p a b c d e f = playSynthPattern' playSig synth (PFunc6 p) [a, b, c, d, e, f]
+
+instance PlaySynthPattern (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) where
+    type PlayPatRet (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playSynthPattern  playSig synth p a b c d e f g = playSynthPattern' playSig synth (PFunc7 p) [a, b, c, d, e, f, g]
+
+instance PlaySynthPattern (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) where
+    type PlayPatRet (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playSynthPattern  playSig synth p a b c d e f g h = playSynthPattern' playSig synth (PFunc8 p) [a, b, c, d, e, f, g, h]
+
+instance PlaySynthPattern (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) where
+    type PlayPatRet (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playSynthPattern  playSig synth p a b c d e f g h i  = playSynthPattern' playSig synth (PFunc9 p) [a, b, c, d, e, f, g, h, i]
+
+instance PlaySynthPattern (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) where
+    type PlayPatRet (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playSynthPattern  playSig synth p a b c d e f g h i j = playSynthPattern' playSig synth (PFunc10 p) [a, b, c, d, e, f, g, h, i, j]
+
 playSynthPattern' :: Signal Bool -> (UGen -> UGen) -> PFunc Rational -> [Signal Double] -> Signal ()
 playSynthPattern' playSig u pattern argSigs = Signal $ \state -> do
 
@@ -1675,7 +1733,6 @@ playSynthPattern' playSig u pattern argSigs = Signal $ \state -> do
     pid          <- getNextID state
 
     let synthName = "~p" ++ show pid
-
     _            <- runNecroState (compileSynthDef synthName u) (necroVars state)
 
     let pFunc     = return (\val t -> playSynthAtJackTime synthName [val] t >> return ())
@@ -1707,20 +1764,59 @@ class PlayBeatPattern a where
     playBeatPattern    :: Signal Bool -> a -> PlayBeatRet a
 
 instance PlayBeatPattern (Pattern (Pattern (String, UGen), Rational)) where
-    type PlayBeatRet (Pattern (Pattern (String, UGen), Rational)) = Signal ()
+    type PlayBeatRet (Pattern (Pattern (String, UGen), Rational)) =
+        Signal ()
     playBeatPattern  playSig p = playBeatPattern'  playSig (PFunc0 p) []
 
 instance PlayBeatPattern (PRational -> Pattern (Pattern (String, UGen), Rational)) where
-    type PlayBeatRet (PRational -> Pattern (Pattern (String, UGen), Rational)) = Signal Double -> Signal ()
-    playBeatPattern  playSig p x = playBeatPattern' playSig (PFunc1 p) [x]
+    type PlayBeatRet (PRational -> Pattern (Pattern (String, UGen), Rational)) =
+        Signal Double -> Signal ()
+    playBeatPattern  playSig p a = playBeatPattern' playSig (PFunc1 p) [a]
 
 instance PlayBeatPattern (PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) where
-    type PlayBeatRet (PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) = Signal Double -> Signal Double -> Signal ()
-    playBeatPattern  playSig p x y = playBeatPattern' playSig (PFunc2 p) [x,y]
+    type PlayBeatRet (PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) =
+        Signal Double -> Signal Double -> Signal ()
+    playBeatPattern  playSig p a b = playBeatPattern' playSig (PFunc2 p) [a, b]
 
 instance PlayBeatPattern (PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) where
-    type PlayBeatRet (PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) = Signal Double -> Signal Double -> Signal Double -> Signal ()
-    playBeatPattern  playSig p x y z = playBeatPattern' playSig (PFunc3 p) [x,y,z]
+    type PlayBeatRet (PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) =
+        Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playBeatPattern  playSig p a b c = playBeatPattern' playSig (PFunc3 p) [a, b, c]
+
+instance PlayBeatPattern (PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) where
+    type PlayBeatRet (PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playBeatPattern  playSig p a b c d = playBeatPattern' playSig (PFunc4 p) [a, b, c ,d]
+
+instance PlayBeatPattern (PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) where
+    type PlayBeatRet (PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playBeatPattern  playSig p a b c d e = playBeatPattern' playSig (PFunc5 p) [a, b, c, d, e]
+
+instance PlayBeatPattern (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) where
+    type PlayBeatRet (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playBeatPattern  playSig p a b c d e f = playBeatPattern' playSig (PFunc6 p) [a, b, c, d, e, f]
+
+instance PlayBeatPattern (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) where
+    type PlayBeatRet (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playBeatPattern  playSig p a b c d e f g = playBeatPattern' playSig (PFunc7 p) [a, b, c, d, e, f, g]
+
+instance PlayBeatPattern (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) where
+    type PlayBeatRet (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playBeatPattern  playSig p a b c d e f g h = playBeatPattern' playSig (PFunc8 p) [a, b, c, d, e, f, g, h]
+
+instance PlayBeatPattern (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) where
+    type PlayBeatRet (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playBeatPattern  playSig p a b c d e f g h i  = playBeatPattern' playSig (PFunc9 p) [a, b, c, d, e, f, g, h, i]
+
+instance PlayBeatPattern (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) where
+    type PlayBeatRet (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playBeatPattern  playSig p a b c d e f g h i j = playBeatPattern' playSig (PFunc10 p) [a, b, c, d, e, f, g, h, i, j]
 
 playBeatPattern' :: Signal Bool -> PFunc (String, UGen) -> [Signal Double] -> Signal ()
 playBeatPattern' playSig pattern argSigs = Signal $ \state -> do

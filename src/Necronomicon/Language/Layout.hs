@@ -11,8 +11,6 @@ import Control.Applicative ((<*),(<*>),(*>),(<$>))
 import Text.ParserCombinators.Parsec
 import qualified Data.Vector as V
 
-import Data.Typeable
-import Data.Data
 import qualified Necronomicon.Patterns as NP
 
 -- modifiers???? How to do this in new layout DSL?
@@ -28,7 +26,7 @@ data ParsecPattern a = ParsecValue a
                      | ParsecRest
                      | ParsecChord [a]
                      | ParsecList [ParsecPattern a]
-                     deriving (Show,Typeable,Data)
+                     deriving (Show)
 
 
 -- type Time = Double
@@ -71,7 +69,7 @@ parseParsecPattern input =
 parseExpr :: Parser (Q Exp)
 -- parseExpr = (parsecPatternToQExpr <$> try synthPattern) <|> (parsecPatternToQExpr <$> try functionPattern) <|> (parsecPatternToQExpr <$> notePattern)
 -- parseExpr = (dataToExpQ (const Nothing) <$> try synthPattern) <|> (dataToExpQ (const Nothing) <$> try functionPattern) <|> (dataToExpQ (const Nothing) <$> notePattern)
-parseExpr = try notePatternExp <|> try synthPatternExp <|> (dataToExpQ (const Nothing) <$> try functionPattern)
+parseExpr = try notePatternExp <|> try synthPatternExp <|> functionPatternExp --(dataToExpQ (const Nothing) <$> try functionPattern)
 
 synthPatternExp :: Parser (Q Exp)
 synthPatternExp = synthPattern >>= return . patToExp
@@ -106,6 +104,21 @@ notePatternExp = notePattern >>= return . patToExp
             name  <- getValueName "ParsecChord"
             rName <- getTypeName "Rational"
             return $ AppE (ConE name) (ListE $ map ((flip SigE) (ConT rName) . LitE . RationalL . toRational) ps)
+
+functionPatternExp :: Parser (Q Exp)
+functionPatternExp = functionPattern >>= return . patToExp
+    where
+        patToExp (ParsecRest    ) = getValueName "ParsecRest" >>= return . ConE
+        patToExp (ParsecValue  p) = do
+            pv    <- getValueName "ParsecValue"
+            return $ AppE (ConE pv) p
+        patToExp (ParsecList  ps) = do
+            name <- getValueName "ParsecList"
+            list <- mapM patToExp ps
+            return $ AppE (ConE name) (ListE list)
+        patToExp (ParsecChord ps) = do
+            name  <- getValueName "ParsecChord"
+            return $ AppE (ConE name) (ListE ps)
 
 synthPattern :: Parser (ParsecPattern String)
 synthPattern = parseSynthArray <|> parseSynthChordTuples <|> parseSynthRest <|> parseSynthPattern

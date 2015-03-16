@@ -1,19 +1,15 @@
 module Necronomicon.FRP.Event (
     EventValue(..),
-    Event(..),
+    -- Event(..),
     SignalVar,
     SignalState(..),
     Client(..),
     RunStatus(..),
     writeToSignal,
-    module Data.Dynamic,
-    module Data.Typeable
     ) where
 
 ------------------------------------------------------
 import           Control.Concurrent.STM
-import           Data.Typeable(Typeable)
-import           Data.Dynamic (Dynamic,toDyn,fromDynamic)
 import           Data.IORef
 import           Necronomicon.Graphics.SceneObject (SceneObject)
 import           Necronomicon.Linear (Vector2)
@@ -25,7 +21,7 @@ import qualified Data.IntMap as IntMap
 -------------------------
 -- Signals 6.0
 -------------------------
-data Event        = Event Int Dynamic
+-- data Event        = Event Int Dynamic
 data EventValue a = Change a | NoChange a deriving (Show)
 
 --timestamp inputs mayhap?
@@ -68,7 +64,7 @@ data RunStatus = Connecting
                | ShouldQuit
                | Quitting
                | DoneQuitting
-               deriving (Show,Eq,Typeable)
+               deriving (Show,Eq)
 
 data Client = Client {
     clientUserName    :: String,

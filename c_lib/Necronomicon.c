@@ -1525,6 +1525,15 @@ int process(jack_nframes_t nframes, void* arg)
 	double* _necronomicon_buses_out6 = _necronomicon_buses + BLOCK_SIZE * 6;
 	double* _necronomicon_buses_out7 = _necronomicon_buses + BLOCK_SIZE * 7;
 
+	double* _out_bus_0 = out_bus_buffers[0];
+	double* _out_bus_1 = out_bus_buffers[1];
+	double* _out_bus_2 = out_bus_buffers[2];
+	double* _out_bus_3 = out_bus_buffers[3];
+	double* _out_bus_4 = out_bus_buffers[4];
+	double* _out_bus_5 = out_bus_buffers[5];
+	double* _out_bus_6 = out_bus_buffers[6];
+	double* _out_bus_7 = out_bus_buffers[7];
+
 	unsigned int i;
 	for (i = 0; i < nframes; ++i)
     {
@@ -1532,14 +1541,14 @@ int process(jack_nframes_t nframes, void* arg)
 		out1[i] = _necronomicon_buses_out1[i];
 
 		//Hand un-rolled this loop. The non-unrolled version was causing 13% cpu overhead on my machine, this doesn't make a blip...
-		out_bus_buffers[0][out_bus_buffer_index]  = _necronomicon_buses_out0[i];
-		out_bus_buffers[1][out_bus_buffer_index]  = _necronomicon_buses_out1[i];
-		out_bus_buffers[2][out_bus_buffer_index]  = _necronomicon_buses_out2[i];
-		out_bus_buffers[3][out_bus_buffer_index]  = _necronomicon_buses_out3[i];
-		out_bus_buffers[4][out_bus_buffer_index]  = _necronomicon_buses_out4[i];
-		out_bus_buffers[5][out_bus_buffer_index]  = _necronomicon_buses_out5[i];
-		out_bus_buffers[6][out_bus_buffer_index]  = _necronomicon_buses_out6[i];
-		out_bus_buffers[7][out_bus_buffer_index]  = _necronomicon_buses_out7[i];
+		_out_bus_0[out_bus_buffer_index] = _necronomicon_buses_out0[i];
+		_out_bus_1[out_bus_buffer_index] = _necronomicon_buses_out1[i];
+		_out_bus_2[out_bus_buffer_index] = _necronomicon_buses_out2[i];
+		_out_bus_3[out_bus_buffer_index] = _necronomicon_buses_out3[i];
+		_out_bus_4[out_bus_buffer_index] = _necronomicon_buses_out4[i];
+		_out_bus_5[out_bus_buffer_index] = _necronomicon_buses_out5[i];
+		_out_bus_6[out_bus_buffer_index] = _necronomicon_buses_out6[i];
+		_out_bus_7[out_bus_buffer_index] = _necronomicon_buses_out7[i];
 		out_bus_buffer_index = (out_bus_buffer_index + 1) & 511;
 	}
 
@@ -5217,4 +5226,21 @@ void time_secs_calc(ugen u)
 	AUDIO_LOOP(
 		UGEN_OUT(out, ((double) current_cycle_usecs + ((double) _block_frame * usecs_per_frame)) / MICROS_PER_SECOND);
 	);
+}
+
+float out_bus_rms(int bus)
+{
+	if(bus < 0 || bus > 7)
+		return 0.0;
+
+	float   squareSum    = 0;
+	double* outBusBuffer = out_bus_buffers[bus];
+	uint    i            = 0;
+
+	for(i<512; ++i;)
+	{
+		squareSum += outBusBuffer[i] * outBusBuffer[i];
+	}
+
+	return sqrt(squareSum / 512);
 }

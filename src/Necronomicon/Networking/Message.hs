@@ -3,7 +3,6 @@ module Necronomicon.Networking.Message where
 import Prelude
 import Network.Socket hiding (send,recv,recvFrom,sendTo)
 import Network.Socket.ByteString.Lazy
-import Sound.OSC.Core
 import Data.Binary (Binary,encode,decode,get,put,Get)
 import Data.Int    (Int32,Int64)
 import Control.Monad (when)
@@ -12,17 +11,7 @@ import Control.Exception
 import qualified Data.ByteString.Char8 as C
 import qualified Data.ByteString.Lazy  as B
 import Necronomicon.Linear.Vector (Vector2(..),Vector3(..),Vector4(..))
--- import Necronomicon.FRP.Event
-import Data.Dynamic
 import qualified Data.IntMap as IntMap
-
-toOSCString :: String -> Datum
-toOSCString = d_put . C.pack --ASCII_String . C.pack
-
-datumToString :: Datum -> Maybe String
-datumToString d = case d_get d of
-    Just s  -> Just $ C.unpack s
-    Nothing -> Nothing
 
 lengthOfMessageLength :: Int64
 lengthOfMessageLength = 2
@@ -171,26 +160,6 @@ instance Binary NetMessage where
         7 -> (get ::Get  C.ByteString ) >>= return . Logout
         8 -> (get ::Get (IntMap.IntMap NetValue)) >>= return . SyncNetSignals
         _ -> return EmptyMessage
-
-netValToDyn :: NetValue -> Dynamic
-netValToDyn (NetInt        v) = toDyn v
-netValToDyn (NetDouble     v) = toDyn v
-netValToDyn (NetBool       v) = toDyn v
-netValToDyn (NetString     v) = toDyn v
-netValToDyn (NetVec2       v) = toDyn v
-netValToDyn (NetVec3       v) = toDyn v
-netValToDyn (NetVec4       v) = toDyn v
-netValToDyn (NetTupInt     v) = toDyn v
-netValToDyn (NetTupDouble  v) = toDyn v
-netValToDyn (NetTupBool    v) = toDyn v
-netValToDyn (NetIntList    v) = toDyn v
-netValToDyn (NetDoubleList v) = toDyn v
-netValToDyn (NetBoolList   v) = toDyn v
-netValToDyn (NetStringList v) = toDyn v
-netValToDyn (NetVec2List   v) = toDyn v
-netValToDyn (NetVec3List   v) = toDyn v
-netValToDyn (NetVec4List   v) = toDyn v
-netValToDyn NetNothing        = toDyn ()
 
 class (Eq a) => Networkable a where
     toNetVal   :: a -> NetValue

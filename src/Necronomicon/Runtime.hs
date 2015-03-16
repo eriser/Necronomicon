@@ -11,7 +11,6 @@ import qualified Necronomicon.Util.PriorityQueue as PQ
 import Necronomicon.Patterns
 import qualified Data.Map as M
 import Paths_Necronomicon
-import Data.Typeable
 import Debug.Trace
 
 data SynthDef = SynthDef {
@@ -148,7 +147,7 @@ data NecroVars = NecroVars {
     necroTempo :: TVar Rational
 }
 
-data Necronomicon a = Necronomicon { runNecroState :: NecroVars -> IO (a, NecroVars) } deriving (Typeable)
+data Necronomicon a = Necronomicon { runNecroState :: NecroVars -> IO (a, NecroVars) }
 
 instance Functor Necronomicon where
     fmap f (Necronomicon h) = Necronomicon (\n -> h n >>= \(a, n') -> return (f a, n'))
