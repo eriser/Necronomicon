@@ -16,7 +16,7 @@ printTest i
     | otherwise               = ""
 
 switcher :: Signal Int
-switcher = count (every 5)
+switcher = count (every 6)
 
 -- ticker :: Signal Double
 -- ticker = fps 1
@@ -32,6 +32,8 @@ synthsVec = V.fromList synths
 
 synths :: [(String, UGen)]
 synths = [
+    ("nothingSynth", nothingSynth),
+    ("nothingSynth2", nothingSynth2),
     ("addSynth", addSynth),
     ("minusSynth", minusSynth),
     ("mulSynth", mulSynth),
@@ -107,6 +109,12 @@ testTwoArgs f = foldr f 1 (map fromIntegral [1..testCount])
 
 testOneArg :: (UGen -> UGen) -> UGen
 testOneArg f = foldr (<|) 1 <| replicate testCount f
+
+nothingSynth :: UGen
+nothingSynth = 0
+
+nothingSynth2 :: UGen
+nothingSynth2 = 0
 
 addSynth :: UGen
 addSynth = testTwoArgs (+)
@@ -245,7 +253,7 @@ delayCSynth = testTwoArgs (\a b -> delayC 1 a b)
 
 whiteNoiseSynth :: UGen
 -- whiteNoiseSynth = mconcat <| replicate 10 whiteNoise
-whiteNoiseSynth = testTwoArgs (\a b -> delayC 1 a b)
+whiteNoiseSynth = 0 -- testTwoArgs (\a b -> delayC 1 a b)
 
 pluckSynth :: UGen
 pluckSynth = testTwoArgs (\a b -> pluck 100 a b whiteNoise)
