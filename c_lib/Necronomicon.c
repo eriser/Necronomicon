@@ -1697,7 +1697,7 @@ AUDIO_LOOP(                                       \
 	UGEN_OUT(out, a OP b);                        \
 );                                                \
 
-void add_calc(ugen u)
+void add_aa_calc(ugen u)
 {
 	BIN_OP_CALC(
 		+,
@@ -1727,15 +1727,18 @@ void add_ka_calc(ugen u)
 
 void add_kk_calc(ugen u)
 {
-	BIN_OP_CALC(
-		+,
-		a = in0[0]; // Control args
-		b = in1[0];,
-		/* no audio args */
-    );
+	double* in0 = UGEN_INPUT_BUFFER(u, 0);
+	double* in1 = UGEN_INPUT_BUFFER(u, 1);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	double a = in0[0];
+	double b = in1[0];
+	const double y = a + b;
+	AUDIO_LOOP(
+		UGEN_OUT(out, y);
+	);
 }
 
-void minus_calc(ugen u)
+void minus_aa_calc(ugen u)
 {
 	BIN_OP_CALC(
 		-,
@@ -1765,15 +1768,18 @@ void minus_ka_calc(ugen u)
 
 void minus_kk_calc(ugen u)
 {
-	BIN_OP_CALC(
-		-,
-		a = in0[0]; // Control args
-		b = in1[0];,
-		/* no audio args */
-    );
+	double* in0 = UGEN_INPUT_BUFFER(u, 0);
+	double* in1 = UGEN_INPUT_BUFFER(u, 1);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	double a = in0[0];
+	double b = in1[0];
+	const double y = a - b;
+	AUDIO_LOOP(
+		UGEN_OUT(out, y);
+	);
 }
 
-void mul_calc(ugen u)
+void mul_aa_calc(ugen u)
 {
 	BIN_OP_CALC(
 		*,
@@ -1803,32 +1809,70 @@ void mul_ka_calc(ugen u)
 
 void mul_kk_calc(ugen u)
 {
-	BIN_OP_CALC(
-		*,
-		a = in0[0]; // Control args
-		b = in1[0];,
-		/* no audio args */
+	double* in0 = UGEN_INPUT_BUFFER(u, 0);
+	double* in1 = UGEN_INPUT_BUFFER(u, 1);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	double a = in0[0];
+	double b = in1[0];
+	const double y = a * b;
+	AUDIO_LOOP(
+		UGEN_OUT(out, y);
+	);
+}
+
+#define DIV_CALC(CONTROL_ARGS, AUDIO_ARGS)        \
+double* in0 = UGEN_INPUT_BUFFER(u, 0);            \
+double* in1 = UGEN_INPUT_BUFFER(u, 1);            \
+double* out = UGEN_OUTPUT_BUFFER(u, 0);           \
+double a,b;                                       \
+CONTROL_ARGS                                      \
+AUDIO_LOOP(                                       \
+	AUDIO_ARGS                                    \
+	if (b == 0) 								  \
+		UGEN_OUT(out, 0);     					  \
+	else 										  \
+		UGEN_OUT(out, a / b);  					  \
+);                                                \
+
+void div_aa_calc(ugen u)
+{
+	DIV_CALC(
+		/* no control args */,
+		a = UGEN_IN(in0); // Audio args
+		b = UGEN_IN(in1);
     );
 }
 
-void div_calc(ugen u)
+void div_ka_calc(ugen u)
+{
+	DIV_CALC(
+		a = in0[0];, // Control args
+		b = UGEN_IN(in1); // Audio args
+    );
+}
+
+void div_ak_calc(ugen u)
+{
+	DIV_CALC(
+		b = in1[0];, // Control args
+		a = UGEN_IN(in0); // Audio args
+    );
+}
+
+void div_kk_calc(ugen u)
 {
 	double* in0 = UGEN_INPUT_BUFFER(u, 0);
 	double* in1 = UGEN_INPUT_BUFFER(u, 1);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-
-	double denominator;
-
+	double a = in0[0];
+	double b = in1[0];
+	const double y = b != 0 ? (a / b) : 0;
 	AUDIO_LOOP(
-		denominator = UGEN_IN(in1);
-		if(denominator == 0)
-			UGEN_OUT(out, 0);
-		else
-			UGEN_OUT(out, UGEN_IN(in0) / denominator);
+		UGEN_OUT(out, y);
 	);
 }
 
-void abs_calc(ugen u)
+void abs_a_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
@@ -1838,29 +1882,48 @@ void abs_calc(ugen u)
 	);
 }
 
-void signum_calc(ugen u)
+void abs_k_calc(ugen u)
+{
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	const double y = abs(in[0]);
+	AUDIO_LOOP(
+		UGEN_OUT(out, y);
+	);
+}
+
+#define SIGNUM_CALC() \
+if (value > 0)        \
+	value = 1;        \
+else if (value < 0)   \
+	value = -1;       \
+else                  \
+	value = 0;        \
+
+void signum_a_calc(ugen u)
 {
 	double* in  = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-
+	double value;
 	AUDIO_LOOP(
-		double value = UGEN_IN(in);
-
-		if (value > 0)
-		{
-			value = 1;
-		}
-
-		else if (value < 0)
-		{
-			value = -1;
-		}
-
+		value = UGEN_IN(in);
+		SIGNUM_CALC();
 		UGEN_OUT(out, value);
 	);
 }
 
-void negate_calc(ugen u)
+void signum_k_calc(ugen u)
+{
+	double* in  = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	double value = in[0];
+	SIGNUM_CALC();
+	AUDIO_LOOP(
+		UGEN_OUT(out, value);
+	);
+}
+
+void negate_a_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
@@ -1870,7 +1933,17 @@ void negate_calc(ugen u)
 	);
 }
 
-void pow_calc(ugen u)
+void negate_k_calc(ugen u)
+{
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	const double y = -in[0];
+	AUDIO_LOOP(
+		UGEN_OUT(out, y);
+	);
+}
+
+void pow_a_calc(ugen u)
 {
 	double* in0 = UGEN_INPUT_BUFFER(u, 0);
 	double* in1 = UGEN_INPUT_BUFFER(u, 1);
@@ -1881,7 +1954,18 @@ void pow_calc(ugen u)
 	);
 }
 
-void exp_calc(ugen u)
+void pow_k_calc(ugen u)
+{
+	double* in0 = UGEN_INPUT_BUFFER(u, 0);
+	double* in1 = UGEN_INPUT_BUFFER(u, 1);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	const double y = pow(in0[0], in1[0]);
+	AUDIO_LOOP(
+		UGEN_OUT(out, y);
+	);
+}
+
+void exp_a_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
@@ -1891,7 +1975,17 @@ void exp_calc(ugen u)
 	);
 }
 
-void log_calc(ugen u)
+void exp_k_calc(ugen u)
+{
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	const double y = exp(in[0]);
+	AUDIO_LOOP(
+		UGEN_OUT(out, y);
+	);
+}
+
+void log_a_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
@@ -1901,7 +1995,17 @@ void log_calc(ugen u)
 	);
 }
 
-void cos_calc(ugen u)
+void log_k_calc(ugen u)
+{
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	const double y = log(in[0]);
+	AUDIO_LOOP(
+		UGEN_OUT(out, y);
+	);
+}
+
+void cos_a_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
@@ -1911,7 +2015,17 @@ void cos_calc(ugen u)
 	);
 }
 
-void asin_calc(ugen u)
+void cos_k_calc(ugen u)
+{
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	const double y = cos(in[0]);
+	AUDIO_LOOP(
+		UGEN_OUT(out, y);
+	);
+}
+
+void asin_a_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
@@ -1921,7 +2035,17 @@ void asin_calc(ugen u)
 	);
 }
 
-void acos_calc(ugen u)
+void asin_k_calc(ugen u)
+{
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	const double y = asin(in[0]);
+	AUDIO_LOOP(
+		UGEN_OUT(out, y);
+	);
+}
+
+void acos_a_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
@@ -1931,7 +2055,17 @@ void acos_calc(ugen u)
 	);
 }
 
-void atan_calc(ugen u)
+void acos_k_calc(ugen u)
+{
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	const double y = acos(in[0]);
+	AUDIO_LOOP(
+		UGEN_OUT(out, y);
+	);
+}
+
+void atan_a_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
@@ -1941,7 +2075,17 @@ void atan_calc(ugen u)
 	);
 }
 
-void logbase_calc(ugen u)
+void atan_k_calc(ugen u)
+{
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	const double y = atan(in[0]);
+	AUDIO_LOOP(
+		UGEN_OUT(out, y);
+	);
+}
+
+void logbase_aa_calc(ugen u)
 {
 	double* in0 = UGEN_INPUT_BUFFER(u, 0);
 	double* in1 = UGEN_INPUT_BUFFER(u, 1);
@@ -1952,7 +2096,42 @@ void logbase_calc(ugen u)
 	);
 }
 
-void sqrt_calc(ugen u)
+void logbase_ka_calc(ugen u)
+{
+	double* in0 = UGEN_INPUT_BUFFER(u, 0);
+	double* in1 = UGEN_INPUT_BUFFER(u, 1);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	const double a = log(in0[0]);
+	AUDIO_LOOP(
+		UGEN_OUT(out, a / log(UGEN_IN(in1)));
+	);
+}
+
+void logbase_ak_calc(ugen u)
+{
+	double* in0 = UGEN_INPUT_BUFFER(u, 0);
+	double* in1 = UGEN_INPUT_BUFFER(u, 1);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	const double b = log(in1[0]);
+	AUDIO_LOOP(
+		UGEN_OUT(out, log(UGEN_IN(in0)) / b);
+	);
+}
+
+void logbase_kk_calc(ugen u)
+{
+	double* in0 = UGEN_INPUT_BUFFER(u, 0);
+	double* in1 = UGEN_INPUT_BUFFER(u, 1);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	const double a = log(in0[0]);
+	const double b = log(in1[0]);
+	const double y = a / b;
+	AUDIO_LOOP(
+		UGEN_OUT(out, y);
+	);
+}
+
+void sqrt_a_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
@@ -1962,7 +2141,17 @@ void sqrt_calc(ugen u)
 	);
 }
 
-void tan_calc(ugen u)
+void sqrt_k_calc(ugen u)
+{
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	const double y = sqrt(in[0]);
+	AUDIO_LOOP(
+		UGEN_OUT(out, y);
+	);
+}
+
+void tan_a_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
@@ -1972,7 +2161,17 @@ void tan_calc(ugen u)
 	);
 }
 
-void sinh_calc(ugen u)
+void tan_k_calc(ugen u)
+{
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	const double y = tan(in[0]);
+	AUDIO_LOOP(
+		UGEN_OUT(out, y);
+	);
+}
+
+void sinh_a_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
@@ -1982,7 +2181,17 @@ void sinh_calc(ugen u)
 	);
 }
 
-void cosh_calc(ugen u)
+void sinh_k_calc(ugen u)
+{
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	const double y = sinh(in[0]);
+	AUDIO_LOOP(
+		UGEN_OUT(out, y);
+	);
+}
+
+void cosh_a_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
@@ -1992,7 +2201,17 @@ void cosh_calc(ugen u)
 	);
 }
 
-void tanh_calc(ugen u)
+void cosh_k_calc(ugen u)
+{
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	const double y = cosh(in[0]);
+	AUDIO_LOOP(
+		UGEN_OUT(out, y);
+	);
+}
+
+void tanh_a_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
@@ -2002,7 +2221,17 @@ void tanh_calc(ugen u)
 	);
 }
 
-void asinh_calc(ugen u)
+void tanh_k_calc(ugen u)
+{
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	const double y = tanh(in[0]);
+	AUDIO_LOOP(
+		UGEN_OUT(out, y);
+	);
+}
+
+void asinh_a_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
@@ -2012,7 +2241,17 @@ void asinh_calc(ugen u)
 	);
 }
 
-void atanh_calc(ugen u)
+void asinh_k_calc(ugen u)
+{
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	const double y = asinh(in[0]);
+	AUDIO_LOOP(
+		UGEN_OUT(out, y);
+	);
+}
+
+void atanh_a_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
@@ -2022,13 +2261,33 @@ void atanh_calc(ugen u)
 	);
 }
 
-void acosh_calc(ugen u)
+void atanh_k_calc(ugen u)
+{
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	const double y = atanh(in[0]);
+	AUDIO_LOOP(
+		UGEN_OUT(out, y);
+	);
+}
+
+void acosh_a_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 
 	AUDIO_LOOP(
 		UGEN_OUT(out, acosh(UGEN_IN(in)));
+	);
+}
+
+void acosh_k_calc(ugen u)
+{
+	double* in = UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	const double y = acosh(in[0]);
+	AUDIO_LOOP(
+		UGEN_OUT(out, y);
 	);
 }
 
@@ -2160,6 +2419,7 @@ void env_calc(ugen u)
 	int          dursOffset = 2 + data.numValues;
 	double       line_timed;
 	double       y          = 0;
+	bool scheduled_for_removal = false;
 
 	AUDIO_LOOP(
 		curve      = UGEN_IN(in0);
@@ -2222,7 +2482,12 @@ void env_calc(ugen u)
 		{
 			// printf("!!!!!!!!!!!!!!!!!!!!env freeing synth!!!!!!!!!!!!!!!!!!!!!!!!!\n");
 			y = 0;
-			try_schedule_current_synth_for_removal();
+
+			if (scheduled_for_removal == false)
+			{
+				try_schedule_current_synth_for_removal();
+				scheduled_for_removal = true;
+			}
 		}
 
 		else
@@ -2412,7 +2677,7 @@ AUDIO_LOOP(										 \
                                                  \
 *((double*) u.data) = phase;                     \
 
-void sin_calc(ugen u)
+void sin_a_calc(ugen u)
 {
 	SIN_CALC(
 		/*no control args*/, // Control Args
@@ -2438,29 +2703,82 @@ void local_out_calc(ugen u)
 	);
 }
 
-void out_calc(ugen u)
-{
-	double* in0 = UGEN_INPUT_BUFFER(u, 0);
-	double* in1 = UGEN_INPUT_BUFFER(u, 1);
-	unsigned char bus_index;
+#define OUT_CALC(CONTROL_CODE, AUDIO_CODE)       		\
+double* in0 = UGEN_INPUT_BUFFER(u, 0);           		\
+double* in1 = UGEN_INPUT_BUFFER(u, 1);           		\
+double x;                                        		\
+unsigned char bus_index; /* constrains bus range */     \
+unsigned int bus_frame;                          		\
+CONTROL_CODE									 		\
+AUDIO_LOOP(										 		\
+	AUDIO_CODE									 		\
+	_necronomicon_buses[bus_frame + _block_frame] += x; \
+);                                               	    \
 
-	AUDIO_LOOP(
-		// Constrain bus index to the correct range
+void out_aa_calc(ugen u)
+{
+	OUT_CALC(
+		/* NO CONTROL CODE */,
+		bus_index = UGEN_IN(in0); // Audio rate code
+		bus_frame = bus_index * BLOCK_SIZE;
+		x = UGEN_IN(in1);
+	)
+}
+
+void out_ak_calc(ugen u)
+{
+	OUT_CALC(
+		x = in1[0];, // Control rate code
+		bus_index = UGEN_IN(in0); // Audio rate code
+		bus_frame = bus_index * BLOCK_SIZE;
+	)
+}
+
+void out_ka_calc(ugen u)
+{
+	OUT_CALC(
+		bus_index = in0[0]; // Control rate code
+		bus_frame = bus_index * BLOCK_SIZE;,
+		x = UGEN_IN(in1); // Audio rate code
+	)
+}
+
+void out_kk_calc(ugen u)
+{
+	OUT_CALC(
+		bus_index = in0[0]; // Control rate code
+		bus_frame = bus_index * BLOCK_SIZE;
+		x = in1[0];,
+		/* no audio rate code */
+	)
+}
+
+#define IN_CALC(CONTROL_CODE, AUDIO_CODE)       				  \
+double* in0 = UGEN_INPUT_BUFFER(u, 0); 							  \
+double* out = UGEN_OUTPUT_BUFFER(u, 0); 						  \
+unsigned char bus_index; /* constrains bus range */     		  \
+unsigned int bus_frame;                          				  \
+CONTROL_CODE									 				  \
+AUDIO_LOOP(										 				  \
+	AUDIO_CODE									 				  \
+	UGEN_OUT(out, _necronomicon_buses[bus_frame + _block_frame]); \
+);                                               	    		  \
+
+void in_a_calc(ugen u)
+{
+	IN_CALC(
+		/* no control rate code */,
 		bus_index = UGEN_IN(in0);
-		_necronomicon_buses[bus_index * BLOCK_SIZE + _block_frame] += UGEN_IN(in1);
+		bus_frame = bus_index * BLOCK_SIZE;
 	);
 }
 
-void in_calc(ugen u)
+void in_k_calc(ugen u)
 {
-	double* in0 = UGEN_INPUT_BUFFER(u, 0);
-	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-	unsigned char bus_index;
-
-	AUDIO_LOOP(
-		// Constrain bus index to the correct range
-		bus_index = UGEN_IN(in0);
-		UGEN_OUT(out, _necronomicon_buses[bus_index * BLOCK_SIZE + _block_frame]);
+	IN_CALC(
+		bus_index = in0[0];
+		bus_frame = bus_index * BLOCK_SIZE;,
+		/* no audio rate code */
 	);
 }
 
@@ -2848,7 +3166,7 @@ void print_ugen(ugen* ugen)
 
 synth_node* new_test_synth(unsigned int time)
 {
-	ugen test_ugen = { &sin_calc, &sin_constructor, &sin_deconstructor, NULL, NULL, NULL };
+	ugen test_ugen = { &sin_a_calc, &sin_constructor, &sin_deconstructor, NULL, NULL, NULL };
 	test_ugen.constructor(&test_ugen);
 
 	synth_node* test_synth = malloc(NODE_SIZE);
