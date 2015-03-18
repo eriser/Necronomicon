@@ -2,7 +2,7 @@ import Necronomicon
 import qualified Data.Vector as V
 
 main :: IO ()
-main = runSignal <| merges (map (<| switcher) ugenTests) <|> sigPrint (printTest <~ switcher)
+main = runSignal <| merges (map (<| switcher) ugenTests) <> sigPrint (printTest <~ switcher)
 
 ugenTests :: [Signal Int -> Signal ()]
 ugenTests = map test <| zip synths [0..]
@@ -16,7 +16,7 @@ printTest i
     | otherwise               = ""
 
 switcher :: Signal Int
-switcher = count (every 6)
+switcher = count (every 10)
 
 -- ticker :: Signal Double
 -- ticker = fps 1
@@ -37,6 +37,17 @@ synths = [
     ("addSynth", addSynth),
     ("minusSynth", minusSynth),
     ("mulSynth", mulSynth),
+
+-- Testing the filter synths in particular in comparison to the nothing and basic math ugens
+    ("softclipSynth", softclipSynth),
+    ("lpfSynth", lpfSynth),
+    ("hpfSynth", hpfSynth),
+    ("bpfSynth", bpfSynth),
+    ("notchSynth", notchSynth),
+    ("allpassSynth", allpassSynth),
+    ("lowshelfSynth", lowshelfSynth),
+    ("highshelfSynth", highshelfSynth),
+
     ("gainSynth", gainSynth),
     ("divSynth", divSynth),
     ("sinSynth", sinSynth),
@@ -60,16 +71,8 @@ synths = [
     ("impulseSynth", impulseSynth),
     ("rangeSynth", rangeSynth),
     ("exprangeSynth", exprangeSynth),
-    ("lpfSynth", lpfSynth),
-    ("hpfSynth", hpfSynth),
-    ("bpfSynth", bpfSynth),
-    ("notchSynth", notchSynth),
-    ("allpassSynth", allpassSynth),
-    ("lowshelfSynth", lowshelfSynth),
-    ("highshelfSynth", highshelfSynth),
     ("lagSynth", lagSynth),
     ("clipSynth", clipSynth),
-    ("softclipSynth", softclipSynth),
     ("poly3Synth", poly3Synth),
     ("tanhDistSynth", tanhDistSynth),
     ("sinDistSynth", sinDistSynth),
@@ -138,10 +141,10 @@ lineSynth' :: UGen
 lineSynth' = testOneArg line
 
 percSynth :: UGen
-percSynth = testTwoArgs (\a b -> perc 0.01 3.0 a 0 b)
+percSynth = testTwoArgs (\a b -> perc 0.01 10.0 a 0 b)
 
 envSynth :: UGen
-envSynth = testOneArg (\a -> env [0,1,0] [0.1,3.0] 0 a)
+envSynth = testOneArg <| env [0,1,0] [0.1,10.0] 0
 
 outSynth :: UGen
 outSynth = testTwoArgs out
@@ -195,25 +198,25 @@ exprangeSynth :: UGen
 exprangeSynth = testTwoArgs (\a b -> exprange a b 0.5)
 
 lpfSynth :: UGen
-lpfSynth = testTwoArgs (\a b -> lpf (a *4) b (lfsaw a 0))
+lpfSynth = testTwoArgs (\a b -> lpf (a * 4) a b)
 
 hpfSynth :: UGen
-hpfSynth = testTwoArgs (\a b -> hpf (a *4) b (lfsaw a 0))
+hpfSynth = testTwoArgs (\a b -> hpf (a * 4) a b)
 
 bpfSynth :: UGen
-bpfSynth = testTwoArgs (\a b -> bpf (a *4) b (lfsaw a 0))
+bpfSynth = testTwoArgs (\a b -> bpf (a * 4) a b)
 
 notchSynth :: UGen
-notchSynth = testTwoArgs (\a b -> bpf (a *4) b (lfsaw a 0))
+notchSynth = testTwoArgs (\a b -> notch (a * 4) 1 a b)
 
 allpassSynth :: UGen
-allpassSynth = testTwoArgs (\a b -> allpass (a *4) b (lfsaw a 0))
+allpassSynth = testTwoArgs (\a b -> allpass (a * 4) a b)
 
 lowshelfSynth :: UGen
-lowshelfSynth = testTwoArgs (\a b -> lowshelf (a *4) b 1 (lfsaw a 0))
+lowshelfSynth = testTwoArgs (\a b -> lowshelf (a * 4) a 1 b)
 
 highshelfSynth :: UGen
-highshelfSynth = testTwoArgs (\a b -> highshelf (a *4) b 1 (lfsaw a 0))
+highshelfSynth = testTwoArgs (\a b -> highshelf (a * 4) a 1 b)
 
 lagSynth :: UGen
 lagSynth = testTwoArgs (\a b -> lag a b)

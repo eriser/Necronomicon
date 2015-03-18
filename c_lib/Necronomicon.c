@@ -47,8 +47,12 @@ unsigned int DOUBLE_SIZE = sizeof(double);
 unsigned int UINT_SIZE = sizeof(unsigned int);
 
 #define TABLE_SIZE 256
+#define TABLE_SIZE_WRAP 255
 double RECIP_TABLE_SIZE = 1.0 / (double) TABLE_SIZE;
 double sine_table[TABLE_SIZE];
+double cosn_table[TABLE_SIZE];
+double sinh_table[TABLE_SIZE];
+double atan_table[TABLE_SIZE];
 
 double SAMPLE_RATE = 44100;
 double RECIP_SAMPLE_RATE = 1.0 / 44100.0;
@@ -577,7 +581,10 @@ void initialize_wave_tables()
 	unsigned int i;
 	for (i = 0; i < TABLE_SIZE; ++i)
 	{
-		sine_table[i] = sin(TWO_PI * (((double) i) / ((double) TABLE_SIZE)));
+		sine_table[i] =  sin(TWO_PI * (((double) i) / ((double) TABLE_SIZE)));
+		cosn_table[i] =  cos(TWO_PI * (((double) i) / ((double) TABLE_SIZE)));
+		sinh_table[i] = sinh(TWO_PI * (((double) i) / ((double) TABLE_SIZE)));
+		atan_table[i] = atan(TWO_PI * (((double) i) / ((double) TABLE_SIZE)));
 	}
 
 	// Needed to initialize minblep table.
@@ -3473,7 +3480,16 @@ void test_doubly_linked_list()
 	result; \
 })
 
-#define SOFT_CLIP(X,AMOUNT) (atan(X*AMOUNT)/M_PI)
+#define SOFT_CLIP(XIN,AMOUNT) \
+({\
+double X     = XIN * AMOUNT * 0.5; \
+double v1    = atan_table[((unsigned char) (X * TABLE_SIZE))];     \
+double v2    = atan_table[((unsigned char) (X * TABLE_SIZE + 1))]; \
+double delta = X - ((long) X);	      \
+v1 + delta * (v2 - v1);			  \
+})
+// atan(X*AMOUNT)/M_PI)
+
 #define HARD_CLIP(X,AMOUNT) (CLAMP(X*AMOUNT,-1.0,1.0))
 #define POLY3_DIST(X,AMOUNT) (1.5 * X - 0.5 * pow(X,3))
 #define TANH_DIST(X,AMOUNT) (tanh(X*AMOUNT))
@@ -4249,6 +4265,12 @@ typedef struct
 	double x2;
 	double y1;
 	double y2;
+
+	double prevF;
+	double prevQ;
+	double cs;
+	double alpha;
+
 } biquad_t;
 
 void biquad_constructor(ugen* u)
@@ -4258,6 +4280,10 @@ void biquad_constructor(ugen* u)
 	biquad->x2       = 0;
 	biquad->y1       = 0;
 	biquad->y2       = 0;
+	biquad->prevF    = 0;
+	biquad->prevQ    = 0;
+	biquad->cs       = 0;
+	biquad->alpha    = 0;
 	u->data          = biquad;
 }
 
@@ -4267,6 +4293,12 @@ void biquad_deconstructor(ugen* u)
 }
 
 #define BIQUAD(B0,B1,B2,A0,A1,A2,X,X1,X2,Y1,Y2) ( (B0/A0)*X + (B1/A0)*X1 + (B2/A0)*X2 - (A1/A0)*Y1 - (A2/A0)*Y2 )
+
+#define TABLE_LOOKUP(VAL,TABLE)               \
+v1     = TABLE[((int) (VAL * TABLE_SIZE)) & TABLE_SIZE_WRAP];     \
+v2     = TABLE[((int) (VAL * TABLE_SIZE + 1)) & TABLE_SIZE_WRAP]; \
+delta  = VAL - ((long) VAL);	      \
+v1 + delta * (v2 - v1);			      \
 
 void lpf_calc(ugen u)
 {
@@ -4294,16 +4326,40 @@ void lpf_calc(ugen u)
 
 	double y;
 
+	double snhi;
+	double delta;
+	double v1;
+	double v2;
 
     AUDIO_LOOP(
 		freq  = UGEN_IN(in0);
 		q     = MAX(UGEN_IN(in1),0.00000001);
 		in    = UGEN_IN(in2);
 
-		omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
-		cs    = cos(omega);
-    	sn    = sin(omega);
-		alpha = sn * sinh(1 / (2 * q));
+		if(freq != bi.prevF || q != bi.prevQ)
+		{
+			bi.prevF = freq;
+			bi.prevQ = q;
+			//Don't recalc if unnecessary
+			omega  = freq * RECIP_SAMPLE_RATE;
+			// printf("omega: %f\n",omega);
+			// printf("cs\n");
+			bi.cs  = TABLE_LOOKUP(omega,cosn_table);
+			// printf("sn\n");
+    		sn     = TABLE_LOOKUP(omega,sine_table);
+			snhi   = (1 / (2 * q));
+			snhi   = snhi * RECIP_TWO_PI;
+			// printf("snhi: %f\n",snhi);
+			bi.alpha = TABLE_LOOKUP(snhi, sinh_table);
+			bi.alpha *= sn;
+		}
+		cs    = bi.cs;
+		alpha = bi.alpha;
+
+		// omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
+		// cs    = cos(omega);
+    	// sn    = sin(omega);
+		// alpha = sn * sinh(1 / (2 * q));
 
     	b0    = (1 - cs) * 0.5;
     	b1    =  1 - cs;
@@ -4324,6 +4380,20 @@ void lpf_calc(ugen u)
 
 	*((biquad_t*) u.data) = bi;
 }
+
+#define mmsin_a0 1.0
+#define mmsin_a1 -1.666666666640169148537065260055e-1
+#define mmsin_a2 8.333333316490113523036717102793e-3
+#define mmsin_a3 -1.984126600659171392655484413285e-4
+#define mmsin_a4 2.755690114917374804474016589137e-6
+#define mmsin_a5 -2.502845227292692953118686710787e-8
+#define mmsin_a6 1.538730635926417598443354215485e-10
+
+#define MINIMAXSIN(X)																\
+({ 																					\
+    double x2 = X * X;                                                              \
+    X * (mmsin_a0 + x2 * (mmsin_a1 + x2 * (mmsin_a2 + x2 * (mmsin_a3 + x2 * (mmsin_a4 + x2 * (mmsin_a5 + x2 * mmsin_a6)))))); \
+})
 
 void hpf_calc(ugen u)
 {
@@ -4350,7 +4420,7 @@ void hpf_calc(ugen u)
     double a2;
 
 	double y;
-
+	double sinh_i;
 
     AUDIO_LOOP(
 		freq  = UGEN_IN(in0);
@@ -4361,6 +4431,12 @@ void hpf_calc(ugen u)
 		cs    = cos(omega);
     	sn    = sin(omega);
 		alpha = sn * sinh(1 / (2 * q));
+
+		// cs    = MINIMAXSIN(omega);
+    	// sn    = MINIMAXSIN(omega);
+		// sinh_i= 2 * q;
+		// sinh_i= 1 / sinh_i;
+		// alpha = sn * MINIMAXSIN(sinh_i);
 
 		b0    = (1 + cs) * 0.5;
 	    b1    = -1 - cs;

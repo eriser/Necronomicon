@@ -5,7 +5,7 @@ import Data.List (zip4)
 --Get chords up and running
 
 main :: IO ()
-main = runSignal <| tempo (pure 150) *> testGUI <> sections <> hyperTerrainSounds
+main = runSignal <| testGUI *> sections *> hyperTerrainSounds
 
 hyperTerrainSounds :: Signal ()
 hyperTerrainSounds = metallicPattern
@@ -175,7 +175,7 @@ visAux :: UGen -> UGen -> UGen -> UGen
 visAux _ _ u = u
 
 metallic3 :: UGen -> UGen
-metallic3 f = sig + sig2 + sig3 |> e |> visAux 2 2 |> softclip 1000 |> filt |> gain 0.045 |> verb |> e |> gain 1 |> dup |> out 0
+metallic3 f = sig + sig2 + sig3 |> e |> visAux 2 2 |> softclip 2 |> filt |> gain 0.065 |> verb |> e |> gain 1 |> dup |> out 0
     where
         sig    = sin (f * random 0 0.999 1.001) |> gain 0.15
         sig2   = sin (f * random 1 0.499 0.500) |> gain 0.15
@@ -192,7 +192,7 @@ metallic3 f = sig + sig2 + sig3 |> e |> visAux 2 2 |> softclip 1000 |> filt |> g
         verb   = freeverb 0.5 1.0 0.1
 
 metallic4 :: UGen -> UGen
-metallic4 f = sig + sig2 + sig3 |> e |> visAux 3 2 |> softclip 1000 |> filt |> gain 0.045 |> verb |> e |> gain 1 |> dup |> out 0
+metallic4 f = sig + sig2 + sig3 |> e |> visAux 3 2 |> softclip 2 |> filt |> gain 0.065 |> verb |> e |> gain 1 |> dup |> out 0
     where
         sig    = sin (f * random 0 0.999 1.001) |> gain 0.15
         sig2   = sin (f * random 1 0.499 0.500) |> gain 0.15
