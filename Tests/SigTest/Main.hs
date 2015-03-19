@@ -218,8 +218,8 @@ reverseSwell :: UGen -> UGen
 reverseSwell f =  sig1 + sig2 + sig3 |> e |> tanhDist (dup <| random 31 0.25 1) |> add (whiteNoise * 0.25) |> gain 0.03 |> filt |> e |> pan 0.75 |> out 20
     where
         hf   = f * 0.5
-        e    = env  [0,1,0]         [4,4] (3)
-        e2   = env2 [0.125,1,0.125] [4,4] (3)
+        e    = env [0,1,0]         [4,4] 3
+        e2   = env [0.125,1,0.125] [4,4] 3
         sig1 = saw (hf * random 0 0.995 1.005) * mod1
         sig2 = saw (f  * random 2 0.995 1.005) * mod2
         sig3 = saw (hf * random 4 0.495 0.505) * mod4 * 0.5
@@ -233,8 +233,8 @@ reverseSwell2 :: UGen -> UGen
 reverseSwell2 f = sig1 + sig2 + sig3 |> e |> tanhDist (random 32 0.25 1) |> add (whiteNoise * 0.25) |> gain 0.03 |> filt |> e |> pan 0.25 |> out 20
     where
         hf   = f * 0.5
-        e    = env  [0,1,0]         [4,4] (3)
-        e2   = env2 [0.125,1,0.125] [4,4] (3)
+        e    = env [0,1,0]         [4,4] 3
+        e2   = env [0.125,1,0.125] [4,4] 3
         sig1 = saw (hf * random 0 0.995 1.005) * mod1
         sig2 = saw (f  * random 2 0.995 1.005) * mod2
         sig3 = saw (hf * random 4 0.495 0.505) * mod4 * 0.5
