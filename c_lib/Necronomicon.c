@@ -53,6 +53,7 @@ double sine_table[TABLE_SIZE];
 double cosn_table[TABLE_SIZE];
 double sinh_table[TABLE_SIZE];
 double atan_table[TABLE_SIZE];
+double tanh_table[TABLE_SIZE];
 
 double SAMPLE_RATE = 44100;
 double RECIP_SAMPLE_RATE = 1.0 / 44100.0;
@@ -585,6 +586,7 @@ void initialize_wave_tables()
 		cosn_table[i] =  cos(TWO_PI * (((double) i) / ((double) TABLE_SIZE)));
 		sinh_table[i] = sinh(TWO_PI * (((double) i) / ((double) TABLE_SIZE)));
 		atan_table[i] = atan(TWO_PI * (((double) i) / ((double) TABLE_SIZE)));
+		tanh_table[i] = tanh(TWO_PI * (((double) i) / ((double) TABLE_SIZE)));
 	}
 
 	// Needed to initialize minblep table.
@@ -3473,27 +3475,60 @@ void test_doubly_linked_list()
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
 #define LERP(A,B,D) (A+D*(B-A))
-#define CLAMP(V,MIN,MAX) \
-({\
-	double result = V < MIN ? MIN : V; \
-	result        = V > MAX ? MAX : V; \
-	result; \
+#define CLAMP(V,MIN,MAX) 				\
+({										\
+	double result = V < MIN ? MIN : V; 	\
+	result        = V > MAX ? MAX : V; 	\
+	result; 							\
 })
 
-#define SOFT_CLIP(XIN,AMOUNT) \
-({\
-double X     = XIN * AMOUNT * 0.5; \
-double v1    = atan_table[((unsigned char) (X * TABLE_SIZE))];     \
-double v2    = atan_table[((unsigned char) (X * TABLE_SIZE + 1))]; \
-double delta = X - ((long) X);	      \
-v1 + delta * (v2 - v1);			  \
+#define SOFT_CLIP(XIN,AMOUNT) 											\
+({																		\
+	double X     = XIN * AMOUNT * 0.5; 									\
+	double v1    = atan_table[((unsigned char) (X * TABLE_SIZE))];     	\
+	double v2    = atan_table[((unsigned char) (X * TABLE_SIZE + 1))]; 	\
+	double delta = X - ((long) X);	      								\
+	v1 + delta * (v2 - v1);			  									\
 })
 // atan(X*AMOUNT)/M_PI)
 
+#define TANH_DIST(XIN,AMOUNT) 											\
+({																		\
+	double X     = XIN * AMOUNT * 0.5; 									\
+	double v1    = tanh_table[((unsigned char) (X * TABLE_SIZE))];     	\
+	double v2    = tanh_table[((unsigned char) (X * TABLE_SIZE + 1))]; 	\
+	double delta = X - ((long) X);	      								\
+	v1 + delta * (v2 - v1);			  									\
+})
+// #define TANH_DIST(X,AMOUNT) (tanh(X*AMOUNT))
+
+
+#define SIN_DIST(XIN,AMOUNT) 											\
+({																		\
+	double X     = XIN * AMOUNT * 0.5; 									\
+	double v1    = sine_table[((unsigned char) (X * TABLE_SIZE))];     	\
+	double v2    = sine_table[((unsigned char) (X * TABLE_SIZE + 1))]; 	\
+	double delta = X - ((long) X);	      								\
+	v1 + delta * (v2 - v1);			  									\
+})
+
+// #define SIN_DIST(X,AMOUNT) (sin(X*AMOUNT)/M_PI)
+
 #define HARD_CLIP(X,AMOUNT) (CLAMP(X*AMOUNT,-1.0,1.0))
-#define POLY3_DIST(X,AMOUNT) (1.5 * X - 0.5 * pow(X,3))
-#define TANH_DIST(X,AMOUNT) (tanh(X*AMOUNT))
-#define SIN_DIST(X,AMOUNT) (sin(X*AMOUNT)/M_PI)
+
+#define fast_pow(BASE,EXPONENT) 									\
+({																	\
+	union {															\
+    	double d;													\
+    	int x[2];													\
+	} u = { BASE };													\
+  	u.x[1] = (int)(EXPONENT * (u.x[1] - 1072632447) + 1072632447);	\
+  	u.x[0] = 0;														\
+	u.d;															\
+})
+
+#define POLY3_DIST(X,AMOUNT) (1.5 * X - 0.5 * fast_pow(X,3))
+
 #define WRAP(X,AMOUNT)       \
 ({                           \
 	double x   = X * AMOUNT; \
@@ -3503,14 +3538,6 @@ v1 + delta * (v2 - v1);			  \
 	else if(x < -1)          \
 		ret = x + 2;         \
 	ret;                     \
-})
-
-#define WAVE_TABLE_AMPLITUDE(phase,table) \
-({ \
-	double amp1  = table[(unsigned char)phase]; \
-	double amp2  = table[(unsigned char)(phase+1)]; \
-	double delta = phase - ((long) phase); \
-	amp1 + delta * (amp2 - amp1); \
 })
 
 void accumulator_constructor(ugen* u)
@@ -4295,8 +4322,8 @@ void biquad_deconstructor(ugen* u)
 #define BIQUAD(B0,B1,B2,A0,A1,A2,X,X1,X2,Y1,Y2) ( (B0/A0)*X + (B1/A0)*X1 + (B2/A0)*X2 - (A1/A0)*Y1 - (A2/A0)*Y2 )
 
 #define TABLE_LOOKUP(VAL,TABLE)               \
-v1     = TABLE[((int) (VAL * TABLE_SIZE)) & TABLE_SIZE_WRAP];     \
-v2     = TABLE[((int) (VAL * TABLE_SIZE + 1)) & TABLE_SIZE_WRAP]; \
+v1     = TABLE[((unsigned char) (VAL * TABLE_SIZE))];     \
+v2     = TABLE[((unsigned char) (VAL * TABLE_SIZE + 1))]; \
 delta  = VAL - ((long) VAL);	      \
 v1 + delta * (v2 - v1);			      \
 

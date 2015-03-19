@@ -175,7 +175,7 @@ visAux :: UGen -> UGen -> UGen -> UGen
 visAux _ _ u = u
 
 metallic3 :: UGen -> UGen
-metallic3 f = sig + sig2 + sig3 |> e |> visAux 2 2 |> softclip 2 |> filt |> gain 0.065 |> verb |> e |> gain 1 |> dup |> out 0
+metallic3 f = sig + sig2 + sig3 |> e |> visAux 2 2 |> softclip 2 |> filt |> e |> gain 0.065 |> pan 0.75 |> out 20
     where
         sig    = sin (f * random 0 0.999 1.001) |> gain 0.15
         sig2   = sin (f * random 1 0.499 0.500) |> gain 0.15
@@ -189,10 +189,9 @@ metallic3 f = sig + sig2 + sig3 |> e |> visAux 2 2 |> softclip 2 |> filt |> gain
 
         e      = env      [0,1,0.01,0]    [0.1, 6,0.1] (-1)
         e2     = env2     [1,1,0.25,0.25] [0.01,1,5]   (-3)
-        verb   = freeverb 0.5 1.0 0.1
 
 metallic4 :: UGen -> UGen
-metallic4 f = sig + sig2 + sig3 |> e |> visAux 3 2 |> softclip 2 |> filt |> gain 0.065 |> verb |> e |> gain 1 |> dup |> out 0
+metallic4 f = sig + sig2 + sig3 |> e |> visAux 3 2 |> softclip 2 |> filt |> e |> gain 0.065 |> pan 0.25 |> out 20
     where
         sig    = sin (f * random 0 0.999 1.001) |> gain 0.15
         sig2   = sin (f * random 1 0.499 0.500) |> gain 0.15
@@ -206,7 +205,6 @@ metallic4 f = sig + sig2 + sig3 |> e |> visAux 3 2 |> softclip 2 |> filt |> gain
 
         e      = env      [0,1,0.01,0]    [0.1, 6,0.1] (-1)
         e2     = env2     [1,1,0.25,0.25] [0.01,1,5] (-3)
-        verb   = freeverb 0.5 1.0 0.1
 
 hyperMelody :: UGen -> UGen
 hyperMelody f = [s,s2] |> gain 0.04 |> e |> visAux (random 0 2 4.99) 20 |> out 0

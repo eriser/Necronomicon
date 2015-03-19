@@ -39,7 +39,11 @@ synths = [
     ("mulSynth", mulSynth),
 
 -- Testing the filter synths in particular in comparison to the nothing and basic math ugens
+    ("sinSynth", sinSynth),
     ("softclipSynth", softclipSynth),
+    ("poly3Synth", poly3Synth),
+    ("tanhDistSynth", tanhDistSynth),
+    ("sinDistSynth", sinDistSynth),
     ("lpfSynth", lpfSynth),
     ("hpfSynth", hpfSynth),
     ("bpfSynth", bpfSynth),
@@ -50,7 +54,6 @@ synths = [
 
     ("gainSynth", gainSynth),
     ("divSynth", divSynth),
-    ("sinSynth", sinSynth),
     ("lineSynth'", lineSynth'),
     ("percSynth", percSynth),
     ("envSynth", envSynth),
@@ -73,9 +76,6 @@ synths = [
     ("exprangeSynth", exprangeSynth),
     ("lagSynth", lagSynth),
     ("clipSynth", clipSynth),
-    ("poly3Synth", poly3Synth),
-    ("tanhDistSynth", tanhDistSynth),
-    ("sinDistSynth", sinDistSynth),
     ("wrapSynth", wrapSynth),
     ("crushSynth", crushSynth),
     ("decimateSynth", decimateSynth),
