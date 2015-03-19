@@ -1676,6 +1676,18 @@ void shutdown_necronomicon()
 
 #define LINEAR_INTERP(A, B, DELTA) (A + DELTA * (B - A))
 
+#define fast_pow(BASE,EXPONENT) 									\
+({																	\
+	union {															\
+    	double d;													\
+    	int x[2];													\
+	} u = { BASE };													\
+  	u.x[1] = (int)(EXPONENT * (u.x[1] - 1072632447) + 1072632447);	\
+  	u.x[0] = 0;														\
+	u.d;															\
+})
+
+
 /*
 #define CUBIC_INTERP(A,B,C,D,DELTA) \
 ({                                  \
@@ -2504,6 +2516,7 @@ void env_calc(ugen u)
 			// printf("data.index: %u, data.numValues: %u.\n",data.index,data.numValues);
 
 			double unclampedDelta    = pow((line_timed - data.curTotalDuration) * data.recipDuration, data.curve);
+			// double unclampedDelta    = fast_pow((line_timed - data.curTotalDuration) * data.recipDuration, data.curve);
 			double delta             = MIN(unclampedDelta,1.0);
 			y                        = ((1-delta) * data.currentValue + delta * data.nextValue) * x;
 			data.time                = data.time + 1;
@@ -3515,17 +3528,6 @@ void test_doubly_linked_list()
 // #define SIN_DIST(X,AMOUNT) (sin(X*AMOUNT)/M_PI)
 
 #define HARD_CLIP(X,AMOUNT) (CLAMP(X*AMOUNT,-1.0,1.0))
-
-#define fast_pow(BASE,EXPONENT) 									\
-({																	\
-	union {															\
-    	double d;													\
-    	int x[2];													\
-	} u = { BASE };													\
-  	u.x[1] = (int)(EXPONENT * (u.x[1] - 1072632447) + 1072632447);	\
-  	u.x[0] = 0;														\
-	u.d;															\
-})
 
 #define POLY3_DIST(X,AMOUNT) (1.5 * X - 0.5 * fast_pow(X,3))
 
