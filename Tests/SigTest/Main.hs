@@ -210,8 +210,8 @@ hyperMelody :: UGen -> UGen
 hyperMelody f = [s,s2] |> gain 0.04 |> e |> visAux (random 0 2 4.99) 20 |> out 0
     where
         e  = env [0,1,0.15, 0] [0.0001,0.1, 7] (-1.5)
-        s  = sin <| add (sin 3 * 6) (f*2)
-        s2 = sin <| add (sin 6 * 9) f
+        s  = sin <| sin 3 * 6 + f * 2
+        s2 = sin <| sin 6 * 9 + f
 
 --add sins for visuals and modulation
 reverseSwell :: UGen -> UGen

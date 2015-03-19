@@ -187,7 +187,7 @@ parseMessage (Login _) _ _ = putStrLn "Succesfully logged in."
 parseMessage (AddNetSignal uid netVal) _ sigstate = do
     -- atomically (readTVar (netSignals client) >>= \sig -> writeTVar (netSignals client) (IntMap.insert uid (Change netVal) sig))
     atomically $ readTVar (netSignalsBuffer sigstate) >>= writeTVar (netSignalsBuffer sigstate) . ((uid,netVal) :)
-    putStrLn $ "Adding NetSignal: " ++ show (uid,netVal)
+    -- putStrLn $ "Adding NetSignal: " ++ show (uid,netVal)
 
 parseMessage (SetNetSignal uid netVal) _ sigstate = do
     -- need new system for this

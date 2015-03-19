@@ -1,8 +1,12 @@
 import Necronomicon
 import qualified Data.Vector as V
 
+
 main :: IO ()
-main = runSignal <| merges (map (<| switcher) ugenTests) <> sigPrint (printTest <~ switcher)
+main | testNum == 0 = runSignal <| merges (map (play <| pure True) (replicate 200 <| line 1000))
+     | testNum == 1 = runSignal <| merges (map (<| switcher) ugenTests) <> sigPrint (printTest <~ switcher)
+     | otherwise    = return ()
+     where testNum  = 1 :: Int
 
 ugenTests :: [Signal Int -> Signal ()]
 ugenTests = map test <| zip synths [0..]
@@ -35,10 +39,11 @@ synths = [
     ("nothingSynth", nothingSynth),
     ("nothingSynth2", nothingSynth2),
     ("addSynth", addSynth),
-    ("minusSynth", minusSynth),
-    ("mulSynth", mulSynth),
 
 -- Testing the filter synths in particular in comparison to the nothing and basic math ugens
+    ("lineSynth'", lineSynth'),
+    ("percSynth", percSynth),
+    ("envSynth", envSynth),
     ("sinSynth", sinSynth),
     ("softclipSynth", softclipSynth),
     ("poly3Synth", poly3Synth),
@@ -52,11 +57,10 @@ synths = [
     ("lowshelfSynth", lowshelfSynth),
     ("highshelfSynth", highshelfSynth),
 
+    ("minusSynth", minusSynth),
+    ("mulSynth", mulSynth),
     ("gainSynth", gainSynth),
     ("divSynth", divSynth),
-    ("lineSynth'", lineSynth'),
-    ("percSynth", percSynth),
-    ("envSynth", envSynth),
     ("outSynth", outSynth),
     ("lfsawSynth", lfsawSynth),
     ("lfpulseSynth", lfpulseSynth),
@@ -138,7 +142,7 @@ sinSynth :: UGen
 sinSynth = testOneArg sin
 
 lineSynth' :: UGen
-lineSynth' = testOneArg line
+lineSynth' = foldr (<|) 1 <| replicate testCount (\a -> line 20 + a)
 
 percSynth :: UGen
 percSynth = testTwoArgs (\a b -> perc 0.01 10.0 a 0 b)
