@@ -836,9 +836,9 @@ runCompileSynthDef name ugenFunc = do
     -- print ("Compiling synthdef " ++ name ++ " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
     (numArgs, (CompiledData {-table-}_ revGraph constants numWires _ _)) <- runCompile (compileSynthArgsAndUGenGraph ugenFunc) mkCompiledData
     -- print ("table: " ++ (show table))
-    -- print ("Total ugens: " ++ (show $ length revGraph))
-    -- print ("Total constants: " ++ (show $ length constants))
-    -- print ("Num Wires: " ++ (show numWires))
+    print ("Total ugens: " ++ (show $ length revGraph))
+    print ("Total constants: " ++ (show $ length constants))
+    print ("Num Wires: " ++ (show numWires))
     -- Don't actually compile the arg ugens, they shouldn't be evaluated at run time. Instead they're controlled from the Haskell side.
     let graph = drop numArgs $ reverse revGraph -- Reverse the revGraph because we've been using cons during compilation.
     -- print ("UGenGraph: " ++ (show graph))
