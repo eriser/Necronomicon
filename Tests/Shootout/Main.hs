@@ -2,12 +2,17 @@ import Necronomicon
 import qualified Data.Vector as V
 
 main :: IO ()
-main = runSignal <| merges (map (<| switcher) ugenTests) <|> sigPrint (printTest <~ switcher)
+main | testNum == 0 = runSignal <| merges (map (play <| pure True) (replicate 200 <| line 1000))
+     | testNum == 1 = runSignal <| merges (map (<| switcher) ugenTests) <> sigPrint (printTest <~ switcher)
+     | testNum == 2 = runSignal hyperMelodyPattern
+     | testNum == 3 = runSignal <| merges (map (play <| pure True) (replicate 5 <| hyperMelody 440))
+     | otherwise    = return ()
+     where testNum  = 2 :: Int
 
 ugenTests :: [Signal Int -> Signal ()]
 ugenTests = map test <| zip synths [0..]
     where
-        test ((_,synth),i) s = play ((== i) <~ s) synth x y
+        test ((_,synth),i) s = play ((== i) <~ s) synth
 
 printTest :: Int -> String
 printTest i
@@ -16,31 +21,38 @@ printTest i
     | otherwise               = ""
 
 switcher :: Signal Int
-switcher = count (every 5)
+switcher = count (every 10)
 
-ticker :: Signal Double
-ticker = fps 1
-
-x :: Signal Double
-x = randFS ticker ~> scale (-3000) 3000
-
-y :: Signal Double
-y = randFS ticker ~> scale (-3000) 3000
-
-synthsVec :: V.Vector (String, UGen -> UGen -> UGen)
+synthsVec :: V.Vector (String, UGen)
 synthsVec = V.fromList synths
 
-synths :: [(String, UGen -> UGen -> UGen)]
+synths :: [(String, UGen)]
 synths = [
+    ("nothingSynth", nothingSynth),
+    ("nothingSynth2", nothingSynth2),
     ("addSynth", addSynth),
+
+-- Testing the filter synths in particular in comparison to the nothing and basic math ugens
+    ("lineSynth'", lineSynth'),
+    ("percSynth", percSynth),
+    ("envSynth", envSynth),
+    ("sinSynth", sinSynth),
+    ("softclipSynth", softclipSynth),
+    ("poly3Synth", poly3Synth),
+    ("tanhDistSynth", tanhDistSynth),
+    ("sinDistSynth", sinDistSynth),
+    ("lpfSynth", lpfSynth),
+    ("hpfSynth", hpfSynth),
+    ("bpfSynth", bpfSynth),
+    ("notchSynth", notchSynth),
+    ("allpassSynth", allpassSynth),
+    ("lowshelfSynth", lowshelfSynth),
+    ("highshelfSynth", highshelfSynth),
+
     ("minusSynth", minusSynth),
     ("mulSynth", mulSynth),
     ("gainSynth", gainSynth),
     ("divSynth", divSynth),
-    ("sinSynth", sinSynth),
-    ("lineSynth'", lineSynth'),
-    ("percSynth", percSynth),
-    ("envSynth", envSynth),
     ("outSynth", outSynth),
     ("lfsawSynth", lfsawSynth),
     ("lfpulseSynth", lfpulseSynth),
@@ -58,19 +70,8 @@ synths = [
     ("impulseSynth", impulseSynth),
     ("rangeSynth", rangeSynth),
     ("exprangeSynth", exprangeSynth),
-    ("lpfSynth", lpfSynth),
-    ("hpfSynth", hpfSynth),
-    ("bpfSynth", bpfSynth),
-    ("notchSynth", notchSynth),
-    ("allpassSynth", allpassSynth),
-    ("lowshelfSynth", lowshelfSynth),
-    ("highshelfSynth", highshelfSynth),
     ("lagSynth", lagSynth),
     ("clipSynth", clipSynth),
-    ("softclipSynth", softclipSynth),
-    ("poly3Synth", poly3Synth),
-    ("tanhDistSynth", tanhDistSynth),
-    ("sinDistSynth", sinDistSynth),
     ("wrapSynth", wrapSynth),
     ("crushSynth", crushSynth),
     ("decimateSynth", decimateSynth),
@@ -99,199 +100,241 @@ synths = [
     ("atanHSynth", atanHSynth)]
 
 testCount :: Int
-testCount = 100
+testCount = 200
 
-addSynth :: UGen -> UGen -> UGen
-addSynth a b = foldr (+) a <| replicate testCount b
+testTwoArgs :: (UGen -> UGen -> UGen) -> UGen
+-- testTwoArgs f = mconcat . map f <| zip (map fromIntegral [1..testCount]) (map fromIntegral [1..testCount])
+testTwoArgs f = foldr f 1 (map fromIntegral [1..testCount])
 
-minusSynth :: UGen -> UGen -> UGen
-minusSynth a b = foldr (-) a <| replicate testCount b
+testOneArg :: (UGen -> UGen) -> UGen
+testOneArg f = foldr (<|) 1 <| replicate testCount f
 
-mulSynth :: UGen -> UGen -> UGen
-mulSynth a b = foldr (*) a <| replicate testCount b
+nothingSynth :: UGen
+nothingSynth = 0
 
-gainSynth :: UGen -> UGen -> UGen
-gainSynth a b = foldr gain a <| replicate testCount b
+nothingSynth2 :: UGen
+nothingSynth2 = 0
 
-divSynth :: UGen -> UGen -> UGen
-divSynth a b = foldr (/) a <| replicate testCount b
+addSynth :: UGen
+addSynth = testTwoArgs (+)
 
-sinSynth :: UGen -> UGen -> UGen
-sinSynth a _ = sum . replicate testCount <| sin a
+minusSynth :: UGen
+minusSynth = testTwoArgs (-)
 
-lineSynth' :: UGen -> UGen -> UGen
-lineSynth' _ b = sum <| replicate testCount (line b)
+mulSynth :: UGen
+mulSynth = testTwoArgs (*)
 
-percSynth :: UGen -> UGen -> UGen
-percSynth a b = sum . replicate testCount <| perc2 0.01 1.0 a 0 b
+gainSynth :: UGen
+gainSynth = testTwoArgs gain
 
-envSynth :: UGen -> UGen -> UGen
-envSynth a _ = sum . replicate testCount <| env2 [0,1,0] [0.1,2.0] 0 a
+divSynth :: UGen
+divSynth = testTwoArgs (/)
 
-outSynth :: UGen -> UGen -> UGen
-outSynth a b = sum . replicate testCount <| out a b
+sinSynth :: UGen
+sinSynth = testOneArg sin
 
-lfsawSynth :: UGen -> UGen -> UGen
-lfsawSynth a b = sum . replicate testCount <| lfsaw a b
+lineSynth' :: UGen
+lineSynth' = foldr (<|) 1 <| replicate testCount (\a -> line 20 + a)
 
-lfpulseSynth :: UGen -> UGen -> UGen
-lfpulseSynth a b = sum . replicate testCount <| lfpulse a b
+percSynth :: UGen
+percSynth = testTwoArgs (\a b -> perc 0.01 10.0 a 0 b)
 
-sawSynth :: UGen -> UGen -> UGen
-sawSynth a _ = sum . replicate testCount <| saw a
+envSynth :: UGen
+envSynth = testOneArg <| env [0,1,0] [0.1,10.0] 0
 
-pulseSynth :: UGen -> UGen -> UGen
-pulseSynth a b = sum . replicate testCount <| pulse a b
+outSynth :: UGen
+outSynth = testTwoArgs out
 
-syncSawSynth :: UGen -> UGen -> UGen
-syncSawSynth a b = sum . replicate testCount <| syncsaw a b
+lfsawSynth :: UGen
+lfsawSynth = testTwoArgs lfsaw
 
-syncPulseSynth :: UGen -> UGen -> UGen
-syncPulseSynth a b = sum . replicate testCount <| syncpulse a 0.5 b
+lfpulseSynth :: UGen
+lfpulseSynth = testTwoArgs (\a b -> lfpulse (abs a) (abs b))
 
-syncOscSynth :: UGen -> UGen -> UGen
-syncOscSynth a b = sum . replicate testCount <| syncosc a 0 0.5 b
+sawSynth :: UGen
+sawSynth = testOneArg saw
 
-randSynth :: UGen -> UGen -> UGen
-randSynth a _ = sum . replicate testCount <| random 0 0 1 * a
+pulseSynth :: UGen
+pulseSynth = testTwoArgs pulse
 
-noise0Synth :: UGen -> UGen -> UGen
-noise0Synth a _ = sum . replicate testCount <| noise0 a
+syncSawSynth :: UGen
+syncSawSynth = testTwoArgs syncsaw
 
-noise1Synth :: UGen -> UGen -> UGen
-noise1Synth a _ = sum . replicate testCount <| noise1 a
+syncPulseSynth :: UGen
+syncPulseSynth = testTwoArgs (\a b -> syncpulse a 0.5 b)
 
-noise2Synth :: UGen -> UGen -> UGen
-noise2Synth a _ = sum . replicate testCount <| noise2 a
+syncOscSynth :: UGen
+syncOscSynth = testTwoArgs (\a b -> syncosc a 0 0.5 b)
 
-dustSynth :: UGen -> UGen -> UGen
-dustSynth a _ = sum . replicate testCount <| dust a
+randSynth :: UGen
+randSynth = testOneArg <| \a -> random 0 0 1 * a
 
-dust2Synth :: UGen -> UGen -> UGen
-dust2Synth a _ = sum . replicate testCount <| dust2 a
+noise0Synth :: UGen
+noise0Synth = testOneArg noise0
 
-impulseSynth :: UGen -> UGen -> UGen
-impulseSynth a b = sum . replicate testCount <| impulse a b
+noise1Synth :: UGen
+noise1Synth = testOneArg noise1
 
-rangeSynth :: UGen -> UGen -> UGen
-rangeSynth a b = sum . replicate testCount <| range a b (a * b)
+noise2Synth :: UGen
+noise2Synth = testOneArg noise2
 
-exprangeSynth :: UGen -> UGen -> UGen
-exprangeSynth a b = sum . replicate testCount <| exprange a b (a * b)
+dustSynth :: UGen
+dustSynth = testOneArg dust
 
-lpfSynth :: UGen -> UGen -> UGen
-lpfSynth a b = sum . replicate testCount <| lpf (a *4) b (lfsaw a 0)
+dust2Synth :: UGen
+dust2Synth = testOneArg dust2
 
-hpfSynth :: UGen -> UGen -> UGen
-hpfSynth a b = sum . replicate testCount <| hpf (a *4) b (lfsaw a 0)
+impulseSynth :: UGen
+impulseSynth = testTwoArgs impulse
 
-bpfSynth :: UGen -> UGen -> UGen
-bpfSynth a b = sum . replicate testCount <| bpf (a *4) b (lfsaw a 0)
+rangeSynth :: UGen
+rangeSynth = testTwoArgs (\a b -> range a b 0.5)
 
-notchSynth :: UGen -> UGen -> UGen
-notchSynth a b = sum . replicate testCount <| bpf (a *4) b (lfsaw a 0)
+exprangeSynth :: UGen
+exprangeSynth = testTwoArgs (\a b -> exprange a b 0.5)
 
-allpassSynth :: UGen -> UGen -> UGen
-allpassSynth a b = sum . replicate testCount <| allpass (a *4) b (lfsaw a 0)
+lpfSynth :: UGen
+lpfSynth = testTwoArgs (\a b -> lpf (a * 4) a b)
 
-lowshelfSynth :: UGen -> UGen -> UGen
-lowshelfSynth a b = sum . replicate testCount <| lowshelf (a *4) b 1 (lfsaw a 0)
+hpfSynth :: UGen
+hpfSynth = testTwoArgs (\a b -> hpf (a * 4) a b)
 
-highshelfSynth :: UGen -> UGen -> UGen
-highshelfSynth a b = sum . replicate testCount <| highshelf (a *4) b 1 (lfsaw a 0)
+bpfSynth :: UGen
+bpfSynth = testTwoArgs (\a b -> bpf (a * 4) a b)
 
-lagSynth :: UGen -> UGen -> UGen
-lagSynth a b = sum . replicate testCount <| lag a b
+notchSynth :: UGen
+notchSynth = testTwoArgs (\a b -> notch (a * 4) 1 a b)
 
-clipSynth :: UGen -> UGen -> UGen
-clipSynth a b = sum . replicate testCount <| clip a b
+allpassSynth :: UGen
+allpassSynth = testTwoArgs (\a b -> allpass (a * 4) a b)
 
-softclipSynth :: UGen -> UGen -> UGen
-softclipSynth a b = sum . replicate testCount <| softclip a b
+lowshelfSynth :: UGen
+lowshelfSynth = testTwoArgs (\a b -> lowshelf (a * 4) a 1 b)
 
-poly3Synth :: UGen -> UGen -> UGen
-poly3Synth a b = sum . replicate testCount <| poly3 a b
+highshelfSynth :: UGen
+highshelfSynth = testTwoArgs (\a b -> highshelf (a * 4) a 1 b)
 
-tanhDistSynth :: UGen -> UGen -> UGen
-tanhDistSynth a b = sum . replicate testCount <| tanhDist a b
+lagSynth :: UGen
+lagSynth = testTwoArgs (\a b -> lag a b)
 
-sinDistSynth :: UGen -> UGen -> UGen
-sinDistSynth a b = sum . replicate testCount <| sinDist a b
+clipSynth :: UGen
+clipSynth = testTwoArgs (\a b -> clip a b)
 
-wrapSynth :: UGen -> UGen -> UGen
-wrapSynth a b = sum . replicate testCount <| wrap a b
+softclipSynth :: UGen
+softclipSynth = testTwoArgs (\a b -> softclip a b)
 
-crushSynth :: UGen -> UGen -> UGen
-crushSynth a b = sum . replicate testCount <| crush a b
+poly3Synth :: UGen
+poly3Synth = testTwoArgs (\a b -> poly3 a b)
 
-decimateSynth :: UGen -> UGen -> UGen
-decimateSynth a b = sum . replicate testCount <| decimate a b
+tanhDistSynth :: UGen
+tanhDistSynth = testTwoArgs (\a b -> tanhDist a b)
 
-delayNSynth :: UGen -> UGen -> UGen
-delayNSynth a b = sum . replicate testCount <| delayN 1 a b
+sinDistSynth :: UGen
+sinDistSynth = testTwoArgs (\a b -> sinDist a b)
 
-delayLSynth :: UGen -> UGen -> UGen
-delayLSynth a b = sum . replicate testCount <| delayL 1 a b
+wrapSynth :: UGen
+wrapSynth = testTwoArgs (\a b -> wrap a b)
 
-delayCSynth :: UGen -> UGen -> UGen
-delayCSynth a b = sum . replicate testCount <| delayC 1 a b
+crushSynth :: UGen
+crushSynth = testTwoArgs (\a b -> crush a b)
 
-whiteNoiseSynth :: UGen -> UGen -> UGen
-whiteNoiseSynth _ _ = sum . replicate testCount <| whiteNoise
+decimateSynth :: UGen
+decimateSynth = testTwoArgs (\a b -> decimate a b)
 
-pluckSynth :: UGen -> UGen -> UGen
-pluckSynth a b = sum . replicate testCount <| pluck 100 a b whiteNoise
+delayNSynth :: UGen
+delayNSynth = testTwoArgs (\a b -> delayN 1 a b)
 
-freeverbSynth :: UGen -> UGen -> UGen
-freeverbSynth a b = sum . replicate testCount <| freeverb a 1 1 b
+delayLSynth :: UGen
+delayLSynth = testTwoArgs (\a b -> delayL 1 a b)
 
-absSynth :: UGen -> UGen -> UGen
-absSynth a _ = sum . replicate testCount <| abs a
+delayCSynth :: UGen
+delayCSynth = testTwoArgs (\a b -> delayC 1 a b)
 
-signumSynth :: UGen -> UGen -> UGen
-signumSynth a _ = sum . replicate testCount <| signum a
+whiteNoiseSynth :: UGen
+-- whiteNoiseSynth = mconcat <| replicate 10 whiteNoise
+whiteNoiseSynth = 0 -- testTwoArgs (\a b -> delayC 1 a b)
 
-powSynth :: UGen -> UGen -> UGen
-powSynth a b = sum . replicate testCount <| a ** b
+pluckSynth :: UGen
+pluckSynth = testTwoArgs (\a b -> pluck 100 a b whiteNoise)
 
-logSynth :: UGen -> UGen -> UGen
-logSynth a _ = sum . replicate testCount <| log a
+freeverbSynth :: UGen
+freeverbSynth = testTwoArgs (\a b -> freeverb a 1 1 b)
 
-cosSynth :: UGen -> UGen -> UGen
-cosSynth a _ = sum . replicate testCount <| cos a
+absSynth :: UGen
+absSynth = testOneArg abs
 
-asinSynth :: UGen -> UGen -> UGen
-asinSynth a _ = sum . replicate testCount <| asin a
+signumSynth :: UGen
+signumSynth = testOneArg signum
 
-acosSynth :: UGen -> UGen -> UGen
-acosSynth a _ = sum . replicate testCount <| acos a
+powSynth :: UGen
+powSynth = testTwoArgs (\a b -> a ** b)
 
-atanSynth :: UGen -> UGen -> UGen
-atanSynth a _ = sum . replicate testCount <| atan a
+logSynth :: UGen
+logSynth = testOneArg log
 
-logBaseSynth :: UGen -> UGen -> UGen
-logBaseSynth a b = sum . replicate testCount <| logBase a b
+cosSynth :: UGen
+cosSynth = testOneArg cos
 
-sqrtSynth :: UGen -> UGen -> UGen
-sqrtSynth a _ = sum . replicate testCount <| sqrt a
+asinSynth :: UGen
+asinSynth = testOneArg asin
 
-tanSynth :: UGen -> UGen -> UGen
-tanSynth a _ = sum . replicate testCount <| tan a
+acosSynth :: UGen
+acosSynth = testOneArg acos
 
-sinHSynth :: UGen -> UGen -> UGen
-sinHSynth a _ = sum . replicate testCount <| sinh a
+atanSynth :: UGen
+atanSynth = testOneArg atan
 
-cosHSynth :: UGen -> UGen -> UGen
-cosHSynth a _ = sum . replicate testCount <| cosh a
+logBaseSynth :: UGen
+logBaseSynth = testTwoArgs (\a b -> logBase a b)
 
-tanHSynth :: UGen -> UGen -> UGen
-tanHSynth a _ = sum . replicate testCount <| tanh a
+sqrtSynth :: UGen
+sqrtSynth = testOneArg sqrt
 
-asinHSynth :: UGen -> UGen -> UGen
-asinHSynth a _ = sum . replicate testCount <| asinh a
+tanSynth :: UGen
+tanSynth = testOneArg tan
 
-atanHSynth :: UGen -> UGen -> UGen
-atanHSynth a _ = sum . replicate testCount <| atanh a
+sinHSynth :: UGen
+sinHSynth = testOneArg sinh
 
-acosHSynth :: UGen -> UGen -> UGen
-acosHSynth a _ = sum . replicate testCount <| acosh a
+cosHSynth :: UGen
+cosHSynth = testOneArg cosh
+
+tanHSynth :: UGen
+tanHSynth = testOneArg tanh
+
+asinHSynth :: UGen
+asinHSynth = testOneArg asinh
+
+atanHSynth :: UGen
+atanHSynth = testOneArg atanh
+
+acosHSynth :: UGen
+acosHSynth = testOneArg acosh
+
+
+-----------------------------------
+-- More tests
+-----------------------------------
+
+visAux :: UGen -> UGen -> UGen -> UGen
+--TODO: Fix visAux
+-- visAux bus a u = (applyLeft (auxThrough bus . (* a)) u * 0) + u
+visAux _ _ u = u
+
+hyperMelody :: UGen -> UGen
+hyperMelody f = [s, s2] |> gain 0.04 |> e |> visAux (random 0 2 4.99) 20 |> out 0
+    where
+        e  = env [0,1,0.15, 0] [0.0001,0.1, 700] (-1.5)
+        s  = sin <| sin 3 * 6 + f * 2
+        s2 = sin <| sin 6 * 9 + f
+
+hyperMelodyPattern :: Signal ()
+hyperMelodyPattern = playSynthPattern (toggle <| combo [alt,isDown keyF]) (env [0,1,0.15, 0] [0.0001,0.1, 7] (-1.5) >>> out 0) (pmap ((*1) . d2f slendro) <| ploop [sec1])
+    where
+        sec1 = [lich| [_ 3] [4 3] [_ 3] 6 7 _ [_ 3] 4 _ _ _ _ _ _
+                      [1 _ 2] [_ 3 _] [2 4 6] 5 _ _ _ _ _ _ _ _ _ _ _
+                      [4 _ _ 3] [_ _ 2 _] [_ 1 _ _] 3 _ _ _ _ 2 _ _ _ _ _ _ 1 _ _
+                      _ _ _ _ _ _ 7 5 [_ 4] 5 _ _ _ _ _
+                      _ _ _ _ 3 _ _ _ _ _ _ _ _ _ _ _ _
+                      2 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+                |]

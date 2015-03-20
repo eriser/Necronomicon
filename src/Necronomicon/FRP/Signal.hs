@@ -1649,7 +1649,7 @@ playSynth' playSig u argSigs = Signal $ \state -> do
     synthRef  <- newIORef Nothing
     synthName <- getNextID state ~> \uid -> "~p" ++ show uid
     _         <- runNecroState (compileSynthDef synthName u) (necroVars state)
-    print $ "Compiling synthDef: " ++ synthName
+    putStrLn $ "Compiling synthDef: " ++ synthName
 
     return $ processSignal pCont aConts synthRef synthName (necroVars state)
     where

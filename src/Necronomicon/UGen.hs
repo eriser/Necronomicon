@@ -945,6 +945,7 @@ newtype UGen = UGen{ unUGen :: [UGenChannel] } deriving (Show, Eq)
 instance Monoid UGen where
     mempty                    = UGen []
     UGen s1 `mappend` UGen s2 = UGen $ s1 ++ s2
+    mconcat us                = foldr1 (<>) us
 
 applyLeft :: (UGen -> UGen) -> UGen -> UGen
 applyLeft = applyChan 0
@@ -986,6 +987,9 @@ instance IsList UGen where
     type Item    UGen  = UGen
     fromList     list  = UGen $ foldl (\acc (UGen u) -> acc ++ u) [] list
     toList (UGen list) = [UGen list]
+
+ugenReplicate :: Int -> UGen -> UGen
+ugenReplicate num (UGen us) = UGen $ concat $ replicate num us
 
 --combinator function for creating multiple oscillators with frequency variations in stereo, etc
 --spread, spreadN, spreadL, spreadC

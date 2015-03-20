@@ -5,7 +5,7 @@ import Data.List (zip4)
 --Get chords up and running
 
 main :: IO ()
-main = runSignal <| tempo (pure 150) *> testGUI <> sections <> hyperTerrainSounds
+main = runSignal <| testGUI *> sections *> hyperTerrainSounds
 
 hyperTerrainSounds :: Signal ()
 hyperTerrainSounds = metallicPattern
@@ -175,7 +175,7 @@ visAux :: UGen -> UGen -> UGen -> UGen
 visAux _ _ u = u
 
 metallic3 :: UGen -> UGen
-metallic3 f = sig + sig2 + sig3 |> e |> visAux 2 2 |> softclip 1000 |> filt |> gain 0.045 |> verb |> e |> gain 1 |> dup |> out 0
+metallic3 f = sig + sig2 + sig3 |> e |> visAux 2 2 |> softclip 2 |> filt |> e |> gain 0.065 |> pan 0.75 |> out 20
     where
         sig    = sin (f * random 0 0.999 1.001) |> gain 0.15
         sig2   = sin (f * random 1 0.499 0.500) |> gain 0.15
@@ -189,10 +189,9 @@ metallic3 f = sig + sig2 + sig3 |> e |> visAux 2 2 |> softclip 1000 |> filt |> g
 
         e      = env      [0,1,0.01,0]    [0.1, 6,0.1] (-1)
         e2     = env2     [1,1,0.25,0.25] [0.01,1,5]   (-3)
-        verb   = freeverb 0.5 1.0 0.1
 
 metallic4 :: UGen -> UGen
-metallic4 f = sig + sig2 + sig3 |> e |> visAux 3 2 |> softclip 1000 |> filt |> gain 0.045 |> verb |> e |> gain 1 |> dup |> out 0
+metallic4 f = sig + sig2 + sig3 |> e |> visAux 3 2 |> softclip 2 |> filt |> e |> gain 0.065 |> pan 0.25 |> out 20
     where
         sig    = sin (f * random 0 0.999 1.001) |> gain 0.15
         sig2   = sin (f * random 1 0.499 0.500) |> gain 0.15
@@ -206,22 +205,21 @@ metallic4 f = sig + sig2 + sig3 |> e |> visAux 3 2 |> softclip 1000 |> filt |> g
 
         e      = env      [0,1,0.01,0]    [0.1, 6,0.1] (-1)
         e2     = env2     [1,1,0.25,0.25] [0.01,1,5] (-3)
-        verb   = freeverb 0.5 1.0 0.1
 
 hyperMelody :: UGen -> UGen
 hyperMelody f = [s,s2] |> gain 0.04 |> e |> visAux (random 0 2 4.99) 20 |> out 0
     where
         e  = env [0,1,0.15, 0] [0.0001,0.1, 7] (-1.5)
-        s  = sin <| add (sin 3 * 6) (f*2)
-        s2 = sin <| add (sin 6 * 9) f
+        s  = sin <| sin 3 * 6 + f * 2
+        s2 = sin <| sin 6 * 9 + f
 
 --add sins for visuals and modulation
 reverseSwell :: UGen -> UGen
 reverseSwell f =  sig1 + sig2 + sig3 |> e |> tanhDist (dup <| random 31 0.25 1) |> add (whiteNoise * 0.25) |> gain 0.03 |> filt |> e |> pan 0.75 |> out 20
     where
         hf   = f * 0.5
-        e    = env  [0,1,0]         [4,4] (3)
-        e2   = env2 [0.125,1,0.125] [4,4] (3)
+        e    = env [0,1,0]         [4,4] 3
+        e2   = env [0.125,1,0.125] [4,4] 3
         sig1 = saw (hf * random 0 0.995 1.005) * mod1
         sig2 = saw (f  * random 2 0.995 1.005) * mod2
         sig3 = saw (hf * random 4 0.495 0.505) * mod4 * 0.5
@@ -235,8 +233,8 @@ reverseSwell2 :: UGen -> UGen
 reverseSwell2 f = sig1 + sig2 + sig3 |> e |> tanhDist (random 32 0.25 1) |> add (whiteNoise * 0.25) |> gain 0.03 |> filt |> e |> pan 0.25 |> out 20
     where
         hf   = f * 0.5
-        e    = env  [0,1,0]         [4,4] (3)
-        e2   = env2 [0.125,1,0.125] [4,4] (3)
+        e    = env [0,1,0]         [4,4] 3
+        e2   = env [0.125,1,0.125] [4,4] 3
         sig1 = saw (hf * random 0 0.995 1.005) * mod1
         sig2 = saw (f  * random 2 0.995 1.005) * mod2
         sig3 = saw (hf * random 4 0.495 0.505) * mod4 * 0.5
@@ -576,7 +574,7 @@ section2Drums = floorPattern2 <> shake2Pattern <> shake1Pattern <> omniPrimePatt
             where
                 sec1 = [lich| 1 _ 1 _ 1 _ 1 _
                               1 _ 1 _ 1 _ 1 [4 4]
-                        ] |]
+                        |]
 
         shake2Pattern = playSynthPattern (toggle <| combo [alt,isDown keyW]) shake2 (pmap (* 0.1) <| ploop [sec1])
             where
@@ -584,7 +582,7 @@ section2Drums = floorPattern2 <> shake2Pattern <> shake1Pattern <> omniPrimePatt
                               [2 1] [_ 2] 1
                               [_ 1] [_ 1] 1
                               _ _ _
-                        ] |]
+                        |]
 
         floorPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyW]) floorPerc2 (pmap (* 0.25) <| ploop [sec1])
             where
