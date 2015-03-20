@@ -1,12 +1,13 @@
 import Necronomicon
 import qualified Data.Vector as V
 
-
 main :: IO ()
 main | testNum == 0 = runSignal <| merges (map (play <| pure True) (replicate 200 <| line 1000))
      | testNum == 1 = runSignal <| merges (map (<| switcher) ugenTests) <> sigPrint (printTest <~ switcher)
+     | testNum == 2 = runSignal hyperMelodyPattern
+     | testNum == 3 = runSignal <| merges (map (play <| pure True) (replicate 5 <| hyperMelody 440))
      | otherwise    = return ()
-     where testNum  = 1 :: Int
+     where testNum  = 2 :: Int
 
 ugenTests :: [Signal Int -> Signal ()]
 ugenTests = map test <| zip synths [0..]
@@ -21,15 +22,6 @@ printTest i
 
 switcher :: Signal Int
 switcher = count (every 10)
-
--- ticker :: Signal Double
--- ticker = fps 1
-
--- x :: Signal Double
--- x = randFS ticker ~> scale (-3000) 3000
-
--- y :: Signal Double
--- y = randFS ticker ~> scale (-3000) 3000
 
 synthsVec :: V.Vector (String, UGen)
 synthsVec = V.fromList synths
@@ -318,3 +310,31 @@ atanHSynth = testOneArg atanh
 
 acosHSynth :: UGen
 acosHSynth = testOneArg acosh
+
+
+-----------------------------------
+-- More tests
+-----------------------------------
+
+visAux :: UGen -> UGen -> UGen -> UGen
+--TODO: Fix visAux
+-- visAux bus a u = (applyLeft (auxThrough bus . (* a)) u * 0) + u
+visAux _ _ u = u
+
+hyperMelody :: UGen -> UGen
+hyperMelody f = [s, s2] |> gain 0.04 |> e |> visAux (random 0 2 4.99) 20 |> out 0
+    where
+        e  = env [0,1,0.15, 0] [0.0001,0.1, 700] (-1.5)
+        s  = sin <| sin 3 * 6 + f * 2
+        s2 = sin <| sin 6 * 9 + f
+
+hyperMelodyPattern :: Signal ()
+hyperMelodyPattern = playSynthPattern (toggle <| combo [alt,isDown keyF]) (env [0,1,0.15, 0] [0.0001,0.1, 7] (-1.5) >>> out 0) (pmap ((*1) . d2f slendro) <| ploop [sec1])
+    where
+        sec1 = [lich| [_ 3] [4 3] [_ 3] 6 7 _ [_ 3] 4 _ _ _ _ _ _
+                      [1 _ 2] [_ 3 _] [2 4 6] 5 _ _ _ _ _ _ _ _ _ _ _
+                      [4 _ _ 3] [_ _ 2 _] [_ 1 _ _] 3 _ _ _ _ 2 _ _ _ _ _ _ 1 _ _
+                      _ _ _ _ _ _ 7 5 [_ 4] 5 _ _ _ _ _
+                      _ _ _ _ 3 _ _ _ _ _ _ _ _ _ _ _ _
+                      2 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+                |]

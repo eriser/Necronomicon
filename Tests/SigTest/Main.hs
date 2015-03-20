@@ -574,7 +574,7 @@ section2Drums = floorPattern2 <> shake2Pattern <> shake1Pattern <> omniPrimePatt
             where
                 sec1 = [lich| 1 _ 1 _ 1 _ 1 _
                               1 _ 1 _ 1 _ 1 [4 4]
-                        ] |]
+                        |]
 
         shake2Pattern = playSynthPattern (toggle <| combo [alt,isDown keyW]) shake2 (pmap (* 0.1) <| ploop [sec1])
             where
@@ -582,7 +582,7 @@ section2Drums = floorPattern2 <> shake2Pattern <> shake1Pattern <> omniPrimePatt
                               [2 1] [_ 2] 1
                               [_ 1] [_ 1] 1
                               _ _ _
-                        ] |]
+                        |]
 
         floorPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyW]) floorPerc2 (pmap (* 0.25) <| ploop [sec1])
             where
