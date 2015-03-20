@@ -31,6 +31,8 @@ unsigned int next_power_of_two(unsigned int v)
 	return ++v;
 }
 
+#define LERP(A,B,D) (A+D*(B-A))
+
 /////////////////////
 // Constants
 /////////////////////
@@ -2510,16 +2512,16 @@ void env_calc(ugen u)
 				scheduled_for_removal = true;
 			}
 		}
-
 		else
 		{
 			// printf("data.index: %u, data.numValues: %u.\n",data.index,data.numValues);
 
-			double unclampedDelta    = pow((line_timed - data.curTotalDuration) * data.recipDuration, data.curve);
-			// double unclampedDelta    = fast_pow((line_timed - data.curTotalDuration) * data.recipDuration, data.curve);
-			double delta             = MIN(unclampedDelta,1.0);
-			y                        = ((1-delta) * data.currentValue + delta * data.nextValue) * x;
-			data.time                = data.time + 1;
+			// double unclampedDelta    = pow((line_timed - data.curTotalDuration) * data.recipDuration, data.curve);
+			double delta             = fast_pow((line_timed - data.curTotalDuration) * data.recipDuration, data.curve);
+			// double delta             = MIN(unclampedDelta,1.0);
+			y                        = LERP(data.currentValue, data.nextValue, delta) * x;
+			// ((1-delta) * data.currentValue + delta * data.nextValue) * x;
+			data.time++;
 		}
 
 		UGEN_OUT(out, y);
@@ -3487,7 +3489,6 @@ void test_doubly_linked_list()
 // Curtis: New UGens
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#define LERP(A,B,D) (A+D*(B-A))
 #define CLAMP(V,MIN,MAX) 				\
 ({										\
 	double result = V < MIN ? MIN : V; 	\
@@ -5033,7 +5034,7 @@ void crush_calc(ugen u)
     int max;
 
 	AUDIO_LOOP(
-	    max = pow(2, UGEN_IN(in0)) - 1;
+	    max = fast_pow(2, UGEN_IN(in0)) - 1;
 		UGEN_OUT(out,ROUND((UGEN_IN(in1) + 1.0) * max) / max - 1.0);
 	);
 }
