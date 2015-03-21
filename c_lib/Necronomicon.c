@@ -2394,15 +2394,12 @@ void perc_calc(ugen* u)
 typedef struct
 {
 	double time;
-
 	double curTotalDuration;
-	double nextTotalDuration;
 	double recipDuration;
-
-	double currentValue;
-	double nextValue;
 	double curve;
-
+	double nextValue;
+	double currentValue;
+	double nextTotalDuration;
 	int    index;
 	int    numValues;
 	int    numDurations;
@@ -2511,7 +2508,7 @@ void env_calc(ugen u)
 				try_schedule_current_synth_for_removal();
 				scheduled_for_removal = true;
 			}
-			UGEN_OUT(out,0);
+			UGEN_OUT(out,data.nextValue);
 		}
 		else
 		{
