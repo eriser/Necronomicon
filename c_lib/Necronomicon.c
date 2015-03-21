@@ -2688,8 +2688,8 @@ double phase = *((double*) u.data);				 \
 double freq;									 \
 unsigned char index1;							 \
 unsigned char index2;							 \
-double amp1;									 \
-double amp2;									 \
+double v1; 										 \
+double v2;										 \
 double delta;									 \
 double y;										 \
 												 \
@@ -2699,16 +2699,46 @@ AUDIO_LOOP(										 \
 	AUDIO_ARGS									 \
 	index1 = phase;								 \
 	index2 = index1 + 1;						 \
-	amp1 = sine_table[index1];					 \
-	amp2 = sine_table[index2];					 \
-	delta = phase - ((long) phase);				 \
-	y = amp1 + delta * (amp2 - amp1);			 \
-												 \
-	UGEN_OUT(out, y);                            \
+	v1     = sine_table[index1];				 \
+	v2     = sine_table[index2];				 \
+	delta  = phase - ((long) phase);			 \
+	UGEN_OUT(out, LERP(v1,v2,delta));            \
 	phase += TABLE_MUL_RECIP_SAMPLE_RATE * freq; \
 );                                               \
                                                  \
 *((double*) u.data) = phase;                     \
+
+#define mmsin_a0  1.0
+#define mmsin_a1 -1.666666666640169148537065260055e-1
+#define mmsin_a2  8.333333316490113523036717102793e-3
+#define mmsin_a3 -1.984126600659171392655484413285e-4
+#define mmsin_a4  2.755690114917374804474016589137e-6
+#define mmsin_a5 -2.502845227292692953118686710787e-8
+#define mmsin_a6  1.538730635926417598443354215485e-10
+
+#define MINIMAXSIN(X)																									  \
+x2 = X * X;                                                              												  \
+X * (mmsin_a0 + x2 * (mmsin_a1 + x2 * (mmsin_a2 + x2 * (mmsin_a3 + x2 * (mmsin_a4 + x2 * (mmsin_a5 + x2 * mmsin_a6)))))); \
+
+/*
+#define SIN_CALC(CONTROL_ARGS, AUDIO_ARGS)       	\
+double* in0 = UGEN_INPUT_BUFFER(u, 0);           	\
+double* out = UGEN_OUTPUT_BUFFER(u, 0);			 	\
+												 	\
+double phase = *((double*) u.data);				 	\
+double freq;									 	\
+double x2;										 	\
+CONTROL_ARGS									 	\
+												 	\
+AUDIO_LOOP(										 	\
+	AUDIO_ARGS									 	\
+	UGEN_OUT(out, MINIMAXSIN(phase));               \
+	phase += TWO_PI_TIMES_RECIP_SAMPLE_RATE * freq; \
+	if(phase > 1) phase = 0;						\
+);                                               	\
+                                                 	\
+*((double*) u.data) = phase;                     	\
+*/
 
 void sin_a_calc(ugen u)
 {
@@ -4421,20 +4451,6 @@ void lpf_calc(ugen u)
 
 	*((biquad_t*) u.data) = bi;
 }
-
-#define mmsin_a0 1.0
-#define mmsin_a1 -1.666666666640169148537065260055e-1
-#define mmsin_a2 8.333333316490113523036717102793e-3
-#define mmsin_a3 -1.984126600659171392655484413285e-4
-#define mmsin_a4 2.755690114917374804474016589137e-6
-#define mmsin_a5 -2.502845227292692953118686710787e-8
-#define mmsin_a6 1.538730635926417598443354215485e-10
-
-#define MINIMAXSIN(X)																\
-({ 																					\
-    double x2 = X * X;                                                              \
-    X * (mmsin_a0 + x2 * (mmsin_a1 + x2 * (mmsin_a2 + x2 * (mmsin_a3 + x2 * (mmsin_a4 + x2 * (mmsin_a5 + x2 * mmsin_a6)))))); \
-})
 
 void hpf_calc(ugen u)
 {
