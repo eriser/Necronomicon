@@ -106,6 +106,12 @@ unsigned int  out_bus_buffer_index = 0;
 // UGen
 /////////////////////
 
+typedef enum
+{
+	ControlRate = 0,
+	AudioRate = 1,
+} CalcRate;
+
 struct ugen;
 typedef struct ugen ugen;
 
@@ -118,6 +124,8 @@ struct ugen
 	double* constructor_args; // arguments passed in for use during construction
 	unsigned int* inputs; // indexes to the parent synth's ugen wire buffer
 	unsigned int* outputs; // indexes to the parent synth's ugen wire buffer
+	CalcRate calc_rate;
+	unsigned int __padding; // Pad struct size to 8 * 8 == 64 bytes
 };
 
 const unsigned int UGEN_SIZE = sizeof(ugen);
@@ -1718,6 +1726,17 @@ AUDIO_LOOP(                                       \
 	UGEN_OUT(out, a OP b);                        \
 );                                                \
 
+#define BIN_FUNC_CALC(FUNC, CONTROL_ARGS, AUDIO_ARGS) \
+double* in0 = UGEN_INPUT_BUFFER(u, 0);          	  \
+double* in1 = UGEN_INPUT_BUFFER(u, 1);                \
+double* out = UGEN_OUTPUT_BUFFER(u, 0);               \
+double a,b;                                           \
+CONTROL_ARGS                                          \
+AUDIO_LOOP(                                           \
+	AUDIO_ARGS                                        \
+	UGEN_OUT(out, FUNC(a, b));                        \
+);                                                    \
+
 void add_aa_calc(ugen u)
 {
 	BIN_OP_CALC(
@@ -1964,18 +1983,35 @@ void negate_k_calc(ugen u)
 	);
 }
 
-void pow_a_calc(ugen u)
+void pow_aa_calc(ugen u)
 {
-	double* in0 = UGEN_INPUT_BUFFER(u, 0);
-	double* in1 = UGEN_INPUT_BUFFER(u, 1);
-	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-
-	AUDIO_LOOP(
-		UGEN_OUT(out, pow(UGEN_IN(in0), UGEN_IN(in1)));
+	BIN_FUNC_CALC(
+		pow,
+		/* no control args */,
+		a = UGEN_IN(in0);
+		b = UGEN_IN(in1); // Audio args
 	);
 }
 
-void pow_k_calc(ugen u)
+void pow_ak_calc(ugen u)
+{
+	BIN_FUNC_CALC(
+		pow,
+		b = in1[0];, // Control args
+		a = UGEN_IN(in0); // Audio args
+	);
+}
+
+void pow_ka_calc(ugen u)
+{
+	BIN_FUNC_CALC(
+		pow,
+		a = in0[0];, // Control args
+		b = UGEN_IN(in1); // Audio args
+	);
+}
+
+void pow_kk_calc(ugen u)
 {
 	double* in0 = UGEN_INPUT_BUFFER(u, 0);
 	double* in1 = UGEN_INPUT_BUFFER(u, 1);

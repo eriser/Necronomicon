@@ -227,10 +227,12 @@ foreign import ccall "&signum_a_calc" signumACalc :: CUGenFunc
 usignum :: UGen -> UGen
 usignum x = optimizeUGenCalcFunc [signumKCalc, signumACalc] $ multiChannelExpandUGen Signum signumACalc nullConstructor nullDeconstructor [x]
 
-foreign import ccall "&pow_k_calc" powKCalc :: CUGenFunc
-foreign import ccall "&pow_a_calc" powACalc :: CUGenFunc
+foreign import ccall "&pow_kk_calc" powKKCalc :: CUGenFunc
+foreign import ccall "&pow_ak_calc" powAKCalc :: CUGenFunc
+foreign import ccall "&pow_ka_calc" powKACalc :: CUGenFunc
+foreign import ccall "&pow_aa_calc" powAACalc :: CUGenFunc
 upow :: UGen -> UGen -> UGen
-upow x y = optimizeUGenCalcFunc [powKCalc, powACalc] $ multiChannelExpandUGen Pow powACalc nullConstructor nullDeconstructor [x, y]
+upow x y = optimizeUGenCalcFunc [powKKCalc, powAKCalc, powKACalc, powAACalc] $ multiChannelExpandUGen Pow powAACalc nullConstructor nullDeconstructor [x, y]
 
 foreign import ccall "&exp_k_calc" expKCalc :: CUGenFunc
 foreign import ccall "&exp_a_calc" expACalc :: CUGenFunc
@@ -875,7 +877,7 @@ compileUGenWithConstructorArgs (UGenFunc _ calc cons decn _) conArgs args key = 
     inputs <- liftIO (newArray args)
     wire <- nextWireIndex
     wireBuf <- liftIO $ new wire
-    addUGen key (CUGen calc cons decn nullPtr conArgs inputs wireBuf) wire
+    addUGen key (CUGen calc cons decn nullPtr conArgs inputs wireBuf (fromEnum AudioRate) 0) wire
     return wire
 
 -- To Do: Add multi-out ugen support
@@ -887,7 +889,7 @@ compileUGen (UGenFunc (LocalOut feedBus) calc cons decn _) args key = do
     inputs <- liftIO (newArray args)
     wire <- getOrAddCompiledFeedWire feedBus
     wireBuf <- liftIO $ new wire
-    addUGen key (CUGen calc cons decn nullPtr nullPtr inputs wireBuf) wire
+    addUGen key (CUGen calc cons decn nullPtr nullPtr inputs wireBuf (fromEnum AudioRate) 0) wire
     return wire
 compileUGen (UGenNum d) _ key = do
     wire <- nextWireIndex
