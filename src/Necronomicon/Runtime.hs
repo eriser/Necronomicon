@@ -600,10 +600,12 @@ type JackTime = CULLong
 type CUGenFunc = FunPtr (Ptr CUGen -> ())
 type CUGenConstructor = FunPtr (Ptr CUGen -> ())
 type CUGenDeconstructor = FunPtr (Ptr CUGen -> ())
-data CUGen = CUGen CUGenFunc CUGenConstructor CUGenDeconstructor (Ptr ()) (Ptr CDouble) (Ptr CUInt) (Ptr CUInt) deriving (Show)
+type CUGenCalcRate = Int
+type CUGenPadding = Int
+data CUGen = CUGen CUGenFunc CUGenConstructor CUGenDeconstructor (Ptr ()) (Ptr CDouble) (Ptr CUInt) (Ptr CUInt) CUGenCalcRate CUGenPadding deriving (Show)
 
 instance Storable CUGen where
-    sizeOf _ = sizeOf (undefined :: CDouble) * 7
+    sizeOf _ = sizeOf (undefined :: CDouble) * 8
     alignment _ = alignment (undefined :: CDouble)
     peek ptr = do
         calc  <- peekByteOff ptr 0  :: IO CUGenFunc
@@ -613,8 +615,10 @@ instance Storable CUGen where
         cArgs <- peekByteOff ptr 32 :: IO (Ptr CDouble)
         inpts <- peekByteOff ptr 40 :: IO (Ptr CUInt)
         outs  <- peekByteOff ptr 48 :: IO (Ptr CUInt)
-        return (CUGen calc cons decon dataS cArgs inpts outs)
-    poke ptr (CUGen calc cons decon dataS cArgs inpts outs) = do
+        crate <- peekByteOff ptr 56 :: IO Int
+        padd0 <- peekByteOff ptr 60 :: IO Int
+        return (CUGen calc cons decon dataS cArgs inpts outs crate padd0)
+    poke ptr (CUGen calc cons decon dataS cArgs inpts outs crate padd0) = do
         pokeByteOff ptr 0  calc
         pokeByteOff ptr 8  cons
         pokeByteOff ptr 16 decon
@@ -622,6 +626,8 @@ instance Storable CUGen where
         pokeByteOff ptr 32 cArgs
         pokeByteOff ptr 40 inpts
         pokeByteOff ptr 48 outs
+        pokeByteOff ptr 56 crate
+        pokeByteOff ptr 60 padd0
 
 data CSynthDef = CSynthDef {
     csynthDefUGenGraph :: Ptr CUGen,

@@ -108,6 +108,12 @@ unsigned int  out_bus_buffer_index = 0;
 // UGen
 /////////////////////
 
+typedef enum
+{
+	ControlRate = 0,
+	AudioRate = 1,
+} CalcRate;
+
 struct ugen;
 typedef struct ugen ugen;
 
@@ -120,6 +126,8 @@ struct ugen
 	double* constructor_args; // arguments passed in for use during construction
 	unsigned int* inputs; // indexes to the parent synth's ugen wire buffer
 	unsigned int* outputs; // indexes to the parent synth's ugen wire buffer
+	CalcRate calc_rate;
+	unsigned int __padding; // Pad struct size to 8 * 8 == 64 bytes
 };
 
 const unsigned int UGEN_SIZE = sizeof(ugen);
@@ -1720,6 +1728,17 @@ AUDIO_LOOP(                                       \
 	UGEN_OUT(out, a OP b);                        \
 );                                                \
 
+#define BIN_FUNC_CALC(FUNC, CONTROL_ARGS, AUDIO_ARGS) \
+double* in0 = UGEN_INPUT_BUFFER(u, 0);          	  \
+double* in1 = UGEN_INPUT_BUFFER(u, 1);                \
+double* out = UGEN_OUTPUT_BUFFER(u, 0);               \
+double a,b;                                           \
+CONTROL_ARGS                                          \
+AUDIO_LOOP(                                           \
+	AUDIO_ARGS                                        \
+	UGEN_OUT(out, FUNC(a, b));                        \
+);                                                    \
+
 void add_aa_calc(ugen u)
 {
 	BIN_OP_CALC(
@@ -1966,18 +1985,35 @@ void negate_k_calc(ugen u)
 	);
 }
 
-void pow_a_calc(ugen u)
+void pow_aa_calc(ugen u)
 {
-	double* in0 = UGEN_INPUT_BUFFER(u, 0);
-	double* in1 = UGEN_INPUT_BUFFER(u, 1);
-	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-
-	AUDIO_LOOP(
-		UGEN_OUT(out, pow(UGEN_IN(in0), UGEN_IN(in1)));
+	BIN_FUNC_CALC(
+		pow,
+		/* no control args */,
+		a = UGEN_IN(in0);
+		b = UGEN_IN(in1); // Audio args
 	);
 }
 
-void pow_k_calc(ugen u)
+void pow_ak_calc(ugen u)
+{
+	BIN_FUNC_CALC(
+		pow,
+		b = in1[0];, // Control args
+		a = UGEN_IN(in0); // Audio args
+	);
+}
+
+void pow_ka_calc(ugen u)
+{
+	BIN_FUNC_CALC(
+		pow,
+		a = in0[0];, // Control args
+		b = UGEN_IN(in1); // Audio args
+	);
+}
+
+void pow_kk_calc(ugen u)
 {
 	double* in0 = UGEN_INPUT_BUFFER(u, 0);
 	double* in1 = UGEN_INPUT_BUFFER(u, 1);
@@ -2402,6 +2438,7 @@ typedef struct
 	double nextTotalDuration;
 	int    index;
 	int    numValues;
+	int	   maxIndex;
 	int    numDurations;
 
 } env_struct;
@@ -2412,6 +2449,7 @@ void env_constructor(ugen* u)
 	data->time              = 0;
 	data->index             = -1;
 	data->numValues         = u->constructor_args[0];
+	data->maxIndex          = fmax(0, data->numValues - 1);
 	data->numDurations      = u->constructor_args[1];
 	data->curTotalDuration  = -1;
 	data->nextTotalDuration = -1;
@@ -2438,6 +2476,7 @@ void env_calc(ugen u)
 	// int          valsOffset = 2;
 	// double       line_timed;
 	bool scheduled_for_removal = false;
+	const int maxIndex = data.maxIndex;
 
 	AUDIO_LOOP(
 		//Curtis: A bit ambitious to just treat this as control rate, but honestly when is audio rate curve ever going to be a useful thing?
@@ -2461,7 +2500,7 @@ void env_calc(ugen u)
 			// printf("data.numValues: %i\n",data.numValues);
 			// printf("data.numDurations: %u\n",data.numDurations);
 
-			if(data.index < data.numValues - 1)
+			if(data.index < maxIndex)
 			{
 				// printf("dursOffset: %d\n",dursOffset);
 				// printf("valsOffset: %d\n",valsOffset);
@@ -2479,10 +2518,10 @@ void env_calc(ugen u)
 				data.nextTotalDuration = data.curTotalDuration + nextDuration;
 				// printf("data.nextTotalDuration: %f\n",data.nextTotalDuration);
 
-				data.currentValue = UGEN_IN(UGEN_INPUT_BUFFER(u, MIN(data.index,data.numValues - 1) + 2));
+				data.currentValue = UGEN_IN(UGEN_INPUT_BUFFER(u, MIN(data.index, maxIndex) + 2));
 				// printf("data.currentValue: %f\n",data.currentValue);
 
-				data.nextValue = UGEN_IN(UGEN_INPUT_BUFFER(u, MIN(data.index + 1,data.numValues - 1) + 2));
+				data.nextValue = UGEN_IN(UGEN_INPUT_BUFFER(u, MIN(data.index + 1, maxIndex) + 2));
 
 				if(nextDuration == 0.0)
 					data.recipDuration = 0.0;
@@ -2498,7 +2537,7 @@ void env_calc(ugen u)
 			}
 		}
 
-		if(data.index >= data.numValues - 1)
+		if(data.index >= maxIndex)
 		{
 			// printf("!!!!!!!!!!!!!!!!!!!!env freeing synth!!!!!!!!!!!!!!!!!!!!!!!!!\n");
 			// y = 0;
@@ -2536,6 +2575,7 @@ void env2_calc(ugen u)
 	env_struct   data       = *((env_struct*) u.data);
 	double       curve;
 	double       x;
+	int          maxIndex = data.maxIndex;
 	int          valsOffset = 2;
 	int          dursOffset = 2 + data.numValues;
 	// double       line_timed;
@@ -2550,14 +2590,14 @@ void env2_calc(ugen u)
 		{
 			data.index = data.index + 1;
 
-			if(data.index < data.numValues - 1)
+			if(data.index < maxIndex)
 			{
 				double nextDuration    = UGEN_IN(UGEN_INPUT_BUFFER(u, (data.index % data.numValues) + dursOffset));
 
 				data.curTotalDuration  = data.nextTotalDuration;
 				data.nextTotalDuration = data.curTotalDuration + nextDuration;
-				data.currentValue      = UGEN_IN(UGEN_INPUT_BUFFER(u, MIN(data.index,data.numValues - 1) + valsOffset));
-				data.nextValue         = UGEN_IN(UGEN_INPUT_BUFFER(u, MIN(data.index + 1,data.numValues - 1) + valsOffset));
+				data.currentValue      = UGEN_IN(UGEN_INPUT_BUFFER(u, MIN(data.index, maxIndex) + valsOffset));
+				data.nextValue         = UGEN_IN(UGEN_INPUT_BUFFER(u, MIN(data.index + 1, maxIndex) + valsOffset));
 				data.recipDuration     = 1.0 / nextDuration;
 				if(curve < 0)
 					data.curve = 1 / ((curve * -1) + 1);
