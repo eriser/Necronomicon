@@ -32,6 +32,8 @@ unsigned int next_power_of_two(unsigned int v)
 }
 
 #define LERP(A,B,D) (A+D*(B-A))
+#define likely(x)   __builtin_expect((x),1)
+#define unlikely(x) __builtin_expect((x),0)
 
 /////////////////////
 // Constants
@@ -2519,7 +2521,8 @@ void env_calc(ugen u)
 			}
 		}
 
-		double delta = fast_pow(ud, data.time - data.curTotalDuration * data.recipDuration, data.curve);
+		double delta = fast_pow(ud, (data.time - data.curTotalDuration) * data.recipDuration, data.curve);
+		// double delta = pow(data.time - data.curTotalDuration * data.recipDuration, data.curve);
 		UGEN_OUT(out,LERP(data.currentValue, data.nextValue, delta) * UGEN_IN(in1));
 		data.time   += RECIP_SAMPLE_RATE;
 	);
@@ -4361,11 +4364,13 @@ void lpf_calc(ugen u)
 
     AUDIO_LOOP(
 		freq  = UGEN_IN(in0);
-		q     = MAX(UGEN_IN(in1),0.00000001);
+		q     = UGEN_IN(in1);
 		in    = UGEN_IN(in2);
 
 		if(freq != bi.prevF || q != bi.prevQ)
 		{
+			//branchless max?
+			q     = MAX(q,0.00000001);
 			bi.prevF = freq;
 			bi.prevQ = q;
 			//Don't recalc if unnecessary
