@@ -2467,11 +2467,9 @@ void env_calc(ugen u)
 
 	env_struct   data  = *((env_struct*) u.data);
 	double       curve = UGEN_INPUT_BUFFER(u, 0)[0];
-	// double       x;
-	// int          valsOffset = 2;
-	// double       line_timed;
-	bool scheduled_for_removal = false;
 	const int maxIndex = data.maxIndex;
+
+	bool scheduled_for_removal = false;
 
 	union {
     	double d;
@@ -2479,32 +2477,13 @@ void env_calc(ugen u)
 	} ud = { 0 };
 
 	AUDIO_LOOP(
-		//Curtis: A bit ambitious to just treat this as control rate, but honestly when is audio rate curve ever going to be a useful thing?
-		// curve      = UGEN_IN(in0);
-		// x          = UGEN_IN(in1);
-		// line_timed = (double) data.time * RECIP_SAMPLE_RATE;
-
-		// printf("env---------------------------------------------\n");
-		// printf("data.index: %i, data.numValues: %i.\n",data.index,data.numValues);
-		// printf("data.nextTotalDuration: %f\n",data.nextTotalDuration);
-		// printf("line_timed: %f\n",line_timed);
 
 		if(data.time >= data.nextTotalDuration)
 		{
-			// printf("env---------------------------------------------\n");
-			// printf("line_timed >= data.nextTotalDuration\n");
-
 			data.index = data.index + 1;
-
-			// printf("data.index: %i\n",data.index);
-			// printf("data.numValues: %i\n",data.numValues);
-			// printf("data.numDurations: %u\n",data.numDurations);
 
 			if(data.index >= maxIndex)
 			{
-				// printf("!!!!!!!!!!!!!!!!!!!!env freeing synth!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-				// y = 0;
-
 				if(scheduled_for_removal == false)
 				{
 					try_schedule_current_synth_for_removal();
@@ -2515,50 +2494,34 @@ void env_calc(ugen u)
 			}
 			else if(data.index < maxIndex)
 			{
-				// printf("dursOffset: %d\n",dursOffset);
-				// printf("valsOffset: %d\n",valsOffset);
 				int dursOffset = 2 + data.numValues;
 
 				double nextDuration = UGEN_IN(UGEN_INPUT_BUFFER(u, (data.index % data.numValues) + dursOffset));
-				// printf("nextDuration: %f\n",nextDuration);
 
 				if(data.nextTotalDuration < 0)
 					data.curTotalDuration = 0;
 				else
 					data.curTotalDuration = data.nextTotalDuration;
-				// printf("data.curTotalDuration: %f\n",data.curTotalDuration);
 
 				data.nextTotalDuration = data.curTotalDuration + nextDuration;
-				// printf("data.nextTotalDuration: %f\n",data.nextTotalDuration);
-
-				data.currentValue = UGEN_IN(UGEN_INPUT_BUFFER(u, MIN(data.index, maxIndex) + 2));
-				// printf("data.currentValue: %f\n",data.currentValue);
-
-				data.nextValue = UGEN_IN(UGEN_INPUT_BUFFER(u, MIN(data.index + 1, maxIndex) + 2));
+				data.currentValue      = UGEN_IN(UGEN_INPUT_BUFFER(u, MIN(data.index, maxIndex) + 2));
+				data.nextValue         = UGEN_IN(UGEN_INPUT_BUFFER(u, MIN(data.index + 1, maxIndex) + 2));
 
 				if(nextDuration == 0.0)
 					data.recipDuration = 0.0;
 				else
 					data.recipDuration = 1.0 / nextDuration;
-				// printf("data.recipDuration: %f\n",data.recipDuration);
 
 				if(curve < 0)
 					data.curve = 1 / ((curve * -1) + 1);
 				else
 					data.curve = curve + 1;
-				// printf("data.curve: %f\n",data.curve);
 			}
 		}
 
-		// printf("data.index: %u, data.numValues: %u.\n",data.index,data.numValues);
-
-		// double unclampedDelta    = pow((line_timed - data.curTotalDuration) * data.recipDuration, data.curve);
-		double delta             = fast_pow(ud,data.time - data.curTotalDuration * data.recipDuration, data.curve);
-		// double delta             = MIN(unclampedDelta,1.0);
+		double delta = fast_pow(ud, data.time - data.curTotalDuration * data.recipDuration, data.curve);
 		UGEN_OUT(out,LERP(data.currentValue, data.nextValue, delta) * UGEN_IN(in1));
-		// ((1-delta) * data.currentValue + delta * data.nextValue) * x;
-		// data.time++;
-		data.time += RECIP_SAMPLE_RATE;
+		data.time   += RECIP_SAMPLE_RATE;
 	);
 
 	*((env_struct*) u.data) = data;
