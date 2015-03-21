@@ -8,7 +8,7 @@ main | testNum == 0 = printTestHead >> (runSignal <| merges (map (play <| pure T
      | testNum == 3 = printTestHead >> (runSignal <| merges (map (play <| pure True) (replicate 5 <| hyperMelody 440)))
      | otherwise    = return ()
      where
-         testNum   = 1 :: Int
+         testNum   = 2 :: Int
          printTestHead = do
              putStrLn "==========================================================================="
              putStrLn <| "== Running test " ++ show testNum

@@ -156,6 +156,14 @@ chooseCalcFunc cfuncs u@(UGenFunc unit _ con dec args) = UGenFunc unit cfunc con
 optimizeUGenCalcFunc :: [CUGenFunc] -> UGen -> UGen
 optimizeUGenCalcFunc cfuncs u = mapUGenChannels (chooseCalcFunc cfuncs) u
 
+-- Choose a calc function for a ugen based on a specific argument
+selectRateByArg :: CUGenFunc -> CUGenFunc -> Int -> UGenChannel -> UGenChannel
+selectRateByArg _ _ _ u@(UGenNum _) = u
+selectRateByArg kCalc aCalc argIndex (UGenFunc unit _ con dec args) = UGenFunc unit cfunc con dec args
+    where
+        rate = ugenRate (args !! (max 0 (min (max 0 ((length args) - 1)) argIndex)))
+        cfunc = if rate == ControlRate then kCalc else aCalc
+
 -- toUGenList us = us
 
 -- used during compiling to correctly handle synth argument compilation
@@ -311,16 +319,13 @@ foreign import ccall "&acosh_a_calc" acoshACalc :: CUGenFunc
 uacosh :: UGen -> UGen
 uacosh x = optimizeUGenCalcFunc [acoshKCalc, acoshACalc] $ multiChannelExpandUGen ACosH acoshACalc nullConstructor nullDeconstructor [x]
 
-foreign import ccall "&line_calc" lineCalc :: CUGenFunc
+foreign import ccall "&line_k_calc" lineKCalc :: CUGenFunc
+foreign import ccall "&line_a_calc" lineACalc :: CUGenFunc
 foreign import ccall "&line_constructor" lineConstructor :: CUGenFunc
 foreign import ccall "&line_deconstructor" lineDeconstructor :: CUGenFunc
 
 line :: UGen -> UGen
-line lineLength = multiChannelExpandUGen Line lineCalc lineConstructor lineDeconstructor [lineLength]
-
--- foreign import ccall "&perc_calc" percCalc :: CUGenFunc
--- perc :: UGenType a => a -> a -> a -> a -> a
--- perc length peak curve x = multiChannelExpandUGen Perc percCalc lineConstructor lineDeconstructor [length,peak,curve,x]
+line lineLength =  optimizeUGenCalcFunc [lineKCalc, lineACalc] $ multiChannelExpandUGen Line lineACalc lineConstructor lineDeconstructor [lineLength]
 
 perc :: UGen -> UGen -> UGen -> UGen -> UGen -> UGen
 perc attackTime releaseTime peak curve input = env [0,peak,0] [attackTime,releaseTime] curve input
@@ -333,13 +338,15 @@ adr attackTime decayTime releaseTime peak releaseLevel curve = env [0,peak,relea
 
 foreign import ccall "&env_constructor"   envConstructor :: CUGenFunc
 foreign import ccall "&env_deconstructor" envDeconstructor :: CUGenFunc
-foreign import ccall "&env_calc" envCalc          :: CUGenFunc
+foreign import ccall "&env_k_calc" envKCalc :: CUGenFunc
+foreign import ccall "&env_a_calc" envACalc :: CUGenFunc
 env :: [UGen] -> [UGen] -> UGen -> UGen -> UGen
-env values durations curve x = multiChannelExpandUGen (Env (fromIntegral valuesLength) (fromIntegral durationsLength)) envCalc envConstructor envDeconstructor args
+env values durations curve x = mapUGenChannels (selectRateByArg envKCalc envACalc 1) expandedUGen
     where
         valuesLength    = length values
         durationsLength = length durations
         args            = [curve,x] ++ values ++ durations
+        expandedUGen    = multiChannelExpandUGen (Env (fromIntegral valuesLength) (fromIntegral durationsLength)) envACalc envConstructor envDeconstructor args
 
 foreign import ccall "&env2_calc" env2Calc          :: CUGenFunc
 env2 :: [UGen] -> [UGen] -> UGen -> UGen -> UGen
