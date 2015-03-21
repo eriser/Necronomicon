@@ -1686,16 +1686,11 @@ void shutdown_necronomicon()
 
 #define LINEAR_INTERP(A, B, DELTA) (A + DELTA * (B - A))
 
-#define fast_pow(BASE,EXPONENT) 									\
-({																	\
-	union {															\
-    	double d;													\
-    	int x[2];													\
-	} u = { BASE };													\
-  	u.x[1] = (int)(EXPONENT * (u.x[1] - 1072632447) + 1072632447);	\
-  	u.x[0] = 0;														\
-	u.d;															\
-})
+#define fast_pow(U,BASE,EXPONENT) 								\
+U.d    = BASE;													\
+U.x[1] = (int)(EXPONENT * (U.x[1] - 1072632447) + 1072632447);	\
+U.x[0] = 0;														\
+U.d;															\
 
 
 /*
@@ -2478,6 +2473,11 @@ void env_calc(ugen u)
 	bool scheduled_for_removal = false;
 	const int maxIndex = data.maxIndex;
 
+	union {
+    	double d;
+    	int x[2];
+	} ud = { 0 };
+
 	AUDIO_LOOP(
 		//Curtis: A bit ambitious to just treat this as control rate, but honestly when is audio rate curve ever going to be a useful thing?
 		// curve      = UGEN_IN(in0);
@@ -2500,7 +2500,20 @@ void env_calc(ugen u)
 			// printf("data.numValues: %i\n",data.numValues);
 			// printf("data.numDurations: %u\n",data.numDurations);
 
-			if(data.index < maxIndex)
+			if(data.index >= maxIndex)
+			{
+				// printf("!!!!!!!!!!!!!!!!!!!!env freeing synth!!!!!!!!!!!!!!!!!!!!!!!!!\n");
+				// y = 0;
+
+				if(scheduled_for_removal == false)
+				{
+					try_schedule_current_synth_for_removal();
+					scheduled_for_removal = true;
+				}
+				UGEN_OUT(out,data.nextValue);
+				continue;
+			}
+			else if(data.index < maxIndex)
 			{
 				// printf("dursOffset: %d\n",dursOffset);
 				// printf("valsOffset: %d\n",valsOffset);
@@ -2537,30 +2550,15 @@ void env_calc(ugen u)
 			}
 		}
 
-		if(data.index >= maxIndex)
-		{
-			// printf("!!!!!!!!!!!!!!!!!!!!env freeing synth!!!!!!!!!!!!!!!!!!!!!!!!!\n");
-			// y = 0;
+		// printf("data.index: %u, data.numValues: %u.\n",data.index,data.numValues);
 
-			if(scheduled_for_removal == false)
-			{
-				try_schedule_current_synth_for_removal();
-				scheduled_for_removal = true;
-			}
-			UGEN_OUT(out,data.nextValue);
-		}
-		else
-		{
-			// printf("data.index: %u, data.numValues: %u.\n",data.index,data.numValues);
-
-			// double unclampedDelta    = pow((line_timed - data.curTotalDuration) * data.recipDuration, data.curve);
-			double delta             = fast_pow((data.time - data.curTotalDuration) * data.recipDuration, data.curve);
-			// double delta             = MIN(unclampedDelta,1.0);
-			UGEN_OUT(out,LERP(data.currentValue, data.nextValue, delta) * UGEN_IN(in1));
-			// ((1-delta) * data.currentValue + delta * data.nextValue) * x;
-			// data.time++;
-			data.time += RECIP_SAMPLE_RATE;
-		}
+		// double unclampedDelta    = pow((line_timed - data.curTotalDuration) * data.recipDuration, data.curve);
+		double delta             = fast_pow(ud,data.time - data.curTotalDuration * data.recipDuration, data.curve);
+		// double delta             = MIN(unclampedDelta,1.0);
+		UGEN_OUT(out,LERP(data.currentValue, data.nextValue, delta) * UGEN_IN(in1));
+		// ((1-delta) * data.currentValue + delta * data.nextValue) * x;
+		// data.time++;
+		data.time += RECIP_SAMPLE_RATE;
 	);
 
 	*((env_struct*) u.data) = data;
@@ -3567,7 +3565,7 @@ void test_doubly_linked_list()
 
 #define HARD_CLIP(X,AMOUNT) (CLAMP(X*AMOUNT,-1.0,1.0))
 
-#define POLY3_DIST(X,AMOUNT) (1.5 * X - 0.5 * fast_pow(X,3))
+#define POLY3_DIST(X,AMOUNT) (1.5 * X - 0.5 * pow(X,3))
 
 #define WRAP(X,AMOUNT)       \
 ({                           \
@@ -5070,8 +5068,13 @@ void crush_calc(ugen u)
 
     int max;
 
+	union {
+    	double d;
+    	int x[2];
+	} ud = { 0 };
+
 	AUDIO_LOOP(
-	    max = fast_pow(2, UGEN_IN(in0)) - 1;
+	    max = fast_pow(ud,2, UGEN_IN(in0)) - 1;
 		UGEN_OUT(out,ROUND((UGEN_IN(in1) + 1.0) * max) / max - 1.0);
 	);
 }

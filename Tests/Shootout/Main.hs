@@ -2,12 +2,17 @@ import Necronomicon
 import qualified Data.Vector as V
 
 main :: IO ()
-main | testNum == 0 = runSignal <| merges (map (play <| pure True) (replicate 200 <| line 1000))
-     | testNum == 1 = runSignal <| merges (map (<| switcher) ugenTests) <> sigPrint (printTest <~ switcher)
-     | testNum == 2 = runSignal hyperMelodyPattern
-     | testNum == 3 = runSignal <| merges (map (play <| pure True) (replicate 5 <| hyperMelody 440))
+main | testNum == 0 = printTestHead >> (runSignal <| merges (map (play <| pure True) (replicate 200 <| line 1000)))
+     | testNum == 1 = printTestHead >> (runSignal <| merges (map (<| switcher) ugenTests) <> sigPrint (printTest <~ switcher))
+     | testNum == 2 = printTestHead >> (runSignal hyperMelodyPattern)
+     | testNum == 3 = printTestHead >> (runSignal <| merges (map (play <| pure True) (replicate 5 <| hyperMelody 440)))
      | otherwise    = return ()
-     where testNum  = 2 :: Int
+     where
+         testNum   = 1 :: Int
+         printTestHead = do
+             putStrLn "==========================================================================="
+             putStrLn <| "== Running test " ++ show testNum
+             putStrLn "==========================================================================="
 
 ugenTests :: [Signal Int -> Signal ()]
 ugenTests = map test <| zip synths [0..]
