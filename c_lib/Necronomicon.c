@@ -32,6 +32,8 @@ unsigned int next_power_of_two(unsigned int v)
 }
 
 #define LERP(A,B,D) (A+D*(B-A))
+#define likely(x)   __builtin_expect((x),1)
+#define unlikely(x) __builtin_expect((x),0)
 
 /////////////////////
 // Constants
@@ -2435,60 +2437,65 @@ void env_deconstructor(ugen* u)
 	free(u->data);
 }
 
-#define ENV_CALC(CONTROL_ARGS, AUDIO_ARGS)																\
-double* in1 = UGEN_INPUT_BUFFER(u, 1);																	\
-double* out = UGEN_OUTPUT_BUFFER(u, 0);																	\
-double x;																								\
-env_struct   data  = *((env_struct*) u.data);															\
-double       curve = UGEN_INPUT_BUFFER(u, 0)[0];														\
-const int maxIndex = data.maxIndex;																		\
-bool scheduled_for_removal = false;																		\
-union {																									\
-	double d;																							\
-	int x[2];																							\
-} ud = { 0 };																							\
-CONTROL_ARGS																							\
-AUDIO_LOOP(																								\
-	AUDIO_ARGS																							\
-	if(data.time >= data.nextTotalDuration)																\
-	{																									\
-		data.index = data.index + 1;																	\
-		if(data.index >= maxIndex)																		\
-		{																								\
-			if(scheduled_for_removal == false)															\
-			{																							\
-				try_schedule_current_synth_for_removal();												\
-				scheduled_for_removal = true;															\
-			}																							\
-			UGEN_OUT(out,data.nextValue);																\
-			continue;																					\
-		}																								\
-		else if(data.index < maxIndex)																	\
-		{																								\
-			int dursOffset = 2 + data.numValues;														\
-			double nextDuration = *UGEN_INPUT_BUFFER(u, (data.index % data.numValues) + dursOffset);	\
-			if(data.nextTotalDuration < 0)																\
-				data.curTotalDuration = 0;																\
-			else																						\
-				data.curTotalDuration = data.nextTotalDuration;											\
-			data.nextTotalDuration = data.curTotalDuration + nextDuration;								\
-			data.currentValue      = *(UGEN_INPUT_BUFFER(u, MIN(data.index, maxIndex) + 2));			\
-			data.nextValue         = *(UGEN_INPUT_BUFFER(u, MIN(data.index + 1, maxIndex) + 2));		\
-			if(nextDuration == 0.0)																		\
-				data.recipDuration = 0.0;																\
-			else																						\
-				data.recipDuration = 1.0 / nextDuration;												\
-			if(curve < 0)																				\
-				data.curve = 1 / ((curve * -1) + 1);													\
-			else																						\
-				data.curve = curve + 1;																	\
-		}																								\
-	}																									\
-	double delta = fast_pow(ud, data.time - data.curTotalDuration * data.recipDuration, data.curve);	\
-	UGEN_OUT(out,LERP(data.currentValue, data.nextValue, delta) * x);									\
-	data.time   += RECIP_SAMPLE_RATE;																	\
-);																										\
-*((env_struct*) u.data) = data;																			\
+#define ENV_CALC(CONTROL_ARGS, AUDIO_ARGS)																		\
+double* in1 = UGEN_INPUT_BUFFER(u, 1); 																			\
+double* out = UGEN_OUTPUT_BUFFER(u, 0); 																		\
+env_struct   data  = *((env_struct*) u.data);																	\
+double x;																										\
+double       curve = UGEN_INPUT_BUFFER(u, 0)[0];																\
+const int maxIndex = data.maxIndex;																				\
+bool scheduled_for_removal = false;																				\
+union {																											\
+	double d;																									\
+	int x[2];																									\
+} ud = { 0 };																									\
+CONTROL_ARGS																									\
+AUDIO_LOOP(																										\
+	AUDIO_ARGS																									\
+	if(data.time >= data.nextTotalDuration)																		\
+	{																											\
+		data.index = data.index + 1;																			\
+		if(data.index >= maxIndex)																				\
+		{																										\
+			if(scheduled_for_removal == false)																	\
+			{																									\
+				try_schedule_current_synth_for_removal();														\
+				scheduled_for_removal = true;																	\
+			}																									\
+			UGEN_OUT(out,data.nextValue);																		\
+			continue;																							\
+		}																										\
+		else if(data.index < maxIndex)																			\
+		{																										\
+			int dursOffset = 2 + data.numValues;																\
+			double nextDuration = UGEN_IN(UGEN_INPUT_BUFFER(u, (data.index % data.numValues) + dursOffset));	\
+																												\
+			if(data.nextTotalDuration < 0)																		\
+				data.curTotalDuration = 0;																		\
+			else																								\
+				data.curTotalDuration = data.nextTotalDuration;													\
+																												\
+			data.nextTotalDuration = data.curTotalDuration + nextDuration;										\
+			data.currentValue      = UGEN_IN(UGEN_INPUT_BUFFER(u, MIN(data.index, maxIndex) + 2));				\
+			data.nextValue         = UGEN_IN(UGEN_INPUT_BUFFER(u, MIN(data.index + 1, maxIndex) + 2));			\
+																												\
+			if(nextDuration == 0.0)																				\
+				data.recipDuration = 0.0;																		\
+			else																								\
+				data.recipDuration = 1.0 / nextDuration;														\
+																												\
+			if(curve < 0)																						\
+				data.curve = 1 / ((curve * -1) + 1);															\
+			else																								\
+				data.curve = curve + 1;																			\
+		}																										\
+	}																											\
+																												\
+	double delta = fast_pow(ud, (data.time - data.curTotalDuration) * data.recipDuration, data.curve);			\
+	UGEN_OUT(out,LERP(data.currentValue, data.nextValue, delta) * x);											\
+	data.time   += RECIP_SAMPLE_RATE;																			\
+);																												\
+*((env_struct*) u.data) = data;																					\
 
 void env_k_calc(ugen u)
 {
@@ -2506,136 +2513,75 @@ void env_a_calc(ugen u)
 	)
 }
 
-void env2_calc(ugen u)
+#define ENV2_CALC(CONTROL_ARGS, AUDIO_ARGS)																		\
+double* in1 = UGEN_INPUT_BUFFER(u, 1);																			\
+double* out = UGEN_OUTPUT_BUFFER(u, 0);																			\
+double x;																										\
+env_struct   data  = *((env_struct*) u.data);																	\
+double       curve = UGEN_INPUT_BUFFER(u, 0)[0];																\
+const int maxIndex = data.maxIndex;																				\
+union {																											\
+	double d;																									\
+	int x[2];																									\
+} ud = { 0 };																									\
+CONTROL_ARGS																									\
+AUDIO_LOOP(																										\
+	AUDIO_ARGS																									\
+	if(data.time >= data.nextTotalDuration)																		\
+	{																											\
+		data.index = data.index + 1;																			\
+		if(data.index >= maxIndex)																				\
+		{																										\
+			UGEN_OUT(out,data.nextValue);																		\
+			continue;																							\
+		}																										\
+		else if(data.index < maxIndex)																			\
+		{																										\
+			int dursOffset = 2 + data.numValues;																\
+			double nextDuration = *UGEN_INPUT_BUFFER(u, (data.index % data.numValues) + dursOffset);			\
+																												\
+			if(data.nextTotalDuration < 0)																		\
+				data.curTotalDuration = 0;																		\
+			else																								\
+				data.curTotalDuration = data.nextTotalDuration;													\
+																												\
+			data.nextTotalDuration = data.curTotalDuration + nextDuration;										\
+			data.currentValue      = *UGEN_INPUT_BUFFER(u, MIN(data.index, maxIndex) + 2);						\
+			data.nextValue         = *UGEN_INPUT_BUFFER(u, MIN(data.index + 1, maxIndex) + 2);					\
+																												\
+			if(nextDuration == 0.0)																				\
+				data.recipDuration = 0.0;																		\
+			else																								\
+				data.recipDuration = 1.0 / nextDuration;														\
+																												\
+			if(curve < 0)																						\
+				data.curve = 1 / ((curve * -1) + 1);															\
+			else																								\
+				data.curve = curve + 1;																			\
+		}																										\
+	}																											\
+																												\
+	double delta = fast_pow(ud, (data.time - data.curTotalDuration) * data.recipDuration, data.curve);			\
+	UGEN_OUT(out,LERP(data.currentValue, data.nextValue, delta) * x);											\
+	data.time   += RECIP_SAMPLE_RATE;																			\
+);																												\
+*((env_struct*) u.data) = data;																					\
+
+void env2_k_calc(ugen u)
 {
-	double* in0 = UGEN_INPUT_BUFFER(u, 0);
-	double* in1 = UGEN_INPUT_BUFFER(u, 1);
-	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	ENV2_CALC(
+		x = in1[0];,
+		/* no audio args */
+	)
+}
 
-	env_struct   data       = *((env_struct*) u.data);
-	double       curve;
-	double       x;
-	int          maxIndex = data.maxIndex;
-	int          valsOffset = 2;
-	int          dursOffset = 2 + data.numValues;
-	// double       line_timed;
-	double       y          = 0;
-
-	AUDIO_LOOP(
-		curve = UGEN_IN(in0);
+void env2_a_calc(ugen u)
+{
+	ENV2_CALC(
+		/* no control args */,
 		x = UGEN_IN(in1);
-		// line_timed = (double) data.time * RECIP_SAMPLE_RATE;
-
-		if(data.time > data.nextTotalDuration)
-		{
-			data.index = data.index + 1;
-
-			if(data.index < maxIndex)
-			{
-				double nextDuration    = UGEN_IN(UGEN_INPUT_BUFFER(u, (data.index % data.numValues) + dursOffset));
-
-				data.curTotalDuration  = data.nextTotalDuration;
-				data.nextTotalDuration = data.curTotalDuration + nextDuration;
-				data.currentValue      = UGEN_IN(UGEN_INPUT_BUFFER(u, MIN(data.index, maxIndex) + valsOffset));
-				data.nextValue         = UGEN_IN(UGEN_INPUT_BUFFER(u, MIN(data.index + 1, maxIndex) + valsOffset));
-				data.recipDuration     = 1.0 / nextDuration;
-				if(curve < 0)
-					data.curve = 1 / ((curve * -1) + 1);
-				else
-					data.curve = curve + 1;
-			}
-		}
-
-		double unclampedDelta    = pow((data.time - data.curTotalDuration) * data.recipDuration, data.curve);
-		double delta             = MIN(unclampedDelta,1.0);
-		y                        = ((1-delta) * data.currentValue + delta * data.nextValue) * x;
-		data.time               += RECIP_SAMPLE_RATE;
-
-		UGEN_OUT(out, y);
-	);
-
-    *((env_struct*) u.data) = data;
+	)
 }
-
-/*
-void env2_calc(ugen* u)
-{
-	double       curve      = UGEN_IN(u, 0);
-	double       x          = UGEN_IN(u, 1);
-	// double       length     = UGEN_IN(u, 2) * SAMPLE_RATE;
-	int          valsLength = (int) UGEN_IN(u, 2);
-	int          dursLength = (int) UGEN_IN(u, 3);
-	int          valsOffset = 4;
-	int          dursOffset = 4 + valsLength;
-	unsigned int line_time  = *((unsigned int*) u->data);
-	double       line_timed = (double) line_time * RECIP_SAMPLE_RATE;
-	double       y          = 0;
-
-	if(valsLength == 0 || dursLength == 0)
-	{
-		if(valsLength == 0)
-			printf("Vals length 0.\n");
-
-		if(dursLength == 0)
-			printf("Durs length 0.\n");
-
-		UGEN_OUT(u,0,0);
-	}
-	else
-	{
-		double currentDuration   = 0;
-		double nextDuration      = 0;
-
-		double curTotalDuration  = 0;
-		double nextTotalDuration = 0;
-		double totalDuration     = 0;
-
-		double currentValue      = 0;
-		double nextValue         = 0;
-
-		int i;
-	    for(i=0;i<valsLength - 1;++i)
-	    {
-	    	currentDuration   = nextDuration;
-			nextDuration      = UGEN_IN(u,(i % dursLength)+dursOffset);
-
-	    	curTotalDuration += currentDuration;
-	    	nextTotalDuration = curTotalDuration + nextDuration;
-			totalDuration     = nextTotalDuration;
-
-			currentValue      = UGEN_IN(u,i     + valsOffset);
-			nextValue         = UGEN_IN(u,i + 1 + valsOffset);
-
-	    	if(nextTotalDuration > line_timed)
-	    		break;
-	    }
-
-		for(;i<valsLength - 1; ++i)
-		{
-			totalDuration += UGEN_IN(u,(i % dursLength)+dursOffset);
-		}
-
-	    // if(line_time >= length)
-		if(line_timed >= totalDuration)
-		{
-			// try_schedule_current_synth_for_removal();
-		}
-	    else
-	    {
-			if(curve < 0)
-		    	curve = 1 / ((curve * -1) + 1);
-		    else
-		    	curve = curve + 1;
-
-			double delta               = pow((line_timed - curTotalDuration) / (nextTotalDuration - curTotalDuration), curve);
-			y                          = ((1-delta) * currentValue + delta * nextValue) * x;
-	    	*((unsigned int*) u->data) = line_time + 1;
-	    }
-
-		UGEN_OUT(u, 0, y);
-	}
-}
-*/
 
 void sin_constructor(ugen* u)
 {
@@ -2656,10 +2602,9 @@ double phase = *((double*) u.data);				 \
 double freq;									 \
 unsigned char index1;							 \
 unsigned char index2;							 \
-double amp1;									 \
-double amp2;									 \
+double v1; 										 \
+double v2;										 \
 double delta;									 \
-double y;										 \
 												 \
 CONTROL_ARGS									 \
 												 \
@@ -2667,16 +2612,26 @@ AUDIO_LOOP(										 \
 	AUDIO_ARGS									 \
 	index1 = phase;								 \
 	index2 = index1 + 1;						 \
-	amp1 = sine_table[index1];					 \
-	amp2 = sine_table[index2];					 \
-	delta = phase - ((long) phase);				 \
-	y = amp1 + delta * (amp2 - amp1);			 \
-												 \
-	UGEN_OUT(out, y);                            \
+	v1     = sine_table[index1];				 \
+	v2     = sine_table[index2];				 \
+	delta  = phase - ((long) phase);			 \
+	UGEN_OUT(out, LERP(v1,v2,delta));            \
 	phase += TABLE_MUL_RECIP_SAMPLE_RATE * freq; \
 );                                               \
                                                  \
 *((double*) u.data) = phase;                     \
+
+#define mmsin_a0  1.0
+#define mmsin_a1 -1.666666666640169148537065260055e-1
+#define mmsin_a2  8.333333316490113523036717102793e-3
+#define mmsin_a3 -1.984126600659171392655484413285e-4
+#define mmsin_a4  2.755690114917374804474016589137e-6
+#define mmsin_a5 -2.502845227292692953118686710787e-8
+#define mmsin_a6  1.538730635926417598443354215485e-10
+
+#define MINIMAXSIN(X)																									  \
+x2 = X * X;                                                              												  \
+X * (mmsin_a0 + x2 * (mmsin_a1 + x2 * (mmsin_a2 + x2 * (mmsin_a3 + x2 * (mmsin_a4 + x2 * (mmsin_a5 + x2 * mmsin_a6)))))); \
 
 void sin_a_calc(ugen u)
 {
@@ -2794,26 +2749,21 @@ void poll_calc(ugen u)
 {
 	unsigned int* count_buffer = (unsigned int*) u.data;
 	unsigned int count = *count_buffer;
-	double* in0 = UGEN_INPUT_BUFFER(u, 0);
-	double input;
 	message msg;
 	msg.arg.number = 0;
 	msg.type = PRINT_NUMBER;
 
-	AUDIO_LOOP(
-		if (count >= SAMPLE_RATE)
-		{
-			input = UGEN_IN(in0);
-		    msg.arg.number = input;
-			NRT_FIFO_PUSH(msg);
-			count = 0;
-		}
+	if (count >= ((double) SAMPLE_RATE * 0.25))
+	{
+		msg.arg.number = *UGEN_INPUT_BUFFER(u, 0); // Reads ugens as control rate
+		NRT_FIFO_PUSH(msg);
+		count = 0;
+	}
 
-		else
-		{
-			count += 10;
-		}
-	);
+	else
+	{
+		count += BLOCK_SIZE;
+	}
 
 	*count_buffer = count;
 }
@@ -3531,62 +3481,118 @@ void accumulator_deconstructor(ugen* u)
 	free(u->data);
 }
 
-//LFOS
+// LFOs
+
 double RECIP_CHAR_RANGE = 1.0 / 255.0;
-void lfsaw_calc(ugen u) //Branchless and table-less saw
+
+#define LFSAW_CALC(CONTROL_ARGS, AUDIO_ARGS)			\
+double* in0 = UGEN_INPUT_BUFFER(u, 0);					\
+double* in1 = UGEN_INPUT_BUFFER(u, 1);					\
+double* out = UGEN_OUTPUT_BUFFER(u, 0);					\
+double phase = *((unsigned int*) u.data);				\
+double freq;											\
+/* double phaseArg; */									\
+double amp1;											\
+double amp2;											\
+double delta;											\
+double y;												\
+CONTROL_ARGS											\
+AUDIO_LOOP(												\
+	AUDIO_ARGS											\
+	/* Branchless and table-less saw */					\
+	amp1   = ((double)((char)phase));					\
+	amp2   = ((double)(((char)phase)+1));				\
+	delta  = phase - ((long) phase);					\
+	y      = LERP(amp1,amp2,delta) * RECIP_CHAR_RANGE;	\
+	phase += TABLE_MUL_RECIP_SAMPLE_RATE * freq;		\
+	UGEN_OUT(out, y);									\
+);														\
+*((double*) u.data) = phase;							\
+
+void lfsaw_aa_calc(ugen u)
 {
-	double* in0 = UGEN_INPUT_BUFFER(u, 0);
-	double* in1 = UGEN_INPUT_BUFFER(u, 1);
-	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-	double phase = *((unsigned int*) u.data);
-
-	double freq;
-	double phaseArg;
-	double amp1;
-	double amp2;
-	double delta;
-	double y;
-
-	AUDIO_LOOP(
-		freq = UGEN_IN(in0);
-		// phaseArg = UGEN_IN(in1);
-
-		//Branchless and table-less saw
-	    amp1   = ((double)((char)phase));
-		amp2   = ((double)(((char)phase)+1));
-		delta  = phase - ((long) phase);
-		y      = LERP(amp1,amp2,delta) * RECIP_CHAR_RANGE;
-		phase += TABLE_MUL_RECIP_SAMPLE_RATE * freq;
-
-		UGEN_OUT(out, y);
-	);
-
-	*((double*) u.data) = phase;
+	LFSAW_CALC(
+		/* no control args */,
+		freq = UGEN_IN(in0); // Audio args
+		/* phaseArg = UGEN_IN(in1); */
+    );
 }
 
-void lfpulse_calc(ugen u)
+void lfsaw_ak_calc(ugen u)
 {
-	double* in0 = UGEN_INPUT_BUFFER(u, 0);
-	double* in1 = UGEN_INPUT_BUFFER(u, 1);
-	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-	double phase = *((unsigned int*) u.data);
+	LFSAW_CALC(
+		/*phaseArg = in1[0];*/, // Control arg
+		freq = UGEN_IN(in0); // Audio arg
+    );
+}
 
-	double freq;
-	double phaseArg;
-	double y;
+void lfsaw_ka_calc(ugen u)
+{
+	LFSAW_CALC(
+		freq = in0[0];, // Control arg
+		/*phaseArg = UGEN_IN(in1);*/ // Audio arg
+    );
+}
 
-	AUDIO_LOOP(
-		freq = UGEN_IN(in0);
-		// phaseArg = UGEN_IN(in1);
+void lfsaw_kk_calc(ugen u)
+{
+	LFSAW_CALC(
+		freq = in0[0]; // Control args
+		/*phaseArg = in1[0]*/,
+		/* no audio args */
+    );
+}
 
-		//Branchless and table-less square
-		y = 1 | (((char)phase) >> (sizeof(char) * CHAR_BIT - 1));
-		phase += TABLE_MUL_RECIP_SAMPLE_RATE * freq;
+#define LFPULSE_CALC(CONTROL_ARGS, AUDIO_ARGS)					\
+double* in0 = UGEN_INPUT_BUFFER(u, 0);							\
+double* in1 = UGEN_INPUT_BUFFER(u, 1);							\
+double* out = UGEN_OUTPUT_BUFFER(u, 0);							\
+double phase = *((unsigned int*) u.data);						\
+double freq;													\
+/*double phaseArg;*/											\
+double y;														\
+CONTROL_ARGS													\
+AUDIO_LOOP(														\
+	AUDIO_ARGS													\
+	/*Branchless and table-less square*/						\
+	y = 1 | (((char)phase) >> (sizeof(char) * CHAR_BIT - 1));	\
+	phase += TABLE_MUL_RECIP_SAMPLE_RATE * freq;				\
+	UGEN_OUT(out, y);											\
+);																\
+*((double*) u.data) = phase;									\
 
-		UGEN_OUT(out, y);
-	);
+void lfpulse_aa_calc(ugen u)
+{
+	LFPULSE_CALC(
+		/* no control args */,
+		freq = UGEN_IN(in0); // Audio args
+		/* phaseArg = UGEN_IN(in1); */
+    );
+}
 
-	*((double*) u.data) = phase;
+void lfpulse_ak_calc(ugen u)
+{
+	LFPULSE_CALC(
+		/*phaseArg = in1[0];*/, // Control arg
+		freq = UGEN_IN(in0); // Audio arg
+    );
+}
+
+void lfpulse_ka_calc(ugen u)
+{
+	LFPULSE_CALC(
+		freq = in0[0];, // Control arg
+		/*phaseArg = UGEN_IN(in1);*/ // Audio arg
+    );
+}
+
+void lfpulse_kk_calc(ugen u)
+{
+	LFPULSE_CALC(
+		freq = in0[0]; // Control args
+		/*phaseArg = in1[0]*/,
+		/* no audio args */
+    );
 }
 
 //---------------------------------------------
@@ -4340,11 +4346,13 @@ void lpf_calc(ugen u)
 
     AUDIO_LOOP(
 		freq  = UGEN_IN(in0);
-		q     = MAX(UGEN_IN(in1),0.00000001);
+		q     = UGEN_IN(in1);
 		in    = UGEN_IN(in2);
 
 		if(freq != bi.prevF || q != bi.prevQ)
 		{
+			//branchless max?
+			q     = MAX(q,0.00000001);
 			bi.prevF = freq;
 			bi.prevQ = q;
 			//Don't recalc if unnecessary
@@ -4387,20 +4395,6 @@ void lpf_calc(ugen u)
 
 	*((biquad_t*) u.data) = bi;
 }
-
-#define mmsin_a0 1.0
-#define mmsin_a1 -1.666666666640169148537065260055e-1
-#define mmsin_a2 8.333333316490113523036717102793e-3
-#define mmsin_a3 -1.984126600659171392655484413285e-4
-#define mmsin_a4 2.755690114917374804474016589137e-6
-#define mmsin_a5 -2.502845227292692953118686710787e-8
-#define mmsin_a6 1.538730635926417598443354215485e-10
-
-#define MINIMAXSIN(X)																\
-({ 																					\
-    double x2 = X * X;                                                              \
-    X * (mmsin_a0 + x2 * (mmsin_a1 + x2 * (mmsin_a2 + x2 * (mmsin_a3 + x2 * (mmsin_a4 + x2 * (mmsin_a5 + x2 * mmsin_a6)))))); \
-})
 
 void hpf_calc(ugen u)
 {

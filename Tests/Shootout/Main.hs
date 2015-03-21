@@ -38,10 +38,10 @@ synths = [
     ("addSynth", addSynth),
 
 -- Testing the filter synths in particular in comparison to the nothing and basic math ugens
+    ("sinSynth", sinSynth),
     ("lineSynth'", lineSynth'),
     ("percSynth", percSynth),
     ("envSynth", envSynth),
-    ("sinSynth", sinSynth),
     ("softclipSynth", softclipSynth),
     ("poly3Synth", poly3Synth),
     ("tanhDistSynth", tanhDistSynth),

@@ -31,7 +31,7 @@ data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Env Double 
               | LPF | HPF | BPF | Notch | AllPass | PeakEQ | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int
               | Clip | SoftClip | Poly3 | TanHDist | SinDist | Wrap | DelayN Double | DelayL Double | DelayC Double | CombN Double | CombL Double | CombC Double
               | Negate | Crush | Decimate | FreeVerb | Pluck Double | WhiteNoise | Abs | Signum | Pow | Exp | Log | Cos | ASin | ACos
-              | ATan | LogBase | Sqrt | Tan | SinH | CosH | TanH | ASinH | ATanH | ACosH | TimeMicros | TimeSecs
+              | ATan | LogBase | Sqrt | Tan | SinH | CosH | TanH | ASinH | ATanH | ACosH | TimeMicros | TimeSecs | USeq
               deriving (Show, Eq, Ord)
 
 data UGenRate = ControlRate | AudioRate deriving (Show, Enum, Eq, Ord)
@@ -130,6 +130,7 @@ polymorphicRateUGenUnits = S.fromList [Add, Minus, Mul, Div, Negate, Abs, Signum
 ugenRate :: UGenChannel -> UGenRate
 ugenRate (UGenNum _) = ControlRate
 ugenRate (UGenFunc (Arg _) _ _ _ _) = ControlRate
+ugenRate (UGenFunc USeq _ _ _ args) = ugenRate $ last args
 ugenRate (UGenFunc unit _ _ _ args) = if isPolyRate then polyRate else AudioRate
     where
         isPolyRate = S.member unit polymorphicRateUGenUnits
@@ -348,13 +349,20 @@ env values durations curve x = mapUGenChannels (selectRateByArg envKCalc envACal
         args            = [curve,x] ++ values ++ durations
         expandedUGen    = multiChannelExpandUGen (Env (fromIntegral valuesLength) (fromIntegral durationsLength)) envACalc envConstructor envDeconstructor args
 
-foreign import ccall "&env2_calc" env2Calc          :: CUGenFunc
+foreign import ccall "&env2_k_calc" env2KCalc :: CUGenFunc
+foreign import ccall "&env2_a_calc" env2ACalc :: CUGenFunc
 env2 :: [UGen] -> [UGen] -> UGen -> UGen -> UGen
-env2 values durations curve x = multiChannelExpandUGen (Env2 (fromIntegral valuesLength) (fromIntegral durationsLength)) env2Calc envConstructor envDeconstructor args
+env2 values durations curve x = mapUGenChannels (selectRateByArg env2KCalc env2ACalc 1) expandedUGen
     where
         valuesLength    = length values
         durationsLength = length durations
         args            = [curve,x] ++ values ++ durations
+        expandedUGen   = multiChannelExpandUGen (Env2 (fromIntegral valuesLength) (fromIntegral durationsLength)) env2ACalc envConstructor envDeconstructor args
+
+-- _useq is used internally to allow the compiler to find ugens that run in parrallel but should not be found as arguments to the same ugen, for instance with auxThrough
+-- The b argument is returned as the output of the _useq
+_useq :: UGen -> UGen -> UGen
+_useq a b = multiChannelExpandUGen USeq nullFunPtr nullFunPtr nullFunPtr [a,b]
 
 foreign import ccall "&out_kk_calc" outKKCalc :: CUGenFunc
 foreign import ccall "&out_ak_calc" outAKCalc :: CUGenFunc
@@ -372,14 +380,14 @@ auxIn :: UGen -> UGen
 auxIn channel = optimizeUGenCalcFunc [inKCalc, inACalc] $ multiChannelExpandUGen AuxIn inACalc nullConstructor nullDeconstructor [channel]
 
 auxThrough :: UGen -> UGen -> UGen
-auxThrough channel input = add (out channel input) input
+auxThrough channel input = _useq (out channel input) input
 
 foreign import ccall "&poll_calc" pollCalc :: CUGenFunc
 foreign import ccall "&poll_constructor" pollConstructor :: CUGenFunc
 foreign import ccall "&poll_deconstructor" pollDeconstructor :: CUGenFunc
 
 poll :: UGen -> UGen
-poll input = add input $ multiChannelExpandUGen Poll pollCalc pollConstructor pollDeconstructor [input]
+poll input = _useq (multiChannelExpandUGen Poll pollCalc pollConstructor pollDeconstructor [input]) input
 
 -- foreign import ccall "&local_in_calc" localInCalc :: CUGenFunc
 localIn :: Int -> UGen
@@ -406,13 +414,19 @@ feedback _ = 0
 foreign import ccall "&accumulator_constructor" accumulatorConstructor :: CUGenFunc
 foreign import ccall "&accumulator_deconstructor" accumulatorDeconstructor :: CUGenFunc
 
-foreign import ccall "&lfsaw_calc" lfsawCalc :: CUGenFunc
+foreign import ccall "&lfsaw_kk_calc" lfsawKKCalc :: CUGenFunc
+foreign import ccall "&lfsaw_ak_calc" lfsawAKCalc :: CUGenFunc
+foreign import ccall "&lfsaw_ka_calc" lfsawKACalc :: CUGenFunc
+foreign import ccall "&lfsaw_aa_calc" lfsawAACalc :: CUGenFunc
 lfsaw :: UGen -> UGen -> UGen
-lfsaw freq phase = multiChannelExpandUGen LFSaw lfsawCalc accumulatorConstructor accumulatorDeconstructor [freq,phase]
+lfsaw freq phase = optimizeUGenCalcFunc [lfsawKKCalc, lfsawAKCalc, lfsawKACalc, lfsawAACalc] $ multiChannelExpandUGen LFSaw lfsawAACalc accumulatorConstructor accumulatorDeconstructor [freq,phase]
 
-foreign import ccall "&lfpulse_calc" lfpulseCalc :: CUGenFunc
+foreign import ccall "&lfpulse_kk_calc" lfpulseKKCalc :: CUGenFunc
+foreign import ccall "&lfpulse_ak_calc" lfpulseAKCalc :: CUGenFunc
+foreign import ccall "&lfpulse_ka_calc" lfpulseKACalc :: CUGenFunc
+foreign import ccall "&lfpulse_aa_calc" lfpulseAACalc :: CUGenFunc
 lfpulse :: UGen -> UGen -> UGen
-lfpulse freq phase = multiChannelExpandUGen LFPulse lfpulseCalc accumulatorConstructor accumulatorDeconstructor [freq,phase]
+lfpulse freq phase = optimizeUGenCalcFunc [lfpulseKKCalc, lfpulseAKCalc, lfpulseKACalc, lfpulseAACalc] $ multiChannelExpandUGen LFPulse lfpulseAACalc accumulatorConstructor accumulatorDeconstructor [freq,phase]
 
 foreign import ccall "&impulse_calc" impulseCalc :: CUGenFunc
 impulse :: UGen -> UGen -> UGen
@@ -902,6 +916,7 @@ compileUGen (UGenNum d) _ key = do
     wire <- nextWireIndex
     addConstant key (CompiledConstant (CDouble d) wire)
     return wire
+compileUGen (UGenFunc USeq _ _ _ _) args _ = return $ last args -- Return the last argumen of USeq as the output of that ugen
 compileUGen ugen@(UGenFunc (DelayN maxDelayTime) _ _ _ _) args key = liftIO (new $ CDouble maxDelayTime) >>= \maxDelayTimePtr ->
     compileUGenWithConstructorArgs ugen maxDelayTimePtr args key
 compileUGen ugen@(UGenFunc (DelayL maxDelayTime) _ _ _ _) args key = liftIO (new $ CDouble maxDelayTime) >>= \maxDelayTimePtr ->
