@@ -2691,7 +2691,6 @@ unsigned char index2;							 \
 double v1; 										 \
 double v2;										 \
 double delta;									 \
-double y;										 \
 												 \
 CONTROL_ARGS									 \
 												 \
