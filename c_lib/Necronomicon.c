@@ -2522,7 +2522,6 @@ void env_calc(ugen u)
 		}
 
 		double delta = fast_pow(ud, (data.time - data.curTotalDuration) * data.recipDuration, data.curve);
-		// double delta = pow(data.time - data.curTotalDuration * data.recipDuration, data.curve);
 		UGEN_OUT(out,LERP(data.currentValue, data.nextValue, delta) * UGEN_IN(in1));
 		data.time   += RECIP_SAMPLE_RATE;
 	);
