@@ -137,10 +137,10 @@ lineSynth' :: UGen
 lineSynth' = foldr (<|) 1 <| replicate testCount (\a -> line 20 + a)
 
 percSynth :: UGen
-percSynth = testTwoArgs (\a b -> perc 0.01 10.0 a 0 b)
+percSynth = testTwoArgs (\a b -> perc 0.01 20.0 a 0 b)
 
 envSynth :: UGen
-envSynth = testOneArg <| env [0,1,0] [0.1,10.0] 0
+envSynth = testOneArg <| env [0,1,0] [0.1,20.0] 0
 
 outSynth :: UGen
 outSynth = testTwoArgs out
@@ -325,6 +325,8 @@ hyperMelody :: UGen -> UGen
 hyperMelody f = [s, s2] |> gain 0.04 |> e |> visAux (random 0 2 4.99) 20 |> out 0
     where
         e  = env [0,1,0.15, 0] [0.0001,0.1, 7] (-1.5)
+        -- e  = env [0,1,0.15, 0] [0.0001,0.1, 700] (-1.5)
+        -- e  = gain <| line 700
         s  = sin <| sin 3 * 6 + f * 2
         s2 = sin <| sin 6 * 9 + f
 
