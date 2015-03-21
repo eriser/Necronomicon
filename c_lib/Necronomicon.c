@@ -2531,37 +2531,49 @@ void env_calc(ugen u)
 
 void env2_calc(ugen u)
 {
-	double* in0 = UGEN_INPUT_BUFFER(u, 0);
 	double* in1 = UGEN_INPUT_BUFFER(u, 1);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 
-	env_struct   data       = *((env_struct*) u.data);
-	double       curve;
-	double       x;
-	int          maxIndex = data.maxIndex;
-	int          valsOffset = 2;
-	int          dursOffset = 2 + data.numValues;
-	// double       line_timed;
-	double       y          = 0;
+	env_struct   data  = *((env_struct*) u.data);
+	double       curve = UGEN_INPUT_BUFFER(u, 0)[0];
+	const int maxIndex = data.maxIndex;
+
+	union {
+    	double d;
+    	int x[2];
+	} ud = { 0 };
 
 	AUDIO_LOOP(
-		curve = UGEN_IN(in0);
-		x = UGEN_IN(in1);
-		// line_timed = (double) data.time * RECIP_SAMPLE_RATE;
 
-		if(data.time > data.nextTotalDuration)
+		if(data.time >= data.nextTotalDuration)
 		{
 			data.index = data.index + 1;
 
-			if(data.index < maxIndex)
+			if(data.index >= maxIndex)
 			{
-				double nextDuration    = UGEN_IN(UGEN_INPUT_BUFFER(u, (data.index % data.numValues) + dursOffset));
+				UGEN_OUT(out,data.nextValue);
+				continue;
+			}
+			else if(data.index < maxIndex)
+			{
+				int dursOffset = 2 + data.numValues;
 
-				data.curTotalDuration  = data.nextTotalDuration;
+				double nextDuration = UGEN_IN(UGEN_INPUT_BUFFER(u, (data.index % data.numValues) + dursOffset));
+
+				if(data.nextTotalDuration < 0)
+					data.curTotalDuration = 0;
+				else
+					data.curTotalDuration = data.nextTotalDuration;
+
 				data.nextTotalDuration = data.curTotalDuration + nextDuration;
-				data.currentValue      = UGEN_IN(UGEN_INPUT_BUFFER(u, MIN(data.index, maxIndex) + valsOffset));
-				data.nextValue         = UGEN_IN(UGEN_INPUT_BUFFER(u, MIN(data.index + 1, maxIndex) + valsOffset));
-				data.recipDuration     = 1.0 / nextDuration;
+				data.currentValue      = UGEN_IN(UGEN_INPUT_BUFFER(u, MIN(data.index, maxIndex) + 2));
+				data.nextValue         = UGEN_IN(UGEN_INPUT_BUFFER(u, MIN(data.index + 1, maxIndex) + 2));
+
+				if(nextDuration == 0.0)
+					data.recipDuration = 0.0;
+				else
+					data.recipDuration = 1.0 / nextDuration;
+
 				if(curve < 0)
 					data.curve = 1 / ((curve * -1) + 1);
 				else
@@ -2569,15 +2581,12 @@ void env2_calc(ugen u)
 			}
 		}
 
-		double unclampedDelta    = pow((data.time - data.curTotalDuration) * data.recipDuration, data.curve);
-		double delta             = MIN(unclampedDelta,1.0);
-		y                        = ((1-delta) * data.currentValue + delta * data.nextValue) * x;
-		data.time               += RECIP_SAMPLE_RATE;
-
-		UGEN_OUT(out, y);
+		double delta = fast_pow(ud, (data.time - data.curTotalDuration) * data.recipDuration, data.curve);
+		UGEN_OUT(out,LERP(data.currentValue, data.nextValue, delta) * UGEN_IN(in1));
+		data.time   += RECIP_SAMPLE_RATE;
 	);
 
-    *((env_struct*) u.data) = data;
+	*((env_struct*) u.data) = data;
 }
 
 /*
