@@ -166,6 +166,12 @@ blur tex = Material draw
             GL.uniform texu    GL.$= GL.TextureUnit 0
             bindThenDraw mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
 
+loadProgram :: GL.Program -> IO ()
+loadProgram program = GL.currentProgram  GL.$= Just program
+
+uniformD :: GL.UniformLocation -> Double -> IO ()
+uniformD loc v = GL.uniform loc GL.$= GL.Index1 (realToFrac v :: GL.GLfloat)
+
 getShader :: Resources -> Shader -> IO LoadedShader
 getShader resources sh = readIORef (shadersRef resources) >>= \shaders ->
     case IntMap.lookup (key sh) shaders of

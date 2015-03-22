@@ -2,9 +2,10 @@
 module Necronomicon.Graphics.BufferObject where
 
 import Prelude
-import qualified Graphics.Rendering.OpenGL as GL
 import Foreign.Marshal.Array
 import Foreign.Storable
+
+import qualified Graphics.Rendering.OpenGL as GL
 
 makeBuffer :: (Storable a) => GL.BufferTarget -> [a] -> IO GL.BufferObject
 makeBuffer target elems = makeBufferWithLength target (length elems) elems
@@ -18,7 +19,6 @@ makeBufferWithLength target len elems = do
     return buffer
     where
         n = fromIntegral $ len * sizeOf (head elems)
-
 
 makeDynamicBuffer :: (Storable a) => GL.BufferObject -> GL.BufferTarget -> [a] -> IO GL.BufferObject
 makeDynamicBuffer buffer target elems = do
@@ -35,3 +35,18 @@ genDynMeshBuffers = do
     vertexBuffer:_ <- GL.genObjectNames 1
     indexBuffer :_ <- GL.genObjectNames 1
     return (vertexBuffer,indexBuffer)
+
+
+    -- array <- peekArray 512 $ advancePtr outBusBuffers (512 * index)
+    -- withArray elems $ \ptr -> GL.bufferData target GL.$= (n, ptr, GL.StaticDraw)
+    -- return buffer
+    --
+
+-- audioBuffer :: Int -> Signal [Double]
+-- audioBuffer index = Signal $ \_ -> if index < 8
+        -- then return processState
+        -- else return $ \_ -> return $ NoChange []
+    -- where
+        -- processState _ = do
+            -- array <- peekArray 512 $ advancePtr outBusBuffers (512 * index)
+            -- return $ Change $ map realToFrac array

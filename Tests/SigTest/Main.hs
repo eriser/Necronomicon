@@ -5,7 +5,7 @@ import Data.List (zip4)
 --Get chords up and running
 
 main :: IO ()
-main = runSignal <| testGUI *> sections *> hyperTerrainSounds
+main = runSignal <| testGUI <> sections <> hyperTerrainSounds
 
 hyperTerrainSounds :: Signal ()
 hyperTerrainSounds = metallicPattern
@@ -30,7 +30,8 @@ section1 = scene [pure cam,oscSig]
 section2 :: Signal ()
 section2 = scene [camSig,terrainSig]
     where
-        terrainSig     = terrainObject <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time
+        -- terrainSig     = terrainObject <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time
+        terrainSig     = terrainObject <~ audioTexture 2 ~~ audioTexture 3 ~~ audioTexture 4 ~~ time
         -- cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
         camSig         = cam <~ time * 0.125
         cam t          = perspCamera pos rot 60 0.1 1000 black [glow]
@@ -49,20 +50,25 @@ section3 = scene [camSig,sphereSig]
                 pos = Vector3 (cos (t * 0.7453) * 5) (sin (t * 0.912) * 8) (sin (t * 0.4543) * 4)
                 rot = inverse <| lookAt (_z_ (* (-2.5)) <| pos) 0
 
-terrainObject :: [Double] -> [Double] -> [Double] -> Double -> SceneObject
-terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 0 (-6)) (fromEuler' 0 0 0) (Vector3 0.5 1 0.5) (Model mesh <| vertexColored (RGBA 1 1 1 0.35)) []
+-- terrainObject :: [Double] -> [Double] -> [Double] -> Double -> SceneObject
+-- terrainObject _ _ _ _ = SceneObject (Vector3 (-8) 0 (-6)) (fromEuler' 0 0 0) (Vector3 0.5 1 0.5) (Model terrainMesh <| vertexColored (RGBA 1 1 1 0.35)) []
+
+terrainObject :: Texture -> Texture -> Texture -> Double -> SceneObject
+terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 0 (-6)) (fromEuler' 0 0 0) (Vector3 0.5 1 0.5) (Model mesh <| terrainMaterial a1 a2 a3 t) []
     where
-        mesh             = DynamicMesh "simplex" vertices colors uvs indices
+        mesh             = Mesh "simplex" vertices colors uvs indices
         (w,h)            = (64.0,32.0)
         (tscale,vscale)  = (1 / 6,2.5)
-        values           = [(x + a,simplex 8 (x / w + t * 0.05) (y / h + t * 0.05) * 0.65 + aa,y + aaa)
-                          | (x,y) <- map (\n -> (mod' n w,n / h)) [0..w*h]
-                          | a     <- map (* 2.00) <| cycle a1
-                          | aa    <- map (* 0.35) <| cycle a2
-                          | aaa   <- map (* 2.00) <| cycle a3]
+        -- values           = [(x + a,simplex 8 (x / w + t * 0.05) (y / h + t * 0.05) * 0.65 + aa,y + aaa)
+                        --   | (x,y) <- map (\n -> (mod' n w,n / h)) [0..w*h]
+                        --   | a     <- map (* 2.00) <| cycle a1
+                        --   | aa    <- map (* 0.35) <| cycle a2
+                        --   | aaa   <- map (* 2.00) <| cycle a3]
+        values           = [(x,0,y) | (x,y) <- map (\n -> (mod' n w, n / h)) [0..w*h]]
 
         toVertex (x,y,z) = Vector3 (x*tscale*3) (y*vscale) (z*tscale*3)
         toColor  (x,y,z) = RGBA    ((x * 1.75) / w * (y * 0.6 + 0.4)) (y * 0.75 + 0.25) (z / h * (y * 0.75 + 0.25)) 0.3
+        toUV     (x,_,z) = Vector2 (x / w) (z / h)
 
         addIndices w' i indicesList
             | mod i w' < (w'-1) = i + 1 : i + w' : i + w' + 1 : i + 1 : i : i + w' : indicesList
@@ -70,8 +76,33 @@ terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 0 (-6)) (fromEuler' 0 0 0) 
 
         vertices = map toVertex values
         colors   = map toColor  values
-        uvs      = repeat 0
+        uvs      = map toUV     values
         indices  = foldr (addIndices <| floor w) [] [0..length values - floor (w + 2)]
+
+terrainShader :: Shader
+terrainShader = shader
+    "terrain"
+    ["tex1","tex2","tex3","time","modelView","proj"]
+    ["position","in_color","in_uv"]
+    (loadVertexShader   "terrain-vert.glsl")
+    (loadFragmentShader "terrain-frag.glsl")
+
+terrainMaterial :: Texture -> Texture -> Texture -> Double -> Material
+terrainMaterial tex1 tex2 tex3 t = Material drawMat
+    where
+        drawMat mesh modelView proj resources = do
+            (program, texu1:texu2:texu3:timeu:mv:pr:_, attributes)           <- getShader  resources terrainShader
+            (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh    resources mesh
+            texture1                                                         <- getTexture resources tex1
+            texture2                                                         <- getTexture resources tex2
+            texture3                                                         <- getTexture resources tex3
+
+            loadProgram program
+            setTextureUniform texu1 0 texture1
+            setTextureUniform texu2 1 texture2
+            setTextureUniform texu3 2 texture3
+            uniformD          timeu t
+            bindThenDraw mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
 
 oscillatorObject :: [Double] -> [Double] -> [Double] -> SceneObject
 oscillatorObject audioBuffer1 audioBuffer2 audioBuffer3 = SceneObject 0 identity 1 (Model mesh <| vertexColored (RGBA 1 1 1 0.35)) []
@@ -155,12 +186,12 @@ triOsc32 mx my = feedback fSig |> verb |> gain 0.0385 |> out 0
         d      = delayN 0.6 0.6
         fSig i = [sig4 + sig6, sig5 + sig6]
             where
-                sig1 = sinOsc (f1 + sig3 * 26.162)   * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> auxThrough 2
-                sig2 = sinOsc (f2 - sig3 * 26.162)   * (sinOsc (f1 * 0.00025) |> range 0.5 1) |> auxThrough 3
-                sig3 = sinOsc (f1 - f2 +  i * 26.162) * (sinOsc ( i * 0.00025)  |> range 0.5 1) |> auxThrough 4
+                sig1 = sinOsc (f1 + sig3 * 26.162)    * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> auxThrough 2
+                sig2 = sinOsc (f2 - sig3 * 26.162)    * (sinOsc (f1 * 0.00025) |> range 0.5 1) |> auxThrough 3
+                sig3 = sinOsc (f1 - f2 +  i * 26.162) * (sinOsc ( i * 0.00025) |> range 0.5 1) |> auxThrough 4
                 sig4 = sinOsc (f1 * 0.25 + sig1 * 261.6255653006) * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 60 |> gain 0.5 +> d
                 sig5 = sinOsc (f2 * 0.25 - sig2 * 261.6255653006) * (sinOsc (f1 * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 60 |> gain 0.5 +> d
-                sig6 = sinOsc (f1 * 0.25 - sig3 * 261.6255653006) * (sinOsc ( i * 0.00025)  |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 60 |> gain 0.5 +> d
+                sig6 = sinOsc (f1 * 0.25 - sig3 * 261.6255653006) * (sinOsc ( i * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 60 |> gain 0.5 +> d
 
 caveTime :: UGen
 caveTime = [l * 0.875 + r * 0.125, r * 0.875 + l * 0.125] |> out 0
@@ -215,7 +246,7 @@ hyperMelody f = [s,s2] |> gain 0.04 |> e |> visAux (random 0 2 4.99) 20 |> out 0
 
 --add sins for visuals and modulation
 reverseSwell :: UGen -> UGen
-reverseSwell f =  sig1 + sig2 + sig3 |> e |> tanhDist (dup <| random 31 0.25 1) |> add (whiteNoise * 0.25) |> gain 0.03 |> filt |> e |> pan 0.75 |> out 20
+reverseSwell f =  sig1 + sig2 + sig3 |> e |> tanhDist (random 31 0.25 1) |> (+ whiteNoise * 0.25) |> gain 0.03 |> filt |> e |> pan 0.75 |> out 20
     where
         hf   = f * 0.5
         e    = env [0,1,0]         [4,4] 3
@@ -230,7 +261,7 @@ reverseSwell f =  sig1 + sig2 + sig3 |> e |> tanhDist (dup <| random 31 0.25 1) 
         mod4 = saw (random 11 0.5 2.0)  |> range 0.01 1
 
 reverseSwell2 :: UGen -> UGen
-reverseSwell2 f = sig1 + sig2 + sig3 |> e |> tanhDist (random 32 0.25 1) |> add (whiteNoise * 0.25) |> gain 0.03 |> filt |> e |> pan 0.25 |> out 20
+reverseSwell2 f = sig1 + sig2 + sig3 |> e |> tanhDist (random 32 0.25 1) |> (+ whiteNoise * 0.25) |> gain 0.03 |> filt |> e |> pan 0.25 |> out 20
     where
         hf   = f * 0.5
         e    = env [0,1,0]         [4,4] 3
