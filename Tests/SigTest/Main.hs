@@ -30,9 +30,7 @@ section1 = scene [pure cam,oscSig]
 section2 :: Signal ()
 section2 = scene [camSig,terrainSig]
     where
-        -- terrainSig     = terrainObject <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time
         terrainSig     = terrainObject <~ audioTexture 2 ~~ audioTexture 3 ~~ audioTexture 4 ~~ time
-        -- cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
         camSig         = cam <~ time * 0.125
         cam t          = perspCamera pos rot 60 0.1 1000 black [glow]
             where
@@ -50,20 +48,12 @@ section3 = scene [camSig,sphereSig]
                 pos = Vector3 (cos (t * 0.7453) * 5) (sin (t * 0.912) * 8) (sin (t * 0.4543) * 4)
                 rot = inverse <| lookAt (_z_ (* (-2.5)) <| pos) 0
 
--- terrainObject :: [Double] -> [Double] -> [Double] -> Double -> SceneObject
--- terrainObject _ _ _ _ = SceneObject (Vector3 (-8) 0 (-6)) (fromEuler' 0 0 0) (Vector3 0.5 1 0.5) (Model terrainMesh <| vertexColored (RGBA 1 1 1 0.35)) []
-
 terrainObject :: Texture -> Texture -> Texture -> Double -> SceneObject
 terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 0 (-6)) (fromEuler' 0 0 0) (Vector3 0.5 1 0.5) (Model mesh <| terrainMaterial a1 a2 a3 t) []
     where
         mesh             = Mesh "simplex" vertices colors uvs indices
         (w,h)            = (64.0,32.0)
         (tscale,vscale)  = (1 / 6,2.5)
-        -- values           = [(x + a,simplex 8 (x / w + t * 0.05) (y / h + t * 0.05) * 0.65 + aa,y + aaa)
-                        --   | (x,y) <- map (\n -> (mod' n w,n / h)) [0..w*h]
-                        --   | a     <- map (* 2.00) <| cycle a1
-                        --   | aa    <- map (* 0.35) <| cycle a2
-                        --   | aaa   <- map (* 2.00) <| cycle a3]
         values           = [(x,0,y) | (x,y) <- map (\n -> (mod' n w, n / h)) [0..w*h]]
 
         toVertex (x,y,z) = Vector3 (x*tscale*3) (y*vscale) (z*tscale*3)
