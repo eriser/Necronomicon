@@ -4163,30 +4163,58 @@ void exprange_calc(ugen u)
     );
 }
 
-void impulse_calc(ugen u)
+#define IMPULSE_CALC(CONTROL_ARGS, AUDIO_ARGS)	\
+double*  in0  = UGEN_INPUT_BUFFER(u, 0);		\
+/* double*  in1  = UGEN_INPUT_BUFFER(u, 1); */	\
+double*  out  = UGEN_OUTPUT_BUFFER(u, 0);		\
+double  phase = (*(double*)u.data);				\
+double freq;									\
+/* Offset is unused at the moment... */			\
+/* double offset; */							\
+CONTROL_ARGS									\
+AUDIO_LOOP(										\
+	AUDIO_ARGS									\
+	phase += freq * RECIP_SAMPLE_RATE;			\
+	if(phase >= 1)								\
+		UGEN_OUT(out,1);						\
+	else										\
+		UGEN_OUT(out,0);						\
+	phase = fmod(phase,1);						\
+);												\
+(*(double*)u.data) = phase;						\
+
+void impulse_aa_calc(ugen u)
 {
-    double*  in0  = UGEN_INPUT_BUFFER(u, 0);
-    // double*  in1  = UGEN_INPUT_BUFFER(u, 1);
-	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
-    double  phase = (*(double*)u.data);
-
-    //Offset is unused at the moment...
-    // double offset;
-
-    AUDIO_LOOP(
-
-   		phase += UGEN_IN(in0) * RECIP_SAMPLE_RATE;
-   		// offset = UGEN_IN(u,in1);
-
-   		if(phase >= 1)
-       		UGEN_OUT(out,1);
-        else
-       		UGEN_OUT(out,0);
-
-   		phase = fmod(phase,1);
+	IMPULSE_CALC(
+		/* no control args */,
+		freq = UGEN_IN(in0); // Audio args
+		/* offset = UGEN_IN(in1); */
     );
+}
 
-    (*(double*)u.data) = phase;
+void impulse_ak_calc(ugen u)
+{
+	IMPULSE_CALC(
+		/*offset = in1[0];*/, // Control arg
+		freq = UGEN_IN(in0); // Audio arg
+    );
+}
+
+void impulse_ka_calc(ugen u)
+{
+	IMPULSE_CALC(
+		freq = in0[0];, // Control arg
+		/*offset = UGEN_IN(in1);*/ // Audio arg
+    );
+}
+
+void impulse_kk_calc(ugen u)
+{
+	IMPULSE_CALC(
+		freq = in0[0]; // Control args
+		/*offset = in1[0]*/,
+		/* no audio args */
+    );
 }
 
 typedef struct
@@ -4208,64 +4236,84 @@ void dust_deconstructor(ugen* u)
 	free(u->data);
 }
 
-void dust_calc(ugen u)
+#define DUST_CALC(CONTROL_ARGS, AUDIO_ARGS)						\
+double*  in0 = UGEN_INPUT_BUFFER(u, 0);							\
+double*  out = UGEN_OUTPUT_BUFFER(u, 0);						\
+dust_t  dust = *((dust_t*)u.data);								\
+if(dust.period == -1)											\
+	dust.period = RAND_RANGE(0,2);								\
+double density;													\
+CONTROL_ARGS													\
+AUDIO_LOOP(														\
+	AUDIO_ARGS													\
+	if(dust.phase + density * RECIP_SAMPLE_RATE >= dust.period)	\
+	{															\
+		dust.phase  = 0;										\
+		dust.period = RAND_RANGE(0,2);							\
+		UGEN_OUT(out,RAND_RANGE(-1,1));							\
+	}															\
+	else														\
+	{															\
+		dust.phase = dust.phase + density * RECIP_SAMPLE_RATE;	\
+		UGEN_OUT(out,0);										\
+	}															\
+);																\
+*((dust_t*)u.data) = dust;										\
+
+void dust_k_calc(ugen u)
 {
-    double*  in0 = UGEN_INPUT_BUFFER(u, 0);
-	double*  out = UGEN_OUTPUT_BUFFER(u, 0);
-    dust_t  dust = *((dust_t*)u.data);
-
-    if(dust.period == -1)
-        dust.period = RAND_RANGE(0,2);
-
-    double density;
-
-    AUDIO_LOOP(
-        double density = UGEN_IN(in0);
-
-    	if(dust.phase + density * RECIP_SAMPLE_RATE >= dust.period)
-    	{
-    		dust.phase  = 0;
-    		dust.period = RAND_RANGE(0,2);
-            UGEN_OUT(out,RAND_RANGE(-1,1));
-    	}
-    	else
-    	{
-    		dust.phase = dust.phase + density * RECIP_SAMPLE_RATE;
-            UGEN_OUT(out,0);
-    	}
-    );
-
-    *((dust_t*)u.data) = dust;
+	DUST_CALC(
+		density = *in0;,
+		/* no audio args */
+	)
 }
 
-void dust2_calc(ugen u)
+void dust_a_calc(ugen u)
 {
-	double*  in0 = UGEN_INPUT_BUFFER(u, 0);
-	double*  out = UGEN_OUTPUT_BUFFER(u, 0);
-    dust_t  dust = *((dust_t*)u.data);
+	DUST_CALC(
+		/* no control args */,
+		density = UGEN_IN(in0);
+	)
+}
 
-    if(dust.period == -1)
-        dust.period = RAND_RANGE(0,2);
+#define DUST2_CALC(CONTROL_ARGS, AUDIO_ARGS)					\
+double*  in0 = UGEN_INPUT_BUFFER(u, 0);							\
+double*  out = UGEN_OUTPUT_BUFFER(u, 0);						\
+dust_t  dust = *((dust_t*)u.data);								\
+if(dust.period == -1)											\
+	dust.period = RAND_RANGE(0,2);								\
+double density;													\
+CONTROL_ARGS													\
+AUDIO_LOOP(														\
+	AUDIO_ARGS													\
+	if(dust.phase + density * RECIP_SAMPLE_RATE >= dust.period)	\
+	{															\
+		dust.phase  = 0;										\
+		dust.period = RAND_RANGE(0,2);							\
+		UGEN_OUT(out,RAND_RANGE(0,1));							\
+	}															\
+	else														\
+	{															\
+		dust.phase = dust.phase + density * RECIP_SAMPLE_RATE;	\
+		UGEN_OUT(out,0);										\
+	}															\
+);																\
+*((dust_t*)u.data) = dust;										\
 
-    double density;
+void dust2_k_calc(ugen u)
+{
+	DUST2_CALC(
+		density = *in0;,
+		/* no audio args */
+	)
+}
 
-    AUDIO_LOOP(
-        double density = UGEN_IN(in0);
-
-    	if(dust.phase + density * RECIP_SAMPLE_RATE >= dust.period)
-    	{
-    		dust.phase  = 0;
-    		dust.period = RAND_RANGE(0,2);
-        	UGEN_OUT(out,RAND_RANGE(0,1));
-    	}
-    	else
-    	{
-    		dust.phase = dust.phase + density * RECIP_SAMPLE_RATE;
-            UGEN_OUT(out,0);
-    	}
-    );
-
-    *((dust_t*)u.data) = dust;
+void dust2_a_calc(ugen u)
+{
+	DUST2_CALC(
+		/* no control args */,
+		density = UGEN_IN(in0);
+	)
 }
 
 //===================================

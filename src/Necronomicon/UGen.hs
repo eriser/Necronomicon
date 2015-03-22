@@ -428,20 +428,25 @@ foreign import ccall "&lfpulse_aa_calc" lfpulseAACalc :: CUGenFunc
 lfpulse :: UGen -> UGen -> UGen
 lfpulse freq phase = optimizeUGenCalcFunc [lfpulseKKCalc, lfpulseAKCalc, lfpulseKACalc, lfpulseAACalc] $ multiChannelExpandUGen LFPulse lfpulseAACalc accumulatorConstructor accumulatorDeconstructor [freq,phase]
 
-foreign import ccall "&impulse_calc" impulseCalc :: CUGenFunc
+foreign import ccall "&impulse_kk_calc" impulseKKCalc :: CUGenFunc
+foreign import ccall "&impulse_ak_calc" impulseAKCalc :: CUGenFunc
+foreign import ccall "&impulse_ka_calc" impulseKACalc :: CUGenFunc
+foreign import ccall "&impulse_aa_calc" impulseAACalc :: CUGenFunc
 impulse :: UGen -> UGen -> UGen
-impulse freq phase = multiChannelExpandUGen Impulse impulseCalc accumulatorConstructor accumulatorDeconstructor [freq,phase]
+impulse freq phase = optimizeUGenCalcFunc [impulseKKCalc, impulseAKCalc, impulseKACalc, impulseAACalc] $ multiChannelExpandUGen Impulse impulseAACalc accumulatorConstructor accumulatorDeconstructor [freq,phase]
 
 foreign import ccall "&dust_constructor"   dustConstructor   :: CUGenFunc
 foreign import ccall "&dust_deconstructor" dustDeconstructor :: CUGenFunc
 
-foreign import ccall "&dust_calc" dustCalc :: CUGenFunc
+foreign import ccall "&dust_k_calc" dustKCalc :: CUGenFunc
+foreign import ccall "&dust_a_calc" dustACalc :: CUGenFunc
 dust :: UGen -> UGen
-dust density = multiChannelExpandUGen Dust dustCalc dustConstructor dustDeconstructor [density]
+dust density = optimizeUGenCalcFunc [dustKCalc, dustACalc] $ multiChannelExpandUGen Dust dustACalc dustConstructor dustDeconstructor [density]
 
-foreign import ccall "&dust2_calc" dust2Calc :: CUGenFunc
+foreign import ccall "&dust2_k_calc" dust2KCalc :: CUGenFunc
+foreign import ccall "&dust2_a_calc" dust2ACalc :: CUGenFunc
 dust2 :: UGen -> UGen
-dust2 density = multiChannelExpandUGen Dust2 dust2Calc dustConstructor dustDeconstructor [density]
+dust2 density = optimizeUGenCalcFunc [dust2KCalc, dust2ACalc] $ multiChannelExpandUGen Dust2 dust2ACalc dustConstructor dustDeconstructor [density]
 
 foreign import ccall "&minblep_constructor"   minblepConstructor   :: CUGenFunc
 foreign import ccall "&minblep_deconstructor" minblepDeconstructor :: CUGenFunc
