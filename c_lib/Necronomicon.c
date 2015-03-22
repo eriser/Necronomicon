@@ -3708,144 +3708,198 @@ inline void add_blep(minblep* mb, double offset, double amp)
 	mb->nInit = cBLEP;
 }
 
-void saw_calc(ugen u)
+#define SAW_CALC(CONTROL_ARGS, AUDIO_ARGS)	\
+double* in0 = UGEN_INPUT_BUFFER(u, 0);		\
+double* out = UGEN_OUTPUT_BUFFER(u, 0);		\
+minblep mb  = *((minblep*) u.data);			\
+double freq;								\
+double y;									\
+CONTROL_ARGS								\
+AUDIO_LOOP(									\
+	AUDIO_ARGS								\
+	/* create waveform */					\
+	mb.phase += freq;						\
+	/* add BLEP at end of waveform */		\
+	if(mb.phase >= 1)						\
+	{										\
+		mb.phase  = mb.phase - 1.0;			\
+		mb.output = 0.0;					\
+		add_blep(&mb, mb.phase/freq,1.0);	\
+	}										\
+	y = mb.phase;							\
+	/* add BLEP buffer contents */			\
+	if(mb.nInit)							\
+	{										\
+		y += mb.buffer[mb.iBuffer];			\
+		mb.nInit--;							\
+		if(++mb.iBuffer >= mb.cBuffer)		\
+			mb.iBuffer=0;					\
+	}										\
+	UGEN_OUT(out, y);						\
+);											\
+*((minblep*) u.data) = mb;					\
+
+void saw_k_calc(ugen u)
 {
-	double* in0 = UGEN_INPUT_BUFFER(u, 0);
-	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-	minblep mb  = *((minblep*) u.data);
-
-	double freq;
-	double y;
-
-	AUDIO_LOOP(
-		freq  = UGEN_IN(in0) * RECIP_SAMPLE_RATE;
-
-		// create waveform
-		mb.phase += freq;
-
-		// add BLEP at end of waveform
-		if(mb.phase >= 1)
-		{
-			mb.phase  = mb.phase - 1.0;
-			mb.output = 0.0;
-			add_blep(&mb, mb.phase/freq,1.0);
-		}
-
-		y = mb.phase;
-
-		// add BLEP buffer contents
-		if(mb.nInit)
-		{
-			y += mb.buffer[mb.iBuffer];
-			mb.nInit--;
-			if(++mb.iBuffer >= mb.cBuffer)
-				mb.iBuffer=0;
-		}
-
-		UGEN_OUT(out, y);
-	);
-
-	*((minblep*) u.data) = mb;
+	SAW_CALC(
+		freq  = in0[0] * RECIP_SAMPLE_RATE;,
+		/* no audio args */
+	)
 }
 
-void square_calc(ugen u)
+void saw_a_calc(ugen u)
 {
-	double* in0 = UGEN_INPUT_BUFFER(u, 0);
-	double* in1 = UGEN_INPUT_BUFFER(u, 1);
-	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-	minblep mb  = *((minblep*) u.data);
+	SAW_CALC(
+		/* no control args */,
+		freq  = UGEN_IN(in0) * RECIP_SAMPLE_RATE;
+	)
+}
 
-	double freq;
-	double pwm;
-	double y;
+#define SQUARE_CALC(CONTROL_ARGS, AUDIO_ARGS)			\
+double* in0 = UGEN_INPUT_BUFFER(u, 0);					\
+double* in1 = UGEN_INPUT_BUFFER(u, 1);					\
+double* out = UGEN_OUTPUT_BUFFER(u, 0);					\
+minblep mb  = *((minblep*) u.data);						\
+double freq;											\
+double pwm;												\
+double y;												\
+CONTROL_ARGS											\
+AUDIO_LOOP(												\
+	AUDIO_ARGS											\
+	/* create waveform */								\
+	mb.phase += freq;									\
+	/* add BLEP at end of waveform */					\
+	if (mb.phase >= 1)									\
+	{													\
+		mb.phase  = mb.phase - 1.0;						\
+		mb.output = 0.0;								\
+		add_blep(&mb, mb.phase/freq,1.0);				\
+	}													\
+	/* add BLEP in middle of wavefor for squarewave */	\
+	if(!mb.output && mb.phase > pwm)					\
+	{													\
+		mb.output = 1.0;								\
+		add_blep(&mb, (mb.phase - pwm) / freq,-1.0);	\
+	}													\
+	y = mb.output;										\
+	/* add BLEP buffer contents */						\
+	if(mb.nInit)										\
+	{													\
+		y += mb.buffer[mb.iBuffer];						\
+		mb.nInit--;										\
+		if(++mb.iBuffer >= mb.cBuffer)					\
+			mb.iBuffer=0;								\
+	}													\
+	UGEN_OUT(out, y);									\
+);														\
+*((minblep*) u.data) = mb;								\
 
-	AUDIO_LOOP(
+void square_aa_calc(ugen u)
+{
+	SQUARE_CALC(
+		/* no control args */,
 		freq = UGEN_IN(in0) * RECIP_SAMPLE_RATE;
 		pwm  = CLAMP(UGEN_IN(in1),0,1) * 0.5;
-
-		// create waveform
-		mb.phase += freq;
-
-		// add BLEP at end of waveform
-		if (mb.phase >= 1)
-		{
-			mb.phase  = mb.phase - 1.0;
-			mb.output = 0.0;
-			add_blep(&mb, mb.phase/freq,1.0);
-		}
-
-		// add BLEP in middle of wavefor for squarewave
-		if(!mb.output && mb.phase > pwm)
-		{
-			mb.output = 1.0;
-			add_blep(&mb, (mb.phase - pwm) / freq,-1.0);
-		}
-
-		y = mb.output;
-
-		// add BLEP buffer contents
-		if(mb.nInit)
-		{
-			y += mb.buffer[mb.iBuffer];
-			mb.nInit--;
-			if(++mb.iBuffer >= mb.cBuffer)
-				mb.iBuffer=0;
-		}
-
-		UGEN_OUT(out, y);
-	);
-
-	*((minblep*) u.data) = mb;
+	)
 }
 
-void syncsaw_calc(ugen u)
+void square_ka_calc(ugen u)
 {
-	double* in0 = UGEN_INPUT_BUFFER(u, 0);
-	double* in1 = UGEN_INPUT_BUFFER(u, 1);
-	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-	minblep mb  = *((minblep*) u.data);
+	SQUARE_CALC(
+		freq = in0[0] * RECIP_SAMPLE_RATE;,
+		pwm  = CLAMP(UGEN_IN(in1),0,1) * 0.5;
+	)
+}
 
-	double freq;
-	double sync;
-	double y;
+void square_ak_calc(ugen u)
+{
+	SQUARE_CALC(
+		pwm  = CLAMP(in1[0],0,1) * 0.5;,
+		freq = UGEN_IN(in0) * RECIP_SAMPLE_RATE;
+	)
+}
 
-	AUDIO_LOOP(
+void square_kk_calc(ugen u)
+{
+	SQUARE_CALC(
+		freq = in0[0] * RECIP_SAMPLE_RATE;
+		pwm  = CLAMP(in1[0],0,1) * 0.5;,
+		/* no audio args */
+	)
+}
+
+#define SYNCSAW_CALC(CONTROL_ARGS, AUDIO_ARGS)	\
+double* in0 = UGEN_INPUT_BUFFER(u, 0);			\
+double* in1 = UGEN_INPUT_BUFFER(u, 1);			\
+double* out = UGEN_OUTPUT_BUFFER(u, 0);			\
+minblep mb  = *((minblep*) u.data);				\
+double freq;									\
+double sync;									\
+double y;										\
+CONTROL_ARGS									\
+AUDIO_LOOP(										\
+	AUDIO_ARGS									\
+	/* create waveform */						\
+	mb.phase += freq;							\
+	/* add BLEP at end of waveform */			\
+	if(mb.phase >= 1)							\
+	{											\
+		mb.phase  = mb.phase - 1.0;				\
+		mb.output = 0.0;						\
+		add_blep(&mb, mb.phase/freq,1.0);		\
+	}											\
+	else if(mb.prevSyncAmp < 0 && sync > 0)		\
+	{											\
+		mb.phase  = 0.0;						\
+		mb.output = 0.0;						\
+		add_blep(&mb, mb.phase/freq,1.0);		\
+	}											\
+	y = mb.phase;								\
+	/* add BLEP buffer contents */				\
+	if(mb.nInit)								\
+	{											\
+		y += mb.buffer[mb.iBuffer];				\
+		mb.nInit--;								\
+		if(++mb.iBuffer >= mb.cBuffer)			\
+			mb.iBuffer=0;						\
+	}											\
+	mb.prevSyncAmp = sync;						\
+	UGEN_OUT(out, y);							\
+);												\
+*((minblep*) u.data) = mb;						\
+
+void syncsaw_aa_calc(ugen u)
+{
+	SYNCSAW_CALC(
+		/* no control args */,
 		freq  = UGEN_IN(in0) * RECIP_SAMPLE_RATE;
 		sync  = UGEN_IN(in1);
+	)
+}
 
-		// create waveform
-		mb.phase += freq;
+void syncsaw_ka_calc(ugen u)
+{
+	SYNCSAW_CALC(
+		freq  = in0[0] * RECIP_SAMPLE_RATE;,
+		sync  = UGEN_IN(in1);
+	)
+}
 
-		// add BLEP at end of waveform
-		if(mb.phase >= 1)
-		{
-			mb.phase  = mb.phase - 1.0;
-			mb.output = 0.0;
-			add_blep(&mb, mb.phase/freq,1.0);
-		}
-		else if(mb.prevSyncAmp < 0 && sync > 0)
-		{
-			mb.phase  = 0.0;
-			mb.output = 0.0;
-			add_blep(&mb, mb.phase/freq,1.0);
-		}
+void syncsaw_ak_calc(ugen u)
+{
+	SYNCSAW_CALC(
+		sync  = in1[0];,
+		freq  = UGEN_IN(in0) * RECIP_SAMPLE_RATE;
+	)
+}
 
-		y = mb.phase;
-
-		// add BLEP buffer contents
-		if(mb.nInit)
-		{
-			y += mb.buffer[mb.iBuffer];
-			mb.nInit--;
-			if(++mb.iBuffer >= mb.cBuffer)
-				mb.iBuffer=0;
-		}
-
-		mb.prevSyncAmp = sync;
-		UGEN_OUT(out, y);
-	);
-
-	*((minblep*) u.data) = mb;
+void syncsaw_kk_calc(ugen u)
+{
+	SYNCSAW_CALC(
+		freq  = in0[0] * RECIP_SAMPLE_RATE;
+		sync  = in1[0];,
+		/* no audio args */
+	)
 }
 
 void syncsquare_calc(ugen u)

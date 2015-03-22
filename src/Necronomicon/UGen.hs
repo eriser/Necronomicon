@@ -451,17 +451,24 @@ dust2 density = optimizeUGenCalcFunc [dust2KCalc, dust2ACalc] $ multiChannelExpa
 foreign import ccall "&minblep_constructor"   minblepConstructor   :: CUGenFunc
 foreign import ccall "&minblep_deconstructor" minblepDeconstructor :: CUGenFunc
 
-foreign import ccall "&saw_calc" sawCalc :: CUGenFunc
+foreign import ccall "&saw_k_calc" sawKCalc :: CUGenFunc
+foreign import ccall "&saw_a_calc" sawACalc :: CUGenFunc
 saw :: UGen -> UGen
-saw freq = multiChannelExpandUGen Saw sawCalc minblepConstructor minblepDeconstructor [freq]
+saw freq = optimizeUGenCalcFunc [sawKCalc, sawACalc] $ multiChannelExpandUGen Saw sawACalc minblepConstructor minblepDeconstructor [freq]
 
-foreign import ccall "&square_calc" squareCalc :: CUGenFunc
+foreign import ccall "&square_kk_calc" squareKKCalc :: CUGenFunc
+foreign import ccall "&square_ak_calc" squareAKCalc :: CUGenFunc
+foreign import ccall "&square_ka_calc" squareKACalc :: CUGenFunc
+foreign import ccall "&square_aa_calc" squareAACalc :: CUGenFunc
 pulse :: UGen -> UGen -> UGen
-pulse freq pw = multiChannelExpandUGen Pulse squareCalc minblepConstructor minblepDeconstructor [freq,pw]
+pulse freq pw = optimizeUGenCalcFunc [squareKKCalc, squareAKCalc, squareKACalc, squareAACalc] $ multiChannelExpandUGen Pulse squareAACalc minblepConstructor minblepDeconstructor [freq,pw]
 
-foreign import ccall "&syncsaw_calc" syncSawCalc :: CUGenFunc
+foreign import ccall "&syncsaw_kk_calc" syncSawKKCalc :: CUGenFunc
+foreign import ccall "&syncsaw_ak_calc" syncSawAKCalc :: CUGenFunc
+foreign import ccall "&syncsaw_ka_calc" syncSawKACalc :: CUGenFunc
+foreign import ccall "&syncsaw_aa_calc" syncSawAACalc :: CUGenFunc
 syncsaw :: UGen -> UGen -> UGen
-syncsaw freq master = multiChannelExpandUGen SyncSaw syncSawCalc minblepConstructor minblepDeconstructor [freq,master]
+syncsaw freq master = optimizeUGenCalcFunc [syncSawKKCalc, syncSawAKCalc, syncSawKACalc, syncSawAACalc] $ multiChannelExpandUGen SyncSaw syncSawAACalc minblepConstructor minblepDeconstructor [freq,master]
 
 foreign import ccall "&syncsquare_calc" syncSquareCalc :: CUGenFunc
 syncpulse :: UGen -> UGen -> UGen -> UGen
