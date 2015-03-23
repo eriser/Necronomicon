@@ -470,13 +470,46 @@ foreign import ccall "&syncsaw_aa_calc" syncSawAACalc :: CUGenFunc
 syncsaw :: UGen -> UGen -> UGen
 syncsaw freq master = optimizeUGenCalcFunc [syncSawKKCalc, syncSawAKCalc, syncSawKACalc, syncSawAACalc] $ multiChannelExpandUGen SyncSaw syncSawAACalc minblepConstructor minblepDeconstructor [freq,master]
 
-foreign import ccall "&syncsquare_calc" syncSquareCalc :: CUGenFunc
+foreign import ccall "&syncsquare_kkk_calc" syncSquareKKKCalc :: CUGenFunc
+foreign import ccall "&syncsquare_akk_calc" syncSquareAKKCalc :: CUGenFunc
+foreign import ccall "&syncsquare_kak_calc" syncSquareKAKCalc :: CUGenFunc
+foreign import ccall "&syncsquare_aak_calc" syncSquareAAKCalc :: CUGenFunc
+foreign import ccall "&syncsquare_kka_calc" syncSquareKKACalc :: CUGenFunc
+foreign import ccall "&syncsquare_aka_calc" syncSquareAKACalc :: CUGenFunc
+foreign import ccall "&syncsquare_kaa_calc" syncSquareKAACalc :: CUGenFunc
+foreign import ccall "&syncsquare_aaa_calc" syncSquareAAACalc :: CUGenFunc
 syncpulse :: UGen -> UGen -> UGen -> UGen
-syncpulse freq pw master = multiChannelExpandUGen SyncPulse syncSquareCalc minblepConstructor minblepDeconstructor [freq,pw,master]
+syncpulse freq pw master = optimizeUGenCalcFunc cfuncs expandedUGen
+    where
+        cfuncs = [syncSquareKKKCalc, syncSquareAKKCalc, syncSquareKAKCalc, syncSquareAAKCalc, syncSquareKKACalc, syncSquareAKACalc, syncSquareKAACalc, syncSquareAAACalc]
+        expandedUGen = multiChannelExpandUGen SyncPulse syncSquareAAACalc minblepConstructor minblepDeconstructor [freq,pw,master]
 
-foreign import ccall "&syncosc_calc" syncoscCalc :: CUGenFunc
+foreign import ccall "&syncosc_kkkk_calc" syncoscKKKKCalc :: CUGenFunc
+foreign import ccall "&syncosc_akkk_calc" syncoscAKKKCalc :: CUGenFunc
+foreign import ccall "&syncosc_kakk_calc" syncoscKAKKCalc :: CUGenFunc
+foreign import ccall "&syncosc_aakk_calc" syncoscAAKKCalc :: CUGenFunc
+foreign import ccall "&syncosc_kkak_calc" syncoscKKAKCalc :: CUGenFunc
+foreign import ccall "&syncosc_akak_calc" syncoscAKAKCalc :: CUGenFunc
+foreign import ccall "&syncosc_kaak_calc" syncoscKAAKCalc :: CUGenFunc
+foreign import ccall "&syncosc_aaak_calc" syncoscAAAKCalc :: CUGenFunc
+foreign import ccall "&syncosc_kkka_calc" syncoscKKKACalc :: CUGenFunc
+foreign import ccall "&syncosc_akka_calc" syncoscAKKACalc :: CUGenFunc
+foreign import ccall "&syncosc_kaka_calc" syncoscKAKACalc :: CUGenFunc
+foreign import ccall "&syncosc_aaka_calc" syncoscAAKACalc :: CUGenFunc
+foreign import ccall "&syncosc_kkaa_calc" syncoscKKAACalc :: CUGenFunc
+foreign import ccall "&syncosc_akaa_calc" syncoscAKAACalc :: CUGenFunc
+foreign import ccall "&syncosc_kaaa_calc" syncoscKAAACalc :: CUGenFunc
+foreign import ccall "&syncosc_aaaa_calc" syncoscAAAACalc :: CUGenFunc
 syncosc :: UGen -> UGen -> UGen -> UGen -> UGen
-syncosc slaveFreq slaveWave slavePW masterFreq = multiChannelExpandUGen SyncOsc syncoscCalc minblepConstructor minblepDeconstructor [slaveFreq,slaveWave,slavePW,masterFreq]
+syncosc slaveFreq slaveWave slavePW masterFreq = optimizeUGenCalcFunc cfuncs expandedUGen
+    where
+        cfuncs = [
+            syncoscKKKKCalc, syncoscAKKKCalc, syncoscKAKKCalc, syncoscAAKKCalc,
+            syncoscKKAKCalc, syncoscAKAKCalc, syncoscKAAKCalc, syncoscAAAKCalc,
+            syncoscKKKACalc, syncoscAKKACalc, syncoscKAKACalc, syncoscAAKACalc,
+            syncoscKKAACalc, syncoscAKAACalc, syncoscKAAACalc, syncoscAAAACalc
+            ]
+        expandedUGen = multiChannelExpandUGen SyncOsc syncoscAAAACalc minblepConstructor minblepDeconstructor [slaveFreq,slaveWave,slavePW,masterFreq]
 
 --randomness
 foreign import ccall "&rand_constructor"   randConstructor   :: CUGenFunc
