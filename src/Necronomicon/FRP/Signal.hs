@@ -11,6 +11,7 @@ module Necronomicon.FRP.Signal (
     synthDef,
     time,
     unEvent,
+    audioTexture,
     audioBuffer,
     netsignal,
     foldn,
@@ -162,6 +163,7 @@ import qualified Graphics.UI.GLFW                  as GLFW
 import           Necronomicon.Graphics.Camera      (renderGraphics)
 import           Necronomicon.Graphics.Model       ( newResources)
 import           Necronomicon.Graphics.SceneObject (SceneObject, root)
+import           Necronomicon.Graphics.Texture
 import           Necronomicon.Linear.Vector        (Vector2 (Vector2))
 import           Necronomicon.Patterns             (Pattern (..))
 import           Necronomicon.Runtime
@@ -388,8 +390,8 @@ runSignal s = initWindow >>= \mw -> case mw of
 
                 -- execIfChanged result print
 
-                -- threadDelay $ 16667
-                threadDelay $ 33334
+                threadDelay $ 16667
+                -- threadDelay $ 33334
 
                 renderNecronomicon q window signalLoop signalState resources currentTime
 
@@ -1485,16 +1487,22 @@ netsignal sig = Signal $ \state -> do
 -- Sound
 ---------------------------------------------
 
-foreign import ccall "&out_bus_buffers" outBusBuffers :: Ptr CDouble
+foreign import ccall "&out_bus_buffers" outBusBuffers :: Ptr CFloat
 
 audioBuffer :: Int -> Signal [Double]
-audioBuffer index = Signal $ \_ -> if index < 16
+audioBuffer index = Signal $ \_ -> if index < 8
         then return processState
         else return $ \_ -> return $ NoChange []
     where
         processState _ = do
             array <- peekArray 512 $ advancePtr outBusBuffers (512 * index)
             return $ Change $ map realToFrac array
+
+--consider dynamic texture constructor similar to dynamic mesh?
+audioTexture :: Int -> Signal Texture
+audioTexture index
+    | index < 8 = Signal $ \_ -> makeAudioTexture index >>= \t -> return $ \_ -> return $ Change t
+    | otherwise = Signal $ \_ -> return $ \_ -> return $ NoChange emptyTexture
 
 playSynthN :: Signal Bool -> String -> [Signal Double] -> Signal ()
 playSynthN playSig synthName argSigs = Signal $ \state -> do
