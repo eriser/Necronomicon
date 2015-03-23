@@ -130,6 +130,7 @@ polymorphicRateUGenUnits = S.fromList [Add, Minus, Mul, Div, Negate, Abs, Signum
 ugenRate :: UGenChannel -> UGenRate
 ugenRate (UGenNum _) = ControlRate
 ugenRate (UGenFunc (Arg _) _ _ _ _) = ControlRate
+ugenRate (UGenFunc (Random _ _ _) _ _ _ _) = ControlRate
 ugenRate (UGenFunc USeq _ _ _ args) = ugenRate $ last args
 ugenRate (UGenFunc unit _ _ _ args) = if isPolyRate then polyRate else AudioRate
     where

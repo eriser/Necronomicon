@@ -387,6 +387,7 @@ struct synth_node
 };
 
 synth_node* _necronomicon_current_node = NULL;
+synth_node* _necronomicon_current_node_underconstruction = NULL;
 const unsigned int NODE_SIZE = sizeof(synth_node);
 const unsigned int NODE_POINTER_SIZE = sizeof(synth_node*);
 synth_node* free_synths = NULL;
@@ -520,20 +521,7 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 	synth->time = time;
 	synth->previous_alive_status = NODE_DEAD;
 	synth->alive_status = NODE_SPAWNING;
-
-	// UGens
-	unsigned int num_ugens = synth_definition->num_ugens;
-	unsigned int size_ugens = num_ugens * UGEN_SIZE;
-	synth->ugen_graph_node = acquire_ugen_graph(num_ugens);
-	synth->ugen_graph = synth->ugen_graph_node->ugen_graph;
-	ugen* ugen_graph = synth->ugen_graph;
-	memcpy(ugen_graph, synth_definition->ugen_graph, size_ugens);
-
-	for (i = 0; i < num_ugens; ++i)
-	{
-		ugen* graph_node = &ugen_graph[i];
-		graph_node->constructor(graph_node);
-	}
+	_necronomicon_current_node_underconstruction = synth;
 
 	// Wires
 	unsigned int num_wires = synth->num_wires;
@@ -553,6 +541,21 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
         }
     }
 
+	// UGens
+	unsigned int num_ugens = synth_definition->num_ugens;
+	unsigned int size_ugens = num_ugens * UGEN_SIZE;
+	synth->ugen_graph_node = acquire_ugen_graph(num_ugens);
+	synth->ugen_graph = synth->ugen_graph_node->ugen_graph;
+	ugen* ugen_graph = synth->ugen_graph;
+	memcpy(ugen_graph, synth_definition->ugen_graph, size_ugens);
+
+	for (i = 0; i < num_ugens; ++i)
+	{
+		ugen* graph_node = &ugen_graph[i];
+		graph_node->constructor(graph_node);
+	}
+
+	_necronomicon_current_node_underconstruction = NULL;
 	return synth;
 }
 
@@ -4317,29 +4320,23 @@ void rand_deconstructor(ugen* u)
 
 void rand_range_constructor(ugen* u)
 {
-	double* value = malloc(sizeof(double));
-
 	double   seed  = u->constructor_args[0];
 	double   min   = u->constructor_args[1];
 	double   max   = u->constructor_args[2];
 	double   range = max - min;
 	double   in    = RAND_RANGE(0,1);
-	*value         = (in * range) + min;
-	u->data        = value;
+	double   value = (in * range) + min;
+	double*  out  = (_necronomicon_current_node_underconstruction->ugen_wires + (u->outputs[0] * BLOCK_SIZE));
+
+	unsigned int i;
+	for (i = 0; i < BLOCK_SIZE; ++i)
+	{
+		out[i] = value;
+	}
 }
 
-void rand_range_deconstructor(ugen* u)
-{
-	free(u->data);
-}
-
-void rand_calc(ugen u)
-{
-	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
-	double   val  = *((double*) u.data);
-
-	AUDIO_LOOP(UGEN_OUT(out,val););
-}
+void rand_range_deconstructor(ugen* u) { }
+void rand_calc(ugen u) { }
 
 void lfnoiseN_calc(ugen u)
 {
