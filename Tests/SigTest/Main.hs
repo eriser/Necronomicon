@@ -69,14 +69,6 @@ terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 0 (-6)) (fromEuler' 0 0 0) 
         uvs      = map toUV     values
         indices  = foldr (addIndices <| floor w) [] [0..length values - floor (w + 2)]
 
-terrainShader :: Shader
-terrainShader = shader
-    "terrain"
-    ["tex1","tex2","tex3","time","modelView","proj"]
-    ["position","in_color","in_uv"]
-    (loadVertexShader   "terrain-vert.glsl")
-    (loadFragmentShader "terrain-frag.glsl")
-
 terrainMaterial :: Texture -> Texture -> Texture -> Double -> Material
 terrainMaterial tex1 tex2 tex3 t = Material drawMat
     where
@@ -93,6 +85,13 @@ terrainMaterial tex1 tex2 tex3 t = Material drawMat
             setTextureUniform texu3 2 texture3
             uniformD          timeu t
             bindThenDraw mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
+
+        terrainShader = shader
+            "terrain"
+            ["tex1","tex2","tex3","time","modelView","proj"]
+            ["position","in_color","in_uv"]
+            (loadVertexShader   "terrain-vert.glsl")
+            (loadFragmentShader "terrain-frag.glsl")
 
 oscillatorObject :: [Double] -> [Double] -> [Double] -> SceneObject
 oscillatorObject audioBuffer1 audioBuffer2 audioBuffer3 = SceneObject 0 identity 1 (Model mesh <| vertexColored (RGBA 1 1 1 0.35)) []
@@ -193,7 +192,8 @@ caveTime = [l * 0.875 + r * 0.125, r * 0.875 + l * 0.125] |> out 0
 visAux :: UGen -> UGen -> UGen -> UGen
 --TODO: Fix visAux
 -- visAux bus a u = (applyLeft (auxThrough bus . (* a)) u * 0) + u
-visAux _ _ u = u
+-- visAux _ _ u = u
+visAux bus a u = _useq (auxThrough bus a) u
 
 metallic3 :: UGen -> UGen
 metallic3 f = sig + sig2 + sig3 |> e |> visAux 2 2 |> softclip 2 |> filt |> e |> gain 0.065 |> pan 0.75 |> out 20
@@ -228,7 +228,7 @@ metallic4 f = sig + sig2 + sig3 |> e |> visAux 3 2 |> softclip 2 |> filt |> e |>
         e2     = env2     [1,1,0.25,0.25] [0.01,1,5] (-3)
 
 hyperMelody :: UGen -> UGen
-hyperMelody f = [s,s2] |> gain 0.04 |> e |> visAux (random 0 2 4.99) 20 |> out 0
+hyperMelody f = [s,s2] |> gain 0.04 |> e |> visAux (random 0 2 5.5) 20 |> out 0
     where
         e  = env [0,1,0.15, 0] [0.0001,0.1, 7] (-1.5)
         s  = sin <| sin 3 * 6 + f * 2

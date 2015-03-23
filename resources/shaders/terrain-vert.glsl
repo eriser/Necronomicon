@@ -1,4 +1,7 @@
 #version 130
+uniform sampler1D tex1;
+uniform sampler1D tex2;
+uniform sampler1D tex3;
 uniform float time;
 uniform mat4  modelView,proj;
 
@@ -102,11 +105,19 @@ float rows    = 1/ 32.0;
 
 void main()
 {
-    // color          = in_color;
-    uv             = in_uv;
-    float x        = (position.x * 6) * columns;
-    float z        = (position.z * 6) * rows;
-    float y        = simplex(x * 0.5 + time * 0.05, z * 0.5 + time * 0.05) * 1.65;
-    color          = vec3((x * 1.75) * (y * 0.6 + 0.4), y * 0.75 + 0.25, z * (y * 0.75 + 0.25));
-    gl_Position    = vec4(position.x, y, position.z, 1.0) * modelView * proj;
+    uv          = in_uv;
+
+    float a1    = texture1D(tex1, mod((uv.x + uv.y) * 8,1)).r * 4;
+    float a2    = texture1D(tex2, mod((uv.x + uv.y) * 8,1)).r * 2.5;
+    float a3    = texture1D(tex3, mod((uv.x + uv.y) * 8,1)).r * 4;
+
+    vec3  pos   = vec3(position.x + a1, position.y + a2, position.z + a3);
+
+    float x     = (pos.x * 6) * columns;
+    float z     = (pos.z * 6) * rows;
+    float y     = (pos.y * 1) + simplex(x * 0.5 + time * 0.05, z * 0.5 + time * 0.05) * 1.65;
+
+    color       = vec3((x * 1.75) * (y * 0.6 + 0.4), y * 0.75 + 0.25, z * (y * 0.75 + 0.25));
+
+    gl_Position = vec4(pos.x, y, pos.z, 1.0) * modelView * proj;
 }
