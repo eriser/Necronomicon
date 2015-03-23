@@ -4338,31 +4338,41 @@ void rand_range_constructor(ugen* u)
 void rand_range_deconstructor(ugen* u) { }
 void rand_calc(ugen u) { }
 
-void lfnoiseN_calc(ugen u)
+#define NOISEN_CALC(CONTROL_ARGS, AUDIO_ARGS)							\
+double*  in0  = UGEN_INPUT_BUFFER(u, 0);								\
+double*  out  = UGEN_OUTPUT_BUFFER(u, 0);								\
+rand_t   rand = *((rand_t*) u.data);									\
+double freq;															\
+CONTROL_ARGS															\
+AUDIO_LOOP(																\
+	AUDIO_ARGS															\
+	if(rand.phase + RECIP_SAMPLE_RATE * freq >= 1.0)					\
+	{																	\
+		rand.phase  = fmod(rand.phase + RECIP_SAMPLE_RATE * freq,1.0);	\
+		rand.value0 = RAND_RANGE(-1,1);									\
+	}																	\
+	else																\
+	{																	\
+		rand.phase = rand.phase + RECIP_SAMPLE_RATE * freq;				\
+	}																	\
+	UGEN_OUT(out, rand.value0);											\
+);																		\
+*((rand_t*) u.data) = rand;												\
+
+void lfnoiseN_k_calc(ugen u)
 {
-    double*  in0  = UGEN_INPUT_BUFFER(u, 0);
-	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
-	rand_t   rand = *((rand_t*) u.data);
+	NOISEN_CALC(
+		freq  = in0[0];,
+		/* no audio args */
+	)
+}
 
-	double freq;
-
-	AUDIO_LOOP(
-        freq  = UGEN_IN(in0);
-
-		if(rand.phase + RECIP_SAMPLE_RATE * freq >= 1.0)
-   		{
-   			rand.phase  = fmod(rand.phase + RECIP_SAMPLE_RATE * freq,1.0);
-   			rand.value0 = RAND_RANGE(-1,1);
-   		}
-   		else
-   		{
-   			rand.phase = rand.phase + RECIP_SAMPLE_RATE * freq;
-   		}
-
-   		UGEN_OUT(out, rand.value0);
-	);
-
-    *((rand_t*) u.data) = rand;
+void lfnoiseN_a_calc(ugen u)
+{
+	NOISEN_CALC(
+		/* no control args */,
+		freq  = UGEN_IN(in0);
+	)
 }
 
 void lfnoiseL_calc(ugen u)

@@ -522,9 +522,10 @@ foreign import ccall "&rand_calc" randCalc :: CUGenFunc
 random :: Double -> Double -> Double -> UGen
 random seed rmin rmax = multiChannelExpandUGen (Random seed rmin rmax) randCalc randRangeConstructor randRangeDeconstructor [UGen [UGenNum seed]]
 
-foreign import ccall "&lfnoiseN_calc" lfnoiseNCalc :: CUGenFunc
+foreign import ccall "&lfnoiseN_k_calc" lfnoiseNKCalc :: CUGenFunc
+foreign import ccall "&lfnoiseN_a_calc" lfnoiseNACalc :: CUGenFunc
 noise0 :: UGen -> UGen
-noise0 freq = multiChannelExpandUGen NoiseN lfnoiseNCalc randConstructor randDeconstructor [freq]
+noise0 freq = optimizeUGenCalcFunc [lfnoiseNKCalc, lfnoiseNACalc] $ multiChannelExpandUGen NoiseN lfnoiseNACalc randConstructor randDeconstructor [freq]
 
 foreign import ccall "&lfnoiseL_calc" lfnoiseLCalc :: CUGenFunc
 noise1 :: UGen -> UGen
