@@ -97,19 +97,21 @@ float simplex(float x, float y)
 {
     // return simplex2(8 * x, 4 * y) + simplex2(4 * x, 2 * y) + simplex2(2 * x, 1 * y);
     //This is off for aesthetic reasons, normally the x and y are matched.
-    return simplex2(8 * x, 5 * y) + simplex2(4 * x, 3 * y) + simplex2(2 * x, 1 * y);
+    return simplex2(16 * x, 9 * y) * 0.25 + simplex2(8 * x, 5 * y) * 0.5 + simplex2(4 * x, 3 * y) + simplex2(2 * x, 1 * y) * 2;
 }
 
-float columns = 1/ 64.0;
-float rows    = 1/ 32.0;
+float columns = 1/ 256.0;
+float rows    = 1/ 128.0;
 
 void main()
 {
     uv          = in_uv;
 
-    float a1    = texture1D(tex1, mod((uv.x + uv.y) * 8,1)).r * 4;
-    float a2    = texture1D(tex2, mod((uv.x + uv.y) * 8,1)).r * 2.5;
-    float a3    = texture1D(tex3, mod((uv.x + uv.y) * 8,1)).r * 4;
+    //not quite right
+    //transmit uvs from haskell land packed into x?
+    float a1    = texture1D(tex1, mod((uv.x + uv.y) * 1,1)).r * 32;
+    float a2    = texture1D(tex2, mod((uv.x + uv.y) * 1,1)).r * 2;
+    float a3    = texture1D(tex3, mod((uv.x + uv.y) * 1,1)).r * 32;
 
     vec3  pos   = vec3(position.x + a1, position.y + a2, position.z + a3);
 
@@ -117,7 +119,7 @@ void main()
     float z     = (pos.z * 6) * rows;
     float y     = (pos.y * 1) + simplex(x * 0.5 + time * 0.05, z * 0.5 + time * 0.05) * 1.65;
 
-    color       = vec3((x * 1.75) * (y * 0.6 + 0.4), y * 0.75 + 0.25, z * (y * 0.75 + 0.25));
+    color       = vec3((x * 1.75) * (y * 0.5 + 0.2), y * 0.5 + 0.2, z * (y * 0.5 + 0.2));
 
     gl_Position = vec4(pos.x, y, pos.z, 1.0) * modelView * proj;
 }

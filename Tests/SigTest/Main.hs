@@ -49,10 +49,10 @@ section3 = scene [camSig,sphereSig]
                 rot = inverse <| lookAt (_z_ (* (-2.5)) <| pos) 0
 
 terrainObject :: Texture -> Texture -> Texture -> Double -> SceneObject
-terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 0 (-6)) (fromEuler' 0 0 0) (Vector3 0.5 1 0.5) (Model mesh <| terrainMaterial a1 a2 a3 t) []
+terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 0 (-6)) (fromEuler' 0 0 0) (Vector3 0.125 1 0.125) (Model mesh <| terrainMaterial a1 a2 a3 t) []
     where
         mesh             = Mesh "simplex" vertices colors uvs indices
-        (w,h)            = (64.0,32.0)
+        (w,h)            = (256.0,128.0)
         (tscale,vscale)  = (1 / 6,2.5)
         values           = [(x,0,y) | (x,y) <- map (\n -> (mod' n w, n / h)) [0..w*h]]
 
@@ -190,10 +190,7 @@ caveTime = [l * 0.875 + r * 0.125, r * 0.875 + l * 0.125] |> out 0
         verb  = freeverb 0.5 1.0 0.1
 
 visAux :: UGen -> UGen -> UGen -> UGen
---TODO: Fix visAux
--- visAux bus a u = (applyLeft (auxThrough bus . (* a)) u * 0) + u
--- visAux _ _ u = u
-visAux bus a u = _useq (auxThrough bus a) u
+visAux bus a u = _useq (auxThrough bus (left u * a)) u
 
 metallic3 :: UGen -> UGen
 metallic3 f = sig + sig2 + sig3 |> e |> visAux 2 2 |> softclip 2 |> filt |> e |> gain 0.065 |> pan 0.75 |> out 20
