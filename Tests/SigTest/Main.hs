@@ -52,7 +52,7 @@ terrainObject :: Texture -> Texture -> Texture -> Double -> SceneObject
 terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 0 (-6)) (fromEuler' 0 0 0) (Vector3 0.125 1 0.125) (Model mesh <| terrainMaterial a1 a2 a3 t) []
     where
         mesh             = Mesh "simplex" vertices colors uvs indices
-        (w,h)            = (256.0,128.0)
+        (w,h)            = (256.0,256.0)
         (tscale,vscale)  = (1 / 6,2.5)
         values           = [(x,0,y) | (x,y) <- map (\n -> (mod' n w, n / h)) [0..w*h]]
 
@@ -225,7 +225,7 @@ metallic4 f = sig + sig2 + sig3 |> e |> visAux 3 2 |> softclip 2 |> filt |> e |>
         e2     = env2     [1,1,0.25,0.25] [0.01,1,5] (-3)
 
 hyperMelody :: UGen -> UGen
-hyperMelody f = [s,s2] |> gain 0.04 |> e |> visAux (random 0 2 5.5) 20 |> out 0
+hyperMelody f = [s,s2] |> gain 0.04 |> e |> visAux (random 0 2 5) 20 |> out 0
     where
         e  = env [0,1,0.15, 0] [0.0001,0.1, 7] (-1.5)
         s  = sin <| sin 3 * 6 + f * 2
