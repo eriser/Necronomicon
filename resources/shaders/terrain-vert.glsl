@@ -109,9 +109,9 @@ void main()
 
     //not quite right
     //transmit uvs from haskell land packed into x?
-    float a1    = texture1D(tex1, mod((uv.x + uv.y) * 1,1)).r * 32;
-    float a2    = texture1D(tex2, mod((uv.x + uv.y) * 1,1)).r * 2;
-    float a3    = texture1D(tex3, mod((uv.x + uv.y) * 1,1)).r * 32;
+    float a1    = texture1D(tex1, mod((uv.x + uv.y) * 0.5,1)).r * 32;
+    float a2    = texture1D(tex2, mod((uv.x + uv.y) * 0.5,1)).r * 2;
+    float a3    = texture1D(tex3, mod((uv.x + uv.y) * 0.5,1)).r * 32;
 
     vec3  pos   = vec3(position.x + a1, position.y + a2, position.z + a3);
 
