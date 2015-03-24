@@ -387,6 +387,7 @@ struct synth_node
 };
 
 synth_node* _necronomicon_current_node = NULL;
+synth_node* _necronomicon_current_node_underconstruction = NULL;
 const unsigned int NODE_SIZE = sizeof(synth_node);
 const unsigned int NODE_POINTER_SIZE = sizeof(synth_node*);
 synth_node* free_synths = NULL;
@@ -520,20 +521,7 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 	synth->time = time;
 	synth->previous_alive_status = NODE_DEAD;
 	synth->alive_status = NODE_SPAWNING;
-
-	// UGens
-	unsigned int num_ugens = synth_definition->num_ugens;
-	unsigned int size_ugens = num_ugens * UGEN_SIZE;
-	synth->ugen_graph_node = acquire_ugen_graph(num_ugens);
-	synth->ugen_graph = synth->ugen_graph_node->ugen_graph;
-	ugen* ugen_graph = synth->ugen_graph;
-	memcpy(ugen_graph, synth_definition->ugen_graph, size_ugens);
-
-	for (i = 0; i < num_ugens; ++i)
-	{
-		ugen* graph_node = &ugen_graph[i];
-		graph_node->constructor(graph_node);
-	}
+	_necronomicon_current_node_underconstruction = synth;
 
 	// Wires
 	unsigned int num_wires = synth->num_wires;
@@ -553,6 +541,21 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
         }
     }
 
+	// UGens
+	unsigned int num_ugens = synth_definition->num_ugens;
+	unsigned int size_ugens = num_ugens * UGEN_SIZE;
+	synth->ugen_graph_node = acquire_ugen_graph(num_ugens);
+	synth->ugen_graph = synth->ugen_graph_node->ugen_graph;
+	ugen* ugen_graph = synth->ugen_graph;
+	memcpy(ugen_graph, synth_definition->ugen_graph, size_ugens);
+
+	for (i = 0; i < num_ugens; ++i)
+	{
+		ugen* graph_node = &ugen_graph[i];
+		graph_node->constructor(graph_node);
+	}
+
+	_necronomicon_current_node_underconstruction = NULL;
 	return synth;
 }
 
@@ -3902,140 +3905,386 @@ void syncsaw_kk_calc(ugen u)
 	)
 }
 
-void syncsquare_calc(ugen u)
+#define SYNCSQUARE_CALC(CONTROL_ARGS, AUDIO_ARGS)		\
+double* in0 = UGEN_INPUT_BUFFER(u, 0);					\
+double* in1 = UGEN_INPUT_BUFFER(u, 1);					\
+double* in2 = UGEN_INPUT_BUFFER(u, 2);					\
+double* out = UGEN_OUTPUT_BUFFER(u, 0);					\
+minblep mb  = *((minblep*) u.data);						\
+double freq;											\
+double pwm;												\
+double sync;											\
+double y;												\
+CONTROL_ARGS											\
+AUDIO_LOOP(												\
+	AUDIO_ARGS											\
+	/* create waveform */								\
+	mb.phase += freq;									\
+	/* add BLEP at end of waveform */					\
+	if(mb.phase >= 1)									\
+	{													\
+		mb.phase  = mb.phase - 1.0;						\
+		mb.output = -1.0;								\
+		add_blep(&mb, mb.phase/freq,1.0);				\
+	}													\
+	/* add BLEP in middle of wavefor for squarewave */	\
+	if(!mb.output && mb.phase > pwm)					\
+	{													\
+		mb.output = 1.0;								\
+		add_blep(&mb, (mb.phase - pwm) / freq,-1.0);	\
+	}													\
+	if(mb.prevSyncAmp < 0 && sync > 0)					\
+	{													\
+		mb.phase  = 0.0;								\
+		mb.output = 1.0;								\
+		add_blep(&mb, mb.phase/freq,1.0);				\
+	}													\
+	y = mb.output;										\
+	/* add BLEP buffer contents */						\
+	if(mb.nInit)										\
+	{													\
+		y += mb.buffer[mb.iBuffer];						\
+		mb.nInit--;										\
+		if(++mb.iBuffer >= mb.cBuffer)					\
+			mb.iBuffer=0;								\
+	}													\
+	mb.prevSyncAmp = sync;								\
+	UGEN_OUT(out, y);									\
+);														\
+*((minblep*) u.data) = mb;								\
+
+#define SYNCSQUARE_FREQ_K freq = in0[0] * RECIP_SAMPLE_RATE;
+#define SYNCSQUARE_PWM_K pwm  = CLAMP(in1[0],0,1) * 0.5;
+#define SYNCSQUARE_SYNC_K sync = in2[0];
+
+#define SYNCSQUARE_FREQ_A freq = UGEN_IN(in0) * RECIP_SAMPLE_RATE;
+#define SYNCSQUARE_PWM_A pwm  = CLAMP(UGEN_IN(in1),0,1) * 0.5;
+#define SYNCSQUARE_SYNC_A sync = UGEN_IN(in2);
+
+void syncsquare_kkk_calc(ugen u)
 {
-	double* in0 = UGEN_INPUT_BUFFER(u, 0);
-	double* in1 = UGEN_INPUT_BUFFER(u, 1);
-	double* in2 = UGEN_INPUT_BUFFER(u, 2);
-	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-	minblep mb  = *((minblep*) u.data);
-
-	double freq;
-	double pwm;
-	double sync;
-	double y;
-
-	AUDIO_LOOP(
-		freq = UGEN_IN(in0) * RECIP_SAMPLE_RATE;
-		pwm  = CLAMP(UGEN_IN(in1),0,1) * 0.5;
-		sync = UGEN_IN(in2);
-
-		// create waveform
-		mb.phase += freq;
-
-		// add BLEP at end of waveform
-		if(mb.phase >= 1)
-		{
-			mb.phase  = mb.phase - 1.0;
-			mb.output = -1.0;
-			add_blep(&mb, mb.phase/freq,1.0);
-		}
-
-		// add BLEP in middle of wavefor for squarewave
-		if(!mb.output && mb.phase > pwm)
-		{
-			mb.output = 1.0;
-			add_blep(&mb, (mb.phase - pwm) / freq,-1.0);
-		}
-
-		if(mb.prevSyncAmp < 0 && sync > 0)
-		{
-			mb.phase  = 0.0;
-			mb.output = 1.0;
-			add_blep(&mb, mb.phase/freq,1.0);
-		}
-
-		y = mb.output;
-
-		// add BLEP buffer contents
-		if(mb.nInit)
-		{
-			y += mb.buffer[mb.iBuffer];
-			mb.nInit--;
-			if(++mb.iBuffer >= mb.cBuffer)
-				mb.iBuffer=0;
-		}
-
-		mb.prevSyncAmp = sync;
-		UGEN_OUT(out, y);
-	);
-
-	*((minblep*) u.data) = mb;
+	SYNCSQUARE_CALC(
+		SYNCSQUARE_FREQ_K
+		SYNCSQUARE_PWM_K
+		SYNCSQUARE_SYNC_K,
+		/* no audio args */
+	)
 }
 
-void syncosc_calc(ugen u)
+void syncsquare_akk_calc(ugen u)
 {
+	SYNCSQUARE_CALC(
+		SYNCSQUARE_PWM_K
+		SYNCSQUARE_SYNC_K,
+		SYNCSQUARE_FREQ_A
+	)
+}
 
-	double* in0 = UGEN_INPUT_BUFFER(u, 0);
-	double* in1 = UGEN_INPUT_BUFFER(u, 1);
-	double* in2 = UGEN_INPUT_BUFFER(u, 2);
-	double* in3 = UGEN_INPUT_BUFFER(u, 3);
-	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-	minblep mb  = *((minblep*) u.data);
+void syncsquare_kak_calc(ugen u)
+{
+	SYNCSQUARE_CALC(
+		SYNCSQUARE_FREQ_K
+		SYNCSQUARE_SYNC_K,
+		SYNCSQUARE_PWM_A
+	)
+}
 
-	double slaveFreq;
-	double slaveWave;
-	double pwm;
-	double masterFreq;
-	double y;
-	double freqN;
+void syncsquare_aak_calc(ugen u)
+{
+	SYNCSQUARE_CALC(
+		SYNCSQUARE_SYNC_K,
+		SYNCSQUARE_FREQ_A
+		SYNCSQUARE_PWM_A
+	)
+}
 
+void syncsquare_kka_calc(ugen u)
+{
+	SYNCSQUARE_CALC(
+		SYNCSQUARE_FREQ_K
+		SYNCSQUARE_PWM_K,
+		SYNCSQUARE_SYNC_A
+	)
+}
 
-	AUDIO_LOOP(
-		slaveFreq  = UGEN_IN(in0);
-		slaveWave  = (int)UGEN_IN(in1);
-		pwm        = CLAMP(UGEN_IN(in2),0,1) * 0.5;
-		masterFreq = UGEN_IN(in3);
-		freqN      = slaveFreq * RECIP_SAMPLE_RATE;
+void syncsquare_aka_calc(ugen u)
+{
+	SYNCSQUARE_CALC(
+		SYNCSQUARE_PWM_K,
+		SYNCSQUARE_FREQ_A
+		SYNCSQUARE_SYNC_A
+	)
+}
 
-		// create waveform
-		mb.phase       = mb.phase + freqN;
-		mb.masterPhase = WRAP(mb.masterPhase + (masterFreq * RECIP_SAMPLE_RATE) * 1.0,1.0);
+void syncsquare_kaa_calc(ugen u)
+{
+	SYNCSQUARE_CALC(
+		SYNCSQUARE_FREQ_K,
+		SYNCSQUARE_PWM_A
+		SYNCSQUARE_SYNC_A
+	)
+}
 
-		// add BLEP at end of waveform
-		if(mb.phase >= 1)
-		{
-			mb.phase  = mb.phase - 1.0;
-			mb.output = -1.0;
-			add_blep(&mb, mb.phase/freqN,1.0);
-		}
+void syncsquare_aaa_calc(ugen u)
+{
+	SYNCSQUARE_CALC(
+		/* no control args */,
+		SYNCSQUARE_FREQ_A
+		SYNCSQUARE_PWM_A
+		SYNCSQUARE_SYNC_A
+	)
+}
 
-		// add BLEP in middle of wavefor for squarewave
-		else if(slaveWave && !mb.output && mb.phase > pwm)
-		{
-			mb.output = 1.0;
-			add_blep(&mb, (mb.phase - pwm) / freqN,-1.0);
-		}
+#define SYNCOSC_CALC(CONTROL_ARGS, AUDIO_ARGS)											\
+double* in0 = UGEN_INPUT_BUFFER(u, 0);													\
+double* in1 = UGEN_INPUT_BUFFER(u, 1);													\
+double* in2 = UGEN_INPUT_BUFFER(u, 2);													\
+double* in3 = UGEN_INPUT_BUFFER(u, 3);													\
+double* out = UGEN_OUTPUT_BUFFER(u, 0);													\
+minblep mb  = *((minblep*) u.data);														\
+double slaveFreq;																		\
+double slaveWave;																		\
+double pwm;																				\
+double masterFreq;																		\
+double y;																				\
+double freqN;																			\
+CONTROL_ARGS																			\
+AUDIO_LOOP(																				\
+	AUDIO_ARGS																			\
+																						\
+	/* create waveform */																\
+	mb.phase       = mb.phase + freqN;													\
+	mb.masterPhase = WRAP(mb.masterPhase + (masterFreq * RECIP_SAMPLE_RATE) * 1.0,1.0);	\
+																						\
+	/* add BLEP at end of waveform */													\
+	if(mb.phase >= 1)																	\
+	{																					\
+		mb.phase  = mb.phase - 1.0;														\
+		mb.output = -1.0;																\
+		add_blep(&mb, mb.phase/freqN,1.0);												\
+	}																					\
+																						\
+	/* add BLEP in middle of wavefor for squarewave */									\
+	else if(slaveWave && !mb.output && mb.phase > pwm)									\
+	{																					\
+		mb.output = 1.0;																\
+		add_blep(&mb, (mb.phase - pwm) / freqN,-1.0);									\
+	}																					\
+																						\
+	else if(mb.prevSyncAmp <= 0 && mb.masterPhase > 0)									\
+	{																					\
+		mb.phase  = mb.masterPhase * (slaveFreq / masterFreq);							\
+		if(!slaveWave)																	\
+			mb.output = mb.masterPhase * (slaveFreq / masterFreq);						\
+		else																			\
+			mb.output = -1.0;															\
+		add_blep(&mb, mb.phase/freqN,1.0);												\
+	}																					\
+																						\
+	if(!slaveWave)																		\
+		y = mb.phase;																	\
+	else																				\
+		y = mb.output;																	\
+																						\
+	/* add BLEP buffer contents */														\
+	if(mb.nInit)																		\
+	{																					\
+		y += mb.buffer[mb.iBuffer];														\
+		mb.nInit--;																		\
+		if(++mb.iBuffer >= mb.cBuffer)													\
+			mb.iBuffer=0;																\
+	}																					\
+	mb.prevSyncAmp = mb.masterPhase;													\
+	UGEN_OUT(out, y);																	\
+);																						\
+*((minblep*) u.data) = mb;																\
 
-		else if(mb.prevSyncAmp <= 0 && mb.masterPhase > 0)
-		{
-			mb.phase  = mb.masterPhase * (slaveFreq / masterFreq);
-			if(!slaveWave)
-				mb.output = mb.masterPhase * (slaveFreq / masterFreq);
-			else
-				mb.output = -1.0;
-			add_blep(&mb, mb.phase/freqN,1.0);
-		}
+#define SYNCOSC_0K slaveFreq  = in0[0]; freqN = slaveFreq * RECIP_SAMPLE_RATE;
+#define SYNCOSC_1K slaveWave  = (int)in1[0];
+#define SYNCOSC_2K pwm        = CLAMP(in2[0],0,1) * 0.5;
+#define SYNCOSC_3K masterFreq = in3[0];
 
-		if(!slaveWave)
-			y = mb.phase;
-		else
-			y = mb.output;
+#define SYNCOSC_0A slaveFreq  = UGEN_IN(in0); freqN = slaveFreq * RECIP_SAMPLE_RATE;
+#define SYNCOSC_1A slaveWave  = (int)UGEN_IN(in1);
+#define SYNCOSC_2A pwm        = CLAMP(UGEN_IN(in2),0,1) * 0.5;
+#define SYNCOSC_3A masterFreq = UGEN_IN(in3);
 
-		// add BLEP buffer contents
-		if(mb.nInit)
-		{
-			y += mb.buffer[mb.iBuffer];
-			mb.nInit--;
-			if(++mb.iBuffer >= mb.cBuffer)
-				mb.iBuffer=0;
-		}
+// syncosc 0
+void syncosc_kkkk_calc(ugen u)
+{
+	SYNCOSC_CALC(
+		SYNCOSC_0K
+		SYNCOSC_1K
+		SYNCOSC_2K
+		SYNCOSC_3K,
+		/* no audio args */
+	)
+}
 
-		mb.prevSyncAmp = mb.masterPhase;
-		UGEN_OUT(out, y);
-	);
+// syncosc 1
+void syncosc_akkk_calc(ugen u)
+{
+	SYNCOSC_CALC(
+		SYNCOSC_1K
+		SYNCOSC_2K
+		SYNCOSC_3K,
+		SYNCOSC_0A
+	)
+}
 
-	*((minblep*) u.data) = mb;
+// syncosc 2
+void syncosc_kakk_calc(ugen u)
+{
+	SYNCOSC_CALC(
+		SYNCOSC_0K
+		SYNCOSC_2K
+		SYNCOSC_3K,
+		SYNCOSC_1A
+	)
+}
+
+// syncosc 3
+void syncosc_aakk_calc(ugen u)
+{
+	SYNCOSC_CALC(
+		SYNCOSC_2K
+		SYNCOSC_3K,
+		SYNCOSC_0A
+		SYNCOSC_1A
+	)
+}
+
+// syncosc 4
+void syncosc_kkak_calc(ugen u)
+{
+	SYNCOSC_CALC(
+		SYNCOSC_0K
+		SYNCOSC_1K
+		SYNCOSC_3K,
+		SYNCOSC_2A
+	)
+}
+
+// syncosc 5
+void syncosc_akak_calc(ugen u)
+{
+	SYNCOSC_CALC(
+		SYNCOSC_1K
+		SYNCOSC_3K,
+		SYNCOSC_0A
+		SYNCOSC_2A
+	)
+}
+
+// syncosc 6
+void syncosc_kaak_calc(ugen u)
+{
+	SYNCOSC_CALC(
+		SYNCOSC_0K
+		SYNCOSC_3K,
+		SYNCOSC_1A
+		SYNCOSC_2A
+	)
+}
+
+// syncosc 7
+void syncosc_aaak_calc(ugen u)
+{
+	SYNCOSC_CALC(
+		SYNCOSC_3K,
+		SYNCOSC_0A
+		SYNCOSC_1A
+		SYNCOSC_2A
+	)
+}
+
+// syncosc 8
+void syncosc_kkka_calc(ugen u)
+{
+	SYNCOSC_CALC(
+		SYNCOSC_0K
+		SYNCOSC_1K
+		SYNCOSC_2K,
+		SYNCOSC_3A
+	)
+}
+
+// syncosc 9
+void syncosc_akka_calc(ugen u)
+{
+	SYNCOSC_CALC(
+		SYNCOSC_1K
+		SYNCOSC_2K,
+		SYNCOSC_0A
+		SYNCOSC_3A
+	)
+}
+
+// syncosc 10
+void syncosc_kaka_calc(ugen u)
+{
+	SYNCOSC_CALC(
+		SYNCOSC_0K
+		SYNCOSC_2K,
+		SYNCOSC_1A
+		SYNCOSC_3A
+	)
+}
+
+// syncosc 11
+void syncosc_aaka_calc(ugen u)
+{
+	SYNCOSC_CALC(
+		SYNCOSC_2K,
+		SYNCOSC_0A
+		SYNCOSC_1A
+		SYNCOSC_3A
+	)
+}
+
+// syncosc 12
+void syncosc_kkaa_calc(ugen u)
+{
+	SYNCOSC_CALC(
+		SYNCOSC_0K
+		SYNCOSC_1K,
+		SYNCOSC_2A
+		SYNCOSC_3A
+	)
+}
+
+// syncosc 13
+void syncosc_akaa_calc(ugen u)
+{
+	SYNCOSC_CALC(
+		SYNCOSC_1K,
+		SYNCOSC_0A
+		SYNCOSC_2A
+		SYNCOSC_3A
+	)
+}
+
+// syncosc 14
+void syncosc_kaaa_calc(ugen u)
+{
+	SYNCOSC_CALC(
+		SYNCOSC_0K,
+		SYNCOSC_1A
+		SYNCOSC_2A
+		SYNCOSC_3A
+	)
+}
+
+// syncosc 15
+void syncosc_aaaa_calc(ugen u)
+{
+	SYNCOSC_CALC(
+		/* no control args */,
+		SYNCOSC_0A
+		SYNCOSC_1A
+		SYNCOSC_2A
+		SYNCOSC_3A
+	)
 }
 
 //==========================================
@@ -4071,55 +4320,59 @@ void rand_deconstructor(ugen* u)
 
 void rand_range_constructor(ugen* u)
 {
-	double* value = malloc(sizeof(double));
-
 	double   seed  = u->constructor_args[0];
 	double   min   = u->constructor_args[1];
 	double   max   = u->constructor_args[2];
 	double   range = max - min;
 	double   in    = RAND_RANGE(0,1);
-	*value         = (in * range) + min;
-	u->data        = value;
+	double   value = (in * range) + min;
+	double*  out  = (_necronomicon_current_node_underconstruction->ugen_wires + (u->outputs[0] * BLOCK_SIZE));
+
+	unsigned int i;
+	for (i = 0; i < BLOCK_SIZE; ++i)
+	{
+		out[i] = value;
+	}
 }
 
-void rand_range_deconstructor(ugen* u)
+void rand_range_deconstructor(ugen* u) { }
+void rand_calc(ugen u) { }
+
+#define NOISEN_CALC(CONTROL_ARGS, AUDIO_ARGS)							\
+double*  in0  = UGEN_INPUT_BUFFER(u, 0);								\
+double*  out  = UGEN_OUTPUT_BUFFER(u, 0);								\
+rand_t   rand = *((rand_t*) u.data);									\
+double freq;															\
+CONTROL_ARGS															\
+AUDIO_LOOP(																\
+	AUDIO_ARGS															\
+	if(rand.phase + RECIP_SAMPLE_RATE * freq >= 1.0)					\
+	{																	\
+		rand.phase  = fmod(rand.phase + RECIP_SAMPLE_RATE * freq,1.0);	\
+		rand.value0 = RAND_RANGE(-1,1);									\
+	}																	\
+	else																\
+	{																	\
+		rand.phase = rand.phase + RECIP_SAMPLE_RATE * freq;				\
+	}																	\
+	UGEN_OUT(out, rand.value0);											\
+);																		\
+*((rand_t*) u.data) = rand;												\
+
+void lfnoiseN_k_calc(ugen u)
 {
-	free(u->data);
+	NOISEN_CALC(
+		freq  = in0[0];,
+		/* no audio args */
+	)
 }
 
-void rand_calc(ugen u)
+void lfnoiseN_a_calc(ugen u)
 {
-	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
-	double   val  = *((double*) u.data);
-
-	AUDIO_LOOP(UGEN_OUT(out,val););
-}
-
-void lfnoiseN_calc(ugen u)
-{
-    double*  in0  = UGEN_INPUT_BUFFER(u, 0);
-	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
-	rand_t   rand = *((rand_t*) u.data);
-
-	double freq;
-
-	AUDIO_LOOP(
-        freq  = UGEN_IN(in0);
-
-		if(rand.phase + RECIP_SAMPLE_RATE * freq >= 1.0)
-   		{
-   			rand.phase  = fmod(rand.phase + RECIP_SAMPLE_RATE * freq,1.0);
-   			rand.value0 = RAND_RANGE(-1,1);
-   		}
-   		else
-   		{
-   			rand.phase = rand.phase + RECIP_SAMPLE_RATE * freq;
-   		}
-
-   		UGEN_OUT(out, rand.value0);
-	);
-
-    *((rand_t*) u.data) = rand;
+	NOISEN_CALC(
+		/* no control args */,
+		freq  = UGEN_IN(in0);
+	)
 }
 
 void lfnoiseL_calc(ugen u)
