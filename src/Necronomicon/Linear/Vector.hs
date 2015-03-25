@@ -393,10 +393,16 @@ toVec3 :: Vector2 -> Vector3
 toVec3 (Vector2 x y)     = Vector3 x y 0
 
 toGLVec3 :: Vector3 -> GL.Vector3 GL.GLdouble
-toGLVec3 (Vector3 x y z) = GL.Vector3 (realToFrac x) (realToFrac y) (realToFrac z) ::GL.Vector3 GL.GLdouble
+toGLVec3 (Vector3 x y z) = GL.Vector3 (realToFrac x) (realToFrac y) (realToFrac z) :: GL.Vector3 GL.GLdouble
 
-toGLVertex3 :: Vector3 -> GL.Vertex3 GL.GLdouble
-toGLVertex3 (Vector3 x y z) = GL.Vertex3 (realToFrac x) (realToFrac y) (realToFrac z) ::GL.Vertex3 GL.GLdouble
+toGLVec4 :: Vector4 -> GL.Vector4 GL.GLdouble
+toGLVec4 (Vector4 x y z w) = GL.Vector4 (realToFrac x) (realToFrac y) (realToFrac z) (realToFrac w) :: GL.Vector4 GL.GLdouble
+
+toGLVertex2 :: Vector2 -> GL.Vertex2 GL.GLfloat
+toGLVertex2 (Vector2 x y) = GL.Vertex2 (realToFrac x) (realToFrac y) :: GL.Vertex2 GL.GLfloat
+
+toGLVertex3 :: Vector3 -> GL.Vertex3 GL.GLfloat
+toGLVertex3 (Vector3 x y z) = GL.Vertex3 (realToFrac x) (realToFrac y) (realToFrac z) ::GL.Vertex3 GL.GLfloat
 
 toGLVertex4 :: Vector4 -> GLT.Vertex4 GL.GLfloat
 toGLVertex4 (Vector4 x y z w) = GLT.Vertex4 (realToFrac x) (realToFrac y) (realToFrac z) (realToFrac w) ::GLT.Vertex4 GL.GLfloat

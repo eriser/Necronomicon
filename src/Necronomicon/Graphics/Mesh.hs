@@ -9,6 +9,7 @@ import           Necronomicon.Linear
 
 import           Data.IORef
 import           Foreign.Storable                   (sizeOf)
+import           Control.Monad                      (foldM_)
 
 import qualified Data.IntMap                        as IntMap
 import qualified Data.Map                           as Map
@@ -277,3 +278,75 @@ blurShader          = shader
                       ["position","in_color","in_uv"]
                       (loadVertexShader   "ambient-vert.glsl")
                       (loadFragmentShader "blur-frag.glsl")
+
+data Uniform = UniformTexture String Texture
+             | UniformScalar  String Double
+             | UniformVec2    String Vector2
+             | UniformVec3    String Vector3
+             | UniformVec4    String Vector4
+             | MatrixView     String
+             | Proj           String
+
+uniformName :: Uniform -> String
+uniformName (UniformTexture s _) = s
+uniformName (UniformScalar  s _) = s
+uniformName (UniformVec2    s _) = s
+uniformName (UniformVec3    s _) = s
+uniformName (UniformVec4    s _) = s
+uniformName (MatrixView     s  ) = s
+uniformName (Proj           s  ) = s
+
+setUniform :: Resources -> GL.UniformLocation -> Uniform -> Int -> IO Int
+setUniform r loc (UniformTexture _ v) t = getTexture r v >>= setTextureUniform loc t >> return (t + 1)
+setUniform _ loc (UniformScalar  _ v) t = GL.uniform loc GL.$= GL.Index1  (realToFrac v :: GL.GLfloat) >> return t
+setUniform _ loc (UniformVec2    _ v) t = GL.uniform loc GL.$= toGLVertex2 v >> return t
+setUniform _ loc (UniformVec3    _ v) t = GL.uniform loc GL.$= toGLVertex3 v >> return t
+setUniform _ loc (UniformVec4    _ v) t = GL.uniform loc GL.$= toGLVertex4 v >> return t
+setUniform _ _ _                      t = return t
+
+material :: String -> String -> [Uniform] -> Material
+material vs fs us = Material drawMat
+    where
+        drawMat mesh modelView proj resources = do
+            (program, uniforms, attributes)                                  <- getShader resources terrainShader
+            (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh   resources mesh
+            let ulocs         = take (length uniforms - 2) uniforms
+                (mv : pr : _) = drop (length uniforms - 2) uniforms
+
+            loadProgram program
+            foldM_ (\t (uloc, uval) -> setUniform resources uloc uval t) 0 $ zip ulocs us
+
+            bindThenDraw mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
+
+        terrainShader = shader
+            (vs ++ " + " ++ fs)
+            (map uniformName us ++ ["modelView", "proj"])
+            ["position","in_color","in_uv"]
+            (loadVertexShader   vs)
+            (loadFragmentShader fs)
+
+{-
+terrainMaterial :: Texture -> Texture -> Texture -> Double -> Material
+terrainMaterial tex1 tex2 tex3 t = Material drawMat
+    where
+        drawMat mesh modelView proj resources = do
+            (program, texu1:texu2:texu3:timeu:mv:pr:_, attributes)           <- getShader  resources terrainShader
+            (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh    resources mesh
+            texture1                                                         <- getTexture resources tex1
+            texture2                                                         <- getTexture resources tex2
+            texture3                                                         <- getTexture resources tex3
+
+            loadProgram program
+            setTextureUniform texu1 0 texture1
+            setTextureUniform texu2 1 texture2
+            setTextureUniform texu3 2 texture3
+            uniformD          timeu t
+            bindThenDraw mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
+
+        terrainShader = shader
+            "terrain"
+            ["tex1","tex2","tex3","time","modelView","proj"]
+            ["position","in_color","in_uv"]
+            (loadVertexShader   "terrain-vert.glsl")
+            (loadFragmentShader "terrain-frag.glsl")
+-}

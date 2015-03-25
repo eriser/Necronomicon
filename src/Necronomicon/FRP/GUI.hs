@@ -56,7 +56,7 @@ netStat (Vector2 x y) (Size w h) font = indicator <~ networkRunStatus
         textObject           t = SceneObject (Vector3  0 0 1) identity 1 (drawText t font ambient) []
 
 chat :: Vector2 -> Size -> Font -> Material -> Signal SceneObject
-chat (Vector2 x y) (Size w h) font material = addChild <~ textEditSignal textInput (toggle $ lift2 (&&) ctrl $ isDown keyT) ~~ chatDisplay (Vector2 x y) (Size w h) font material
+chat (Vector2 x y) (Size w h) font mat = addChild <~ textEditSignal textInput (toggle $ lift2 (&&) ctrl $ isDown keyT) ~~ chatDisplay (Vector2 x y) (Size w h) font mat
     where
         textEditSignal textInputSignal toggleSignal = Signal $ \state -> do
             inputCont  <- unSignal textInputSignal state
@@ -80,7 +80,7 @@ chat (Vector2 x y) (Size w h) font material = addChild <~ textEditSignal textInp
                               else returnNewText textRef metrics $ t ++ [char]
 
         returnNewText r cm t = writeIORef r t >> (return . Change . background $ fitTextIntoBounds False t (w,0.055) cm)
-        background         t = SceneObject (Vector3  0 h 0) identity 1 (Model (rect w 0.055) material) [textObject t]
+        background         t = SceneObject (Vector3  0 h 0) identity 1 (Model (rect w 0.055) mat) [textObject t]
         textObject         t = SceneObject (Vector3  0 0 1) identity 1 (drawText t font ambient) []
 
 chatDisplay :: Vector2 -> Size -> Font -> Material -> Signal SceneObject

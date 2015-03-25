@@ -69,29 +69,13 @@ terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 0 (-6)) (fromEuler' 0 0 0) 
         uvs      = map toUV     values
         indices  = foldr (addIndices <| floor w) [] [0..length values - floor (w + 2)]
 
-terrainMaterial :: Texture -> Texture -> Texture -> Double -> Material
-terrainMaterial tex1 tex2 tex3 t = Material drawMat
-    where
-        drawMat mesh modelView proj resources = do
-            (program, texu1:texu2:texu3:timeu:mv:pr:_, attributes)           <- getShader  resources terrainShader
-            (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh    resources mesh
-            texture1                                                         <- getTexture resources tex1
-            texture2                                                         <- getTexture resources tex2
-            texture3                                                         <- getTexture resources tex3
-
-            loadProgram program
-            setTextureUniform texu1 0 texture1
-            setTextureUniform texu2 1 texture2
-            setTextureUniform texu3 2 texture3
-            uniformD          timeu t
-            bindThenDraw mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
-
-        terrainShader = shader
-            "terrain"
-            ["tex1","tex2","tex3","time","modelView","proj"]
-            ["position","in_color","in_uv"]
-            (loadVertexShader   "terrain-vert.glsl")
-            (loadFragmentShader "terrain-frag.glsl")
+        terrainMaterial a1' a2' a3' t' = material
+            "terrain-vert.glsl"
+            "terrain-frag.glsl"
+            [UniformTexture "tex1" a1',
+             UniformTexture "tex2" a2',
+             UniformTexture "tex3" a3',
+             UniformScalar  "time" t']
 
 oscillatorObject :: [Double] -> [Double] -> [Double] -> SceneObject
 oscillatorObject audioBuffer1 audioBuffer2 audioBuffer3 = SceneObject 0 identity 1 (Model mesh <| vertexColored (RGBA 1 1 1 0.35)) []

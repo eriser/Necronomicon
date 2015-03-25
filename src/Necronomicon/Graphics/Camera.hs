@@ -100,7 +100,7 @@ renderGraphics window resources scene gui = do
 ---------------------------------------
 
 loadPostFX :: PostRenderingFX -> (Double,Double) -> IO LoadedPostRenderingFX
-loadPostFX (PostRenderingFX name material) (w,h) = do
+loadPostFX (PostRenderingFX name mat) (w,h) = do
 
     --Init FBO Texture
     glActiveTexture gl_TEXTURE0
@@ -132,7 +132,7 @@ loadPostFX (PostRenderingFX name material) (w,h) = do
 
     glBindFramebuffer gl_FRAMEBUFFER 0
 
-    return $ LoadedPostRenderingFX name material (w,h) fboTexture rboDepth fbo fboStatus
+    return $ LoadedPostRenderingFX name mat (w,h) fboTexture rboDepth fbo fboStatus
 
 maybeReshape :: LoadedPostRenderingFX -> (Double,Double) -> IO (Maybe LoadedPostRenderingFX)
 maybeReshape post dim@(w,h) = if postRenderDimensions post == dim then return Nothing else do
