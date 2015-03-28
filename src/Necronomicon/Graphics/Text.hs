@@ -215,7 +215,7 @@ removeExtraLines rmvTop boundsHeight cmetrics (text,currentHeight) char = if rmv
                 go (False,saccum) _     = (False,saccum)
                 go (True ,saccum) schar = (True ,saccum ++ [schar])
 
-cheight :: Map.Map Char CharMetric -> Double 
+cheight :: Map.Map Char CharMetric -> Double
 cheight cmetrics = case Map.lookup 'A' cmetrics of
     Nothing -> 20 * fontScale
     Just cm -> charHeight cm * fontScale

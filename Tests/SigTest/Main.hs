@@ -78,12 +78,12 @@ terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 0 (-6)) identity (Vector3 0
 oscillatorObject :: Texture -> Texture -> Texture -> SceneObject
 oscillatorObject a1 a2 a3 = SceneObject (-3) identity 1 (Model mesh oscMaterial) []
     where
-        mesh                       = Mesh "osc1" vertices colors uvs indices
-        indices                    = foldr (\i acc -> i + 1 : i + 2 : i + 3 : i + 1 : i + 0 : i + 2 : acc) [] [0..511]
-        uvs                        = repeat 0
-        colors                     = repeat black
-        vertices                   = zipWith3 Vector3 (cycle [3, 2, 1, 0]) (map (/512) [0..511] >>= replicate 4) (map (/512) [1..512] >>= replicate 4)
-        oscMaterial                = material
+        mesh        = Mesh "osc1" vertices colors uvs indices
+        indices     = foldr (\i acc -> i + 1 : i + 2 : i + 3 : i + 1 : i + 0 : i + 2 : acc) [] [0..511]
+        uvs         = repeat 0
+        colors      = repeat black
+        vertices    = zipWith3 Vector3 (cycle [3, 2, 1, 0]) (map (/512) [0..511] >>= replicate 4) (map (/512) [1..512] >>= replicate 4)
+        oscMaterial = material
             "osc-vert.glsl"
             "osc-frag.glsl"
             [UniformTexture "tex1" a1,
@@ -103,7 +103,6 @@ sphereObject a1 a2 a3 t _ = SceneObject 0 (fromEuler' 0 (t * 0.1765) (t * 0.0825
         l              = floor longitudes
         indices        = foldr (\i acc -> i + 1 : i + l : i + l + 1 : i + 1 : i + 0 : i + l : acc) [] [0,4..floor (latitudes * longitudes) - l]
         mesh           = Mesh "aSphere" vertices colors uvs indices
-
         sphereMaterial = material
             "sphere-vert.glsl"
             "sphere-frag.glsl"
