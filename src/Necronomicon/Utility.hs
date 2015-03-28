@@ -34,7 +34,7 @@ infixl 0 |>
 (<|) :: (a -> b) -> a -> b
 a <| b = a b
 
-infixl 0 <|
+infixr 0 <|
 
 getCurrentTime :: IO Double
 getCurrentTime = getTime >>= \currentTime -> case currentTime of

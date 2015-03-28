@@ -16,9 +16,6 @@ vec3 toPosition(vec3 pos)
     float xRads = pos.x * 0.0174532925;
     float yRads = pos.y * 0.0174532925;
 
-    //not quite right
-    //transmit uvs from haskell land packed into x?
-    //IS THIS CLIPPING!?!?!?
     float a1    = texture1D(tex1, pos.z * 0.5).r * 0.5;
     float a2    = texture1D(tex2, pos.z * 0.5).r * 0.5;
     float a3    = texture1D(tex3, pos.z * 0.5).r * 0.5;
@@ -31,6 +28,5 @@ void main()
     uv               = in_uv;
     vec3 newPosition = toPosition(position);
     color            = ((newPosition / 5.5) + 0.5) * 0.5;
-
-    gl_Position = vec4(newPosition, 1.0) * modelView * proj;
+    gl_Position      = vec4(newPosition, 1.0) * modelView * proj;
 }
