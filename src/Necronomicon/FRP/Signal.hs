@@ -390,7 +390,8 @@ runSignal s = initWindow >>= \mw -> case mw of
 
                 -- execIfChanged result print
 
-                threadDelay $ 16667
+                -- threadDelay $ 16667
+                threadDelay $ 10000
                 -- threadDelay $ 33334
 
                 renderNecronomicon q window signalLoop signalState resources currentTime

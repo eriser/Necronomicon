@@ -110,11 +110,11 @@ void main()
     //not quite right
     //transmit uvs from haskell land packed into x?
     //IS THIS CLIPPING!?!?!?
-    float a1    = texture1D(tex1, mod((uv.x + uv.y) * 0.25,1)).r * 2;
-    float a2    = texture1D(tex2, mod((uv.x + uv.y) * 0.25,1)).r * 2;
-    float a3    = texture1D(tex3, mod((uv.x + uv.y) * 0.25,1)).r * 2;
+    float a1    = texture1D(tex1, uv.x * 1).r * 0.5;
+    float a2    = texture1D(tex2, uv.x * 1).r * 0.5;
+    float a3    = texture1D(tex3, uv.x * 1).r * 0.5;
 
-    vec3  pos   = vec3(position.x + a1, position.y + a2, position.z + a3);
+    vec3  pos   = vec3(position.x , position.y + a1 + a2 + a3, position.z );
 
     float x     = (pos.x * 6) * columns;
     float z     = (pos.z * 6) * rows;

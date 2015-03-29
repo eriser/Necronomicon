@@ -1,6 +1,6 @@
 import Necronomicon
 import Data.Fixed (mod')
-import Data.List (zip4)
+-- import Data.List (zip4)
 
 --Get chords up and running
 
@@ -24,7 +24,7 @@ sections = switch section [section2, section3, section1]
 section1 :: Signal ()
 section1 = scene [pure cam,oscSig]
     where
-        oscSig         = oscillatorObject <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4
+        oscSig         = oscillatorObject <~ audioTexture 2 ~~ audioTexture 3 ~~ audioTexture 4
         cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
 
 section2 :: Signal ()
@@ -40,8 +40,7 @@ section2 = scene [camSig,terrainSig]
 section3 :: Signal ()
 section3 = scene [camSig,sphereSig]
     where
-        sphereSig      = sphereObject <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time ~~ pure 36
-        -- latitudes      = playSignalPattern (toggle <| isDown keyS) 36.6 [] <| ploop [ [lich| [36 10] [24 12] [32 37] [30 33 34 35] |] ]
+        sphereSig      = sphereObject <~ audioTexture 2 ~~ audioTexture 3 ~~ audioTexture 4 ~~ time ~~ pure 36
         camSig         = cam <~ time * 0.05
         cam t          = perspCamera pos rot 60 0.1 1000 black [glow]
             where
@@ -49,7 +48,7 @@ section3 = scene [camSig,sphereSig]
                 rot = inverse <| lookAt (_z_ (* (-2.5)) <| pos) 0
 
 terrainObject :: Texture -> Texture -> Texture -> Double -> SceneObject
-terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 0 (-6)) (fromEuler' 0 0 0) (Vector3 0.125 1 0.125) (Model mesh <| terrainMaterial a1 a2 a3 t) []
+terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 0 (-6)) identity (Vector3 0.125 1 0.125) (Model mesh terrainMaterial) []
     where
         mesh             = Mesh "simplex" vertices colors uvs indices
         (w,h)            = (256.0,256.0)
@@ -58,7 +57,6 @@ terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 0 (-6)) (fromEuler' 0 0 0) 
 
         toVertex (x,y,z) = Vector3 (x*tscale*3) (y*vscale) (z*tscale*3)
         toColor  (x,y,z) = RGBA    ((x * 1.75) / w * (y * 0.6 + 0.4)) (y * 0.75 + 0.25) (z / h * (y * 0.75 + 0.25)) 0.3
-        toUV     (x,_,z) = Vector2 (x / w) (z / h)
 
         addIndices w' i indicesList
             | mod i w' < (w'-1) = i + 1 : i + w' : i + w' + 1 : i + 1 : i : i + w' : indicesList
@@ -66,89 +64,69 @@ terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 0 (-6)) (fromEuler' 0 0 0) 
 
         vertices = map toVertex values
         colors   = map toColor  values
-        uvs      = map toUV     values
+        uvs      = map (\u -> Vector2 (u / (w * h)) 0) [0..w * h]
         indices  = foldr (addIndices <| floor w) [] [0..length values - floor (w + 2)]
 
-        terrainMaterial a1' a2' a3' t' = material
+        terrainMaterial = material
             "terrain-vert.glsl"
             "terrain-frag.glsl"
-            [UniformTexture "tex1" a1',
-             UniformTexture "tex2" a2',
-             UniformTexture "tex3" a3',
-             UniformScalar  "time" t']
+            [UniformTexture "tex1" a1,
+             UniformTexture "tex2" a2,
+             UniformTexture "tex3" a3,
+             UniformScalar  "time" t]
 
-oscillatorObject :: [Double] -> [Double] -> [Double] -> SceneObject
-oscillatorObject audioBuffer1 audioBuffer2 audioBuffer3 = SceneObject 0 identity 1 (Model mesh <| vertexColored (RGBA 1 1 1 0.35)) []
+oscillatorObject :: Texture -> Texture -> Texture -> SceneObject
+oscillatorObject a1 a2 a3 = SceneObject (-3) identity 1 (Model mesh oscMaterial) []
     where
-        mesh                                         = DynamicMesh "osc1" vertices colors uvs indices
-        oscale                                       = 6
-        width                                        = 1
-        indices                                      = foldr (\i acc -> i + 1 : i + 2 : i + 3 : i + 1 : i + 0 : i + 2 : acc) [] [0..511]
-        uvs                                          = replicate 512 0
-        zippedAudio                                  = zip3 audioBuffer1 audioBuffer2 audioBuffer3
-        (vertices,colors)                            = foldr toVertex ([],[]) (zip zippedAudio <| drop 1 zippedAudio)
-        toVertex ((x1,y1,z1),(x2,y2,z2)) (vacc,cacc) = (p3 : p2 : p1 : p0 : vacc,r3 : r2 : r1 : r0 : cacc)
-            where
-                p0  = Vector3 (x1 * oscale) (y1 * oscale) (z1 * oscale * 0.5)
-                p1  = Vector3 (x2 * oscale) (y2 * oscale) (z2 * oscale * 0.5)
+        mesh        = Mesh "osc1" vertices colors uvs indices
+        indices     = foldr (\i acc -> i + 1 : i + 2 : i + 3 : i + 1 : i + 0 : i + 2 : acc) [] [0..511]
+        uvs         = repeat 0
+        colors      = repeat black
+        vertices    = zipWith3 Vector3 (cycle [3, 2, 1, 0]) (map (/512) [0..511] >>= replicate 4) (map (/512) [1..512] >>= replicate 4)
+        oscMaterial = material
+            "osc-vert.glsl"
+            "osc-frag.glsl"
+            [UniformTexture "tex1" a1,
+             UniformTexture "tex2" a2,
+             UniformTexture "tex3" a3]
 
-                cp  = cross np0 np1
-
-                p2  = p0 + cp * width
-                p3  = p1 + cp * width
-
-                np0 = normalize p0
-                np1 = normalize p1
-                np2 = normalize p2
-                np3 = normalize p3
-
-                r0  = vtoc (np0 * 0.5 + 0.5) 0.35
-                r1  = vtoc (np1 * 0.5 + 0.5) 0.35
-                r2  = vtoc (np2 * 0.5 + 0.5) 0.35
-                r3  = vtoc (np3 * 0.5 + 0.5) 0.35
-
-sphereObject :: [Double] -> [Double] -> [Double] -> Double -> Double -> SceneObject
-sphereObject as1 as2 as3 t latitudes = SceneObject 0 (fromEuler' 0 (t * 0.1765) (t * 0.0825)) 5.5 (Model mesh (vertexColored <| RGBA 1 1 1 0.25)) []
+sphereObject :: Texture -> Texture -> Texture -> Double -> Double -> SceneObject
+sphereObject a1 a2 a3 t _ = SceneObject 0 (fromEuler' 0 (t * 0.1765) (t * 0.0825)) 1 (Model mesh sphereMaterial) []
     where
-        colorRange     = (+0.5) . (*0.5)
-        toRadians      = (* 0.0174532925)
-        -- latitudes      = 36.0
-        latInc         = 360 / latitudes
+        latitudes      = 36.0
         longitudes     = 32.0
-        longInc        = 180 / longitudes
-        us             = map (* latInc)  [0..latitudes]
-        ts             = map (* longInc) [0..longitudes]
-
-        toVertex (u,v) = Vector3 <| sin (toRadians v) * sin (toRadians u)
-                                 <| cos (toRadians v)
-                                 <| sin (toRadians v) * cos (toRadians u)
-        toColor p      = RGBA    <| colorRange (_x p)
-                                 <| colorRange (_y p)
-                                 <| colorRange (_z p)
-                                 <| 0.75
-        vertices       = map (\(a1,a2,a3,p) -> p + (Vector3 a1 a2 a3 * 0.2)) <| zip4 (cycle as1) (cycle as2) (cycle as3) (map toVertex (zip (cycle us) (ts >>= replicate (floor longitudes))))
-        colors         = map toColor vertices
+        us             = (* (360 / latitudes))  <~ [0..latitudes]
+        ts             = (* (180 / longitudes)) <~ [0..longitudes]
+        vertices       = zipWith3 Vector3 (cycle us) (ts >>= replicate l) (map (/ 512) <| cycle [0..511])
+        colors         = repeat black
         uvs            = repeat 0
         l              = floor longitudes
         indices        = foldr (\i acc -> i + 1 : i + l : i + l + 1 : i + 1 : i + 0 : i + l : acc) [] [0,4..floor (latitudes * longitudes) - l]
-        mesh           = DynamicMesh "aSphere" vertices colors uvs indices
+        mesh           = Mesh "aSphere" vertices colors uvs indices
+        sphereMaterial = material
+            "sphere-vert.glsl"
+            "sphere-frag.glsl"
+            [UniformTexture "tex1" a1,
+             UniformTexture "tex2" a2,
+             UniformTexture "tex3" a3,
+             UniformScalar  "time" t]
 
 testGUI :: Signal ()
 testGUI = gui [chatBox,netBox,ubox]
     where
-        ubox    = userBox <| Vector2 0.0 0.945
-                          <| Size    0.0 0.055
-                          <| Font   "OCRA.ttf" 24
-                          <| vertexColored (RGBA 0 0 0 0.25)
+        ubox    = userBox (Vector2 0.0 0.945)
+                          (Size    0.0 0.055)
+                          (Font   "OCRA.ttf" 24)
+                          (vertexColored (RGBA 0 0 0 0.25))
 
-        netBox  = netStat <| Vector2 1.4 0.97
-                          <| Size    0.2 0.03
-                          <| Font   "OCRA.ttf" 24
+        netBox  = netStat (Vector2 1.4 0.97)
+                          (Size    0.2 0.03)
+                          (Font   "OCRA.ttf" 24)
 
-        chatBox = chat    <| Vector2 0.0 0.0
-                          <| Size    0.4 0.75
-                          <| Font   "OCRA.ttf" 24
-                          <| vertexColored (RGBA 1 1 1 0.1)
+        chatBox = chat    (Vector2 0.0 0.0)
+                          (Size    0.4 0.75)
+                          (Font   "OCRA.ttf" 24)
+                          (vertexColored (RGBA 1 1 1 0.1))
 
 triOsc32 :: UGen -> UGen -> UGen
 triOsc32 mx my = feedback fSig |> verb |> gain 0.0385 |> out 0
@@ -285,7 +263,7 @@ metallicPattern = play (toggle <| combo [alt,isDown keyD]) caveTime
                <> section2Drums
 
 metallicPattern3 :: Signal ()
-metallicPattern3 = playSynthPattern (toggle <| combo [alt,isDown keyD]) metallic3 (pmap ((*0.25) . d2f sigScale) <| ploop [sec1])
+metallicPattern3 = playSynthPattern (toggle <| combo [alt,isDown keyD]) metallic3 <| pmap ((*0.25) . d2f sigScale) <| ploop [sec1]
     where
         sec1 = [lich| _ _ _ _
                       _ _ _ 1
