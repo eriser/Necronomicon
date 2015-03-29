@@ -1,9 +1,8 @@
 import Necronomicon
 import Data.Fixed (mod')
-import Data.List (zip4)
 
 main :: IO ()
-main = runSignal <| testGUI <|> (sections <> stressSounds)
+main = runSignal <| testGUI <> (sections <> stressSounds)
 
 {-
 synthDefs :: Signal ()
@@ -32,37 +31,39 @@ stressSounds = play             ((> 0.5) <~ randFS ticker) triOsc    (randFS tic
 section1 :: Signal ()
 section1 = scene [pure cam,oscSig]
     where
-        oscSig         = oscillatorObject <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4
+        oscSig         = oscillatorObject <~ audioTexture 2 ~~ audioTexture 3 ~~ audioTexture 4
         cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
 
 section2 :: Signal ()
-section2 = scene [pure cam,terrainSig]
+section2 = scene [camSig,terrainSig]
     where
-        terrainSig     = terrainObject <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time
-        cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
+        terrainSig     = terrainObject <~ audioTexture 2 ~~ audioTexture 3 ~~ audioTexture 4 ~~ time
+        camSig         = cam <~ time * 0.125
+        cam t          = perspCamera pos rot 60 0.1 1000 black [glow]
+            where
+                pos = Vector3 (sin t * 8) (cos (t * 0.75) * 5) (sin (t * 0.333) * 4)
+                rot = inverse <| lookAt (_z_ (* (-3)) <| pos) 0
 
 section3 :: Signal ()
-section3 = scene [pure cam,sphereSig]
+section3 = scene [camSig,sphereSig]
     where
-        sphereSig      = sphereObject <~ audioBuffer 2 ~~ audioBuffer 3 ~~ audioBuffer 4 ~~ time ~~ pure 36
-        -- latitudes      = playSignalPattern (toggle <| isDown keyS) 36.6 [] <| (PFunc0 <| ploop [ [lich| [36 10] [24 12] [32 37] [30 33 34 35] |] ])
-        cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
+        sphereSig      = sphereObject <~ audioTexture 2 ~~ audioTexture 3 ~~ audioTexture 4 ~~ time ~~ pure 36
+        camSig         = cam <~ time * 0.05
+        cam t          = perspCamera pos rot 60 0.1 1000 black [glow]
+            where
+                pos = Vector3 (cos (t * 0.7453) * 5) (sin (t * 0.912) * 8) (sin (t * 0.4543) * 4)
+                rot = inverse <| lookAt (_z_ (* (-2.5)) <| pos) 0
 
-terrainObject :: [Double] -> [Double] -> [Double] -> Double -> SceneObject
-terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 8 (-4)) (fromEuler' (-24) 0 0) (Vector3 0.5 1 0.5) (Model mesh <| vertexColored (RGBA 1 1 1 0.35)) []
+terrainObject :: Texture -> Texture -> Texture -> Double -> SceneObject
+terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 0 (-6)) identity (Vector3 0.125 1 0.125) (Model mesh terrainMaterial) []
     where
-        mesh             = DynamicMesh "simplex" vertices colors uvs indices
-        (w,h)            = (64.0,32.0)
+        mesh             = Mesh "simplex" vertices colors uvs indices
+        (w,h)            = (256.0,256.0)
         (tscale,vscale)  = (1 / 6,2.5)
-        values           = [(x + a,simplex 8 (x / w + t * 0.05) (y / h + t * 0.05) * 0.65 + aa,y + aaa)
-                          | (x,y) <- map (\n -> (mod' n w,n / h)) [0..w*h]
-                          | a     <- map (* 2.00) <| cycle a1
-                          | aa    <- map (* 0.35) <| cycle a2
-                          | aaa   <- map (* 2.00) <| cycle a3]
+        values           = [(x,0,y) | (x,y) <- map (\n -> (mod' n w, n / h)) [0..w*h]]
 
         toVertex (x,y,z) = Vector3 (x*tscale*3) (y*vscale) (z*tscale*3)
         toColor  (x,y,z) = RGBA    ((x * 1.75) / w * (y * 0.6 + 0.4)) (y * 0.75 + 0.25) (z / h * (y * 0.75 + 0.25)) 0.3
-        -- toUV     (x,y,_) = Vector2 (x / w) (y / h)
 
         addIndices w' i indicesList
             | mod i w' < (w'-1) = i + 1 : i + w' : i + w' + 1 : i + 1 : i : i + w' : indicesList
@@ -70,65 +71,52 @@ terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 8 (-4)) (fromEuler' (-24) 0
 
         vertices = map toVertex values
         colors   = map toColor  values
-        -- uvs      = map toUV     values
-        uvs      = repeat 0
+        uvs      = map (\u -> Vector2 (u / (w * h)) 0) [0..w * h]
         indices  = foldr (addIndices <| floor w) [] [0..length values - floor (w + 2)]
 
-oscillatorObject :: [Double] -> [Double] -> [Double] -> SceneObject
-oscillatorObject audioBuffer1 audioBuffer2 audioBuffer3 = SceneObject 0 identity 1 (Model mesh <| vertexColored (RGBA 1 1 1 0.35)) []
+        terrainMaterial = material
+            "terrain-vert.glsl"
+            "terrain-frag.glsl"
+            [UniformTexture "tex1" a1,
+             UniformTexture "tex2" a2,
+             UniformTexture "tex3" a3,
+             UniformScalar  "time" t]
+
+oscillatorObject :: Texture -> Texture -> Texture -> SceneObject
+oscillatorObject a1 a2 a3 = SceneObject (-3) identity 1 (Model mesh oscMaterial) []
     where
-        mesh                                         = DynamicMesh "osc1" vertices colors uvs indices
-        oscale                                       = 6
-        width                                        = 1
-        indices                                      = foldr (\i acc -> i + 1 : i + 2 : i + 3 : i + 1 : i + 0 : i + 2 : acc) [] [0..511]
-        uvs                                          = replicate 512 0
-        zippedAudio                                  = zip3 audioBuffer1 audioBuffer2 audioBuffer3
-        (vertices,colors)                            = foldr toVertex ([],[]) (zip zippedAudio <| drop 1 zippedAudio)
-        toVertex ((x1,y1,z1),(x2,y2,z2)) (vacc,cacc) = (p3 : p2 : p1 : p0 : vacc,r3 : r2 : r1 : r0 : cacc)
-            where
-                p0  = Vector3 (x1 * oscale) (y1 * oscale) (z1 * oscale * 0.5)
-                p1  = Vector3 (x2 * oscale) (y2 * oscale) (z2 * oscale * 0.5)
+        mesh        = Mesh "osc1" vertices colors uvs indices
+        indices     = foldr (\i acc -> i + 1 : i + 2 : i + 3 : i + 1 : i + 0 : i + 2 : acc) [] [0..511]
+        uvs         = repeat 0
+        colors      = repeat black
+        vertices    = zipWith3 Vector3 (cycle [3, 2, 1, 0]) (map (/512) [0..511] >>= replicate 4) (map (/512) [1..512] >>= replicate 4)
+        oscMaterial = material
+            "osc-vert.glsl"
+            "osc-frag.glsl"
+            [UniformTexture "tex1" a1,
+             UniformTexture "tex2" a2,
+             UniformTexture "tex3" a3]
 
-                cp  = cross np0 np1
-
-                p2  = p0 + cp * width
-                p3  = p1 + cp * width
-
-                np0 = normalize p0
-                np1 = normalize p1
-                np2 = normalize p2
-                np3 = normalize p3
-
-                r0  = vtoc (np0 * 0.5 + 0.5) 0.35
-                r1  = vtoc (np1 * 0.5 + 0.5) 0.35
-                r2  = vtoc (np2 * 0.5 + 0.5) 0.35
-                r3  = vtoc (np3 * 0.5 + 0.5) 0.35
-
-sphereObject :: [Double] -> [Double] -> [Double] -> Double -> Double -> SceneObject
-sphereObject as1 as2 as3 t latitudes = SceneObject 0 (fromEuler' 0 (t * 0.5) (t * 0.125)) 5.5 (Model mesh (vertexColored <| RGBA 1 1 1 0.25)) []
+sphereObject :: Texture -> Texture -> Texture -> Double -> Double -> SceneObject
+sphereObject a1 a2 a3 t _ = SceneObject 0 (fromEuler' 0 (t * 0.1765) (t * 0.0825)) 1 (Model mesh sphereMaterial) []
     where
-        colorRange     = (+0.5) . (*0.5)
-        toRadians      = (* 0.0174532925)
-        -- latitudes      = 36.0
-        latInc         = 360 / latitudes
+        latitudes      = 36.0
         longitudes     = 32.0
-        longInc        = 180 / longitudes
-        us             = map (* latInc)  [0..latitudes]
-        ts             = map (* longInc) [0..longitudes]
-
-        toVertex (u,v) = Vector3 <| sin (toRadians v) * sin (toRadians u)
-                                 <| cos (toRadians v)
-                                 <| sin (toRadians v) * cos (toRadians u)
-        toColor p      = RGBA    <| colorRange (_x p)
-                                 <| colorRange (_y p)
-                                 <| colorRange (_z p)
-                                 <| 0.75
-        vertices       = map (\(a1,a2,a3,p) -> p + (Vector3 a1 a2 a3 * 0.2)) <| zip4 (cycle as1) (cycle as2) (cycle as3) (map toVertex (zip (cycle us) (ts >>= replicate (floor longitudes))))
-        colors         = map toColor vertices
+        us             = (* (360 / latitudes))  <~ [0..latitudes]
+        ts             = (* (180 / longitudes)) <~ [0..longitudes]
+        vertices       = zipWith3 Vector3 (cycle us) (ts >>= replicate l) (map (/ 512) <| cycle [0..511])
+        colors         = repeat black
         uvs            = repeat 0
         l              = floor longitudes
         indices        = foldr (\i acc -> i + 1 : i + l : i + l + 1 : i + 1 : i + 0 : i + l : acc) [] [0,4..floor (latitudes * longitudes) - l]
-        mesh           = DynamicMesh "aSphere" vertices colors uvs indices
+        mesh           = Mesh "aSphere" vertices colors uvs indices
+        sphereMaterial = material
+            "sphere-vert.glsl"
+            "sphere-frag.glsl"
+            [UniformTexture "tex1" a1,
+             UniformTexture "tex2" a2,
+             UniformTexture "tex3" a3,
+             UniformScalar  "time" t]
 
 triOsc :: UGen -> UGen -> UGen
 triOsc f1 f2 = (sig1 <> sig2) + (sig3 <> sig3) |> gain 0.5 |> gain 0.1 |> out 0
@@ -161,19 +149,19 @@ triOscEnv f1 = (sig1 <> sig2) + (sig3 <> sig3) |> gain 0.2 |> gain 0.1 |> out 0
 testGUI :: Signal ()
 testGUI = gui [chatBox,netBox,ubox]
     where
-        ubox    = userBox <| Vector2 0.0 0.945
-                          <| Size    0.0 0.055
-                          <| Font   "OCRA.ttf" 24
-                          <| vertexColored (RGBA 0 0 0 0.25)
+        ubox    = userBox (Vector2 0.0 0.945)
+                          (Size    0.0 0.055)
+                          (Font   "OCRA.ttf" 24)
+                          (vertexColored (RGBA 0 0 0 0.25))
 
-        netBox  = netStat <| Vector2 1.4 0.97
-                          <| Size    0.2 0.03
-                          <| Font   "OCRA.ttf" 24
+        netBox  = netStat (Vector2 1.4 0.97)
+                          (Size    0.2 0.03)
+                          (Font   "OCRA.ttf" 24)
 
-        chatBox = chat    <| Vector2 0.0 0.0
-                          <| Size    0.4 0.75
-                          <| Font   "OCRA.ttf" 24
-                          <| vertexColored (RGBA 1 1 1 0.1)
+        chatBox = chat    (Vector2 0.0 0.0)
+                          (Size    0.4 0.75)
+                          (Font   "OCRA.ttf" 24)
+                          (vertexColored (RGBA 1 1 1 0.1))
 
 {-
 testSound :: Signal ()
