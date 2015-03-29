@@ -327,13 +327,13 @@ visAux :: UGen -> UGen -> UGen -> UGen
 visAux _ _ u = u
 
 hyperMelody :: UGen -> UGen
-hyperMelody f = [s, s2] |> gain 0.04 |> e |> visAux (random 0 2 4.99) 20 |> out 0
+hyperMelody _ = [s, s2] |> gain 0.04 |> e |> visAux (random 0 2 4.99) 20 |> out 0
     where
         e  = env [0,1,0.15, 0] [0.0001,0.1, 7] (-1.5)
         -- e  = env [0,1,0.15, 0] [0.0001,0.1, 700] (-1.5)
         -- e  = gain <| line 700
-        s  = noise0 (sin 3 * 6 + f * 2)
-        s2 = noise0 (sin 6 * 9 + f)
+        s  = sin (sin 0.3 |> exprange 440 800)
+        s2 = sin (sin 0.3 |> exprange 880 1600)
 
 hyperMelodyPattern :: Signal ()
 hyperMelodyPattern = playSynthPattern (toggle <| combo [alt,isDown keyF]) hyperMelody (pmap ((*1) . d2f slendro) <| ploop [sec1])

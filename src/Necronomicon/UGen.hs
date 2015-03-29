@@ -125,7 +125,7 @@ isAudioRate :: UGenChannel -> Bool
 isAudioRate u = ugenRate u == AudioRate
 
 polymorphicRateUGenUnits :: S.Set UGenUnit
-polymorphicRateUGenUnits = S.fromList [Add, Minus, Mul, Div, Negate, Abs, Signum, Pow, Exp, Log, Cos, ASin, ACos, ATan, LogBase, Sqrt, Tan, TanH, SinH, CosH, ASinH, ATanH, ACosH]
+polymorphicRateUGenUnits = S.fromList [Add, Minus, Mul, Div, Negate, Abs, Signum, Pow, Exp, Log, Cos, ASin, ACos, ATan, LogBase, Sqrt, Tan, TanH, SinH, CosH, ASinH, ATanH, ACosH, Range, ExpRange]
 
 ugenRate :: UGenChannel -> UGenRate
 ugenRate (UGenNum _) = ControlRate
@@ -527,21 +527,42 @@ foreign import ccall "&lfnoiseN_a_calc" lfnoiseNACalc :: CUGenFunc
 noise0 :: UGen -> UGen
 noise0 freq = optimizeUGenCalcFunc [lfnoiseNKCalc, lfnoiseNACalc] $ multiChannelExpandUGen NoiseN lfnoiseNACalc randConstructor randDeconstructor [freq]
 
-foreign import ccall "&lfnoiseL_calc" lfnoiseLCalc :: CUGenFunc
+foreign import ccall "&lfnoiseL_k_calc" lfnoiseLKCalc :: CUGenFunc
+foreign import ccall "&lfnoiseL_a_calc" lfnoiseLACalc :: CUGenFunc
 noise1 :: UGen -> UGen
-noise1 freq = multiChannelExpandUGen NoiseL lfnoiseLCalc randConstructor randDeconstructor [freq]
+noise1 freq = optimizeUGenCalcFunc [lfnoiseLKCalc, lfnoiseLACalc] $ multiChannelExpandUGen NoiseL lfnoiseLACalc randConstructor randDeconstructor [freq]
 
-foreign import ccall "&lfnoiseC_calc" lfnoiseCCalc :: CUGenFunc
+foreign import ccall "&lfnoiseC_k_calc" lfnoiseCKCalc :: CUGenFunc
+foreign import ccall "&lfnoiseC_a_calc" lfnoiseCACalc :: CUGenFunc
 noise2 :: UGen -> UGen
-noise2 freq = multiChannelExpandUGen NoiseC lfnoiseCCalc randConstructor randDeconstructor [freq]
+noise2 freq = optimizeUGenCalcFunc [lfnoiseCKCalc, lfnoiseCACalc] $ multiChannelExpandUGen NoiseC lfnoiseCACalc randConstructor randDeconstructor [freq]
 
-foreign import ccall "&range_calc" rangeCalc :: CUGenFunc
+foreign import ccall "&range_kkk_calc" rangeKKKCalc :: CUGenFunc
+foreign import ccall "&range_akk_calc" rangeAKKCalc :: CUGenFunc
+foreign import ccall "&range_kak_calc" rangeKAKCalc :: CUGenFunc
+foreign import ccall "&range_aak_calc" rangeAAKCalc :: CUGenFunc
+foreign import ccall "&range_kka_calc" rangeKKACalc :: CUGenFunc
+foreign import ccall "&range_aka_calc" rangeAKACalc :: CUGenFunc
+foreign import ccall "&range_kaa_calc" rangeKAACalc :: CUGenFunc
+foreign import ccall "&range_aaa_calc" rangeAAACalc :: CUGenFunc
 range :: UGen -> UGen -> UGen -> UGen
-range low high input = multiChannelExpandUGen Range rangeCalc nullConstructor nullDeconstructor [low,high,input]
+range low high input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen Range rangeAAACalc nullConstructor nullDeconstructor [low,high,input]
+    where
+        cfuncs = [rangeKKKCalc, rangeAKKCalc, rangeKAKCalc, rangeAAKCalc, rangeKKACalc, rangeAKACalc, rangeKAACalc, rangeAAACalc]
 
-foreign import ccall "&exprange_calc" exprangeCalc :: CUGenFunc
+
+foreign import ccall "&exprange_kkk_calc" exprangeKKKCalc :: CUGenFunc
+foreign import ccall "&exprange_akk_calc" exprangeAKKCalc :: CUGenFunc
+foreign import ccall "&exprange_kak_calc" exprangeKAKCalc :: CUGenFunc
+foreign import ccall "&exprange_aak_calc" exprangeAAKCalc :: CUGenFunc
+foreign import ccall "&exprange_kka_calc" exprangeKKACalc :: CUGenFunc
+foreign import ccall "&exprange_aka_calc" exprangeAKACalc :: CUGenFunc
+foreign import ccall "&exprange_kaa_calc" exprangeKAACalc :: CUGenFunc
+foreign import ccall "&exprange_aaa_calc" exprangeAAACalc :: CUGenFunc
 exprange :: UGen -> UGen -> UGen -> UGen
-exprange low high input = multiChannelExpandUGen ExpRange exprangeCalc nullConstructor nullDeconstructor [low,high,input]
+exprange low high input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen ExpRange exprangeAAACalc nullConstructor nullDeconstructor [low,high,input]
+    where
+        cfuncs = [exprangeKKKCalc, exprangeAKKCalc, exprangeKAKCalc, exprangeAAKCalc, exprangeKKACalc, exprangeAKACalc, exprangeKAACalc, exprangeAAACalc]
 
 --filters
 foreign import ccall "&biquad_constructor"   biquadConstructor   :: CUGenFunc
