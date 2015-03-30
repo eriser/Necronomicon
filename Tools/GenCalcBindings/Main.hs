@@ -1,3 +1,4 @@
+import System.Environment (getArgs)
 import Data.Bits
 import Data.Char
 
@@ -31,9 +32,6 @@ calcFuncBindings name numArgs = map (funcDataToBinding) cfuncData
     where
         cfuncData = calcFuncBindingData name numArgs
         funcDataToBinding (CalcFuncBindingData fname fbind _) = "foreign import ccall \"&" ++ fname ++ "\" " ++ fbind ++ " :: CUGenFunc"
-
-calcFuncBindingList :: String -> Int -> [String]
-calcFuncBindingList name numArgs = map (\(CalcFuncBindingData _ hname _) -> hname) $ calcFuncBindingData name numArgs
 
 generateCCode :: String -> [String] -> String
 generateCCode name args = argDefines ++ "\n\n" ++ cfuncs
@@ -91,14 +89,15 @@ generateHaskellCode name args = cbindings ++ "\n" ++ typeSignature ++ "\n" ++ fu
 
 main :: IO ()
 main = do
-    print $ calcFuncBindings "freeverb" 4
-    print $ calcFuncBindingList "freeverb" 4
-    print $ calcFuncBindingData "freeeverb" 4
-    print "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
-    print "// C Code "
-    print "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////\n"
-    putStrLn $ generateCCode "freeverb" ["mix", "roomSize", "damp", "input"]
-    print "------------------------------------------------------------------------------------------------------------------------"
-    print "-- Haskell Code"
-    print "------------------------------------------------------------------------------------------------------------------------\n"
-    putStrLn $ generateHaskellCode "freeverb" ["mix", "roomSize", "damp", "input"]
+    args <- getArgs
+    putStrLn $ show args
+    let ugenName = head args
+    let ugenArgs = tail args
+    putStrLn "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
+    putStrLn "// C Code "
+    putStrLn "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////\n"
+    putStrLn $ generateCCode ugenName ugenArgs
+    putStrLn "------------------------------------------------------------------------------------------------------------------------"
+    putStrLn "-- Haskell Code"
+    putStrLn "------------------------------------------------------------------------------------------------------------------------\n"
+    putStrLn $ generateHaskellCode ugenName ugenArgs
