@@ -4873,87 +4873,182 @@ v2     = TABLE[((unsigned char) (VAL * TABLE_SIZE + 1))]; \
 delta  = VAL - ((long) VAL);	      \
 v1 + delta * (v2 - v1);			      \
 
-void lpf_calc(ugen u)
+#define LPF_CALC(CONTROL_ARGS, AUDIO_ARGS)							\
+double*  in0  = UGEN_INPUT_BUFFER(u, 0);							\
+double*  in1  = UGEN_INPUT_BUFFER(u, 1);							\
+double*  in2  = UGEN_INPUT_BUFFER(u, 2);							\
+double*  out  = UGEN_OUTPUT_BUFFER(u, 0);							\
+biquad_t bi   = *((biquad_t*) u.data);								\
+																	\
+double freq;														\
+double q;															\
+double in;															\
+																	\
+double omega;														\
+double cs;															\
+double sn;															\
+double alpha;														\
+																	\
+double b0;															\
+double b1;															\
+double b2;															\
+double a0;															\
+double a1;															\
+double a2;															\
+																	\
+double y;															\
+																	\
+double snhi;														\
+double delta;														\
+double v1;															\
+double v2;															\
+																	\
+CONTROL_ARGS														\
+																	\
+AUDIO_LOOP(															\
+	AUDIO_ARGS														\
+																	\
+	if(freq != bi.prevF || q != bi.prevQ)							\
+	{																\
+		/* branchless max? */										\
+		q     = MAX(q,0.00000001);									\
+		bi.prevF = freq;											\
+		bi.prevQ = q;												\
+		/* Don't recalc if unnecessary */							\
+		omega  = freq * RECIP_SAMPLE_RATE;							\
+		bi.cs  = TABLE_LOOKUP(omega,cosn_table);					\
+		sn     = TABLE_LOOKUP(omega,sine_table);					\
+		snhi   = (1 / (2 * q));										\
+		snhi   = snhi * RECIP_TWO_PI;								\
+		bi.alpha = TABLE_LOOKUP(snhi, sinh_table);					\
+		bi.alpha *= sn;												\
+	}																\
+	cs    = bi.cs;													\
+	alpha = bi.alpha;												\
+																	\
+	b0    = (1 - cs) * 0.5;											\
+	b1    =  1 - cs;												\
+	b2    = (1 - cs) * 0.5;											\
+	a0    =  1 + alpha;												\
+	a1    = -2*cs;													\
+	a2    =  1 - alpha;												\
+																	\
+	y     = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);	\
+																	\
+	bi.y2 = bi.y1;													\
+	bi.y1 = y;														\
+	bi.x2 = bi.x1;													\
+	bi.x1 = in;														\
+																	\
+	UGEN_OUT(out,y);												\
+);																	\
+																	\
+*((biquad_t*) u.data) = bi;											\
+
+#define LPF_FREQK freq = *in0;
+#define LPF_FREQA freq = UGEN_IN(in0);
+#define LPF_QK q = *in1;
+#define LPF_QA q = UGEN_IN(in1);
+#define LPF_INK in = *in2;
+#define LPF_INA in = UGEN_IN(in2);
+
+
+// 0
+void lpf_kkk_calc(ugen u)
 {
-	double*  in0  = UGEN_INPUT_BUFFER(u, 0);
-    double*  in1  = UGEN_INPUT_BUFFER(u, 1);
-    double*  in2  = UGEN_INPUT_BUFFER(u, 2);
-	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
-	biquad_t bi   = *((biquad_t*) u.data);
+    LPF_CALC(
+        // Control Arguments
+        LPF_FREQK             /* 0 */
+        LPF_QK                /* 1 */
+        LPF_INK               /* 2 */,
+        // Audio Arguments
+        /* no audio args */
+    )
+}
 
-	double freq;
-	double q;
-	double in;
+// 1
+void lpf_akk_calc(ugen u)
+{
+    LPF_CALC(
+        // Control Arguments
+        LPF_QK                /* 1 */
+        LPF_INK               /* 2 */,
+        // Audio Arguments
+        LPF_FREQA             /* 0 */
+    )
+}
 
-	double omega;
-	double cs;
-    double sn;
-	double alpha;
+// 2
+void lpf_kak_calc(ugen u)
+{
+    LPF_CALC(
+        // Control Arguments
+        LPF_FREQK             /* 0 */
+        LPF_INK               /* 2 */,
+        // Audio Arguments
+        LPF_QA                /* 1 */
+    )
+}
 
-    double b0;
-    double b1;
-    double b2;
-    double a0;
-    double a1;
-    double a2;
+// 3
+void lpf_aak_calc(ugen u)
+{
+    LPF_CALC(
+        // Control Arguments
+        LPF_INK               /* 2 */,
+        // Audio Arguments
+        LPF_FREQA             /* 0 */
+        LPF_QA                /* 1 */
+    )
+}
 
-	double y;
+// 4
+void lpf_kka_calc(ugen u)
+{
+    LPF_CALC(
+        // Control Arguments
+        LPF_FREQK             /* 0 */
+        LPF_QK                /* 1 */,
+        // Audio Arguments
+        LPF_INA               /* 2 */
+    )
+}
 
-	double snhi;
-	double delta;
-	double v1;
-	double v2;
+// 5
+void lpf_aka_calc(ugen u)
+{
+    LPF_CALC(
+        // Control Arguments
+        LPF_QK                /* 1 */,
+        // Audio Arguments
+        LPF_FREQA             /* 0 */
+        LPF_INA               /* 2 */
+    )
+}
 
-    AUDIO_LOOP(
-		freq  = UGEN_IN(in0);
-		q     = UGEN_IN(in1);
-		in    = UGEN_IN(in2);
+// 6
+void lpf_kaa_calc(ugen u)
+{
+    LPF_CALC(
+        // Control Arguments
+        LPF_FREQK             /* 0 */,
+        // Audio Arguments
+        LPF_QA                /* 1 */
+        LPF_INA               /* 2 */
+    )
+}
 
-		if(freq != bi.prevF || q != bi.prevQ)
-		{
-			//branchless max?
-			q     = MAX(q,0.00000001);
-			bi.prevF = freq;
-			bi.prevQ = q;
-			//Don't recalc if unnecessary
-			omega  = freq * RECIP_SAMPLE_RATE;
-			// printf("omega: %f\n",omega);
-			// printf("cs\n");
-			bi.cs  = TABLE_LOOKUP(omega,cosn_table);
-			// printf("sn\n");
-    		sn     = TABLE_LOOKUP(omega,sine_table);
-			snhi   = (1 / (2 * q));
-			snhi   = snhi * RECIP_TWO_PI;
-			// printf("snhi: %f\n",snhi);
-			bi.alpha = TABLE_LOOKUP(snhi, sinh_table);
-			bi.alpha *= sn;
-		}
-		cs    = bi.cs;
-		alpha = bi.alpha;
-
-		// omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
-		// cs    = cos(omega);
-    	// sn    = sin(omega);
-		// alpha = sn * sinh(1 / (2 * q));
-
-    	b0    = (1 - cs) * 0.5;
-    	b1    =  1 - cs;
-    	b2    = (1 - cs) * 0.5;
-    	a0    =  1 + alpha;
-    	a1    = -2*cs;
-    	a2    =  1 - alpha;
-
-		y     = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);
-
-		bi.y2 = bi.y1;
-		bi.y1 = y;
-		bi.x2 = bi.x1;
-		bi.x1 = in;
-
-		UGEN_OUT(out,y);
-	);
-
-	*((biquad_t*) u.data) = bi;
+// 7
+void lpf_aaa_calc(ugen u)
+{
+    LPF_CALC(
+        // Control Arguments
+        /* no control args */,
+        // Audio Arguments
+        LPF_FREQA             /* 0 */
+        LPF_QA                /* 1 */
+        LPF_INA               /* 2 */
+    )
 }
 
 void hpf_calc(ugen u)

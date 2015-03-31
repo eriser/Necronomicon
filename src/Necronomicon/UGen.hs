@@ -568,9 +568,19 @@ exprange low high input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen E
 foreign import ccall "&biquad_constructor"   biquadConstructor   :: CUGenFunc
 foreign import ccall "&biquad_deconstructor" biquadDeconstructor :: CUGenFunc
 
-foreign import ccall "&lpf_calc" lpfCalc :: CUGenFunc
+foreign import ccall "&lpf_kkk_calc" lpfKKKCalc :: CUGenFunc
+foreign import ccall "&lpf_akk_calc" lpfAKKCalc :: CUGenFunc
+foreign import ccall "&lpf_kak_calc" lpfKAKCalc :: CUGenFunc
+foreign import ccall "&lpf_aak_calc" lpfAAKCalc :: CUGenFunc
+foreign import ccall "&lpf_kka_calc" lpfKKACalc :: CUGenFunc
+foreign import ccall "&lpf_aka_calc" lpfAKACalc :: CUGenFunc
+foreign import ccall "&lpf_kaa_calc" lpfKAACalc :: CUGenFunc
+foreign import ccall "&lpf_aaa_calc" lpfAAACalc :: CUGenFunc
+
 lpf :: UGen -> UGen -> UGen -> UGen
-lpf freq q input = multiChannelExpandUGen LPF lpfCalc biquadConstructor biquadDeconstructor [freq,q,input]
+lpf freq q input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen LPF lpfAAACalc biquadConstructor biquadDeconstructor [freq, q, input]
+    where
+        cfuncs = [lpfKKKCalc, lpfAKKCalc, lpfKAKCalc, lpfAAKCalc, lpfKKACalc, lpfAKACalc, lpfKAACalc, lpfAAACalc]
 
 foreign import ccall "&hpf_calc" hpfCalc :: CUGenFunc
 hpf :: UGen -> UGen -> UGen -> UGen
