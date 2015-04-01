@@ -5217,119 +5217,434 @@ void hpf_aaa_calc(ugen u)
     )
 }
 
-void bpf_calc(ugen u)
+#define BPF_CALC(CONTROL_ARGS, AUDIO_ARGS)							\
+double*  in0  = UGEN_INPUT_BUFFER(u, 0);							\
+double*  in1  = UGEN_INPUT_BUFFER(u, 1);							\
+double*  in2  = UGEN_INPUT_BUFFER(u, 2);							\
+double*  out  = UGEN_OUTPUT_BUFFER(u, 0);							\
+biquad_t bi   = *((biquad_t*) u.data);								\
+																	\
+double freq;														\
+double q;															\
+double in;															\
+																	\
+double omega;														\
+double cs;															\
+double sn;															\
+double alpha;														\
+																	\
+double b0;															\
+double b1;															\
+double b2;															\
+double a0;															\
+double a1;															\
+double a2;															\
+																	\
+double y;															\
+CONTROL_ARGS														\
+AUDIO_LOOP(															\
+	AUDIO_ARGS														\
+																	\
+	omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;					\
+	cs    = cos(omega);												\
+	sn    = sin(omega);												\
+	alpha = sn * sinh(1 / (2 * q));									\
+																	\
+	b0    =  alpha;													\
+    b1    =  0;														\
+    b2    = -alpha;													\
+    a0    =  1 + alpha;												\
+    a1    = -2*cs;													\
+    a2    =  1 - alpha;												\
+																	\
+	y     = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);	\
+																	\
+	bi.y2 = bi.y1;													\
+	bi.y1 = y;														\
+	bi.x2 = bi.x1;													\
+	bi.x1 = in;														\
+																	\
+	UGEN_OUT(out,y);												\
+);																	\
+																	\
+*((biquad_t*) u.data) = bi;											\
+
+#define BPF_FREQK freq = *in0;
+#define BPF_FREQA freq = UGEN_IN(in0);
+#define BPF_QK q = *in1;
+#define BPF_QA q = UGEN_IN(in1);
+#define BPF_INK in = *in2;
+#define BPF_INA in = UGEN_IN(in2);
+
+// 0
+void bpf_kkk_calc(ugen u)
 {
-	double*  in0  = UGEN_INPUT_BUFFER(u, 0);
-    double*  in1  = UGEN_INPUT_BUFFER(u, 1);
-    double*  in2  = UGEN_INPUT_BUFFER(u, 2);
-	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
-	biquad_t bi   = *((biquad_t*) u.data);
-
-	double freq;
-	double q;
-	double in;
-
-	double omega;
-	double cs;
-    double sn;
-	double alpha;
-
-    double b0;
-    double b1;
-    double b2;
-    double a0;
-    double a1;
-    double a2;
-
-	double y;
-
-    AUDIO_LOOP(
-		freq  = UGEN_IN(in0);
-		q     = MAX(UGEN_IN(in1),0.00000001);
-		in    = UGEN_IN(in2);
-
-		omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
-		cs    = cos(omega);
-    	sn    = sin(omega);
-		alpha = sn * sinh(1 / (2 * q));
-
-		b0    =  alpha;
-	    b1    =  0;
-	    b2    = -alpha;
-	    a0    =  1 + alpha;
-	    a1    = -2*cs;
-	    a2    =  1 - alpha;
-
-		y     = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);
-
-		bi.y2 = bi.y1;
-		bi.y1 = y;
-		bi.x2 = bi.x1;
-		bi.x1 = in;
-
-		UGEN_OUT(out,y);
-	);
-
-	*((biquad_t*) u.data) = bi;
+    BPF_CALC(
+        // Control Arguments
+        BPF_FREQK             /* 0 */
+        BPF_QK                /* 1 */
+        BPF_INK               /* 2 */,
+        // Audio Arguments
+        /* no audio args */
+    )
 }
 
-void notch_calc(ugen u)
+// 1
+void bpf_akk_calc(ugen u)
 {
-	double*  in0  = UGEN_INPUT_BUFFER(u, 0);
-    double*  in1  = UGEN_INPUT_BUFFER(u, 1);
-    double*  in2  = UGEN_INPUT_BUFFER(u, 2);
-    double*  in3  = UGEN_INPUT_BUFFER(u, 3);
-	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
-	biquad_t bi   = *((biquad_t*) u.data);
+    BPF_CALC(
+        // Control Arguments
+        BPF_QK                /* 1 */
+        BPF_INK               /* 2 */,
+        // Audio Arguments
+        BPF_FREQA             /* 0 */
+    )
+}
 
-	double freq;
-	double gain;
-	double q;
-	double in;
+// 2
+void bpf_kak_calc(ugen u)
+{
+    BPF_CALC(
+        // Control Arguments
+        BPF_FREQK             /* 0 */
+        BPF_INK               /* 2 */,
+        // Audio Arguments
+        BPF_QA                /* 1 */
+    )
+}
 
-	double omega;
-	double cs;
-    double sn;
-	double alpha;
+// 3
+void bpf_aak_calc(ugen u)
+{
+    BPF_CALC(
+        // Control Arguments
+        BPF_INK               /* 2 */,
+        // Audio Arguments
+        BPF_FREQA             /* 0 */
+        BPF_QA                /* 1 */
+    )
+}
 
-    double b0;
-    double b1;
-    double b2;
-    double a0;
-    double a1;
-    double a2;
+// 4
+void bpf_kka_calc(ugen u)
+{
+    BPF_CALC(
+        // Control Arguments
+        BPF_FREQK             /* 0 */
+        BPF_QK                /* 1 */,
+        // Audio Arguments
+        BPF_INA               /* 2 */
+    )
+}
 
-	double y;
+// 5
+void bpf_aka_calc(ugen u)
+{
+    BPF_CALC(
+        // Control Arguments
+        BPF_QK                /* 1 */,
+        // Audio Arguments
+        BPF_FREQA             /* 0 */
+        BPF_INA               /* 2 */
+    )
+}
 
-    AUDIO_LOOP(
-		freq  = UGEN_IN(in0);
-		gain  = UGEN_IN(in1);
-		q     = MAX(UGEN_IN(in2),0.00000001);
-		in    = UGEN_IN(in3);
+// 6
+void bpf_kaa_calc(ugen u)
+{
+    BPF_CALC(
+        // Control Arguments
+        BPF_FREQK             /* 0 */,
+        // Audio Arguments
+        BPF_QA                /* 1 */
+        BPF_INA               /* 2 */
+    )
+}
 
-		omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
-		cs    = cos(omega);
-    	sn    = sin(omega);
-		alpha = sn * sinh(1 / (2 * q));
+// 7
+void bpf_aaa_calc(ugen u)
+{
+    BPF_CALC(
+        // Control Arguments
+        /* no control args */,
+        // Audio Arguments
+        BPF_FREQA             /* 0 */
+        BPF_QA                /* 1 */
+        BPF_INA               /* 2 */
+    )
+}
 
-		b0    =  1;
-	    b1    = -2*cs;
-	    b2    =  1;
-	    a0    =  1 + alpha;
-	    a1    = -2*cs;
-	    a2    =  1 - alpha;
+#define NOTCH_CALC(CONTROL_ARGS, AUDIO_ARGS)						\
+double*  in0  = UGEN_INPUT_BUFFER(u, 0);							\
+double*  in1  = UGEN_INPUT_BUFFER(u, 1);							\
+double*  in2  = UGEN_INPUT_BUFFER(u, 2);							\
+double*  in3  = UGEN_INPUT_BUFFER(u, 3);							\
+double*  out  = UGEN_OUTPUT_BUFFER(u, 0);							\
+biquad_t bi   = *((biquad_t*) u.data);								\
+																	\
+double freq;														\
+double gain;														\
+double q;															\
+double in;															\
+																	\
+double omega;														\
+double cs;															\
+double sn;															\
+double alpha;														\
+																	\
+double b0;															\
+double b1;															\
+double b2;															\
+double a0;															\
+double a1;															\
+double a2;															\
+																	\
+double y;															\
+CONTROL_ARGS														\
+AUDIO_LOOP(															\
+	AUDIO_ARGS														\
+																	\
+	omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;					\
+	cs    = cos(omega);												\
+	sn    = sin(omega);												\
+	alpha = sn * sinh(1 / (2 * q));									\
+																	\
+	b0    =  1;														\
+    b1    = -2*cs;													\
+    b2    =  1;														\
+    a0    =  1 + alpha;												\
+    a1    = -2*cs;													\
+    a2    =  1 - alpha;												\
+																	\
+	y     = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);	\
+																	\
+	bi.y2 = bi.y1;													\
+	bi.y1 = y;														\
+	bi.x2 = bi.x1;													\
+	bi.x1 = in;														\
+																	\
+	UGEN_OUT(out,y);												\
+);																	\
+																	\
+*((biquad_t*) u.data) = bi;											\
 
-		y     = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);
+#define NOTCH_FREQK freq = *in0;
+#define NOTCH_FREQA freq = UGEN_IN(in0);
+#define NOTCH_GAINK gain = *in1;
+#define NOTCH_GAINA gain = UGEN_IN(in1);
+#define NOTCH_QK q = *in2;
+#define NOTCH_QA q = UGEN_IN(in2);
+#define NOTCH_INK in = *in3;
+#define NOTCH_INA in = UGEN_IN(in3);
 
-		bi.y2 = bi.y1;
-		bi.y1 = y;
-		bi.x2 = bi.x1;
-		bi.x1 = in;
+// 0
+void notch_kkkk_calc(ugen u)
+{
+    NOTCH_CALC(
+        // Control Arguments
+        NOTCH_FREQK           /* 0 */
+        NOTCH_GAINK           /* 1 */
+        NOTCH_QK              /* 2 */
+        NOTCH_INK             /* 3 */,
+        // Audio Arguments
+        /* no audio args */
+    )
+}
 
-		UGEN_OUT(out,y);
-	);
+// 1
+void notch_akkk_calc(ugen u)
+{
+    NOTCH_CALC(
+        // Control Arguments
+        NOTCH_GAINK           /* 1 */
+        NOTCH_QK              /* 2 */
+        NOTCH_INK             /* 3 */,
+        // Audio Arguments
+        NOTCH_FREQA           /* 0 */
+    )
+}
 
-	*((biquad_t*) u.data) = bi;
+// 2
+void notch_kakk_calc(ugen u)
+{
+    NOTCH_CALC(
+        // Control Arguments
+        NOTCH_FREQK           /* 0 */
+        NOTCH_QK              /* 2 */
+        NOTCH_INK             /* 3 */,
+        // Audio Arguments
+        NOTCH_GAINA           /* 1 */
+    )
+}
+
+// 3
+void notch_aakk_calc(ugen u)
+{
+    NOTCH_CALC(
+        // Control Arguments
+        NOTCH_QK              /* 2 */
+        NOTCH_INK             /* 3 */,
+        // Audio Arguments
+        NOTCH_FREQA           /* 0 */
+        NOTCH_GAINA           /* 1 */
+    )
+}
+
+// 4
+void notch_kkak_calc(ugen u)
+{
+    NOTCH_CALC(
+        // Control Arguments
+        NOTCH_FREQK           /* 0 */
+        NOTCH_GAINK           /* 1 */
+        NOTCH_INK             /* 3 */,
+        // Audio Arguments
+        NOTCH_QA              /* 2 */
+    )
+}
+
+// 5
+void notch_akak_calc(ugen u)
+{
+    NOTCH_CALC(
+        // Control Arguments
+        NOTCH_GAINK           /* 1 */
+        NOTCH_INK             /* 3 */,
+        // Audio Arguments
+        NOTCH_FREQA           /* 0 */
+        NOTCH_QA              /* 2 */
+    )
+}
+
+// 6
+void notch_kaak_calc(ugen u)
+{
+    NOTCH_CALC(
+        // Control Arguments
+        NOTCH_FREQK           /* 0 */
+        NOTCH_INK             /* 3 */,
+        // Audio Arguments
+        NOTCH_GAINA           /* 1 */
+        NOTCH_QA              /* 2 */
+    )
+}
+
+// 7
+void notch_aaak_calc(ugen u)
+{
+    NOTCH_CALC(
+        // Control Arguments
+        NOTCH_INK             /* 3 */,
+        // Audio Arguments
+        NOTCH_FREQA           /* 0 */
+        NOTCH_GAINA           /* 1 */
+        NOTCH_QA              /* 2 */
+    )
+}
+
+// 8
+void notch_kkka_calc(ugen u)
+{
+    NOTCH_CALC(
+        // Control Arguments
+        NOTCH_FREQK           /* 0 */
+        NOTCH_GAINK           /* 1 */
+        NOTCH_QK              /* 2 */,
+        // Audio Arguments
+        NOTCH_INA             /* 3 */
+    )
+}
+
+// 9
+void notch_akka_calc(ugen u)
+{
+    NOTCH_CALC(
+        // Control Arguments
+        NOTCH_GAINK           /* 1 */
+        NOTCH_QK              /* 2 */,
+        // Audio Arguments
+        NOTCH_FREQA           /* 0 */
+        NOTCH_INA             /* 3 */
+    )
+}
+
+// 10
+void notch_kaka_calc(ugen u)
+{
+    NOTCH_CALC(
+        // Control Arguments
+        NOTCH_FREQK           /* 0 */
+        NOTCH_QK              /* 2 */,
+        // Audio Arguments
+        NOTCH_GAINA           /* 1 */
+        NOTCH_INA             /* 3 */
+    )
+}
+
+// 11
+void notch_aaka_calc(ugen u)
+{
+    NOTCH_CALC(
+        // Control Arguments
+        NOTCH_QK              /* 2 */,
+        // Audio Arguments
+        NOTCH_FREQA           /* 0 */
+        NOTCH_GAINA           /* 1 */
+        NOTCH_INA             /* 3 */
+    )
+}
+
+// 12
+void notch_kkaa_calc(ugen u)
+{
+    NOTCH_CALC(
+        // Control Arguments
+        NOTCH_FREQK           /* 0 */
+        NOTCH_GAINK           /* 1 */,
+        // Audio Arguments
+        NOTCH_QA              /* 2 */
+        NOTCH_INA             /* 3 */
+    )
+}
+
+// 13
+void notch_akaa_calc(ugen u)
+{
+    NOTCH_CALC(
+        // Control Arguments
+        NOTCH_GAINK           /* 1 */,
+        // Audio Arguments
+        NOTCH_FREQA           /* 0 */
+        NOTCH_QA              /* 2 */
+        NOTCH_INA             /* 3 */
+    )
+}
+
+// 14
+void notch_kaaa_calc(ugen u)
+{
+    NOTCH_CALC(
+        // Control Arguments
+        NOTCH_FREQK           /* 0 */,
+        // Audio Arguments
+        NOTCH_GAINA           /* 1 */
+        NOTCH_QA              /* 2 */
+        NOTCH_INA             /* 3 */
+    )
+}
+
+// 15
+void notch_aaaa_calc(ugen u)
+{
+    NOTCH_CALC(
+        // Control Arguments
+        /* no control args */,
+        // Audio Arguments
+        NOTCH_FREQA           /* 0 */
+        NOTCH_GAINA           /* 1 */
+        NOTCH_QA              /* 2 */
+        NOTCH_INA             /* 3 */
+    )
 }
 
 void allpass_calc(ugen u)
@@ -5388,65 +5703,280 @@ void allpass_calc(ugen u)
 	*((biquad_t*) u.data) = bi;
 }
 
-void peakEQ_calc(ugen u)
+#define PEAKEQ_CALC(CONTROL_ARGS, AUDIO_ARGS)						\
+double*  in0  = UGEN_INPUT_BUFFER(u, 0);							\
+double*  in1  = UGEN_INPUT_BUFFER(u, 1);							\
+double*  in2  = UGEN_INPUT_BUFFER(u, 2);							\
+double*  in3  = UGEN_INPUT_BUFFER(u, 3);							\
+double*  out  = UGEN_OUTPUT_BUFFER(u, 0);							\
+biquad_t bi   = *((biquad_t*) u.data);								\
+																	\
+double freq;														\
+double gain;														\
+double q;															\
+double in;															\
+																	\
+double a;															\
+double omega;														\
+double cs;															\
+double sn;															\
+double alpha;														\
+																	\
+double b0;															\
+double b1;															\
+double b2;															\
+double a0;															\
+double a1;															\
+double a2;															\
+																	\
+double y;															\
+CONTROL_ARGS														\
+AUDIO_LOOP(															\
+	AUDIO_ARGS														\
+																	\
+	a     = pow(10,(gain/40));										\
+	omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;					\
+	cs    = cos(omega);												\
+	sn    = sin(omega);												\
+	alpha = sn * sinh(1 / (2 * q));									\
+																	\
+	b0    =  1 + alpha*a;											\
+    b1    = -2*cs;													\
+    b2    =  1 - alpha*a;											\
+    a0    =  1 + alpha/a;											\
+    a1    = -2*cs;													\
+    a2    =  1 - alpha/a;											\
+																	\
+	y     = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);	\
+																	\
+	bi.y2 = bi.y1;													\
+	bi.y1 = y;														\
+	bi.x2 = bi.x1;													\
+	bi.x1 = in;														\
+																	\
+	UGEN_OUT(out,y);												\
+);																	\
+																	\
+*((biquad_t*) u.data) = bi;											\
+
+#define PEAKEQ_FREQK freq = *in0;
+#define PEAKEQ_FREQA freq = UGEN_IN(in0);
+#define PEAKEQ_GAINK gain = *in1;
+#define PEAKEQ_GAINA gain = UGEN_IN(in1);
+#define PEAKEQ_QK q = *in2;
+#define PEAKEQ_QA q = UGEN_IN(in2);
+#define PEAKEQ_INK in = *in3;
+#define PEAKEQ_INA in = UGEN_IN(in3);
+
+
+// 0
+void peakEQ_kkkk_calc(ugen u)
 {
-	double*  in0  = UGEN_INPUT_BUFFER(u, 0);
-    double*  in1  = UGEN_INPUT_BUFFER(u, 1);
-    double*  in2  = UGEN_INPUT_BUFFER(u, 2);
-    double*  in3  = UGEN_INPUT_BUFFER(u, 3);
-	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
-	biquad_t bi   = *((biquad_t*) u.data);
+    PEAKEQ_CALC(
+        // Control Arguments
+        PEAKEQ_FREQK          /* 0 */
+        PEAKEQ_GAINK          /* 1 */
+        PEAKEQ_QK             /* 2 */
+        PEAKEQ_INK            /* 3 */,
+        // Audio Arguments
+        /* no audio args */
+    )
+}
 
-	double freq;
-	double gain;
-	double q;
-	double in;
+// 1
+void peakEQ_akkk_calc(ugen u)
+{
+    PEAKEQ_CALC(
+        // Control Arguments
+        PEAKEQ_GAINK          /* 1 */
+        PEAKEQ_QK             /* 2 */
+        PEAKEQ_INK            /* 3 */,
+        // Audio Arguments
+        PEAKEQ_FREQA          /* 0 */
+    )
+}
 
-	double a;
-	double omega;
-	double cs;
-    double sn;
-	double alpha;
+// 2
+void peakEQ_kakk_calc(ugen u)
+{
+    PEAKEQ_CALC(
+        // Control Arguments
+        PEAKEQ_FREQK          /* 0 */
+        PEAKEQ_QK             /* 2 */
+        PEAKEQ_INK            /* 3 */,
+        // Audio Arguments
+        PEAKEQ_GAINA          /* 1 */
+    )
+}
 
-    double b0;
-    double b1;
-    double b2;
-    double a0;
-    double a1;
-    double a2;
+// 3
+void peakEQ_aakk_calc(ugen u)
+{
+    PEAKEQ_CALC(
+        // Control Arguments
+        PEAKEQ_QK             /* 2 */
+        PEAKEQ_INK            /* 3 */,
+        // Audio Arguments
+        PEAKEQ_FREQA          /* 0 */
+        PEAKEQ_GAINA          /* 1 */
+    )
+}
 
-	double y;
+// 4
+void peakEQ_kkak_calc(ugen u)
+{
+    PEAKEQ_CALC(
+        // Control Arguments
+        PEAKEQ_FREQK          /* 0 */
+        PEAKEQ_GAINK          /* 1 */
+        PEAKEQ_INK            /* 3 */,
+        // Audio Arguments
+        PEAKEQ_QA             /* 2 */
+    )
+}
 
-    AUDIO_LOOP(
-		freq  = UGEN_IN(in0);
-		gain  = UGEN_IN(in1);
-		q     = MAX(UGEN_IN(in2),0.00000001);
-		in    = UGEN_IN(in3);
+// 5
+void peakEQ_akak_calc(ugen u)
+{
+    PEAKEQ_CALC(
+        // Control Arguments
+        PEAKEQ_GAINK          /* 1 */
+        PEAKEQ_INK            /* 3 */,
+        // Audio Arguments
+        PEAKEQ_FREQA          /* 0 */
+        PEAKEQ_QA             /* 2 */
+    )
+}
 
-		a     = pow(10,(gain/40));
-		omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
-		cs    = cos(omega);
-    	sn    = sin(omega);
-		alpha = sn * sinh(1 / (2 * q));
+// 6
+void peakEQ_kaak_calc(ugen u)
+{
+    PEAKEQ_CALC(
+        // Control Arguments
+        PEAKEQ_FREQK          /* 0 */
+        PEAKEQ_INK            /* 3 */,
+        // Audio Arguments
+        PEAKEQ_GAINA          /* 1 */
+        PEAKEQ_QA             /* 2 */
+    )
+}
 
-		b0    =  1 + alpha*a;
-	    b1    = -2*cs;
-	    b2    =  1 - alpha*a;
-	    a0    =  1 + alpha/a;
-	    a1    = -2*cs;
-	    a2    =  1 - alpha/a;
+// 7
+void peakEQ_aaak_calc(ugen u)
+{
+    PEAKEQ_CALC(
+        // Control Arguments
+        PEAKEQ_INK            /* 3 */,
+        // Audio Arguments
+        PEAKEQ_FREQA          /* 0 */
+        PEAKEQ_GAINA          /* 1 */
+        PEAKEQ_QA             /* 2 */
+    )
+}
 
-		y     = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);
+// 8
+void peakEQ_kkka_calc(ugen u)
+{
+    PEAKEQ_CALC(
+        // Control Arguments
+        PEAKEQ_FREQK          /* 0 */
+        PEAKEQ_GAINK          /* 1 */
+        PEAKEQ_QK             /* 2 */,
+        // Audio Arguments
+        PEAKEQ_INA            /* 3 */
+    )
+}
 
-		bi.y2 = bi.y1;
-		bi.y1 = y;
-		bi.x2 = bi.x1;
-		bi.x1 = in;
+// 9
+void peakEQ_akka_calc(ugen u)
+{
+    PEAKEQ_CALC(
+        // Control Arguments
+        PEAKEQ_GAINK          /* 1 */
+        PEAKEQ_QK             /* 2 */,
+        // Audio Arguments
+        PEAKEQ_FREQA          /* 0 */
+        PEAKEQ_INA            /* 3 */
+    )
+}
 
-		UGEN_OUT(out,y);
-	);
+// 10
+void peakEQ_kaka_calc(ugen u)
+{
+    PEAKEQ_CALC(
+        // Control Arguments
+        PEAKEQ_FREQK          /* 0 */
+        PEAKEQ_QK             /* 2 */,
+        // Audio Arguments
+        PEAKEQ_GAINA          /* 1 */
+        PEAKEQ_INA            /* 3 */
+    )
+}
 
-	*((biquad_t*) u.data) = bi;
+// 11
+void peakEQ_aaka_calc(ugen u)
+{
+    PEAKEQ_CALC(
+        // Control Arguments
+        PEAKEQ_QK             /* 2 */,
+        // Audio Arguments
+        PEAKEQ_FREQA          /* 0 */
+        PEAKEQ_GAINA          /* 1 */
+        PEAKEQ_INA            /* 3 */
+    )
+}
+
+// 12
+void peakEQ_kkaa_calc(ugen u)
+{
+    PEAKEQ_CALC(
+        // Control Arguments
+        PEAKEQ_FREQK          /* 0 */
+        PEAKEQ_GAINK          /* 1 */,
+        // Audio Arguments
+        PEAKEQ_QA             /* 2 */
+        PEAKEQ_INA            /* 3 */
+    )
+}
+
+// 13
+void peakEQ_akaa_calc(ugen u)
+{
+    PEAKEQ_CALC(
+        // Control Arguments
+        PEAKEQ_GAINK          /* 1 */,
+        // Audio Arguments
+        PEAKEQ_FREQA          /* 0 */
+        PEAKEQ_QA             /* 2 */
+        PEAKEQ_INA            /* 3 */
+    )
+}
+
+// 14
+void peakEQ_kaaa_calc(ugen u)
+{
+    PEAKEQ_CALC(
+        // Control Arguments
+        PEAKEQ_FREQK          /* 0 */,
+        // Audio Arguments
+        PEAKEQ_GAINA          /* 1 */
+        PEAKEQ_QA             /* 2 */
+        PEAKEQ_INA            /* 3 */
+    )
+}
+
+// 15
+void peakEQ_aaaa_calc(ugen u)
+{
+    PEAKEQ_CALC(
+        // Control Arguments
+        /* no control args */,
+        // Audio Arguments
+        PEAKEQ_FREQA          /* 0 */
+        PEAKEQ_GAINA          /* 1 */
+        PEAKEQ_QA             /* 2 */
+        PEAKEQ_INA            /* 3 */
+    )
 }
 
 void lowshelf_calc(ugen u)

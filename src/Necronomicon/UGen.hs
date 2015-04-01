@@ -596,23 +596,79 @@ hpf freq q input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen HPF hpfA
     where
         cfuncs = [hpfKKKCalc, hpfAKKCalc, hpfKAKCalc, hpfAAKCalc, hpfKKACalc, hpfAKACalc, hpfKAACalc, hpfAAACalc]
 
-foreign import ccall "&bpf_calc" bpfCalc :: CUGenFunc
+foreign import ccall "&bpf_kkk_calc" bpfKKKCalc :: CUGenFunc
+foreign import ccall "&bpf_akk_calc" bpfAKKCalc :: CUGenFunc
+foreign import ccall "&bpf_kak_calc" bpfKAKCalc :: CUGenFunc
+foreign import ccall "&bpf_aak_calc" bpfAAKCalc :: CUGenFunc
+foreign import ccall "&bpf_kka_calc" bpfKKACalc :: CUGenFunc
+foreign import ccall "&bpf_aka_calc" bpfAKACalc :: CUGenFunc
+foreign import ccall "&bpf_kaa_calc" bpfKAACalc :: CUGenFunc
+foreign import ccall "&bpf_aaa_calc" bpfAAACalc :: CUGenFunc
+
 bpf :: UGen -> UGen -> UGen -> UGen
-bpf freq q input = multiChannelExpandUGen BPF bpfCalc biquadConstructor biquadDeconstructor [freq,q,input]
+bpf freq q input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen BPF bpfAAACalc biquadConstructor biquadDeconstructor [freq, q, input]
+    where
+        cfuncs = [bpfKKKCalc, bpfAKKCalc, bpfKAKCalc, bpfAAKCalc, bpfKKACalc, bpfAKACalc, bpfKAACalc, bpfAAACalc]
 
-foreign import ccall "&notch_calc" notchCalc :: CUGenFunc
+foreign import ccall "&notch_kkkk_calc" notchKKKKCalc :: CUGenFunc
+foreign import ccall "&notch_akkk_calc" notchAKKKCalc :: CUGenFunc
+foreign import ccall "&notch_kakk_calc" notchKAKKCalc :: CUGenFunc
+foreign import ccall "&notch_aakk_calc" notchAAKKCalc :: CUGenFunc
+foreign import ccall "&notch_kkak_calc" notchKKAKCalc :: CUGenFunc
+foreign import ccall "&notch_akak_calc" notchAKAKCalc :: CUGenFunc
+foreign import ccall "&notch_kaak_calc" notchKAAKCalc :: CUGenFunc
+foreign import ccall "&notch_aaak_calc" notchAAAKCalc :: CUGenFunc
+foreign import ccall "&notch_kkka_calc" notchKKKACalc :: CUGenFunc
+foreign import ccall "&notch_akka_calc" notchAKKACalc :: CUGenFunc
+foreign import ccall "&notch_kaka_calc" notchKAKACalc :: CUGenFunc
+foreign import ccall "&notch_aaka_calc" notchAAKACalc :: CUGenFunc
+foreign import ccall "&notch_kkaa_calc" notchKKAACalc :: CUGenFunc
+foreign import ccall "&notch_akaa_calc" notchAKAACalc :: CUGenFunc
+foreign import ccall "&notch_kaaa_calc" notchKAAACalc :: CUGenFunc
+foreign import ccall "&notch_aaaa_calc" notchAAAACalc :: CUGenFunc
+
 notch :: UGen -> UGen -> UGen -> UGen -> UGen
-notch freq fgain q input = multiChannelExpandUGen Notch notchCalc biquadConstructor biquadDeconstructor [freq,fgain,q,input]
+notch freq fgain q input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen Notch notchAAAACalc biquadConstructor biquadDeconstructor [freq, fgain, q, input]
+    where
+        cfuncs = [
+                notchKKKKCalc, notchAKKKCalc, notchKAKKCalc, notchAAKKCalc,
+                notchKKAKCalc, notchAKAKCalc, notchKAAKCalc, notchAAAKCalc,
+                notchKKKACalc, notchAKKACalc, notchKAKACalc, notchAAKACalc,
+                notchKKAACalc, notchAKAACalc, notchKAAACalc, notchAAAACalc
+            ]
 
-foreign import ccall "&peakEQ_calc" peakEQCalc :: CUGenFunc
+foreign import ccall "&peakEQ_kkkk_calc" peakEQKKKKCalc :: CUGenFunc
+foreign import ccall "&peakEQ_akkk_calc" peakEQAKKKCalc :: CUGenFunc
+foreign import ccall "&peakEQ_kakk_calc" peakEQKAKKCalc :: CUGenFunc
+foreign import ccall "&peakEQ_aakk_calc" peakEQAAKKCalc :: CUGenFunc
+foreign import ccall "&peakEQ_kkak_calc" peakEQKKAKCalc :: CUGenFunc
+foreign import ccall "&peakEQ_akak_calc" peakEQAKAKCalc :: CUGenFunc
+foreign import ccall "&peakEQ_kaak_calc" peakEQKAAKCalc :: CUGenFunc
+foreign import ccall "&peakEQ_aaak_calc" peakEQAAAKCalc :: CUGenFunc
+foreign import ccall "&peakEQ_kkka_calc" peakEQKKKACalc :: CUGenFunc
+foreign import ccall "&peakEQ_akka_calc" peakEQAKKACalc :: CUGenFunc
+foreign import ccall "&peakEQ_kaka_calc" peakEQKAKACalc :: CUGenFunc
+foreign import ccall "&peakEQ_aaka_calc" peakEQAAKACalc :: CUGenFunc
+foreign import ccall "&peakEQ_kkaa_calc" peakEQKKAACalc :: CUGenFunc
+foreign import ccall "&peakEQ_akaa_calc" peakEQAKAACalc :: CUGenFunc
+foreign import ccall "&peakEQ_kaaa_calc" peakEQKAAACalc :: CUGenFunc
+foreign import ccall "&peakEQ_aaaa_calc" peakEQAAAACalc :: CUGenFunc
+
 peakEQ :: UGen -> UGen -> UGen -> UGen -> UGen
-peakEQ freq fgain q input = multiChannelExpandUGen PeakEQ peakEQCalc biquadConstructor biquadDeconstructor [freq,fgain,q,input]
+peakEQ freq fgain q input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen PeakEQ peakEQAAAACalc biquadConstructor biquadDeconstructor [freq, fgain, q, input]
+    where
+        cfuncs = [
+                peakEQKKKKCalc, peakEQAKKKCalc, peakEQKAKKCalc, peakEQAAKKCalc,
+                peakEQKKAKCalc, peakEQAKAKCalc, peakEQKAAKCalc, peakEQAAAKCalc,
+                peakEQKKKACalc, peakEQAKKACalc, peakEQKAKACalc, peakEQAAKACalc,
+                peakEQKKAACalc, peakEQAKAACalc, peakEQKAAACalc, peakEQAAAACalc
+            ]
 
 foreign import ccall "&allpass_calc" allpassCalc :: CUGenFunc
 allpass :: UGen -> UGen -> UGen -> UGen
 allpass freq q input = multiChannelExpandUGen AllPass allpassCalc biquadConstructor biquadDeconstructor [freq,q,input]
 
-foreign import ccall "&notch_calc" lowshelfCalc :: CUGenFunc
+foreign import ccall "&lowshelf_calc" lowshelfCalc :: CUGenFunc
 lowshelf :: UGen -> UGen -> UGen -> UGen -> UGen
 lowshelf freq fgain slope input = multiChannelExpandUGen LowShelf lowshelfCalc biquadConstructor biquadDeconstructor [freq,fgain,slope,input]
 
