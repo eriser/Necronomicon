@@ -332,8 +332,8 @@ hyperMelody _ = [s, s2] |> gain 0.04 |> e |> visAux (random 0 2 4.99) 20 |> out 
         e  = env [0,1,0.15, 0] [0.0001,0.1, 7] (-1.5)
         -- e  = env [0,1,0.15, 0] [0.0001,0.1, 700] (-1.5)
         -- e  = gain <| line 700
-        s  = pulse 440 0.5 |> peakEQ (sin 0.3 |> exprange 440 10000) 1 1
-        s2 = pulse 880 0.5 |> peakEQ (sin 0.2 |> exprange 900 5000) 1 1
+        s  = pulse 440 0.5 |> lowshelf (sin 0.3 |> exprange 440 10000) 2 1
+        s2 = pulse 880 0.5 |> lowshelf (sin 0.2 |> exprange 900 5000) 2 1
 
 hyperMelodyPattern :: Signal ()
 hyperMelodyPattern = playSynthPattern (toggle <| combo [alt,isDown keyF]) hyperMelody (pmap ((*1) . d2f slendro) <| ploop [sec1])

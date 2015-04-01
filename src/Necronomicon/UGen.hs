@@ -327,7 +327,7 @@ foreign import ccall "&line_constructor" lineConstructor :: CUGenFunc
 foreign import ccall "&line_deconstructor" lineDeconstructor :: CUGenFunc
 
 line :: UGen -> UGen
-line lineLength =  optimizeUGenCalcFunc [lineKCalc, lineACalc] $ multiChannelExpandUGen Line lineACalc lineConstructor lineDeconstructor [lineLength]
+line lineLength = optimizeUGenCalcFunc [lineKCalc, lineACalc] $ multiChannelExpandUGen Line lineACalc lineConstructor lineDeconstructor [lineLength]
 
 perc :: UGen -> UGen -> UGen -> UGen -> UGen -> UGen
 perc attackTime releaseTime peak curve input = env [0,peak,0] [attackTime,releaseTime] curve input
@@ -501,6 +501,7 @@ foreign import ccall "&syncosc_kkaa_calc" syncoscKKAACalc :: CUGenFunc
 foreign import ccall "&syncosc_akaa_calc" syncoscAKAACalc :: CUGenFunc
 foreign import ccall "&syncosc_kaaa_calc" syncoscKAAACalc :: CUGenFunc
 foreign import ccall "&syncosc_aaaa_calc" syncoscAAAACalc :: CUGenFunc
+
 syncosc :: UGen -> UGen -> UGen -> UGen -> UGen
 syncosc slaveFreq slaveWave slavePW masterFreq = optimizeUGenCalcFunc cfuncs expandedUGen
     where
@@ -664,13 +665,46 @@ peakEQ freq fgain q input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen
                 peakEQKKAACalc, peakEQAKAACalc, peakEQKAAACalc, peakEQAAAACalc
             ]
 
-foreign import ccall "&allpass_calc" allpassCalc :: CUGenFunc
-allpass :: UGen -> UGen -> UGen -> UGen
-allpass freq q input = multiChannelExpandUGen AllPass allpassCalc biquadConstructor biquadDeconstructor [freq,q,input]
+foreign import ccall "&allpass_kkk_calc" allpassKKKCalc :: CUGenFunc
+foreign import ccall "&allpass_akk_calc" allpassAKKCalc :: CUGenFunc
+foreign import ccall "&allpass_kak_calc" allpassKAKCalc :: CUGenFunc
+foreign import ccall "&allpass_aak_calc" allpassAAKCalc :: CUGenFunc
+foreign import ccall "&allpass_kka_calc" allpassKKACalc :: CUGenFunc
+foreign import ccall "&allpass_aka_calc" allpassAKACalc :: CUGenFunc
+foreign import ccall "&allpass_kaa_calc" allpassKAACalc :: CUGenFunc
+foreign import ccall "&allpass_aaa_calc" allpassAAACalc :: CUGenFunc
 
-foreign import ccall "&lowshelf_calc" lowshelfCalc :: CUGenFunc
+allpass :: UGen -> UGen -> UGen -> UGen
+allpass freq q input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen AllPass allpassAAACalc biquadConstructor biquadDeconstructor [freq, q, input]
+    where
+        cfuncs = [allpassKKKCalc, allpassAKKCalc, allpassKAKCalc, allpassAAKCalc, allpassKKACalc, allpassAKACalc, allpassKAACalc, allpassAAACalc]
+
+foreign import ccall "&lowshelf_kkkk_calc" lowshelfKKKKCalc :: CUGenFunc
+foreign import ccall "&lowshelf_akkk_calc" lowshelfAKKKCalc :: CUGenFunc
+foreign import ccall "&lowshelf_kakk_calc" lowshelfKAKKCalc :: CUGenFunc
+foreign import ccall "&lowshelf_aakk_calc" lowshelfAAKKCalc :: CUGenFunc
+foreign import ccall "&lowshelf_kkak_calc" lowshelfKKAKCalc :: CUGenFunc
+foreign import ccall "&lowshelf_akak_calc" lowshelfAKAKCalc :: CUGenFunc
+foreign import ccall "&lowshelf_kaak_calc" lowshelfKAAKCalc :: CUGenFunc
+foreign import ccall "&lowshelf_aaak_calc" lowshelfAAAKCalc :: CUGenFunc
+foreign import ccall "&lowshelf_kkka_calc" lowshelfKKKACalc :: CUGenFunc
+foreign import ccall "&lowshelf_akka_calc" lowshelfAKKACalc :: CUGenFunc
+foreign import ccall "&lowshelf_kaka_calc" lowshelfKAKACalc :: CUGenFunc
+foreign import ccall "&lowshelf_aaka_calc" lowshelfAAKACalc :: CUGenFunc
+foreign import ccall "&lowshelf_kkaa_calc" lowshelfKKAACalc :: CUGenFunc
+foreign import ccall "&lowshelf_akaa_calc" lowshelfAKAACalc :: CUGenFunc
+foreign import ccall "&lowshelf_kaaa_calc" lowshelfKAAACalc :: CUGenFunc
+foreign import ccall "&lowshelf_aaaa_calc" lowshelfAAAACalc :: CUGenFunc
+
 lowshelf :: UGen -> UGen -> UGen -> UGen -> UGen
-lowshelf freq fgain slope input = multiChannelExpandUGen LowShelf lowshelfCalc biquadConstructor biquadDeconstructor [freq,fgain,slope,input]
+lowshelf freq fgain slope input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen LowShelf lowshelfAAAACalc biquadConstructor biquadDeconstructor [freq, fgain, slope, input]
+    where
+        cfuncs = [
+                lowshelfKKKKCalc, lowshelfAKKKCalc, lowshelfKAKKCalc, lowshelfAAKKCalc,
+                lowshelfKKAKCalc, lowshelfAKAKCalc, lowshelfKAAKCalc, lowshelfAAAKCalc,
+                lowshelfKKKACalc, lowshelfAKKACalc, lowshelfKAKACalc, lowshelfAAKACalc,
+                lowshelfKKAACalc, lowshelfAKAACalc, lowshelfKAAACalc, lowshelfAAAACalc
+            ]
 
 foreign import ccall "&highshelf_calc" highshelfCalc :: CUGenFunc
 highshelf :: UGen -> UGen -> UGen -> UGen -> UGen

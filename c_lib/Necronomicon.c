@@ -5647,61 +5647,163 @@ void notch_aaaa_calc(ugen u)
     )
 }
 
-void allpass_calc(ugen u)
+#define ALLPASS_CALC(CONTROL_ARGS, AUDIO_ARGS)						\
+double*  in0  = UGEN_INPUT_BUFFER(u, 0);							\
+double*  in1  = UGEN_INPUT_BUFFER(u, 1);							\
+double*  in2  = UGEN_INPUT_BUFFER(u, 2);							\
+double*  out  = UGEN_OUTPUT_BUFFER(u, 0);							\
+biquad_t bi   = *((biquad_t*) u.data);								\
+																	\
+double freq;														\
+double q;															\
+double in;															\
+																	\
+double omega;														\
+double cs;															\
+double sn;															\
+double alpha;														\
+																	\
+double b0;															\
+double b1;															\
+double b2;															\
+double a0;															\
+double a1;															\
+double a2;															\
+																	\
+double y;															\
+CONTROL_ARGS														\
+AUDIO_LOOP(															\
+	AUDIO_ARGS														\
+																	\
+	omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;					\
+	cs    = cos(omega);												\
+	sn    = sin(omega);												\
+	alpha = sn * sinh(1 / (2 * q));									\
+																	\
+	b0    =   1 - alpha;											\
+    b1    =  -2*cs;													\
+    b2    =   1 + alpha;											\
+    a0    =   1 + alpha;											\
+    a1    =  -2*cs;													\
+    a2    =   1 - alpha;											\
+																	\
+	y     = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);	\
+																	\
+	bi.y2 = bi.y1;													\
+	bi.y1 = y;														\
+	bi.x2 = bi.x1;													\
+	bi.x1 = in;														\
+																	\
+	UGEN_OUT(out,y);												\
+);																	\
+																	\
+*((biquad_t*) u.data) = bi;											\
+
+#define ALLPASS_FREQK freq = *in0;
+#define ALLPASS_FREQA freq = UGEN_IN(in0);
+#define ALLPASS_QK q = *in1;
+#define ALLPASS_QA q = UGEN_IN(in1);
+#define ALLPASS_INK in = *in2;
+#define ALLPASS_INA in = UGEN_IN(in2);
+
+// 0
+void allpass_kkk_calc(ugen u)
 {
-	double*  in0  = UGEN_INPUT_BUFFER(u, 0);
-    double*  in1  = UGEN_INPUT_BUFFER(u, 1);
-    double*  in2  = UGEN_INPUT_BUFFER(u, 2);
-	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
-	biquad_t bi   = *((biquad_t*) u.data);
-
-	double freq;
-	double q;
-	double in;
-
-	double omega;
-	double cs;
-    double sn;
-	double alpha;
-
-    double b0;
-    double b1;
-    double b2;
-    double a0;
-    double a1;
-    double a2;
-
-	double y;
-
-    AUDIO_LOOP(
-		freq  = UGEN_IN(in0);
-		q     = MAX(UGEN_IN(in1),0.00000001);
-		in    = UGEN_IN(in2);
-
-		omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
-		cs    = cos(omega);
-    	sn    = sin(omega);
-		alpha = sn * sinh(1 / (2 * q));
-
-		b0    =   1 - alpha;
-	    b1    =  -2*cs;
-	    b2    =   1 + alpha;
-	    a0    =   1 + alpha;
-	    a1    =  -2*cs;
-	    a2    =   1 - alpha;
-
-		y     = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);
-
-		bi.y2 = bi.y1;
-		bi.y1 = y;
-		bi.x2 = bi.x1;
-		bi.x1 = in;
-
-		UGEN_OUT(out,y);
-	);
-
-	*((biquad_t*) u.data) = bi;
+    ALLPASS_CALC(
+        // Control Arguments
+        ALLPASS_FREQK         /* 0 */
+        ALLPASS_QK            /* 1 */
+        ALLPASS_INK           /* 2 */,
+        // Audio Arguments
+        /* no audio args */
+    )
 }
+
+// 1
+void allpass_akk_calc(ugen u)
+{
+    ALLPASS_CALC(
+        // Control Arguments
+        ALLPASS_QK            /* 1 */
+        ALLPASS_INK           /* 2 */,
+        // Audio Arguments
+        ALLPASS_FREQA         /* 0 */
+    )
+}
+
+// 2
+void allpass_kak_calc(ugen u)
+{
+    ALLPASS_CALC(
+        // Control Arguments
+        ALLPASS_FREQK         /* 0 */
+        ALLPASS_INK           /* 2 */,
+        // Audio Arguments
+        ALLPASS_QA            /* 1 */
+    )
+}
+
+// 3
+void allpass_aak_calc(ugen u)
+{
+    ALLPASS_CALC(
+        // Control Arguments
+        ALLPASS_INK           /* 2 */,
+        // Audio Arguments
+        ALLPASS_FREQA         /* 0 */
+        ALLPASS_QA            /* 1 */
+    )
+}
+
+// 4
+void allpass_kka_calc(ugen u)
+{
+    ALLPASS_CALC(
+        // Control Arguments
+        ALLPASS_FREQK         /* 0 */
+        ALLPASS_QK            /* 1 */,
+        // Audio Arguments
+        ALLPASS_INA           /* 2 */
+    )
+}
+
+// 5
+void allpass_aka_calc(ugen u)
+{
+    ALLPASS_CALC(
+        // Control Arguments
+        ALLPASS_QK            /* 1 */,
+        // Audio Arguments
+        ALLPASS_FREQA         /* 0 */
+        ALLPASS_INA           /* 2 */
+    )
+}
+
+// 6
+void allpass_kaa_calc(ugen u)
+{
+    ALLPASS_CALC(
+        // Control Arguments
+        ALLPASS_FREQK         /* 0 */,
+        // Audio Arguments
+        ALLPASS_QA            /* 1 */
+        ALLPASS_INA           /* 2 */
+    )
+}
+
+// 7
+void allpass_aaa_calc(ugen u)
+{
+    ALLPASS_CALC(
+        // Control Arguments
+        /* no control args */,
+        // Audio Arguments
+        ALLPASS_FREQA         /* 0 */
+        ALLPASS_QA            /* 1 */
+        ALLPASS_INA           /* 2 */
+    )
+}
+
 
 #define PEAKEQ_CALC(CONTROL_ARGS, AUDIO_ARGS)						\
 double*  in0  = UGEN_INPUT_BUFFER(u, 0);							\
@@ -5979,65 +6081,282 @@ void peakEQ_aaaa_calc(ugen u)
     )
 }
 
-void lowshelf_calc(ugen u)
+#define LOWSHELF_CALC(CONTROL_ARGS, AUDIO_ARGS)						\
+double*  in0  = UGEN_INPUT_BUFFER(u, 0);							\
+double*  in1  = UGEN_INPUT_BUFFER(u, 1);							\
+double*  in2  = UGEN_INPUT_BUFFER(u, 2);							\
+double*  in3  = UGEN_INPUT_BUFFER(u, 3);							\
+double*  out  = UGEN_OUTPUT_BUFFER(u, 0);							\
+biquad_t bi   = *((biquad_t*) u.data);								\
+																	\
+double freq;														\
+double gain;														\
+double slope;														\
+double in;															\
+																	\
+double a;															\
+double omega;														\
+double cs;															\
+double sn;															\
+double beta;														\
+																	\
+double b0;															\
+double b1;															\
+double b2;															\
+double a0;															\
+double a1;															\
+double a2;															\
+																	\
+double y;															\
+																	\
+AUDIO_LOOP(															\
+	freq  = UGEN_IN(in0);											\
+	gain  = UGEN_IN(in1);											\
+	slope = UGEN_IN(in2);											\
+	in    = UGEN_IN(in3);											\
+																	\
+	a     = pow(10,(gain/40));										\
+	omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;					\
+	cs    = cos(omega);												\
+	sn    = sin(omega);												\
+	beta  = sqrt( (pow(a,2) + 1) / slope - pow((a-1),2) );			\
+																	\
+	b0    =    a*( (a+1) - (a-1)*cs + beta*sn );					\
+	b1    =  2*a*( (a-1) - (a+1)*cs           );					\
+	b2    =    a*( (a+1) - (a-1)*cs - beta*sn );					\
+	a0    =        (a+1) + (a-1)*cs + beta*sn;						\
+	a1    =   -2*( (a-1) + (a+1)*cs           );					\
+	a2    =        (a+1) + (a-1)*cs - beta*sn;						\
+																	\
+	y     = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);	\
+																	\
+	bi.y2 = bi.y1;													\
+	bi.y1 = y;														\
+	bi.x2 = bi.x1;													\
+	bi.x1 = in;														\
+																	\
+	UGEN_OUT(out,y);												\
+);																	\
+																	\
+*((biquad_t*) u.data) = bi;											\
+
+#define LOWSHELF_FREQK freq = *in0;
+#define LOWSHELF_FREQA freq = UGEN_IN(in0);
+#define LOWSHELF_GAINK gain = *in1;
+#define LOWSHELF_GAINA gain = UGEN_IN(in1);
+#define LOWSHELF_SLOPEK slope = *in2;
+#define LOWSHELF_SLOPEA slope = UGEN_IN(in2);
+#define LOWSHELF_INK in = *in3;
+#define LOWSHELF_INA in = UGEN_IN(in3);
+
+// 0
+void lowshelf_kkkk_calc(ugen u)
 {
-	double*  in0  = UGEN_INPUT_BUFFER(u, 0);
-    double*  in1  = UGEN_INPUT_BUFFER(u, 1);
-    double*  in2  = UGEN_INPUT_BUFFER(u, 2);
-    double*  in3  = UGEN_INPUT_BUFFER(u, 3);
-	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
-	biquad_t bi   = *((biquad_t*) u.data);
+    LOWSHELF_CALC(
+        // Control Arguments
+        LOWSHELF_FREQK        /* 0 */
+        LOWSHELF_GAINK        /* 1 */
+        LOWSHELF_SLOPEK       /* 2 */
+        LOWSHELF_INK          /* 3 */,
+        // Audio Arguments
+        /* no audio args */
+    )
+}
 
-	double freq;
-	double gain;
-	double slope;
-	double in;
+// 1
+void lowshelf_akkk_calc(ugen u)
+{
+    LOWSHELF_CALC(
+        // Control Arguments
+        LOWSHELF_GAINK        /* 1 */
+        LOWSHELF_SLOPEK       /* 2 */
+        LOWSHELF_INK          /* 3 */,
+        // Audio Arguments
+        LOWSHELF_FREQA        /* 0 */
+    )
+}
 
-	double a;
-	double omega;
-	double cs;
-    double sn;
-	double beta;
+// 2
+void lowshelf_kakk_calc(ugen u)
+{
+    LOWSHELF_CALC(
+        // Control Arguments
+        LOWSHELF_FREQK        /* 0 */
+        LOWSHELF_SLOPEK       /* 2 */
+        LOWSHELF_INK          /* 3 */,
+        // Audio Arguments
+        LOWSHELF_GAINA        /* 1 */
+    )
+}
 
-    double b0;
-    double b1;
-    double b2;
-    double a0;
-    double a1;
-    double a2;
+// 3
+void lowshelf_aakk_calc(ugen u)
+{
+    LOWSHELF_CALC(
+        // Control Arguments
+        LOWSHELF_SLOPEK       /* 2 */
+        LOWSHELF_INK          /* 3 */,
+        // Audio Arguments
+        LOWSHELF_FREQA        /* 0 */
+        LOWSHELF_GAINA        /* 1 */
+    )
+}
 
-	double y;
+// 4
+void lowshelf_kkak_calc(ugen u)
+{
+    LOWSHELF_CALC(
+        // Control Arguments
+        LOWSHELF_FREQK        /* 0 */
+        LOWSHELF_GAINK        /* 1 */
+        LOWSHELF_INK          /* 3 */,
+        // Audio Arguments
+        LOWSHELF_SLOPEA       /* 2 */
+    )
+}
 
-    AUDIO_LOOP(
-		freq  = UGEN_IN(in0);
-		gain  = UGEN_IN(in1);
-		slope = UGEN_IN(in2);
-		in    = UGEN_IN(in3);
+// 5
+void lowshelf_akak_calc(ugen u)
+{
+    LOWSHELF_CALC(
+        // Control Arguments
+        LOWSHELF_GAINK        /* 1 */
+        LOWSHELF_INK          /* 3 */,
+        // Audio Arguments
+        LOWSHELF_FREQA        /* 0 */
+        LOWSHELF_SLOPEA       /* 2 */
+    )
+}
 
-		a     = pow(10,(gain/40));
-		omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
-		cs    = cos(omega);
-    	sn    = sin(omega);
-		beta  = sqrt( (pow(a,2) + 1) / slope - pow((a-1),2) );
+// 6
+void lowshelf_kaak_calc(ugen u)
+{
+    LOWSHELF_CALC(
+        // Control Arguments
+        LOWSHELF_FREQK        /* 0 */
+        LOWSHELF_INK          /* 3 */,
+        // Audio Arguments
+        LOWSHELF_GAINA        /* 1 */
+        LOWSHELF_SLOPEA       /* 2 */
+    )
+}
 
-		b0    =    a*( (a+1) - (a-1)*cs + beta*sn );
-		b1    =  2*a*( (a-1) - (a+1)*cs           );
-		b2    =    a*( (a+1) - (a-1)*cs - beta*sn );
-		a0    =        (a+1) + (a-1)*cs + beta*sn;
-		a1    =   -2*( (a-1) + (a+1)*cs           );
-		a2    =        (a+1) + (a-1)*cs - beta*sn;
+// 7
+void lowshelf_aaak_calc(ugen u)
+{
+    LOWSHELF_CALC(
+        // Control Arguments
+        LOWSHELF_INK          /* 3 */,
+        // Audio Arguments
+        LOWSHELF_FREQA        /* 0 */
+        LOWSHELF_GAINA        /* 1 */
+        LOWSHELF_SLOPEA       /* 2 */
+    )
+}
 
-		y     = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);
+// 8
+void lowshelf_kkka_calc(ugen u)
+{
+    LOWSHELF_CALC(
+        // Control Arguments
+        LOWSHELF_FREQK        /* 0 */
+        LOWSHELF_GAINK        /* 1 */
+        LOWSHELF_SLOPEK       /* 2 */,
+        // Audio Arguments
+        LOWSHELF_INA          /* 3 */
+    )
+}
 
-		bi.y2 = bi.y1;
-		bi.y1 = y;
-		bi.x2 = bi.x1;
-		bi.x1 = in;
+// 9
+void lowshelf_akka_calc(ugen u)
+{
+    LOWSHELF_CALC(
+        // Control Arguments
+        LOWSHELF_GAINK        /* 1 */
+        LOWSHELF_SLOPEK       /* 2 */,
+        // Audio Arguments
+        LOWSHELF_FREQA        /* 0 */
+        LOWSHELF_INA          /* 3 */
+    )
+}
 
-		UGEN_OUT(out,y);
-	);
+// 10
+void lowshelf_kaka_calc(ugen u)
+{
+    LOWSHELF_CALC(
+        // Control Arguments
+        LOWSHELF_FREQK        /* 0 */
+        LOWSHELF_SLOPEK       /* 2 */,
+        // Audio Arguments
+        LOWSHELF_GAINA        /* 1 */
+        LOWSHELF_INA          /* 3 */
+    )
+}
 
-	*((biquad_t*) u.data) = bi;
+// 11
+void lowshelf_aaka_calc(ugen u)
+{
+    LOWSHELF_CALC(
+        // Control Arguments
+        LOWSHELF_SLOPEK       /* 2 */,
+        // Audio Arguments
+        LOWSHELF_FREQA        /* 0 */
+        LOWSHELF_GAINA        /* 1 */
+        LOWSHELF_INA          /* 3 */
+    )
+}
+
+// 12
+void lowshelf_kkaa_calc(ugen u)
+{
+    LOWSHELF_CALC(
+        // Control Arguments
+        LOWSHELF_FREQK        /* 0 */
+        LOWSHELF_GAINK        /* 1 */,
+        // Audio Arguments
+        LOWSHELF_SLOPEA       /* 2 */
+        LOWSHELF_INA          /* 3 */
+    )
+}
+
+// 13
+void lowshelf_akaa_calc(ugen u)
+{
+    LOWSHELF_CALC(
+        // Control Arguments
+        LOWSHELF_GAINK        /* 1 */,
+        // Audio Arguments
+        LOWSHELF_FREQA        /* 0 */
+        LOWSHELF_SLOPEA       /* 2 */
+        LOWSHELF_INA          /* 3 */
+    )
+}
+
+// 14
+void lowshelf_kaaa_calc(ugen u)
+{
+    LOWSHELF_CALC(
+        // Control Arguments
+        LOWSHELF_FREQK        /* 0 */,
+        // Audio Arguments
+        LOWSHELF_GAINA        /* 1 */
+        LOWSHELF_SLOPEA       /* 2 */
+        LOWSHELF_INA          /* 3 */
+    )
+}
+
+// 15
+void lowshelf_aaaa_calc(ugen u)
+{
+    LOWSHELF_CALC(
+        // Control Arguments
+        /* no control args */,
+        // Audio Arguments
+        LOWSHELF_FREQA        /* 0 */
+        LOWSHELF_GAINA        /* 1 */
+        LOWSHELF_SLOPEA       /* 2 */
+        LOWSHELF_INA          /* 3 */
+    )
 }
 
 void highshelf_calc(ugen u)
