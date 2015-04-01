@@ -5051,67 +5051,170 @@ void lpf_aaa_calc(ugen u)
     )
 }
 
-void hpf_calc(ugen u)
+#define HPF_CALC(CONTROL_ARGS, AUDIO_ARGS)							\
+double*  in0  = UGEN_INPUT_BUFFER(u, 0);							\
+double*  in1  = UGEN_INPUT_BUFFER(u, 1);							\
+double*  in2  = UGEN_INPUT_BUFFER(u, 2);							\
+double*  out  = UGEN_OUTPUT_BUFFER(u, 0);							\
+biquad_t bi   = *((biquad_t*) u.data);								\
+																	\
+double freq;														\
+double q;															\
+double in;															\
+																	\
+double omega;														\
+double cs;															\
+double sn;															\
+double alpha;														\
+																	\
+double b0;															\
+double b1;															\
+double b2;															\
+double a0;															\
+double a1;															\
+double a2;															\
+																	\
+double y;															\
+double sinh_i;														\
+																	\
+CONTROL_ARGS														\
+AUDIO_LOOP(															\
+	AUDIO_ARGS														\
+																	\
+	omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;					\
+	cs    = cos(omega);												\
+	sn    = sin(omega);												\
+	alpha = sn * sinh(1 / (2 * q));									\
+																	\
+	/* cs    = MINIMAXSIN(omega);									\
+	sn    = MINIMAXSIN(omega);										\
+	sinh_i= 2 * q;													\
+	sinh_i= 1 / sinh_i;												\
+	alpha = sn * MINIMAXSIN(sinh_i);*/								\
+																	\
+	b0    = (1 + cs) * 0.5;											\
+    b1    = -1 - cs;												\
+    b2    = (1 + cs) * 0.5;											\
+    a0    =  1 + alpha;												\
+    a1    = -2*cs;													\
+    a2    =  1 - alpha;												\
+																	\
+	y     = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);	\
+																	\
+	bi.y2 = bi.y1;													\
+	bi.y1 = y;														\
+	bi.x2 = bi.x1;													\
+	bi.x1 = in;														\
+																	\
+	UGEN_OUT(out,y);												\
+);																	\
+																	\
+*((biquad_t*) u.data) = bi;											\
+
+#define HPF_FREQK freq = *in0;
+#define HPF_FREQA freq = UGEN_IN(in0);
+#define HPF_QK q = *in1;
+#define HPF_QA q = UGEN_IN(in1);
+#define HPF_INK in = *in2;
+#define HPF_INA in = UGEN_IN(in2);
+
+
+// 0
+void hpf_kkk_calc(ugen u)
 {
-	double*  in0  = UGEN_INPUT_BUFFER(u, 0);
-    double*  in1  = UGEN_INPUT_BUFFER(u, 1);
-    double*  in2  = UGEN_INPUT_BUFFER(u, 2);
-	double*  out  = UGEN_OUTPUT_BUFFER(u, 0);
-	biquad_t bi   = *((biquad_t*) u.data);
+    HPF_CALC(
+        // Control Arguments
+        HPF_FREQK             /* 0 */
+        HPF_QK                /* 1 */
+        HPF_INK               /* 2 */,
+        // Audio Arguments
+        /* no audio args */
+    )
+}
 
-	double freq;
-	double q;
-	double in;
+// 1
+void hpf_akk_calc(ugen u)
+{
+    HPF_CALC(
+        // Control Arguments
+        HPF_QK                /* 1 */
+        HPF_INK               /* 2 */,
+        // Audio Arguments
+        HPF_FREQA             /* 0 */
+    )
+}
 
-	double omega;
-	double cs;
-    double sn;
-	double alpha;
+// 2
+void hpf_kak_calc(ugen u)
+{
+    HPF_CALC(
+        // Control Arguments
+        HPF_FREQK             /* 0 */
+        HPF_INK               /* 2 */,
+        // Audio Arguments
+        HPF_QA                /* 1 */
+    )
+}
 
-    double b0;
-    double b1;
-    double b2;
-    double a0;
-    double a1;
-    double a2;
+// 3
+void hpf_aak_calc(ugen u)
+{
+    HPF_CALC(
+        // Control Arguments
+        HPF_INK               /* 2 */,
+        // Audio Arguments
+        HPF_FREQA             /* 0 */
+        HPF_QA                /* 1 */
+    )
+}
 
-	double y;
-	double sinh_i;
+// 4
+void hpf_kka_calc(ugen u)
+{
+    HPF_CALC(
+        // Control Arguments
+        HPF_FREQK             /* 0 */
+        HPF_QK                /* 1 */,
+        // Audio Arguments
+        HPF_INA               /* 2 */
+    )
+}
 
-    AUDIO_LOOP(
-		freq  = UGEN_IN(in0);
-		q     = MAX(UGEN_IN(in1),0.00000001);
-		in    = UGEN_IN(in2);
+// 5
+void hpf_aka_calc(ugen u)
+{
+    HPF_CALC(
+        // Control Arguments
+        HPF_QK                /* 1 */,
+        // Audio Arguments
+        HPF_FREQA             /* 0 */
+        HPF_INA               /* 2 */
+    )
+}
 
-		omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;
-		cs    = cos(omega);
-    	sn    = sin(omega);
-		alpha = sn * sinh(1 / (2 * q));
+// 6
+void hpf_kaa_calc(ugen u)
+{
+    HPF_CALC(
+        // Control Arguments
+        HPF_FREQK             /* 0 */,
+        // Audio Arguments
+        HPF_QA                /* 1 */
+        HPF_INA               /* 2 */
+    )
+}
 
-		// cs    = MINIMAXSIN(omega);
-    	// sn    = MINIMAXSIN(omega);
-		// sinh_i= 2 * q;
-		// sinh_i= 1 / sinh_i;
-		// alpha = sn * MINIMAXSIN(sinh_i);
-
-		b0    = (1 + cs) * 0.5;
-	    b1    = -1 - cs;
-	    b2    = (1 + cs) * 0.5;
-	    a0    =  1 + alpha;
-	    a1    = -2*cs;
-	    a2    =  1 - alpha;
-
-		y     = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);
-
-		bi.y2 = bi.y1;
-		bi.y1 = y;
-		bi.x2 = bi.x1;
-		bi.x1 = in;
-
-		UGEN_OUT(out,y);
-	);
-
-	*((biquad_t*) u.data) = bi;
+// 7
+void hpf_aaa_calc(ugen u)
+{
+    HPF_CALC(
+        // Control Arguments
+        /* no control args */,
+        // Audio Arguments
+        HPF_FREQA             /* 0 */
+        HPF_QA                /* 1 */
+        HPF_INA               /* 2 */
+    )
 }
 
 void bpf_calc(ugen u)

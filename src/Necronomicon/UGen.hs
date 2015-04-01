@@ -582,9 +582,19 @@ lpf freq q input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen LPF lpfA
     where
         cfuncs = [lpfKKKCalc, lpfAKKCalc, lpfKAKCalc, lpfAAKCalc, lpfKKACalc, lpfAKACalc, lpfKAACalc, lpfAAACalc]
 
-foreign import ccall "&hpf_calc" hpfCalc :: CUGenFunc
+foreign import ccall "&hpf_kkk_calc" hpfKKKCalc :: CUGenFunc
+foreign import ccall "&hpf_akk_calc" hpfAKKCalc :: CUGenFunc
+foreign import ccall "&hpf_kak_calc" hpfKAKCalc :: CUGenFunc
+foreign import ccall "&hpf_aak_calc" hpfAAKCalc :: CUGenFunc
+foreign import ccall "&hpf_kka_calc" hpfKKACalc :: CUGenFunc
+foreign import ccall "&hpf_aka_calc" hpfAKACalc :: CUGenFunc
+foreign import ccall "&hpf_kaa_calc" hpfKAACalc :: CUGenFunc
+foreign import ccall "&hpf_aaa_calc" hpfAAACalc :: CUGenFunc
+
 hpf :: UGen -> UGen -> UGen -> UGen
-hpf freq q input = multiChannelExpandUGen HPF hpfCalc biquadConstructor biquadDeconstructor [freq,q,input]
+hpf freq q input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen HPF hpfAAACalc biquadConstructor biquadDeconstructor [freq, q, input]
+    where
+        cfuncs = [hpfKKKCalc, hpfAKKCalc, hpfKAKCalc, hpfAAKCalc, hpfKKACalc, hpfAKACalc, hpfKAACalc, hpfAAACalc]
 
 foreign import ccall "&bpf_calc" bpfCalc :: CUGenFunc
 bpf :: UGen -> UGen -> UGen -> UGen
