@@ -706,9 +706,32 @@ lowshelf freq fgain slope input = optimizeUGenCalcFunc cfuncs $ multiChannelExpa
                 lowshelfKKAACalc, lowshelfAKAACalc, lowshelfKAAACalc, lowshelfAAAACalc
             ]
 
-foreign import ccall "&highshelf_calc" highshelfCalc :: CUGenFunc
+foreign import ccall "&highshelf_kkkk_calc" highshelfKKKKCalc :: CUGenFunc
+foreign import ccall "&highshelf_akkk_calc" highshelfAKKKCalc :: CUGenFunc
+foreign import ccall "&highshelf_kakk_calc" highshelfKAKKCalc :: CUGenFunc
+foreign import ccall "&highshelf_aakk_calc" highshelfAAKKCalc :: CUGenFunc
+foreign import ccall "&highshelf_kkak_calc" highshelfKKAKCalc :: CUGenFunc
+foreign import ccall "&highshelf_akak_calc" highshelfAKAKCalc :: CUGenFunc
+foreign import ccall "&highshelf_kaak_calc" highshelfKAAKCalc :: CUGenFunc
+foreign import ccall "&highshelf_aaak_calc" highshelfAAAKCalc :: CUGenFunc
+foreign import ccall "&highshelf_kkka_calc" highshelfKKKACalc :: CUGenFunc
+foreign import ccall "&highshelf_akka_calc" highshelfAKKACalc :: CUGenFunc
+foreign import ccall "&highshelf_kaka_calc" highshelfKAKACalc :: CUGenFunc
+foreign import ccall "&highshelf_aaka_calc" highshelfAAKACalc :: CUGenFunc
+foreign import ccall "&highshelf_kkaa_calc" highshelfKKAACalc :: CUGenFunc
+foreign import ccall "&highshelf_akaa_calc" highshelfAKAACalc :: CUGenFunc
+foreign import ccall "&highshelf_kaaa_calc" highshelfKAAACalc :: CUGenFunc
+foreign import ccall "&highshelf_aaaa_calc" highshelfAAAACalc :: CUGenFunc
+
 highshelf :: UGen -> UGen -> UGen -> UGen -> UGen
-highshelf freq fgain slope input = multiChannelExpandUGen HighShelf highshelfCalc biquadConstructor biquadDeconstructor [freq,fgain,slope,input]
+highshelf freq fgain slope input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen HighShelf highshelfAAAACalc biquadConstructor biquadDeconstructor [freq, fgain, slope, input]
+    where
+        cfuncs = [
+                highshelfKKKKCalc, highshelfAKKKCalc, highshelfKAKKCalc, highshelfAAKKCalc,
+                highshelfKKAKCalc, highshelfAKAKCalc, highshelfKAAKCalc, highshelfAAAKCalc,
+                highshelfKKKACalc, highshelfAKKACalc, highshelfKAKACalc, highshelfAAKACalc,
+                highshelfKKAACalc, highshelfAKAACalc, highshelfKAAACalc, highshelfAAAACalc
+            ]
 
 foreign import ccall "&lag_calc" lagCalc :: CUGenFunc
 lag :: UGen -> UGen -> UGen
