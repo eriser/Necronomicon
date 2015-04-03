@@ -5681,10 +5681,10 @@ AUDIO_LOOP(															\
 	alpha = sn * sinh(1 / (2 * q));									\
 																	\
 	b0    =   1 - alpha;											\
-    b1    =  -2*cs;													\
+    b1    =  -2 * cs;												\
     b2    =   1 + alpha;											\
     a0    =   1 + alpha;											\
-    a1    =  -2*cs;													\
+    a1    =  -2 * cs;												\
     a2    =   1 - alpha;											\
 																	\
 	y     = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);	\
