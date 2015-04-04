@@ -125,7 +125,13 @@ isAudioRate :: UGenChannel -> Bool
 isAudioRate u = ugenRate u == AudioRate
 
 polymorphicRateUGenUnits :: S.Set UGenUnit
-polymorphicRateUGenUnits = S.fromList [Add, Minus, Mul, Div, Negate, Abs, Signum, Pow, Exp, Log, Cos, ASin, ACos, ATan, LogBase, Sqrt, Tan, TanH, SinH, CosH, ASinH, ATanH, ACosH, Range, ExpRange]
+polymorphicRateUGenUnits = S.fromList [
+        Add, Minus, Mul, Div, Negate, Abs, Signum, Pow,
+        Exp, Log, Cos, ASin, ACos, ATan, LogBase, Sqrt,
+        Tan, TanH, SinH, CosH, ASinH, ATanH, ACosH, Range,
+        ExpRange, Clip, SoftClip, Poly3, TanHDist, SinDist,
+        Wrap
+    ]
 
 ugenRate :: UGenChannel -> UGenRate
 ugenRate (UGenNum _) = ControlRate
@@ -755,39 +761,88 @@ lag timeLag input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen LagCalc
 -- lpfMS20 freq reson dist input = multiChannelExpandUGen LPFMS20 zeroDelayLPMS20Calc zeroDelayFilterConstructor zeroDelayFilterDeconstructor [freq,reson,dist,input]
 
 --Distortions
-foreign import ccall "&clip_calc" clipCalc :: CUGenFunc
+foreign import ccall "&clip_kk_calc" clipKKCalc :: CUGenFunc
+foreign import ccall "&clip_ak_calc" clipAKCalc :: CUGenFunc
+foreign import ccall "&clip_ka_calc" clipKACalc :: CUGenFunc
+foreign import ccall "&clip_aa_calc" clipAACalc :: CUGenFunc
+
 clip :: UGen -> UGen -> UGen
-clip amount input = multiChannelExpandUGen Clip clipCalc nullConstructor nullDeconstructor [amount,input]
+clip amount input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen Clip clipAACalc nullConstructor nullDeconstructor [amount, input]
+    where
+        cfuncs = [clipKKCalc, clipAKCalc, clipKACalc, clipAACalc]
 
-foreign import ccall "&softclip_calc" softclipCalc :: CUGenFunc
+foreign import ccall "&softclip_kk_calc" softclipKKCalc :: CUGenFunc
+foreign import ccall "&softclip_ak_calc" softclipAKCalc :: CUGenFunc
+foreign import ccall "&softclip_ka_calc" softclipKACalc :: CUGenFunc
+foreign import ccall "&softclip_aa_calc" softclipAACalc :: CUGenFunc
+
 softclip :: UGen -> UGen -> UGen
-softclip amount input = multiChannelExpandUGen SoftClip softclipCalc nullConstructor nullDeconstructor [amount,input]
+softclip amount input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen SoftClip softclipAACalc nullConstructor nullDeconstructor [amount, input]
+    where
+        cfuncs = [softclipKKCalc, softclipAKCalc, softclipKACalc, softclipAACalc]
 
-foreign import ccall "&poly3_calc" poly3Calc :: CUGenFunc
+foreign import ccall "&poly3_kk_calc" poly3KKCalc :: CUGenFunc
+foreign import ccall "&poly3_ak_calc" poly3AKCalc :: CUGenFunc
+foreign import ccall "&poly3_ka_calc" poly3KACalc :: CUGenFunc
+foreign import ccall "&poly3_aa_calc" poly3AACalc :: CUGenFunc
+
 poly3 :: UGen -> UGen -> UGen
-poly3 amount input = multiChannelExpandUGen Poly3 poly3Calc nullConstructor nullDeconstructor [amount,input]
+poly3 amount input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen Poly3 poly3AACalc nullConstructor nullDeconstructor [amount, input]
+    where
+        cfuncs = [poly3KKCalc, poly3AKCalc, poly3KACalc, poly3AACalc]
 
-foreign import ccall "&tanhdist_calc" tanhDistCalc :: CUGenFunc
+foreign import ccall "&tanhDist_kk_calc" tanhDistKKCalc :: CUGenFunc
+foreign import ccall "&tanhDist_ak_calc" tanhDistAKCalc :: CUGenFunc
+foreign import ccall "&tanhDist_ka_calc" tanhDistKACalc :: CUGenFunc
+foreign import ccall "&tanhDist_aa_calc" tanhDistAACalc :: CUGenFunc
+
 tanhDist :: UGen -> UGen -> UGen
-tanhDist amount input = multiChannelExpandUGen TanHDist tanhDistCalc nullConstructor nullDeconstructor [amount,input]
+tanhDist amount input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen TanHDist tanhDistAACalc nullConstructor nullDeconstructor [amount, input]
+    where
+        cfuncs = [tanhDistKKCalc, tanhDistAKCalc, tanhDistKACalc, tanhDistAACalc]
 
-foreign import ccall "&sinDist_calc" sinDistCalc :: CUGenFunc
+foreign import ccall "&sinDist_kk_calc" sinDistKKCalc :: CUGenFunc
+foreign import ccall "&sinDist_ak_calc" sinDistAKCalc :: CUGenFunc
+foreign import ccall "&sinDist_ka_calc" sinDistKACalc :: CUGenFunc
+foreign import ccall "&sinDist_aa_calc" sinDistAACalc :: CUGenFunc
+
 sinDist :: UGen -> UGen -> UGen
-sinDist amount input = multiChannelExpandUGen SinDist sinDistCalc nullConstructor nullDeconstructor [amount,input]
+sinDist amount input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen SinDist sinDistAACalc nullConstructor nullDeconstructor [amount, input]
+    where
+        cfuncs = [sinDistKKCalc, sinDistAKCalc, sinDistKACalc, sinDistAACalc]
 
-foreign import ccall "&wrap_calc" wrapCalc :: CUGenFunc
+foreign import ccall "&wrap_kk_calc" wrapKKCalc :: CUGenFunc
+foreign import ccall "&wrap_ak_calc" wrapAKCalc :: CUGenFunc
+foreign import ccall "&wrap_ka_calc" wrapKACalc :: CUGenFunc
+foreign import ccall "&wrap_aa_calc" wrapAACalc :: CUGenFunc
+
 wrap :: UGen -> UGen -> UGen
-wrap amount input = multiChannelExpandUGen Wrap wrapCalc nullConstructor nullDeconstructor [amount,input]
+wrap amount input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen Wrap wrapAACalc nullConstructor nullDeconstructor [amount, input]
+    where
+        cfuncs = [wrapKKCalc, wrapAKCalc, wrapKACalc, wrapAACalc]
 
-foreign import ccall "&crush_calc" crushCalc :: CUGenFunc
+foreign import ccall "&crush_kk_calc" crushKKCalc :: CUGenFunc
+foreign import ccall "&crush_ak_calc" crushAKCalc :: CUGenFunc
+foreign import ccall "&crush_ka_calc" crushKACalc :: CUGenFunc
+foreign import ccall "&crush_aa_calc" crushAACalc :: CUGenFunc
+
 crush :: UGen -> UGen -> UGen
-crush depth x = multiChannelExpandUGen Crush crushCalc nullConstructor nullDeconstructor [depth,x]
+crush depth x = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen Crush crushAACalc nullConstructor nullDeconstructor [depth, x]
+    where
+        cfuncs = [crushKKCalc, crushAKCalc, crushKACalc, crushAACalc]
 
 foreign import ccall "&decimate_constructor"   decimateConstructor   :: CUGenFunc
 foreign import ccall "&decimate_deconstructor" decimateDeconstructor :: CUGenFunc
-foreign import ccall "&decimate_calc"          decimateCalc          :: CUGenFunc
+
+foreign import ccall "&decimate_kk_calc" decimateKKCalc :: CUGenFunc
+foreign import ccall "&decimate_ak_calc" decimateAKCalc :: CUGenFunc
+foreign import ccall "&decimate_ka_calc" decimateKACalc :: CUGenFunc
+foreign import ccall "&decimate_aa_calc" decimateAACalc :: CUGenFunc
+
 decimate :: UGen -> UGen -> UGen
-decimate rate x = multiChannelExpandUGen Decimate decimateCalc decimateConstructor decimateDeconstructor [rate,x]
+decimate rate x = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen Decimate decimateAACalc decimateConstructor decimateDeconstructor [rate, x]
+    where
+        cfuncs = [decimateKKCalc, decimateAKCalc, decimateKACalc, decimateAACalc]
 
 foreign import ccall "&delay_deconstructor" delayDeconstructor :: CUGenFunc
 foreign import ccall "&delayN_constructor" delayNConstructor :: CUGenFunc
