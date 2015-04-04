@@ -535,10 +535,7 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
     {
 		double* wire_buffer = ugen_wires + (i * BLOCK_SIZE);
         unsigned j;
-        for (j = 0; j < BLOCK_SIZE; ++j)
-        {
-            wire_buffer[j] = arguments[i];
-        }
+        *wire_buffer = arguments[i];
     }
 
 	// UGens
@@ -1286,12 +1283,9 @@ void send_set_synth_arg(unsigned int id, double argument, unsigned int arg_index
 	// print_node(synth);
 	if ((synth != NULL) && (synth->alive_status == NODE_SPAWNING || synth->alive_status == NODE_ALIVE))
 	{
-		double* ugen_wires = synth->ugen_wires + (arg_index * BLOCK_SIZE);
+		double* wire_buffer = synth->ugen_wires + (arg_index * BLOCK_SIZE);
 		unsigned j;
-		for (j = 0; j < BLOCK_SIZE; ++j)
-		{
-			ugen_wires[j] = argument;
-		}
+		*wire_buffer = argument;
 	}
 
 	else
@@ -1315,11 +1309,7 @@ void send_set_synth_args(unsigned int id, double* arguments, unsigned int num_ar
 		for (i = 0; i < num_arguments; ++i)
 		{
 			double* wire_buffer = ugen_wires + (i * BLOCK_SIZE);
-			unsigned j;
-			for (j = 0; j < BLOCK_SIZE; ++j)
-			{
-				wire_buffer[j] = arguments[i];
-			}
+			*wire_buffer = arguments[i];
 		}
 	}
 
@@ -1774,10 +1764,7 @@ void add_kk_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 	double a = in0[0];
 	double b = in1[0];
-	const double y = a + b;
-	AUDIO_LOOP(
-		UGEN_OUT(out, y);
-	);
+	*out = a + b;
 }
 
 void minus_aa_calc(ugen u)
@@ -1815,10 +1802,7 @@ void minus_kk_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 	double a = in0[0];
 	double b = in1[0];
-	const double y = a - b;
-	AUDIO_LOOP(
-		UGEN_OUT(out, y);
-	);
+	*out = a - b;
 }
 
 void mul_aa_calc(ugen u)
@@ -1856,10 +1840,7 @@ void mul_kk_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 	double a = in0[0];
 	double b = in1[0];
-	const double y = a * b;
-	AUDIO_LOOP(
-		UGEN_OUT(out, y);
-	);
+	*out = a * b;
 }
 
 #define DIV_CALC(CONTROL_ARGS, AUDIO_ARGS)        \
@@ -1908,10 +1889,7 @@ void div_kk_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 	double a = in0[0];
 	double b = in1[0];
-	const double y = b != 0 ? (a / b) : 0;
-	AUDIO_LOOP(
-		UGEN_OUT(out, y);
-	);
+	*out = b != 0 ? (a / b) : 0;
 }
 
 void abs_a_calc(ugen u)
@@ -1928,10 +1906,7 @@ void abs_k_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-	const double y = abs(in[0]);
-	AUDIO_LOOP(
-		UGEN_OUT(out, y);
-	);
+	*out = abs(in[0]);
 }
 
 #define SIGNUM_CALC() \
@@ -1960,9 +1935,7 @@ void signum_k_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 	double value = in[0];
 	SIGNUM_CALC();
-	AUDIO_LOOP(
-		UGEN_OUT(out, value);
-	);
+	*out = value;
 }
 
 void negate_a_calc(ugen u)
@@ -1979,10 +1952,7 @@ void negate_k_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-	const double y = -in[0];
-	AUDIO_LOOP(
-		UGEN_OUT(out, y);
-	);
+	*out = -in[0];
 }
 
 void pow_aa_calc(ugen u)
@@ -2018,10 +1988,7 @@ void pow_kk_calc(ugen u)
 	double* in0 = UGEN_INPUT_BUFFER(u, 0);
 	double* in1 = UGEN_INPUT_BUFFER(u, 1);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-	const double y = pow(in0[0], in1[0]);
-	AUDIO_LOOP(
-		UGEN_OUT(out, y);
-	);
+	*out = pow(in0[0], in1[0]);
 }
 
 void exp_a_calc(ugen u)
@@ -2038,10 +2005,7 @@ void exp_k_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-	const double y = exp(in[0]);
-	AUDIO_LOOP(
-		UGEN_OUT(out, y);
-	);
+	*out = exp(in[0]);
 }
 
 void log_a_calc(ugen u)
@@ -2058,10 +2022,7 @@ void log_k_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-	const double y = log(in[0]);
-	AUDIO_LOOP(
-		UGEN_OUT(out, y);
-	);
+	*out = log(in[0]);
 }
 
 void cos_a_calc(ugen u)
@@ -2078,10 +2039,7 @@ void cos_k_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-	const double y = cos(in[0]);
-	AUDIO_LOOP(
-		UGEN_OUT(out, y);
-	);
+	*out = cos(in[0]);
 }
 
 void asin_a_calc(ugen u)
@@ -2098,10 +2056,7 @@ void asin_k_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-	const double y = asin(in[0]);
-	AUDIO_LOOP(
-		UGEN_OUT(out, y);
-	);
+	*out = asin(in[0]);
 }
 
 void acos_a_calc(ugen u)
@@ -2118,10 +2073,7 @@ void acos_k_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-	const double y = acos(in[0]);
-	AUDIO_LOOP(
-		UGEN_OUT(out, y);
-	);
+	*out = acos(in[0]);
 }
 
 void atan_a_calc(ugen u)
@@ -2138,10 +2090,7 @@ void atan_k_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-	const double y = atan(in[0]);
-	AUDIO_LOOP(
-		UGEN_OUT(out, y);
-	);
+	*out = atan(in[0]);
 }
 
 void logbase_aa_calc(ugen u)
@@ -2184,10 +2133,7 @@ void logbase_kk_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 	const double a = log(in0[0]);
 	const double b = log(in1[0]);
-	const double y = a / b;
-	AUDIO_LOOP(
-		UGEN_OUT(out, y);
-	);
+	*out = a / b;
 }
 
 void sqrt_a_calc(ugen u)
@@ -2204,10 +2150,7 @@ void sqrt_k_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-	const double y = sqrt(in[0]);
-	AUDIO_LOOP(
-		UGEN_OUT(out, y);
-	);
+	*out = sqrt(in[0]);
 }
 
 void tan_a_calc(ugen u)
@@ -2224,10 +2167,7 @@ void tan_k_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-	const double y = tan(in[0]);
-	AUDIO_LOOP(
-		UGEN_OUT(out, y);
-	);
+	*out = tan(in[0]);
 }
 
 void sinh_a_calc(ugen u)
@@ -2244,10 +2184,7 @@ void sinh_k_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-	const double y = sinh(in[0]);
-	AUDIO_LOOP(
-		UGEN_OUT(out, y);
-	);
+	*out = sinh(in[0]);
 }
 
 void cosh_a_calc(ugen u)
@@ -2264,10 +2201,7 @@ void cosh_k_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-	const double y = cosh(in[0]);
-	AUDIO_LOOP(
-		UGEN_OUT(out, y);
-	);
+	*out = cosh(in[0]);
 }
 
 void tanh_a_calc(ugen u)
@@ -2284,10 +2218,7 @@ void tanh_k_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-	const double y = tanh(in[0]);
-	AUDIO_LOOP(
-		UGEN_OUT(out, y);
-	);
+	*out = tanh(in[0]);
 }
 
 void asinh_a_calc(ugen u)
@@ -2304,10 +2235,7 @@ void asinh_k_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-	const double y = asinh(in[0]);
-	AUDIO_LOOP(
-		UGEN_OUT(out, y);
-	);
+	*out = asinh(in[0]);
 }
 
 void atanh_a_calc(ugen u)
@@ -2324,10 +2252,7 @@ void atanh_k_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-	const double y = atanh(in[0]);
-	AUDIO_LOOP(
-		UGEN_OUT(out, y);
-	);
+	*out = atanh(in[0]);
 }
 
 void acosh_a_calc(ugen u)
@@ -2344,10 +2269,7 @@ void acosh_k_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
-	const double y = acosh(in[0]);
-	AUDIO_LOOP(
-		UGEN_OUT(out, y);
-	);
+	*out = acosh(in[0]);
 }
 
 void line_constructor(ugen* u)
@@ -3109,139 +3031,399 @@ double* in2 = UGEN_INPUT_BUFFER(u, 2); \
 	ret;														   \
 })                                                                 \
 
-void combN_calc(ugen u)
+#define COMBN_CALC(CONTROL_ARGS, AUDIO_ARGS)									\
+INIT_DELAY(u);																	\
+INIT_COMB(u);																	\
+long iread_index;																\
+CONTROL_ARGS																	\
+AUDIO_LOOP(																		\
+	AUDIO_ARGS																	\
+	iread_index = write_index - (long) delay_time;								\
+	y = iread_index < 0 ? 0 : buffer.samples[iread_index & num_samples_mask];	\
+	buffer.samples[write_index & num_samples_mask] = x + (feedback * y);		\
+	++write_index;																\
+	UGEN_OUT(out, y);															\
+);																				\
+FINISH_DELAY();																	\
+
+#define COMBN_DELAY_TIMEK delay_time = fmin(data.max_delay_time, fmax(1, (*in0) * SAMPLE_RATE));
+#define COMBN_DELAY_TIMEA delay_time = fmin(data.max_delay_time, fmax(1, UGEN_IN(in0) * SAMPLE_RATE));
+#define COMBN_FEEDBACKK feedback = (*in1) * 0.1;
+#define COMBN_FEEDBACKA feedback = UGEN_IN(in1) * 0.1;
+#define COMBN_XK x = *in2;
+#define COMBN_XA x = UGEN_IN(in2);
+
+// 0
+void combN_kkk_calc(ugen u)
 {
-	INIT_DELAY(u);
-	INIT_COMB(u);
-	long iread_index;
-
-	AUDIO_LOOP(
-		delay_time = fmin(data.max_delay_time, fmax(1, UGEN_IN(in0) * SAMPLE_RATE));
-		// decay_time = UGEN_IN(in1);
-		feedback = UGEN_IN(in1) * 0.1;
-		// feedback = CALC_FEEDBACK(delay_time, decay_time);
-		x = UGEN_IN(in2);
-		iread_index = write_index - (long) delay_time;
-		y = iread_index < 0 ? 0 : buffer.samples[iread_index & num_samples_mask];
-		buffer.samples[write_index & num_samples_mask] = x + (feedback * y);
-		++write_index;
-		UGEN_OUT(out, y);
-	);
-
-	FINISH_DELAY();
+    COMBN_CALC(
+        // Control Arguments
+        COMBN_DELAY_TIMEK     /* 0 */
+        COMBN_FEEDBACKK       /* 1 */
+        COMBN_XK              /* 2 */,
+        // Audio Arguments
+        /* no audio args */
+    )
 }
 
-void combL_calc(ugen u)
+// 1
+void combN_akk_calc(ugen u)
 {
-	INIT_DELAY(u);
-	INIT_COMB(u);
-	double y0, y1;
-	double delta;
-	double read_index;
-	unsigned int iread_index0, iread_index1;
-
-	AUDIO_LOOP(
-		delay_time = fmin(data.max_delay_time, fmax(1, UGEN_IN(in0) * SAMPLE_RATE));
-		// decay_time = UGEN_IN(in1);
-		feedback = UGEN_IN(in1) * 0.1;
-		// feedback = CALC_FEEDBACK(delay_time, decay_time);
-		x = UGEN_IN(in2);
-		read_index = (double) write_index - delay_time;
-		iread_index0 = (long) read_index;
-
-		if (iread_index0 < 0)
-		{
-			y = 0;
-		}
-
-		else
-		{
-			iread_index1 = iread_index0 - 1;
-			delta = read_index - iread_index0;
-			y0 = buffer.samples[iread_index0 & num_samples_mask];
-			y1 = iread_index1 < 0 ? 0 : buffer.samples[iread_index1 & num_samples_mask];
-			y  = LINEAR_INTERP(y0, y1, delta);
-		}
-
-		buffer.samples[write_index & num_samples_mask] = x + (feedback * y);
-		++write_index;
-		UGEN_OUT(out, y);
-	);
-
-	FINISH_DELAY();
+    COMBN_CALC(
+        // Control Arguments
+        COMBN_FEEDBACKK       /* 1 */
+        COMBN_XK              /* 2 */,
+        // Audio Arguments
+        COMBN_DELAY_TIMEA     /* 0 */
+    )
 }
 
-void combC_calc(ugen u)
+// 2
+void combN_kak_calc(ugen u)
 {
-	INIT_DELAY(u);
-	INIT_COMB(u);
-	double y0, y1, y2, y3;
-	double delta;
-	double read_index;
-	unsigned int iread_index0, iread_index1, iread_index2, iread_index3;
+    COMBN_CALC(
+        // Control Arguments
+        COMBN_DELAY_TIMEK     /* 0 */
+        COMBN_XK              /* 2 */,
+        // Audio Arguments
+        COMBN_FEEDBACKA       /* 1 */
+    )
+}
 
-	AUDIO_LOOP(
-		// Clamp delay at 1 to prevent the + 1 iread_index3 from reading on the wrong side of the write head
-		delay_time = fmin(data.max_delay_time, fmax(2, UGEN_IN(in0) * SAMPLE_RATE));
-		// decay_time = UGEN_IN(in1);
-		feedback = UGEN_IN(in1) * 0.1;
-		// feedback = CALC_FEEDBACK(delay_time, decay_time);
-		x = UGEN_IN(in2);
-		read_index  = (double) write_index - delay_time;
-		iread_index1 = (long) read_index;
-		iread_index2 = iread_index1 - 1;
-		iread_index3 = iread_index1 - 2;
-		iread_index0 = iread_index1 + 1;
-		delta = read_index - iread_index0;
+// 3
+void combN_aak_calc(ugen u)
+{
+    COMBN_CALC(
+        // Control Arguments
+        COMBN_XK              /* 2 */,
+        // Audio Arguments
+        COMBN_DELAY_TIMEA     /* 0 */
+        COMBN_FEEDBACKA       /* 1 */
+    )
+}
 
-		if (iread_index0 < 0)
-		{
-			y = 0;
-		}
+// 4
+void combN_kka_calc(ugen u)
+{
+    COMBN_CALC(
+        // Control Arguments
+        COMBN_DELAY_TIMEK     /* 0 */
+        COMBN_FEEDBACKK       /* 1 */,
+        // Audio Arguments
+        COMBN_XA              /* 2 */
+    )
+}
 
-		else
-		{
-			if(iread_index1 < 0)
-			{
-				y0 = buffer.samples[iread_index0 & num_samples_mask];
-				y1 = y2 = y3 = 0;
-				y  = CUBIC_INTERP(y0, y1, y2, y3, delta);
-			}
+// 5
+void combN_aka_calc(ugen u)
+{
+    COMBN_CALC(
+        // Control Arguments
+        COMBN_FEEDBACKK       /* 1 */,
+        // Audio Arguments
+        COMBN_DELAY_TIMEA     /* 0 */
+        COMBN_XA              /* 2 */
+    )
+}
 
-			else if(iread_index2 < 0)
-			{
-				y0 = buffer.samples[iread_index0 & num_samples_mask];
-				y1 = buffer.samples[iread_index1 & num_samples_mask];
-				y2 = y3 = 0;
-				y  = CUBIC_INTERP(y0, y1, y2, y3, delta);
-			}
+// 6
+void combN_kaa_calc(ugen u)
+{
+    COMBN_CALC(
+        // Control Arguments
+        COMBN_DELAY_TIMEK     /* 0 */,
+        // Audio Arguments
+        COMBN_FEEDBACKA       /* 1 */
+        COMBN_XA              /* 2 */
+    )
+}
 
-			else if(iread_index3 < 0)
-			{
-				y0 = buffer.samples[iread_index0 & num_samples_mask];
-				y1 = buffer.samples[iread_index1 & num_samples_mask];
-				y2 = buffer.samples[iread_index1 & num_samples_mask];
-				y3 = 0;
-				y  = CUBIC_INTERP(y0, y1, y2, y3, delta);
-			}
+// 7
+void combN_aaa_calc(ugen u)
+{
+    COMBN_CALC(
+        // Control Arguments
+        /* no control args */,
+        // Audio Arguments
+        COMBN_DELAY_TIMEA     /* 0 */
+        COMBN_FEEDBACKA       /* 1 */
+        COMBN_XA              /* 2 */
+    )
+}
 
-			else
-			{
-				y0 = buffer.samples[iread_index0 & num_samples_mask];
-				y1 = buffer.samples[iread_index1 & num_samples_mask];
-				y2 = buffer.samples[iread_index2 & num_samples_mask];
-				y3 = buffer.samples[iread_index3 & num_samples_mask];
-			}
+#define COMBL_CALC(CONTROL_ARGS, AUDIO_ARGS)											\
+INIT_DELAY(u);																			\
+INIT_COMB(u);																			\
+double y0, y1;																			\
+double delta;																			\
+double read_index;																		\
+unsigned int iread_index0, iread_index1;												\
+CONTROL_ARGS																			\
+AUDIO_LOOP(																				\
+	AUDIO_ARGS																			\
+	/* feedback = CALC_FEEDBACK(delay_time, decay_time); */								\
+	x = UGEN_IN(in2);																	\
+	read_index = (double) write_index - delay_time;										\
+	iread_index0 = (long) read_index;													\
+																						\
+	if (iread_index0 < 0)																\
+	{																					\
+		y = 0;																			\
+	}																					\
+																						\
+	else																				\
+	{																					\
+		iread_index1 = iread_index0 - 1;												\
+		delta = read_index - iread_index0;												\
+		y0 = buffer.samples[iread_index0 & num_samples_mask];							\
+		y1 = iread_index1 < 0 ? 0 : buffer.samples[iread_index1 & num_samples_mask];	\
+		y  = LINEAR_INTERP(y0, y1, delta);												\
+	}																					\
+																						\
+	buffer.samples[write_index & num_samples_mask] = x + (feedback * y);				\
+	++write_index;																		\
+	UGEN_OUT(out, y);																	\
+);																						\
+FINISH_DELAY();																			\
 
-			y  = CUBIC_INTERP(y0, y1, y2, y3, delta);
-		}
+#define COMBL_DELAY_TIMEK delay_time = fmin(data.max_delay_time, fmax(1, (*in0) * SAMPLE_RATE));
+#define COMBL_DELAY_TIMEA delay_time = fmin(data.max_delay_time, fmax(1, UGEN_IN(in0) * SAMPLE_RATE));
+#define COMBL_FEEDBACKK feedback = (*in1) * 0.1;
+#define COMBL_FEEDBACKA feedback = UGEN_IN(in1) * 0.1;
+#define COMBL_XK x = *in2;
+#define COMBL_XA x = UGEN_IN(in2);
 
-		buffer.samples[write_index & num_samples_mask] = x + (feedback * y);
-		++write_index;
-		UGEN_OUT(out, y);
-	);
+// 0
+void combL_kkk_calc(ugen u)
+{
+    COMBL_CALC(
+        // Control Arguments
+        COMBL_DELAY_TIMEK     /* 0 */
+        COMBL_FEEDBACKK       /* 1 */
+        COMBL_XK              /* 2 */,
+        // Audio Arguments
+        /* no audio args */
+    )
+}
 
-	FINISH_DELAY();
+// 1
+void combL_akk_calc(ugen u)
+{
+    COMBL_CALC(
+        // Control Arguments
+        COMBL_FEEDBACKK       /* 1 */
+        COMBL_XK              /* 2 */,
+        // Audio Arguments
+        COMBL_DELAY_TIMEA     /* 0 */
+    )
+}
+
+// 2
+void combL_kak_calc(ugen u)
+{
+    COMBL_CALC(
+        // Control Arguments
+        COMBL_DELAY_TIMEK     /* 0 */
+        COMBL_XK              /* 2 */,
+        // Audio Arguments
+        COMBL_FEEDBACKA       /* 1 */
+    )
+}
+
+// 3
+void combL_aak_calc(ugen u)
+{
+    COMBL_CALC(
+        // Control Arguments
+        COMBL_XK              /* 2 */,
+        // Audio Arguments
+        COMBL_DELAY_TIMEA     /* 0 */
+        COMBL_FEEDBACKA       /* 1 */
+    )
+}
+
+// 4
+void combL_kka_calc(ugen u)
+{
+    COMBL_CALC(
+        // Control Arguments
+        COMBL_DELAY_TIMEK     /* 0 */
+        COMBL_FEEDBACKK       /* 1 */,
+        // Audio Arguments
+        COMBL_XA              /* 2 */
+    )
+}
+
+// 5
+void combL_aka_calc(ugen u)
+{
+    COMBL_CALC(
+        // Control Arguments
+        COMBL_FEEDBACKK       /* 1 */,
+        // Audio Arguments
+        COMBL_DELAY_TIMEA     /* 0 */
+        COMBL_XA              /* 2 */
+    )
+}
+
+// 6
+void combL_kaa_calc(ugen u)
+{
+    COMBL_CALC(
+        // Control Arguments
+        COMBL_DELAY_TIMEK     /* 0 */,
+        // Audio Arguments
+        COMBL_FEEDBACKA       /* 1 */
+        COMBL_XA              /* 2 */
+    )
+}
+
+// 7
+void combL_aaa_calc(ugen u)
+{
+    COMBL_CALC(
+        // Control Arguments
+        /* no control args */,
+        // Audio Arguments
+        COMBL_DELAY_TIMEA     /* 0 */
+        COMBL_FEEDBACKA       /* 1 */
+        COMBL_XA              /* 2 */
+    )
+}
+
+#define COMBC_CALC(CONTROL_ARGS, AUDIO_ARGS)																	\
+INIT_DELAY(u);																									\
+INIT_COMB(u);																									\
+double* samples = buffer.samples;																				\
+double delta;																									\
+double read_index;																								\
+unsigned int iread_index0, iread_index1, iread_index2, iread_index3;											\
+CONTROL_ARGS																									\
+AUDIO_LOOP(																										\
+	AUDIO_ARGS																									\
+	/* feedback = CALC_FEEDBACK(delay_time, decay_time); */														\
+	x = UGEN_IN(in2);																							\
+	read_index  = (double) write_index - delay_time;															\
+	iread_index1 = (long) read_index;																			\
+	iread_index2 = iread_index1 - 1;																			\
+	iread_index3 = iread_index1 - 2;																			\
+	iread_index0 = iread_index1 + 1;																			\
+	delta = read_index - iread_index0;																			\
+																												\
+	if (iread_index0 < 0)																						\
+		y = 0;																									\
+	else																										\
+		y = delayC(iread_index0, iread_index1, iread_index2, iread_index3, num_samples_mask, delta, samples);	\
+																												\
+	samples[write_index & num_samples_mask] = x + (feedback * y);												\
+	++write_index;																								\
+	UGEN_OUT(out, y);																							\
+);																												\
+FINISH_DELAY();																									\
+
+#define COMBC_DELAY_TIMEK delay_time = fmin(data.max_delay_time, fmax(1, (*in0) * SAMPLE_RATE));
+#define COMBC_DELAY_TIMEA delay_time = fmin(data.max_delay_time, fmax(1, UGEN_IN(in0) * SAMPLE_RATE));
+#define COMBC_FEEDBACKK feedback = (*in1) * 0.1;
+#define COMBC_FEEDBACKA feedback = UGEN_IN(in1) * 0.1;
+#define COMBC_XK x = *in2;
+#define COMBC_XA x = UGEN_IN(in2);
+
+// 0
+void combC_kkk_calc(ugen u)
+{
+    COMBC_CALC(
+        // Control Arguments
+        COMBC_DELAY_TIMEK     /* 0 */
+        COMBC_FEEDBACKK       /* 1 */
+        COMBC_XK              /* 2 */,
+        // Audio Arguments
+        /* no audio args */
+    )
+}
+
+// 1
+void combC_akk_calc(ugen u)
+{
+    COMBC_CALC(
+        // Control Arguments
+        COMBC_FEEDBACKK       /* 1 */
+        COMBC_XK              /* 2 */,
+        // Audio Arguments
+        COMBC_DELAY_TIMEA     /* 0 */
+    )
+}
+
+// 2
+void combC_kak_calc(ugen u)
+{
+    COMBC_CALC(
+        // Control Arguments
+        COMBC_DELAY_TIMEK     /* 0 */
+        COMBC_XK              /* 2 */,
+        // Audio Arguments
+        COMBC_FEEDBACKA       /* 1 */
+    )
+}
+
+// 3
+void combC_aak_calc(ugen u)
+{
+    COMBC_CALC(
+        // Control Arguments
+        COMBC_XK              /* 2 */,
+        // Audio Arguments
+        COMBC_DELAY_TIMEA     /* 0 */
+        COMBC_FEEDBACKA       /* 1 */
+    )
+}
+
+// 4
+void combC_kka_calc(ugen u)
+{
+    COMBC_CALC(
+        // Control Arguments
+        COMBC_DELAY_TIMEK     /* 0 */
+        COMBC_FEEDBACKK       /* 1 */,
+        // Audio Arguments
+        COMBC_XA              /* 2 */
+    )
+}
+
+// 5
+void combC_aka_calc(ugen u)
+{
+    COMBC_CALC(
+        // Control Arguments
+        COMBC_FEEDBACKK       /* 1 */,
+        // Audio Arguments
+        COMBC_DELAY_TIMEA     /* 0 */
+        COMBC_XA              /* 2 */
+    )
+}
+
+// 6
+void combC_kaa_calc(ugen u)
+{
+    COMBC_CALC(
+        // Control Arguments
+        COMBC_DELAY_TIMEK     /* 0 */,
+        // Audio Arguments
+        COMBC_FEEDBACKA       /* 1 */
+        COMBC_XA              /* 2 */
+    )
+}
+
+// 7
+void combC_aaa_calc(ugen u)
+{
+    COMBC_CALC(
+        // Control Arguments
+        /* no control args */,
+        // Audio Arguments
+        COMBC_DELAY_TIMEA     /* 0 */
+        COMBC_FEEDBACKA       /* 1 */
+        COMBC_XA              /* 2 */
+    )
 }
 
 void print_ugen(ugen* ugen)
@@ -4628,10 +4810,7 @@ void range_kkk_calc(ugen u)
 	double  RANGE_XK
 	double  mul  = (max - min) * 0.5;
 	double  add  = mul + min;
-	double  y    = (x * mul) + add;
-	AUDIO_LOOP(
-		UGEN_OUT(out, y);
-	);
+	*out         = (x * mul) + add;
 }
 
 // 1
@@ -4736,10 +4915,7 @@ void exprange_kkk_calc(ugen u)
 	double  EXPRANGE_MINK;
 	double  EXPRANGE_MAXK;
 	double 	EXPRANGE_XK;
-	double  y = pow(max / min, x * 0.5 + 0.5) * min;
-	AUDIO_LOOP(
-		UGEN_OUT(out, y);
-	);
+	*out = pow(max / min, x * 0.5 + 0.5) * min;
 }
 
 // 1
@@ -6956,11 +7132,7 @@ void clip_kk_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 	double  CLIP_AMOUNTK
 	double  CLIP_INPUTK
-	double  y = HARD_CLIP(input, amount);
-
-	AUDIO_LOOP(
-		UGEN_OUT(out, y);
-	);
+	*out = HARD_CLIP(input, amount);
 }
 
 // 1
@@ -7021,11 +7193,7 @@ void softclip_kk_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 	double  SOFTCLIP_AMOUNTK
 	double  SOFTCLIP_INPUTK
-	double  y = SOFT_CLIP(input, amount);
-
-	AUDIO_LOOP(
-		UGEN_OUT(out, y);
-	);
+	*out = SOFT_CLIP(input, amount);
 }
 
 // 1
@@ -7097,11 +7265,7 @@ void poly3_kk_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 	double  POLY3_AMOUNTK
 	double  POLY3_INPUTK
-	double  y = POLY3_DIST(input, amount);
-
-	AUDIO_LOOP(
-		UGEN_OUT(out, y);
-	);
+	*out = POLY3_DIST(input, amount);
 }
 
 // 1
@@ -7174,11 +7338,7 @@ void tanhDist_kk_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 	double  TANHDIST_AMOUNTK
 	double  TANHDIST_INPUTK
-	double  y = TANH_DIST(input, amount);
-
-	AUDIO_LOOP(
-		UGEN_OUT(out, y);
-	);
+	*out = TANH_DIST(input, amount);
 }
 
 // 1
@@ -7251,11 +7411,7 @@ void sinDist_kk_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 	double  SINDIST_AMOUNTK
 	double  SINDIST_INPUTK
-	double  y = SIN_DIST(input, amount);
-
-	AUDIO_LOOP(
-		UGEN_OUT(out, y);
-	);
+	*out = SIN_DIST(input, amount);
 }
 
 // 1
@@ -7317,11 +7473,7 @@ void wrap_kk_calc(ugen u)
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 	double  WRAP_AMOUNTK
 	double  WRAP_INPUTK
-	double  y = WRAP(input, amount);
-
-	AUDIO_LOOP(
-		UGEN_OUT(out, y);
-	);
+	*out = WRAP(input, amount);
 }
 
 // 1
@@ -7623,49 +7775,260 @@ const double fixed_gain = 0.015;
 })
 
 
-void freeverb_calc(ugen u)
+// NOTE: Optimize COMB_FILTER and ALLPASS_FEEDBACK by pulling declarations and ugen data access outside of audio loop
+#define FREEVERB_CALC(CONTROL_ARGS, AUDIO_ARGS)													\
+double* in0 = UGEN_INPUT_BUFFER(u, 0);															\
+double* in1 = UGEN_INPUT_BUFFER(u, 1);															\
+double* in2 = UGEN_INPUT_BUFFER(u, 2);															\
+double* in3 = UGEN_INPUT_BUFFER(u, 3);															\
+double* out = UGEN_OUTPUT_BUFFER(u, 0);															\
+freeverb_data vdata = *((freeverb_data*) u.data);												\
+double mix;																						\
+double roomSize;																				\
+double damp;																					\
+double x, y;																					\
+double cf0, cf1, cf2, cf3, cf4, cf5, cf6, cf7, cfy;												\
+double ap0, ap1, ap2, ap3;																		\
+CONTROL_ARGS																					\
+AUDIO_LOOP(																						\
+	AUDIO_ARGS																					\
+	cf0      = COMB_FILTER(x, roomSize, damp, 1557, vdata.combFilterDelays, vdata.combz1s, 0);	\
+	cf1      = COMB_FILTER(x, roomSize, damp, 1617, vdata.combFilterDelays, vdata.combz1s, 1);	\
+	cf2      = COMB_FILTER(x, roomSize, damp, 1491, vdata.combFilterDelays, vdata.combz1s, 2);	\
+	cf3      = COMB_FILTER(x, roomSize, damp, 1422, vdata.combFilterDelays, vdata.combz1s, 3);	\
+	cf4      = COMB_FILTER(x, roomSize, damp, 1277, vdata.combFilterDelays, vdata.combz1s, 4);	\
+	cf5      = COMB_FILTER(x, roomSize, damp, 1356, vdata.combFilterDelays, vdata.combz1s, 5);	\
+	cf6      = COMB_FILTER(x, roomSize, damp, 1188, vdata.combFilterDelays, vdata.combz1s, 6);	\
+	cf7      = COMB_FILTER(x, roomSize, damp, 1116, vdata.combFilterDelays, vdata.combz1s, 7);	\
+	cfy      = cf0 + cf1 + cf2 + cf3 + cf3 + cf5 + cf6 + cf7;									\
+																								\
+	ap0      = ALLPASS_FEEDBACK(cfy, 0.5, 225, vdata.allpassDelays, 0);							\
+	ap1      = ALLPASS_FEEDBACK(ap0, 0.5, 556, vdata.allpassDelays, 1);							\
+	ap2      = ALLPASS_FEEDBACK(ap1, 0.5, 441, vdata.allpassDelays, 2);							\
+	ap3      = ALLPASS_FEEDBACK(ap2, 0.5, 341, vdata.allpassDelays, 3);							\
+	y        = (x * (1 - mix)) + (ap3 * mix * 1.0);												\
+	UGEN_OUT(out, y);																			\
+);																								\
+*((freeverb_data*) u.data) = vdata;																\
+
+#define FREEVERB_MIXK mix = CLAMP(*in0, 0, 1);
+#define FREEVERB_MIXA mix = CLAMP(UGEN_IN(in0), 0, 1);
+#define FREEVERB_ROOMSIZEK roomSize = CLAMP(*in1, 0, 1);
+#define FREEVERB_ROOMSIZEA roomSize = CLAMP(UGEN_IN(in1), 0, 1);
+#define FREEVERB_DAMPK damp = CLAMP(*in2, 0, 1);
+#define FREEVERB_DAMPA damp = CLAMP(UGEN_IN(in2), 0, 1);
+#define FREEVERB_XK x = *in3;
+#define FREEVERB_XA x = UGEN_IN(in3);
+
+
+// 0
+void freeverb_kkkk_calc(ugen u)
 {
-	double* in0 = UGEN_INPUT_BUFFER(u, 0);
-	double* in1 = UGEN_INPUT_BUFFER(u, 1);
-	double* in2 = UGEN_INPUT_BUFFER(u, 2);
-	double* in3 = UGEN_INPUT_BUFFER(u, 3);
-	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+    FREEVERB_CALC(
+        // Control Arguments
+        FREEVERB_MIXK         /* 0 */
+        FREEVERB_ROOMSIZEK    /* 1 */
+        FREEVERB_DAMPK        /* 2 */
+        FREEVERB_XK           /* 3 */,
+        // Audio Arguments
+        /* no audio args */
+    )
+}
 
-	freeverb_data  vdata    = *((freeverb_data*) u.data);
-	double mix;
-	double roomSize;
-	double damp;
-	double x, y;
-	double cf0, cf1, cf2, cf3, cf4, cf5, cf6, cf7, cfy;
-	double ap0, ap1, ap2, ap3;
+// 1
+void freeverb_akkk_calc(ugen u)
+{
+    FREEVERB_CALC(
+        // Control Arguments
+        FREEVERB_ROOMSIZEK    /* 1 */
+        FREEVERB_DAMPK        /* 2 */
+        FREEVERB_XK           /* 3 */,
+        // Audio Arguments
+        FREEVERB_MIXA         /* 0 */
+    )
+}
 
-	// NOTE: Optimize COMB_FILTER and ALLPASS_FEEDBACK by pulling declarations and ugen data access outside of audio loop
-	AUDIO_LOOP(
-		mix      = CLAMP(UGEN_IN(in0),0,1);
-		roomSize = CLAMP(UGEN_IN(in1),0,1);
-		damp     = CLAMP(UGEN_IN(in2),0,1);
-		x        = UGEN_IN(in3);
+// 2
+void freeverb_kakk_calc(ugen u)
+{
+    FREEVERB_CALC(
+        // Control Arguments
+        FREEVERB_MIXK         /* 0 */
+        FREEVERB_DAMPK        /* 2 */
+        FREEVERB_XK           /* 3 */,
+        // Audio Arguments
+        FREEVERB_ROOMSIZEA    /* 1 */
+    )
+}
 
-		cf0      = COMB_FILTER(x,roomSize,damp,1557,vdata.combFilterDelays,vdata.combz1s,0);
-		cf1      = COMB_FILTER(x,roomSize,damp,1617,vdata.combFilterDelays,vdata.combz1s,1);
-		cf2      = COMB_FILTER(x,roomSize,damp,1491,vdata.combFilterDelays,vdata.combz1s,2);
-		cf3      = COMB_FILTER(x,roomSize,damp,1422,vdata.combFilterDelays,vdata.combz1s,3);
-		cf4      = COMB_FILTER(x,roomSize,damp,1277,vdata.combFilterDelays,vdata.combz1s,4);
-		cf5      = COMB_FILTER(x,roomSize,damp,1356,vdata.combFilterDelays,vdata.combz1s,5);
-		cf6      = COMB_FILTER(x,roomSize,damp,1188,vdata.combFilterDelays,vdata.combz1s,6);
-		cf7      = COMB_FILTER(x,roomSize,damp,1116,vdata.combFilterDelays,vdata.combz1s,7);
-		cfy      = cf0 + cf1 + cf2 + cf3 + cf3 + cf5 + cf6 + cf7;
+// 3
+void freeverb_aakk_calc(ugen u)
+{
+    FREEVERB_CALC(
+        // Control Arguments
+        FREEVERB_DAMPK        /* 2 */
+        FREEVERB_XK           /* 3 */,
+        // Audio Arguments
+        FREEVERB_MIXA         /* 0 */
+        FREEVERB_ROOMSIZEA    /* 1 */
+    )
+}
 
-		ap0      = ALLPASS_FEEDBACK(cfy,0.5,225,vdata.allpassDelays,0);
-		ap1      = ALLPASS_FEEDBACK(ap0,0.5,556,vdata.allpassDelays,1);
-		ap2      = ALLPASS_FEEDBACK(ap1,0.5,441,vdata.allpassDelays,2);
-		ap3      = ALLPASS_FEEDBACK(ap2,0.5,341,vdata.allpassDelays,3);
-		y        = (x * (1 - mix)) + (ap3 * mix * 1.0);
+// 4
+void freeverb_kkak_calc(ugen u)
+{
+    FREEVERB_CALC(
+        // Control Arguments
+        FREEVERB_MIXK         /* 0 */
+        FREEVERB_ROOMSIZEK    /* 1 */
+        FREEVERB_XK           /* 3 */,
+        // Audio Arguments
+        FREEVERB_DAMPA        /* 2 */
+    )
+}
 
-		UGEN_OUT(out, y);
-	);
+// 5
+void freeverb_akak_calc(ugen u)
+{
+    FREEVERB_CALC(
+        // Control Arguments
+        FREEVERB_ROOMSIZEK    /* 1 */
+        FREEVERB_XK           /* 3 */,
+        // Audio Arguments
+        FREEVERB_MIXA         /* 0 */
+        FREEVERB_DAMPA        /* 2 */
+    )
+}
 
-	*((freeverb_data*) u.data) = vdata;
+// 6
+void freeverb_kaak_calc(ugen u)
+{
+    FREEVERB_CALC(
+        // Control Arguments
+        FREEVERB_MIXK         /* 0 */
+        FREEVERB_XK           /* 3 */,
+        // Audio Arguments
+        FREEVERB_ROOMSIZEA    /* 1 */
+        FREEVERB_DAMPA        /* 2 */
+    )
+}
+
+// 7
+void freeverb_aaak_calc(ugen u)
+{
+    FREEVERB_CALC(
+        // Control Arguments
+        FREEVERB_XK           /* 3 */,
+        // Audio Arguments
+        FREEVERB_MIXA         /* 0 */
+        FREEVERB_ROOMSIZEA    /* 1 */
+        FREEVERB_DAMPA        /* 2 */
+    )
+}
+
+// 8
+void freeverb_kkka_calc(ugen u)
+{
+    FREEVERB_CALC(
+        // Control Arguments
+        FREEVERB_MIXK         /* 0 */
+        FREEVERB_ROOMSIZEK    /* 1 */
+        FREEVERB_DAMPK        /* 2 */,
+        // Audio Arguments
+        FREEVERB_XA           /* 3 */
+    )
+}
+
+// 9
+void freeverb_akka_calc(ugen u)
+{
+    FREEVERB_CALC(
+        // Control Arguments
+        FREEVERB_ROOMSIZEK    /* 1 */
+        FREEVERB_DAMPK        /* 2 */,
+        // Audio Arguments
+        FREEVERB_MIXA         /* 0 */
+        FREEVERB_XA           /* 3 */
+    )
+}
+
+// 10
+void freeverb_kaka_calc(ugen u)
+{
+    FREEVERB_CALC(
+        // Control Arguments
+        FREEVERB_MIXK         /* 0 */
+        FREEVERB_DAMPK        /* 2 */,
+        // Audio Arguments
+        FREEVERB_ROOMSIZEA    /* 1 */
+        FREEVERB_XA           /* 3 */
+    )
+}
+
+// 11
+void freeverb_aaka_calc(ugen u)
+{
+    FREEVERB_CALC(
+        // Control Arguments
+        FREEVERB_DAMPK        /* 2 */,
+        // Audio Arguments
+        FREEVERB_MIXA         /* 0 */
+        FREEVERB_ROOMSIZEA    /* 1 */
+        FREEVERB_XA           /* 3 */
+    )
+}
+
+// 12
+void freeverb_kkaa_calc(ugen u)
+{
+    FREEVERB_CALC(
+        // Control Arguments
+        FREEVERB_MIXK         /* 0 */
+        FREEVERB_ROOMSIZEK    /* 1 */,
+        // Audio Arguments
+        FREEVERB_DAMPA        /* 2 */
+        FREEVERB_XA           /* 3 */
+    )
+}
+
+// 13
+void freeverb_akaa_calc(ugen u)
+{
+    FREEVERB_CALC(
+        // Control Arguments
+        FREEVERB_ROOMSIZEK    /* 1 */,
+        // Audio Arguments
+        FREEVERB_MIXA         /* 0 */
+        FREEVERB_DAMPA        /* 2 */
+        FREEVERB_XA           /* 3 */
+    )
+}
+
+// 14
+void freeverb_kaaa_calc(ugen u)
+{
+    FREEVERB_CALC(
+        // Control Arguments
+        FREEVERB_MIXK         /* 0 */,
+        // Audio Arguments
+        FREEVERB_ROOMSIZEA    /* 1 */
+        FREEVERB_DAMPA        /* 2 */
+        FREEVERB_XA           /* 3 */
+    )
+}
+
+// 15
+void freeverb_aaaa_calc(ugen u)
+{
+    FREEVERB_CALC(
+        // Control Arguments
+        /* no control args */,
+        // Audio Arguments
+        FREEVERB_MIXA         /* 0 */
+        FREEVERB_ROOMSIZEA    /* 1 */
+        FREEVERB_DAMPA        /* 2 */
+        FREEVERB_XA           /* 3 */
+    )
 }
 
 #define E 2.7182818284590452353602874713527
@@ -7693,55 +8056,151 @@ void pluck_deconstructor(ugen* u)
 }
 
 // Jaffe and Smith "Extensions of the Karplus-Strong Plucked-String* Algorithm"
-void pluck_calc(ugen u)
+#define PLUCK_CALC(CONTROL_ARGS, AUDIO_ARGS)							\
+double* in0 = UGEN_INPUT_BUFFER(u, 0);									\
+double* in1 = UGEN_INPUT_BUFFER(u, 1);									\
+double* in2 = UGEN_INPUT_BUFFER(u, 2);									\
+double* out = UGEN_OUTPUT_BUFFER(u, 0);									\
+pluck_data  data             = *((pluck_data*) u.data);					\
+double*     samples          = data.buffer->samples;					\
+uint        write_index      = data.write_index;						\
+uint        num_samples_mask = data.buffer->num_samples_mask;			\
+double      clamped;													\
+double      freq;														\
+uint        n;															\
+uint        index2;														\
+double      decay;														\
+double      duration;													\
+double      x;															\
+double      y;															\
+CONTROL_ARGS															\
+AUDIO_LOOP(																\
+	AUDIO_ARGS															\
+	index2 = (write_index + 1) % n;										\
+	decay = pow(E, (-(n + 0.5) * 6.908) / duration) / cos(M_PI * freq);	\
+	y = 0;																\
+																		\
+	if(data.noiseSamples < n)											\
+	{																	\
+		y = x;															\
+		data.noiseSamples++;											\
+	}																	\
+																		\
+	else																\
+	{																	\
+		y = decay * (samples[write_index] + samples[index2]) / 2;		\
+	}																	\
+																		\
+	samples[write_index] = y;											\
+	write_index = index2;												\
+	UGEN_OUT(out, y);													\
+);																		\
+data.write_index = index2;												\
+*((pluck_data*) u.data) = data;											\
+
+#define PLUCK_FREQK clamped = MAX(*in0, data.minFreq); freq = clamped * RECIP_SAMPLE_RATE; n = SAMPLE_RATE / clamped;
+#define PLUCK_FREQA clamped = MAX(UGEN_IN(in0), data.minFreq); freq = clamped * RECIP_SAMPLE_RATE; n = SAMPLE_RATE / clamped;
+#define PLUCK_DURATIONK duration = (*in1) * SAMPLE_RATE;
+#define PLUCK_DURATIONA duration = UGEN_IN(in1) * SAMPLE_RATE;
+#define PLUCK_XK x = *in2;
+#define PLUCK_XA x = UGEN_IN(in2);
+
+// 0
+void pluck_kkk_calc(ugen u)
 {
-	double* in0 = UGEN_INPUT_BUFFER(u, 0);
-	double* in1 = UGEN_INPUT_BUFFER(u, 1);
-	double* in2 = UGEN_INPUT_BUFFER(u, 2);
-	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_FREQK           /* 0 */
+        PLUCK_DURATIONK       /* 1 */
+        PLUCK_XK              /* 2 */,
+        // Audio Arguments
+        /* no audio args */
+    )
+}
 
-	pluck_data  data             = *((pluck_data*) u.data);
-	double*     samples          = data.buffer->samples;
-	uint        write_index      = data.write_index;
-	uint        num_samples_mask = data.buffer->num_samples_mask;
-	double      clamped;
-	double      freq;
-	uint        n;
-	uint        index2;
-	double      decay;
-	double      duration;
-	double      x;
-	double      y;
+// 1
+void pluck_akk_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_DURATIONK       /* 1 */
+        PLUCK_XK              /* 2 */,
+        // Audio Arguments
+        PLUCK_FREQA           /* 0 */
+    )
+}
 
-	AUDIO_LOOP(
-		clamped = MAX(UGEN_IN(in0), data.minFreq);
-		freq = clamped * RECIP_SAMPLE_RATE;
-		n = SAMPLE_RATE / clamped;
-		duration = UGEN_IN(in1) * SAMPLE_RATE;
-		x = UGEN_IN(in2);
-		index2 = (write_index + 1) % n;
-		decay = pow(E, (-(n + 0.5) * 6.908) / duration) / cos(M_PI * freq);
-		y = 0;
+// 2
+void pluck_kak_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_FREQK           /* 0 */
+        PLUCK_XK              /* 2 */,
+        // Audio Arguments
+        PLUCK_DURATIONA       /* 1 */
+    )
+}
 
-		if(data.noiseSamples < n)
-		{
-			y = x;
-			data.noiseSamples++;
-		}
+// 3
+void pluck_aak_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_XK              /* 2 */,
+        // Audio Arguments
+        PLUCK_FREQA           /* 0 */
+        PLUCK_DURATIONA       /* 1 */
+    )
+}
 
-		else
-		{
-			y = decay * (samples[write_index] + samples[index2]) / 2;
-		}
+// 4
+void pluck_kka_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_FREQK           /* 0 */
+        PLUCK_DURATIONK       /* 1 */,
+        // Audio Arguments
+        PLUCK_XA              /* 2 */
+    )
+}
 
-		samples[write_index] = y;
-		write_index = index2;
+// 5
+void pluck_aka_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_DURATIONK       /* 1 */,
+        // Audio Arguments
+        PLUCK_FREQA           /* 0 */
+        PLUCK_XA              /* 2 */
+    )
+}
 
-		UGEN_OUT(out, y);
-	);
+// 6
+void pluck_kaa_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_FREQK           /* 0 */,
+        // Audio Arguments
+        PLUCK_DURATIONA       /* 1 */
+        PLUCK_XA              /* 2 */
+    )
+}
 
-	data.write_index = index2;
-	*((pluck_data*) u.data) = data;
+// 7
+void pluck_aaa_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        /* no control args */,
+        // Audio Arguments
+        PLUCK_FREQA           /* 0 */
+        PLUCK_DURATIONA       /* 1 */
+        PLUCK_XA              /* 2 */
+    )
 }
 
 void white_calc(ugen u)

@@ -332,8 +332,8 @@ hyperMelody _ = [s, s2] |> gain 0.04 |> e |> visAux (random 0 2 4.99) 20 |> out 
         e  = env [0,1,0.15, 0] [0.0001,0.1, 7] (-1.5)
         -- e  = env [0,1,0.15, 0] [0.0001,0.1, 700] (-1.5)
         -- e  = gain <| line 700
-        s  = sin (sin 1 |> exprange 10 44100) +> delayC 0.25 0.2
-        s2 = sin (sin 1.5 |> exprange 10 44100) +> delayC 0.25 0.25
+        s  = whiteNoise |> e |> freeverb 1 1 0.5
+        s2 = whiteNoise |> e |> freeverb 1 1 (sin 2 |> range 0 1)
 
 hyperMelodyPattern :: Signal ()
 hyperMelodyPattern = playSynthPattern (toggle <| combo [alt,isDown keyF]) hyperMelody (pmap ((*1) . d2f slendro) <| ploop [sec1])
