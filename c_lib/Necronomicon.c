@@ -6634,30 +6634,77 @@ void highshelf_aaaa_calc(ugen u)
     )
 }
 
-void lag_calc(ugen u)
+#define LAG_CALC(CONTROL_ARGS, AUDIO_ARGS)					\
+double*  in0 = UGEN_INPUT_BUFFER(u, 0);						\
+double*  in1 = UGEN_INPUT_BUFFER(u, 1);						\
+double*  out = UGEN_OUTPUT_BUFFER(u, 0);					\
+double   z   = *((double*) u.data);							\
+															\
+double lagTime;												\
+double input;												\
+double a;													\
+double b;													\
+CONTROL_ARGS												\
+AUDIO_LOOP(													\
+	AUDIO_ARGS												\
+    a       = exp((-2 * M_PI) / (lagTime * SAMPLE_RATE));	\
+    b       = 1.0f - a;										\
+	z       = (input * b) + (z * a);						\
+															\
+	UGEN_OUT(out,z);										\
+);															\
+															\
+*((double*) u.data) = z;									\
+
+#define LAG_LAGTIMEK lagTime = *in0;
+#define LAG_LAGTIMEA lagTime = UGEN_IN(in0);
+#define LAG_INPUTK input = *in1;
+#define LAG_INPUTA input = UGEN_IN(in1);
+
+// 0
+void lag_kk_calc(ugen u)
 {
-	double*  in0 = UGEN_INPUT_BUFFER(u, 0);
-    double*  in1 = UGEN_INPUT_BUFFER(u, 1);
-	double*  out = UGEN_OUTPUT_BUFFER(u, 0);
-	double   z   = *((double*) u.data);
+    LAG_CALC(
+        // Control Arguments
+        LAG_LAGTIMEK          /* 0 */
+        LAG_INPUTK            /* 1 */,
+        // Audio Arguments
+        /* no audio args */
+    )
+}
 
-	double lagTime;
-	double input;
-    double a;
-    double b;
+// 1
+void lag_ak_calc(ugen u)
+{
+    LAG_CALC(
+        // Control Arguments
+        LAG_INPUTK            /* 1 */,
+        // Audio Arguments
+        LAG_LAGTIMEA          /* 0 */
+    )
+}
 
-	AUDIO_LOOP(
+// 2
+void lag_ka_calc(ugen u)
+{
+    LAG_CALC(
+        // Control Arguments
+        LAG_LAGTIMEK          /* 0 */,
+        // Audio Arguments
+        LAG_INPUTA            /* 1 */
+    )
+}
 
-		lagTime = UGEN_IN(in0);
-		input   = UGEN_IN(in1);
-	    a       = exp((-2 * M_PI) / (lagTime * SAMPLE_RATE));
-	    b       = 1.0f - a;
-		z       = (input * b) + (z * a);
-
-		UGEN_OUT(out,z);
-	);
-
-	*((double*) u.data) = z;
+// 3
+void lag_aa_calc(ugen u)
+{
+    LAG_CALC(
+        // Control Arguments
+        /* no control args */,
+        // Audio Arguments
+        LAG_LAGTIMEA          /* 0 */
+        LAG_INPUTA            /* 1 */
+    )
 }
 
 //REMOVING THESE FOR NOW AS THEY ARE NON-FUNCTIONAL AT THE MOMENT ANYWAYS

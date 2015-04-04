@@ -733,9 +733,15 @@ highshelf freq fgain slope input = optimizeUGenCalcFunc cfuncs $ multiChannelExp
                 highshelfKKAACalc, highshelfAKAACalc, highshelfKAAACalc, highshelfAAAACalc
             ]
 
-foreign import ccall "&lag_calc" lagCalc :: CUGenFunc
+foreign import ccall "&lag_kk_calc" lagKKCalc :: CUGenFunc
+foreign import ccall "&lag_ak_calc" lagAKCalc :: CUGenFunc
+foreign import ccall "&lag_ka_calc" lagKACalc :: CUGenFunc
+foreign import ccall "&lag_aa_calc" lagAACalc :: CUGenFunc
+
 lag :: UGen -> UGen -> UGen
-lag timeLag input = multiChannelExpandUGen LagCalc lagCalc accumulatorConstructor accumulatorDeconstructor [timeLag,input]
+lag timeLag input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen LagCalc lagAACalc accumulatorConstructor accumulatorDeconstructor [timeLag, input]
+    where
+        cfuncs = [lagKKCalc, lagAKCalc, lagKACalc, lagAACalc]
 
 -- foreign import ccall "&zeroDelayFilter_constructor"   zeroDelayFilterConstructor   :: CUGenFunc
 -- foreign import ccall "&zeroDelayFilter_deconstructor" zeroDelayFilterDeconstructor :: CUGenFunc
