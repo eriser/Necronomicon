@@ -846,19 +846,37 @@ decimate rate x = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen Decimate 
 
 foreign import ccall "&delay_deconstructor" delayDeconstructor :: CUGenFunc
 foreign import ccall "&delayN_constructor" delayNConstructor :: CUGenFunc
-foreign import ccall "&delayN_calc" delayNCalc :: CUGenFunc
+foreign import ccall "&delayN_kk_calc" delayNKKCalc :: CUGenFunc
+foreign import ccall "&delayN_ak_calc" delayNAKCalc :: CUGenFunc
+foreign import ccall "&delayN_ka_calc" delayNKACalc :: CUGenFunc
+foreign import ccall "&delayN_aa_calc" delayNAACalc :: CUGenFunc
+
 delayN :: Double -> UGen -> UGen -> UGen
-delayN maxDelayTime delayTime input = multiChannelExpandUGen (DelayN maxDelayTime) delayNCalc delayNConstructor delayDeconstructor [delayTime, input]
+delayN maxDelayTime delayTime input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen (DelayN maxDelayTime) delayNAACalc delayNConstructor delayDeconstructor [delayTime, input]
+    where
+        cfuncs = [delayNKKCalc, delayNAKCalc, delayNKACalc, delayNAACalc]
 
 foreign import ccall "&delayL_constructor" delayLConstructor :: CUGenFunc
-foreign import ccall "&delayL_calc" delayLCalc :: CUGenFunc
+foreign import ccall "&delayL_kk_calc" delayLKKCalc :: CUGenFunc
+foreign import ccall "&delayL_ak_calc" delayLAKCalc :: CUGenFunc
+foreign import ccall "&delayL_ka_calc" delayLKACalc :: CUGenFunc
+foreign import ccall "&delayL_aa_calc" delayLAACalc :: CUGenFunc
+
 delayL :: Double -> UGen -> UGen -> UGen
-delayL maxDelayTime delayTime input = multiChannelExpandUGen (DelayL maxDelayTime) delayLCalc delayLConstructor delayDeconstructor [delayTime, input]
+delayL maxDelayTime delayTime input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen (DelayL maxDelayTime) delayLAACalc delayLConstructor delayDeconstructor [delayTime, input]
+    where
+        cfuncs = [delayLKKCalc, delayLAKCalc, delayLKACalc, delayLAACalc]
 
 foreign import ccall "&delayC_constructor" delayCConstructor :: CUGenFunc
-foreign import ccall "&delayC_calc" delayC_calc :: CUGenFunc
+foreign import ccall "&delayC_kk_calc" delayCKKCalc :: CUGenFunc
+foreign import ccall "&delayC_ak_calc" delayCAKCalc :: CUGenFunc
+foreign import ccall "&delayC_ka_calc" delayCKACalc :: CUGenFunc
+foreign import ccall "&delayC_aa_calc" delayCAACalc :: CUGenFunc
+
 delayC :: Double -> UGen -> UGen -> UGen
-delayC maxDelayTime delayTime input = multiChannelExpandUGen (DelayC maxDelayTime) delayC_calc delayCConstructor delayDeconstructor [delayTime, input]
+delayC maxDelayTime delayTime input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen (DelayC maxDelayTime) delayCAACalc delayCConstructor delayDeconstructor [delayTime, input]
+    where
+        cfuncs = [delayCKKCalc, delayCAKCalc, delayCKACalc, delayCAACalc]
 
 foreign import ccall "&combN_calc" combNCalc :: CUGenFunc
 combN :: Double -> UGen -> UGen -> UGen -> UGen

@@ -2831,128 +2831,266 @@ double y;												  \
 data.write_index = write_index;						      \
 *((delay_data*) u.data) = data;							  \
 
-void delayN_calc(ugen u)
+#define DELAYN_CALC(CONTROL_ARGS, AUDIO_ARGS)									\
+INIT_DELAY(u);																	\
+long iread_index;																\
+CONTROL_ARGS																	\
+AUDIO_LOOP(																		\
+	AUDIO_ARGS																	\
+	iread_index = write_index - (long) delay_time;								\
+	y = iread_index < 0 ? 0 : buffer.samples[iread_index & num_samples_mask];	\
+	buffer.samples[write_index & num_samples_mask] = x;							\
+	++write_index;																\
+	UGEN_OUT(out, y);															\
+);																				\
+FINISH_DELAY();																	\
+
+#define DELAYN_DELAY_TIMEK delay_time = fmin(data.max_delay_time, fmax(1, (*in0) * SAMPLE_RATE));
+#define DELAYN_DELAY_TIMEA delay_time = fmin(data.max_delay_time, fmax(1, UGEN_IN(in0) * SAMPLE_RATE));
+#define DELAYN_XK x = *in1;
+#define DELAYN_XA x = UGEN_IN(in1);
+
+// 0
+void delayN_kk_calc(ugen u)
 {
-	INIT_DELAY(u);
-	long iread_index;
-
-	AUDIO_LOOP(
-		delay_time = fmin(data.max_delay_time, fmax(1, UGEN_IN(in0) * SAMPLE_RATE));
-		x = UGEN_IN(in1);
-		iread_index = write_index - (long) delay_time;
-		y = iread_index < 0 ? 0 : buffer.samples[iread_index & num_samples_mask];
-		buffer.samples[write_index & num_samples_mask] = x;
-		++write_index;
-		UGEN_OUT(out, y);
-	);
-
-	FINISH_DELAY();
+    DELAYN_CALC(
+        // Control Arguments
+        DELAYN_DELAY_TIMEK    /* 0 */
+        DELAYN_XK             /* 1 */,
+        // Audio Arguments
+        /* no audio args */
+    )
 }
 
-void delayL_calc(ugen u)
+// 1
+void delayN_ak_calc(ugen u)
 {
-	INIT_DELAY(u);
-	double y0, y1;
-	double delta;
-	double read_index;
-	unsigned int iread_index0, iread_index1;
-
-	AUDIO_LOOP(
-		delay_time = fmin(data.max_delay_time, fmax(1, UGEN_IN(in0) * SAMPLE_RATE));
-		x = UGEN_IN(in1);
-		read_index = (double) write_index - delay_time;
-		iread_index0 = (long) read_index;
-
-		if (iread_index0 < 0)
-		{
-			y = 0;
-		}
-
-		else
-		{
-			iread_index1 = iread_index0 - 1;
-			delta = read_index - iread_index0;
-			y0 = buffer.samples[iread_index0 & num_samples_mask];
-			y1 = iread_index1 < 0 ? 0 : buffer.samples[iread_index1 & num_samples_mask];
-			y  = LINEAR_INTERP(y0, y1, delta);
-		}
-
-		buffer.samples[write_index & num_samples_mask] = x;
-		++write_index;
-		UGEN_OUT(out, y);
-	);
-
-	FINISH_DELAY();
+    DELAYN_CALC(
+        // Control Arguments
+        DELAYN_XK             /* 1 */,
+        // Audio Arguments
+        DELAYN_DELAY_TIMEA    /* 0 */
+    )
 }
 
-void delayC_calc(ugen u)
+// 2
+void delayN_ka_calc(ugen u)
 {
-	INIT_DELAY(u);
+    DELAYN_CALC(
+        // Control Arguments
+        DELAYN_DELAY_TIMEK    /* 0 */,
+        // Audio Arguments
+        DELAYN_XA             /* 1 */
+    )
+}
+
+// 3
+void delayN_aa_calc(ugen u)
+{
+    DELAYN_CALC(
+        // Control Arguments
+        /* no control args */,
+        // Audio Arguments
+        DELAYN_DELAY_TIMEA    /* 0 */
+        DELAYN_XA             /* 1 */
+    )
+}
+
+#define DELAYL_CALC(CONTROL_ARGS, AUDIO_ARGS)											\
+INIT_DELAY(u);																			\
+double y0, y1;																			\
+double delta;																			\
+double read_index;																		\
+unsigned int iread_index0, iread_index1;												\
+CONTROL_ARGS																			\
+AUDIO_LOOP(																				\
+	AUDIO_ARGS																			\
+	read_index = (double) write_index - delay_time;										\
+	iread_index0 = (long) read_index;													\
+																						\
+	if (iread_index0 < 0)																\
+	{																					\
+		y = 0;																			\
+	}																					\
+																						\
+	else																				\
+	{																					\
+		iread_index1 = iread_index0 - 1;												\
+		delta = read_index - iread_index0;												\
+		y0 = buffer.samples[iread_index0 & num_samples_mask];							\
+		y1 = iread_index1 < 0 ? 0 : buffer.samples[iread_index1 & num_samples_mask];	\
+		y  = LINEAR_INTERP(y0, y1, delta);												\
+	}																					\
+																						\
+	buffer.samples[write_index & num_samples_mask] = x;									\
+	++write_index;																		\
+	UGEN_OUT(out, y);																	\
+);																						\
+FINISH_DELAY();																			\
+
+#define DELAYL_DELAY_TIMEK delay_time = fmin(data.max_delay_time, fmax(1, (*in0) * SAMPLE_RATE));
+#define DELAYL_DELAY_TIMEA delay_time = fmin(data.max_delay_time, fmax(1, UGEN_IN(in0) * SAMPLE_RATE));
+#define DELAYL_XK x = *in1;
+#define DELAYL_XA x = UGEN_IN(in1);
+
+// 0
+void delayL_kk_calc(ugen u)
+{
+    DELAYL_CALC(
+        // Control Arguments
+        DELAYL_DELAY_TIMEK    /* 0 */
+        DELAYL_XK             /* 1 */,
+        // Audio Arguments
+        /* no audio args */
+    )
+}
+
+// 1
+void delayL_ak_calc(ugen u)
+{
+    DELAYL_CALC(
+        // Control Arguments
+        DELAYL_XK             /* 1 */,
+        // Audio Arguments
+        DELAYL_DELAY_TIMEA    /* 0 */
+    )
+}
+
+// 2
+void delayL_ka_calc(ugen u)
+{
+    DELAYL_CALC(
+        // Control Arguments
+        DELAYL_DELAY_TIMEK    /* 0 */,
+        // Audio Arguments
+        DELAYL_XA             /* 1 */
+    )
+}
+
+// 3
+void delayL_aa_calc(ugen u)
+{
+    DELAYL_CALC(
+        // Control Arguments
+        /* no control args */,
+        // Audio Arguments
+        DELAYL_DELAY_TIMEA    /* 0 */
+        DELAYL_XA             /* 1 */
+    )
+}
+
+inline double delayC(unsigned int iread_index0, unsigned int iread_index1, unsigned int iread_index2, unsigned int iread_index3, unsigned int num_samples_mask, double delta, double* samples)
+{
 	double y0, y1, y2, y3;
-	double delta;
-	double read_index;
-	unsigned int iread_index0, iread_index1, iread_index2, iread_index3;
+	if(iread_index1 < 0)
+	{
+		y0 = samples[iread_index0 & num_samples_mask];
+		y1 = y2 = y3 = 0;
+	}
 
+	else if(iread_index2 < 0)
+	{
+		y0 = samples[iread_index0 & num_samples_mask];
+		y1 = samples[iread_index1 & num_samples_mask];
+		y2 = y3 = 0;
+	}
 
-	AUDIO_LOOP(
-		// Clamp delay at 1 to prevent the + 1 iread_index3 from reading on the wrong side of the write head
-		delay_time = fmin(data.max_delay_time, fmax(2, UGEN_IN(in0) * SAMPLE_RATE));
-		x = UGEN_IN(in1);
-		read_index  = (double) write_index - delay_time;
-		iread_index1 = (long) read_index;
-		iread_index2 = iread_index1 - 1;
-		iread_index3 = iread_index1 - 2;
-		iread_index0 = iread_index1 + 1;
-		delta = read_index - iread_index0;
+	else if(iread_index3 < 0)
+	{
+		y0 = samples[iread_index0 & num_samples_mask];
+		y1 = samples[iread_index1 & num_samples_mask];
+		y2 = samples[iread_index1 & num_samples_mask];
+		y3 = 0;
+	}
 
-		if (iread_index0 < 0)
-		{
-			y = 0;
-		}
+	else
+	{
+		y0 = samples[iread_index0 & num_samples_mask];
+		y1 = samples[iread_index1 & num_samples_mask];
+		y2 = samples[iread_index2 & num_samples_mask];
+		y3 = samples[iread_index3 & num_samples_mask];
+	}
 
-		else
-		{
-			if(iread_index1 < 0)
-			{
-				y0 = buffer.samples[iread_index0 & num_samples_mask];
-				y1 = y2 = y3 = 0;
-				y  = CUBIC_INTERP(y0, y1, y2, y3, delta);
-			}
+	return CUBIC_INTERP(y0, y1, y2, y3, delta);
+}
 
-			else if(iread_index2 < 0)
-			{
-				y0 = buffer.samples[iread_index0 & num_samples_mask];
-				y1 = buffer.samples[iread_index1 & num_samples_mask];
-				y2 = y3 = 0;
-				y  = CUBIC_INTERP(y0, y1, y2, y3, delta);
-			}
+#define DELAYC_CALC(CONTROL_ARGS, AUDIO_ARGS)																	\
+INIT_DELAY(u);																									\
+double* samples = buffer.samples;																				\
+double delta;																									\
+double read_index;																								\
+unsigned int iread_index0, iread_index1, iread_index2, iread_index3;											\
+CONTROL_ARGS																									\
+AUDIO_LOOP(																										\
+	AUDIO_ARGS																									\
+	read_index  = (double) write_index - delay_time;															\
+	iread_index1 = (long) read_index;																			\
+	iread_index2 = iread_index1 - 1;																			\
+	iread_index3 = iread_index1 - 2;																			\
+	iread_index0 = iread_index1 + 1;																			\
+	delta = read_index - iread_index0;																			\
+																												\
+	if (iread_index0 < 0)																						\
+		y = 0;																									\
+	else																										\
+		y = delayC(iread_index0, iread_index1, iread_index2, iread_index3, num_samples_mask, delta, samples);	\
+																												\
+	buffer.samples[write_index & num_samples_mask] = x;															\
+	++write_index;																								\
+	UGEN_OUT(out, y);																							\
+);																												\
+FINISH_DELAY();																									\
 
-			else if(iread_index3 < 0)
-			{
-				y0 = buffer.samples[iread_index0 & num_samples_mask];
-				y1 = buffer.samples[iread_index1 & num_samples_mask];
-				y2 = buffer.samples[iread_index1 & num_samples_mask];
-				y3 = 0;
-				y  = CUBIC_INTERP(y0, y1, y2, y3, delta);
-			}
+// Clamp delay at 1 to prevent the + 1 iread_index3 from reading on the wrong side of the write head
+#define DELAYC_DELAY_TIMEK delay_time = fmin(data.max_delay_time, fmax(2, (*in0) * SAMPLE_RATE));
+#define DELAYC_DELAY_TIMEA delay_time = fmin(data.max_delay_time, fmax(2, UGEN_IN(in0) * SAMPLE_RATE));
+#define DELAYC_XK x = *in1;
+#define DELAYC_XA x = UGEN_IN(in1);
 
-			else
-			{
-				y0 = buffer.samples[iread_index0 & num_samples_mask];
-				y1 = buffer.samples[iread_index1 & num_samples_mask];
-				y2 = buffer.samples[iread_index2 & num_samples_mask];
-				y3 = buffer.samples[iread_index3 & num_samples_mask];
-			}
+// 0
+void delayC_kk_calc(ugen u)
+{
+    DELAYC_CALC(
+        // Control Arguments
+        DELAYC_DELAY_TIMEK    /* 0 */
+        DELAYC_XK             /* 1 */,
+        // Audio Arguments
+        /* no audio args */
+    )
+}
 
-			y  = CUBIC_INTERP(y0, y1, y2, y3, delta);
-		}
+// 1
+void delayC_ak_calc(ugen u)
+{
+    DELAYC_CALC(
+        // Control Arguments
+        DELAYC_XK             /* 1 */,
+        // Audio Arguments
+        DELAYC_DELAY_TIMEA    /* 0 */
+    )
+}
 
-		buffer.samples[write_index & num_samples_mask] = x;
-		++write_index;
-		UGEN_OUT(out, y);
-	);
+// 2
+void delayC_ka_calc(ugen u)
+{
+    DELAYC_CALC(
+        // Control Arguments
+        DELAYC_DELAY_TIMEK    /* 0 */,
+        // Audio Arguments
+        DELAYC_XA             /* 1 */
+    )
+}
 
-	FINISH_DELAY();
+// 3
+void delayC_aa_calc(ugen u)
+{
+    DELAYC_CALC(
+        // Control Arguments
+        /* no control args */,
+        // Audio Arguments
+        DELAYC_DELAY_TIMEA    /* 0 */
+        DELAYC_XA             /* 1 */
+    )
 }
 
 #define INIT_COMB(u)				   \
