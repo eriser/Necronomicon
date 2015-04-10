@@ -1,4 +1,4 @@
 Necronomicon
 ============
 
-Haskell based Audio and Graphics Engine
+Haskell and C based Interactive Audio and Graphics Engine.
