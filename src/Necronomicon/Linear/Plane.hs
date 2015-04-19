@@ -31,8 +31,8 @@ data Side = Behind | InFront | OnPlane | BothSides deriving (Eq, Ord, Show)
 
 pointNormal :: Vector3 -> Vector3 -> Maybe Plane
 pointNormal point normal
-    | sqrMagnitude n /= 0 = Just $ Plane n (n `dot` point)
-    | otherwise           = Nothing
+    | n /= 0    = Just $ Plane n (n `dot` point)
+    | otherwise = Nothing
     where
         n = normalize normal
 
