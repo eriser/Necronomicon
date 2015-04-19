@@ -2,6 +2,7 @@ module Necronomicon.Linear.Triangle where
 
 import Prelude
 import Necronomicon.Linear.Vector
+import Necronomicon.Linear.Plane
 
 data Triangle = Triangle Vector3 Vector3 Vector3 deriving (Eq, Show)
 
@@ -41,3 +42,6 @@ sqrArea (Triangle v0 v1 v2) = s*(s - a)*(s - b)*(s - c)
 
 area :: Triangle -> Double
 area tri = sqrt  $ sqrArea tri
+
+triPlane :: Triangle -> Maybe Plane
+triPlane (Triangle v1 v2 v3) = pointsToPlane v1 v2 v3
