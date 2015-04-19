@@ -125,7 +125,13 @@ isAudioRate :: UGenChannel -> Bool
 isAudioRate u = ugenRate u == AudioRate
 
 polymorphicRateUGenUnits :: S.Set UGenUnit
-polymorphicRateUGenUnits = S.fromList [Add, Minus, Mul, Div, Negate, Abs, Signum, Pow, Exp, Log, Cos, ASin, ACos, ATan, LogBase, Sqrt, Tan, TanH, SinH, CosH, ASinH, ATanH, ACosH, Range, ExpRange]
+polymorphicRateUGenUnits = S.fromList [
+        Add, Minus, Mul, Div, Negate, Abs, Signum, Pow,
+        Exp, Log, Cos, ASin, ACos, ATan, LogBase, Sqrt,
+        Tan, TanH, SinH, CosH, ASinH, ATanH, ACosH, Range,
+        ExpRange, Clip, SoftClip, Poly3, TanHDist, SinDist,
+        Wrap
+    ]
 
 ugenRate :: UGenChannel -> UGenRate
 ugenRate (UGenNum _) = ControlRate
@@ -192,8 +198,8 @@ sinOsc :: UGen -> UGen
 sinOsc freq = optimizeUGenCalcFunc [sinKCalc, sinACalc] $ multiChannelExpandUGen Sin sinACalc sinConstructor sinDeconstructor [freq]
 
 foreign import ccall "&add_kk_calc" addKKCalc :: CUGenFunc
-foreign import ccall "&add_ak_calc" addKACalc :: CUGenFunc
-foreign import ccall "&add_ka_calc" addAKCalc :: CUGenFunc
+foreign import ccall "&add_ak_calc" addAKCalc :: CUGenFunc
+foreign import ccall "&add_ka_calc" addKACalc :: CUGenFunc
 foreign import ccall "&add_aa_calc" addAACalc :: CUGenFunc
 add :: UGen -> UGen -> UGen
 add x y = optimizeUGenCalcFunc [addKKCalc, addAKCalc, addKACalc, addAACalc] $ multiChannelExpandUGen Add addAACalc nullConstructor nullDeconstructor [x, y]
@@ -327,7 +333,7 @@ foreign import ccall "&line_constructor" lineConstructor :: CUGenFunc
 foreign import ccall "&line_deconstructor" lineDeconstructor :: CUGenFunc
 
 line :: UGen -> UGen
-line lineLength =  optimizeUGenCalcFunc [lineKCalc, lineACalc] $ multiChannelExpandUGen Line lineACalc lineConstructor lineDeconstructor [lineLength]
+line lineLength = optimizeUGenCalcFunc [lineKCalc, lineACalc] $ multiChannelExpandUGen Line lineACalc lineConstructor lineDeconstructor [lineLength]
 
 perc :: UGen -> UGen -> UGen -> UGen -> UGen -> UGen
 perc attackTime releaseTime peak curve input = env [0,peak,0] [attackTime,releaseTime] curve input
@@ -501,6 +507,7 @@ foreign import ccall "&syncosc_kkaa_calc" syncoscKKAACalc :: CUGenFunc
 foreign import ccall "&syncosc_akaa_calc" syncoscAKAACalc :: CUGenFunc
 foreign import ccall "&syncosc_kaaa_calc" syncoscKAAACalc :: CUGenFunc
 foreign import ccall "&syncosc_aaaa_calc" syncoscAAAACalc :: CUGenFunc
+
 syncosc :: UGen -> UGen -> UGen -> UGen -> UGen
 syncosc slaveFreq slaveWave slavePW masterFreq = optimizeUGenCalcFunc cfuncs expandedUGen
     where
@@ -568,41 +575,179 @@ exprange low high input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen E
 foreign import ccall "&biquad_constructor"   biquadConstructor   :: CUGenFunc
 foreign import ccall "&biquad_deconstructor" biquadDeconstructor :: CUGenFunc
 
-foreign import ccall "&lpf_calc" lpfCalc :: CUGenFunc
+foreign import ccall "&lpf_kkk_calc" lpfKKKCalc :: CUGenFunc
+foreign import ccall "&lpf_akk_calc" lpfAKKCalc :: CUGenFunc
+foreign import ccall "&lpf_kak_calc" lpfKAKCalc :: CUGenFunc
+foreign import ccall "&lpf_aak_calc" lpfAAKCalc :: CUGenFunc
+foreign import ccall "&lpf_kka_calc" lpfKKACalc :: CUGenFunc
+foreign import ccall "&lpf_aka_calc" lpfAKACalc :: CUGenFunc
+foreign import ccall "&lpf_kaa_calc" lpfKAACalc :: CUGenFunc
+foreign import ccall "&lpf_aaa_calc" lpfAAACalc :: CUGenFunc
+
 lpf :: UGen -> UGen -> UGen -> UGen
-lpf freq q input = multiChannelExpandUGen LPF lpfCalc biquadConstructor biquadDeconstructor [freq,q,input]
+lpf freq q input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen LPF lpfAAACalc biquadConstructor biquadDeconstructor [freq, q, input]
+    where
+        cfuncs = [lpfKKKCalc, lpfAKKCalc, lpfKAKCalc, lpfAAKCalc, lpfKKACalc, lpfAKACalc, lpfKAACalc, lpfAAACalc]
 
-foreign import ccall "&hpf_calc" hpfCalc :: CUGenFunc
+foreign import ccall "&hpf_kkk_calc" hpfKKKCalc :: CUGenFunc
+foreign import ccall "&hpf_akk_calc" hpfAKKCalc :: CUGenFunc
+foreign import ccall "&hpf_kak_calc" hpfKAKCalc :: CUGenFunc
+foreign import ccall "&hpf_aak_calc" hpfAAKCalc :: CUGenFunc
+foreign import ccall "&hpf_kka_calc" hpfKKACalc :: CUGenFunc
+foreign import ccall "&hpf_aka_calc" hpfAKACalc :: CUGenFunc
+foreign import ccall "&hpf_kaa_calc" hpfKAACalc :: CUGenFunc
+foreign import ccall "&hpf_aaa_calc" hpfAAACalc :: CUGenFunc
+
 hpf :: UGen -> UGen -> UGen -> UGen
-hpf freq q input = multiChannelExpandUGen HPF hpfCalc biquadConstructor biquadDeconstructor [freq,q,input]
+hpf freq q input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen HPF hpfAAACalc biquadConstructor biquadDeconstructor [freq, q, input]
+    where
+        cfuncs = [hpfKKKCalc, hpfAKKCalc, hpfKAKCalc, hpfAAKCalc, hpfKKACalc, hpfAKACalc, hpfKAACalc, hpfAAACalc]
 
-foreign import ccall "&bpf_calc" bpfCalc :: CUGenFunc
+foreign import ccall "&bpf_kkk_calc" bpfKKKCalc :: CUGenFunc
+foreign import ccall "&bpf_akk_calc" bpfAKKCalc :: CUGenFunc
+foreign import ccall "&bpf_kak_calc" bpfKAKCalc :: CUGenFunc
+foreign import ccall "&bpf_aak_calc" bpfAAKCalc :: CUGenFunc
+foreign import ccall "&bpf_kka_calc" bpfKKACalc :: CUGenFunc
+foreign import ccall "&bpf_aka_calc" bpfAKACalc :: CUGenFunc
+foreign import ccall "&bpf_kaa_calc" bpfKAACalc :: CUGenFunc
+foreign import ccall "&bpf_aaa_calc" bpfAAACalc :: CUGenFunc
+
 bpf :: UGen -> UGen -> UGen -> UGen
-bpf freq q input = multiChannelExpandUGen BPF bpfCalc biquadConstructor biquadDeconstructor [freq,q,input]
+bpf freq q input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen BPF bpfAAACalc biquadConstructor biquadDeconstructor [freq, q, input]
+    where
+        cfuncs = [bpfKKKCalc, bpfAKKCalc, bpfKAKCalc, bpfAAKCalc, bpfKKACalc, bpfAKACalc, bpfKAACalc, bpfAAACalc]
 
-foreign import ccall "&notch_calc" notchCalc :: CUGenFunc
+foreign import ccall "&notch_kkkk_calc" notchKKKKCalc :: CUGenFunc
+foreign import ccall "&notch_akkk_calc" notchAKKKCalc :: CUGenFunc
+foreign import ccall "&notch_kakk_calc" notchKAKKCalc :: CUGenFunc
+foreign import ccall "&notch_aakk_calc" notchAAKKCalc :: CUGenFunc
+foreign import ccall "&notch_kkak_calc" notchKKAKCalc :: CUGenFunc
+foreign import ccall "&notch_akak_calc" notchAKAKCalc :: CUGenFunc
+foreign import ccall "&notch_kaak_calc" notchKAAKCalc :: CUGenFunc
+foreign import ccall "&notch_aaak_calc" notchAAAKCalc :: CUGenFunc
+foreign import ccall "&notch_kkka_calc" notchKKKACalc :: CUGenFunc
+foreign import ccall "&notch_akka_calc" notchAKKACalc :: CUGenFunc
+foreign import ccall "&notch_kaka_calc" notchKAKACalc :: CUGenFunc
+foreign import ccall "&notch_aaka_calc" notchAAKACalc :: CUGenFunc
+foreign import ccall "&notch_kkaa_calc" notchKKAACalc :: CUGenFunc
+foreign import ccall "&notch_akaa_calc" notchAKAACalc :: CUGenFunc
+foreign import ccall "&notch_kaaa_calc" notchKAAACalc :: CUGenFunc
+foreign import ccall "&notch_aaaa_calc" notchAAAACalc :: CUGenFunc
+
 notch :: UGen -> UGen -> UGen -> UGen -> UGen
-notch freq fgain q input = multiChannelExpandUGen Notch notchCalc biquadConstructor biquadDeconstructor [freq,fgain,q,input]
+notch freq fgain q input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen Notch notchAAAACalc biquadConstructor biquadDeconstructor [freq, fgain, q, input]
+    where
+        cfuncs = [
+                notchKKKKCalc, notchAKKKCalc, notchKAKKCalc, notchAAKKCalc,
+                notchKKAKCalc, notchAKAKCalc, notchKAAKCalc, notchAAAKCalc,
+                notchKKKACalc, notchAKKACalc, notchKAKACalc, notchAAKACalc,
+                notchKKAACalc, notchAKAACalc, notchKAAACalc, notchAAAACalc
+            ]
 
-foreign import ccall "&peakEQ_calc" peakEQCalc :: CUGenFunc
+foreign import ccall "&peakEQ_kkkk_calc" peakEQKKKKCalc :: CUGenFunc
+foreign import ccall "&peakEQ_akkk_calc" peakEQAKKKCalc :: CUGenFunc
+foreign import ccall "&peakEQ_kakk_calc" peakEQKAKKCalc :: CUGenFunc
+foreign import ccall "&peakEQ_aakk_calc" peakEQAAKKCalc :: CUGenFunc
+foreign import ccall "&peakEQ_kkak_calc" peakEQKKAKCalc :: CUGenFunc
+foreign import ccall "&peakEQ_akak_calc" peakEQAKAKCalc :: CUGenFunc
+foreign import ccall "&peakEQ_kaak_calc" peakEQKAAKCalc :: CUGenFunc
+foreign import ccall "&peakEQ_aaak_calc" peakEQAAAKCalc :: CUGenFunc
+foreign import ccall "&peakEQ_kkka_calc" peakEQKKKACalc :: CUGenFunc
+foreign import ccall "&peakEQ_akka_calc" peakEQAKKACalc :: CUGenFunc
+foreign import ccall "&peakEQ_kaka_calc" peakEQKAKACalc :: CUGenFunc
+foreign import ccall "&peakEQ_aaka_calc" peakEQAAKACalc :: CUGenFunc
+foreign import ccall "&peakEQ_kkaa_calc" peakEQKKAACalc :: CUGenFunc
+foreign import ccall "&peakEQ_akaa_calc" peakEQAKAACalc :: CUGenFunc
+foreign import ccall "&peakEQ_kaaa_calc" peakEQKAAACalc :: CUGenFunc
+foreign import ccall "&peakEQ_aaaa_calc" peakEQAAAACalc :: CUGenFunc
+
 peakEQ :: UGen -> UGen -> UGen -> UGen -> UGen
-peakEQ freq fgain q input = multiChannelExpandUGen PeakEQ peakEQCalc biquadConstructor biquadDeconstructor [freq,fgain,q,input]
+peakEQ freq fgain q input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen PeakEQ peakEQAAAACalc biquadConstructor biquadDeconstructor [freq, fgain, q, input]
+    where
+        cfuncs = [
+                peakEQKKKKCalc, peakEQAKKKCalc, peakEQKAKKCalc, peakEQAAKKCalc,
+                peakEQKKAKCalc, peakEQAKAKCalc, peakEQKAAKCalc, peakEQAAAKCalc,
+                peakEQKKKACalc, peakEQAKKACalc, peakEQKAKACalc, peakEQAAKACalc,
+                peakEQKKAACalc, peakEQAKAACalc, peakEQKAAACalc, peakEQAAAACalc
+            ]
 
-foreign import ccall "&allpass_calc" allpassCalc :: CUGenFunc
+foreign import ccall "&allpass_kkk_calc" allpassKKKCalc :: CUGenFunc
+foreign import ccall "&allpass_akk_calc" allpassAKKCalc :: CUGenFunc
+foreign import ccall "&allpass_kak_calc" allpassKAKCalc :: CUGenFunc
+foreign import ccall "&allpass_aak_calc" allpassAAKCalc :: CUGenFunc
+foreign import ccall "&allpass_kka_calc" allpassKKACalc :: CUGenFunc
+foreign import ccall "&allpass_aka_calc" allpassAKACalc :: CUGenFunc
+foreign import ccall "&allpass_kaa_calc" allpassKAACalc :: CUGenFunc
+foreign import ccall "&allpass_aaa_calc" allpassAAACalc :: CUGenFunc
+
 allpass :: UGen -> UGen -> UGen -> UGen
-allpass freq q input = multiChannelExpandUGen AllPass allpassCalc biquadConstructor biquadDeconstructor [freq,q,input]
+allpass freq q input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen AllPass allpassAAACalc biquadConstructor biquadDeconstructor [freq, q, input]
+    where
+        cfuncs = [allpassKKKCalc, allpassAKKCalc, allpassKAKCalc, allpassAAKCalc, allpassKKACalc, allpassAKACalc, allpassKAACalc, allpassAAACalc]
 
-foreign import ccall "&notch_calc" lowshelfCalc :: CUGenFunc
+foreign import ccall "&lowshelf_kkkk_calc" lowshelfKKKKCalc :: CUGenFunc
+foreign import ccall "&lowshelf_akkk_calc" lowshelfAKKKCalc :: CUGenFunc
+foreign import ccall "&lowshelf_kakk_calc" lowshelfKAKKCalc :: CUGenFunc
+foreign import ccall "&lowshelf_aakk_calc" lowshelfAAKKCalc :: CUGenFunc
+foreign import ccall "&lowshelf_kkak_calc" lowshelfKKAKCalc :: CUGenFunc
+foreign import ccall "&lowshelf_akak_calc" lowshelfAKAKCalc :: CUGenFunc
+foreign import ccall "&lowshelf_kaak_calc" lowshelfKAAKCalc :: CUGenFunc
+foreign import ccall "&lowshelf_aaak_calc" lowshelfAAAKCalc :: CUGenFunc
+foreign import ccall "&lowshelf_kkka_calc" lowshelfKKKACalc :: CUGenFunc
+foreign import ccall "&lowshelf_akka_calc" lowshelfAKKACalc :: CUGenFunc
+foreign import ccall "&lowshelf_kaka_calc" lowshelfKAKACalc :: CUGenFunc
+foreign import ccall "&lowshelf_aaka_calc" lowshelfAAKACalc :: CUGenFunc
+foreign import ccall "&lowshelf_kkaa_calc" lowshelfKKAACalc :: CUGenFunc
+foreign import ccall "&lowshelf_akaa_calc" lowshelfAKAACalc :: CUGenFunc
+foreign import ccall "&lowshelf_kaaa_calc" lowshelfKAAACalc :: CUGenFunc
+foreign import ccall "&lowshelf_aaaa_calc" lowshelfAAAACalc :: CUGenFunc
+
 lowshelf :: UGen -> UGen -> UGen -> UGen -> UGen
-lowshelf freq fgain slope input = multiChannelExpandUGen LowShelf lowshelfCalc biquadConstructor biquadDeconstructor [freq,fgain,slope,input]
+lowshelf freq fgain slope input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen LowShelf lowshelfAAAACalc biquadConstructor biquadDeconstructor [freq, fgain, slope, input]
+    where
+        cfuncs = [
+                lowshelfKKKKCalc, lowshelfAKKKCalc, lowshelfKAKKCalc, lowshelfAAKKCalc,
+                lowshelfKKAKCalc, lowshelfAKAKCalc, lowshelfKAAKCalc, lowshelfAAAKCalc,
+                lowshelfKKKACalc, lowshelfAKKACalc, lowshelfKAKACalc, lowshelfAAKACalc,
+                lowshelfKKAACalc, lowshelfAKAACalc, lowshelfKAAACalc, lowshelfAAAACalc
+            ]
 
-foreign import ccall "&highshelf_calc" highshelfCalc :: CUGenFunc
+foreign import ccall "&highshelf_kkkk_calc" highshelfKKKKCalc :: CUGenFunc
+foreign import ccall "&highshelf_akkk_calc" highshelfAKKKCalc :: CUGenFunc
+foreign import ccall "&highshelf_kakk_calc" highshelfKAKKCalc :: CUGenFunc
+foreign import ccall "&highshelf_aakk_calc" highshelfAAKKCalc :: CUGenFunc
+foreign import ccall "&highshelf_kkak_calc" highshelfKKAKCalc :: CUGenFunc
+foreign import ccall "&highshelf_akak_calc" highshelfAKAKCalc :: CUGenFunc
+foreign import ccall "&highshelf_kaak_calc" highshelfKAAKCalc :: CUGenFunc
+foreign import ccall "&highshelf_aaak_calc" highshelfAAAKCalc :: CUGenFunc
+foreign import ccall "&highshelf_kkka_calc" highshelfKKKACalc :: CUGenFunc
+foreign import ccall "&highshelf_akka_calc" highshelfAKKACalc :: CUGenFunc
+foreign import ccall "&highshelf_kaka_calc" highshelfKAKACalc :: CUGenFunc
+foreign import ccall "&highshelf_aaka_calc" highshelfAAKACalc :: CUGenFunc
+foreign import ccall "&highshelf_kkaa_calc" highshelfKKAACalc :: CUGenFunc
+foreign import ccall "&highshelf_akaa_calc" highshelfAKAACalc :: CUGenFunc
+foreign import ccall "&highshelf_kaaa_calc" highshelfKAAACalc :: CUGenFunc
+foreign import ccall "&highshelf_aaaa_calc" highshelfAAAACalc :: CUGenFunc
+
 highshelf :: UGen -> UGen -> UGen -> UGen -> UGen
-highshelf freq fgain slope input = multiChannelExpandUGen HighShelf highshelfCalc biquadConstructor biquadDeconstructor [freq,fgain,slope,input]
+highshelf freq fgain slope input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen HighShelf highshelfAAAACalc biquadConstructor biquadDeconstructor [freq, fgain, slope, input]
+    where
+        cfuncs = [
+                highshelfKKKKCalc, highshelfAKKKCalc, highshelfKAKKCalc, highshelfAAKKCalc,
+                highshelfKKAKCalc, highshelfAKAKCalc, highshelfKAAKCalc, highshelfAAAKCalc,
+                highshelfKKKACalc, highshelfAKKACalc, highshelfKAKACalc, highshelfAAKACalc,
+                highshelfKKAACalc, highshelfAKAACalc, highshelfKAAACalc, highshelfAAAACalc
+            ]
 
-foreign import ccall "&lag_calc" lagCalc :: CUGenFunc
+foreign import ccall "&lag_kk_calc" lagKKCalc :: CUGenFunc
+foreign import ccall "&lag_ak_calc" lagAKCalc :: CUGenFunc
+foreign import ccall "&lag_ka_calc" lagKACalc :: CUGenFunc
+foreign import ccall "&lag_aa_calc" lagAACalc :: CUGenFunc
+
 lag :: UGen -> UGen -> UGen
-lag timeLag input = multiChannelExpandUGen LagCalc lagCalc accumulatorConstructor accumulatorDeconstructor [timeLag,input]
+lag timeLag input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen LagCalc lagAACalc accumulatorConstructor accumulatorDeconstructor [timeLag, input]
+    where
+        cfuncs = [lagKKCalc, lagAKCalc, lagKACalc, lagAACalc]
 
 -- foreign import ccall "&zeroDelayFilter_constructor"   zeroDelayFilterConstructor   :: CUGenFunc
 -- foreign import ccall "&zeroDelayFilter_deconstructor" zeroDelayFilterDeconstructor :: CUGenFunc
@@ -616,85 +761,213 @@ lag timeLag input = multiChannelExpandUGen LagCalc lagCalc accumulatorConstructo
 -- lpfMS20 freq reson dist input = multiChannelExpandUGen LPFMS20 zeroDelayLPMS20Calc zeroDelayFilterConstructor zeroDelayFilterDeconstructor [freq,reson,dist,input]
 
 --Distortions
-foreign import ccall "&clip_calc" clipCalc :: CUGenFunc
+foreign import ccall "&clip_kk_calc" clipKKCalc :: CUGenFunc
+foreign import ccall "&clip_ak_calc" clipAKCalc :: CUGenFunc
+foreign import ccall "&clip_ka_calc" clipKACalc :: CUGenFunc
+foreign import ccall "&clip_aa_calc" clipAACalc :: CUGenFunc
+
 clip :: UGen -> UGen -> UGen
-clip amount input = multiChannelExpandUGen Clip clipCalc nullConstructor nullDeconstructor [amount,input]
+clip amount input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen Clip clipAACalc nullConstructor nullDeconstructor [amount, input]
+    where
+        cfuncs = [clipKKCalc, clipAKCalc, clipKACalc, clipAACalc]
 
-foreign import ccall "&softclip_calc" softclipCalc :: CUGenFunc
+foreign import ccall "&softclip_kk_calc" softclipKKCalc :: CUGenFunc
+foreign import ccall "&softclip_ak_calc" softclipAKCalc :: CUGenFunc
+foreign import ccall "&softclip_ka_calc" softclipKACalc :: CUGenFunc
+foreign import ccall "&softclip_aa_calc" softclipAACalc :: CUGenFunc
+
 softclip :: UGen -> UGen -> UGen
-softclip amount input = multiChannelExpandUGen SoftClip softclipCalc nullConstructor nullDeconstructor [amount,input]
+softclip amount input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen SoftClip softclipAACalc nullConstructor nullDeconstructor [amount, input]
+    where
+        cfuncs = [softclipKKCalc, softclipAKCalc, softclipKACalc, softclipAACalc]
 
-foreign import ccall "&poly3_calc" poly3Calc :: CUGenFunc
+foreign import ccall "&poly3_kk_calc" poly3KKCalc :: CUGenFunc
+foreign import ccall "&poly3_ak_calc" poly3AKCalc :: CUGenFunc
+foreign import ccall "&poly3_ka_calc" poly3KACalc :: CUGenFunc
+foreign import ccall "&poly3_aa_calc" poly3AACalc :: CUGenFunc
+
 poly3 :: UGen -> UGen -> UGen
-poly3 amount input = multiChannelExpandUGen Poly3 poly3Calc nullConstructor nullDeconstructor [amount,input]
+poly3 amount input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen Poly3 poly3AACalc nullConstructor nullDeconstructor [amount, input]
+    where
+        cfuncs = [poly3KKCalc, poly3AKCalc, poly3KACalc, poly3AACalc]
 
-foreign import ccall "&tanhdist_calc" tanhDistCalc :: CUGenFunc
+foreign import ccall "&tanhDist_kk_calc" tanhDistKKCalc :: CUGenFunc
+foreign import ccall "&tanhDist_ak_calc" tanhDistAKCalc :: CUGenFunc
+foreign import ccall "&tanhDist_ka_calc" tanhDistKACalc :: CUGenFunc
+foreign import ccall "&tanhDist_aa_calc" tanhDistAACalc :: CUGenFunc
+
 tanhDist :: UGen -> UGen -> UGen
-tanhDist amount input = multiChannelExpandUGen TanHDist tanhDistCalc nullConstructor nullDeconstructor [amount,input]
+tanhDist amount input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen TanHDist tanhDistAACalc nullConstructor nullDeconstructor [amount, input]
+    where
+        cfuncs = [tanhDistKKCalc, tanhDistAKCalc, tanhDistKACalc, tanhDistAACalc]
 
-foreign import ccall "&sinDist_calc" sinDistCalc :: CUGenFunc
+foreign import ccall "&sinDist_kk_calc" sinDistKKCalc :: CUGenFunc
+foreign import ccall "&sinDist_ak_calc" sinDistAKCalc :: CUGenFunc
+foreign import ccall "&sinDist_ka_calc" sinDistKACalc :: CUGenFunc
+foreign import ccall "&sinDist_aa_calc" sinDistAACalc :: CUGenFunc
+
 sinDist :: UGen -> UGen -> UGen
-sinDist amount input = multiChannelExpandUGen SinDist sinDistCalc nullConstructor nullDeconstructor [amount,input]
+sinDist amount input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen SinDist sinDistAACalc nullConstructor nullDeconstructor [amount, input]
+    where
+        cfuncs = [sinDistKKCalc, sinDistAKCalc, sinDistKACalc, sinDistAACalc]
 
-foreign import ccall "&wrap_calc" wrapCalc :: CUGenFunc
+foreign import ccall "&wrap_kk_calc" wrapKKCalc :: CUGenFunc
+foreign import ccall "&wrap_ak_calc" wrapAKCalc :: CUGenFunc
+foreign import ccall "&wrap_ka_calc" wrapKACalc :: CUGenFunc
+foreign import ccall "&wrap_aa_calc" wrapAACalc :: CUGenFunc
+
 wrap :: UGen -> UGen -> UGen
-wrap amount input = multiChannelExpandUGen Wrap wrapCalc nullConstructor nullDeconstructor [amount,input]
+wrap amount input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen Wrap wrapAACalc nullConstructor nullDeconstructor [amount, input]
+    where
+        cfuncs = [wrapKKCalc, wrapAKCalc, wrapKACalc, wrapAACalc]
 
-foreign import ccall "&crush_calc" crushCalc :: CUGenFunc
+foreign import ccall "&crush_kk_calc" crushKKCalc :: CUGenFunc
+foreign import ccall "&crush_ak_calc" crushAKCalc :: CUGenFunc
+foreign import ccall "&crush_ka_calc" crushKACalc :: CUGenFunc
+foreign import ccall "&crush_aa_calc" crushAACalc :: CUGenFunc
+
 crush :: UGen -> UGen -> UGen
-crush depth x = multiChannelExpandUGen Crush crushCalc nullConstructor nullDeconstructor [depth,x]
+crush depth x = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen Crush crushAACalc nullConstructor nullDeconstructor [depth, x]
+    where
+        cfuncs = [crushKKCalc, crushAKCalc, crushKACalc, crushAACalc]
 
 foreign import ccall "&decimate_constructor"   decimateConstructor   :: CUGenFunc
 foreign import ccall "&decimate_deconstructor" decimateDeconstructor :: CUGenFunc
-foreign import ccall "&decimate_calc"          decimateCalc          :: CUGenFunc
+
+foreign import ccall "&decimate_kk_calc" decimateKKCalc :: CUGenFunc
+foreign import ccall "&decimate_ak_calc" decimateAKCalc :: CUGenFunc
+foreign import ccall "&decimate_ka_calc" decimateKACalc :: CUGenFunc
+foreign import ccall "&decimate_aa_calc" decimateAACalc :: CUGenFunc
+
 decimate :: UGen -> UGen -> UGen
-decimate rate x = multiChannelExpandUGen Decimate decimateCalc decimateConstructor decimateDeconstructor [rate,x]
+decimate rate x = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen Decimate decimateAACalc decimateConstructor decimateDeconstructor [rate, x]
+    where
+        cfuncs = [decimateKKCalc, decimateAKCalc, decimateKACalc, decimateAACalc]
 
 foreign import ccall "&delay_deconstructor" delayDeconstructor :: CUGenFunc
 foreign import ccall "&delayN_constructor" delayNConstructor :: CUGenFunc
-foreign import ccall "&delayN_calc" delayNCalc :: CUGenFunc
+foreign import ccall "&delayN_kk_calc" delayNKKCalc :: CUGenFunc
+foreign import ccall "&delayN_ak_calc" delayNAKCalc :: CUGenFunc
+foreign import ccall "&delayN_ka_calc" delayNKACalc :: CUGenFunc
+foreign import ccall "&delayN_aa_calc" delayNAACalc :: CUGenFunc
+
 delayN :: Double -> UGen -> UGen -> UGen
-delayN maxDelayTime delayTime input = multiChannelExpandUGen (DelayN maxDelayTime) delayNCalc delayNConstructor delayDeconstructor [delayTime, input]
+delayN maxDelayTime delayTime input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen (DelayN maxDelayTime) delayNAACalc delayNConstructor delayDeconstructor [delayTime, input]
+    where
+        cfuncs = [delayNKKCalc, delayNAKCalc, delayNKACalc, delayNAACalc]
 
 foreign import ccall "&delayL_constructor" delayLConstructor :: CUGenFunc
-foreign import ccall "&delayL_calc" delayLCalc :: CUGenFunc
+foreign import ccall "&delayL_kk_calc" delayLKKCalc :: CUGenFunc
+foreign import ccall "&delayL_ak_calc" delayLAKCalc :: CUGenFunc
+foreign import ccall "&delayL_ka_calc" delayLKACalc :: CUGenFunc
+foreign import ccall "&delayL_aa_calc" delayLAACalc :: CUGenFunc
+
 delayL :: Double -> UGen -> UGen -> UGen
-delayL maxDelayTime delayTime input = multiChannelExpandUGen (DelayL maxDelayTime) delayLCalc delayLConstructor delayDeconstructor [delayTime, input]
+delayL maxDelayTime delayTime input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen (DelayL maxDelayTime) delayLAACalc delayLConstructor delayDeconstructor [delayTime, input]
+    where
+        cfuncs = [delayLKKCalc, delayLAKCalc, delayLKACalc, delayLAACalc]
 
 foreign import ccall "&delayC_constructor" delayCConstructor :: CUGenFunc
-foreign import ccall "&delayC_calc" delayC_calc :: CUGenFunc
+foreign import ccall "&delayC_kk_calc" delayCKKCalc :: CUGenFunc
+foreign import ccall "&delayC_ak_calc" delayCAKCalc :: CUGenFunc
+foreign import ccall "&delayC_ka_calc" delayCKACalc :: CUGenFunc
+foreign import ccall "&delayC_aa_calc" delayCAACalc :: CUGenFunc
+
 delayC :: Double -> UGen -> UGen -> UGen
-delayC maxDelayTime delayTime input = multiChannelExpandUGen (DelayC maxDelayTime) delayC_calc delayCConstructor delayDeconstructor [delayTime, input]
+delayC maxDelayTime delayTime input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen (DelayC maxDelayTime) delayCAACalc delayCConstructor delayDeconstructor [delayTime, input]
+    where
+        cfuncs = [delayCKKCalc, delayCAKCalc, delayCKACalc, delayCAACalc]
 
-foreign import ccall "&combN_calc" combNCalc :: CUGenFunc
+foreign import ccall "&combN_kkk_calc" combNKKKCalc :: CUGenFunc
+foreign import ccall "&combN_akk_calc" combNAKKCalc :: CUGenFunc
+foreign import ccall "&combN_kak_calc" combNKAKCalc :: CUGenFunc
+foreign import ccall "&combN_aak_calc" combNAAKCalc :: CUGenFunc
+foreign import ccall "&combN_kka_calc" combNKKACalc :: CUGenFunc
+foreign import ccall "&combN_aka_calc" combNAKACalc :: CUGenFunc
+foreign import ccall "&combN_kaa_calc" combNKAACalc :: CUGenFunc
+foreign import ccall "&combN_aaa_calc" combNAAACalc :: CUGenFunc
+
 combN :: Double -> UGen -> UGen -> UGen -> UGen
-combN maxDelayTime delayTime decayTime input = multiChannelExpandUGen (CombN maxDelayTime) combNCalc delayNConstructor delayDeconstructor [delayTime, decayTime, input]
+combN maxDelayTime delayTime decayTime input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen (CombN maxDelayTime) combNAAACalc delayNConstructor delayDeconstructor [delayTime, decayTime, input]
+    where
+        cfuncs = [combNKKKCalc, combNAKKCalc, combNKAKCalc, combNAAKCalc, combNKKACalc, combNAKACalc, combNKAACalc, combNAAACalc]
 
-foreign import ccall "&combL_calc" combLCalc :: CUGenFunc
+foreign import ccall "&combL_kkk_calc" combLKKKCalc :: CUGenFunc
+foreign import ccall "&combL_akk_calc" combLAKKCalc :: CUGenFunc
+foreign import ccall "&combL_kak_calc" combLKAKCalc :: CUGenFunc
+foreign import ccall "&combL_aak_calc" combLAAKCalc :: CUGenFunc
+foreign import ccall "&combL_kka_calc" combLKKACalc :: CUGenFunc
+foreign import ccall "&combL_aka_calc" combLAKACalc :: CUGenFunc
+foreign import ccall "&combL_kaa_calc" combLKAACalc :: CUGenFunc
+foreign import ccall "&combL_aaa_calc" combLAAACalc :: CUGenFunc
+
 combL :: Double -> UGen -> UGen -> UGen -> UGen
-combL maxDelayTime delayTime decayTime input = multiChannelExpandUGen (CombL maxDelayTime) combLCalc delayLConstructor delayDeconstructor [delayTime, decayTime , input]
+combL maxDelayTime delayTime decayTime input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen (CombL maxDelayTime) combLAAACalc delayLConstructor delayDeconstructor [delayTime, decayTime , input]
+    where
+        cfuncs = [combLKKKCalc, combLAKKCalc, combLKAKCalc, combLAAKCalc, combLKKACalc, combLAKACalc, combLKAACalc, combLAAACalc]
 
-foreign import ccall "&combC_calc" combC_calc :: CUGenFunc
+foreign import ccall "&combC_kkk_calc" combCKKKCalc :: CUGenFunc
+foreign import ccall "&combC_akk_calc" combCAKKCalc :: CUGenFunc
+foreign import ccall "&combC_kak_calc" combCKAKCalc :: CUGenFunc
+foreign import ccall "&combC_aak_calc" combCAAKCalc :: CUGenFunc
+foreign import ccall "&combC_kka_calc" combCKKACalc :: CUGenFunc
+foreign import ccall "&combC_aka_calc" combCAKACalc :: CUGenFunc
+foreign import ccall "&combC_kaa_calc" combCKAACalc :: CUGenFunc
+foreign import ccall "&combC_aaa_calc" combCAAACalc :: CUGenFunc
+
 combC :: Double -> UGen -> UGen -> UGen -> UGen
-combC maxDelayTime delayTime decayTime input = multiChannelExpandUGen (CombC maxDelayTime) combC_calc delayCConstructor delayDeconstructor [delayTime, decayTime, input]
+combC maxDelayTime delayTime decayTime input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen (CombC maxDelayTime) combCAAACalc delayCConstructor delayDeconstructor [delayTime, decayTime, input]
+    where
+        cfuncs = [combCKKKCalc, combCAKKCalc, combCKAKCalc, combCAAKCalc, combCKKACalc, combCAKACalc, combCKAACalc, combCAAACalc]
 
-foreign import ccall "&pluck_constructor"   pluckConstructor   :: CUGenFunc
+foreign import ccall "&pluck_constructor" pluckConstructor :: CUGenFunc
 foreign import ccall "&pluck_deconstructor" pluckDeconstructor :: CUGenFunc
-foreign import ccall "&pluck_calc"          pluckCalc          :: CUGenFunc
+foreign import ccall "&pluck_kkk_calc" pluckKKKCalc :: CUGenFunc
+foreign import ccall "&pluck_akk_calc" pluckAKKCalc :: CUGenFunc
+foreign import ccall "&pluck_kak_calc" pluckKAKCalc :: CUGenFunc
+foreign import ccall "&pluck_aak_calc" pluckAAKCalc :: CUGenFunc
+foreign import ccall "&pluck_kka_calc" pluckKKACalc :: CUGenFunc
+foreign import ccall "&pluck_aka_calc" pluckAKACalc :: CUGenFunc
+foreign import ccall "&pluck_kaa_calc" pluckKAACalc :: CUGenFunc
+foreign import ccall "&pluck_aaa_calc" pluckAAACalc :: CUGenFunc
 
 pluck :: Double -> UGen -> UGen -> UGen -> UGen
-pluck minFreq freq duration x = multiChannelExpandUGen (Pluck minFreq) pluckCalc pluckConstructor pluckDeconstructor [freq,duration,x]
+pluck minFreq freq duration x = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen (Pluck minFreq) pluckAAACalc pluckConstructor pluckDeconstructor [freq, duration, x]
+    where
+        cfuncs = [pluckKKKCalc, pluckAKKCalc, pluckKAKCalc, pluckAAKCalc, pluckKKACalc, pluckAKACalc, pluckKAACalc, pluckAAACalc]
 
 foreign import ccall "&white_calc" whiteCalc :: CUGenFunc
 whiteNoise :: UGen
-whiteNoise = multiChannelExpandUGen WhiteNoise whiteCalc nullConstructor nullDeconstructor []
+whiteNoise = UGen [UGenFunc WhiteNoise whiteCalc nullConstructor nullDeconstructor []]
 
 foreign import ccall "&freeverb_constructor" freeverbConstructor :: CUGenFunc
 foreign import ccall "&freeverb_deconstructor" freeverbDeconstructor :: CUGenFunc
-foreign import ccall "&freeverb_calc" freeverbCalc :: CUGenFunc
+foreign import ccall "&freeverb_kkkk_calc" freeverbKKKKCalc :: CUGenFunc
+foreign import ccall "&freeverb_akkk_calc" freeverbAKKKCalc :: CUGenFunc
+foreign import ccall "&freeverb_kakk_calc" freeverbKAKKCalc :: CUGenFunc
+foreign import ccall "&freeverb_aakk_calc" freeverbAAKKCalc :: CUGenFunc
+foreign import ccall "&freeverb_kkak_calc" freeverbKKAKCalc :: CUGenFunc
+foreign import ccall "&freeverb_akak_calc" freeverbAKAKCalc :: CUGenFunc
+foreign import ccall "&freeverb_kaak_calc" freeverbKAAKCalc :: CUGenFunc
+foreign import ccall "&freeverb_aaak_calc" freeverbAAAKCalc :: CUGenFunc
+foreign import ccall "&freeverb_kkka_calc" freeverbKKKACalc :: CUGenFunc
+foreign import ccall "&freeverb_akka_calc" freeverbAKKACalc :: CUGenFunc
+foreign import ccall "&freeverb_kaka_calc" freeverbKAKACalc :: CUGenFunc
+foreign import ccall "&freeverb_aaka_calc" freeverbAAKACalc :: CUGenFunc
+foreign import ccall "&freeverb_kkaa_calc" freeverbKKAACalc :: CUGenFunc
+foreign import ccall "&freeverb_akaa_calc" freeverbAKAACalc :: CUGenFunc
+foreign import ccall "&freeverb_kaaa_calc" freeverbKAAACalc :: CUGenFunc
+foreign import ccall "&freeverb_aaaa_calc" freeverbAAAACalc :: CUGenFunc
 
 freeverb :: UGen -> UGen -> UGen -> UGen -> UGen
-freeverb mix' roomSize damp input = multiChannelExpandUGen FreeVerb freeverbCalc freeverbConstructor freeverbDeconstructor [mix',roomSize,damp,input]
+freeverb mix' roomSize damp input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen FreeVerb freeverbAAAACalc freeverbConstructor freeverbDeconstructor [mix', roomSize, damp, input]
+    where
+        cfuncs = [
+                freeverbKKKKCalc, freeverbAKKKCalc, freeverbKAKKCalc, freeverbAAKKCalc,
+                freeverbKKAKCalc, freeverbAKAKCalc, freeverbKAAKCalc, freeverbAAAKCalc,
+                freeverbKKKACalc, freeverbAKKACalc, freeverbKAKACalc, freeverbAAKACalc,
+                freeverbKKAACalc, freeverbAKAACalc, freeverbKAAACalc, freeverbAAAACalc
+            ]
 
 dup :: UGen -> UGen
 dup u = u <> u
