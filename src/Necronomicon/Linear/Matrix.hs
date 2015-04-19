@@ -50,7 +50,7 @@ instance Matrix Matrix3x3 where
     determinant (Matrix3x3 (Vector3 a b c) (Vector3 d e f) (Vector3 g h i)) =
         a * (e*i-f*h) - d * (b*i-c*h) + g * (b*f-c*e)
 
-    -- | Invert a 3x3 matrix. With an inversion matrix you can undo a projection into a coordinate space.
+    -- | Invert a 3x3 matrix. With an inversion matrix you can undo a transformation into a coordinate space.
     invert m@(Matrix3x3 (Vector3 a b c) (Vector3 d e f) (Vector3 g h i)) =
         (1 / det) .*. Matrix3x3 (Vector3 a' b' c') (Vector3 d' e' f') (Vector3 g' h' i')
         where
@@ -84,7 +84,7 @@ instance Matrix Matrix4x4 where
         where
             fdet da db dc dd de df dg dh di = da * (de*di-df*dh) - dd * (db*di-dc*dh) + dg * (db*df-dc*de)
 
-    -- | Invert a 4x4 matrix. With an inversion matrix you can undo a projection into a coordinate space.
+    -- | Invert a 4x4 matrix. With an inversion matrix you can undo a transformation into a coordinate space.
     invert mat@(Matrix4x4 (Vector4 a b c d) (Vector4 e f g h) (Vector4 i j k l) (Vector4 m n o p)) =
         (1 / det) .*. (transpose <| Matrix4x4 (Vector4 a' (-b') c' (-d')) (Vector4 (-e') f' (-g') h') (Vector4 i' (-j') k' (-l')) (Vector4 (-m') n' (-o') p'))
         where
@@ -383,7 +383,12 @@ orthoMatrix l r b t n f = Matrix4x4
                           (Vector4 0       0       0          1               )
 
 perspMatrix :: Double -> Double -> Double -> Double -> Matrix4x4
-perspMatrix fov aspect near far = Matrix4x4 (Vector4 (negate $ f/aspect) 0 0 0) (Vector4 0 (-f) 0 0) (Vector4 0 0 ((near+far)/(near-far)) ((2*far*near)/(near-far))) (Vector4 0 0 (-1) 0)
+perspMatrix fov aspect near far =
+    Matrix4x4
+    (Vector4 (negate $ f/aspect)  0  0                        0                      )
+    (Vector4 0                  (-f) 0                        0                      )
+    (Vector4 0                    0 ((near+far)/(near-far)) ((2*far*near)/(near-far)))
+    (Vector4 0                    0 (-1)                      0                      )
     where
         f = 1 / tan (fov / 2)
 

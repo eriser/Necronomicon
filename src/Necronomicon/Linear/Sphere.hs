@@ -8,7 +8,7 @@ import Necronomicon.Linear.Vector
 import Necronomicon.Linear.AABB
 import Necronomicon.Linear.Plane
 
-data Sphere = Sphere { sphCenter::Vector3, sphRadius::Double } deriving (Eq)
+data Sphere = Sphere { sphCenter::Vector3, sphRadius::Double } deriving (Eq, Show)
 
 intersectsSphere :: Sphere -> Sphere -> Bool
 intersectsSphere (Sphere c1 r1) (Sphere c2 r2) = sqrMagnitude (c2 - c1) <= radii where radii = (r1 + r2) ** 2
@@ -18,7 +18,7 @@ intersectsVector (Sphere c r) v = sqrMagnitude (v - c) <= (r*r)
 
 -- Arvo's algorithm
 sphereIntersectsAABB :: Sphere -> AABB -> Bool
-sphereIntersectsAABB (Sphere c r) a@(AABB mn mx) = if isNull a then False else sqrDist <= (r*r) 
+sphereIntersectsAABB (Sphere c r) a@(AABB mn mx) = if isNull a then False else sqrDist <= (r*r)
     where
         foldPoints (s, d) (ci, mni, mxi) = (s', d')
             where

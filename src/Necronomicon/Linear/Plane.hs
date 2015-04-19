@@ -1,5 +1,5 @@
-module Necronomicon.Linear.Plane (Plane(Plane,pnorm,pd),
-                                  Side(Behind,InFront,OnPlane,BothSides),
+module Necronomicon.Linear.Plane (Plane(..),
+                                  Side(..),
                                   pointNormal,
                                   pointDistance,
                                   pointSide,
@@ -16,9 +16,8 @@ import Necronomicon.Linear.Vector
     This equation defined a normal to the plane (Vector3 x y z) and the distance along that normal to the origin of the plane (d).
 -}
 
-data Plane = Plane { pnorm::Vector3, pd::Double } deriving (Eq)
-
-data Side = Behind | InFront | OnPlane | BothSides deriving (Eq, Ord)
+data Plane = Plane { pnorm::Vector3, pd::Double } deriving (Eq, Show)
+data Side = Behind | InFront | OnPlane | BothSides deriving (Eq, Ord, Show)
 
 pointNormal :: Vector3 -> Vector3 -> Plane
 pointNormal point normal = Plane normal (negate $ dot normal point)

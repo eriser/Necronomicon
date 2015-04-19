@@ -383,6 +383,11 @@ up4      = Vector4   0   1   0   1
 cross :: Vector3 -> Vector3 -> Vector3
 cross (Vector3 x1 y1 z1) (Vector3 x2 y2 z2) = Vector3 (y1*z2-z1*y2) (z1*x2-x1*z2) (x1*y2-y1*x2)
 
+(><) :: Vector3 -> Vector3 -> Vector3
+(><) = cross
+
+infixl 8 ><
+
 makeCeil :: Vector3 -> Vector3 -> Vector3
 makeCeil (Vector3 x1 y1 z1) (Vector3 x2 y2 z2) = Vector3 (max x1 x2) (max y1 y2) (max z1 z2)
 

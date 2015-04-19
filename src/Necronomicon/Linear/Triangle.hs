@@ -3,7 +3,7 @@ module Necronomicon.Linear.Triangle where
 import Prelude
 import Necronomicon.Linear.Vector
 
-data Triangle = Triangle Vector3 Vector3 Vector3 deriving (Eq)
+data Triangle = Triangle Vector3 Vector3 Vector3 deriving (Eq, Show)
 
 centroid :: Triangle -> Vector3
 centroid (Triangle v0 v1 v2) = (v0 + v1 + v2) ./. (3 :: Double)

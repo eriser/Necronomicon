@@ -12,7 +12,8 @@ module Necronomicon.Linear.AABB (Corner(FarLeftBottom,FarLeftTop,FarRighTop,FarR
                                  intersection,
                                  isNull,
                                  corners,
-                                 corner) where
+                                 corner,
+                                 aabbArea) where
 
 -- import Necronomicon.Game.Utilities
 import Necronomicon.Linear.Vector
@@ -33,10 +34,10 @@ import Necronomicon.Linear.Vector
 data Corner = FarLeftBottom | FarLeftTop  | FarRighTop     | FarRightBottom |
               NearRightTop  | NearLeftTop | NearLeftBottom | NearRightBottom deriving (Show, Ord, Eq)
 
-data AABB = AABB { aabbMin::Vector3, aabbMax::Vector3 } deriving (Eq)
+data AABB = AABB { aabbMin::Vector3, aabbMax::Vector3 } deriving (Eq, Show)
 
 instance Num AABB where
-    (+)         (AABB mn1 mx1) (AABB mn2 mx2) = AABB (mn1 + mn2) (mx1 + mx2) 
+    (+)         (AABB mn1 mx1) (AABB mn2 mx2) = AABB (mn1 + mn2) (mx1 + mx2)
     (*)         (AABB mn1 mx1) (AABB mn2 mx2) = AABB (mn1 * mn2) (mx1 * mx2)
     (-)         (AABB mn1 mx1) (AABB mn2 mx2) = AABB (mn1 + mn2) (mx1 + mx2)
     negate      (AABB mn mx)                  = AABB (-mn) (-mx)
@@ -71,7 +72,7 @@ halfSize (AABB mn mx) = (mx - mn) .*. (0.5::Double)
 
 boundingRadius :: AABB -> Double
 -- boundingRadius (AABB mx mn) = makeCeil (-mx) mx |> makeCeil mn |> makeCeil (-mn) |> magnitude
-boundingRadius (AABB mx mn) = magnitude $ makeCeil (-mn) $ makeCeil mn $ makeCeil (-mx) mx 
+boundingRadius (AABB mx mn) = magnitude $ makeCeil (-mn) $ makeCeil mn $ makeCeil (-mx) mx
 
 less :: Vector3 -> Vector3 -> Bool
 less (Vector3 x1 y1 z1) (Vector3 x2 y2 z2) = (x1 < x2) && (y1 < y2) && (z1 < z2)
@@ -85,6 +86,7 @@ containsPoint (AABB mn mx) point = (lessEq mn point) && (lessEq point mx)
 containsAABB :: AABB -> AABB -> Bool
 containsAABB (AABB mn1 mx1) (AABB mn2 mx2) = (lessEq mn1 mn2) && (lessEq mx2 mx1)
 
+--TODO: fix this implementation to use less branching
 intersectsAABB :: AABB -> AABB -> Bool
 intersectsAABB (AABB (Vector3 nx1 ny1 nz1) (Vector3 xx1 xy1 xz1)) (AABB (Vector3 nx2 ny2 nz2) (Vector3 xx2 xy2 xz2))
     | xx1 < nx2 = False
@@ -124,3 +126,6 @@ corner (AABB mn@(Vector3 nx ny nz) mx@(Vector3 xx xy xz)) c =
         NearLeftTop -> Vector3 nx xy xz
         NearLeftBottom -> Vector3 nx ny xz
         NearRightBottom -> Vector3 xx ny xz
+
+aabbArea :: AABB -> Double
+aabbArea (AABB (Vector3 mnx mny mnz) (Vector3 mxx mxy mxz)) = (mxx - mnx) * (mxy - mny) * (mxz - mnz)

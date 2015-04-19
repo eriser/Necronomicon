@@ -39,3 +39,6 @@ nearZero v = v < epsilon
     -- | val <= inMin = outMin
     -- | val >= inMax = outMax
     -- | otherwise    = (((val - inMin) / (inMax - inMin)) * (outMax - outMin)) + outMin
+
+clamp :: Double -> Double -> Double -> Double
+clamp mn mx = min mx . max mn

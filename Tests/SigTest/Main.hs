@@ -24,15 +24,15 @@ sections = switch section [section2, section3, section1]
 section1 :: Signal ()
 section1 = scene [pure cam,oscSig]
     where
-        oscSig         = oscillatorObject <~ audioTexture 2 ~~ audioTexture 3 ~~ audioTexture 4
-        cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
+        oscSig      = oscillatorObject <~ audioTexture 2 ~~ audioTexture 3 ~~ audioTexture 4
+        cam         = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
 
 section2 :: Signal ()
 section2 = scene [camSig,terrainSig]
     where
-        terrainSig     = terrainObject <~ audioTexture 2 ~~ audioTexture 3 ~~ audioTexture 4 ~~ time
-        camSig         = cam <~ time * 0.125
-        cam t          = perspCamera pos rot 60 0.1 1000 black [glow]
+        terrainSig  = terrainObject <~ audioTexture 2 ~~ audioTexture 3 ~~ audioTexture 4 ~~ time
+        camSig      = cam <~ time * 0.125
+        cam t       = perspCamera pos rot 60 0.1 1000 black [glow]
             where
                 pos = Vector3 (sin t * 8) (cos (t * 0.75) * 5) (sin (t * 0.333) * 4)
                 rot = inverse <| lookAt (_z_ (* (-3)) <| pos) 0
@@ -40,9 +40,9 @@ section2 = scene [camSig,terrainSig]
 section3 :: Signal ()
 section3 = scene [camSig,sphereSig]
     where
-        sphereSig      = sphereObject <~ audioTexture 2 ~~ audioTexture 3 ~~ audioTexture 4 ~~ time ~~ pure 36
-        camSig         = cam <~ time * 0.05
-        cam t          = perspCamera pos rot 60 0.1 1000 black [glow]
+        sphereSig   = sphereObject <~ audioTexture 2 ~~ audioTexture 3 ~~ audioTexture 4 ~~ time ~~ pure 36
+        camSig      = cam <~ time * 0.05
+        cam t       = perspCamera pos rot 60 0.1 1000 black [glow]
             where
                 pos = Vector3 (cos (t * 0.7453) * 5) (sin (t * 0.912) * 8) (sin (t * 0.4543) * 4)
                 rot = inverse <| lookAt (_z_ (* (-2.5)) <| pos) 0
@@ -50,10 +50,10 @@ section3 = scene [camSig,sphereSig]
 terrainObject :: Texture -> Texture -> Texture -> Double -> SceneObject
 terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 0 (-6)) identity (Vector3 0.125 1 0.125) (Model mesh terrainMaterial) []
     where
-        mesh             = Mesh "simplex" vertices colors uvs indices
-        (w,h)            = (256.0,256.0)
-        (tscale,vscale)  = (1 / 6,2.5)
-        values           = [(x,0,y) | (x,y) <- map (\n -> (mod' n w, n / h)) [0..w*h]]
+        mesh            = Mesh "simplex" vertices colors uvs indices
+        (w,h)           = (256.0,256.0)
+        (tscale,vscale) = (1 / 6,2.5)
+        values          = [(x,0,y) | (x,y) <- map (\n -> (mod' n w, n / h)) [0..w*h]]
 
         toVertex (x,y,z) = Vector3 (x*tscale*3) (y*vscale) (z*tscale*3)
         toColor  (x,y,z) = RGBA    ((x * 1.75) / w * (y * 0.6 + 0.4)) (y * 0.75 + 0.25) (z / h * (y * 0.75 + 0.25)) 0.3
@@ -147,9 +147,9 @@ triOsc32 mx my = feedback fSig |> verb |> gain 0.0385 |> out 0
 caveTime :: UGen
 caveTime = [l * 0.875 + r * 0.125, r * 0.875 + l * 0.125] |> out 0
     where
-        l     = auxIn 20 |> verb
-        r     = auxIn 21 |> verb
-        verb  = freeverb 0.5 1.0 0.1
+        l    = auxIn 20 |> verb
+        r    = auxIn 21 |> verb
+        verb = freeverb 0.5 1.0 0.1
 
 visAux :: UGen -> UGen -> UGen -> UGen
 visAux bus a u = _useq (auxThrough bus (left u * a)) u
