@@ -52,7 +52,8 @@ pointNormal point normal
     This is because three collinear points do not unambiguously form a plane.
 
     As when converting the point normal form to the general form of a plane,
-    we compute do by taking the dot product of n with a point on the plane.
+
+    we compute D by taking the dot product of n with a point on the plane.
 -}
 
 pointsToPlane :: Vector3 -> Vector3 -> Vector3 -> Maybe Plane

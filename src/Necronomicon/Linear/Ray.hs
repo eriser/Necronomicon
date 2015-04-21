@@ -65,9 +65,9 @@ invRay (Ray org dir) = Ray org ((1 :: Double) ./. dir)
     If the rays are skew, then t1 (the parameter of r1) and t2 (the parameter of r2) are the points of closest approach.
     To differentiate between skew rays and intersecting planes you test the distance between
     p t1 (the point on r1 at t1) and p t2 (the point on r2 at t2).
-    Due to floating point error an EXACT intersection is rate, so it is common to use a tolerance.
+    Due to floating point error an EXACT intersection is rare, so it is common to use a tolerance.
 
-    To keep the test finite, after determining t1 and t2 the appropriate bounds test much be applied.
+    To keep the test finite, after determining t1 and t2 the appropriate bounds test should be applied.
 -}
 
 rayIntersectsRay :: Ray -> Ray -> Maybe Vector3

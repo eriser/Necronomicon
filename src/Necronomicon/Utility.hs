@@ -3,12 +3,17 @@ module Necronomicon.Utility (hash,
                              (<|),
                              scale,
                              linlin,
-                             getCurrentTime) where
+                             getCurrentTime,
+                             showBinary,
+                             showHex) where
 
 import Prelude
 import Data.Bits
 import Data.List (foldl')
 import Graphics.UI.GLFW (getTime)
+import Numeric (showIntAtBase)
+import qualified Numeric as N (showHex)
+import Data.Char (intToDigit)
 
 class Hashable a where
     hash :: a -> Int
@@ -55,3 +60,9 @@ scale offset range input = input * range + offset
 
 -- range :: (Floating a,Fractional a) => a -> a -> a -> a
 -- range = linlin (-1) 1
+
+showBinary :: Int -> String
+showBinary i = showIntAtBase 2 intToDigit i ""
+
+showHex :: Int -> String
+showHex i = N.showHex i ""
