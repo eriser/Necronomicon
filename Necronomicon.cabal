@@ -44,6 +44,8 @@ library
         Necronomicon.Runtime,
         Necronomicon.Util,
         Necronomicon.Util.PriorityQueue
+        Necronomicon.Physics
+        Necronomicon.Physics.DynamicTree
 
     other-modules:
         Necronomicon.Language.Layout
@@ -82,8 +84,7 @@ library
         Necronomicon.Graphics.Text
         Necronomicon.Graphics.Texture
         Necronomicon.Graphics.Model
-        Necronomicon.Physics
-        Necronomicon.Physics.DynamicTree
+        Necronomicon.Game
         Paths_Necronomicon
     Build-Depends:
         base             >= 3 && < 5,
@@ -100,7 +101,8 @@ library
         OpenGLRaw        >= 1.5.0,
         mtl              >= 2.1.3.0,
         freetype2        >= 0.1.1,
-        binary           >= 0.7.0
+        binary           >= 0.7.0,
+        QuickCheck
 
 executable PatternTest
     main-is:          Main.hs
@@ -206,3 +208,12 @@ executable GenCalcBindings
     ghc-options:      -threaded -Wall -Werror
     hs-source-dirs:   Tools/GenCalcBindings
     build-depends:    base             == 4.*
+
+executable DynamicTreeTest
+    main-is:          Main.hs
+    default-language: Haskell2010
+    ghc-options:      -Wall -Werror -debug
+    hs-source-dirs:   Tests/DynamicTreeTest
+    build-depends:    base             == 4.*,
+                      Necronomicon,
+                      QuickCheck

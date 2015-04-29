@@ -13,8 +13,11 @@ module Necronomicon.Linear.AABB (Corner(FarLeftBottom,FarLeftTop,FarRighTop,FarR
                                  isNull,
                                  corners,
                                  corner,
-                                 aabbArea) where
+                                 aabbArea,
+                                 combineAABB,
+                                 insureAABBSanity) where
 
+import Test.QuickCheck
 -- import Necronomicon.Game.Utilities
 import Necronomicon.Linear.Vector
 
@@ -129,3 +132,24 @@ corner (AABB mn@(Vector3 nx ny nz) mx@(Vector3 xx xy xz)) c =
 
 aabbArea :: AABB -> Double
 aabbArea (AABB (Vector3 mnx mny mnz) (Vector3 mxx mxy mxz)) = (mxx - mnx) * (mxy - mny) * (mxz - mnz)
+
+combineAABB :: AABB -> AABB -> AABB
+combineAABB (AABB (Vector3 mnx1 mny1 mnz1) (Vector3 mxx1 mxy1 mxz1)) (AABB (Vector3 mnx2 mny2 mnz2) (Vector3 mxx2 mxy2 mxz2)) =
+    AABB (Vector3 (min mnx1 mnx2) (min mny1 mny2) (min mnz1 mnz2)) (Vector3 (max mxx1 mxx2) (max mxy1 mxy2) (max mxz1 mxz2))
+
+insureAABBSanity :: AABB -> AABB
+insureAABBSanity (AABB (Vector3 mnx mny mnz) (Vector3 mxx mxy mxz)) = AABB (Vector3 mnx' mny' mnz') (Vector3 mxx' mxy' mxz')
+    where
+        (mnx', mxx') = if mnx <= mxx then (mnx, mxx) else (mxx, mnx)
+        (mny', mxy') = if mny <= mxy then (mny, mxy) else (mxy, mny)
+        (mnz', mxz') = if mnz <= mxz then (mnz, mxz) else (mxz, mnz)
+
+instance Arbitrary AABB where
+    arbitrary = do
+        mnx <- choose ((-10000), 10000)
+        mny <- choose ((-10000), 10000)
+        mnz <- choose ((-10000), 10000)
+        mxx <- choose ((-10000), 10000)
+        mxy <- choose ((-10000), 10000)
+        mxz <- choose ((-10000), 10000)
+        return $ AABB (Vector3 mnx mny mnz) (Vector3 mxx mxy mxz)
