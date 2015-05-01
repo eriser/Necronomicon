@@ -1,8 +1,9 @@
 -- import Necronomicon
-import qualified Necronomicon.Physics.DynamicTree as DynTree
+-- import qualified Necronomicon.Physics.DynamicTree as DynTree
 
 main :: IO ()
-main = DynTree.test
+main = print "test"
+-- main = DynTree.test
 -- main = do
     -- DynTree.validate $
         -- snd $ DynTree.createProxy (AABB 1 3) (0, 0) $

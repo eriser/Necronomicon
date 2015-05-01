@@ -1,4 +1,90 @@
-module Necronomicon.Physics.DynamicTree (DynamicTree(..),
+module Necronomicon.Physics.DynamicTree where
+
+import qualified Data.Vector as V
+import Necronomicon.Linear
+
+data TreeNode = Node AABB TreeNode TreeNode Int
+              | Leaf AABB Int
+              | Tip
+
+data TreeUpdate = Changed    TreeNode
+                | NotChanged TreeNode
+                | Empty
+
+data DynamicTree = DynamicTree{
+    nodes     :: TreeNode,
+    nodeData  :: V.Vector (Maybe AABB),
+    freeList  :: [Int]
+}
+
+--This is step 2, step
+bulkUpdate :: V.Vector (Maybe AABB) -> [(AABB, Int)] -> DynamicTree -> DynamicTree
+bulkUpdate newData insertList tree = foldr insert (DynamicTree (fromUpdate nodes') (nodeData tree) freeList') insertList'
+    where
+        (nodes', freeList', insertList')          = moveOrRemove (nodes tree) (freeList tree) insertList
+        moveOrRemove  Tip fl il                   = (Empty, fl, il)
+        moveOrRemove (Node aabb l r h) fl il      = (newNode l' r', fl'', il'')
+            where
+                (l', fl',  il')  = moveOrRemove l fl  il
+                (r', fl'', il'') = moveOrRemove r fl' il'
+                newNode (Empty        ) (Empty        ) = Empty
+                newNode (Empty        ) (Changed    rn) = Changed rn
+                newNode (Changed    ln) (Empty        ) = Changed ln
+                newNode (Changed    ln) (Changed    rn) = Changed (balance $ Node 0 ln rn 0)
+                newNode (NotChanged _ ) (Changed    rn) = Changed (balance $ Node 0 l  rn 0)
+                newNode (Changed    ln) (NotChanged _ ) = Changed (balance $ Node 0 ln r  0)
+                newNode (NotChanged _ ) (Empty        ) = Changed l
+                newNode (Empty        ) (NotChanged _ ) = Changed r
+                newNode (NotChanged _ ) (NotChanged _ ) = NotChanged (Node aabb l r h)
+        moveOrRemove (Leaf aabb i) fl il
+            | Just (Just aabb') <- newData V.!? i = if aabb `containsAABB` aabb' then (NotChanged (Leaf aabb i), fl, il) else (Empty, fl, (enlargeAABB2 aabb aabb', i) : il)
+            | otherwise                           = (Empty, i : fl, il)
+
+insert :: (AABB, Int) -> DynamicTree -> DynamicTree
+insert = undefined
+
+-- (insertList', freeList'')                 = createInsertList insertList freeList' moveList
+-- createInsertList :: [AABB] -> [Int] -> [(AABB, Int)] -> ([Int], [(AABB, Int)])
+-- createInsertList insertList' moveList freeList' = foldr pairList (moveList, freeList') insertList'
+    -- where
+        -- pairList x (ml, i : fs) = ((x, i)
+
+fromUpdate :: TreeUpdate -> TreeNode
+fromUpdate (Changed    t) = t
+fromUpdate (NotChanged t) = t
+fromUpdate  _             = Tip
+
+--calc enlargedAABB
+enlargeAABB2 :: AABB -> AABB -> AABB
+enlargeAABB2 = undefined
+
+treeAABB :: TreeNode -> AABB
+treeAABB  Tip              = 0
+treeAABB (Node aabb _ _ _) = aabb
+treeAABB (Leaf aabb _    ) = aabb
+
+height :: TreeNode -> Int
+height (Node _ _ _ h) = h
+height  _             = 0
+
+calcNode :: TreeNode -> TreeNode -> TreeNode
+calcNode l r = Node (combineAABB (treeAABB l) (treeAABB r)) l r (1 + max (height l) (height r))
+
+balance :: TreeNode -> TreeNode
+balance (Node _ l r _)
+    | bal >  1  = rotateUpR r
+    | bal < -1  = rotateUpL l
+    | otherwise = calcNode l r
+    where
+        bal = height r - height l
+        rotateUpR (Node _ rl rr _) = calcNode (calcNode l rl) rr
+        rotateUpR  _               = calcNode l r
+        rotateUpL (Node _ ll lr _) = calcNode ll (calcNode lr r)
+        rotateUpL  _               = calcNode l r
+balance t = t
+
+{-
+(DynamicTree(..),
                                          empty,
                                          createProxy,
                                          destroyProxy,
@@ -8,11 +94,14 @@ module Necronomicon.Physics.DynamicTree (DynamicTree(..),
                                          validateHeight,
                                          validateAll) where
 
+-- Consider ST monad version!
 import Control.Monad.ST.Safe
 import Debug.Trace
 -- import Control.Exception (assert)
-import qualified Data.Vector         as V
-import qualified Data.Vector.Mutable as MV
+-- import qualified Data.Vector         as V
+-- import qualified Data.Vector.Mutable as MV
+import qualified Data.Vector.Mutable as V
+import Data.STRef
 import Necronomicon.Linear hiding (isNull)
 import Test.QuickCheck
 
@@ -21,18 +110,32 @@ data TreeNode = Null
               | Leaf AABB Int (Int, Int)  --Parent (ObjectType, DataVector Index)
               deriving (Show)
 
-data DynamicTree = DynamicTree {
-    root       :: Int,
-    nodes      :: V.Vector TreeNode,
-    freeList   :: [Int]
+data DynamicTree = forall s. DynamicTree {
+    root       :: STRef s Int,
+    nodes      :: STRef s (V.MVector s TreeNode),
+    freeList   :: STRef s [Int]
     } deriving (Show)
 
-empty :: DynamicTree
-empty = DynamicTree 0 (V.fromList . take 8 $ repeat Null) [1..7]
+empty :: forall s. ST s DynamicTree
+empty = do
+    r <- newSTRef 0
+    v <- newSTRef $ V.fromList . take 8 $ repeat Null
+    f <- newSTRef [1..7]
+    return $ DynamicTree r v f
 
 ------------------------------
 -- Getters and Setters
 ------------------------------
+
+readVec :: DynamicTree -> Int -> ST s TreeNode
+readVec t i = do
+    v <- readSTRef $ nodes t
+    V.unsafeRead v i
+
+writeVec :: DynamicTree -> Int -> TreeNode -> ST s ()
+writeVec t i n = do
+    v <- readSTRef $ nodes t
+    V.unsafeWrite v i n
 
 treeAABB :: TreeNode -> AABB
 treeAABB  Null               = error "treeAABB called on Null node."
@@ -101,116 +204,193 @@ isLeaf _            = False
 -- Insert
 ------------------------------
 
-findSibling :: AABB -> Int -> DynamicTree -> Int
-findSibling leafAABB nIndex tree
-    | Null       <- node            = nIndex
-    | Leaf _ _ _ <- node            = nIndex
-    | cost  < cost1 && cost < cost2 = nIndex
-    | cost1 < cost2                 = findSibling leafAABB c1 tree
-    | otherwise                     = findSibling leafAABB c2 tree
-    where
-        node                           = nodes tree V.! nIndex
-        naabb                          = treeAABB node
-        c1                             = child1 node
-        c2                             = child2 node
-        cost                           = 2 * combinedArea
-        cost1                          = childCost $ nodes tree V.! c1
-        cost2                          = childCost $ nodes tree V.! c2
-        combinedArea                   = aabbArea  $ combineAABB naabb leafAABB
-        inheritanceCost                = 2 * (combinedArea - aabbArea naabb) -- Minimum cost of pushing the leaf further down the tree
-        childCost  Null                = error "Null should never be a child."
-        childCost (Node caabb _ _ _ _) = inheritanceCost + (aabbArea (combineAABB caabb leafAABB) - aabbArea caabb)
-        childCost (Leaf caabb _ _)     = inheritanceCost +  aabbArea (combineAABB caabb leafAABB)
+findSibling :: forall s. AABB -> Int -> DynamicTree s -> ST s Int
+findSibling leafAABB nIndex tree = readVec tree nIndex >>= \node -> case node of
+    Null       -> return nIndex
+    Leaf _ _ _ -> return nIndex
+    _          -> do
+        let naabb                          = treeAABB node
+            c1                             = child1 node
+            c2                             = child2 node
+            combinedArea                   = aabbArea  $ combineAABB naabb leafAABB
+            cost                           = 2 * combinedArea
+            inheritanceCost                = 2 * (combinedArea - aabbArea naabb) -- Minimum cost of pushing the leaf further down the tree
+            childCost  Null                = error "Null should never be a child."
+            childCost (Node caabb _ _ _ _) = inheritanceCost + (aabbArea (combineAABB caabb leafAABB) - aabbArea caabb)
+            childCost (Leaf caabb _ _)     = inheritanceCost +  aabbArea (combineAABB caabb leafAABB)
+        cost1 <- readVec tree c1 >>= childCost
+        cost2 <- readVec tree c2 >>= childCost
+        if cost < cost1 && cost < cost2
+            then return nIndex
+            else if cost1 < cost
+                then findSibling leafAABB c1 tree
+                else findSibling leafAABB c2 tree
 
-newParentFromSibling :: forall s. Int -> Int -> Int -> MV.MVector s TreeNode -> ST s ()
+--
+-- findSibling :: AABB -> Int -> DynamicTree s -> s Int
+-- findSibling leafAABB nIndex tree = do
+--     | Null       <- node            = nIndex
+--     | Leaf _ _ _ <- node            = nIndex
+--     | cost  < cost1 && cost < cost2 = nIndex
+--     | cost1 < cost2                 = findSibling leafAABB c1 tree
+--     | otherwise                     = findSibling leafAABB c2 tree
+--     where
+--         node                           = nodes tree V.! nIndex
+--         naabb                          = treeAABB node
+--         c1                             = child1 node
+--         c2                             = child2 node
+--         cost                           = 2 * combinedArea
+--         cost1                          = childCost $ nodes tree V.! c1
+--         cost2                          = childCost $ nodes tree V.! c2
+--         combinedArea                   = aabbArea  $ combineAABB naabb leafAABB
+--         inheritanceCost                = 2 * (combinedArea - aabbArea naabb) -- Minimum cost of pushing the leaf further down the tree
+--         childCost  Null                = error "Null should never be a child."
+--         childCost (Node caabb _ _ _ _) = inheritanceCost + (aabbArea (combineAABB caabb leafAABB) - aabbArea caabb)
+--         childCost (Leaf caabb _ _)     = inheritanceCost +  aabbArea (combineAABB caabb leafAABB)
+
+newParentFromSibling :: forall s. Int -> Int -> Int -> V.MVector s TreeNode -> ST s ()
 newParentFromSibling leaf sibling newParent vec = do
     -- Update sibling such that newParent is its parent
     siblingNode <- MV.unsafeRead vec sibling
-    MV.unsafeWrite vec sibling $ parent_ newParent siblingNode
+    V.unsafeWrite vec sibling $ parent_ newParent siblingNode
 
     -- Update leaf such that newParent is its parent
-    leafNode <- MV.unsafeRead  vec leaf
-    MV.unsafeWrite vec leaf $ parent_ newParent leafNode
+    leafNode <- V.unsafeRead vec leaf
+    V.unsafeWrite vec leaf $ parent_ newParent leafNode
 
     -- Write newParent values
-    MV.unsafeWrite vec newParent $ Node (combineAABB (treeAABB siblingNode) (treeAABB leafNode)) sibling leaf (parent siblingNode) 0
+    V.unsafeWrite vec newParent $ Node (combineAABB (treeAABB siblingNode) (treeAABB leafNode)) sibling leaf (parent siblingNode) 0
 
     -- Update oldParent such that newParent is a child
-    MV.unsafeRead vec (parent siblingNode) >>= \n -> case n of
+    V.unsafeRead vec (parent siblingNode) >>= \n -> case n of
         Node aabb c1 c2 p h -> if sibling == c1
-            then MV.unsafeWrite vec (parent siblingNode) $ Node aabb newParent c2 p h
-            else MV.unsafeWrite vec (parent siblingNode) $ Node aabb c1 newParent p h
+            then V.unsafeWrite vec (parent siblingNode) $ Node aabb newParent c2 p h
+            else V.unsafeWrite vec (parent siblingNode) $ Node aabb c1 newParent p h
         _                   -> return ()
 
-adjustHeightAndAABB :: Int -> DynamicTree -> DynamicTree
+adjustHeightAndAABB :: forall s. Int -> DynamicTree -> ST s ()
 adjustHeightAndAABB index tree
     | index == 0 = tree
-    | otherwise  = adjustHeightAndAABB (parent $ nodes tree'' V.! index') tree''
-    where
-        (index', tree') = balance index tree
-        tree''          = tree'{nodes = V.modify adjustNode $ nodes tree'}
-        adjustNode :: forall s. MV.MVector s TreeNode -> ST s ()
-        adjustNode vec  = MV.unsafeRead vec index' >>= \n -> case n of
+    | otherwise  = do
+        index' <- balance index tree
+        n      <- V.unsafeRead (nodes tree) index'
+        case n of
             Null             -> return ()
             Leaf _ _ _       -> return ()
             Node _ c1 c2 p _ -> do
-                c1n <- MV.unsafeRead vec c1
-                c2n <- MV.unsafeRead vec c2
-                MV.unsafeWrite vec index' $ Node (combineAABB (treeAABB c1n) (treeAABB c2n)) c1 c2 p (1 + max (height c1n) (height c2n))
+                c1n <- V.unsafeRead vec c1
+                c2n <- V.unsafeRead vec c2
+                V.unsafeWrite vec index' $ Node (combineAABB (treeAABB c1n) (treeAABB c2n)) c1 c2 p (1 + max (height c1n) (height c2n))
+                adjustHeightAndAABB p tree
+--
+-- adjustHeightAndAABB :: Int -> DynamicTree s -> s ()
+-- adjustHeightAndAABB index tree
+--     | index == 0 = tree
+--     | otherwise  = adjustHeightAndAABB (parent $ nodes tree'' V.! index') tree''
+--     where
+--         (index', tree') = balance index tree
+--         tree''          = tree'{nodes = V.modify adjustNode $ nodes tree'}
+--         adjustNode :: forall s. MV.MVector s TreeNode -> ST s ()
+--         adjustNode vec  = MV.unsafeRead vec index' >>= \n -> case n of
+--             Null             -> return ()
+--             Leaf _ _ _       -> return ()
+--             Node _ c1 c2 p _ -> do
+--                 c1n <- MV.unsafeRead vec c1
+--                 c2n <- MV.unsafeRead vec c2
+--                 MV.unsafeWrite vec index' $ Node (combineAABB (treeAABB c1n) (treeAABB c2n)) c1 c2 p (1 + max (height c1n) (height c2n))
 
-insert :: Int -> DynamicTree -> DynamicTree
-insert leaf tree = adjustHeightAndAABB (parent $ nodes tree'' V.! leaf) tree''
-    where
-        (newParent, tree') = allocateNode tree
-        sibling            = findSibling (treeAABB $ nodes tree V.! leaf) (root tree) tree
-        tree''
-            | root tree == 0       = tree{root = leaf}
-            | root tree == sibling = tree'{nodes = V.modify (newParentFromSibling leaf sibling newParent) $ nodes tree', root = newParent}
-            | otherwise            = tree'{nodes = V.modify (newParentFromSibling leaf sibling newParent) $ nodes tree'}
+insert :: forall s. Int -> DynamicTree -> ST s ()
+insert leaf tree = do
+    r         <- readSTRef $ root tree
+    sibling   <- findSibling (treeAABB n) r tree
+    let tree'
+        | r == 0        = writeSTRef (root tree) r
+        | r == sibling  = do
+            writeSTRef (root tree) newParent
+            newParent <- allocateNode tree
+            readSTRef (nodes tree) >>= newParentFromSibling leaf sibling newParent
+            n         <- readVec tree leaf
+            readVec tree leaf >>= \n -> adjustHeightAndAABB (parent n) tree
+        | otherwise     = do
+            newParent <- allocateNode tree
+            readSTRef (nodes tree) >>= newParentFromSibling leaf sibling newParent
+            readVec tree leaf >>= \n -> adjustHeightAndAABB (parent n) tree
+    tree'
+--
+-- insert :: Int -> DynamicTree s -> s ()
+-- insert leaf tree = adjustHeightAndAABB (parent $ nodes tree'' V.! leaf) tree''
+--     where
+--         (newParent, tree') = allocateNode tree
+--         sibling            = findSibling (treeAABB $ nodes tree V.! leaf) (root tree) tree
+--         tree''
+--             | root tree == 0       = tree{root = leaf}
+--             | root tree == sibling = tree'{nodes = V.modify (newParentFromSibling leaf sibling newParent) $ nodes tree', root = newParent}
+--             | otherwise            = tree'{nodes = V.modify (newParentFromSibling leaf sibling newParent) $ nodes tree'}
 
 ------------------------------
 -- Remove
 ------------------------------
 
-siblingReplaceParent :: forall s. Int -> Int -> Int -> MV.MVector s TreeNode -> ST s ()
+siblingReplaceParent :: forall s. Int -> Int -> Int -> V.MVector s TreeNode -> ST s ()
 siblingReplaceParent sibling parentIndex grandParent vec = do
 
     --replace parent with sibling in grandparent children
-    MV.unsafeRead vec grandParent >>= \grandParentNode -> if child1 grandParentNode == parentIndex
-        then MV.unsafeWrite vec grandParent $ child1_ sibling grandParentNode
-        else MV.unsafeWrite vec grandParent $ child2_ sibling grandParentNode
+    V.unsafeRead vec grandParent >>= \grandParentNode -> if child1 grandParentNode == parentIndex
+        then V.unsafeWrite vec grandParent $ child1_ sibling grandParentNode
+        else V.unsafeWrite vec grandParent $ child2_ sibling grandParentNode
 
     --replace parent with grandparent in sibling node
-    MV.unsafeRead vec sibling >>= MV.unsafeWrite vec sibling . parent_ grandParent
+    V.unsafeRead vec sibling >>= V.unsafeWrite vec sibling . parent_ grandParent
 
-remove :: Int -> DynamicTree -> DynamicTree
-remove leaf tree
-    | leaf == root tree = tree{root = 0}
-    | grandParent == 0  = freeNode (parent node) $ tree{root = sibling, nodes = V.modify (\vec -> MV.unsafeRead vec sibling >>= MV.unsafeWrite vec sibling . parent_ 0) $ nodes tree}
-    | otherwise         = adjustHeightAndAABB grandParent $ freeNode (parent node) $ tree{nodes = V.modify (siblingReplaceParent sibling (parent node) grandParent) $ nodes tree}
-    where
-        node        = nodes tree V.! leaf
-        parentNode  = nodes tree V.! parent node
+remove :: forall s. Int -> DynamicTree -> ST s ()
+remove leaf tree = do
+    r          <- readSTRef $ root tree
+    node       <- readVec tree leaf
+    parentNode <- readVec tree $ parent node
+    let grandParent = parent parentNode
         sibling     = if child1 parentNode == leaf then child2 parentNode else child1 parentNode
-        grandParent = parent parentNode
+        result
+            | leaf == root tree = writeSTRef (root tree) 0 tree{root = 0}
+            | grandParent == 0  = do
+                writeSTRef (root tree) sibling
+                readVec tree sibling >>= writeVec tree sibling . parent_ 0
+                freeNode (parent node) tree
+            | otherwise         = do
+                siblingReplaceParent sibling (parent node) grandParent $ nodes tree
+                freeNode (parent node) tree
+                adjustHeightAndAABB grandParent tree
+    result
 
 ------------------------------
 -- Nodes
 ------------------------------
 
-allocateNode :: DynamicTree -> (Int, DynamicTree)
-allocateNode (DynamicTree r n (f : fs)) = (f, DynamicTree r n  fs)
-allocateNode (DynamicTree r n  []     ) = (l, DynamicTree r n' fs')
-    where
-        l           = V.length n
-        l'          = V.length n * 2
-        n'          = V.fromList $ V.toList n ++ replicate l Null
-        fs'         = [l + 1 .. l' - 1]
+allocateNode :: DynamicTree -> ST s Int
+allocateNode tree = readSTRef (freeList tree) >>= \fl -> case fl of
+    (f : fs) -> writeSTRef (freeList tree) fs >> return f
+    _        -> do
+        let
+            l           = V.length n
+            l'          = V.length n * 2
+        writeSTRef (freeList tree) [l + 1 .. l' - 1]
+        readSTRef (nodes tree) >>= \n -> writeSTRef (V.fromList $ V.toList n ++ replicate l Null)
 
-freeNode :: Int -> DynamicTree -> DynamicTree
-freeNode nid (DynamicTree r n fs) = DynamicTree r n' (nid : fs)
-    where
-        n' = V.modify (\vec -> MV.unsafeWrite vec nid Null) n
+
+        --V.fromList $ V.toList n ++ replicate l Null
+        --Unfortunately I think fixing this means we need to put the vector into a ref so we can replace it with a grown one...
+        --That or juggle the new around....
+
+--
+-- allocateNode (DynamicTree r n (f : fs)) = (f, DynamicTree r n  fs)
+-- allocateNode (DynamicTree r n  []     ) = (l, DynamicTree r n' fs')
+--     where
+--         l           = V.length n
+--         l'          = V.length n * 2
+--         n'          = V.fromList $ V.toList n ++ replicate l Null
+--         fs'         = [l + 1 .. l' - 1]
+
+freeNode :: forall s. Int -> DynamicTree -> ST s ()
+freeNode nid tree = readVec tree nid Null >> readSTRef (freeList tree) >>= \fs' -> writeSTRef (freeList tree) (nid : fs')
 
 aabbMultiplier :: Double
 aabbMultiplier = 3
@@ -225,35 +405,28 @@ fattenAABB (AABB mn mx) = AABB (mn .-. fatAABBFactor) (mx .+. fatAABBFactor)
 -- Proxies
 ------------------------------
 
-createProxy :: AABB -> (Int, Int) -> DynamicTree -> (Int, DynamicTree)
-createProxy aabb dat tree = (proxyID, tree'')
-    where
-        (proxyID, tree') = allocateNode tree
-        nodes'           = V.modify (\vec -> MV.unsafeWrite vec proxyID $ Leaf (fattenAABB $ insureAABBSanity aabb) 0 dat) $ nodes tree'
-        tree''           = insert proxyID (tree'{nodes = nodes'})
+createProxy :: AABB -> (Int, Int) -> DynamicTree -> ST s Int
+createProxy aabb dat tree = do
+    proxyID <- allocateNode tree
+    writeVec tree proxyID $ Leaf (fattenAABB $ insureAABBSanity aabb) 0 dat
+    insert proxyID tree
+    return $ proxyID
 
-destroyProxy :: Int -> DynamicTree -> DynamicTree
+destroyProxy :: Int -> DynamicTree -> ST s ()
 destroyProxy proxyID tree
     | proxyID <= 0 || proxyID >= V.length (nodes tree) = tree
-    | not (isLeaf node)                                = tree
-    | otherwise                                        = freeNode proxyID $ remove proxyID tree
-    where
-        node = nodes tree V.! proxyID
+    | otherwise                                        = readVec tree proxyID >>= \node -> case node of
+        Leaf _ _ _ -> tree
+        _          -> remove proxyID tree >> freeNode proxyID tree
 
-moveProxy :: Int -> AABB -> DynamicTree -> (Bool, DynamicTree)
-moveProxy leaf leafAABB tree
-    | leaf <= 0 || leaf >= V.length (nodes tree) = (False, tree)
-    | not (isLeaf prevNode)                      = (False, tree)
-    | containsAABB (treeAABB prevNode) aabb      = (False, tree)
-    | otherwise                                  = (True,  tree'')
-    where
-        aabb@(AABB (Vector3 mnx mny mnz) (Vector3 mxx mxy mxz)) = insureAABBSanity leafAABB
-        prevNode                                                = nodes tree V.! leaf
+
+moveProxy :: Int -> AABB -> DynamicTree -> ST s Bool
+moveProxy leaf leafAABB tree = do
+    prevNode <- readVec tree leaf
+
+    let aabb@(AABB (Vector3 mnx mny mnz) (Vector3 mxx mxy mxz)) = insureAABBSanity leafAABB
         displacement                                            = center aabb - center (treeAABB prevNode)
         (Vector3 dx dy dz)                                      = displacement .*. aabbMultiplier
-        tree'                                                   = remove leaf tree
-        nodes'                                                  = V.modify (\vec -> MV.unsafeWrite vec leaf $ Leaf enlargedAABB 0 (userData prevNode)) $ nodes tree'
-        tree''                                                  = insert leaf (tree'{nodes = nodes'})
         enlargedAABB                                            = AABB
             (Vector3
                 ((mnx - fatAABBFactor) + dx * (fromIntegral . fromEnum $ dx < 0))
@@ -263,23 +436,58 @@ moveProxy leaf leafAABB tree
                 ((mxx + fatAABBFactor) + dx * (fromIntegral . fromEnum $ dx > 0))
                 ((mxy + fatAABBFactor) + dy * (fromIntegral . fromEnum $ dy > 0))
                 ((mxz + fatAABBFactor) + dz * (fromIntegral . fromEnum $ dz > 0)))
+        result
+            | leaf <= 0 || leaf >= V.length (nodes tree) = return False
+            | not (isLeaf prevNode)                      = return False
+            | containsAABB (treeAABB prevNode) aabb      = return False
+            | otherwise                                  = do
+                remove leaf tree
+                writeVec tree leaf $ Leaf enlargedAABB 0 (userData prevNode)
+                insert leaf tree
+                return True
+    result
+--
+-- moveProxy :: Int -> AABB -> DynamicTree -> ST s Bool
+-- moveProxy leaf leafAABB tree
+--     | leaf <= 0 || leaf >= V.length (nodes tree) = (False, tree)
+--     | not (isLeaf prevNode)                      = (False, tree)
+--     | containsAABB (treeAABB prevNode) aabb      = (False, tree)
+--     | otherwise                                  = (True,  tree'')
+--     where
+--         aabb@(AABB (Vector3 mnx mny mnz) (Vector3 mxx mxy mxz)) = insureAABBSanity leafAABB
+--         prevNode                                                = nodes tree V.! leaf
+--         displacement                                            = center aabb - center (treeAABB prevNode)
+--         (Vector3 dx dy dz)                                      = displacement .*. aabbMultiplier
+--         tree'                                                   = remove leaf tree
+--         nodes'                                                  = V.modify (\vec -> MV.unsafeWrite vec leaf $ Leaf enlargedAABB 0 (userData prevNode)) $ nodes tree'
+--         tree''                                                  = insert leaf (tree'{nodes = nodes'})
+--         enlargedAABB                                            = AABB
+--             (Vector3
+--                 ((mnx - fatAABBFactor) + dx * (fromIntegral . fromEnum $ dx < 0))
+--                 ((mny - fatAABBFactor) + dy * (fromIntegral . fromEnum $ dy < 0))
+--                 ((mnz - fatAABBFactor) + dz * (fromIntegral . fromEnum $ dz < 0)))
+--             (Vector3
+--                 ((mxx + fatAABBFactor) + dx * (fromIntegral . fromEnum $ dx > 0))
+--                 ((mxy + fatAABBFactor) + dy * (fromIntegral . fromEnum $ dy > 0))
+--                 ((mxz + fatAABBFactor) + dz * (fromIntegral . fromEnum $ dz > 0)))
 
 ------------------------------
 -- Balance
 ------------------------------
 
-balance :: Int -> DynamicTree -> (Int, DynamicTree)
-balance i tree
-    | isNull a  = error "Attempting to balance a null node."
-    | isLeaf a  = (i, tree)
-    | bal >  1  = rotateUp (parent a) i (child2 a) (child1 a) tree -- Rotate C up
-    | bal < -1  = rotateUp (parent a) i (child1 a) (child2 a) tree -- Rotate B up
-    | otherwise = (i, tree)
-    where
-        a   = nodes tree V.! i
-        b   = nodes tree V.! child1 a
-        c   = nodes tree V.! child2 a
-        bal = height c - height b
+balance :: Int -> DynamicTree -> ST s Int
+balance i tree = do
+    a <- readVec tree i
+    b <- readVec tree $ child1 a
+    c <- readVec tree $ child2 a
+    let bal = height c - height b
+        result
+            | isNull a  = error "Attempting to balance a null node."
+            | isLeaf a  = i
+            | bal >  1  = rotateUp (parent a) i (child2 a) (child1 a) tree -- Rotate C up
+            | bal < -1  = rotateUp (parent a) i (child1 a) (child2 a) tree -- Rotate B up
+            | otherwise = return i
+    result
 
 -- i1 is the original node
 -- i2 is the child of i1 that is being rotated up
@@ -288,13 +496,12 @@ balance i tree
 -- i5 is the second child of i2
 -- ip is the parent of i1
 -- Probably need more testing to be extra sure...
-rotateUp :: Int -> Int -> Int -> Int -> DynamicTree -> (Int, DynamicTree)
-rotateUp pa i1 i2 i3 tree
-    | pa == 0   = (i2, tree{nodes = nodes', root = i2})
-    | otherwise = (i2, tree{nodes = nodes'})
+rotateUp :: Int -> Int -> Int -> Int -> DynamicTree -> ST s Int
+rotateUp pa i1 i2 i3 tree = (readSTRef tree >>= rotate) >> if pa == 0
+    then writeSTRef (root tree) i2 >> return i2
+    else return i2
     where
-        nodes' = V.modify rotate $ nodes tree
-        rotate :: forall s. MV.MVector s TreeNode -> ST s ()
+        rotate :: forall s. V.MVector s TreeNode -> ST s ()
         rotate vec = do
             n1 <- MV.unsafeRead vec i1
             n2 <- MV.unsafeRead vec i2
@@ -459,24 +666,25 @@ test = do
     putStrLn "----------------------------------------------------------------------------------------"
     putStrLn "Count test"
     putStrLn ""
-    quickCheckWith (stdArgs { maxSize = 1000, maxSuccess = 100 }) $ dynTreeTester validateCount
+    quickCheckWith (stdArgs { maxSize = 100000, maxSuccess = 10 }) $ dynTreeTester validateCount
 
     putStrLn "----------------------------------------------------------------------------------------"
     putStrLn "Height test"
     putStrLn ""
-    quickCheckWith (stdArgs { maxSize = 1000, maxSuccess = 100 }) $ dynTreeTester validateHeight
+    quickCheckWith (stdArgs { maxSize = 100000, maxSuccess = 10 }) $ dynTreeTester validateHeight
 
     putStrLn "----------------------------------------------------------------------------------------"
     putStrLn "Structure test"
     putStrLn ""
-    quickCheckWith (stdArgs { maxSize = 1000, maxSuccess = 100 }) $ dynTreeTester validateStructure
+    quickCheckWith (stdArgs { maxSize = 100000, maxSuccess = 10 }) $ dynTreeTester validateStructure
 
     putStrLn "----------------------------------------------------------------------------------------"
     putStrLn "Metrics test"
     putStrLn ""
-    quickCheckWith (stdArgs { maxSize = 1000, maxSuccess = 100 }) $ dynTreeTester validateMetrics
+    quickCheckWith (stdArgs { maxSize = 100000, maxSuccess = 10 }) $ dynTreeTester validateMetrics
 
     putStrLn "----------------------------------------------------------------------------------------"
     putStrLn "Test all"
     putStrLn ""
-    quickCheckWith (stdArgs { maxSize = 1000, maxSuccess = 100 }) $ dynTreeTester validateAll
+    quickCheckWith (stdArgs { maxSize = 100000, maxSuccess = 10 }) $ dynTreeTester validateAll
+-}
