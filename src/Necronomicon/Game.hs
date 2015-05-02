@@ -1,64 +1,34 @@
 module Necronomicon.Game where
 
--- import qualified Data.IntMap         as IntMap
-import qualified Data.Sequence       as Seq
-
-import qualified Necronomicon.Physics.DynamicTree as DynamicTree
 import Necronomicon.Linear
 
-newtype Uid     = Uid Int
+data UID           = UID Int | New
+data Transform     = Transform Vector3 Quaternion Vector3
+data Collider      = SphereCollider UID Sphere
+                   | BoxCollider    UID AABB
 
-data GameObject = GameObject Vector3 AABB Uid
-                | NewObject  Vector3 AABB
+--
+-- data Component     = Physics  UID Collider
+--                    | Graphics Model
+--                    | Audio    String Double Bool
+--                    | Camera   Double Double Double
+--                    | Light    LightType
+--                    | Timer    Double Double
 
-data World a    = World {
-    dynTree    :: DynamicTree.DynamicTree,
-    objectData :: Seq.Seq (Seq.Seq a)
-    }
+data GameObject = GameObject Transform (Maybe Collider) [GameObject]
 
---Require the custom data types derive from enum, then use the to enum functions to actually sort them into the correct dictionaries implicitly!
+children :: GameObject -> [GameObject]
+children (GameObject _ _ c) = c
 
-------------------------------
--- Mapping
-------------------------------
+calcAABB :: Collider -> AABB
+calcAABB _ = 0
 
--- treeMap :: Enum e => (GameObject -> Maybe GameObject) -> e -> DynamicTree -> DynamicTree
--- treeMap = undefined
+colliderID :: Collider -> UID
+colliderID (SphereCollider uid _) = uid
+colliderID (BoxCollider    uid _) = uid
 
+foldChildren :: (GameObject -> a -> a) -> a -> GameObject -> a
+foldChildren f acc g = foldr f (f g acc) (children g)
 
-{-
-    I think there is probably a whole family of mapping idioms that work with this.
-    The trick is finding the right collection of mapping functions that addresses all concerns elegantly.
-    If this can be attained, then it should theoretically be possible to a have temporally coherent broadphase scheme,
-    and to keep everything extremely pure and functional.
-
-    The game turns into a series of very clear transformations.
--}
-
-{-
-data World      = World (IntMap.IntMap [GameObject])
-
-worldMap :: Enum a => (GameObject -> Maybe GameObject) -> a -> World -> World
-worldMap f t (World ws)
-    | Just [] <- mgs = World ws
-    | Just gs <- mgs = World $ IntMap.insert key (foldr fcollect [] gs) ws
-    | otherwise      = World $ IntMap.insert key [] ws
-    where
-        mgs = IntMap.lookup key ws
-        key = fromEnum t
-        fcollect g acc
-            | Just g' <- f g = g' : acc
-            | otherwise      = acc
-
-data TestType = Hero | Dragon | Demon deriving (Enum)
-
-testWorld :: World -> World
-testWorld = heroMap . demonMap . dragonMap
-    where
-        heroMap      = worldMap calcHero   Hero
-        demonMap     = worldMap calcDemon  Demon
-        dragonMap    = worldMap calcDragon Dragon
-        calcHero   h = Just h
-        calcDemon  d = Just d
-        calcDragon d = Just d
--}
+collider :: GameObject -> Maybe Collider
+collider (GameObject _ c _) = c

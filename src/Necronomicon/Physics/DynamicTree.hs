@@ -1,28 +1,130 @@
+
 module Necronomicon.Physics.DynamicTree where
 
-import qualified Data.Vector as V
+import qualified Data.Vector         as V
+import qualified Data.Vector.Mutable as MV
 import Necronomicon.Linear
+import Necronomicon.Game
 
 data TreeNode = Node AABB TreeNode TreeNode Int
               | Leaf AABB Int
               | Tip
+              deriving (Show)
 
 data TreeUpdate = Changed    TreeNode
                 | NotChanged TreeNode
                 | Empty
+                deriving (Show)
 
-data DynamicTree = DynamicTree{
-    nodes     :: TreeNode,
-    nodeData  :: V.Vector (Maybe AABB),
-    freeList  :: [Int]
-}
+type NodeData    = (AABB, Int)
+type UpdateInput = (([NodeData], Int), [NodeData], DynamicTree)
 
---This is step 2, step
-bulkUpdate :: V.Vector (Maybe AABB) -> [(AABB, Int)] -> DynamicTree -> DynamicTree
-bulkUpdate newData insertList tree = foldr insert (DynamicTree (fromUpdate nodes') (nodeData tree) freeList') insertList'
+data DynamicTree = DynamicTree
+                 {
+                   nodes     :: TreeNode,
+                   nodeData  :: V.Vector (Maybe AABB),
+                   freeList  :: [Int]
+                 }
+
+instance Show DynamicTree where
+    show (DynamicTree ns nd fl) = "(DynamicTree " ++ show nd ++ " " ++ show (take 10  fl) ++ "\n\n" ++ prettyPrint ns ++ "\n)"
+
+prettyPrint :: TreeNode -> String
+prettyPrint tree = unlines $ go tree
     where
+        go (Node aabb l r h) = ("Node " ++ show h ++ " " ++ show aabb) : pad "    +- " "    |  " (go l) ++ pad "    +- " "       " (go r)
+        go (Leaf aabb i)     = ["Leaf " ++ show i ++ " " ++ show aabb]
+        go  n                = [show n]
+        pad first rest       = zipWith (++) (first : repeat rest)
+
+--need to insure sanity for all inputs, including negative numbers, invereted aabbs, deleting wrong nodes, etc
+
+{-
+    update:
+        The main update loop.
+        Transforms the game object tree supplied by the client program-
+        into a new gameObject tree containing collision events and physics simulations.
+-}
+update :: (GameObject, DynamicTree) -> (GameObject, DynamicTree)
+update (root, tree) = (root, bulkUpdate $ foldChildren genUpdateInput (([],0), [], tree) root)
+
+{-
+    genUpdateInput:
+        Transform the input gameObject into update information for a dynamicTree transformation
+        We've got to get the newly consumed ids to the correct gameobjects....
+-}
+genUpdateInput :: GameObject -> UpdateInput -> UpdateInput
+genUpdateInput g (d, il, t)
+    | Just col <- collider g = updateFromCollider col
+    | otherwise              = (d, il, t)
+    where
+        updateFromCollider col
+            | UID uid <- cid = (nodeListCons (caabb, uid) d,               il, t)
+            | otherwise      = (nodeListCons (caabb,   i) d, (caabb', i) : il, t{freeList = fl})
+            where
+                cid      = colliderID   col
+                caabb    = calcAABB     col
+                caabb'   = enlargeAABB  caabb
+                (i : fl) = freeList t
+
+{-
+    bulkUpdate:
+        Transform update input into an updated Dynamic aabb tree.
+        This is a non-imperative, pure functional approach.
+
+        The transformation happens in bulk for remove and move-detection operations (a single O(n) operation)
+        It's still piecemeal for insertions.
+        This because there is no good operation for pre-sorting AABB's for insertion-
+        into the tree that would actually be faster than simply inserting each element one-by-one.
+
+        The bulk operations give the algorithm good complexity features.
+
+        Complexity of the algorithm is such: O(n + i(log n) + mi(log n))
+        where n is the number of elements in the tree, i is number of insertions,
+        and mi is number of moves that exceed the bounds of their enlarged aabbs.
+
+        Compare this to the imperative approach: O(r(log n) + i(log n) + m + mi(log n))
+        where n is the number of elements in the tree, i is number of insertions,
+        m is the number of moves that occur between frames, r is the number of removes,
+        and mi is number of moves that exceed the bounds of their enlarged aabbs.
+
+        Consider the example:
+        n     = 1000
+        r     = 100
+        i     = 100
+        m     = 500
+        mi    = 100
+        log n = ~10
+
+        the pure version would thus be:       O(1000 + 100 * 10 + 100 * 10)           = 3000
+        the imperative version would thus be: O(100 * 10 + 100 * 10 + 500 + 100 * 10) = 3500
+
+        That said, it's not as simple as comparing the complexity of the two algorithms,
+        as it will often be the case that numbers do not travel as high as even 1000 entities.
+        The imperative version enjoys more data locality, no allocation, and no garbage collection.
+        This should make it considerably friendlier for the cpu to eat through.
+
+        An example with less elements:
+        n     = 100
+        r     = 10
+        i     = 10
+        m     = 50
+        mi    = 10
+        log n = ~7
+
+        the pure version would thus be:       O(100 + 10 * 7 + 10 * 7)         = 240
+        the imperative version would thus be: O(10 * 7 + 10 * 7 + 50 + 10 * 7) = 260
+
+        The pure version however frees the programmer from thinking in an imperative manner.
+        There are no commands for "create", "move", or "remove."
+        Instead the user simply declares their data structure each update loop as they see fit,
+        and the algorithm conducts automatic insertion, position update, and garbage collection operations.
+-}
+bulkUpdate :: UpdateInput -> DynamicTree
+bulkUpdate (dataList, insertList, tree) = foldr insert (DynamicTree (fromUpdate nodes') newData freeList') insertList'
+    where
+        newData                                   = nodeDataListToNodeDataVec dataList
         (nodes', freeList', insertList')          = moveOrRemove (nodes tree) (freeList tree) insertList
-        moveOrRemove  Tip fl il                   = (Empty, fl, il)
         moveOrRemove (Node aabb l r h) fl il      = (newNode l' r', fl'', il'')
             where
                 (l', fl',  il')  = moveOrRemove l fl  il
@@ -36,27 +138,58 @@ bulkUpdate newData insertList tree = foldr insert (DynamicTree (fromUpdate nodes
                 newNode (NotChanged _ ) (Empty        ) = Changed l
                 newNode (Empty        ) (NotChanged _ ) = Changed r
                 newNode (NotChanged _ ) (NotChanged _ ) = NotChanged (Node aabb l r h)
+        moveOrRemove  Tip fl il                         = (Empty, fl, il)
         moveOrRemove (Leaf aabb i) fl il
             | Just (Just aabb') <- newData V.!? i = if aabb `containsAABB` aabb' then (NotChanged (Leaf aabb i), fl, il) else (Empty, fl, (enlargeAABB2 aabb aabb', i) : il)
             | otherwise                           = (Empty, i : fl, il)
 
-insert :: (AABB, Int) -> DynamicTree -> DynamicTree
-insert = undefined
+{-
+    insert:
+        Inserts an AABB
+-}
+insert :: NodeData -> DynamicTree -> DynamicTree
+insert (aabb, i) tree = tree{nodes = go (nodes tree)}
+    where
+        leaf               = Leaf aabb i
+        go  Tip            = leaf
+        go (Leaf laabb li) = Node (combineAABB laabb aabb) (Leaf laabb li) leaf 1
+        go (Node naabb l r h)
+            | cost  < cost1  && cost < cost2 = balance $ Node 0 (Node naabb l r h) leaf 0
+            | cost1 < cost2                  = balance $ Node 0 (balance $ Node 0 l leaf 0) r 0
+            | otherwise                      = balance $ Node 0 l (balance $ Node 0 r leaf 0) 0
+            where
+                cost                         = 2 * combinedArea
+                cost1                        = childCost l
+                cost2                        = childCost r
+                combinedArea                 = aabbArea $ combineAABB naabb aabb
+                inheritanceCost              = 2 * (combinedArea - aabbArea naabb) -- Minimum cost of pushing the leaf further down the tree
+                childCost  Tip               = error "Tip should never be a child."
+                childCost (Node caabb _ _ _) = inheritanceCost + (aabbArea (combineAABB caabb aabb) - aabbArea caabb)
+                childCost (Leaf caabb _)     = inheritanceCost +  aabbArea (combineAABB caabb aabb)
 
--- (insertList', freeList'')                 = createInsertList insertList freeList' moveList
--- createInsertList :: [AABB] -> [Int] -> [(AABB, Int)] -> ([Int], [(AABB, Int)])
--- createInsertList insertList' moveList freeList' = foldr pairList (moveList, freeList') insertList'
-    -- where
-        -- pairList x (ml, i : fs) = ((x, i)
+empty :: DynamicTree
+empty = DynamicTree Tip V.empty [0..]
+
+nodeListCons :: NodeData -> ([NodeData], Int) -> ([NodeData], Int)
+nodeListCons (aabb, i) (nl, l)
+    | i > l     = ((aabb, i) : nl, i)
+    | otherwise = ((aabb, i) : nl, l)
+
+nodeDataListToNodeDataVec :: ([NodeData], Int) -> V.Vector (Maybe AABB)
+nodeDataListToNodeDataVec (d, l) = V.modify (\v -> mapM_ (\(aabb, i) -> MV.unsafeWrite v i (Just aabb)) d) $ V.fromList $ replicate l Nothing
 
 fromUpdate :: TreeUpdate -> TreeNode
 fromUpdate (Changed    t) = t
 fromUpdate (NotChanged t) = t
 fromUpdate  _             = Tip
 
---calc enlargedAABB
+--TODO: Implement
 enlargeAABB2 :: AABB -> AABB -> AABB
-enlargeAABB2 = undefined
+enlargeAABB2 aabb1 _ = aabb1
+
+--TODO: Implement
+enlargeAABB :: AABB -> AABB
+enlargeAABB aabb = aabb
 
 treeAABB :: TreeNode -> AABB
 treeAABB  Tip              = 0
@@ -82,7 +215,6 @@ balance (Node _ l r _)
         rotateUpL (Node _ ll lr _) = calcNode ll (calcNode lr r)
         rotateUpL  _               = calcNode l r
 balance t = t
-
 {-
 (DynamicTree(..),
                                          empty,

@@ -1,8 +1,19 @@
 -- import Necronomicon
--- import qualified Necronomicon.Physics.DynamicTree as DynTree
+import qualified Necronomicon.Physics.DynamicTree as DynTree
 
 main :: IO ()
-main = print "test"
+main = print tree
+    where
+        tree = DynTree.insert (1, 0)
+             $ DynTree.insert (2, 1)
+             $ DynTree.insert (3, 2)
+             $ DynTree.insert (4, 3)
+             $ DynTree.insert (5, 4)
+             $ DynTree.insert (6, 5)
+             $ DynTree.insert (7, 6)
+             $ DynTree.insert (8, 7)
+             $ DynTree.empty
+
 -- main = DynTree.test
 -- main = do
     -- DynTree.validate $
