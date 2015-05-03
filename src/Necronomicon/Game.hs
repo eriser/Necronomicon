@@ -1,5 +1,6 @@
 module Necronomicon.Game where
 
+import Test.QuickCheck
 import Necronomicon.Linear
 
 data UID           = UID Int | New deriving (Show)
@@ -34,7 +35,7 @@ gchildren_ :: [GameObject] -> GameObject -> GameObject
 gchildren_ cs (GameObject t c _) = GameObject t c cs
 
 calcAABB :: Collider -> AABB
-calcAABB (BoxCollider _ aabb) = aabb
+calcAABB (BoxCollider _ aabb) = insureAABBSanity aabb
 calcAABB  _                   = 0
 
 colliderID :: Collider -> UID
@@ -65,3 +66,6 @@ collider_ c (GameObject t _ cs) = GameObject t (Just c) cs
 
 boxCollider :: Vector3 -> Vector3 -> Maybe Collider
 boxCollider mn mx = Just $ BoxCollider New $ AABB mn mx
+
+instance Arbitrary GameObject where
+    arbitrary = arbitrary >>= \aabb -> return (GameObject (Transform 0 identity 1) (Just $ BoxCollider New aabb) [])

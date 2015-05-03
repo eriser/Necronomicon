@@ -5,7 +5,9 @@ import qualified Data.Vector         as V
 import qualified Data.Vector.Mutable as MV
 import Necronomicon.Linear
 import Necronomicon.Game
-import Debug.Trace
+import Data.List (sort)
+import Test.QuickCheck
+-- import Debug.Trace
 
 data TreeNode = Node AABB TreeNode TreeNode Int
               | Leaf AABB Int
@@ -46,7 +48,9 @@ prettyPrint tree = unlines $ go tree
         into a new gameObject tree containing collision events and physics simulations.
 -}
 update :: (GameObject, DynamicTree) -> (GameObject, DynamicTree)
-update (root, tree) = (\(g,i) -> (g, bulkUpdate i)) $ mapFold genUpdateInput (root, (([],0), [], tree))
+update (root, tree) = (g, bulkUpdate i)
+    where
+        (g, i) = mapFold genUpdateInput (root, (([],0), [], tree))
 
 {-
     genUpdateInput:
@@ -112,7 +116,7 @@ bulkUpdate (dataList, insertList, tree) = foldr insert (DynamicTree (fromUpdate 
         Inserts an AABB
 -}
 insert :: NodeData -> DynamicTree -> DynamicTree
-insert (aabb, i) tree = trace "insert" $ tree{nodes = go (nodes tree)}
+insert (aabb, i) tree = tree{nodes = go (nodes tree)}
     where
         leaf               = Leaf aabb i
         go  Tip            = leaf
@@ -201,6 +205,55 @@ balance (Node _ l r _)
         rotateUpL (Node _ ll lr _) = calcNode ll (calcNode lr r)
         rotateUpL  _               = calcNode l r
 balance t = t
+
+data TreeTest = TestInsert GameObject
+              | TestUpdate Int AABB
+              | TestRemove Int
+              deriving (Show)
+
+instance Arbitrary TreeTest where
+    arbitrary = choose (0, 2) >>= \which -> case (which :: Int) of
+        0 -> arbitrary >>= return . TestInsert
+        1 -> arbitrary >>= \aabb -> arbitrary >>= \index -> return (TestUpdate index aabb)
+        _ -> arbitrary >>= return . TestRemove
+
+dynTreeTester :: ((GameObject, DynamicTree) -> Bool) -> [[TreeTest]] -> Bool
+dynTreeTester f uss = fst $ foldr updateTest start uss
+    where
+        start                    = (True, (GameObject (Transform 0 identity 1) Nothing [], empty))
+        updateTest us (True,  t) = let res = update (foldr test' t us) in (f res, res)
+        updateTest _  (False, t) = (False, t)
+        test' (TestInsert c)      (g, t) = (gaddChild   c g, t)
+        test' (TestRemove i)      (g, t) = (removeChild g i, t)
+        test' (TestUpdate i aabb) (g, t)
+            | null cs2  = (g, t)
+            | otherwise = (gchildren_ cs' g, t)
+            where
+                cs'        = cs1 ++ (c : tail cs2)
+                (cs1, cs2) = splitAt i $ children g
+                c = case head cs2 of
+                    (GameObject tr (Just (BoxCollider    uid _)) gs) -> GameObject tr (Just $ BoxCollider uid aabb) gs
+                    (GameObject tr (Just (SphereCollider uid _)) gs) -> GameObject tr (Just $ BoxCollider uid aabb) gs
+                    (GameObject tr  _                            gs) -> GameObject tr (Just $ BoxCollider New aabb) gs
+
+validateIDs :: (GameObject, DynamicTree) -> Bool
+validateIDs (g, t) = sort (tids (nodes t) []) == gids
+    where
+        gid g' acc = case collider g' of
+            Just (SphereCollider (UID c) _) -> c : acc
+            Just (BoxCollider    (UID c) _) -> c : acc
+            _                               -> acc
+        gids = sort $ foldChildren gid [] g
+        tids  Tip           acc = acc
+        tids (Leaf _ uid)   acc = uid : acc
+        tids (Node _ l r _) acc = tids r $ tids l acc
+
+test :: IO ()
+test = do
+    putStrLn "----------------------------------------------------------------------------------------"
+    putStrLn "validateIDs test"
+    putStrLn ""
+    quickCheckWith (stdArgs { maxSize = 100, maxSuccess = 100 }) $ dynTreeTester validateIDs
 
 
 {-
