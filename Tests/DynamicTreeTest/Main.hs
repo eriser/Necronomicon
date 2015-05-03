@@ -1,18 +1,60 @@
 -- import Necronomicon
+
+import Necronomicon
 import qualified Necronomicon.Physics.DynamicTree as DynTree
 
 main :: IO ()
-main = print tree
+main = do
+    putStrLn "starting gameobject: "
+    print testObject
+    putStrLn ""
+
+    putStrLn "Update 1 -------------------------------------- "
+    putStrLn ""
+
+    putStrLn "Resulting GameObject: "
+    print g1
+    putStrLn ""
+
+    putStrLn "Resulting Tree: "
+    print t1
+    putStrLn ""
+
+    putStrLn "Update 2 -------------------------------------- "
+    putStrLn ""
+
+    putStrLn "Resulting GameObject: "
+    print g2
+    putStrLn ""
+
+    putStrLn "Resulting Tree: "
+    print t2
+    putStrLn ""
+
     where
-        tree = DynTree.insert (1, 0)
-             $ DynTree.insert (2, 1)
-             $ DynTree.insert (3, 2)
-             $ DynTree.insert (4, 3)
-             $ DynTree.insert (5, 4)
-             $ DynTree.insert (6, 5)
-             $ DynTree.insert (7, 6)
-             $ DynTree.insert (8, 7)
-             $ DynTree.empty
+        (g1, t1) = DynTree.update (testObject, DynTree.empty)
+        (g2, t2) = DynTree.update (g1, t1)
+
+testObject :: GameObject
+testObject = r
+    where
+        r  = GameObject (Transform 0 identity 1) (boxCollider 1 2) [c1, c2, c3, c4, c5, c6, c7, c8]
+        c1 = GameObject (Transform 0 identity 1) (boxCollider 2 4) [g1, g2]
+        c2 = GameObject (Transform 0 identity 1) (boxCollider 3 9) [g3]
+        c3 = GameObject (Transform 0 identity 1) (boxCollider 1 2) []
+        c4 = GameObject (Transform 0 identity 1) (boxCollider 5 8) [g4, g5]
+        c5 = GameObject (Transform 0 identity 1) (boxCollider 6 7) [g6]
+        c6 = GameObject (Transform 0 identity 1) (boxCollider 2 5) []
+        c7 = GameObject (Transform 0 identity 1) (boxCollider 8 9) [g7, g8]
+        c8 = GameObject (Transform 0 identity 1) (boxCollider 4 8) []
+        g1 = GameObject (Transform 0 identity 1) (boxCollider 5 6) []
+        g2 = GameObject (Transform 0 identity 1) (boxCollider 6 8) []
+        g3 = GameObject (Transform 0 identity 1) (boxCollider 2 4) []
+        g4 = GameObject (Transform 0 identity 1) (boxCollider 1 2) []
+        g5 = GameObject (Transform 0 identity 1) (boxCollider 5 6) []
+        g6 = GameObject (Transform 0 identity 1) (boxCollider 4 5) []
+        g7 = GameObject (Transform 0 identity 1) (boxCollider 8 9) []
+        g8 = GameObject (Transform 0 identity 1) (boxCollider 4 5) []
 
 -- main = DynTree.test
 -- main = do
