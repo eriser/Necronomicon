@@ -18,7 +18,7 @@ import           Graphics.Rendering.FreeType.Internal.Library
 import           Graphics.Rendering.FreeType.Internal.PrimitiveTypes
 import           Graphics.Rendering.OpenGL                           hiding (bitmap)
 import           Graphics.Rendering.OpenGL.Raw.Core31                (gl_TEXTURE_2D,glTexParameteri,gl_RED)
-import           Graphics.Rendering.OpenGL.Raw.EXT.TextureSwizzle    (gl_TEXTURE_SWIZZLE_G,gl_TEXTURE_SWIZZLE_B,gl_TEXTURE_SWIZZLE_A)
+import           Graphics.Rendering.OpenGL.Raw.EXT.TextureSwizzle    (gl_TEXTURE_SWIZZLE_G_EXT,gl_TEXTURE_SWIZZLE_B_EXT,gl_TEXTURE_SWIZZLE_A_EXT)
 
 import qualified Data.Map                                            as Map
 
@@ -75,9 +75,9 @@ loadFontAtlas font = do
 
     mapM_ (addCharToAtlas atlasWidth' ff charMap) [32..128]
 
-    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_SWIZZLE_G (fromIntegral gl_RED)
-    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_SWIZZLE_B (fromIntegral gl_RED)
-    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_SWIZZLE_A (fromIntegral gl_RED)
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_SWIZZLE_G_EXT (fromIntegral gl_RED)
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_SWIZZLE_B_EXT (fromIntegral gl_RED)
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_SWIZZLE_A_EXT (fromIntegral gl_RED)
 
     vertexBuffer:_ <- genObjectNames 1
     indexBuffer :_ <- genObjectNames 1

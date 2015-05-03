@@ -190,7 +190,7 @@ instance LinearMath Quaternion Double where
     apply f (Quaternion w (Vector3 x y z)) s = Quaternion (f w s) (Vector3 (f x s) (f y s) (f z s))
 
 instance LinearFunction Quaternion where
-    type Scalar = Double
+    type Scalar Quaternion = Double
     magnitude    q                                       = sqrt (sqrMagnitude q)
     sqrMagnitude   (Quaternion w  v )                    = w*w + sqrMagnitude v
     dot            (Quaternion w1 v1) (Quaternion w2 v2) = w1*w2 + dot v1 v2

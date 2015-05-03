@@ -8,7 +8,7 @@ module Necronomicon.Physics.DynamicTree where
 
 
 import Control.Exception.Base (assert)
-import Control.Monad.ST.Safe
+import Control.Monad.ST
 import Necronomicon.Linear
 import qualified Data.Vector.Unboxed         as V
 import qualified Data.Vector.Unboxed.Mutable as MV

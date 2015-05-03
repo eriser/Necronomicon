@@ -65,7 +65,7 @@ terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 0 (-6)) identity (Vector3 0
         vertices = map toVertex values
         colors   = map toColor  values
         uvs      = map (\u -> Vector2 (u / (w * h)) 0) [0..w * h]
-        indices  = foldr (addIndices <| floor w) [] [0..length values - floor (w + 2)]
+        indices  = foldr (addIndices <| floor w) [] ([0..length values - floor (w + 2)] :: [Int])
 
         terrainMaterial = material
             "terrain-vert.glsl"
@@ -79,10 +79,10 @@ oscillatorObject :: Texture -> Texture -> Texture -> SceneObject
 oscillatorObject a1 a2 a3 = SceneObject (-3) identity 1 (Model mesh oscMaterial) []
     where
         mesh        = Mesh "osc1" vertices colors uvs indices
-        indices     = foldr (\i acc -> i + 1 : i + 2 : i + 3 : i + 1 : i + 0 : i + 2 : acc) [] [0..511]
+        indices     = foldr (\i acc -> i + 1 : i + 2 : i + 3 : i + 1 : i + 0 : i + 2 : acc) [] ([0..511] :: [Int])
         uvs         = repeat 0
         colors      = repeat black
-        vertices    = zipWith3 Vector3 (cycle [3, 2, 1, 0]) (map (/512) [0..511] >>= replicate 4) (map (/512) [1..512] >>= replicate 4)
+        vertices    = zipWith3 Vector3 (cycle [3, 2, 1, 0]) (map (/512) ([0..511] :: [Double]) >>= replicate 4) (map (/512) ([1..512] :: [Double]) >>= replicate 4)
         oscMaterial = material
             "osc-vert.glsl"
             "osc-frag.glsl"
@@ -101,7 +101,7 @@ sphereObject a1 a2 a3 t _ = SceneObject 0 (fromEuler' 0 (t * 0.1765) (t * 0.0825
         colors         = repeat black
         uvs            = repeat 0
         l              = floor longitudes
-        indices        = foldr (\i acc -> i + 1 : i + l : i + l + 1 : i + 1 : i + 0 : i + l : acc) [] [0,4..floor (latitudes * longitudes) - l]
+        indices        = foldr (\i acc -> i + 1 : i + l : i + l + 1 : i + 1 : i + 0 : i + l : acc) [] ([0,4..floor (latitudes * longitudes) - l] :: [Int])
         mesh           = Mesh "aSphere" vertices colors uvs indices
         sphereMaterial = material
             "sphere-vert.glsl"
@@ -135,6 +135,7 @@ triOsc32 mx my = feedback fSig |> verb |> gain 0.0385 |> out 0
         f2     = lag 0.25 my
         verb   = freeverb 0.25 0.5 0.95
         d      = delayN 0.6 0.6
+        fSig :: UGen -> UGen
         fSig i = [sig4 + sig6, sig5 + sig6]
             where
                 sig1 = sinOsc (f1 + sig3 * 26.162)    * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> auxThrough 2

@@ -55,23 +55,23 @@ gradient x y hash = u' + v'
 simplex2 :: Double -> Double -> Double
 simplex2 x y = 0.507 * ( flerp s n0 n1 )
     where
-        ix0 = floor x	-- Integer part of x
-        iy0 = floor y	-- Integer part of y
-        fx0 = x - (fromIntegral ix0)-- Fractional part of x
-        fy0 = y - (fromIntegral iy0)-- Fractional part of y
-        fx1 = fx0 - 1.0
-        fy1	= fy0 - 1.0
-        ix1 = rem (ix0 + 1) 255  	-- Wrapped to 0..255
-        iy1 = rem (iy0 + 1) 255
-        ix0'= rem ix0 255
-        iy0'= rem iy0 255
+        ix0  = floor x -- Integer part of x
+        iy0  = floor y -- Integer part of y
+        fx0  = x - (fromIntegral ix0)-- Fractional part of x
+        fy0  = y - (fromIntegral iy0)-- Fractional part of y
+        fx1  = fx0 - 1.0
+        fy1  = fy0 - 1.0
+        ix1  = rem (ix0 + 1) 255 -- Wrapped to 0..255
+        iy1  = rem (iy0 + 1) 255
+        ix0' = rem ix0 255
+        iy0' = rem iy0 255
 
         t = ffade fy0
         s = ffade fx0
 
         nx0 = gradient fx0 fy0 $ safePermLookup (ix0' + (fromIntegral (safePermLookup iy0')))
         nx1 = gradient fx0 fy1 $ safePermLookup (ix0' + (fromIntegral (safePermLookup iy1)))
-        n0	= flerp t nx0 nx1
+        n0  = flerp t nx0 nx1
 
         nx0'= gradient fx1 fy0 $ safePermLookup (ix1 + (fromIntegral (safePermLookup iy0')))
         nx1'= gradient fx1 fy1 $ safePermLookup (ix1 + (fromIntegral (safePermLookup iy1)))

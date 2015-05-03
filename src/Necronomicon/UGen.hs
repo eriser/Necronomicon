@@ -7,7 +7,6 @@ import Data.List
 import Foreign
 import Foreign.C
 import Control.Monad.State.Lazy
-import Control.Applicative
 import Necronomicon.Runtime
 import Necronomicon.Utility
 import qualified Data.Map as M
@@ -1177,13 +1176,15 @@ nextWireIndex :: Compiled CUInt
 nextWireIndex = getWireIndex >>= \wire -> setWireIndex (wire + 1) >> return wire
 
 initializeWireBufs :: CUInt -> [CompiledConstant] -> IO (Ptr CDouble)
-initializeWireBufs numWires constants = {-print ("Wire Buffers: " ++ (show folded)) >> -}getJackBlockSize >>= \blockSize ->
+initializeWireBufs numWires constants = {-print ("Wire Buffers: " ++ (show folded)) >> -} getJackBlockSize >>= \blockSize ->
     let wires = foldl (++) [] $ map (replicate (fromIntegral blockSize)) folded in newArray wires
     where
+        wireIndexes :: [CUInt]
+        wireIndexes = [0 .. (numWires - 1)]
         folded :: [CDouble]
-        folded = snd $ foldl foldWires ((sort constants), []) [0..(numWires - 1)]
+        folded = snd $ foldl foldWires ((sort constants), []) wireIndexes
         foldWires ([], ws) _ = ([], ws ++ zero)
-        foldWires (c@((CompiledConstant d ci):cs), ws) i
+        foldWires (c@((CompiledConstant d ci) : cs), ws) i
             | ci == i = (cs, (ws ++ [d]))
             | otherwise = (c, ws ++ zero)
         foldWires (_,_) _ = ([], [])
