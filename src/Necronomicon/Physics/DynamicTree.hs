@@ -50,24 +50,25 @@ prettyPrint tree = unlines $ go tree
 update :: (GameObject, DynamicTree) -> (GameObject, DynamicTree)
 update (root, tree) = (g, bulkUpdate i)
     where
-        (g, i) = mapFold genUpdateInput (root, (([],0), [], tree))
+        (g, i) = mapFoldStack genUpdateInput (root, (([],0), [], tree), identity4)
 
 {-
     genUpdateInput:
         Transform the input gameObject into update information for a dynamicTree transformation
         We've got to get the newly consumed ids to the correct gameobjects....
 -}
-genUpdateInput :: (GameObject, UpdateInput) -> (GameObject, UpdateInput)
-genUpdateInput (g, (d, il, t))
+genUpdateInput :: (GameObject, UpdateInput, Matrix4x4) -> (GameObject, UpdateInput, Matrix4x4)
+genUpdateInput (g, (d, il, t), world)
     | Just col <- collider g = updateFromCollider col
-    | otherwise              = (g, (d, il, t))
+    | otherwise              = (g, (d, il, t), newWorld)
     where
+        newWorld             = world .*. transMat g
         updateFromCollider col
-            | UID uid <- cid = (g , (nodeListCons (caabb, uid) d,               il, t))
-            | otherwise      = (g', (nodeListCons (caabb,   i) d, (caabb', i) : il, t{freeList = fl}))
+            | UID uid <- cid = (g , (nodeListCons (caabb, uid) d,               il, t), newWorld)
+            | otherwise      = (g', (nodeListCons (caabb,   i) d, (caabb', i) : il, t{freeList = fl}), newWorld)
             where
                 cid      = colliderID   col
-                caabb    = calcAABB     col
+                caabb    = calcAABB     newWorld col
                 caabb'   = enlargeAABB  caabb
                 (i : fl) = freeList t
                 g'       = collider_ (colliderID_ (UID i) col) g
@@ -207,14 +208,14 @@ balance (Node _ l r _)
 balance t = t
 
 data TreeTest = TestInsert GameObject
-              | TestUpdate Int AABB
+              | TestUpdate Int [Vector3]
               | TestRemove Int
               deriving (Show)
 
 instance Arbitrary TreeTest where
     arbitrary = choose (0, 2) >>= \which -> case (which :: Int) of
         0 -> arbitrary >>= return . TestInsert
-        1 -> arbitrary >>= \aabb -> arbitrary >>= \index -> return (TestUpdate index aabb)
+        1 -> arbitrary >>= \w -> arbitrary >>= \h -> arbitrary >>= \d -> arbitrary >>= \index -> return (TestUpdate index $ cubeVertices w h d)
         _ -> arbitrary >>= return . TestRemove
 
 dynTreeTester :: ((GameObject, DynamicTree) -> Bool) -> [[TreeTest]] -> Bool
@@ -223,30 +224,32 @@ dynTreeTester f uss = fst $ foldr updateTest start uss
         start                    = (True, (GameObject (Transform 0 identity 1) Nothing [], empty))
         updateTest us (True,  t) = let res = update (foldr test' t us) in (f res, res)
         updateTest _  (False, t) = (False, t)
-        test' (TestInsert c)      (g, t) = (gaddChild   c g, t)
-        test' (TestRemove i)      (g, t) = (removeChild g i, t)
-        test' (TestUpdate i aabb) (g, t)
+        test' (TestInsert c)     (g, t) = (gaddChild   c g, t)
+        test' (TestRemove i)     (g, t) = (removeChild g i, t)
+        test' (TestUpdate i vs)  (g, t)
             | null cs2  = (g, t)
             | otherwise = (gchildren_ cs' g, t)
             where
                 cs'        = cs1 ++ (c : tail cs2)
                 (cs1, cs2) = splitAt i $ children g
                 c = case head cs2 of
-                    (GameObject tr (Just (BoxCollider    uid _)) gs) -> GameObject tr (Just $ BoxCollider uid aabb) gs
-                    (GameObject tr (Just (SphereCollider uid _)) gs) -> GameObject tr (Just $ BoxCollider uid aabb) gs
-                    (GameObject tr  _                            gs) -> GameObject tr (Just $ BoxCollider New aabb) gs
+                    (GameObject tr (Just (BoxCollider    uid _)) gs) -> GameObject tr (Just $ BoxCollider uid vs) gs
+                    (GameObject tr (Just (SphereCollider uid _)) gs) -> GameObject tr (Just $ BoxCollider uid vs) gs
+                    (GameObject tr  _                            gs) -> GameObject tr (Just $ BoxCollider New vs) gs
 
 validateIDs :: (GameObject, DynamicTree) -> Bool
-validateIDs (g, t) = sort (tids (nodes t) []) == gids
+validateIDs (g, t) = sort (tids (nodes t) []) == gids && sort nids == gids
     where
-        gid g' acc = case collider g' of
-            Just (SphereCollider (UID c) _) -> c : acc
-            Just (BoxCollider    (UID c) _) -> c : acc
-            _                               -> acc
-        gids = sort $ foldChildren gid [] g
+        -- trace (show t ++ "\n") $
         tids  Tip           acc = acc
         tids (Leaf _ uid)   acc = uid : acc
         tids (Node _ l r _) acc = tids r $ tids l acc
+        (_, nids)               = V.foldl' (\(i, ids) x -> if x == Nothing then (i + 1, ids) else (i + 1, i : ids) ) (0, []) $ nodeData t
+        gid g' acc              = case collider g' of
+            Just (SphereCollider (UID c) _) -> c : acc
+            Just (BoxCollider    (UID c) _) -> c : acc
+            _                               -> acc
+        gids                    = sort $ foldChildren gid [] g
 
 test :: IO ()
 test = do

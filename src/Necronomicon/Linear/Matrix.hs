@@ -161,6 +161,18 @@ instance LinearMath Vector3 Matrix3x3 where
     (./.) _ _ = undefined
     apply _ _ _ = undefined
 
+instance LinearMath Vector3 Matrix4x4 where
+    type Return Vector3 Matrix4x4    = Vector3
+    (.*.) (Vector3 x y z) (Matrix4x4 (Vector4 a b c _) (Vector4 e f g _) (Vector4 i j k _) (Vector4 m n o _)) =
+        Vector3
+        (x*a+y*e+z*i+m)
+        (x*b+y*f+z*j+n)
+        (x*c+y*g+z*k+o)
+    (.+.) _ _ = undefined
+    (.-.) _ _ = undefined
+    (./.) _ _ = undefined
+    apply _ _ _ = undefined
+
 instance LinearMath Vector4 Matrix4x4 where
     type Return Vector4 Matrix4x4    = Vector4
     (.*.) (Vector4 x y z w) (Matrix4x4 (Vector4 a b c d) (Vector4 e f g h) (Vector4 i j k l) (Vector4 m n o p)) =
