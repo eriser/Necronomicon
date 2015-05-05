@@ -231,7 +231,7 @@ instance LinearMath Matrix4x4 Matrix4x4 where
 
 --Vector Instances
 instance Vector Matrix2x2 where
-    type Component Matrix2x2 = Vector2
+    type VectorComponent Matrix2x2 = Vector2
     type Swizzle2  Matrix2x2 = Matrix2x2
     type Swizzle3  Matrix2x2 = Matrix3x3
     type Swizzle4  Matrix2x2 = Matrix4x4
@@ -265,7 +265,7 @@ instance Vector Matrix2x2 where
     _swizzle4_ mdf mdf' mdf'' mdf''' f = mdf''' f . mdf'' f . mdf' f . mdf f
 
 instance Vector Matrix3x3 where
-    type Component Matrix3x3 = Vector3
+    type VectorComponent Matrix3x3 = Vector3
     type Swizzle2  Matrix3x3 = Matrix2x2
     type Swizzle3  Matrix3x3 = Matrix3x3
     type Swizzle4  Matrix3x3 = Matrix4x4
@@ -298,7 +298,7 @@ instance Vector Matrix3x3 where
     _swizzle4_ mdf mdf' mdf'' mdf''' f = mdf''' f . mdf'' f . mdf' f . mdf f
 
 instance Vector Matrix4x4 where
-    type Component Matrix4x4 = Vector4
+    type VectorComponent Matrix4x4 = Vector4
     type Swizzle2  Matrix4x4 = Matrix2x2
     type Swizzle3  Matrix4x4 = Matrix3x3
     type Swizzle4  Matrix4x4 = Matrix4x4

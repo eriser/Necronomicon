@@ -135,6 +135,9 @@ transparent = RGBA 0 0 0 0
 white :: Color
 white = RGB 1 1 1
 
+green :: Color
+green = RGBA 0 1 0 1
+
 whiteA :: Color
 whiteA = RGBA 1 1 1 1
 

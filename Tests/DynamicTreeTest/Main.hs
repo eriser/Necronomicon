@@ -1,5 +1,4 @@
--- import Necronomicon
-import qualified Necronomicon.Physics.DynamicTree as DynTree
+import Necronomicon
 
 main :: IO ()
-main = DynTree.test
+main = dynTreeTest

@@ -12,46 +12,46 @@ data Vector4 = Vector4 Double Double Double Double       deriving (Show,Eq,Ord)
 
 --Vector class
 class Vector a where
-    type Component a :: *
+    type VectorComponent a :: *
     type Swizzle2  a :: *
     type Swizzle3  a :: *
     type Swizzle4  a :: *
-    toList :: a -> [Component a]
+    toList :: a -> [VectorComponent a]
 
     --get
-    _x     :: a -> Component a
-    _y     :: a -> Component a
-    _z     :: a -> Component a
-    _w     :: a -> Component a
+    _x     :: a -> VectorComponent a
+    _y     :: a -> VectorComponent a
+    _z     :: a -> VectorComponent a
+    _w     :: a -> VectorComponent a
 
     --set
-    x_     :: Component a -> a -> a
-    y_     :: Component a -> a -> a
-    z_     :: Component a -> a -> a
-    w_     :: Component a -> a -> a
+    x_     :: VectorComponent a -> a -> a
+    y_     :: VectorComponent a -> a -> a
+    z_     :: VectorComponent a -> a -> a
+    w_     :: VectorComponent a -> a -> a
 
     --modify
-    _x_    :: (Component a -> Component a) -> a -> a
-    _y_    :: (Component a -> Component a) -> a -> a
-    _z_    :: (Component a -> Component a) -> a -> a
-    _w_    :: (Component a -> Component a) -> a -> a
+    _x_    :: (VectorComponent a -> VectorComponent a) -> a -> a
+    _y_    :: (VectorComponent a -> VectorComponent a) -> a -> a
+    _z_    :: (VectorComponent a -> VectorComponent a) -> a -> a
+    _w_    :: (VectorComponent a -> VectorComponent a) -> a -> a
 
     --swizzle
-    _swizzle2 :: (a -> Component a) -> (a -> Component a) -> a -> Swizzle2 a
-    _swizzle3 :: (a -> Component a) -> (a -> Component a) -> (a -> Component a) -> a -> Swizzle3 a
-    _swizzle4 :: (a -> Component a) -> (a -> Component a) -> (a -> Component a) -> (a -> Component a) -> a -> Swizzle4 a
+    _swizzle2 :: (a -> VectorComponent a) -> (a -> VectorComponent a) -> a -> Swizzle2 a
+    _swizzle3 :: (a -> VectorComponent a) -> (a -> VectorComponent a) -> (a -> VectorComponent a) -> a -> Swizzle3 a
+    _swizzle4 :: (a -> VectorComponent a) -> (a -> VectorComponent a) -> (a -> VectorComponent a) -> (a -> VectorComponent a) -> a -> Swizzle4 a
 
-    swizzle2_ :: (Component a -> a -> a) -> (Component a -> a -> a) -> Swizzle2 a -> a -> a
-    swizzle3_ :: (Component a -> a -> a) -> (Component a -> a -> a) -> (Component a -> a -> a) -> Swizzle3 a -> a -> a
-    swizzle4_ :: (Component a -> a -> a) -> (Component a -> a -> a) -> (Component a -> a -> a) -> (Component a -> a -> a) -> Swizzle4 a -> a -> a
+    swizzle2_ :: (VectorComponent a -> a -> a) -> (VectorComponent a -> a -> a) -> Swizzle2 a -> a -> a
+    swizzle3_ :: (VectorComponent a -> a -> a) -> (VectorComponent a -> a -> a) -> (VectorComponent a -> a -> a) -> Swizzle3 a -> a -> a
+    swizzle4_ :: (VectorComponent a -> a -> a) -> (VectorComponent a -> a -> a) -> (VectorComponent a -> a -> a) -> (VectorComponent a -> a -> a) -> Swizzle4 a -> a -> a
 
-    _swizzle2_ :: ((Component a -> Component a) -> a -> a) -> ((Component a -> Component a) -> a -> a) -> (Component a -> Component a) -> a -> a
-    _swizzle3_ :: ((Component a -> Component a) -> a -> a) -> ((Component a -> Component a) -> a -> a) -> ((Component a -> Component a) -> a -> a) -> (Component a -> Component a) -> a -> a
-    _swizzle4_ :: ((Component a -> Component a) -> a -> a) -> ((Component a -> Component a) -> a -> a) -> ((Component a -> Component a) -> a -> a) -> ((Component a -> Component a) -> a -> a) -> (Component a -> Component a) -> a -> a
+    _swizzle2_ :: ((VectorComponent a -> VectorComponent a) -> a -> a) -> ((VectorComponent a -> VectorComponent a) -> a -> a) -> (VectorComponent a -> VectorComponent a) -> a -> a
+    _swizzle3_ :: ((VectorComponent a -> VectorComponent a) -> a -> a) -> ((VectorComponent a -> VectorComponent a) -> a -> a) -> ((VectorComponent a -> VectorComponent a) -> a -> a) -> (VectorComponent a -> VectorComponent a) -> a -> a
+    _swizzle4_ :: ((VectorComponent a -> VectorComponent a) -> a -> a) -> ((VectorComponent a -> VectorComponent a) -> a -> a) -> ((VectorComponent a -> VectorComponent a) -> a -> a) -> ((VectorComponent a -> VectorComponent a) -> a -> a) -> (VectorComponent a -> VectorComponent a) -> a -> a
 
 --Vector Instances
 instance Vector Vector2 where
-    type Component Vector2 = Double
+    type VectorComponent Vector2 = Double
     type Swizzle2  Vector2 = Vector2
     type Swizzle3  Vector2 = Vector3
     type Swizzle4  Vector2 = Vector4
@@ -80,7 +80,7 @@ instance Vector Vector2 where
     _swizzle4_ _ _ _ _ = undefined
 
 instance Vector Vector3 where
-    type Component Vector3 = Double
+    type VectorComponent Vector3 = Double
     type Swizzle2  Vector3 = Vector2
     type Swizzle3  Vector3 = Vector3
     type Swizzle4  Vector3 = Vector4
@@ -108,7 +108,7 @@ instance Vector Vector3 where
     _swizzle3_ mdf mdf' mdf'' f = mdf'' f . mdf' f . mdf f
 
 instance Vector Vector4 where
-    type Component Vector4 = Double
+    type VectorComponent Vector4 = Double
     type Swizzle2  Vector4 = Vector2
     type Swizzle3  Vector4 = Vector3
     type Swizzle4  Vector4 = Vector4

@@ -65,6 +65,9 @@ cube = Mesh "cube" vertices colors uvs indices
                     6,2,3,7,6,3, -- Top
                     0,4,5,1,0,5] -- Bottom
 
+-- cubeOutline :: Mesh
+-- cubeOutline = Mesh "cubeOutline"
+
 sphere :: Int -> Int -> Mesh
 sphere latitudes longitudes = Mesh (show latitudes ++ show longitudes ++ "sphere") vertices colors uvs indices
     where
@@ -87,7 +90,7 @@ dynRect :: Double -> Double -> Mesh
 dynRect w h = DynamicMesh (show w ++ show h ++ "rect") vertices colors uvs indices
     where
         vertices = [Vector3 0 0 0,Vector3 w 0 0,Vector3 0 h 0,Vector3 w h 0]
-        colors   = [white,white,white,white]
+        colors   = [white, white, white, white]
         uvs      = [Vector2 0 0,Vector2 1 0,Vector2 0 1,Vector2 1 1]
         indices  = [2,0,1,3,2,1]
 
