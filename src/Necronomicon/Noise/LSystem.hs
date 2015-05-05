@@ -9,8 +9,8 @@ data LSystem = LSystem Alphabet RuleSet deriving (Show, Eq)
 
 lsystemGeneration :: LSystem -> String -> Int -> String
 lsystemGeneration (LSystem _ (RuleSet ruleset)) axiom n
-    | n == 0 = axiom
-    | otherwise = foldl prGeneration axiom ([1 .. (max 1 n)] :: [Int])
+    | n <= 0 = axiom
+    | otherwise = foldl prGeneration axiom ([1 .. n] :: [Int])
     where
         prGeneration alphabet' _ = foldl expand [] alphabet'
         expand acc letter = case M.lookup letter ruleset of
