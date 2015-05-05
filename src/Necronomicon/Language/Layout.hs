@@ -7,7 +7,6 @@ module Necronomicon.Language.Layout (
 import Prelude
 import Language.Haskell.TH.Syntax
 import Language.Haskell.TH.Quote
-import Control.Applicative ((<*),(<*>),(*>),(<$>))
 import Text.ParserCombinators.Parsec
 import qualified Data.Vector as V
 

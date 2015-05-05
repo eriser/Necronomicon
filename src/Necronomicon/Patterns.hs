@@ -7,8 +7,6 @@ module Necronomicon.Patterns where
 
 import Prelude
 import System.Random
-import Control.Applicative
-import Data.Monoid
 import qualified Data.Fixed as F
 import qualified Data.Vector as V
 

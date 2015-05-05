@@ -286,18 +286,18 @@ instance LinearMath Vector4 Vector4 where
     apply f (Vector4 x y z w) (Vector4 xx yy zz ww) = Vector4 (f x xx) (f y yy) (f z zz) (f w ww)
 
 class LinearFunction a where
-    type Scalar  :: *
-    sqrMagnitude :: a -> Scalar
-    magnitude    :: a -> Scalar
-    dot          :: a -> a -> Scalar
+    type Scalar a :: *
+    sqrMagnitude :: a -> Scalar a
+    magnitude    :: a -> Scalar a
+    dot          :: a -> a -> Scalar a
     normalize    :: a -> a
-    lerp         :: a -> a -> Scalar -> a
-    distance     :: a -> a -> Scalar
-    angle        :: a -> a -> Scalar
+    lerp         :: a -> a -> Scalar a -> a
+    distance     :: a -> a -> Scalar a
+    angle        :: a -> a -> Scalar a
     direction    :: a -> a -> a
 
 instance LinearFunction Vector2 where
-    type Scalar                                                = Double
+    type Scalar Vector2                                        = Double
     sqrMagnitude (Vector2 x y)                                 = x*x + y*y
     magnitude    (Vector2 x y)                                 = sqrt $ x*x + y*y
     dot          (Vector2 x1 y1) (Vector2 x2 y2)               = x1*x2 + y1*y2
@@ -308,7 +308,7 @@ instance LinearFunction Vector2 where
     direction  v1 v2                                           = normalize $ v2 - v1
 
 instance LinearFunction Vector3 where
-    type Scalar                                                = Double
+    type Scalar Vector3                                        = Double
     sqrMagnitude (Vector3 x y z)                               = x*x + y*y + z*z
     magnitude    (Vector3 x y z)                               = sqrt $ x*x + y*y + z*z
     dot          (Vector3 x1 y1 z1) (Vector3 x2 y2 z2)         = x1*x2 + y1*y2 + z1*z2
@@ -319,7 +319,7 @@ instance LinearFunction Vector3 where
     direction  v1 v2                                           = normalize $ v2 - v1
 
 instance LinearFunction Vector4 where
-    type Scalar                                                = Double
+    type Scalar Vector4                                        = Double
     sqrMagnitude (Vector4 x y z w)                             = x*x + y*y + z*z + w*w
     magnitude    (Vector4 x y z w)                             = sqrt $ x*x + y*y + z*z + w*w
     dot          (Vector4 x1 y1 z1 w1) (Vector4 x2 y2 z2 w2)   = x1*x2 + y1*y2 + z1*z2 + w1*w2

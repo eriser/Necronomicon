@@ -47,7 +47,7 @@ instance LinearMath Color Color where
     apply f (RGBA r1 g1 b1 a1) (RGBA r2 g2 b2 a2) = RGBA (f r1 r2) (f g1 g2) (f b1 b2) (f a1 a2)
 
 instance LinearFunction Color where
-    type Scalar = Double
+    type Scalar Color = Double
     sqrMagnitude c = csqrMagnitude c
     magnitude    c = cmagnitude c
     dot c1 c2 = cdot c1 c2

@@ -74,6 +74,7 @@ library
         Necronomicon.Noise
         Necronomicon.Noise.DiamondSquare
         Necronomicon.Noise.Simplex
+        Necronomicon.Noise.LSystem
         Necronomicon.Graphics
         Necronomicon.Graphics.BufferObject
         Necronomicon.Graphics.Camera
@@ -217,3 +218,15 @@ executable DynamicTreeTest
     build-depends:    base             == 4.*,
                       Necronomicon,
                       QuickCheck
+
+executable GenerativeTest
+    main-is:          Main.hs
+    default-language: Haskell2010
+    ghc-options:      -threaded -O3 -Wall -Werror
+    hs-source-dirs:   Tests/GenerativeTest
+    default-extensions: QuasiQuotes TemplateHaskell ParallelListComp OverloadedLists
+    build-depends:
+        base             == 4.*,
+        Necronomicon,
+        vector,
+        containers

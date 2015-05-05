@@ -5,7 +5,6 @@ import Foreign
 import Foreign.C
 import Control.Concurrent
 import Control.Concurrent.STM
-import Control.Applicative
 import Control.Monad.Trans
 import qualified Necronomicon.Util.PriorityQueue as PQ
 import Necronomicon.Patterns
