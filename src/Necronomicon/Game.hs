@@ -2,11 +2,16 @@ module Necronomicon.Game where
 
 import Test.QuickCheck
 import Data.List (sort)
+import Control.Concurrent
+import Graphics.Rendering.OpenGL.Raw
 import qualified Data.Vector as V
+import qualified Graphics.Rendering.OpenGL         as GL
+import qualified Graphics.UI.GLFW                  as GLFW
 
 import Necronomicon.Linear
 import Necronomicon.Physics
 import Necronomicon.Graphics
+import Necronomicon.Utility              (getCurrentTime)
 
 
 -------------------------------------------------------
@@ -15,7 +20,7 @@ import Necronomicon.Graphics
 
 data UID        = UID Int | New deriving (Show)
 data Transform  = Transform Vector3 Quaternion Vector3 deriving (Show)
-data GameObject = GameObject Transform (Maybe Collider) (Maybe Model) [GameObject] deriving (Show)
+data GameObject = GameObject Transform (Maybe Collider) (Maybe Model) (Maybe Camera) [GameObject] deriving (Show)
 
 
 -------------------------------------------------------
@@ -23,33 +28,36 @@ data GameObject = GameObject Transform (Maybe Collider) (Maybe Model) [GameObjec
 -------------------------------------------------------
 
 transform :: GameObject -> Transform
-transform (GameObject t _ _ _) = t
+transform (GameObject t _ _ _ _) = t
 
 transMat :: GameObject -> Matrix4x4
-transMat (GameObject (Transform p r s) _ _ _) = trsMatrix p r s
+transMat (GameObject (Transform p r s) _ _ _ _) = trsMatrix p r s
 
 children :: GameObject -> [GameObject]
-children (GameObject _ _ _ cs) = cs
+children (GameObject _ _ _ _ cs) = cs
 
 gchildren_ :: [GameObject] -> GameObject -> GameObject
-gchildren_ cs (GameObject t c m _) = GameObject t c m cs
+gchildren_ cs (GameObject t c m cm _) = GameObject t c m cm cs
 
 collider :: GameObject -> Maybe Collider
-collider (GameObject _ c _ _) = c
+collider (GameObject _ c _ _ _) = c
 
 collider_ :: Collider -> GameObject -> GameObject
-collider_ c (GameObject t _ m cs) = GameObject t (Just c) m cs
+collider_ c (GameObject t _ m cm cs) = GameObject t (Just c) m cm cs
 
 model :: GameObject -> Maybe Model
-model (GameObject _ _ m _) = m
+model (GameObject _ _ m _ _) = m
+
+camera :: GameObject -> Maybe Camera
+camera (GameObject _ _ _ cm _) = cm
 
 gaddChild :: GameObject -> GameObject -> GameObject
-gaddChild g (GameObject t c m cs) = GameObject t c m (g : cs)
+gaddChild g (GameObject t c m cm cs) = GameObject t c m cm (g : cs)
 
 removeChild :: GameObject -> Int -> GameObject
-removeChild (GameObject t c m cs) n
-    | null cs2  = GameObject t c m cs
-    | otherwise = GameObject t c m $ cs1 ++ tail cs2
+removeChild (GameObject t c m cm cs) n
+    | null cs2  = GameObject t c m cm cs
+    | otherwise = GameObject t c m cm $ cs1 ++ tail cs2
     where
         (cs1, cs2) = splitAt n cs
 
@@ -197,6 +205,120 @@ drawG world view proj resources debugDraw g
         newWorld  = world .*. transMat g
         modelView = view  .*. newWorld
 
+--From Camera.hs
+renderCameraG :: (Int,Int) -> Matrix4x4 -> GameObject -> Resources -> Bool -> GameObject -> IO Matrix4x4
+renderCameraG (w,h) view scene resources debug so = case camera so of
+    Nothing -> return newView
+    Just c  -> do
+        let  ratio    = fromIntegral w / fromIntegral h
+        let (RGBA r g b a) = case _clearColor c of
+                RGB r' g' b' -> RGBA r' g' b' 1.0
+                c'           -> c'
+
+        --If we have anye post-rendering fx let's bind their fbo
+        case _fx c of
+            []   -> return ()
+            fx:_ -> getPostFX resources (fromIntegral w,fromIntegral h) fx >>= \postFX -> glBindFramebuffer gl_FRAMEBUFFER (postRenderFBO postFX)
+
+        GL.depthFunc     GL.$= Just GL.Less
+        GL.blend         GL.$= GL.Enabled
+        GL.blendBuffer 0 GL.$= GL.Enabled
+        GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
+
+        GL.clearColor GL.$= GL.Color4 (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a)
+        GL.clear [GL.ColorBuffer,GL.DepthBuffer]
+
+        GL.viewport GL.$= (GL.Position 0 0, GL.Size (fromIntegral w) (fromIntegral h))
+        GL.loadIdentity
+
+        case _fov c of
+            0 -> drawGame identity4 (invert newView) (orthoMatrix 0 ratio 1 0 (-1) 1) resources debug scene
+            _ -> drawGame identity4 (invert newView) (perspMatrix (_fov c) ratio (_near c) (_far c)) resources debug scene
+
+        mapM_ (drawPostRenderFX (RGBA r g b a)) $ _fx c
+
+        return $ newView
+    where
+        newView = view .*. transMat so
+        drawPostRenderFX (RGB r g b) fx = drawPostRenderFX (RGBA r g b 1) fx
+        drawPostRenderFX (RGBA r g b a) fx = do
+            glBindFramebuffer gl_FRAMEBUFFER 0
+            GL.depthFunc     GL.$= Nothing
+            GL.blend         GL.$= GL.Disabled
+            GL.blendBuffer 0 GL.$= GL.Disabled
+
+            GL.clearColor GL.$= GL.Color4 (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a)
+            GL.clear [GL.ColorBuffer,GL.DepthBuffer]
+            postFX <- getPostFX resources (fromIntegral w,fromIntegral h) fx
+            let (Material mdraw) = postRenderMaterial postFX (Texture [] . return .GL.TextureObject $ postRenderTex postFX)
+            mdraw (rect 1 1) identity4 (orthoMatrix 0 1 0 1 (-1) 1) resources
+
+            GL.depthFunc     GL.$= Just GL.Less
+            GL.blend         GL.$= GL.Enabled
+            GL.blendBuffer 0 GL.$= GL.Enabled
+            GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
+
+renderCamerasG :: (Int,Int) -> Matrix4x4 -> GameObject -> Resources -> Bool -> GameObject -> IO ()
+renderCamerasG (w,h) view scene resources debug g = renderCameraG (w,h) view scene resources debug g >>= \newView -> mapM_ (renderCamerasG (w,h) newView scene resources debug) (children g)
+
+renderGraphicsG :: GLFW.Window -> Resources -> Bool -> GameObject -> GameObject -> IO ()
+renderGraphicsG window resources debug scene _ = do
+    (w,h) <- GLFW.getWindowSize window
+
+    --render scene
+    renderCamerasG (w,h) identity4 scene resources debug scene
+
+    --render gui
+    -- drawGame identity4 identity4 (orthoMatrix 0 (fromIntegral w / fromIntegral h) 1 0 (-1) 1) resources False gui
+
+    GLFW.swapBuffers window
+    GLFW.pollEvents
+    -- GL.flush
+
+runGame :: (GameObject -> GameObject) -> GameObject -> IO()
+runGame f g = initWindow >>= \mw -> case mw of
+    Nothing -> print "Error starting GLFW." >> return ()
+    Just w  -> do
+        putStrLn "Starting Necronomicon"
+
+        -- GLFW.setCursorPosCallback   w $ Just $ mousePosEvent   signalState
+        -- GLFW.setMouseButtonCallback w $ Just $ mousePressEvent signalState
+        -- GLFW.setKeyCallback         w $ Just $ keyPressEvent   signalState
+        -- GLFW.setWindowSizeCallback  w $ Just $ dimensionsEvent signalState
+
+        resources <- newResources
+        renderNecronomicon False w resources g empty 0
+    where
+        --event callbacks
+        -- mousePressEvent state _ _ GLFW.MouseButtonState'Released _ = atomically $ writeTChan (mouseButtonBuffer state) $ False
+        -- mousePressEvent state _ _ GLFW.MouseButtonState'Pressed  _ = atomically $ writeTChan (mouseButtonBuffer state) $ True
+        -- dimensionsEvent state _ x y = writeToSignal (dimensionsSignal state) $ Vector2 (fromIntegral x) (fromIntegral y)
+        -- keyPressEvent   state _ k _ GLFW.KeyState'Pressed  _       = do
+            -- atomically $ writeTChan (keySignalBuffer state)   (glfwKeyToEventKey k,True)
+            -- atomically $ writeTChan (keysPressedBuffer state) (glfwKeyToEventKey k)
+        -- keyPressEvent   state _ k _ GLFW.KeyState'Released _       = atomically $ writeTChan (keySignalBuffer state) (glfwKeyToEventKey k,False)
+        -- keyPressEvent   _ _ _ _ _ _                            = return ()
+        --
+        -- mousePosEvent state w x y = do
+        --     (wx,wy) <- GLFW.getWindowSize w
+        --     let pos = (x / fromIntegral wx,y / fromIntegral wy)
+        --     writeToSignal (mouseSignal state) pos
+
+        renderNecronomicon quit window resources g' tree runTime'
+            | quit      = print "Qutting" >> return ()
+            | otherwise = do
+
+                GLFW.pollEvents
+                q <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'Escape
+                currentTime <- getCurrentTime
+
+                let _        = currentTime - runTime'
+                    (g'', tree') = update (f g', tree)
+
+                renderGraphicsG window resources True g'' g''
+                threadDelay $ 16667
+                renderNecronomicon q window resources g'' tree' currentTime
+
 -------------------------------------------------------
 -- Testing
 -------------------------------------------------------
@@ -218,12 +340,12 @@ instance Arbitrary GameObject where
         (px, py, pz) <- arbitrary
         (rx, ry, rz) <- arbitrary
         (sx, sy, sz) <- arbitrary
-        return $ GameObject (Transform (Vector3 px py pz) (fromEuler' rx ry rz) (Vector3 sx sy sz)) (Just $ BoxCollider New $ trsMatrix 0 identity (Vector3 w h d)) Nothing []
+        return $ GameObject (Transform (Vector3 px py pz) (fromEuler' rx ry rz) (Vector3 sx sy sz)) (Just $ BoxCollider New $ trsMatrix 0 identity (Vector3 w h d)) Nothing Nothing []
 
 dynTreeTester :: ((GameObject, DynamicTree) -> Bool) -> [[TreeTest]] -> Bool
 dynTreeTester f uss = fst $ foldr updateTest start uss
     where
-        start                    = (True, (GameObject (Transform 0 identity 1) Nothing Nothing [], empty))
+        start                    = (True, (GameObject (Transform 0 identity 1) Nothing Nothing Nothing [], empty))
         updateTest us (True,  t) = let res = update (foldr test' t us) in (f res, res)
         updateTest _  (False, t) = (False, t)
         test' (TestInsert c)     (g, t) = (gaddChild   c g, t)
@@ -235,9 +357,9 @@ dynTreeTester f uss = fst $ foldr updateTest start uss
                 cs'        = cs1 ++ (c : tail cs2)
                 (cs1, cs2) = splitAt i $ children g
                 c = case head cs2 of
-                    (GameObject tr (Just (BoxCollider    uid _)) _ gs) -> GameObject tr (Just $ BoxCollider uid bm) Nothing gs
-                    (GameObject tr (Just (SphereCollider uid _)) _ gs) -> GameObject tr (Just $ BoxCollider uid bm) Nothing gs
-                    (GameObject tr  _                            _ gs) -> GameObject tr (Just $ BoxCollider New bm) Nothing gs
+                    (GameObject tr (Just (BoxCollider    uid _)) _ _ gs) -> GameObject tr (Just $ BoxCollider uid bm) Nothing Nothing gs
+                    (GameObject tr (Just (SphereCollider uid _)) _ _ gs) -> GameObject tr (Just $ BoxCollider uid bm) Nothing Nothing gs
+                    (GameObject tr  _                            _ _ gs) -> GameObject tr (Just $ BoxCollider New bm) Nothing Nothing gs
 
 validateIDs :: (GameObject, DynamicTree) -> Bool
 validateIDs (g, t) = sort (tids (nodes t) []) == gids && sort nids == gids

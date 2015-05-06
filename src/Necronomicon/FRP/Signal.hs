@@ -164,6 +164,7 @@ import           Necronomicon.Graphics.Camera      (renderGraphics)
 import           Necronomicon.Graphics.Model       ( newResources)
 import           Necronomicon.Graphics.SceneObject (SceneObject, root)
 import           Necronomicon.Graphics.Texture
+import           Necronomicon.Graphics             (initWindow)
 import           Necronomicon.Linear.Vector        (Vector2 (Vector2))
 import           Necronomicon.Patterns             (Pattern (..))
 import           Necronomicon.Runtime
@@ -308,17 +309,6 @@ resetKnownInputs state = do
 
 scene :: [Signal SceneObject] -> Signal ()
 scene os = render $ root <~ combine os
-
-initWindow :: IO(Maybe GLFW.Window)
-initWindow = GLFW.init >>= \initSuccessful -> if initSuccessful then window else return Nothing
-    where
-        mkWindow = do
-            --Windowed
-            -- GLFW.createWindow 1280 768 "Necronomicon" Nothing Nothing
-            --Full screen
-            fullScreenOnMain <- GLFW.getPrimaryMonitor
-            GLFW.createWindow 1920 1080 "Necronomicon" fullScreenOnMain Nothing
-        window   = mkWindow >>= \w -> GLFW.makeContextCurrent w >> return w
 
 runSignal :: (Show a) => Signal a -> IO()
 runSignal s = initWindow >>= \mw -> case mw of
