@@ -381,15 +381,12 @@ dynTreeTest = do
 debugDrawBoxCollider :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ()
 debugDrawBoxCollider bm modelView proj resources = drawMeshWithMaterial (debugDraw green) cubeOutline (modelView .*. bm) proj resources
 
-debugDrawAABB :: AABB -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ()
-debugDrawAABB aabb view proj resources = drawMeshWithMaterial (debugDraw whiteA) cubeOutline (view .*. trsMatrix (center aabb) identity (size aabb)) proj resources
+debugDrawAABB :: Color -> AABB -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ()
+debugDrawAABB c aabb view proj resources = drawMeshWithMaterial (debugDraw c) cubeOutline (view .*. trsMatrix (center aabb) identity (size aabb)) proj resources
 
 debugDrawDynamicTree :: DynamicTree -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ()
-debugDrawDynamicTree tree view proj resources = do
-    -- print tree
-    putStrLn "debugDrawDynamicTree"
-    drawNode (nodes tree)
+debugDrawDynamicTree tree view proj resources = drawNode (nodes tree)
     where
-        drawNode (Node aabb l r _) = print aabb >> debugDrawAABB aabb view proj resources >> drawNode l >> drawNode r
-        drawNode (Leaf aabb _)     = print aabb >> debugDrawAABB aabb view proj resources
+        drawNode (Node aabb l r _) = debugDrawAABB blue   aabb view proj resources >> drawNode l >> drawNode r
+        drawNode (Leaf aabb _)     = debugDrawAABB whiteA aabb view proj resources
         drawNode  Tip              = return ()

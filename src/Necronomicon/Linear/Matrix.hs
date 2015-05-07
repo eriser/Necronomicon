@@ -163,11 +163,11 @@ instance LinearMath Vector3 Matrix3x3 where
 
 instance LinearMath Vector3 Matrix4x4 where
     type Return Vector3 Matrix4x4    = Vector3
-    (.*.) (Vector3 x y z) (Matrix4x4 (Vector4 a b c d) (Vector4 e f g h) (Vector4 i j k l) (Vector4 m n o _)) =
+    (.*.) (Vector3 x y z) (Matrix4x4 (Vector4 a b c d) (Vector4 e f g h) (Vector4 i j k l) _) =
         Vector3
-        ((x*a+y*e+z*i+m) + d)
-        ((x*b+y*f+z*j+n) + h)
-        ((x*c+y*g+z*k+o) + l)
+        ((x*a+y*e+z*i) + d)
+        ((x*b+y*f+z*j) + h)
+        ((x*c+y*g+z*k) + l)
     (.+.) _ _ = undefined
     (.-.) _ _ = undefined
     (./.) _ _ = undefined

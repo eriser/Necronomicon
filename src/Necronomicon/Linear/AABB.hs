@@ -138,18 +138,23 @@ combineAABB :: AABB -> AABB -> AABB
 combineAABB (AABB (Vector3 mnx1 mny1 mnz1) (Vector3 mxx1 mxy1 mxz1)) (AABB (Vector3 mnx2 mny2 mnz2) (Vector3 mxx2 mxy2 mxz2)) =
     AABB (Vector3 (min mnx1 mnx2) (min mny1 mny2) (min mnz1 mnz2)) (Vector3 (max mxx1 mxx2) (max mxy1 mxy2) (max mxz1 mxz2))
 
+inf :: Double
+inf = 1 / 0
+
+infv :: Vector3
+infv = Vector3 inf inf inf
+
 aabbFromPoints :: [Vector3] -> AABB
-aabbFromPoints ps = foldr addPoint (AABB 0 0) ps
+aabbFromPoints ps = foldr addPoint (AABB infv (-infv)) ps
     where
         addPoint (Vector3 x y z) (AABB (Vector3 mnx mny mnz) (Vector3 mxx mxy mxz)) = AABB (Vector3 mnx' mny' mnz') (Vector3 mxx' mxy' mxz')
             where
-                mnx' = if x < mnx then x else mnx
-                mxx' = if x > mxx then x else mxx
-                mny' = if y < mny then y else mny
-                mxy' = if y > mxy then y else mxy
-                mnz' = if z < mnz then z else mnz
-                mxz' = if z > mxz then z else mxz
-
+                mnx' = if x <= mnx then x else mnx
+                mxx' = if x >= mxx then x else mxx
+                mny' = if y <= mny then y else mny
+                mxy' = if y >= mxy then y else mxy
+                mnz' = if z <= mnz then z else mnz
+                mxz' = if z >= mxz then z else mxz
 
 insureAABBSanity :: AABB -> AABB
 insureAABBSanity (AABB (Vector3 mnx mny mnz) (Vector3 mxx mxy mxz)) = AABB (Vector3 mnx' mny' mnz') (Vector3 mxx' mxy' mxz')

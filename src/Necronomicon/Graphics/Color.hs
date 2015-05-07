@@ -138,6 +138,9 @@ white = RGB 1 1 1
 green :: Color
 green = RGBA 0 1 0 1
 
+blue :: Color
+blue = RGBA 0 0 1 1
+
 whiteA :: Color
 whiteA = RGBA 1 1 1 1
 
