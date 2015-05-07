@@ -75,6 +75,7 @@ library
         Necronomicon.Noise.DiamondSquare
         Necronomicon.Noise.Simplex
         Necronomicon.Noise.LSystem
+        Necronomicon.Noise.Wolfram
         Necronomicon.Graphics
         Necronomicon.Graphics.BufferObject
         Necronomicon.Graphics.Camera
