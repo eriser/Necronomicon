@@ -115,7 +115,7 @@ fromUpdate (NotChanged t) = t
 fromUpdate  _             = Tip
 
 enlargeAABB2 :: AABB -> AABB -> AABB
-enlargeAABB2 a _ = a
+enlargeAABB2 _ a = a
 -- enlargeAABB2 aabb aabb2 = AABB
 --     (Vector3
 --         (mnx + dx * (fromIntegral . fromEnum $ dx < 0))

@@ -1,6 +1,6 @@
 module Necronomicon.Game where
 
-import Debug.Trace
+-- import Debug.Trace
 import Test.QuickCheck
 import Data.List (sort)
 import Control.Concurrent
@@ -123,7 +123,7 @@ cubeVertices = [Vector3 (-0.5) (-0.5)   0.5,
                 Vector3   0.5    0.5  (-0.5)]
 
 calcAABB :: Matrix4x4 -> Collider -> AABB
-calcAABB mat (BoxCollider _ bmat) = aabbFromPoints $ traceShow (map (.*. (mat .*. bmat)) cubeVertices) map (.*. (mat .*. bmat)) cubeVertices
+calcAABB mat (BoxCollider _ bmat) = aabbFromPoints $ map (.*. (mat .*. bmat)) cubeVertices
 calcAABB  _   _                   = 0
 
 -------------------------------------------------------
@@ -157,6 +157,8 @@ update (g, tree) = (g', bulkUpdate ui)
         Transform the input gameObject into update information for a dynamicTree transformation
         We've got to get the newly consumed ids to the correct gameobjects....
 -}
+-- the issue is with the matrix multiplication!
+-- Need to figure out how to clip an affine vector4 back to 3D space
 genUpdateInput :: (GameObject, UpdateInput, Matrix4x4) -> (GameObject, UpdateInput, Matrix4x4)
 genUpdateInput (g, (d, il, t), world)
     | Just col <- collider g = updateFromCollider col
