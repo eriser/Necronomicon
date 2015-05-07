@@ -65,8 +65,32 @@ cube = Mesh "cube" vertices colors uvs indices
                     6,2,3,7,6,3, -- Top
                     0,4,5,1,0,5] -- Bottom
 
--- cubeOutline :: Mesh
--- cubeOutline = Mesh "cubeOutline"
+cubeOutline :: Mesh
+cubeOutline = Mesh "cubeOutline" vertices colors uvs indices
+    where
+        vertices = [Vector3 (-0.5) (-0.5)   0.5,
+                    Vector3   0.5  (-0.5)   0.5,
+                    Vector3 (-0.5)   0.5    0.5,
+                    Vector3   0.5    0.5    0.5,
+                    Vector3 (-0.5) (-0.5) (-0.5),
+                    Vector3   0.5  (-0.5) (-0.5),
+                    Vector3 (-0.5)   0.5  (-0.5),
+                    Vector3   0.5    0.5  (-0.5)]
+        colors   = repeat white
+        uvs      = [Vector2 0 0,
+                    Vector2 1 0,
+                    Vector2 0 1,
+                    Vector2 1 1,
+                    Vector2 1 0,
+                    Vector2 0 0,
+                    Vector2 1 1,
+                    Vector2 0 1]
+        indices  = [3,2,2,0,0,1,1,3, -- Front
+                    6,7,7,5,5,4,4,6, -- Back
+                    7,3,3,1,1,5,5,7, -- Right
+                    2,6,6,4,4,0,0,2, -- Left
+                    7,6,6,2,2,3,3,7, -- Top
+                    1,0,0,4,4,5,5,1] -- Bottom
 
 sphere :: Int -> Int -> Mesh
 sphere latitudes longitudes = Mesh (show latitudes ++ show longitudes ++ "sphere") vertices colors uvs indices
@@ -102,6 +126,18 @@ tri triSize color = Mesh (show triSize ++ "tri") vertices colors uvs indices
         uvs      = [Vector2 0 0,Vector2 1 0,Vector2 0 1]
         indices  = [0,1,2]
 
+debugDraw :: Color -> Material
+debugDraw (RGBA r g b a) = Material draw
+    where
+        draw mesh modelView proj resources = do
+            (program,baseColor:mv:pr:_,attributes)                     <- getShader resources vertexColoredShader
+            (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:_) <- getMesh   resources mesh
+
+            GL.currentProgram    GL.$= Just program
+            GL.uniform baseColor GL.$= (GL.Vertex4 (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a) :: GL.Vertex4 GL.GLfloat)
+            bindThenDraw GL.Lines mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad]) numIndices
+debugDraw (RGB r g b) = vertexColored (RGBA r g b 1)
+
 vertexColored :: Color -> Material
 vertexColored (RGBA r g b a) = Material draw
     where
@@ -111,7 +147,7 @@ vertexColored (RGBA r g b a) = Material draw
 
             GL.currentProgram    GL.$= Just program
             GL.uniform baseColor GL.$= (GL.Vertex4 (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a) :: GL.Vertex4 GL.GLfloat)
-            bindThenDraw mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad]) numIndices
+            bindThenDraw GL.Triangles mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad]) numIndices
 vertexColored (RGB r g b) = vertexColored (RGBA r g b 1)
 
 ambient :: Texture -> Material
@@ -126,7 +162,7 @@ ambient tex = Material draw
             GL.activeTexture   GL.$= GL.TextureUnit 0
             GL.textureBinding  GL.Texture2D GL.$= Just texture
             GL.uniform texu    GL.$= GL.TextureUnit 0
-            bindThenDraw mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
+            bindThenDraw GL.Triangles mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
 
 uvTest :: Texture -> Material
 uvTest tex = Material draw
@@ -140,7 +176,7 @@ uvTest tex = Material draw
             GL.activeTexture   GL.$= GL.TextureUnit 0
             GL.textureBinding  GL.Texture2D GL.$= Just texture
             GL.uniform texu    GL.$= GL.TextureUnit 0
-            bindThenDraw mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
+            bindThenDraw GL.Triangles mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
 
 colorTest :: Texture -> Material
 colorTest tex = Material draw
@@ -154,7 +190,7 @@ colorTest tex = Material draw
             GL.activeTexture   GL.$= GL.TextureUnit 0
             GL.textureBinding  GL.Texture2D GL.$= Just texture
             GL.uniform texu    GL.$= GL.TextureUnit 0
-            bindThenDraw mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
+            bindThenDraw GL.Triangles mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
 
 blur :: Texture -> Material
 blur tex = Material draw
@@ -168,7 +204,7 @@ blur tex = Material draw
             GL.activeTexture   GL.$= GL.TextureUnit 0
             GL.textureBinding  GL.Texture2D GL.$= Just texture
             GL.uniform texu    GL.$= GL.TextureUnit 0
-            bindThenDraw mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
+            bindThenDraw GL.Triangles mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
 
 loadProgram :: GL.Program -> IO ()
 loadProgram program = GL.currentProgram  GL.$= Just program
@@ -232,14 +268,15 @@ setupAttribute (loc,vad) = do
     GL.vertexAttribPointer loc  GL.$= (GL.ToFloat, vad)
     GL.vertexAttribArray   loc  GL.$= GL.Enabled
 
-bindThenDraw :: GL.UniformLocation -> GL.UniformLocation -> Matrix4x4 -> Matrix4x4 -> GL.BufferObject -> GL.BufferObject -> [(GL.AttribLocation,GL.VertexArrayDescriptor GL.GLfloat)] -> Int -> IO()
-bindThenDraw (GL.UniformLocation mv) (GL.UniformLocation pr) modelView proj vertexBuffer indexBuffer atributesAndVads numIndices = do
-    V.unsafeWith (V.fromList . map realToFrac $ mat4ToList modelView) $ \ptr ->  GLRaw.glUniformMatrix4fv mv 1 0 ptr
-    V.unsafeWith (V.fromList . map realToFrac $ mat4ToList proj     ) $ \ptr ->  GLRaw.glUniformMatrix4fv pr 1 0 ptr
+bindThenDraw :: GL.PrimitiveMode -> GL.UniformLocation -> GL.UniformLocation -> Matrix4x4 -> Matrix4x4 -> GL.BufferObject -> GL.BufferObject -> [(GL.AttribLocation,GL.VertexArrayDescriptor GL.GLfloat)] -> Int -> IO()
+bindThenDraw primitiveMode (GL.UniformLocation mv) (GL.UniformLocation pr) modelView proj vertexBuffer indexBuffer atributesAndVads numIndices = do
+    V.unsafeWith (V.fromList . map realToFrac $ mat4ToList modelView) $ \ptr -> GLRaw.glUniformMatrix4fv mv 1 0 ptr
+    V.unsafeWith (V.fromList . map realToFrac $ mat4ToList proj     ) $ \ptr -> GLRaw.glUniformMatrix4fv pr 1 0 ptr
     GL.bindBuffer GL.ArrayBuffer GL.$= Just vertexBuffer
     mapM_ setupAttribute atributesAndVads
     GL.bindBuffer GL.ElementArrayBuffer GL.$= Just indexBuffer
-    GL.drawElements GL.Triangles (fromIntegral numIndices) GL.UnsignedInt offset0
+    -- GL.drawElements GL.Triangles (fromIntegral numIndices) GL.UnsignedInt offset0
+    GL.drawElements primitiveMode (fromIntegral numIndices) GL.UnsignedInt offset0
     GL.currentProgram GL.$= Nothing
 
 vertexColoredShader :: Shader
@@ -319,7 +356,7 @@ material vs fs us = Material drawMat
             loadProgram program
             foldM_ (\t (uloc, uval) -> setUniform resources uloc uval t) 0 $ zip ulocs us
 
-            bindThenDraw mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
+            bindThenDraw GL.Triangles mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
 
         terrainShader = shader
             (vs ++ " + " ++ fs)

@@ -1,5 +1,6 @@
 module Necronomicon.Game where
 
+import Debug.Trace
 import Test.QuickCheck
 import Data.List (sort)
 import Control.Concurrent
@@ -12,6 +13,12 @@ import Necronomicon.Linear
 import Necronomicon.Physics
 import Necronomicon.Graphics
 import Necronomicon.Utility              (getCurrentTime)
+
+-------------------------------------------------------
+-- TODO: Ideas
+-- Clockwork world / minature-golem-esque world?
+-------------------------------------------------------
+
 
 
 -------------------------------------------------------
@@ -80,8 +87,8 @@ mapFold f gacc = (gchildren_ gcs g, acc')
 mapFoldStack :: ((GameObject, a, s) -> (GameObject, a, s)) -> (GameObject, a, s) -> (GameObject, a)
 mapFoldStack f gacc = (gchildren_ gcs g, acc')
     where
-        (g,   acc, s)   = f gacc
-        (gcs, acc')     = foldr mapC ([], acc) (children g)
+        (g,   acc, s)     = f gacc
+        (gcs, acc')       = foldr mapC ([], acc) (children g)
         mapC c (cs, cacc) = (c' : cs, cacc')
             where
                 (c', cacc') = mapFoldStack f (c, cacc, s)
@@ -116,28 +123,8 @@ cubeVertices = [Vector3 (-0.5) (-0.5)   0.5,
                 Vector3   0.5    0.5  (-0.5)]
 
 calcAABB :: Matrix4x4 -> Collider -> AABB
-calcAABB mat (BoxCollider _ bmat) = aabbFromPoints $ map (.*. (mat .*. bmat)) cubeVertices
-calcAABB  _ _ = 0
-
-debugDrawBoxCollider :: Int -> Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ()
-debugDrawBoxCollider uid bmat modelView proj resources = drawMeshWithMaterial (vertexColored green) mesh modelView proj resources
-    where
-        mesh     = DynamicMesh ("DebugBox" ++ show uid) (map (.*. bmat) cubeVertices) colors uvs indices
-        colors   = repeat green
-        uvs      = [Vector2 0 0,
-                    Vector2 1 0,
-                    Vector2 0 1,
-                    Vector2 1 1,
-                    Vector2 1 0,
-                    Vector2 0 0,
-                    Vector2 1 1,
-                    Vector2 0 1]
-        indices  = [2,0,1,3,2,1, -- Front
-                    7,5,4,6,7,4, -- Back
-                    3,1,5,7,3,5, -- Right
-                    6,4,0,2,6,0, -- Left
-                    6,2,3,7,6,3, -- Top
-                    0,4,5,1,0,5] -- Bottom
+calcAABB mat (BoxCollider _ bmat) = aabbFromPoints $ traceShow (map (.*. (mat .*. bmat)) cubeVertices) map (.*. (mat .*. bmat)) cubeVertices
+calcAABB  _   _                   = 0
 
 -------------------------------------------------------
 -- Components
@@ -180,9 +167,9 @@ genUpdateInput (g, (d, il, t), world)
             | UID uid <- cid = (g , (nodeListCons (caabb, uid) d,               il, t), newWorld)
             | otherwise      = (g', (nodeListCons (caabb,   i) d, (caabb', i) : il, t{freeList = fl}), newWorld)
             where
-                cid      = colliderID   col
-                caabb    = calcAABB     newWorld col
-                caabb'   = enlargeAABB  caabb
+                cid      = colliderID  col
+                caabb    = calcAABB    newWorld col
+                caabb'   = enlargeAABB caabb
                 (i : fl) = freeList t
                 g'       = collider_ (colliderID_ (UID i) col) g
 
@@ -191,23 +178,23 @@ genUpdateInput (g, (d, il, t), world)
 -------------------------------------------------------
 
 drawGame :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> Bool -> GameObject -> IO ()
-drawGame world view proj resources debugDraw g = do
-    newWorld <-  drawG world view proj resources debugDraw  g
-    mapM_ (drawGame newWorld view proj resources debugDraw) (children g)
+drawGame world view proj resources debug g = do
+    newWorld <- drawG world view proj resources debug  g
+    mapM_ (drawGame newWorld view proj resources debug) (children g)
 
 drawG :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> Bool -> GameObject -> IO Matrix4x4
-drawG world view proj resources debugDraw g
-    | Just (Model mesh mat)                      <- model g    = drawMeshWithMaterial mat mesh modelView proj resources >> return newWorld
-    | Just (FontRenderer text font mat)          <- model g    = renderFont text font mat      modelView proj resources >> return newWorld
-    | debugDraw, Just (BoxCollider (UID uid) bm) <- collider g = debugDrawBoxCollider uid bm   modelView proj resources >> return newWorld
-    | otherwise                                                = return newWorld
+drawG world view proj resources debug g
+    | Just (Model mesh mat)             <- model g    = drawMeshWithMaterial mat mesh modelView proj resources >> return newWorld
+    | Just (FontRenderer text font mat) <- model g    = renderFont text font mat      modelView proj resources >> return newWorld
+    | debug, Just (BoxCollider _ bm)    <- collider g = debugDrawBoxCollider bm       modelView proj resources >> return newWorld
+    | otherwise                                       = return newWorld
     where
         newWorld  = world .*. transMat g
         modelView = view  .*. newWorld
 
 --From Camera.hs
-renderCameraG :: (Int,Int) -> Matrix4x4 -> GameObject -> Resources -> Bool -> GameObject -> IO Matrix4x4
-renderCameraG (w,h) view scene resources debug so = case camera so of
+renderCameraG :: (Int,Int) -> Matrix4x4 -> GameObject -> Resources -> Bool -> GameObject -> DynamicTree -> IO Matrix4x4
+renderCameraG (w,h) view scene resources debug so t = case camera so of
     Nothing -> return newView
     Just c  -> do
         let  ratio    = fromIntegral w / fromIntegral h
@@ -233,7 +220,9 @@ renderCameraG (w,h) view scene resources debug so = case camera so of
 
         case _fov c of
             0 -> drawGame identity4 (invert newView) (orthoMatrix 0 ratio 1 0 (-1) 1) resources debug scene
-            _ -> drawGame identity4 (invert newView) (perspMatrix (_fov c) ratio (_near c) (_far c)) resources debug scene
+            _ -> do
+                drawGame identity4 (invert newView) (perspMatrix (_fov c) ratio (_near c) (_far c)) resources debug scene
+                if debug then debugDrawDynamicTree t (invert newView) (perspMatrix (_fov c) ratio (_near c) (_far c)) resources else return ()
 
         mapM_ (drawPostRenderFX (RGBA r g b a)) $ _fx c
 
@@ -258,15 +247,15 @@ renderCameraG (w,h) view scene resources debug so = case camera so of
             GL.blendBuffer 0 GL.$= GL.Enabled
             GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
 
-renderCamerasG :: (Int,Int) -> Matrix4x4 -> GameObject -> Resources -> Bool -> GameObject -> IO ()
-renderCamerasG (w,h) view scene resources debug g = renderCameraG (w,h) view scene resources debug g >>= \newView -> mapM_ (renderCamerasG (w,h) newView scene resources debug) (children g)
+renderCamerasG :: (Int,Int) -> Matrix4x4 -> GameObject -> Resources -> Bool -> DynamicTree -> GameObject -> IO ()
+renderCamerasG (w,h) view scene resources debug t g = renderCameraG (w,h) view scene resources debug g t >>= \newView -> mapM_ (renderCamerasG (w,h) newView scene resources debug t) (children g)
 
-renderGraphicsG :: GLFW.Window -> Resources -> Bool -> GameObject -> GameObject -> IO ()
-renderGraphicsG window resources debug scene _ = do
+renderGraphicsG :: GLFW.Window -> Resources -> Bool -> GameObject -> GameObject -> DynamicTree -> IO ()
+renderGraphicsG window resources debug scene _ t = do
     (w,h) <- GLFW.getWindowSize window
 
     --render scene
-    renderCamerasG (w,h) identity4 scene resources debug scene
+    renderCamerasG (w,h) identity4 scene resources debug t scene
 
     --render gui
     -- drawGame identity4 identity4 (orthoMatrix 0 (fromIntegral w / fromIntegral h) 1 0 (-1) 1) resources False gui
@@ -315,7 +304,7 @@ runGame f g = initWindow >>= \mw -> case mw of
                 let _        = currentTime - runTime'
                     (g'', tree') = update (f g', tree)
 
-                renderGraphicsG window resources True g'' g''
+                renderGraphicsG window resources True g'' g'' tree'
                 threadDelay $ 16667
                 renderNecronomicon q window resources g'' tree' currentTime
 
@@ -381,3 +370,24 @@ dynTreeTest = do
     putStrLn "validateIDs test"
     putStrLn ""
     quickCheckWith (stdArgs { maxSize = 100, maxSuccess = 100 }) $ dynTreeTester validateIDs
+
+
+-------------------------------------------------------
+-- Debug drawing
+-------------------------------------------------------
+
+debugDrawBoxCollider :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ()
+debugDrawBoxCollider bm modelView proj resources = drawMeshWithMaterial (debugDraw green) cubeOutline (modelView .*. bm) proj resources
+
+debugDrawAABB :: AABB -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ()
+debugDrawAABB aabb view proj resources = drawMeshWithMaterial (debugDraw whiteA) cubeOutline (view .*. trsMatrix (center aabb) identity (size aabb)) proj resources
+
+debugDrawDynamicTree :: DynamicTree -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ()
+debugDrawDynamicTree tree view proj resources = do
+    -- print tree
+    putStrLn "debugDrawDynamicTree"
+    drawNode (nodes tree)
+    where
+        drawNode (Node aabb l r _) = print aabb >> debugDrawAABB aabb view proj resources >> drawNode l >> drawNode r
+        drawNode (Leaf aabb _)     = print aabb >> debugDrawAABB aabb view proj resources
+        drawNode  Tip              = return ()

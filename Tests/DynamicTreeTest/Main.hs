@@ -17,4 +17,4 @@ game g
     | [cam, cube1, cube2] <- children g = gchildren_ [cam, cube1' cube1, cube2] g
     | otherwise                         = g
     where
-        cube1' (GameObject (Transform p r s) c _ _ _) = GameObject (Transform p (r  * (fromEuler' 0.1 0.1 0.121)) s) c Nothing Nothing []
+        cube1' (GameObject (Transform p r s) c _ _ _) = GameObject (Transform p (r  * (fromEuler' 0.1 0.121 0)) s) c Nothing Nothing []
