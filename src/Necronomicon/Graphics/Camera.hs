@@ -94,7 +94,6 @@ renderGraphics window resources scene gui = do
     GLFW.pollEvents
     -- GL.flush
 
-
 ---------------------------------------
 -- Full screen Post-Rendering Effects
 ---------------------------------------

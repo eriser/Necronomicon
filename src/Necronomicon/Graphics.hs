@@ -6,7 +6,8 @@ module Necronomicon.Graphics (module Necronomicon.Graphics.Camera,
                               module Necronomicon.Graphics.SceneObject,
                               module Necronomicon.Graphics.Text,
                               module Necronomicon.Graphics.Texture,
-                              module Necronomicon.Graphics.Model) where
+                              module Necronomicon.Graphics.Model,
+                              initWindow) where
 
 import Necronomicon.Graphics.SceneObject
 import Necronomicon.Graphics.Camera
@@ -18,4 +19,15 @@ import Necronomicon.Graphics.BufferObject
 import Necronomicon.Graphics.Texture
 import Necronomicon.Graphics.Model
 
+import qualified Graphics.UI.GLFW                  as GLFW
 
+initWindow :: IO(Maybe GLFW.Window)
+initWindow = GLFW.init >>= \initSuccessful -> if initSuccessful then window else return Nothing
+    where
+        mkWindow = do
+            --Windowed
+            -- GLFW.createWindow 1280 768 "Necronomicon" Nothing Nothing
+            --Full screen
+            fullScreenOnMain <- GLFW.getPrimaryMonitor
+            GLFW.createWindow 1920 1080 "Necronomicon" fullScreenOnMain Nothing
+        window   = mkWindow >>= \w -> GLFW.makeContextCurrent w >> return w
