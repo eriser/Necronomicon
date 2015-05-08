@@ -112,6 +112,7 @@ colliderID_ uid (BoxCollider    _ x) = BoxCollider    uid x
 boxCollider :: Double -> Double -> Double -> Maybe Collider
 boxCollider w h d = Just $ BoxCollider New $ Vector3 (w * 0.5) (h * 0.5) (d * 0.5)
 
+--Problem is in THIS matrix
 calcAABB :: Matrix4x4 -> Collider -> AABB
 calcAABB mat (BoxCollider _ (Vector3 hw hh hd)) = aabbFromPoints [Vector3 (-hw) (-hh) (-hd) .*. mat, Vector3 hw hh hd .*. mat]
 calcAABB  _   _                                 = 0
@@ -257,7 +258,7 @@ renderGraphicsG window resources debug scene _ t = do
     -- GL.flush
 
 runGame :: (GameObject -> GameObject) -> GameObject -> IO()
-runGame f g = initWindow >>= \mw -> case mw of
+runGame f initg = initWindow >>= \mw -> case mw of
     Nothing -> print "Error starting GLFW." >> return ()
     Just w  -> do
         putStrLn "Starting Necronomicon"
@@ -268,7 +269,7 @@ runGame f g = initWindow >>= \mw -> case mw of
         -- GLFW.setWindowSizeCallback  w $ Just $ dimensionsEvent signalState
 
         resources <- newResources
-        renderNecronomicon False w resources g empty 0
+        renderNecronomicon False w resources initg empty 0
     where
         --event callbacks
         -- mousePressEvent state _ _ GLFW.MouseButtonState'Released _ = atomically $ writeTChan (mouseButtonBuffer state) $ False
@@ -285,7 +286,7 @@ runGame f g = initWindow >>= \mw -> case mw of
         --     let pos = (x / fromIntegral wx,y / fromIntegral wy)
         --     writeToSignal (mouseSignal state) pos
 
-        renderNecronomicon quit window resources g' tree runTime'
+        renderNecronomicon quit window resources g tree runTime'
             | quit      = print "Qutting" >> return ()
             | otherwise = do
 
@@ -293,12 +294,12 @@ runGame f g = initWindow >>= \mw -> case mw of
                 q <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'Escape
                 currentTime <- getCurrentTime
 
-                let _        = currentTime - runTime'
-                    (g'', tree') = update (f g', tree)
+                let _           = currentTime - runTime'
+                    (g', tree') = update (f g, tree)
 
-                renderGraphicsG window resources True g'' g'' tree'
+                renderGraphicsG window resources True g' g' tree'
                 threadDelay $ 16667
-                renderNecronomicon q window resources g'' tree' currentTime
+                renderNecronomicon q window resources g' tree' currentTime
 
 -------------------------------------------------------
 -- Testing

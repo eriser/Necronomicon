@@ -146,14 +146,10 @@ infv = Vector3 inf inf inf
 aabbFromPoints :: [Vector3] -> AABB
 aabbFromPoints ps = foldr addPoint (AABB infv (-infv)) ps
     where
-        addPoint (Vector3 x y z) (AABB (Vector3 mnx mny mnz) (Vector3 mxx mxy mxz)) = AABB (Vector3 mnx' mny' mnz') (Vector3 mxx' mxy' mxz')
-            where
-                mnx' = if x < mnx then x else mnx
-                mxx' = if x > mxx then x else mxx
-                mny' = if y < mny then y else mny
-                mxy' = if y > mxy then y else mxy
-                mnz' = if z < mnz then z else mnz
-                mxz' = if z > mxz then z else mxz
+        addPoint (Vector3 x y z) (AABB (Vector3 mnx mny mnz) (Vector3 mxx mxy mxz)) =
+            AABB
+            (Vector3 (min x mnx) (min y mny) (min z mnz))
+            (Vector3 (max x mxx) (max y mxy) (max z mxz))
 
 insureAABBSanity :: AABB -> AABB
 insureAABBSanity (AABB (Vector3 mnx mny mnz) (Vector3 mxx mxy mxz)) = AABB (Vector3 mnx' mny' mnz') (Vector3 mxx' mxy' mxz')
