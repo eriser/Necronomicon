@@ -39,7 +39,7 @@ rect w h = Mesh (show w ++ show h ++ "rect") vertices colors uvs indices
         indices  = [2,0,1,3,2,1]
 
 cube :: Mesh
-cube = Mesh "cube" vertices colors uvs indices
+cube = Mesh "~c" vertices colors uvs indices
     where
         vertices = [Vector3 (-0.5) (-0.5)   0.5,
                     Vector3   0.5  (-0.5)   0.5,
@@ -66,7 +66,7 @@ cube = Mesh "cube" vertices colors uvs indices
                     0,4,5,1,0,5] -- Bottom
 
 cubeOutline :: Mesh
-cubeOutline = Mesh "cubeOutline" vertices colors uvs indices
+cubeOutline = Mesh "*c" vertices colors uvs indices
     where
         vertices = [Vector3 (-0.5) (-0.5)   0.5,
                     Vector3   0.5  (-0.5)   0.5,
@@ -275,7 +275,6 @@ bindThenDraw primitiveMode (GL.UniformLocation mv) (GL.UniformLocation pr) model
     GL.bindBuffer GL.ArrayBuffer GL.$= Just vertexBuffer
     mapM_ setupAttribute atributesAndVads
     GL.bindBuffer GL.ElementArrayBuffer GL.$= Just indexBuffer
-    -- GL.drawElements GL.Triangles (fromIntegral numIndices) GL.UnsignedInt offset0
     GL.drawElements primitiveMode (fromIntegral numIndices) GL.UnsignedInt offset0
     GL.currentProgram GL.$= Nothing
 
