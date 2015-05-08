@@ -66,16 +66,15 @@ instance LinearMath AABB Double where
     apply f (AABB (Vector3 x1 y1 z1) (Vector3 x2 y2 z2)) s = AABB (Vector3 (f x1 s) (f y1 s) (f z1 s)) (Vector3 (f x2 s) (f y2 s) (f z2 s))
 
 center :: AABB -> Vector3
-center aabb@(AABB mn _) = mn + (size aabb * 0.5)
+center aabb@(AABB mn _) = mn + halfSize aabb
 
 size :: AABB -> Vector3
 size (AABB mn mx) = mx - mn
 
 halfSize :: AABB -> Vector3
-halfSize (AABB mn mx) = (mx - mn) .*. (0.5::Double)
+halfSize = (* 0.5) . size
 
 boundingRadius :: AABB -> Double
--- boundingRadius (AABB mx mn) = makeCeil (-mx) mx |> makeCeil mn |> makeCeil (-mn) |> magnitude
 boundingRadius (AABB mx mn) = magnitude $ makeCeil (-mn) $ makeCeil mn $ makeCeil (-mx) mx
 
 less :: Vector3 -> Vector3 -> Bool
@@ -149,12 +148,12 @@ aabbFromPoints ps = foldr addPoint (AABB infv (-infv)) ps
     where
         addPoint (Vector3 x y z) (AABB (Vector3 mnx mny mnz) (Vector3 mxx mxy mxz)) = AABB (Vector3 mnx' mny' mnz') (Vector3 mxx' mxy' mxz')
             where
-                mnx' = if x <= mnx then x else mnx
-                mxx' = if x >= mxx then x else mxx
-                mny' = if y <= mny then y else mny
-                mxy' = if y >= mxy then y else mxy
-                mnz' = if z <= mnz then z else mnz
-                mxz' = if z >= mxz then z else mxz
+                mnx' = if x < mnx then x else mnx
+                mxx' = if x > mxx then x else mxx
+                mny' = if y < mny then y else mny
+                mxy' = if y > mxy then y else mxy
+                mnz' = if z < mnz then z else mnz
+                mxz' = if z > mxz then z else mxz
 
 insureAABBSanity :: AABB -> AABB
 insureAABBSanity (AABB (Vector3 mnx mny mnz) (Vector3 mxx mxy mxz)) = AABB (Vector3 mnx' mny' mnz') (Vector3 mxx' mxy' mxz')

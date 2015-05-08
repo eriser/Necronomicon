@@ -98,7 +98,7 @@ mapFoldStack f gacc = (gchildren_ gcs g, acc')
 -------------------------------------------------------
 
 data Collider = SphereCollider UID Sphere
-              | BoxCollider    UID Matrix4x4
+              | BoxCollider    UID Vector3
               deriving (Show)
 
 colliderID :: Collider -> UID
@@ -110,21 +110,11 @@ colliderID_ uid (SphereCollider _ x) = SphereCollider uid x
 colliderID_ uid (BoxCollider    _ x) = BoxCollider    uid x
 
 boxCollider :: Double -> Double -> Double -> Maybe Collider
-boxCollider w h d = Just $ BoxCollider New $ trsMatrix 0 identity (Vector3 w h d)
-
-cubeVertices :: [Vector3]
-cubeVertices = [Vector3 (-0.5) (-0.5)   0.5,
-                Vector3   0.5  (-0.5)   0.5,
-                Vector3 (-0.5)   0.5    0.5,
-                Vector3   0.5    0.5    0.5,
-                Vector3 (-0.5) (-0.5) (-0.5),
-                Vector3   0.5  (-0.5) (-0.5),
-                Vector3 (-0.5)   0.5  (-0.5),
-                Vector3   0.5    0.5  (-0.5)]
+boxCollider w h d = Just $ BoxCollider New $ Vector3 (w * 0.5) (h * 0.5) (d * 0.5)
 
 calcAABB :: Matrix4x4 -> Collider -> AABB
-calcAABB mat (BoxCollider _ bmat) = aabbFromPoints $ map (.*. (mat .*. bmat)) cubeVertices
-calcAABB  _   _                   = 0
+calcAABB mat (BoxCollider _ (Vector3 hw hh hd)) = aabbFromPoints [Vector3 (-hw) (-hh) (-hd) .*. mat, Vector3 hw hh hd .*. mat]
+calcAABB  _   _                                 = 0
 
 -------------------------------------------------------
 -- Components
@@ -188,7 +178,7 @@ drawG :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> Bool -> GameObject 
 drawG world view proj resources debug g
     | Just (Model mesh mat)             <- model g    = drawMeshWithMaterial mat mesh modelView proj resources >> return newWorld
     | Just (FontRenderer text font mat) <- model g    = renderFont text font mat      modelView proj resources >> return newWorld
-    | debug, Just (BoxCollider _ bm)    <- collider g = debugDrawBoxCollider bm       modelView proj resources >> return newWorld
+    | debug, Just (BoxCollider _ bs)    <- collider g = debugDrawBoxCollider bs       modelView proj resources >> return newWorld
     | otherwise                                       = return newWorld
     where
         newWorld  = world .*. transMat g
@@ -199,7 +189,7 @@ renderCameraG :: (Int,Int) -> Matrix4x4 -> GameObject -> Resources -> Bool -> Ga
 renderCameraG (w,h) view scene resources debug so t = case camera so of
     Nothing -> return newView
     Just c  -> do
-        let  ratio    = fromIntegral w / fromIntegral h
+        let  ratio         = fromIntegral w / fromIntegral h
         let (RGBA r g b a) = case _clearColor c of
                 RGB r' g' b' -> RGBA r' g' b' 1.0
                 c'           -> c'
@@ -315,14 +305,14 @@ runGame f g = initWindow >>= \mw -> case mw of
 -------------------------------------------------------
 
 data TreeTest = TestInsert GameObject
-              | TestUpdate Int Matrix4x4
+              | TestUpdate Int Vector3
               | TestRemove Int
               deriving (Show)
 
 instance Arbitrary TreeTest where
     arbitrary = choose (0, 2) >>= \which -> case (which :: Int) of
         0 -> arbitrary >>= return . TestInsert
-        1 -> arbitrary >>= \w -> arbitrary >>= \h -> arbitrary >>= \d -> arbitrary >>= \index -> return (TestUpdate index $ trsMatrix 0 identity (Vector3 w h d))
+        1 -> arbitrary >>= \w -> arbitrary >>= \h -> arbitrary >>= \d -> arbitrary >>= \index -> return (TestUpdate index $ Vector3 w h d)
         _ -> arbitrary >>= return . TestRemove
 
 instance Arbitrary GameObject where
@@ -331,7 +321,7 @@ instance Arbitrary GameObject where
         (px, py, pz) <- arbitrary
         (rx, ry, rz) <- arbitrary
         (sx, sy, sz) <- arbitrary
-        return $ GameObject (Transform (Vector3 px py pz) (fromEuler' rx ry rz) (Vector3 sx sy sz)) (Just $ BoxCollider New $ trsMatrix 0 identity (Vector3 w h d)) Nothing Nothing []
+        return $ GameObject (Transform (Vector3 px py pz) (fromEuler' rx ry rz) (Vector3 sx sy sz)) (Just $ BoxCollider New $ (Vector3 w h d)) Nothing Nothing []
 
 dynTreeTester :: ((GameObject, DynamicTree) -> Bool) -> [[TreeTest]] -> Bool
 dynTreeTester f uss = fst $ foldr updateTest start uss
@@ -378,8 +368,8 @@ dynTreeTest = do
 -- Debug drawing
 -------------------------------------------------------
 
-debugDrawBoxCollider :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ()
-debugDrawBoxCollider bm modelView proj resources = drawMeshWithMaterial (debugDraw green) cubeOutline (modelView .*. bm) proj resources
+debugDrawBoxCollider :: Vector3 -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ()
+debugDrawBoxCollider bs modelView proj resources = drawMeshWithMaterial (debugDraw green) cubeOutline (modelView .*. trsMatrix 0 identity (bs * 2)) proj resources
 
 debugDrawAABB :: Color -> AABB -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ()
 debugDrawAABB c aabb view proj resources = drawMeshWithMaterial (debugDraw c) cubeOutline (view .*. trsMatrix (center aabb) identity (size aabb)) proj resources
