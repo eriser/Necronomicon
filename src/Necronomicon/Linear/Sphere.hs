@@ -1,5 +1,4 @@
-module Necronomicon.Linear.Sphere (Sphere(Sphere,sphCenter,sphRadius),
-                                   intersectsSphere,
+module Necronomicon.Linear.Sphere (intersectsSphere,
                                    intersectsVector,
                                    sphereIntersectsAABB,
                                    intersectsPlane) where
@@ -7,8 +6,7 @@ module Necronomicon.Linear.Sphere (Sphere(Sphere,sphCenter,sphRadius),
 import Necronomicon.Linear.Vector
 import Necronomicon.Linear.AABB
 import Necronomicon.Linear.Plane
-
-data Sphere = Sphere { sphCenter::Vector3, sphRadius::Double } deriving (Eq, Show)
+import Necronomicon.Linear.GeoPrimitive
 
 intersectsSphere :: Sphere -> Sphere -> Bool
 intersectsSphere (Sphere c1 r1) (Sphere c2 r2) = sqrMagnitude (c2 - c1) <= radii where radii = (r1 + r2) ** 2

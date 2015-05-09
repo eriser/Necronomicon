@@ -7,7 +7,7 @@ import qualified Graphics.Rendering.OpenGL.GL.Tensor as GLT
 import qualified Data.Binary as B
 
 data Vector2 = Vector2 Double Double                     deriving (Show,Eq,Ord)
-data Vector3 = Vector3 Double Double Double              deriving (Show,Eq,Ord)
+data Vector3 = Vector3 Double Double Double              deriving (Show,Eq)
 data Vector4 = Vector4 Double Double Double Double       deriving (Show,Eq,Ord)
 
 --Vector class
@@ -423,3 +423,11 @@ instance B.Binary Vector3 where
 instance B.Binary Vector4 where
     put (Vector4 x y z w) = B.put (realToFrac x :: Float) >> B.put (realToFrac y :: Float) >> B.put (realToFrac z :: Float) >> B.put (realToFrac w :: Float)
     get = (B.get :: B.Get Float) >>= \x -> (B.get :: B.Get Float) >>= \y -> (B.get :: B.Get Float) >>= \z -> (B.get :: B.Get Float) >>= \w -> return (Vector4 (realToFrac x) (realToFrac y) (realToFrac z) (realToFrac w))
+
+instance Ord Vector3 where
+    Vector3 ax ay az <  Vector3 bx by bz      = ax <  bx && ay <  by && az < bz
+    Vector3 ax ay az <= Vector3 bx by bz      = ax <= bx && ay <= by && az <= bz
+    Vector3 ax ay az >  Vector3 bx by bz      = ax >  bx && ay >  by && az > bz
+    Vector3 ax ay az >= Vector3 bx by bz      = ax >= bx && ay <  by && az < bz
+    min (Vector3 ax ay az) (Vector3 bx by bz) = Vector3 (min ax bx) (min ay by) (min az bz)
+    max (Vector3 ax ay az) (Vector3 bx by bz) = Vector3 (max ax bx) (max ay by) (max az bz)

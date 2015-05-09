@@ -71,6 +71,10 @@ library
         Necronomicon.Linear.Matrix
         Necronomicon.Linear.Quaternion
         Necronomicon.Linear.Vector
+        Necronomicon.Linear.OBB
+        Necronomicon.Linear.Line
+        Necronomicon.Linear.Capsule
+        Necronomicon.Linear.GeoPrimitive
         Necronomicon.Noise
         Necronomicon.Noise.DiamondSquare
         Necronomicon.Noise.Simplex

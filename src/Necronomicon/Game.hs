@@ -115,7 +115,7 @@ boxCollider w h d = Just $ BoxCollider New $ Vector3 (w * 0.5) (h * 0.5) (d * 0.
 --Problem is in THIS matrix
 calcAABB :: Matrix4x4 -> Collider -> AABB
 calcAABB mat (BoxCollider _ (Vector3 hw hh hd)) = aabbFromPoints [Vector3 (-hw) (-hh) (-hd) .*. mat, Vector3 hw hh hd .*. mat]
-calcAABB  _   _                                 = 0
+calcAABB  _   _                                 = AABB 0 0
 
 -------------------------------------------------------
 -- Components

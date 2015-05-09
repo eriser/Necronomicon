@@ -40,5 +40,8 @@ nearZero v = v < epsilon
     -- | val >= inMax = outMax
     -- | otherwise    = (((val - inMin) / (inMax - inMin)) * (outMax - outMin)) + outMin
 
-clamp :: Double -> Double -> Double -> Double
-clamp mn mx = min mx . max mn
+-- clamp :: Double -> Double -> Double -> Double
+-- clamp mn mx = min mx . max mn
+
+clamp :: Ord a => a -> a -> a -> a
+clamp x mn mx = min mx (max x mn)

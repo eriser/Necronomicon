@@ -1,5 +1,4 @@
-module Necronomicon.Linear.AABB (Corner(FarLeftBottom,FarLeftTop,FarRighTop,FarRightBottom,NearRightTop,NearLeftTop,NearLeftBottom,NearRightBottom),
-                                 AABB(AABB,aabbMin,aabbMax),
+module Necronomicon.Linear.AABB (Corner(..),
                                  center,
                                  size,
                                  halfSize,
@@ -18,9 +17,8 @@ module Necronomicon.Linear.AABB (Corner(FarLeftBottom,FarLeftTop,FarRighTop,FarR
                                  insureAABBSanity,
                                  aabbFromPoints) where
 
-import Test.QuickCheck
--- import Necronomicon.Game.Utilities
 import Necronomicon.Linear.Vector
+import Necronomicon.Linear.GeoPrimitive
 
 {-
 
@@ -38,32 +36,30 @@ import Necronomicon.Linear.Vector
 data Corner = FarLeftBottom | FarLeftTop  | FarRighTop     | FarRightBottom |
               NearRightTop  | NearLeftTop | NearLeftBottom | NearRightBottom deriving (Show, Ord, Eq)
 
-data AABB = AABB { aabbMin::Vector3, aabbMax::Vector3 } deriving (Eq, Show)
-
-instance Num AABB where
-    (+)         (AABB mn1 mx1) (AABB mn2 mx2) = AABB (mn1 + mn2) (mx1 + mx2)
-    (*)         (AABB mn1 mx1) (AABB mn2 mx2) = AABB (mn1 * mn2) (mx1 * mx2)
-    (-)         (AABB mn1 mx1) (AABB mn2 mx2) = AABB (mn1 + mn2) (mx1 + mx2)
-    negate      (AABB mn mx)                  = AABB (-mn) (-mx)
-    abs         (AABB mn mx)                  = AABB (abs mn) (abs mx)
-    signum      (AABB mn mx)                  = AABB (signum mn) (signum mx)
-    fromInteger i                             = AABB ((fromInteger i) :: Vector3) ((fromInteger i) :: Vector3)
-
-instance LinearMath Double AABB where
-    type Return Double AABB = AABB
-    (.+.) v1 v2  = apply (+) v1 v2
-    (.-.) v1 v2  = apply (-) v1 v2
-    (.*.) v1 v2  = apply (*) v1 v2
-    (./.) v1 v2  = apply (/) v1 v2
-    apply f s (AABB (Vector3 x1 y1 z1) (Vector3 x2 y2 z2)) = AABB (Vector3 (f s x1) (f s y1) (f s z1)) (Vector3 (f s x2) (f s y2) (f s z2))
-
-instance LinearMath AABB Double where
-    type Return AABB Double = AABB
-    (.+.) v1 v2  = apply (+) v1 v2
-    (.-.) v1 v2  = apply (-) v1 v2
-    (.*.) v1 v2  = apply (*) v1 v2
-    (./.) v1 v2  = apply (/) v1 v2
-    apply f (AABB (Vector3 x1 y1 z1) (Vector3 x2 y2 z2)) s = AABB (Vector3 (f x1 s) (f y1 s) (f z1 s)) (Vector3 (f x2 s) (f y2 s) (f z2 s))
+-- instance Num AABB where
+--     (+)         (AABB mn1 mx1) (AABB mn2 mx2) = AABB (mn1 + mn2) (mx1 + mx2)
+--     (*)         (AABB mn1 mx1) (AABB mn2 mx2) = AABB (mn1 * mn2) (mx1 * mx2)
+--     (-)         (AABB mn1 mx1) (AABB mn2 mx2) = AABB (mn1 + mn2) (mx1 + mx2)
+--     negate      (AABB mn mx)                  = AABB (-mn) (-mx)
+--     abs         (AABB mn mx)                  = AABB (abs mn) (abs mx)
+--     signum      (AABB mn mx)                  = AABB (signum mn) (signum mx)
+--     fromInteger i                             = AABB ((fromInteger i) :: Vector3) ((fromInteger i) :: Vector3)
+--
+-- instance LinearMath Double AABB where
+--     type Return Double AABB = AABB
+--     (.+.) v1 v2  = apply (+) v1 v2
+--     (.-.) v1 v2  = apply (-) v1 v2
+--     (.*.) v1 v2  = apply (*) v1 v2
+--     (./.) v1 v2  = apply (/) v1 v2
+--     apply f s (AABB (Vector3 x1 y1 z1) (Vector3 x2 y2 z2)) = AABB (Vector3 (f s x1) (f s y1) (f s z1)) (Vector3 (f s x2) (f s y2) (f s z2))
+--
+-- instance LinearMath AABB Double where
+--     type Return AABB Double = AABB
+--     (.+.) v1 v2  = apply (+) v1 v2
+--     (.-.) v1 v2  = apply (-) v1 v2
+--     (.*.) v1 v2  = apply (*) v1 v2
+--     (./.) v1 v2  = apply (/) v1 v2
+--     apply f (AABB (Vector3 x1 y1 z1) (Vector3 x2 y2 z2)) s = AABB (Vector3 (f x1 s) (f y1 s) (f z1 s)) (Vector3 (f x2 s) (f y2 s) (f z2 s))
 
 center :: AABB -> Vector3
 center aabb@(AABB mn _) = mn + halfSize aabb
@@ -157,13 +153,3 @@ insureAABBSanity (AABB (Vector3 mnx mny mnz) (Vector3 mxx mxy mxz)) = AABB (Vect
         (mnx', mxx') = if mnx <= mxx then (mnx, mxx) else (mxx, mnx)
         (mny', mxy') = if mny <= mxy then (mny, mxy) else (mxy, mny)
         (mnz', mxz') = if mnz <= mxz then (mnz, mxz) else (mxz, mnz)
-
-instance Arbitrary AABB where
-    arbitrary = do
-        mnx <- choose ((-10000), 10000)
-        mny <- choose ((-10000), 10000)
-        mnz <- choose ((-10000), 10000)
-        mxx <- choose ((-10000), 10000)
-        mxy <- choose ((-10000), 10000)
-        mxz <- choose ((-10000), 10000)
-        return $ AABB (Vector3 mnx mny mnz) (Vector3 mxx mxy mxz)

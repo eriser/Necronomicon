@@ -14,8 +14,8 @@ import Necronomicon.Linear.Math
 import Necronomicon.Linear.Vector
 import Necronomicon.Linear.Plane
 import Necronomicon.Linear.Triangle
-import Necronomicon.Linear.Sphere
 import Necronomicon.Linear.AABB
+import Necronomicon.Linear.GeoPrimitive
 
 {-
     A Ray is a directed line segment.

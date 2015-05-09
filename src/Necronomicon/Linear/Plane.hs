@@ -11,6 +11,7 @@ module Necronomicon.Linear.Plane (Plane(..),
 
 import Necronomicon.Linear.AABB
 import Necronomicon.Linear.Vector
+import Necronomicon.Linear.GeoPrimitive
 
 {-
     A Plane is defined using the general form equation: Ax + By + Cz + D = 0

@@ -63,9 +63,9 @@ bulkUpdate (dataList, insertList, tree) = foldr insert (DynamicTree (fromUpdate 
                 newNode (Empty        ) (Empty        ) = Empty
                 newNode (Empty        ) (Changed    rn) = Changed rn
                 newNode (Changed    ln) (Empty        ) = Changed ln
-                newNode (Changed    ln) (Changed    rn) = Changed (balance $ Node 0 ln rn 0)
-                newNode (NotChanged _ ) (Changed    rn) = Changed (balance $ Node 0 l  rn 0)
-                newNode (Changed    ln) (NotChanged _ ) = Changed (balance $ Node 0 ln r  0)
+                newNode (Changed    ln) (Changed    rn) = Changed (balance $ Node (AABB 0 0) ln rn 0)
+                newNode (NotChanged _ ) (Changed    rn) = Changed (balance $ Node (AABB 0 0) l  rn 0)
+                newNode (Changed    ln) (NotChanged _ ) = Changed (balance $ Node (AABB 0 0) ln r  0)
                 newNode (NotChanged _ ) (Empty        ) = Changed l
                 newNode (Empty        ) (NotChanged _ ) = Changed r
                 newNode (NotChanged _ ) (NotChanged _ ) = NotChanged (Node aabb l r h)
@@ -85,9 +85,9 @@ insert (aabb, i) tree = tree{nodes = go (nodes tree)}
         go  Tip            = leaf
         go (Leaf laabb li) = Node (combineAABB laabb aabb) (Leaf laabb li) leaf 1
         go (Node naabb l r h)
-            | cost  < cost1  && cost < cost2 = balance $ Node 0 (Node naabb l r h) leaf 0
-            | cost1 < cost2                  = balance $ Node 0 (go l) r 0
-            | otherwise                      = balance $ Node 0 l (go r) 0
+            | cost  < cost1  && cost < cost2 = balance $ Node (AABB 0 0) (Node naabb l r h) leaf 0
+            | cost1 < cost2                  = balance $ Node (AABB 0 0) (go l) r 0
+            | otherwise                      = balance $ Node (AABB 0 0) l (go r) 0
             where
                 cost                         = 2 * combinedArea
                 cost1                        = childCost l
@@ -147,7 +147,7 @@ enlargeAABB = id
 --         zmag = (mxz - mnz) * fatAABBFactor
 
 treeAABB :: TreeNode -> AABB
-treeAABB  Tip              = 0
+treeAABB  Tip              = AABB 0 0
 treeAABB (Node aabb _ _ _) = aabb
 treeAABB (Leaf aabb _    ) = aabb
 
