@@ -11,6 +11,7 @@ import qualified Graphics.UI.GLFW                  as GLFW
 
 import Necronomicon.Linear
 import Necronomicon.Physics
+import Necronomicon.Physics.DynamicTree
 import Necronomicon.Graphics
 import Necronomicon.Utility              (getCurrentTime)
 
@@ -25,7 +26,6 @@ import Necronomicon.Utility              (getCurrentTime)
 -- GameObject
 -------------------------------------------------------
 
-data UID        = UID Int | New deriving (Show)
 data Transform  = Transform Vector3 Quaternion Vector3 deriving (Show)
 data GameObject = GameObject Transform (Maybe Collider) (Maybe Model) (Maybe Camera) [GameObject] deriving (Show)
 
@@ -94,30 +94,6 @@ mapFoldStack f gacc = (gchildren_ gcs g, acc')
                 (c', cacc') = mapFoldStack f (c, cacc, s)
 
 -------------------------------------------------------
--- Colliders
--------------------------------------------------------
-
-data Collider = SphereCollider UID Sphere
-              | BoxCollider    UID Vector3
-              deriving (Show)
-
-colliderID :: Collider -> UID
-colliderID (SphereCollider uid _) = uid
-colliderID (BoxCollider    uid _) = uid
-
-colliderID_ :: UID -> Collider -> Collider
-colliderID_ uid (SphereCollider _ x) = SphereCollider uid x
-colliderID_ uid (BoxCollider    _ x) = BoxCollider    uid x
-
-boxCollider :: Double -> Double -> Double -> Maybe Collider
-boxCollider w h d = Just $ BoxCollider New $ Vector3 (w * 0.5) (h * 0.5) (d * 0.5)
-
---Problem is in THIS matrix
-calcAABB :: Matrix4x4 -> Collider -> AABB
-calcAABB mat (BoxCollider _ (Vector3 hw hh hd)) = aabbFromPoints [Vector3 (-hw) (-hh) (-hd) .*. mat, Vector3 hw hh hd .*. mat]
-calcAABB  _   _                                 = AABB 0 0
-
--------------------------------------------------------
 -- Components
 -------------------------------------------------------
 
@@ -157,14 +133,16 @@ genUpdateInput (g, (d, il, t), world)
     where
         newWorld             = world .*. transMat g
         updateFromCollider col
-            | UID uid <- cid = (g , (nodeListCons (caabb, uid) d,               il, t), newWorld)
-            | otherwise      = (g', (nodeListCons (caabb,   i) d, (caabb', i) : il, t{freeList = fl}), newWorld)
+            | UID uid <- cid = (g'' , (nodeListCons (caabb, uid) d,               il, t), newWorld)
+            | otherwise      = (g',   (nodeListCons (caabb,   i) d, (caabb', i) : il, t{freeList = fl}), newWorld)
             where
+                g'       = collider_ col' g
+                g''      = collider_ (colliderTransform_ newWorld $ col) g
                 cid      = colliderID  col
-                caabb    = calcAABB    newWorld col
-                caabb'   = enlargeAABB caabb
+                col'     = colliderTransform_ newWorld $ colliderID_ (UID i) col
+                caabb    = colliderAABB col
+                caabb'   = enlargeAABB  caabb
                 (i : fl) = freeList t
-                g'       = collider_ (colliderID_ (UID i) col) g
 
 -------------------------------------------------------
 -- Rendering
@@ -179,7 +157,7 @@ drawG :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> Bool -> GameObject 
 drawG world view proj resources debug g
     | Just (Model mesh mat)             <- model g    = drawMeshWithMaterial mat mesh modelView proj resources >> return newWorld
     | Just (FontRenderer text font mat) <- model g    = renderFont text font mat      modelView proj resources >> return newWorld
-    | debug, Just (BoxCollider _ bs)    <- collider g = debugDrawBoxCollider bs       modelView proj resources >> return newWorld
+    | debug, Just c                     <- collider g = debugDrawCollider c           view      proj resources >> return newWorld
     | otherwise                                       = return newWorld
     where
         newWorld  = world .*. transMat g
@@ -214,8 +192,9 @@ renderCameraG (w,h) view scene resources debug so t = case camera so of
         case _fov c of
             0 -> drawGame identity4 (invert newView) (orthoMatrix 0 ratio 1 0 (-1) 1) resources debug scene
             _ -> do
-                drawGame identity4 (invert newView) (perspMatrix (_fov c) ratio (_near c) (_far c)) resources debug scene
-                if debug then debugDrawDynamicTree t (invert newView) (perspMatrix (_fov c) ratio (_near c) (_far c)) resources else return ()
+                let invView = invert newView
+                drawGame identity4 invView (perspMatrix (_fov c) ratio (_near c) (_far c)) resources debug scene
+                if debug then debugDrawDynamicTree t invView (perspMatrix (_fov c) ratio (_near c) (_far c)) resources else return ()
 
         mapM_ (drawPostRenderFX (RGBA r g b a)) $ _fx c
 
@@ -268,8 +247,9 @@ runGame f initg = initWindow >>= \mw -> case mw of
         -- GLFW.setKeyCallback         w $ Just $ keyPressEvent   signalState
         -- GLFW.setWindowSizeCallback  w $ Just $ dimensionsEvent signalState
 
-        resources <- newResources
-        renderNecronomicon False w resources initg empty 0
+        resources   <- newResources
+        currentTime <- getCurrentTime
+        renderNecronomicon False w resources initg empty currentTime
     where
         --event callbacks
         -- mousePressEvent state _ _ GLFW.MouseButtonState'Released _ = atomically $ writeTChan (mouseButtonBuffer state) $ False
@@ -322,7 +302,7 @@ instance Arbitrary GameObject where
         (px, py, pz) <- arbitrary
         (rx, ry, rz) <- arbitrary
         (sx, sy, sz) <- arbitrary
-        return $ GameObject (Transform (Vector3 px py pz) (fromEuler' rx ry rz) (Vector3 sx sy sz)) (Just $ BoxCollider New $ (Vector3 w h d)) Nothing Nothing []
+        return $ GameObject (Transform (Vector3 px py pz) (fromEuler' rx ry rz) (Vector3 sx sy sz)) (boxCollider w h d) Nothing Nothing []
 
 dynTreeTester :: ((GameObject, DynamicTree) -> Bool) -> [[TreeTest]] -> Bool
 dynTreeTester f uss = fst $ foldr updateTest start uss
@@ -332,16 +312,13 @@ dynTreeTester f uss = fst $ foldr updateTest start uss
         updateTest _  (False, t) = (False, t)
         test' (TestInsert c)     (g, t) = (gaddChild   c g, t)
         test' (TestRemove i)     (g, t) = (removeChild g i, t)
-        test' (TestUpdate i bm)  (g, t)
+        test' (TestUpdate i tr)  (g, t)
             | null cs2  = (g, t)
             | otherwise = (gchildren_ cs' g, t)
             where
                 cs'        = cs1 ++ (c : tail cs2)
                 (cs1, cs2) = splitAt i $ children g
-                c = case head cs2 of
-                    (GameObject tr (Just (BoxCollider    uid _)) _ _ gs) -> GameObject tr (Just $ BoxCollider uid bm) Nothing Nothing gs
-                    (GameObject tr (Just (SphereCollider uid _)) _ _ gs) -> GameObject tr (Just $ BoxCollider uid bm) Nothing Nothing gs
-                    (GameObject tr  _                            _ _ gs) -> GameObject tr (Just $ BoxCollider New bm) Nothing Nothing gs
+                c = GameObject (Transform tr identity 1) (collider (head cs2)) Nothing Nothing (children (head cs2))
 
 validateIDs :: (GameObject, DynamicTree) -> Bool
 validateIDs (g, t) = sort (tids (nodes t) []) == gids && sort nids == gids
@@ -352,9 +329,9 @@ validateIDs (g, t) = sort (tids (nodes t) []) == gids && sort nids == gids
         tids (Node _ l r _) acc = tids r $ tids l acc
         (_, nids)               = V.foldl' (\(i, ids) x -> if x == Nothing then (i + 1, ids) else (i + 1, i : ids) ) (0, []) $ nodeData t
         gid g' acc              = case collider g' of
-            Just (SphereCollider (UID c) _) -> c : acc
-            Just (BoxCollider    (UID c) _) -> c : acc
-            _                               -> acc
+            Just (SphereCollider (UID c) _ _) -> c : acc
+            Just (BoxCollider    (UID c) _ _) -> c : acc
+            _                                 -> acc
         gids                    = sort $ foldChildren gid [] g
 
 dynTreeTest :: IO ()
@@ -369,8 +346,9 @@ dynTreeTest = do
 -- Debug drawing
 -------------------------------------------------------
 
-debugDrawBoxCollider :: Vector3 -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ()
-debugDrawBoxCollider bs modelView proj resources = drawMeshWithMaterial (debugDraw green) cubeOutline (modelView .*. trsMatrix 0 identity (bs * 2)) proj resources
+debugDrawCollider :: Collider -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ()
+debugDrawCollider (BoxCollider _ t (OBB hs)) view proj resources = drawMeshWithMaterial (debugDraw green) cubeOutline (view .*. t .*. trsMatrix 0 identity (hs * 2)) proj resources
+debugDrawCollider  _                       _         _    _      = return ()
 
 debugDrawAABB :: Color -> AABB -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ()
 debugDrawAABB c aabb view proj resources = drawMeshWithMaterial (debugDraw c) cubeOutline (view .*. trsMatrix (center aabb) identity (size aabb)) proj resources

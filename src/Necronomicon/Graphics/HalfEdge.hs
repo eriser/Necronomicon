@@ -125,7 +125,7 @@ hillClimb f he = go he (f he) (neighborhood he)
                 score' = f n
 
 instance GeoPrimitive HalfEdge where
-    maximalPoint he d  = vertexPos . edgeTail $ hillClimb (\e -> dot d . vertexPos $ edgeTail e) he
-    closestPoint he q  = vertexPos . edgeTail $ hillClimb (\e -> (\v -> -sqrMagnitude (q - v)) . vertexPos $ edgeTail e) he
-    enclosingSphere he = Sphere 0 . magnitude . vertexPos . edgeTail $ hillClimb (\e -> sqrMagnitude . vertexPos $ edgeTail e) he
-    enclosingAABB   he = aabbFromPoints [maximalPoint he (-1), maximalPoint he 1]
+    maximalPoint    he _ d = vertexPos . edgeTail $ hillClimb (\e -> dot d . vertexPos $ edgeTail e) he
+    closestPoint    he _ q = vertexPos . edgeTail $ hillClimb (\e -> (\v -> -sqrMagnitude (q - v)) . vertexPos $ edgeTail e) he
+    enclosingSphere he _   = Sphere 0 . magnitude . vertexPos . edgeTail $ hillClimb (\e -> sqrMagnitude . vertexPos $ edgeTail e) he
+    enclosingAABB   he t   = aabbFromPoints [maximalPoint he t (-1), maximalPoint he t 1]

@@ -8,8 +8,8 @@ start = GameObject (Transform 0 identity 1) Nothing Nothing Nothing [cam, cube1,
     where
         c     = Just $ Camera (60/2) 0.1 1000 black []
         cam   = GameObject (Transform (Vector3   0   0 10) identity              1)  Nothing            Nothing c       []
-        cube1 = GameObject (Transform (Vector3   5   0  0) (fromEuler' 32 81 62) 1) (boxCollider 2 1 1) Nothing Nothing []
-        cube2 = GameObject (Transform (Vector3 (-5)  0  0) (fromEuler' 99 12 29) 1) (boxCollider 1 2 1) Nothing Nothing []
+        cube1 = GameObject (Transform (Vector3   5   0  2) (fromEuler' 32 81 62) 1) (boxCollider 2 1 1) Nothing Nothing []
+        cube2 = GameObject (Transform (Vector3 (-5)  0  (-4)) (fromEuler' 99 12 29) 1) (boxCollider 1 2 1) Nothing Nothing []
         cube3 = GameObject (Transform (Vector3 (-2)  2  0) (fromEuler' 99 12 29) 1) (boxCollider 1 2 1) Nothing Nothing []
         cube4 = GameObject (Transform (Vector3   2 (-2) 0) (fromEuler' 99 12 29) 1) (boxCollider 2 1 1) Nothing Nothing []
         cube5 = GameObject (Transform (Vector3   0   1  1) (fromEuler' 15  0  2) 1) (boxCollider 1 1 1) Nothing Nothing []

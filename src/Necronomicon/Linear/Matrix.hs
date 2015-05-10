@@ -412,6 +412,14 @@ withNecroMatrix necroMatrix action = do
     mat <- GLC.newMatrix GLC.ColumnMajor $ map (fromRational . toRational) $ mat4ToList necroMatrix :: IO (GL.GLmatrix GL.GLfloat)
     GLC.withMatrix mat $ const action
 
+basis :: Matrix4x4 -> Matrix3x3
+basis (Matrix4x4 (Vector4 xx xy xz _) (Vector4 yx yy yz _) (Vector4 zx zy zz _) _) = Matrix3x3 (Vector3 xx xy xz) (Vector3 yx yy yz) (Vector3 zx zy zz)
+
+matOrigin :: Matrix4x4 -> Vector3
+matOrigin (Matrix4x4 (Vector4 _ _ _ x) (Vector4 _ _ _ y) (Vector4 _ _ _ z) _) = Vector3 x y z
+
+--Create Matrix3x4 and optimize matrix calculations!
+
 -- uniformMat :: GL.UniformLocation -> GL.SettableStateVar Matrix4x4
 -- uniformMat loc = GL.makeSettableStateVar $ \mat -> withNecroMatrix mat $ \ptr -> glUniformMatrix4fv (unsafeCoerce loc) 1 1 ptr
     -- where

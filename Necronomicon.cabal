@@ -44,7 +44,6 @@ library
         Necronomicon.Runtime,
         Necronomicon.Util,
         Necronomicon.Util.PriorityQueue
-        Necronomicon.Physics
         Necronomicon.Physics.DynamicTree
 
     other-modules:
@@ -92,6 +91,8 @@ library
         Necronomicon.Graphics.Texture
         Necronomicon.Graphics.Model
         Necronomicon.Game
+        Necronomicon.Physics
+        Necronomicon.Physics.Collider
         Paths_Necronomicon
     Build-Depends:
         base             >= 3 && < 5,

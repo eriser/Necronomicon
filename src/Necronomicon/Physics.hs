@@ -1,5 +1,3 @@
-module Necronomicon.Physics (module Necronomicon.Physics.DynamicTree,
-                             module Necronomicon.Physics.Octree) where
+module Necronomicon.Physics (module Necronomicon.Physics.Collider) where
 
-import Necronomicon.Physics.DynamicTree
-import Necronomicon.Physics.Octree
+import Necronomicon.Physics.Collider

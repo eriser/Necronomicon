@@ -1,6 +1,7 @@
 module Necronomicon.Linear.GeoPrimitive where
 
 import Necronomicon.Linear.Math
+import Necronomicon.Linear.Matrix
 import Necronomicon.Linear.Vector
 import Test.QuickCheck
 
@@ -9,10 +10,10 @@ import Test.QuickCheck
 ---------------------------------------
 
 class GeoPrimitive a where
-    maximalPoint    :: a -> Vector3 -> Vector3
-    closestPoint    :: a -> Vector3 -> Vector3
-    enclosingAABB   :: a -> AABB
-    enclosingSphere :: a -> Sphere
+    maximalPoint    :: a -> Matrix4x4 -> Vector3 -> Vector3
+    closestPoint    :: a -> Matrix4x4 -> Vector3 -> Vector3
+    enclosingAABB   :: a -> Matrix4x4 -> AABB
+    enclosingSphere :: a -> Matrix4x4 -> Sphere
 
 data AABB = AABB {
     aabbMin :: Vector3,
@@ -38,7 +39,7 @@ instance Arbitrary AABB where
         return $ AABB (Vector3 mnx mny mnz) (Vector3 mxx mxy mxz)
 
 instance GeoPrimitive AABB where
-    maximalPoint (AABB (Vector3 mnx mny mnz) (Vector3 mxx mxy mxz)) (Vector3 dx dy dz) = Vector3 ax ay az
+    maximalPoint (AABB (Vector3 mnx mny mnz) (Vector3 mxx mxy mxz)) _ (Vector3 dx dy dz) = Vector3 ax ay az
         where
             ax | dx > 0    = mxx
                | otherwise = mnx
@@ -46,14 +47,14 @@ instance GeoPrimitive AABB where
                | otherwise = mny
             az | dz > 0    = mxz
                | otherwise = mnz
-    enclosingAABB                  = id
-    closestPoint    (AABB mn mx) q = clamp q mn mx
-    enclosingSphere (AABB mn mx)   = Sphere (mn + halfSize) (magnitude halfSize)
+    enclosingAABB    a _             = a
+    closestPoint    (AABB mn mx) _ q = clamp q mn mx
+    enclosingSphere (AABB mn mx) _   = Sphere (mn + halfSize) (magnitude halfSize)
         where
             halfSize = (mx - mn) * 0.5
 
 instance GeoPrimitive Sphere where
-    maximalPoint  (Sphere c r) d = c + realToFrac r * normalize d
-    closestPoint  (Sphere c r) q = c - realToFrac r * normalize q
-    enclosingSphere              = id
-    enclosingAABB (Sphere c r)   = AABB (c - realToFrac r) (c + realToFrac r)
+    maximalPoint  (Sphere c r) _ d = c + realToFrac r * normalize d
+    closestPoint  (Sphere c r) _ q = c - realToFrac r * normalize q
+    enclosingSphere s _            = s
+    enclosingAABB (Sphere c r) _   = AABB (c - realToFrac r) (c + realToFrac r)

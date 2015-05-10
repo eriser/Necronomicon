@@ -10,7 +10,7 @@ module Necronomicon (module Necronomicon.Language.Layout,
                      module Necronomicon.Graphics,
                      module Necronomicon.Utility,
                      module Necronomicon.Game,
-                    --  module Necronomicon.Physics,
+                     module Necronomicon.Physics,
                      module Control.Category) where
 
 import Necronomicon.Networking
@@ -25,5 +25,5 @@ import Necronomicon.Noise
 import Necronomicon.Graphics
 import Necronomicon.Utility
 import Necronomicon.Game
--- import Necronomicon.Physics
+import Necronomicon.Physics
 import Control.Category ((>>>))

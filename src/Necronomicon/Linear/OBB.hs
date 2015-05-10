@@ -10,26 +10,42 @@ import Necronomicon.Linear.AABB
 -- Oriented Bounding Box
 ---------------------------------------
 
-data OBB = OBB {
-    obbPos      :: Vector3,
-    obbRot      :: Matrix3x3,
-    obbHalfSize :: Vector3
-}   deriving (Show)
+data OBB = OBB { obbHalfSize :: Vector3 }   deriving (Show)
 
 instance GeoPrimitive OBB where
-    maximalPoint (OBB p (Matrix3x3 xAxis yAxis zAxis) (Vector3 hw hh hd)) d = p + ax + ay + az
+    enclosingSphere (OBB (Vector3 hw hh hd)) t = Sphere (matOrigin t) $ max (hw * 2) $ max (hh * 2) (hd * 2)
+
+    maximalPoint    (OBB (Vector3 hw hh hd)) t d = p + ax + ay + az
         where
+            p = matOrigin t
+            (Matrix3x3 xAxis yAxis zAxis) = basis t
             ax | sameDirection xAxis d = xAxis * realToFrac   hw
                | otherwise             = xAxis * realToFrac (-hw)
             ay | sameDirection yAxis d = yAxis * realToFrac   hh
                | otherwise             = yAxis * realToFrac (-hh)
             az | sameDirection zAxis d = zAxis * realToFrac   hd
                | otherwise             = zAxis * realToFrac (-hd)
-    closestPoint (OBB p (Matrix3x3 xAxis yAxis zAxis) (Vector3 hw hh hd)) q = p + project xAxis hw + project yAxis hh + project zAxis hd
+
+    closestPoint    (OBB (Vector3 hw hh hd)) t q = p + project xAxis hw + project yAxis hh + project zAxis hd
         where
+            p = matOrigin t
+            (Matrix3x3 xAxis yAxis zAxis) = basis t
             project a e = a * realToFrac (clamp (a `dot` (q - p)) (-e) e)
-    enclosingSphere (OBB pos  _                            (Vector3 hw hh hd)) = Sphere pos $ max (hw * 2) $ max (hh * 2) (hd * 2)
-    enclosingAABB   (OBB pos (Matrix3x3 xAxis yAxis zAxis) (Vector3 hw hh hd)) = aabbFromPoints [mn, mx]
-        where
-            mn = pos + xAxis * realToFrac (-hw) + yAxis * realToFrac (-hh) + zAxis * realToFrac (-hd)
-            mx = pos + xAxis * realToFrac   hw  + yAxis * realToFrac   hh  + zAxis * realToFrac   hd
+
+    enclosingAABB   (OBB (Vector3 hw hh hd)) t = aabbFromPoints $ map ((.*. t) . (* Vector3 hw hh hd))
+        [Vector3 (-1) (-1)   1,
+         Vector3   1  (-1)   1,
+         Vector3 (-1)   1    1,
+         Vector3   1    1    1,
+         Vector3 (-1) (-1) (-1),
+         Vector3   1  (-1) (-1),
+         Vector3 (-1)   1  (-1),
+         Vector3   1    1  (-1)]
+        -- where
+            -- mn = Vector3 (-hw) (-hh) (-hd) .*. t
+            -- mx = Vector3   hw    hh    hd  .*. t
+        -- where
+        --     p = matOrigin t
+        --     (Matrix3x3 xAxis yAxis zAxis) = basis t
+        --     mn = p + xAxis * realToFrac (-hw) + yAxis * realToFrac (-hh) + zAxis * realToFrac (-hd)
+        --     mx = p + xAxis * realToFrac   hw  + yAxis * realToFrac   hh  + zAxis * realToFrac   hd
