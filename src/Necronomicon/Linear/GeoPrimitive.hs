@@ -14,7 +14,6 @@ class GeoPrimitive a where
     enclosingAABB   :: a -> AABB
     enclosingSphere :: a -> Sphere
 
-
 data AABB = AABB {
     aabbMin :: Vector3,
     aabbMax :: Vector3

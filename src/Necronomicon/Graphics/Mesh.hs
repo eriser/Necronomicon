@@ -6,7 +6,6 @@ import           Necronomicon.Graphics.Model
 import           Necronomicon.Graphics.Shader
 import           Necronomicon.Graphics.Texture
 import           Necronomicon.Linear
-import           Necronomicon.Utility               (chunksOf)
 
 import           Data.IORef
 import           Foreign.Storable                   (sizeOf)
@@ -14,9 +13,7 @@ import           Control.Monad                      (foldM_)
 
 import qualified Data.IntMap                        as IntMap
 import qualified Data.Map                           as Map
-import qualified Data.Set                           as Set
 import qualified Data.Vector.Storable               as VS (fromList, unsafeWith)
-import qualified Data.Vector                        as V
 import qualified Graphics.Rendering.OpenGL          as GL
 import qualified Graphics.Rendering.OpenGL.Raw      as GLRaw (glUniformMatrix4fv)
 {-
@@ -365,103 +362,3 @@ material vs fs us = Material drawMat
             ["position","in_color","in_uv"]
             (loadVertexShader   vs)
             (loadFragmentShader fs)
-
----------------------------------------
--- HalfEdge Mesh
----------------------------------------
-
-data Vertex  = Vertex {
-    vertexPos  :: Vector3,
-    vertexUV   :: Vector2,
-    vertexEdge :: HalfEdge
-}
-
-instance Show Vertex where
-    show (Vertex p u _) = "Vertex (" ++ show p ++ ") (" ++ show u ++ ") "
-
-data Face   = Face {
-    faceEdge   :: HalfEdge,
-    faceNormal :: Vector3
-}
-
-instance Show Face where
-    show (Face _ n) = "Face (" ++ show n ++ ") "
-
-data HalfEdge = HalfEdge {
-    edgeID   :: (Int, Int),
-    edgeTail :: Vertex,
-    twin     :: HalfEdge,
-    nextEdge :: HalfEdge,
-    face1    :: Maybe Face
-}
-
-instance Show HalfEdge where
-    show he = unlines . fst $ go he Set.empty
-        where
-            go (HalfEdge eid p t n f) set
-                | True <- Set.member eid set = (["(~> HalfEdge " ++ show eid ++ ")"], set)
-                | otherwise                  = (("(HalfEdge " ++ show eid ++ " " ++ show p ++ " " ++ show f) : pad "    n- " "    |  " nstr ++ pad "    t- " "       " tstr, set''')
-                where
-                    set'           = Set.insert eid set
-                    (nstr,set'')   = go n set'
-                    (tstr,set''')  = go t set''
-                    pad first rest = zipWith (++) (first : repeat rest)
-
-edgeHead :: HalfEdge -> Vertex
-edgeHead = edgeTail . twin
-
-face2 :: HalfEdge -> Maybe Face
-face2 = face1 . twin
-
-edgeDirection :: HalfEdge -> Vector3
-edgeDirection e = vertexPos (edgeHead e) - vertexPos (edgeTail e)
-
-adjacentFaces :: Face -> (Maybe Face, Maybe Face, Maybe Face)
-adjacentFaces f = (face2 e1, face2 e2, face2 e3)
-    where
-        e1 = faceEdge f
-        e2 = nextEdge e1
-        e3 = nextEdge e2
-
-----------------------------
---Init from regular mesh!
-----------------------------
-
-data IndirectHalfEdge     = IndirectHalfEdge Int (Int, Int) (Int, Int)
-data IndirectHalfEdgeMesh = IndirectHalfEdgeMesh (Map.Map (Int, Int) IndirectHalfEdge) (V.Vector (Vector3, Vector2)) [(Int, Int)]
-
-meshToHalfEdgeMesh :: Mesh -> HalfEdge
-meshToHalfEdgeMesh (DynamicMesh n vs cs uvs is) = meshToHalfEdgeMesh $ Mesh n vs cs uvs is
-meshToHalfEdgeMesh (Mesh        _ vs _  uvs is) = indirectToDirectHalfEdge . foldr insertFace (IndirectHalfEdgeMesh Map.empty (V.fromList $ zip vs uvs) []) $ chunksOf 3 is
-    where
-        insertFace (i1 : i2 : i3 : _) (IndirectHalfEdgeMesh m vv heis) = IndirectHalfEdgeMesh m' vv ((i1, i2) : (i2, i3) : (i3, i1) : heis)
-            where
-                e1 = IndirectHalfEdge i1 (i2, i1) (i2, i3)
-                e2 = IndirectHalfEdge i2 (i3, i2) (i3, i1)
-                e3 = IndirectHalfEdge i3 (i3, i1) (i1, i2)
-                m' = Map.insert (i3, i1) e3 $ Map.insert (i2, i3) e2 $ Map.insert (i1, i2) e1 m
-        insertFace _ ihe = ihe
-
-indirectToDirectHalfEdge :: IndirectHalfEdgeMesh -> HalfEdge
-indirectToDirectHalfEdge (IndirectHalfEdgeMesh imap vv heis) = fst $ resolve (head heis) Map.empty
-    where
-        resolve ei dmap
-            | Just de <- Map.lookup ei dmap = (de, dmap)
-            | Just ie <- Map.lookup ei imap = resolveIndirect ei ie dmap
-            | otherwise                     = resolveNothing  ei    dmap
-
-        resolveNothing ei dmap = (e, dmap')
-            where
-                e           = HalfEdge ei v te (twin $ nextEdge $ nextEdge te) Nothing
-                v           = Vertex pos uv e
-                (pos, uv)   = vv V.! fst ei
-                (te, dmap') = resolve (snd ei, fst ei) $ Map.insert ei e dmap
-
-        resolveIndirect ei (IndirectHalfEdge vi ti ni) dmap = (e, dmap2)
-            where
-                e           = HalfEdge ei v te ne (Just f)
-                v           = Vertex   pos uv e
-                f           = Face     e $ (vertexPos (edgeTail ne) - pos) `cross` (vertexPos (edgeTail $ nextEdge ne) - pos)
-                (pos, uv)   = vv V.! vi
-                (te, dmap1) = resolve ti $ Map.insert ei e dmap
-                (ne, dmap2) = resolve ni dmap1

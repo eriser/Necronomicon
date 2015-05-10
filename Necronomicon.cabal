@@ -84,6 +84,7 @@ library
         Necronomicon.Graphics.BufferObject
         Necronomicon.Graphics.Camera
         Necronomicon.Graphics.Mesh
+        Necronomicon.Graphics.HalfEdge
         Necronomicon.Graphics.Shader
         Necronomicon.Graphics.Color
         Necronomicon.Graphics.SceneObject
