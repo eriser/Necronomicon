@@ -13,7 +13,7 @@ data Line = Line {
 }   deriving (Show)
 
 instance GeoPrimitive Line where
-    enclosingAABB _                    = error "Line doesn't have a sane enclosing AABB implementation"
+    enclosingAABB                      = error "Line doesn't have a sane enclosing AABB implementation"
     enclosingSphere (Line start end) _ = Sphere (start + realToFrac halfSize) halfSize
         where
             halfSize = magnitude (end - start) * 0.5

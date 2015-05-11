@@ -4,7 +4,6 @@ import Prelude
 
 import qualified Graphics.Rendering.OpenGL as GL
 
-
 -- Constants
 epsilon :: Double
 epsilon = 4.37114e-05

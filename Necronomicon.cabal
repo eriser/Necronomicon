@@ -93,6 +93,7 @@ library
         Necronomicon.Game
         Necronomicon.Physics
         Necronomicon.Physics.Collider
+        Necronomicon.Physics.GJK
         Paths_Necronomicon
     Build-Depends:
         base             >= 3 && < 5,

@@ -10,7 +10,7 @@ import Necronomicon.Linear.Math
 -- Oriented Bounding Box
 ---------------------------------------
 
-data OBB = OBB { obbExtents :: Vector3 }   deriving (Show)
+data OBB = OBB { obbExtents :: Vector3 } deriving (Show)
 
 instance GeoPrimitive OBB where
     enclosingSphere (OBB (Vector3 hw hh hd)) t   = Sphere (matOrigin t) $ max (hw * 2) $ max (hh * 2) (hd * 2)

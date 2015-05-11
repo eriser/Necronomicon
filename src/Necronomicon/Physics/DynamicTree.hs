@@ -115,36 +115,36 @@ fromUpdate (NotChanged t) = t
 fromUpdate  _             = Tip
 
 enlargeAABB2 :: AABB -> AABB -> AABB
-enlargeAABB2 _ a = a
+enlargeAABB2 _ a = enlargeAABB a
 -- enlargeAABB2 aabb aabb2 = AABB
---     (Vector3
---         (mnx + dx * (fromIntegral . fromEnum $ dx < 0))
---         (mny + dy * (fromIntegral . fromEnum $ dy < 0))
---         (mnz + dz * (fromIntegral . fromEnum $ dz < 0)))
---     (Vector3
---         (mxx + dx * (fromIntegral . fromEnum $ dx > 0))
---         (mxy + dy * (fromIntegral . fromEnum $ dy > 0))
---         (mxz + dz * (fromIntegral . fromEnum $ dz > 0)))
---     where
---         (AABB (Vector3 mnx mny mnz) (Vector3 mxx mxy mxz)) = enlargeAABB aabb
---         (Vector3 dx dy dz)                                 = (center aabb2 - center aabb) .*. aabbMultiplier
+    -- (Vector3
+        -- (mnx + dx * (fromIntegral . fromEnum $ dx < 0))
+        -- (mny + dy * (fromIntegral . fromEnum $ dy < 0))
+        -- (mnz + dz * (fromIntegral . fromEnum $ dz < 0)))
+    -- (Vector3
+        -- (mxx + dx * (fromIntegral . fromEnum $ dx > 0))
+        -- (mxy + dy * (fromIntegral . fromEnum $ dy > 0))
+        -- (mxz + dz * (fromIntegral . fromEnum $ dz > 0)))
+    -- where
+        -- (AABB (Vector3 mnx mny mnz) (Vector3 mxx mxy mxz)) = enlargeAABB aabb
+        -- (Vector3 dx dy dz)                                 = (center aabb2 - center aabb) .*. aabbMultiplier
 -- -- aabb@(AABB (Vector3 mnx mny mnz) (Vector3 mxx mxy mxz)) = insureAABBSanity leafAABB
 
 aabbMultiplier :: Double
-aabbMultiplier = 1.1
+aabbMultiplier = 1.0
 
 fatAABBFactor :: Double
 fatAABBFactor = 0.1
 
 enlargeAABB :: AABB -> AABB
-enlargeAABB = id
--- enlargeAABB (AABB (Vector3 mnx mny mnz) (Vector3 mxx mxy mxz)) = AABB
---     (Vector3 (mnx - xmag) (mny - ymag) (mnz - zmag))
---     (Vector3 (mxx + xmag) (mxy + ymag) (mxz + zmag))
---     where
---         xmag = (mxx - mnx) * fatAABBFactor
---         ymag = (mxy - mny) * fatAABBFactor
---         zmag = (mxz - mnz) * fatAABBFactor
+-- enlargeAABB = id
+enlargeAABB (AABB (Vector3 mnx mny mnz) (Vector3 mxx mxy mxz)) = AABB
+    (Vector3 (mnx - xmag) (mny - ymag) (mnz - zmag))
+    (Vector3 (mxx + xmag) (mxy + ymag) (mxz + zmag))
+    where
+        xmag = (mxx - mnx) * fatAABBFactor
+        ymag = (mxy - mny) * fatAABBFactor
+        zmag = (mxz - mnz) * fatAABBFactor
 
 treeAABB :: TreeNode -> AABB
 treeAABB  Tip              = AABB 0 0

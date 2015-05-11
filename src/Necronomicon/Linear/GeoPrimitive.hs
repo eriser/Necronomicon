@@ -25,9 +25,6 @@ data Sphere = Sphere {
     sphRadius :: Double
 }   deriving (Eq, Show)
 
-sameDirection :: Vector3 -> Vector3 -> Bool
-sameDirection a b = a `dot` b > 0
-
 instance Arbitrary AABB where
     arbitrary = do
         mnx <- choose ((-10000), 10000)

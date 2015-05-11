@@ -431,3 +431,6 @@ instance Ord Vector3 where
     Vector3 ax ay az >= Vector3 bx by bz      = ax >= bx && ay <  by && az < bz
     min (Vector3 ax ay az) (Vector3 bx by bz) = Vector3 (min ax bx) (min ay by) (min az bz)
     max (Vector3 ax ay az) (Vector3 bx by bz) = Vector3 (max ax bx) (max ay by) (max az bz)
+
+sameDirection :: Vector3 -> Vector3 -> Bool
+sameDirection a b = a `dot` b > 0
