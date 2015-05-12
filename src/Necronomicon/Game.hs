@@ -26,47 +26,66 @@ import Necronomicon.Utility              (getCurrentTime)
 -- GameObject
 -------------------------------------------------------
 
-data Transform  = Transform Vector3 Quaternion Vector3 deriving (Show)
-data GameObject = GameObject Transform (Maybe Collider) (Maybe Model) (Maybe Camera) [GameObject] deriving (Show)
+-- data Transform  = Transform Vector3 Quaternion Vector3 deriving (Show)
+data GameObject = GameObject {
+    pos      :: Vector3,
+    rot      :: Quaternion,
+    gscale   :: Vector3,
+    collider :: Maybe Collider,
+    model    :: Maybe Model,
+    camera   :: Maybe Camera,
+    gameChildren :: [GameObject]
+} deriving (Show)
 
+-------------------------------------------------------
+-- GameType
+-------------------------------------------------------
+
+class GameType a where
+    _gameObject :: a -> GameObject
+    gameObject_ :: GameObject -> a -> a
+    children    :: a -> [a]
+    gchildren_  :: [a] -> a -> a
+
+gameObject :: GameObject
+gameObject = GameObject 0 identity 1 Nothing Nothing Nothing []
+
+
+{-
+    implement:
+    move, rotate, etc
+-}
+
+rotate :: GameType a => a -> Vector3 -> a
+rotate gt (Vector3 x y z) = gameObject_ (g{rot = rot g * fromEuler' x y z}) gt
+    where
+        g = _gameObject gt
 
 -------------------------------------------------------
 -- GameObject - Getters / Setters
 -------------------------------------------------------
 
-transform :: GameObject -> Transform
-transform (GameObject t _ _ _ _) = t
-
 transMat :: GameObject -> Matrix4x4
-transMat (GameObject (Transform p r s) _ _ _ _) = trsMatrix p r s
-
-children :: GameObject -> [GameObject]
-children (GameObject _ _ _ _ cs) = cs
-
-gchildren_ :: [GameObject] -> GameObject -> GameObject
-gchildren_ cs (GameObject t c m cm _) = GameObject t c m cm cs
-
-collider :: GameObject -> Maybe Collider
-collider (GameObject _ c _ _ _) = c
+transMat (GameObject p r s _ _ _ _) = trsMatrix p r s
 
 collider_ :: Collider -> GameObject -> GameObject
-collider_ c (GameObject t _ m cm cs) = GameObject t (Just c) m cm cs
-
-model :: GameObject -> Maybe Model
-model (GameObject _ _ m _ _) = m
-
-camera :: GameObject -> Maybe Camera
-camera (GameObject _ _ _ cm _) = cm
+collider_ c (GameObject p r s _ m cm cs) = GameObject p r s (Just c) m cm cs
 
 gaddChild :: GameObject -> GameObject -> GameObject
-gaddChild g (GameObject t c m cm cs) = GameObject t c m cm (g : cs)
+gaddChild g (GameObject p r s c m cm cs) = GameObject p r s c m cm (g : cs)
 
 removeChild :: GameObject -> Int -> GameObject
-removeChild (GameObject t c m cm cs) n
-    | null cs2  = GameObject t c m cm cs
-    | otherwise = GameObject t c m cm $ cs1 ++ tail cs2
+removeChild (GameObject p r s c m cm cs) n
+    | null cs2  = GameObject p r s c m cm cs
+    | otherwise = GameObject p r s c m cm $ cs1 ++ tail cs2
     where
         (cs1, cs2) = splitAt n cs
+
+instance GameType GameObject where
+    _gameObject                                = id
+    gameObject_ g _                            = g
+    children       (GameObject _ _ _ _ _ _ gs) = gs
+    gchildren_  gs (GameObject p r s c m cm _) = GameObject p r s c m cm gs
 
 -------------------------------------------------------
 -- GameObject - Folding / Mapping
@@ -92,17 +111,6 @@ mapFoldStack f gacc = (gchildren_ gcs g, acc')
         mapC c (cs, cacc) = (c' : cs, cacc')
             where
                 (c', cacc') = mapFoldStack f (c, cacc, s)
-
--------------------------------------------------------
--- Components
--------------------------------------------------------
-
-data Component = Graphics Model
-               | CameraComponent Camera
---                    | Audio    String Double Bool
---                    | Light    LightType
---                    | Timer    Double Double
-
 
 -------------------------------------------------------
 -- Update
@@ -302,12 +310,12 @@ instance Arbitrary GameObject where
         (px, py, pz) <- arbitrary
         (rx, ry, rz) <- arbitrary
         (sx, sy, sz) <- arbitrary
-        return $ GameObject (Transform (Vector3 px py pz) (fromEuler' rx ry rz) (Vector3 sx sy sz)) (boxCollider w h d) Nothing Nothing []
+        return $ GameObject (Vector3 px py pz) (fromEuler' rx ry rz) (Vector3 sx sy sz) (boxCollider w h d) Nothing Nothing []
 
 dynTreeTester :: ((GameObject, DynamicTree) -> Bool) -> [[TreeTest]] -> Bool
 dynTreeTester f uss = fst $ foldr updateTest start uss
     where
-        start                    = (True, (GameObject (Transform 0 identity 1) Nothing Nothing Nothing [], empty))
+        start                    = (True, (GameObject 0 identity 1 Nothing Nothing Nothing [], empty))
         updateTest us (True,  t) = let res = update (foldr test' t us) in (f res, res)
         updateTest _  (False, t) = (False, t)
         test' (TestInsert c)     (g, t) = (gaddChild   c g, t)
@@ -318,7 +326,7 @@ dynTreeTester f uss = fst $ foldr updateTest start uss
             where
                 cs'        = cs1 ++ (c : tail cs2)
                 (cs1, cs2) = splitAt i $ children g
-                c = GameObject (Transform tr identity 1) (collider (head cs2)) Nothing Nothing (children (head cs2))
+                c = GameObject tr identity 1 (collider (head cs2)) Nothing Nothing (children (head cs2))
 
 validateIDs :: (GameObject, DynamicTree) -> Bool
 validateIDs (g, t) = sort (tids (nodes t) []) == gids && sort nids == gids

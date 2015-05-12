@@ -1,23 +1,36 @@
 import Necronomicon
 
 main :: IO ()
-main = runGame game start
+main = print $ megaDark $ Root []
 
-start :: GameObject
-start = GameObject (Transform 0 identity 1) Nothing Nothing Nothing [cam, cube1, cube2, cube3, cube4, cube5]
-    where
-        c     = Just $ Camera (60/2) 0.1 1000 black []
-        cam   = GameObject (Transform (Vector3   0   0 10) identity              1)  Nothing            Nothing c       []
-        cube1 = GameObject (Transform (Vector3   5   0  2) (fromEuler' 32 81 62) 1) (boxCollider 2 1 1) Nothing Nothing []
-        cube2 = GameObject (Transform (Vector3 (-5)  0  (-4)) (fromEuler' 99 12 29) 1) (boxCollider 1 2 1) Nothing Nothing []
-        cube3 = GameObject (Transform (Vector3 (-2)  2  0) (fromEuler' 99 12 29) 1) (boxCollider 1 2 1) Nothing Nothing []
-        cube4 = GameObject (Transform (Vector3   2 (-2) 0) (fromEuler' 99 12 29) 1) (boxCollider 2 1 1) Nothing Nothing []
-        cube5 = GameObject (Transform (Vector3   0   1  1) (fromEuler' 15  0  2) 1) (boxCollider 1 1 1) Nothing Nothing []
+--This is just a demo
+type Health    = Double
+data MegaDark  = Hero  Health GameObject
+               | Enemy Health GameObject
+               | Root  [MegaDark]
+               deriving (Show)
 
---matrix rotations and or quaternions unstable!
-game :: GameObject -> GameObject
-game g
-    | [cam, cube1, cube2, cube3, cube4, cube5] <- children g = gchildren_ [cam, cube1' cube1, cube2, cube3, cube4, cube5] g
-    | otherwise                                              = g
-    where
-        cube1' (GameObject (Transform p r s) c _ _ _) = GameObject (Transform p (r  * (fromEuler' 0.1 0.121 0)) s) c Nothing Nothing []
+--No deriving....time for template haskell?
+instance GameType MegaDark where
+    _gameObject (Hero  _ g) = g
+    _gameObject (Enemy _ g) = g
+    _gameObject  _          = gameObject
+
+    gameObject_ g (Hero  h _) = Hero  h g
+    gameObject_ g (Enemy h _) = Enemy h g
+    gameObject_ _  g          = g
+
+    children (Root c) = c
+    children  _       = []
+
+    gchildren_ c (Root _) = Root c
+    gchildren_ _  g       = g
+
+mkEnemy :: Vector3 -> MegaDark
+mkHero  :: MegaDark
+mkEnemy p = Enemy 100 gameObject{pos = p, collider = boxCollider 1 1 1}
+mkHero    = Hero  100 gameObject{pos = Vector3 0 0 10, collider = boxCollider 1 2 1, camera = Just $ Camera (60/2) 0.1 1000 black []}
+
+megaDark :: MegaDark -> MegaDark
+megaDark (Root [h, e1, e2, e3, e4]) = Root [h `rotate` Vector3 0.1 0.05 0, e1, e2, e3, e4]
+megaDark  _                         = Root [mkHero, mkEnemy 1, mkEnemy 2, mkEnemy (-1), mkEnemy (-2)]

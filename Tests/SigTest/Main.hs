@@ -32,20 +32,20 @@ section2 = scene [camSig,terrainSig]
     where
         terrainSig  = terrainObject <~ audioTexture 2 ~~ audioTexture 3 ~~ audioTexture 4 ~~ time
         camSig      = cam <~ time * 0.125
-        cam t       = perspCamera pos rot 60 0.1 1000 black [glow]
+        cam t       = perspCamera p r 60 0.1 1000 black [glow]
             where
-                pos = Vector3 (sin t * 8) (cos (t * 0.75) * 5) (sin (t * 0.333) * 4)
-                rot = inverse <| lookAt (_z_ (* (-3)) <| pos) 0
+                p = Vector3 (sin t * 8) (cos (t * 0.75) * 5) (sin (t * 0.333) * 4)
+                r = inverse <| lookAt (_z_ (* (-3)) <| p) 0
 
 section3 :: Signal ()
 section3 = scene [camSig,sphereSig]
     where
         sphereSig   = sphereObject <~ audioTexture 2 ~~ audioTexture 3 ~~ audioTexture 4 ~~ time ~~ pure 36
         camSig      = cam <~ time * 0.05
-        cam t       = perspCamera pos rot 60 0.1 1000 black [glow]
+        cam t       = perspCamera p r 60 0.1 1000 black [glow]
             where
-                pos = Vector3 (cos (t * 0.7453) * 5) (sin (t * 0.912) * 8) (sin (t * 0.4543) * 4)
-                rot = inverse <| lookAt (_z_ (* (-2.5)) <| pos) 0
+                p = Vector3 (cos (t * 0.7453) * 5) (sin (t * 0.912) * 8) (sin (t * 0.4543) * 4)
+                r = inverse <| lookAt (_z_ (* (-2.5)) <| p) 0
 
 terrainObject :: Texture -> Texture -> Texture -> Double -> SceneObject
 terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 0 (-6)) identity (Vector3 0.125 1 0.125) (Model mesh terrainMaterial) []
