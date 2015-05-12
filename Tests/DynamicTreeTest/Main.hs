@@ -27,9 +27,17 @@ instance GameType MegaDark where
     gchildren_ _  g       = g
 
 mkEnemy :: Vector3 -> MegaDark
+mkEnemy    p = Enemy 100 gameObject{
+    pos      = p,
+    collider = boxCollider 1 1 1
+}
+
 mkHero  :: MegaDark
-mkEnemy p = Enemy 100 gameObject{pos = p, collider = boxCollider 1 1 1}
-mkHero    = Hero  100 gameObject{pos = Vector3 0 0 10, collider = boxCollider 1 2 1, camera = Just $ Camera (60/2) 0.1 1000 black []}
+mkHero       = Hero  100 gameObject{
+    pos      = Vector3 0 0 10,
+    collider = boxCollider 1 2 1,
+    camera   = Just $ Camera (60/2) 0.1 1000 black []
+}
 
 megaDark :: MegaDark -> MegaDark
 megaDark (Root [h, e1, e2, e3, e4]) = Root [h `rotate` Vector3 0.1 0.05 0, e1, e2, e3, e4]
