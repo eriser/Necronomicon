@@ -1,6 +1,10 @@
-import Necronomicon
+-- import Necronomicon
+import Necronomicon.FRP.SignalA
 
 main :: IO ()
+main = print "test"
+
+{-
 main = print $ megaDark $ Root []
 
 --This is just a demo
@@ -42,3 +46,4 @@ mkHero       = Hero  100 gameObject{
 megaDark :: MegaDark -> MegaDark
 megaDark (Root [h, e1, e2, e3, e4]) = Root [h `rotate` Vector3 0.1 0.05 0, e1, e2, e3, e4]
 megaDark  _                         = Root [mkHero, mkEnemy 1, mkEnemy 2, mkEnemy (-1), mkEnemy (-2)]
+-}
