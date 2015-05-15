@@ -18,10 +18,6 @@ import           Necronomicon.Utility              (getCurrentTime)
 (~>) :: Functor f => f a -> (a -> b) -> f b
 (~>) = flip fmap
 
-(~<) :: Signal2 (a -> a) -> a -> Signal2 a
-(~<) = flip feedback
-infixl 4 ~<
-
 infixl 4 <~,~~
 infixr 4 ~>
 
@@ -169,30 +165,9 @@ runSignal s = initWindow >>= \mw -> case mw of
                 run q window sig' currentTime
 
 
-data Signal2 a = Signal2 {runSig2 :: Time -> (Signal2 a, a)}
-
-instance Functor Signal2 where
-    fmap f s = Signal2 $ \t -> let (s', x) = runSig2 s t in (fmap f s', f x)
-
-instance Applicative Signal2 where
-    pure x    = Signal2 $ \_ -> (pure x, x)
-    fs <*> xs = Signal2 cont
-        where
-            cont t = (fs' <*> xs', f x)
-                where
-                    (fs', f) = runSig2 fs t
-                    (xs', x) = runSig2 xs t
-
-delay2 :: a -> Signal2 a -> Signal2 a
-delay2 a s = Signal2 $ \t -> let (s', a') = runSig2 s t in (delay2 a' s', a)
-
-feedback :: a -> Signal2 (a -> a) -> Signal2 a
-feedback a fs = Signal2 cont
-    where
-        cont t = (feedback a' fs', a)
-            where
-                (fs', f') = runSig2 fs t
-                a'        = f' a
+-------------------------------------------------------
+-- Applicative Signals 2.0
+-------------------------------------------------------
 
 runSignal2 :: Show a => Signal2 a -> IO()
 runSignal2 s = initWindow >>= \mw -> case mw of
@@ -218,7 +193,7 @@ runSignal2 s = initWindow >>= \mw -> case mw of
         --     let pos = (x / fromIntegral wx,y / fromIntegral wy)
         --     writeToSignal (mouseSignal state) pos
 
-        run quit window sig runTime'
+        run quit window (Signal2 sig) runTime'
             | quit      = print "Qutting" >> return ()
             | otherwise = do
 
@@ -226,9 +201,55 @@ runSignal2 s = initWindow >>= \mw -> case mw of
                 q <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'Escape
                 currentTime <- getCurrentTime
 
-                let delta     = Time $ currentTime - runTime'
-                    (sig', x) = runSig2 sig delta
-
-                print x
+                let delta   = Time $ currentTime - runTime'
+                    (SS xt) = (SS (id, delta)) ~~ fst sig
+                    (SS ct) = snd sig
+                print xt
                 threadDelay $ 16667
-                run q window sig' currentTime
+                run q window (fst ct) currentTime
+
+
+--------------------------
+--Monadic state
+--------------------------
+
+--SS - Signal State, This has to be lazy as well!
+newtype SS a = SS (a, Time)
+
+instance Functor SS where
+    fmap f (SS xt) = SS (f $ fst xt, snd xt)
+
+instance Applicative SS where
+    pure x                = SS (x , Time 0)
+    SS ft <*> SS xt = SS (fst ft $ fst xt, snd ft)
+
+--------------------------
+--Signal Type
+--------------------------
+--Pure constructor to make things more efficient
+
+newtype Signal2 a = Signal2 (SS a, SS (Signal2 a))
+
+instance Functor Signal2 where
+    fmap f (Signal2 sig) = Signal2 (f <~ fst sig, (fmap f) <~ snd sig)
+
+instance Applicative Signal2 where
+    pure x                            = Signal2 (pure x, pure $ pure x)
+    (Signal2 fsig) <*> (Signal2 xsig) = Signal2 (x', sig')
+        where
+            x'   = fst fsig ~~ fst xsig
+            sig' = (<*>) <~ snd fsig ~~ snd xsig
+
+delay2 :: a -> Signal2 a -> Signal2 a
+delay2 aPrev (Signal2 sig) = Signal2 (pure aPrev, delay2 <~ fst sig ~~ snd sig)
+
+signalValues2 :: Double -> Signal2 a -> [a]
+signalValues2 t (Signal2 sig) = fst xt : signalValues2 t (fst contt)
+    where
+        (SS xt)    = (SS (id, Time t)) ~~ fst sig
+        (SS contt) = snd sig
+
+test2 :: Signal2 Int
+test2 = h
+    where
+        h = (+1) <~ delay2 0 h
