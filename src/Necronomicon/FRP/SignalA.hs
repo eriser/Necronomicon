@@ -1,9 +1,12 @@
 module Necronomicon.FRP.SignalA where
-
 ------------------------------------------------------
--- import           Control.Applicative
-import           Control.Arrow hiding (second)
-import qualified Control.Category as Cat
+import           Control.Arrow                      hiding (second)
+import           Control.Concurrent
+import qualified Control.Category                  as Cat
+import qualified Graphics.UI.GLFW                  as GLFW
+
+import           Necronomicon.Graphics
+import           Necronomicon.Utility              (getCurrentTime)
 ------------------------------------------------------
 
 (<~) :: Functor f => (a -> b) -> f a -> f b
@@ -15,10 +18,17 @@ import qualified Control.Category as Cat
 (~>) :: Functor f => f a -> (a -> b) -> f b
 (~>) = flip fmap
 
+(~<) :: Signal2 (a -> a) -> a -> Signal2 a
+(~<) = flip feedback
+infixl 4 ~<
+
 infixl 4 <~,~~
 infixr 4 ~>
 
 newtype Time = Time Double
+
+instance Show Time where
+    show (Time d) = show d
 
 -------------------------------------------------------
 -- AFRP
@@ -77,15 +87,6 @@ instance Arrow Signal where
 -- instance ArrowApply Signal where
     -- app =
 
---foldp or state???
---maybe define this in terms of arrow loop instead!??!?!
---I think this is where the space leak would exhibit itself
-state :: s -> (a -> s -> s) -> Signal a s
-state s f = SignalGen $ \_ a -> let x = f a s in (state x f, x)
-
-foldp :: (a -> s -> s) -> s -> Signal a s
-foldp = flip state
-
 plus1 :: Signal Int Int
 plus1 = arr (+1)
 
@@ -99,19 +100,26 @@ instance Applicative (Signal a) where
     pure      = constant
     af <*> ax = fmap (uncurry ($)) (af &&& ax) -- Maybe implement this for better efficiency
 
-test1 :: Signal () Int
-test1 = constant 1
+spawner :: (spawnInput -> [s]) -> (updateInput -> s -> Maybe s) -> Signal (spawnInput, updateInput) [s]
+spawner spawn update = spawner' []
+    where
+        spawner' ss = SignalGen cont
+            where
+                cont _ (spawnInput, updateInput) = (spawner' ss', ss')
+                    where
+                        ss' = foldr updateAndPrune (spawn spawnInput) ss
+                        updateAndPrune s acc = case update updateInput s of
+                            Just s' -> s' : acc
+                            _       -> acc
 
-test2 :: Signal () Int
-test2 = (+) <~ constant 1 ~~ constant 2
+delay :: a -> Signal a a
+delay a = SignalGen $ \_ a' -> (delay a', a)
 
-test :: Signal () (Int -> Int)
-test = (+) <~ constant 1
+state :: s -> (a -> s -> s) -> Signal a s
+state s f = SignalGen $ \_ a -> let x = f a s in (state x f, x)
 
-data HeroA = HeroA Double
-
-test4 :: Signal () HeroA
-test4 = foldp (\dmg (HeroA h) -> HeroA (h - dmg)) (HeroA 100 ) <<< constant 3000
+foldp :: (a -> s -> s) -> s -> Signal a s
+foldp = flip state
 
 --try a test with an open loop feedback for game entities
 --maybe need delay combinator
@@ -119,3 +127,108 @@ test4 = foldp (\dmg (HeroA h) -> HeroA (h - dmg)) (HeroA 100 ) <<< constant 3000
 instance ArrowLoop Signal where
     loop (SignalConst _ c) = constant (fst c)
     loop  sig              = SignalGen $ \dt b -> let (sig', (c, d)) = runS sig dt (b, d) in (loop sig', c)
+
+
+runSignal :: Show a => Signal () a -> IO()
+runSignal s = initWindow >>= \mw -> case mw of
+    Nothing -> print "Error starting GLFW." >> return ()
+    Just w  -> do
+        putStrLn "Starting Necronomicon"
+
+        currentTime <- getCurrentTime
+        run False w s currentTime
+    where
+        --event callbacks
+        -- mousePressEvent state _ _ GLFW.MouseButtonState'Released _ = atomically $ writeTChan (mouseButtonBuffer state) $ False
+        -- mousePressEvent state _ _ GLFW.MouseButtonState'Pressed  _ = atomically $ writeTChan (mouseButtonBuffer state) $ True
+        -- dimensionsEvent state _ x y = writeToSignal (dimensionsSignal state) $ Vector2 (fromIntegral x) (fromIntegral y)
+        -- keyPressEvent   state _ k _ GLFW.KeyState'Pressed  _       = do
+            -- atomically $ writeTChan (keySignalBuffer state)   (glfwKeyToEventKey k,True)
+            -- atomically $ writeTChan (keysPressedBuffer state) (glfwKeyToEventKey k)
+        -- keyPressEvent   state _ k _ GLFW.KeyState'Released _       = atomically $ writeTChan (keySignalBuffer state) (glfwKeyToEventKey k,False)
+        -- keyPressEvent   _ _ _ _ _ _                            = return ()
+        --
+        -- mousePosEvent state w x y = do
+        --     (wx,wy) <- GLFW.getWindowSize w
+        --     let pos = (x / fromIntegral wx,y / fromIntegral wy)
+        --     writeToSignal (mouseSignal state) pos
+
+        run quit window sig runTime'
+            | quit      = print "Qutting" >> return ()
+            | otherwise = do
+
+                GLFW.pollEvents
+                q <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'Escape
+                currentTime <- getCurrentTime
+
+                let delta     = Time $ currentTime - runTime'
+                    (sig', x) = runS sig delta ()
+
+                print x
+                threadDelay $ 16667
+                run q window sig' currentTime
+
+
+data Signal2 a = Signal2 {runSig2 :: Time -> (Signal2 a, a)}
+
+instance Functor Signal2 where
+    fmap f s = Signal2 $ \t -> let (s', x) = runSig2 s t in (fmap f s', f x)
+
+instance Applicative Signal2 where
+    pure x    = Signal2 $ \_ -> (pure x, x)
+    fs <*> xs = Signal2 cont
+        where
+            cont t = (fs' <*> xs', f x)
+                where
+                    (fs', f) = runSig2 fs t
+                    (xs', x) = runSig2 xs t
+
+delay2 :: a -> Signal2 a -> Signal2 a
+delay2 a s = Signal2 $ \t -> let (s', a') = runSig2 s t in (delay2 a' s', a)
+
+feedback :: a -> Signal2 (a -> a) -> Signal2 a
+feedback a fs = Signal2 cont
+    where
+        cont t = (feedback a' fs', a)
+            where
+                (fs', f') = runSig2 fs t
+                a'        = f' a
+
+runSignal2 :: Show a => Signal2 a -> IO()
+runSignal2 s = initWindow >>= \mw -> case mw of
+    Nothing -> print "Error starting GLFW." >> return ()
+    Just w  -> do
+        putStrLn "Starting Necronomicon"
+
+        currentTime <- getCurrentTime
+        run False w s currentTime
+    where
+        --event callbacks
+        -- mousePressEvent state _ _ GLFW.MouseButtonState'Released _ = atomically $ writeTChan (mouseButtonBuffer state) $ False
+        -- mousePressEvent state _ _ GLFW.MouseButtonState'Pressed  _ = atomically $ writeTChan (mouseButtonBuffer state) $ True
+        -- dimensionsEvent state _ x y = writeToSignal (dimensionsSignal state) $ Vector2 (fromIntegral x) (fromIntegral y)
+        -- keyPressEvent   state _ k _ GLFW.KeyState'Pressed  _       = do
+            -- atomically $ writeTChan (keySignalBuffer state)   (glfwKeyToEventKey k,True)
+            -- atomically $ writeTChan (keysPressedBuffer state) (glfwKeyToEventKey k)
+        -- keyPressEvent   state _ k _ GLFW.KeyState'Released _       = atomically $ writeTChan (keySignalBuffer state) (glfwKeyToEventKey k,False)
+        -- keyPressEvent   _ _ _ _ _ _                            = return ()
+        --
+        -- mousePosEvent state w x y = do
+        --     (wx,wy) <- GLFW.getWindowSize w
+        --     let pos = (x / fromIntegral wx,y / fromIntegral wy)
+        --     writeToSignal (mouseSignal state) pos
+
+        run quit window sig runTime'
+            | quit      = print "Qutting" >> return ()
+            | otherwise = do
+
+                GLFW.pollEvents
+                q <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'Escape
+                currentTime <- getCurrentTime
+
+                let delta     = Time $ currentTime - runTime'
+                    (sig', x) = runSig2 sig delta
+
+                print x
+                threadDelay $ 16667
+                run q window sig' currentTime

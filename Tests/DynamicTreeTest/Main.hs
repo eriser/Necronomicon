@@ -1,8 +1,30 @@
+{-# LANGUAGE Arrows #-}
 -- import Necronomicon
 import Necronomicon.FRP.SignalA
+-- import Control.Arrow hiding (second)
 
 main :: IO ()
-main = print "test"
+-- main = runSignal gameA
+main = runSignal2 game
+
+-- gameA :: Signal () Int
+-- gameA = proc () -> do
+    -- rec a <- arr (+) -< b
+        -- b <- arr (+) -< a
+    -- returnA -< b
+    -- where
+        -- h = loop (arr $ \(x, l) -> (f, x : map (*x) fs)) <<< constant 2
+        -- h = loop $ arr (1 + ) <<< delay 0
+        -- e = arr (+2) <<< (delay 0 <<< h)
+
+game :: Signal2 Int
+game = h
+    where
+        h = (+ 1) <~ delay2 0 e
+        e = (+ 1) <~ delay2 0 h
+        -- h = (+1) <~ delay2 0 h
+        -- h = feedback 0 $ (+) <~ pure 1
+        -- h = (+) <~ pure 1 ~< 0
 
 {-
 main = print $ megaDark $ Root []
