@@ -1,4 +1,5 @@
 import System.Environment (getArgs)
+import System.Console.GetOpt
 import Data.Bits
 import Data.Char
 
@@ -8,6 +9,29 @@ data ArgDefine = ArgDefine String String Rate
 
 argDefineName :: ArgDefine -> String
 argDefineName (ArgDefine name _ _) = name
+
+funcNameToCalcDefineName :: String -> String
+funcNameToCalcDefineName funcName = (foldr (\s acc -> (map toUpper s) ++ "_" ++ acc) "" wordList) ++ "CALC"
+    where
+        wordList = filter ((>0) . length) $ (\(wrd, acc) -> wrd : acc) $ foldr splitCamelCase ("", [] :: [String]) funcName
+        splitCamelCase char (wrd, acc) = if isUpper char then ("", (char : wrd) : acc) else (char : wrd, acc)
+
+generateCalcDefine :: String -> String -> [String] -> String
+generateCalcDefine funcName defineName args = inlineFunc ++ foldr (++) "" macroLinesWithEndings
+    where
+        lengthArgs = length args
+        inlineFuncName = funcName ++ "InlineCalc"
+        inlineFuncArgs = foldl (\a b -> a ++ (if null a then "" else ", ") ++ b) "" $ map (\s -> "double " ++ s) args
+        inlineFunc = "static inline double " ++ inlineFuncName ++ "(" ++ inlineFuncArgs ++ ")\n{\n    double y = 0; // CALC CODE HERE\n    return y;\n}\n\n"
+        calcDefineLine = "#define " ++ defineName ++ "(CONTROL_ARGS, AUDIO_ARGS)"
+        inputs = map argIndexToInputString ([0 .. (max 0 (lengthArgs -1 ))] :: [Int])
+        outputs = ["double* out = UGEN_OUTPUT_BUFFER(u, 0);"]
+        argIndexToInputString index = "double* in" ++ show index ++ " UGEN_INPUT_BUFFER(u, " ++ show index ++ ");"
+        argLines = map (\arg -> "double " ++ arg ++ ";") args
+        audioLoopFuncCall = "    UGEN_OUT(out, " ++ inlineFuncName ++ "(" ++ foldl (\a b -> a ++ (if null a then "" else ", ") ++ b) "" args ++ "));"
+        macroLines = calcDefineLine : inputs ++ outputs ++ argLines ++ ["CONTROL_ARGS", "AUDIO_LOOP(", "    AUDIO_ARGS", audioLoopFuncCall, ");"]
+        longestLength = foldr (\s acc -> max (length s) acc) 0 macroLines
+        macroLinesWithEndings = map (\line -> line ++ replicate (max 0 (longestLength - length line)) ' ' ++ " \\\n") macroLines
 
 -- Creates a little endian bit list representation of an Int
 toBitList :: Int -> [Int]
@@ -34,12 +58,13 @@ calcFuncBindings name numArgs = map (funcDataToBinding) cfuncData
         funcDataToBinding (CalcFuncBindingData fname fbind _) = "foreign import ccall \"&" ++ fname ++ "\" " ++ fbind ++ " :: CUGenFunc"
 
 generateCCode :: String -> [String] -> String
-generateCCode name args = argDefines ++ "\n\n" ++ cfuncs
+generateCCode name args = (generateCalcDefine name calcDefineName args) ++ "\n\n" ++ argDefines ++ "\n\n" ++ cfuncs
     where
         numArgs = length args
         cfuncData = calcFuncBindingData name numArgs
         cfuncs = foldl (\acc s -> acc ++ s ++ "\n\n") "" $ map createCFunction [0..((2 ^ numArgs) - 1)]
         longestCFuncNameLength = foldl max (length "// Control Arguments  ") $ map (\(CalcFuncBindingData cname _ _) -> length cname) cfuncData
+        calcDefineName = funcNameToCalcDefineName name
         argDefines = foldl (\acc (ArgDefine _ ks _, ArgDefine _ as _) -> acc ++ ks ++ "\n" ++ as ++ "\n") "" argDefinesList
         argDefinesList :: [(ArgDefine, ArgDefine)]
         argDefinesList = map argToDefines $ zip args [0..]
@@ -52,7 +77,7 @@ generateCCode name args = argDefines ++ "\n\n" ++ cfuncs
         argToDefines :: (String, Int) -> (ArgDefine, ArgDefine)
         argToDefines (arg, i) = (argToControlDefine arg i, argToAudioDefine arg i)
         createCFunction :: Int -> String
-        createCFunction i = "// " ++ (show i) ++ "\n" ++ "void " ++ cname ++ "(ugen u)\n{\n    " ++ (map toUpper name) ++ "_CALC(" ++ fguts ++ "    )\n}"
+        createCFunction i = "// " ++ (show i) ++ "\n" ++ "void " ++ cname ++ "(ugen u)\n{\n    " ++ calcDefineName ++ "(" ++ fguts ++ "    )\n}"
             where
                 (CalcFuncBindingData cname _ rates) = cfuncData !! i
                 fguts = argPrefix ++ "// Control Arguments" ++ controlArgs' ++ "," ++ argPrefix ++ "// Audio Arguments" ++ audioArgs' ++ "\n"
@@ -87,10 +112,19 @@ generateHaskellCode name args = cbindings ++ "\n" ++ typeSignature ++ "\n" ++ fu
         haskellNamesListString = "[" ++ join ", " haskellNames ++ "]"
         argsListString = "[" ++ join ", " args ++ "]"
 
+data Flag = Version deriving (Show, Eq, Enum)
+
+options :: [OptDescr Flag]
+options = [ Option ['V'] ["version"] (NoArg Version) "show version number" ]
+
 main :: IO ()
 main = do
     args <- getArgs
     putStrLn $ show args
+    let (flags, nonOpts, msgs) = getOpt RequireOrder options args
+    print flags
+    print nonOpts
+    print msgs
     let ugenName = head args
     let ugenArgs = tail args
     putStrLn "////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////"
