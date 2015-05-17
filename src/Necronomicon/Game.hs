@@ -61,6 +61,11 @@ rotate gt (Vector3 x y z) = gameObject_ (g{rot = rot g * fromEuler' x y z}) gt
     where
         g = _gameObject gt
 
+move :: GameType a => a -> Vector3 -> a
+move gt dir = gameObject_ (g{pos = pos g + dir}) gt
+    where
+        g = _gameObject gt
+
 -------------------------------------------------------
 -- GameObject - Getters / Setters
 -------------------------------------------------------

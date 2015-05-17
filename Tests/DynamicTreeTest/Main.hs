@@ -1,30 +1,36 @@
 {-# LANGUAGE Arrows #-}
 -- import Necronomicon
 import Necronomicon.FRP.SignalA
--- import Control.Arrow hiding (second)
+import Control.Arrow hiding (second)
 
 main :: IO ()
--- main = runSignal gameA
-main = runSignal2 game
+-- main = runSignalSS gameS
+main = runSignalA gameA
+-- main = runSignal game
 
--- gameA :: Signal () Int
--- gameA = proc () -> do
-    -- rec a <- arr (+) -< b
-        -- b <- arr (+) -< a
-    -- returnA -< b
+
+gameA :: SignalA () Int
+gameA = proc () -> do
+    rec a <- arr (+1) <<< delayA 0 -< b
+        b <- arr (+1) <<< delayA 0 -< a
+    returnA -< b
+
+-- game :: Signal Int
+-- game = h
     -- where
-        -- h = loop (arr $ \(x, l) -> (f, x : map (*x) fs)) <<< constant 2
-        -- h = loop $ arr (1 + ) <<< delay 0
-        -- e = arr (+2) <<< (delay 0 <<< h)
+        -- h = (+1) <~ delay 0 e
+        -- e = (+1) <~ delay 0 h
 
-game :: Signal2 Int
-game = h
-    where
-        h = (+ 1) <~ delay2 0 e
-        e = (+ 1) <~ delay2 0 h
-        -- h = (+1) <~ delay2 0 h
-        -- h = feedback 0 $ (+) <~ pure 1
-        -- h = (+) <~ pure 1 ~< 0
+-- instance Show (Int -> Int) where
+    -- show _ = "(Int -> Int)"
+
+-- gameS :: SignalS Int
+-- gameS = pureS (+) `apS` pureS 1 `apS` pureS 666
+-- gameS = (fmapS (+) (pureS 666)) `apS` pureS 666
+-- gameS = h
+    -- where
+        -- This goes infinite....gotta figure that out!
+        -- h = fmapS (+ 1) $ delayS 0 h
 
 {-
 main = print $ megaDark $ Root []
