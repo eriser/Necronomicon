@@ -85,15 +85,6 @@ instance Arrow SignalA where
                 where
                     (cont2, c) = cont1 t b
 
--- instance ArrowApply Signal where
-    -- app =
-
-plus1 :: SignalA Int Int
-plus1 = arr (+1)
-
-plus2 :: SignalA Int Int
-plus2 = plus1 >>> plus1
-
 instance Functor (SignalA a) where
     fmap f a = a >>> arr f -- Maybe implement this for better efficiency
 
@@ -113,14 +104,14 @@ instance Applicative (SignalA a) where
 --                             Just s' -> s' : acc
 --                             _       -> acc
 
-delayA :: a -> SignalA a a
-delayA a = SignalGen $ \_ a' -> (delayA a', a)
+delay :: a -> SignalA a a
+delay a = SignalGen $ \_ a' -> (delay a', a)
 
-stateA :: s -> (a -> s -> s) -> SignalA a s
-stateA s f = SignalGen $ \_ a -> let x = f a s in (stateA x f, x)
+state :: s -> (a -> s -> s) -> SignalA a s
+state s f = SignalGen $ \_ a -> let x = f a s in (state x f, x)
 
-foldpA :: (a -> s -> s) -> s -> SignalA a s
-foldpA = flip stateA
+-- foldp :: (a -> s -> s) -> s -> SignalA a s
+-- foldp = flip stateA
 
 --try a test with an open loop feedback for game entities
 --maybe need delay combinator
@@ -328,3 +319,7 @@ moveHero k (Hero health  _               ) = case k of
     KeyA -> Hero health $ HeroMoving left3
     KeyD -> Hero health $ HeroMoving right3
 moveHero _ m = m
+
+
+data Wire s e m a b = Wire (m b)
+newtype Signal' a b = Signa' (Wire Float () IO a b)

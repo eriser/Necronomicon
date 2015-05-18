@@ -6,13 +6,13 @@ import Control.Arrow hiding (second)
 main :: IO ()
 -- main = runSignalSS gameS
 main = runSignalA gameA
+-- main = runSignalA $ constant (1 :: Int) >>> state 0 (+)
 -- main = runSignal game
-
 
 gameA :: SignalA () Int
 gameA = proc () -> do
-    rec a <- arr (+1) <<< delayA 0 -< b
-        b <- arr (+1) <<< delayA 0 -< a
+    rec a <- arr (+1)             -< b
+        b <- arr (+1) <<< delay 0 -< a
     returnA -< b
 
 -- game :: Signal Int
