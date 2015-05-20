@@ -1,5 +1,3 @@
-{-# LANGUAGE ExistentialQuantification #-}
-
 module Necronomicon.FRP.SignalA where
 ------------------------------------------------------
 import           Control.Arrow                      hiding (second)
@@ -8,6 +6,7 @@ import           Control.Concurrent.STM
 import qualified Control.Category                  as Cat
 import qualified Graphics.UI.GLFW                  as GLFW
 import           Control.Monad                     (foldM)
+import           Control.Monad.Trans               (MonadIO, liftIO)
 
 import           Necronomicon.Graphics
 import           Necronomicon.Utility              (getCurrentTime)
@@ -106,9 +105,9 @@ instance Applicative (SignalA a) where
 
 delay :: a -> SignalA a a
 delay a = SignalGen $ \_ a' -> (delay a', a)
-
-state :: s -> (a -> s -> s) -> SignalA a s
-state s f = SignalGen $ \_ a -> let x = f a s in (state x f, x)
+--
+-- state :: s -> (a -> s -> s) -> SignalA a s
+-- state s f = SignalGen $ \_ a -> let x = f a s in (state x f, x)
 
 -- foldp :: (a -> s -> s) -> s -> SignalA a s
 -- foldp = flip stateA
@@ -126,29 +125,12 @@ runSignalA s = initWindow >>= \mw -> case mw of
     Nothing -> print "Error starting GLFW." >> return ()
     Just w  -> do
         putStrLn "Starting Necronomicon"
-
         currentTime <- getCurrentTime
         run False w s currentTime
     where
-        --event callbacks
-        -- mousePressEvent state _ _ GLFW.MouseButtonState'Released _ = atomically $ writeTChan (mouseButtonBuffer state) $ False
-        -- mousePressEvent state _ _ GLFW.MouseButtonState'Pressed  _ = atomically $ writeTChan (mouseButtonBuffer state) $ True
-        -- dimensionsEvent state _ x y = writeToSignal (dimensionsSignal state) $ Vector2 (fromIntegral x) (fromIntegral y)
-        -- keyPressEvent   state _ k _ GLFW.KeyState'Pressed  _       = do
-            -- atomically $ writeTChan (keySignalBuffer state)   (glfwKeyToEventKey k,True)
-            -- atomically $ writeTChan (keysPressedBuffer state) (glfwKeyToEventKey k)
-        -- keyPressEvent   state _ k _ GLFW.KeyState'Released _       = atomically $ writeTChan (keySignalBuffer state) (glfwKeyToEventKey k,False)
-        -- keyPressEvent   _ _ _ _ _ _                            = return ()
-        --
-        -- mousePosEvent state w x y = do
-        --     (wx,wy) <- GLFW.getWindowSize w
-        --     let pos = (x / fromIntegral wx,y / fromIntegral wy)
-        --     writeToSignal (mouseSignal state) pos
-
         run quit window sig runTime'
             | quit      = print "Qutting" >> return ()
             | otherwise = do
-
                 GLFW.pollEvents
                 q <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'Escape
                 currentTime <- getCurrentTime
@@ -160,6 +142,147 @@ runSignalA s = initWindow >>= \mw -> case mw of
                 threadDelay $ 16667
                 run q window sig' currentTime
 
+
+-------------------------------------------------------
+-- Applicative Signals 2.0
+-------------------------------------------------------
+
+--------------------------
+--SS - Monadic state
+--------------------------
+data SignalState = SignalState {
+    sigStateTime   :: Time,
+    sigStateWindow :: GLFW.Window
+    } deriving (Show)
+
+newtype SS a = SS (SignalState -> IO (a, SignalState))
+
+instance Functor SS where
+    fmap f (SS xcont) = SS $ \state -> xcont state >>= \x -> return (f $ fst x, snd x)
+
+instance Applicative SS where
+    pure x                = SS $ \state -> return (x , state)
+    SS fcont <*> SS xcont = SS $ \state -> do
+        f <- fcont state
+        x <- xcont $ snd f
+        return (fst f $ fst x, snd x)
+
+instance Monad SS where
+    return        = pure
+    SS xsig >>= f = SS $ \state -> do
+        (x, state') <- xsig state
+        let (SS g)      = f x
+        g state'
+
+instance MonadIO SS where
+    liftIO action = SS $ \state -> do
+        a <- action
+        return (a, state)
+
+get :: (SignalState -> a) -> SS a
+get getter = SS $ \state -> return (getter state, state)
+
+-------------------------------------------------------
+--SignalM - Applicative Signals with internal state
+-------------------------------------------------------
+newtype SignalM a = SignalM {runSigM :: SS (a, SignalM a)}
+
+instance Functor SignalM where
+    fmap f sig = SignalM $ do
+        ~(x, cont) <- runSigM sig
+        return (f x, fmap f cont)
+
+instance Applicative SignalM where
+    pure x        = SignalM $ return (x, pure x)
+    fsig <*> xsig = SignalM $ do
+        ~(f, fcont) <- runSigM fsig
+        ~(x, xcont) <- runSigM xsig
+        return $ (f x, fcont <*> xcont)
+
+-------------------------------------------------------
+--SignalM - Arrow instance
+-------------------------------------------------------
+newtype SigArrow a b = SigArrow {runSigArrow :: (SignalM (a -> b))}
+
+sigArr :: SignalM (a -> b) -> SigArrow a b
+sigArr f = SigArrow f
+
+instance Cat.Category SigArrow where
+    id                            = SigArrow $ pure id
+    SigArrow fsig . SigArrow gsig = SigArrow $ SignalM $ do
+        ~(f, fcont) <- runSigM fsig
+        ~(g, gcont) <- runSigM gsig
+        return (f . g, runSigArrow $ SigArrow fcont Cat.. SigArrow gcont)
+
+
+instance Arrow SigArrow where
+    arr f                 = SigArrow $ pure f
+    first (SigArrow fsig) = SigArrow $ SignalM $ do
+        ~(f, fcont) <- runSigM fsig
+        return (\(b, d) -> (f b, d), runSigArrow $ first (SigArrow fcont))
+
+sigLoopA :: a -> SigArrow a a -> SignalM a
+sigLoopA x fsig = sigLoop x (runSigArrow fsig)
+
+-------------------------------------------------------
+-- Run time
+-------------------------------------------------------
+runSignalM :: Show a => SignalM a -> IO()
+runSignalM s = initWindow >>= \mw -> case mw of
+    Nothing -> print "Error starting GLFW." >> return ()
+    Just w  -> do
+        putStrLn "Starting Necronomicon"
+        currentTime <- getCurrentTime
+        let state = SignalState (Time 0) w
+        run False w s state currentTime
+    where
+        run quit window (SignalM (SS sig)) state runTime'
+            | quit      = print "Qutting" >> return ()
+            | otherwise = do
+                GLFW.pollEvents
+                q                    <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'Escape
+                currentTime          <- getCurrentTime
+                let delta             = Time $ currentTime - runTime'
+                (~(x, cont), state') <- sig (state{sigStateTime = delta})
+                print x
+                putStrLn ""
+                threadDelay $ 16667
+                run q window cont state' currentTime
+
+-------------------------------------------------------
+-- Combinators
+-------------------------------------------------------
+
+time :: SignalM Double
+time = SignalM $ liftIO getCurrentTime >>= \t -> return (t, time)
+
+mousePos :: SignalM (Double, Double)
+mousePos = SignalM $ do
+    w <- get sigStateWindow
+    m <- liftIO $ GLFW.getCursorPos w
+    return (m, mousePos)
+
+sigLoop :: a -> SignalM (a -> a) -> SignalM a
+sigLoop x fsig = SignalM $ do
+    ~(f, fcont) <- runSigM fsig
+    let x' = f x
+    return (x, sigLoop x' fcont)
+
+-- sigFix :: (SignalM a -> SignalM a) -> a -> SignalM a
+-- sigFix f x = SignalM $ do
+--     ~(x', _) <- runSigM $ f x
+--     return (x, sigFix f x')
+
+foldp :: (a -> b -> b) -> b -> SignalM a -> SignalM b
+foldp f b asig = SignalM $ do
+    ~(a, acont) <- runSigM asig
+    let b' = f a b
+    return (b, foldp f b' acont)
+
+delayM :: a -> SignalM a -> SignalM a
+delayM aPrev (SignalM sig) = SignalM $ do
+    ~(a, cont) <- sig
+    return (aPrev, delayM a cont)
 
 -------------------------------------------------------
 -- Agent model
@@ -319,7 +442,3 @@ moveHero k (Hero health  _               ) = case k of
     KeyA -> Hero health $ HeroMoving left3
     KeyD -> Hero health $ HeroMoving right3
 moveHero _ m = m
-
-
-data Wire s e m a b = Wire (m b)
-newtype Signal' a b = Signa' (Wire Float () IO a b)

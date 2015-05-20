@@ -1,36 +1,42 @@
 {-# LANGUAGE Arrows #-}
 -- import Necronomicon
 import Necronomicon.FRP.SignalA
-import Control.Arrow hiding (second)
+-- import Control.Arrow
 
 main :: IO ()
+main = runSignalM sigLoopTest
 -- main = runSignalSS gameS
-main = runSignalA gameA
+-- main = runSignalA gameA
 -- main = runSignalA $ constant (1 :: Int) >>> state 0 (+)
 -- main = runSignal game
 
-gameA :: SignalA () Int
-gameA = proc () -> do
-    rec a <- arr (+1)             -< b
-        b <- arr (+1) <<< delay 0 -< a
-    returnA -< b
+-- sigATest :: SignalM Double
+-- sigATest = fmap fst $ sigLoopA (0, 0) $ proc (a, b) -> do
+--     a' <- sigArr $ (+) <~ fmap fst mousePos -< b
+--     b' <- sigArr $ (+) <~ fmap snd mousePos -< a
+--     returnA -< (a', b')
+--
+-- sigLoopTest :: SignalM Double
+-- sigLoopTest = sigLoop 0 mouseCounter
+--     where
+--         mouseCounter = (+) <~ fmap fst mousePos
+
+sigLoopTest :: SignalM Double
+sigLoopTest = sigLoop 0 mouseCounter
+    where
+        mouseCounter = (+) <~ fmap fst mousePos
+
+-- gameA :: SignalA () Int
+-- gameA = proc () -> do
+--     rec a <- arr (+1)             -< b
+--         b <- arr (+1) <<< delay 0 -< a
+--     returnA -< b
 
 -- game :: Signal Int
 -- game = h
     -- where
         -- h = (+1) <~ delay 0 e
         -- e = (+1) <~ delay 0 h
-
--- instance Show (Int -> Int) where
-    -- show _ = "(Int -> Int)"
-
--- gameS :: SignalS Int
--- gameS = pureS (+) `apS` pureS 1 `apS` pureS 666
--- gameS = (fmapS (+) (pureS 666)) `apS` pureS 666
--- gameS = h
-    -- where
-        -- This goes infinite....gotta figure that out!
-        -- h = fmapS (+ 1) $ delayS 0 h
 
 {-
 main = print $ megaDark $ Root []
