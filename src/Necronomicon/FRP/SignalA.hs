@@ -2,17 +2,13 @@ module Necronomicon.FRP.SignalA where
 ------------------------------------------------------
 import           Control.Arrow                      hiding (second)
 import           Control.Concurrent
-import           Control.Concurrent.STM
 import qualified Control.Category                  as Cat
 import qualified Graphics.UI.GLFW                  as GLFW
-import           Control.Monad                     (foldM)
 import           Control.Monad.Trans               (MonadIO, liftIO)
+import           Control.Monad.Fix
 
 import           Necronomicon.Graphics
 import           Necronomicon.Utility              (getCurrentTime)
-import           Necronomicon.Game
-import           Necronomicon.Linear
-import           Necronomicon.Physics
 ------------------------------------------------------
 
 (<~) :: Functor f => (a -> b) -> f a -> f b
@@ -155,7 +151,7 @@ data SignalState = SignalState {
     sigStateWindow :: GLFW.Window
     } deriving (Show)
 
-newtype SS a = SS (SignalState -> IO (a, SignalState))
+newtype SS a = SS {runSS :: SignalState -> IO (a, SignalState) }
 
 instance Functor SS where
     fmap f (SS xcont) = SS $ \state -> xcont state >>= \x -> return (f $ fst x, snd x)
@@ -268,10 +264,12 @@ sigLoop x fsig = SignalM $ do
     let x' = f x
     return (x, sigLoop x' fcont)
 
--- sigFix :: (SignalM a -> SignalM a) -> a -> SignalM a
--- sigFix f x = SignalM $ do
---     ~(x', _) <- runSigM $ f x
---     return (x, sigFix f x')
+sigFix :: (SignalM a -> SignalM a) -> a -> SignalM a
+sigFix f x = SignalM $ SS cont
+    where
+        cont state = mfix $ \ ~(~(x', xcont), _) -> do
+            let fcont = delayM x . f $ delayM x' xcont
+            (runSS (runSigM fcont)) state
 
 foldp :: (a -> b -> b) -> b -> SignalM a -> SignalM b
 foldp f b asig = SignalM $ do
@@ -280,165 +278,4 @@ foldp f b asig = SignalM $ do
     return (b, foldp f b' acont)
 
 delayM :: a -> SignalM a -> SignalM a
-delayM aPrev (SignalM sig) = SignalM $ do
-    ~(a, cont) <- sig
-    return (aPrev, delayM a cont)
-
--------------------------------------------------------
--- Agent model
--------------------------------------------------------
-{-
-    This is basically the actor model.
-    However that fact can actually largely be ignored by the end-user.
-    The run-time system will take care of all of the multi-threading and message passing
-    The user essentially only needs to make one instance of a type class,
-    that has two functions in it, for the entire game to work.
-
-    Some ground rules:
-        -The base level of computation is an agent.
-        -An agent interacts with the world through a specific set of inputs and outputs.
-        -The agent's inputs are designated by a list of "sensors" (or whatever the fuck you want to call it)
-        -These are things like Sight, Sound, Collision, user input, etc
-        -Using this the run-time system can generate events specific to each agent and feed each agent the events they require as they occur.
-        -Agent output is fedback into the system in the form of a "gameObject" that has all the necessary informations the run-time system needs.
-        -Agents contain game specifc data that the user specifies.
-        -The run time doesn't care about this data at all, in the end it's really just used to transform the game object which is what the system really cares about.
-        -Agents run in a loop until terminated
-
-    To make use of this system the end-user creates a data object and makes it an instance of AgentType type class:
-
-        class AgentType a where
-            agentEvent       :: Event a -> a -> Maybe a
-            updateGameObject :: Time -> a -> GameObject -> GameObject
-
-    The agentEvent function is called each time there is event that has occurred that the agent cares about.
-    This function is used purely to update the internal state of the agent. The run-time system cares not what happens.
-    These events can occur WHENEVER.
-
-    The updateGameObject function is called regulary, and is asynchronous to the agentEvnt function calls.
-    It simply takes the current state of the agent and updates it's associated GameObject as required.
-    This can update everything from the model or shaders used for rendering, the position of the agent in the world,
-    or it can dynamically alter the sensor the agent is using (thus changing what events it will receive).
-
-    This allows agents to do things like put on nightvision goggles, changing it's ability to see, etc.
-
-    FRP variation:
-        -Instead of an event driven system, agent's behaviors could be described in terms of a signal graph a la' FRP
--}
-
-
---Some base level data types
-type Range   = Double
-data Key     = KeyW | KeyA | KeyS | KeyD
-data Event a = Sight     a Vector3 Range --Agent Seen,  Position seen at, range to agent
-             | Sound     a Vector3 Range --Agent Heard, Direction heard,  range from sound
-             | Collision a Vector3       --Agent collided with, Point of collision (We can actually generate LOTS of collision data)
-             | MousePos    Vector2
-             | MousePressUp
-             | MousePressDown
-             | MouseClick
-             | KeyUp     Key
-             | KeyDown   Key
-             | TimeEvent Time
-
------------------------------------
--- Run time
------------------------------------
-
---An agent is a self-contained Unit
-data Agent a = Agent {
-    agentData       :: a,          --This is game specific data
-    agentGameObject :: GameObject, --This is the object the run time interacts with, used for rendering, position data, etc
-    agentSensors    :: [Sensor]    --These serve as the means for interactivity in the game. Each sensor has a list of readings it has received since the last update.
-}
-
---These serve as the means for interactivity in the game.
---Each sensor has a list of readings it has received since the last update.
---Each agent can have any combinations of these, and have them in multiples
---They can also be dynamically changed at run time.
---For example, this allows agents to have one collider proximity detection of enemies, and another collider for taking damage, and another for physics simulations
-data Sensor = Vision  Range    --Implemented via collision detection
-            | Hearing Range    --Implemented via collision detection
-            | Physics Collider --Implemented via collision detection
-            | SystemInput      --Implemented via system
-            | Temporal         --Implemented via system
-                               --Other Shit?
-
---How do we spawn new agents in the game? Maybe a specific spawn manager agent type
---Returning Just a keeps the agent running, Returning Nothing ends the agent
-class AgentType a where
-    agentEvent       :: Event a -> a -> Maybe a
-    updateGameObject :: Time -> a -> (GameObject, [Sensor]) -> (GameObject, [Sensor])
-
-startAgent :: AgentType a => Agent a -> IO ()
-startAgent agent = do
-    mailBox <- atomically $ newTMVar (agentGameObject agent, agentSensors agent, [])
-    _       <- forkIO $ agentLoop agent (UID 0) mailBox
-    return ()
-    where
-        agentLoop (Agent a _ s) uid mailBox = do
-            (g, _, es) <- atomically $ takeTMVar mailBox
-            t          <- fmap Time getCurrentTime
-            case foldM (\acc e -> agentEvent e acc) a (TimeEvent t : es) of
-                Nothing -> return ()
-                Just a' -> do
-                    let (g', s') = updateGameObject t a (g, s)
-                    atomically $ putTMVar mailBox (g', s', [])
-                    agentLoop (Agent a' g' s') uid mailBox
-
------------------------------------
--- User land
------------------------------------
-newtype Health = Health Double deriving (Eq, Show, Ord, Num, Fractional, Real)
-newtype Damage = Damage Double deriving (Eq, Show, Ord, Num, Fractional, Real)
-
---Not strictly necessary, but it can be good to design agents as Finite State Machines
-data HeroState = HeroIdle
-               | HeroMoving Vector3
-               | HeroAttacking Time
-               | HeroDamaged   Time
-
---Each Agent would likely have similar (or even shared) state objects
-data MegaDark  = Hero   Health HeroState
-               | Enemy  Health
-               | Bullet Damage
-
-instance AgentType MegaDark where
-    agentEvent event h@(Hero health _)
-        | health <= 0            = Nothing
-        | Collision e p <- event = Just $ collide e p h
-        | KeyDown   k   <- event = Just $ moveHero k h
-        | TimeEvent t   <- event = Just $ tickHero t h
-    agentEvent _ m = Just m
-
-    --Right now the sensor list and game object are only apart so that I don't have to break code in the project.
-    --They really should be fused together for simplicity if this is the direction we go
-    updateGameObject t (Hero _ (HeroMoving dir)) (g, s) = (move g (dir * realToFrac t), s)
-    updateGameObject _  _                         g     = g
-
-----------------------
--- Update Hero State
-----------------------
-
-tickHero :: Time -> MegaDark -> MegaDark
-tickHero t (Hero health (HeroAttacking at))
-    | at - t <= 0 = Hero health $ HeroIdle
-    | otherwise   = Hero health $ HeroAttacking $ at - t
-tickHero t (Hero health (HeroDamaged dt))
-    | dt - t <= 0 = Hero health $ HeroIdle
-    | otherwise   = Hero health $ HeroDamaged $ dt - t
-tickHero _ h = h
-
-collide :: MegaDark -> Vector3 -> MegaDark -> MegaDark
-collide (Bullet damage) _ (Hero health _) = Hero (health - realToFrac damage) $ HeroDamaged 1
-collide  _              _  h              = h
-
-moveHero :: Key -> MegaDark -> MegaDark
-moveHero _ (Hero health (HeroAttacking t)) = Hero health $ HeroAttacking t
-moveHero _ (Hero health (HeroDamaged   t)) = Hero health $ HeroDamaged t
-moveHero k (Hero health  _               ) = case k of
-    KeyW -> Hero health $ HeroMoving up
-    KeyS -> Hero health $ HeroMoving down
-    KeyA -> Hero health $ HeroMoving left3
-    KeyD -> Hero health $ HeroMoving right3
-moveHero _ m = m
+delayM aPrev curSig = SignalM $ return (aPrev, curSig)

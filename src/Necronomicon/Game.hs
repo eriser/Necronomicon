@@ -66,6 +66,11 @@ move gt dir = gameObject_ (g{pos = pos g + dir}) gt
     where
         g = _gameObject gt
 
+collisions :: GameObject -> [Collision]
+collisions g
+    | Just c <- collider g = colliderCollisions c
+    | otherwise            = []
+
 -------------------------------------------------------
 -- GameObject - Getters / Setters
 -------------------------------------------------------
@@ -342,9 +347,9 @@ validateIDs (g, t) = sort (tids (nodes t) []) == gids && sort nids == gids
         tids (Node _ l r _) acc = tids r $ tids l acc
         (_, nids)               = V.foldl' (\(i, ids) x -> if x == Nothing then (i + 1, ids) else (i + 1, i : ids) ) (0, []) $ nodeData t
         gid g' acc              = case collider g' of
-            Just (SphereCollider (UID c) _ _) -> c : acc
-            Just (BoxCollider    (UID c) _ _) -> c : acc
-            _                                 -> acc
+            Just (SphereCollider (UID c) _ _ _) -> c : acc
+            Just (BoxCollider    (UID c) _ _ _) -> c : acc
+            _                                   -> acc
         gids                    = sort $ foldChildren gid [] g
 
 dynTreeTest :: IO ()
@@ -360,8 +365,8 @@ dynTreeTest = do
 -------------------------------------------------------
 
 debugDrawCollider :: Collider -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ()
-debugDrawCollider (BoxCollider _ t (OBB hs)) view proj resources = drawMeshWithMaterial (debugDraw green) cubeOutline (view .*. t .*. trsMatrix 0 identity (hs * 2)) proj resources
-debugDrawCollider  _                       _         _    _      = return ()
+debugDrawCollider (BoxCollider _ t (OBB hs) _) view proj resources = drawMeshWithMaterial (debugDraw green) cubeOutline (view .*. t .*. trsMatrix 0 identity (hs * 2)) proj resources
+debugDrawCollider  _                       _         _    _        = return ()
 
 debugDrawAABB :: Color -> AABB -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ()
 debugDrawAABB c aabb view proj resources = drawMeshWithMaterial (debugDraw c) cubeOutline (view .*. trsMatrix (center aabb) identity (size aabb)) proj resources
@@ -372,3 +377,58 @@ debugDrawDynamicTree tree view proj resources = drawNode (nodes tree)
         drawNode (Node aabb l r _) = debugDrawAABB blue   aabb view proj resources >> drawNode l >> drawNode r
         drawNode (Leaf aabb _)     = debugDrawAABB whiteA aabb view proj resources
         drawNode  Tip              = return ()
+
+
+-------------------------------------------------------
+-- Entity
+-------------------------------------------------------
+
+data Input = Input {
+    mousePosition :: (Double, Double),
+    runTime       :: Double,
+    deltaTime     :: Double
+}
+
+data Entity a = Entity {
+    userData   :: a,
+    entityData :: GameObject
+}
+
+class World a where
+    updateWorld :: a -> a
+
+instance World (Entity a) where
+    updateWorld = undefined
+
+instance World a => World [a] where
+    updateWorld = undefined
+
+instance (World a, World b) => World (a, b) where
+    updateWorld = undefined
+
+instance (World a, World b, World c) => World (a, b, c) where
+    updateWorld = undefined
+
+instance (World a, World b, World c, World d) => World (a, b, c, d) where
+    updateWorld = undefined
+
+instance (World a, World b, World c, World d, World e) => World (a, b, c, d, e) where
+    updateWorld = undefined
+
+instance (World a, World b, World c, World d, World e, World f) => World (a, b, c, d, e, f) where
+    updateWorld = undefined
+
+instance (World a, World b, World c, World d, World e, World f, World g) => World (a, b, c, d, e, f, g) where
+    updateWorld = undefined
+
+instance (World a, World b, World c, World d, World e, World f, World g, World h) => World (a, b, c, d, e, f, g, h) where
+    updateWorld = undefined
+
+instance (World a, World b, World c, World d, World e, World f, World g, World h, World i) => World (a, b, c, d, e, f, g, h, i) where
+    updateWorld = undefined
+
+instance (World a, World b, World c, World d, World e, World f, World g, World h, World i, World j) => World (a, b, c, d, e, f, g, h, i, j) where
+    updateWorld = undefined
+
+instance World a => World (a, a) where
+    updateWorld = undefined

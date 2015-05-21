@@ -1,10 +1,31 @@
-{-# LANGUAGE Arrows #-}
--- import Necronomicon
-import Necronomicon.FRP.SignalA
+-- {-# LANGUAGE Arrows #-}
+{-# LANGUAGE GeneralizedNewtypeDeriving #-}
+import Necronomicon
+-- import Necronomicon.FRP.SignalA
 -- import Control.Arrow
 
 main :: IO ()
-main = runSignalM sigLoopTest
+main = print "test"
+
+
+--Entity System
+type Health = Double
+type Damage = Double
+
+data HeroState = HeroIdle | HeroMoving Vector3 | HeroAttacking Time | HeroDamaged Time
+data Hero      = Hero   HeroState Health
+data Bullet    = Bullet Damage
+
+newtype MegaDark = MegaDark (Entity Hero, Entity Bullet) deriving (World)
+
+megaDark :: Input -> MegaDark -> MegaDark
+megaDark input (MegaDark (hero, bullet)) = MegaDark (updateHero input hero, bullet)
+
+updateHero :: Input -> Entity Hero -> Entity Hero
+updateHero = undefined
+
+
+-- main = runSignalM sigLoopTest
 -- main = runSignalSS gameS
 -- main = runSignalA gameA
 -- main = runSignalA $ constant (1 :: Int) >>> state 0 (+)
@@ -20,11 +41,25 @@ main = runSignalM sigLoopTest
 -- sigLoopTest = sigLoop 0 mouseCounter
 --     where
 --         mouseCounter = (+) <~ fmap fst mousePos
+--
+-- sigLoopTest :: SignalM Double
+-- sigLoopTest = mouseCounter
+    -- where
+        -- mouseCounter = (+) <~ fmap fst mousePos ~~ delayM 0 mouseCounter
+--
+-- sigLoopTest :: SignalM Double
+-- sigLoopTest = fmap fst $ sigLoop (0, 0) scene
+--     where
+--         scene = (\hf ef (h', e') -> (hf e', ef h')) <~ hero ~~ enemy
+--         hero  = (\h e -> h + e) <~ pure 1
+--         enemy = (\e h -> h + e) <~ pure 1
 
-sigLoopTest :: SignalM Double
-sigLoopTest = sigLoop 0 mouseCounter
-    where
-        mouseCounter = (+) <~ fmap fst mousePos
+-- sigLoopTest :: SignalM Double
+-- sigLoopTest = foldp (\h m e -> h + m + e) 0 (fmap fst mousePos) ~~ pure 2
+    -- where
+    --     scene = (\hf ef (h', e') -> (hf e', ef h')) <~ hero ~~ enemy
+    --     hero  = foldp (\h e -> h + e + 1) 0 (pure 0)
+    --     enemy = foldp (\e h -> h + h + 1) 0 (pure 0)
 
 -- gameA :: SignalA () Int
 -- gameA = proc () -> do
