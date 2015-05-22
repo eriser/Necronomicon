@@ -9,73 +9,65 @@ main = print "test"
 type Health = Double
 type Damage = Double
 
-data HeroState = HeroIdle | HeroMoving Vector3 | HeroAttacking Time | HeroDamaged Time
+data HeroState = HeroIdle | HeroMoving Vector3 | HeroAttacking Timer | HeroDamaged Timer
 data Hero      = Hero HeroState Health
 
-data BulletState = Flying Vector3 | DeathAnimation Time
+data BulletState = Flying Vector3 | DeathAnimation Timer
 data Bullet      = Bullet BulletState
 
-
-data PhysM     = EnemyWeapon
-               | HeroWeapon
-               | Player
-               | Neutral
-               deriving (Enum)
+data PhysM = EnemyWeapon
+           | HeroWeapon
+           | Player
+           | Neutral
+           deriving (Enum)
 
 type MegaDark = (Entity Hero, [Entity Bullet])
 
-megaDark :: Input -> MegaDark -> MegaDark
-megaDark i (hero, bullets) = (updateHero i hero, mapCollapse (updateBullet i) bullets)
+megaDark :: World -> MegaDark -> MegaDark
+megaDark w (hero, bullets) = (updateHero w hero, mapCollapse (updateBullet w) bullets)
 
-updateBullet :: Input -> Entity Bullet -> Maybe (Entity Bullet)
-updateBullet i (Entity bullet@(Bullet s) gameObject)
-    | DeathAnimation t <- s, t > realToFrac (runTime i) = Nothing
-    | otherwise                                         = Just $ Entity bullet' (moveGO bullet')
+updateBullet :: World -> Entity Bullet -> Maybe (Entity Bullet)
+updateBullet w (Entity bullet@(Bullet s) g)
+    | DeathAnimation t <- s, timerReady t w = Nothing
+    | otherwise                             = Just $ Entity bullet' (moveGO bullet')
     where
-        moveGO (Bullet (Flying d)) = move gameObject d
-        bullet'                    = foldr checkCollider bullet $ collisions gameObject
+        moveGO (Bullet (Flying d)) = move g d
+        bullet'                    = foldr checkCollider bullet $ collisions g
         checkCollider c b
             | EnemyWeapon <- tag c = b
-            | otherwise            = Bullet . DeathAnimation . realToFrac $ runTime i + 0.5
+            | otherwise            = Bullet . DeathAnimation $ timer 0.5 w
 
-updateHero :: Input -> Entity Hero -> Entity Hero
-updateHero i (Entity hero gameObject) = Entity hero' (updateGO hero')
+updateHero :: World -> Entity Hero -> Entity Hero
+updateHero w (Entity hero g) = Entity hero' (updateGO hero')
     where
-        hero'                            = moveHero $ attack $ tickHero $ foldr checkCollider hero $ collisions gameObject
-        updateGO (Hero (HeroMoving d) _) = move gameObject d
-        updateGO  _                      = gameObject
+        hero'                            = moveHero $ attack $ tickHero $ foldr checkCollider hero $ collisions g
+        updateGO (Hero (HeroMoving d) _) = move g d
+        updateGO  _                      = g
 
         moveHero h@(Hero state health)
-            | HeroIdle     <- state, Just (x, y) <- moveKeys i = h' x y
-            | HeroMoving _ <- state, Just (x, y) <- moveKeys i = h' x y
-            | otherwise                                        = h
+            | HeroIdle     <- state, Just (x, y) <- moveKeysPressed w = h' x y
+            | HeroMoving _ <- state, Just (x, y) <- moveKeysPressed w = h' x y
+            | otherwise                                               = h
             where
                 h' x y = Hero (HeroMoving $ Vector3 x y 0) health
 
         attack h@(Hero state health)
-            | HeroIdle     <- state, Just _ <- mouseClick i = h'
-            | HeroMoving _ <- state, Just _ <- mouseClick i = h'
-            | otherwise                                     = h
+            | HeroIdle     <- state, mouseClicked w = h'
+            | HeroMoving _ <- state, mouseClicked w = h'
+            | otherwise                             = h
             where
-                h' = Hero (HeroAttacking . realToFrac $ runTime i + 1) health
+                h' = Hero (HeroAttacking $ timer 1 w) health
 
         tickHero h@(Hero state health)
-            | HeroAttacking t <- state, t > realToFrac (runTime i) = h'
-            | HeroDamaged   t <- state, t > realToFrac (runTime i) = h'
-            | otherwise                                            = h
+            | HeroAttacking t <- state, timerReady t w = h'
+            | HeroDamaged   t <- state, timerReady t w = h'
+            | otherwise                                = h
             where
                 h' = Hero HeroIdle health
 
         checkCollider c h@(Hero state health)
-            | EnemyWeapon <- tag c = Hero (HeroDamaged . realToFrac $ runTime i + 1) (health - 10)
+            | EnemyWeapon <- tag c = Hero (HeroDamaged $ timer 1 w) (health - 10)
             | otherwise            = h
-
-mapCollapse :: (a -> Maybe a) -> [a] -> [a]
-mapCollapse f xs = foldr collapse [] xs
-    where
-        collapse x xs'
-            | Just x' <- f x = x' : xs'
-            | otherwise      = xs'
 
 -- main = runSignalM sigLoopTest
 -- main = runSignalSS gameS

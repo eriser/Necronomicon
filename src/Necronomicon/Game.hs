@@ -378,19 +378,21 @@ debugDrawDynamicTree tree view proj resources = drawNode (nodes tree)
         drawNode (Leaf aabb _)     = debugDrawAABB whiteA aabb view proj resources
         drawNode  Tip              = return ()
 
-
 -------------------------------------------------------
 -- Entity
 -------------------------------------------------------
 
--- newtype Time = Time Double deriving (Num, Floating, Fractional, Real, Show, Eq, Ord)
-
-data Input = Input {
-    mousePosition :: (Double, Double),
+data World = World {
+    --SignalStyle
     runTime       :: Double,
     deltaTime     :: Double,
-    moveKeys      :: Maybe (Double, Double),
-    mouseClick    :: Maybe ()
+    mousePosition :: (Double, Double),
+    moveKeys      :: (Double, Double),
+
+    --Event Style
+    mouseClicked    :: Bool,
+    mouseMoved      :: Maybe (Double, Double),
+    moveKeysPressed :: Maybe (Double, Double)
 }
 
 data Entity a = Entity {
@@ -398,41 +400,160 @@ data Entity a = Entity {
     entityData :: GameObject
 }
 
-class World a where
-    updateWorld :: a -> a
+class Scene a where
+    getGameObjects :: a -> [GameObject] -> [GameObject]
+    setGameObjects :: a -> [GameObject] -> (a, [GameObject])
 
-instance World (Entity a) where
-    updateWorld = undefined
+instance Scene (Entity a) where
+    getGameObjects (Entity _ g) gs = g : gs
+    setGameObjects (Entity a _) gs = (Entity a $ head gs, tail gs)
 
-instance World a => World [a] where
-    updateWorld = undefined
+instance Scene a => Scene [a] where
+    getGameObjects es gs = foldr (\e gs' -> getGameObjects e gs') gs es
+    setGameObjects es gs = fmap reverse $ foldl foldE ([], gs) es
+        where
+            foldE (es', gs') e = (e' : es', gs'')
+                where
+                    (e', gs'') = setGameObjects e gs'
 
-instance (World a, World b) => World (a, b) where
-    updateWorld = undefined
+instance (Scene a, Scene b) => Scene (a, b) where
+    getGameObjects (e1, e2) gs  = getGameObjects e1 $ getGameObjects e2 gs
+    setGameObjects (e1, e2) gs1 = ((e1', e2'), gs3)
+        where
+            (e1', gs2) = setGameObjects e1 gs1
+            (e2', gs3) = setGameObjects e2 gs2
 
-instance (World a, World b, World c) => World (a, b, c) where
-    updateWorld = undefined
+instance (Scene a, Scene b, Scene c) => Scene (a, b, c) where
+    getGameObjects (e1, e2, e3) gs  = getGameObjects e1 $ getGameObjects e2 $ getGameObjects e3 gs
+    setGameObjects (e1, e2, e3) gs1 = ((e1', e2', e3'), gs4)
+        where
+            (e1', gs2) = setGameObjects e1 gs1
+            (e2', gs3) = setGameObjects e2 gs2
+            (e3', gs4) = setGameObjects e3 gs3
 
-instance (World a, World b, World c, World d) => World (a, b, c, d) where
-    updateWorld = undefined
+instance (Scene a, Scene b, Scene c, Scene d) => Scene (a, b, c, d) where
+    getGameObjects (e1, e2, e3, e4) gs  = getGameObjects e1 $ getGameObjects e2 $ getGameObjects e3 $ getGameObjects e4 gs
+    setGameObjects (e1, e2, e3, e4) gs1 = ((e1', e2', e3', e4'), gs5)
+        where
+            (e1', gs2) = setGameObjects e1 gs1
+            (e2', gs3) = setGameObjects e2 gs2
+            (e3', gs4) = setGameObjects e3 gs3
+            (e4', gs5) = setGameObjects e4 gs4
 
-instance (World a, World b, World c, World d, World e) => World (a, b, c, d, e) where
-    updateWorld = undefined
+instance (Scene a, Scene b, Scene c, Scene d, Scene e) => Scene (a, b, c, d, e) where
+    getGameObjects (e1, e2, e3, e4, e5) gs  = getGameObjects e1 $ getGameObjects e2 $ getGameObjects e3 $ getGameObjects e4 $ getGameObjects e5 gs
+    setGameObjects (e1, e2, e3, e4, e5) gs1 = ((e1', e2', e3', e4', e5'), gs6)
+        where
+            (e1', gs2) = setGameObjects e1 gs1
+            (e2', gs3) = setGameObjects e2 gs2
+            (e3', gs4) = setGameObjects e3 gs3
+            (e4', gs5) = setGameObjects e4 gs4
+            (e5', gs6) = setGameObjects e5 gs5
 
-instance (World a, World b, World c, World d, World e, World f) => World (a, b, c, d, e, f) where
-    updateWorld = undefined
+instance (Scene a, Scene b, Scene c, Scene d, Scene e, Scene f) => Scene (a, b, c, d, e, f) where
+    getGameObjects (e1, e2, e3, e4, e5, e6) gs  = getGameObjects e1 $ getGameObjects e2 $ getGameObjects e3 $ getGameObjects e4 $ getGameObjects e5 $ getGameObjects e6 gs
+    setGameObjects (e1, e2, e3, e4, e5, e6) gs1 = ((e1', e2', e3', e4', e5', e6'), gs7)
+        where
+            (e1', gs2) = setGameObjects e1 gs1
+            (e2', gs3) = setGameObjects e2 gs2
+            (e3', gs4) = setGameObjects e3 gs3
+            (e4', gs5) = setGameObjects e4 gs4
+            (e5', gs6) = setGameObjects e5 gs5
+            (e6', gs7) = setGameObjects e6 gs6
 
-instance (World a, World b, World c, World d, World e, World f, World g) => World (a, b, c, d, e, f, g) where
-    updateWorld = undefined
+instance (Scene a, Scene b, Scene c, Scene d, Scene e, Scene f, Scene g) => Scene (a, b, c, d, e, f, g) where
+    getGameObjects (e1, e2, e3, e4, e5, e6, e7) gs  = getGameObjects e1 $ getGameObjects e2 $ getGameObjects e3 $ getGameObjects e4 $ getGameObjects e5 $ getGameObjects e6 $ getGameObjects e7 gs
+    setGameObjects (e1, e2, e3, e4, e5, e6, e7) gs1 = ((e1', e2', e3', e4', e5', e6', e7'), gs8)
+        where
+            (e1', gs2) = setGameObjects e1 gs1
+            (e2', gs3) = setGameObjects e2 gs2
+            (e3', gs4) = setGameObjects e3 gs3
+            (e4', gs5) = setGameObjects e4 gs4
+            (e5', gs6) = setGameObjects e5 gs5
+            (e6', gs7) = setGameObjects e6 gs6
+            (e7', gs8) = setGameObjects e7 gs7
 
-instance (World a, World b, World c, World d, World e, World f, World g, World h) => World (a, b, c, d, e, f, g, h) where
-    updateWorld = undefined
+instance (Scene a, Scene b, Scene c, Scene d, Scene e, Scene f, Scene g, Scene h) => Scene (a, b, c, d, e, f, g, h) where
+    getGameObjects (e1, e2, e3, e4, e5, e6, e7, e8) gs  =
+        getGameObjects e1 $
+        getGameObjects e2 $
+        getGameObjects e3 $
+        getGameObjects e4 $
+        getGameObjects e5 $
+        getGameObjects e6 $
+        getGameObjects e7 $
+        getGameObjects e8 gs
+    setGameObjects (e1, e2, e3, e4, e5, e6, e7, e8) gs1 = ((e1', e2', e3', e4', e5', e6', e7', e8'), gs9)
+        where
+            (e1', gs2) = setGameObjects e1 gs1
+            (e2', gs3) = setGameObjects e2 gs2
+            (e3', gs4) = setGameObjects e3 gs3
+            (e4', gs5) = setGameObjects e4 gs4
+            (e5', gs6) = setGameObjects e5 gs5
+            (e6', gs7) = setGameObjects e6 gs6
+            (e7', gs8) = setGameObjects e7 gs7
+            (e8', gs9) = setGameObjects e8 gs8
 
-instance (World a, World b, World c, World d, World e, World f, World g, World h, World i) => World (a, b, c, d, e, f, g, h, i) where
-    updateWorld = undefined
+instance (Scene a, Scene b, Scene c, Scene d, Scene e, Scene f, Scene g, Scene h, Scene i) => Scene (a, b, c, d, e, f, g, h, i) where
+    getGameObjects (e1, e2, e3, e4, e5, e6, e7, e8, e9) gs  =
+        getGameObjects e1 $
+        getGameObjects e2 $
+        getGameObjects e3 $
+        getGameObjects e4 $
+        getGameObjects e5 $
+        getGameObjects e6 $
+        getGameObjects e7 $
+        getGameObjects e8 $
+        getGameObjects e9 gs
+    setGameObjects (e1, e2, e3, e4, e5, e6, e7, e8, e9) gs1 = ((e1', e2', e3', e4', e5', e6', e7', e8', e9'), gs10)
+        where
+            (e1', gs2)  = setGameObjects e1 gs1
+            (e2', gs3)  = setGameObjects e2 gs2
+            (e3', gs4)  = setGameObjects e3 gs3
+            (e4', gs5)  = setGameObjects e4 gs4
+            (e5', gs6)  = setGameObjects e5 gs5
+            (e6', gs7)  = setGameObjects e6 gs6
+            (e7', gs8)  = setGameObjects e7 gs7
+            (e8', gs9)  = setGameObjects e8 gs8
+            (e9', gs10) = setGameObjects e9 gs9
 
-instance (World a, World b, World c, World d, World e, World f, World g, World h, World i, World j) => World (a, b, c, d, e, f, g, h, i, j) where
-    updateWorld = undefined
+instance (Scene a, Scene b, Scene c, Scene d, Scene e, Scene f, Scene g, Scene h, Scene i, Scene j) => Scene (a, b, c, d, e, f, g, h, i, j) where
+    getGameObjects (e1, e2, e3, e4, e5, e6, e7, e8, e9, e10) gs  =
+        getGameObjects e1 $
+        getGameObjects e2 $
+        getGameObjects e3 $
+        getGameObjects e4 $
+        getGameObjects e5 $
+        getGameObjects e6 $
+        getGameObjects e7 $
+        getGameObjects e8 $
+        getGameObjects e9 $
+        getGameObjects e10 gs
+    setGameObjects (e1, e2, e3, e4, e5, e6, e7, e8, e9, e10) gs1 = ((e1', e2', e3', e4', e5', e6', e7', e8', e9', e10'), gs11)
+        where
+            (e1',  gs2)  = setGameObjects e1  gs1
+            (e2',  gs3)  = setGameObjects e2  gs2
+            (e3',  gs4)  = setGameObjects e3  gs3
+            (e4',  gs5)  = setGameObjects e4  gs4
+            (e5',  gs6)  = setGameObjects e5  gs5
+            (e6',  gs7)  = setGameObjects e6  gs6
+            (e7',  gs8)  = setGameObjects e7  gs7
+            (e8',  gs9)  = setGameObjects e8  gs8
+            (e9',  gs10) = setGameObjects e9  gs9
+            (e10', gs11) = setGameObjects e10 gs10
 
-instance World a => World (a, a) where
-    updateWorld = undefined
+-- state timing convenience functions
+data Timer = Timer { timerStartTime :: Double, timerEndTime :: Double }
+
+timer :: Double -> World -> Timer
+timer t w = Timer (runTime w) (runTime w + t)
+
+timerReady :: Timer -> World -> Bool
+timerReady (Timer _ endTime) i = endTime > runTime i
+
+mapCollapse :: (a -> Maybe a) -> [a] -> [a]
+mapCollapse f xs = foldr collapse [] xs
+    where
+        collapse x xs'
+            | Just x' <- f x = x' : xs'
+            | otherwise      = xs'
