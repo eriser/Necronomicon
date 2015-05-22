@@ -11,23 +11,39 @@ type Damage = Double
 
 data HeroState = HeroIdle | HeroMoving Vector3 | HeroAttacking Time | HeroDamaged Time
 data Hero      = Hero HeroState Health
-data Bullet    = Bullet
+
+data BulletState = Flying Vector3 | DeathAnimation Time
+data Bullet      = Bullet BulletState
+
+
 data PhysM     = EnemyWeapon
                | HeroWeapon
+               | Player
                | Neutral
                deriving (Enum)
 
 type MegaDark = (Entity Hero, [Entity Bullet])
 
 megaDark :: Input -> MegaDark -> MegaDark
-megaDark i (hero, bullets) = (updateHero i hero, bullets)
+megaDark i (hero, bullets) = (updateHero i hero, mapCollapse (updateBullet i) bullets)
+
+updateBullet :: Input -> Entity Bullet -> Maybe (Entity Bullet)
+updateBullet i (Entity bullet@(Bullet s) gameObject)
+    | DeathAnimation t <- s, t > realToFrac (runTime i) = Nothing
+    | otherwise                                         = Just $ Entity bullet' (moveGO bullet')
+    where
+        moveGO (Bullet (Flying d)) = move gameObject d
+        bullet'                    = foldr checkCollider bullet $ collisions gameObject
+        checkCollider c b
+            | EnemyWeapon <- tag c = b
+            | otherwise            = Bullet . DeathAnimation . realToFrac $ runTime i + 0.5
 
 updateHero :: Input -> Entity Hero -> Entity Hero
-updateHero i (Entity hero dat) = Entity hero' (updateData hero')
+updateHero i (Entity hero gameObject) = Entity hero' (updateGO hero')
     where
-        hero'                              = moveHero $ attack $ tickHero $ foldr checkCollider hero $ collisions dat
-        updateData (Hero (HeroMoving v) _) = move dat v
-        updateData  _                      = dat
+        hero'                            = moveHero $ attack $ tickHero $ foldr checkCollider hero $ collisions gameObject
+        updateGO (Hero (HeroMoving d) _) = move gameObject d
+        updateGO  _                      = gameObject
 
         moveHero h@(Hero state health)
             | HeroIdle     <- state, Just (x, y) <- moveKeys i = h' x y
@@ -54,7 +70,12 @@ updateHero i (Entity hero dat) = Entity hero' (updateData hero')
             | EnemyWeapon <- tag c = Hero (HeroDamaged . realToFrac $ runTime i + 1) (health - 10)
             | otherwise            = h
 
-
+mapCollapse :: (a -> Maybe a) -> [a] -> [a]
+mapCollapse f xs = foldr collapse [] xs
+    where
+        collapse x xs'
+            | Just x' <- f x = x' : xs'
+            | otherwise      = xs'
 
 -- main = runSignalM sigLoopTest
 -- main = runSignalSS gameS
