@@ -1,5 +1,4 @@
 -- {-# LANGUAGE Arrows #-}
-{-# LANGUAGE GeneralizedNewtypeDeriving #-}
 import Necronomicon
 -- import Necronomicon.FRP.SignalA
 -- import Control.Arrow
@@ -7,22 +6,54 @@ import Necronomicon
 main :: IO ()
 main = print "test"
 
-
---Entity System
 type Health = Double
 type Damage = Double
 
 data HeroState = HeroIdle | HeroMoving Vector3 | HeroAttacking Time | HeroDamaged Time
-data Hero      = Hero   HeroState Health
-data Bullet    = Bullet Damage
+data Hero      = Hero HeroState Health
+data Bullet    = Bullet
+data PhysM     = EnemyWeapon
+               | HeroWeapon
+               | Neutral
+               deriving (Enum)
 
-newtype MegaDark = MegaDark (Entity Hero, Entity Bullet) deriving (World)
+type MegaDark = (Entity Hero, [Entity Bullet])
 
 megaDark :: Input -> MegaDark -> MegaDark
-megaDark input (MegaDark (hero, bullet)) = MegaDark (updateHero input hero, bullet)
+megaDark i (hero, bullets) = (updateHero i hero, bullets)
 
 updateHero :: Input -> Entity Hero -> Entity Hero
-updateHero = undefined
+updateHero i (Entity hero dat) = Entity hero' (updateData hero')
+    where
+        hero'                              = moveHero $ attack $ tickHero $ foldr checkCollider hero $ collisions dat
+        updateData (Hero (HeroMoving v) _) = move dat v
+        updateData  _                      = dat
+
+        moveHero h@(Hero state health)
+            | HeroIdle     <- state, Just (x, y) <- moveKeys i = h' x y
+            | HeroMoving _ <- state, Just (x, y) <- moveKeys i = h' x y
+            | otherwise                                        = h
+            where
+                h' x y = Hero (HeroMoving $ Vector3 x y 0) health
+
+        attack h@(Hero state health)
+            | HeroIdle     <- state, Just _ <- mouseClick i = h'
+            | HeroMoving _ <- state, Just _ <- mouseClick i = h'
+            | otherwise                                     = h
+            where
+                h' = Hero (HeroAttacking . realToFrac $ runTime i + 1) health
+
+        tickHero h@(Hero state health)
+            | HeroAttacking t <- state, t > realToFrac (runTime i) = h'
+            | HeroDamaged   t <- state, t > realToFrac (runTime i) = h'
+            | otherwise                                            = h
+            where
+                h' = Hero HeroIdle health
+
+        checkCollider c h@(Hero state health)
+            | EnemyWeapon <- tag c = Hero (HeroDamaged . realToFrac $ runTime i + 1) (health - 10)
+            | otherwise            = h
+
 
 
 -- main = runSignalM sigLoopTest
@@ -72,7 +103,6 @@ updateHero = undefined
     -- where
         -- h = (+1) <~ delay 0 e
         -- e = (+1) <~ delay 0 h
-
 {-
 main = print $ megaDark $ Root []
 

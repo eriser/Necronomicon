@@ -383,10 +383,14 @@ debugDrawDynamicTree tree view proj resources = drawNode (nodes tree)
 -- Entity
 -------------------------------------------------------
 
+-- newtype Time = Time Double deriving (Num, Floating, Fractional, Real, Show, Eq, Ord)
+
 data Input = Input {
     mousePosition :: (Double, Double),
     runTime       :: Double,
-    deltaTime     :: Double
+    deltaTime     :: Double,
+    moveKeys      :: Maybe (Double, Double),
+    mouseClick    :: Maybe ()
 }
 
 data Entity a = Entity {

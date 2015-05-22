@@ -6,8 +6,8 @@ import Necronomicon.Graphics.HalfEdge
 -------------------------------------------------------
 -- Colliders
 -------------------------------------------------------
-data Collision = Collision deriving (Show)
-data UID      = UID Int | New deriving (Show)
+data Collision = Collision Int deriving (Show)
+data UID       = UID Int | New deriving (Show)
 data Collider = SphereCollider  UID Matrix4x4 Sphere   [Collision]
               | BoxCollider     UID Matrix4x4 OBB      [Collision]
               | CapsuleCollider UID Matrix4x4 Capsule  [Collision]
@@ -50,3 +50,7 @@ colliderCollisions (SphereCollider  _ _ _ cs) = cs
 colliderCollisions (BoxCollider     _ _ _ cs) = cs
 colliderCollisions (CapsuleCollider _ _ _ cs) = cs
 colliderCollisions (MeshCollider    _ _ _ cs) = cs
+
+
+tag :: Enum a => Collision -> a
+tag (Collision t) = toEnum t
