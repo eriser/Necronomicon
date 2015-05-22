@@ -14,10 +14,10 @@ maximulMinkowskiPoint :: Collider -> Collider -> Vector3 -> Vector3
 maximulMinkowskiPoint c1 c2 d = support c1 d + support c2 (-d)
 
 support :: Collider -> Vector3 -> Vector3
-support (SphereCollider  _ t s) d = maximalPoint s t d
-support (CapsuleCollider _ t c) d = maximalPoint c t d
-support (BoxCollider     _ t b) d = maximalPoint b t d
-support (MeshCollider    _ t m) d = maximalPoint m t d
+support (SphereCollider  _ t s _) d = maximalPoint s t d
+support (CapsuleCollider _ t c _) d = maximalPoint c t d
+support (BoxCollider     _ t b _) d = maximalPoint b t d
+support (MeshCollider    _ t m _) d = maximalPoint m t d
 
 calcSimplex :: Vector3 -> Vector3 -> Simplex -> (Bool, Vector3, Simplex)
 calcSimplex _ a (PointSimplex b)

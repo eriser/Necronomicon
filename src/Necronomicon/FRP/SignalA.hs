@@ -1,19 +1,14 @@
-{-# LANGUAGE ExistentialQuantification #-}
-
 module Necronomicon.FRP.SignalA where
 ------------------------------------------------------
 import           Control.Arrow                      hiding (second)
 import           Control.Concurrent
-import           Control.Concurrent.STM
 import qualified Control.Category                  as Cat
 import qualified Graphics.UI.GLFW                  as GLFW
-import           Control.Monad                     (foldM)
+import           Control.Monad.Trans               (MonadIO, liftIO)
+import           Control.Monad.Fix
 
 import           Necronomicon.Graphics
 import           Necronomicon.Utility              (getCurrentTime)
-import           Necronomicon.Game
-import           Necronomicon.Linear
-import           Necronomicon.Physics
 ------------------------------------------------------
 
 (<~) :: Functor f => (a -> b) -> f a -> f b
@@ -85,15 +80,6 @@ instance Arrow SignalA where
                 where
                     (cont2, c) = cont1 t b
 
--- instance ArrowApply Signal where
-    -- app =
-
-plus1 :: SignalA Int Int
-plus1 = arr (+1)
-
-plus2 :: SignalA Int Int
-plus2 = plus1 >>> plus1
-
 instance Functor (SignalA a) where
     fmap f a = a >>> arr f -- Maybe implement this for better efficiency
 
@@ -113,14 +99,14 @@ instance Applicative (SignalA a) where
 --                             Just s' -> s' : acc
 --                             _       -> acc
 
-delayA :: a -> SignalA a a
-delayA a = SignalGen $ \_ a' -> (delayA a', a)
+delay :: a -> SignalA a a
+delay a = SignalGen $ \_ a' -> (delay a', a)
+--
+-- state :: s -> (a -> s -> s) -> SignalA a s
+-- state s f = SignalGen $ \_ a -> let x = f a s in (state x f, x)
 
-stateA :: s -> (a -> s -> s) -> SignalA a s
-stateA s f = SignalGen $ \_ a -> let x = f a s in (stateA x f, x)
-
-foldpA :: (a -> s -> s) -> s -> SignalA a s
-foldpA = flip stateA
+-- foldp :: (a -> s -> s) -> s -> SignalA a s
+-- foldp = flip stateA
 
 --try a test with an open loop feedback for game entities
 --maybe need delay combinator
@@ -135,29 +121,12 @@ runSignalA s = initWindow >>= \mw -> case mw of
     Nothing -> print "Error starting GLFW." >> return ()
     Just w  -> do
         putStrLn "Starting Necronomicon"
-
         currentTime <- getCurrentTime
         run False w s currentTime
     where
-        --event callbacks
-        -- mousePressEvent state _ _ GLFW.MouseButtonState'Released _ = atomically $ writeTChan (mouseButtonBuffer state) $ False
-        -- mousePressEvent state _ _ GLFW.MouseButtonState'Pressed  _ = atomically $ writeTChan (mouseButtonBuffer state) $ True
-        -- dimensionsEvent state _ x y = writeToSignal (dimensionsSignal state) $ Vector2 (fromIntegral x) (fromIntegral y)
-        -- keyPressEvent   state _ k _ GLFW.KeyState'Pressed  _       = do
-            -- atomically $ writeTChan (keySignalBuffer state)   (glfwKeyToEventKey k,True)
-            -- atomically $ writeTChan (keysPressedBuffer state) (glfwKeyToEventKey k)
-        -- keyPressEvent   state _ k _ GLFW.KeyState'Released _       = atomically $ writeTChan (keySignalBuffer state) (glfwKeyToEventKey k,False)
-        -- keyPressEvent   _ _ _ _ _ _                            = return ()
-        --
-        -- mousePosEvent state w x y = do
-        --     (wx,wy) <- GLFW.getWindowSize w
-        --     let pos = (x / fromIntegral wx,y / fromIntegral wy)
-        --     writeToSignal (mouseSignal state) pos
-
         run quit window sig runTime'
             | quit      = print "Qutting" >> return ()
             | otherwise = do
-
                 GLFW.pollEvents
                 q <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'Escape
                 currentTime <- getCurrentTime
@@ -171,160 +140,142 @@ runSignalA s = initWindow >>= \mw -> case mw of
 
 
 -------------------------------------------------------
--- Agent model
+-- Applicative Signals 2.0
 -------------------------------------------------------
-{-
-    This is basically the actor model.
-    However that fact can actually largely be ignored by the end-user.
-    The run-time system will take care of all of the multi-threading and message passing
-    The user essentially only needs to make one instance of a type class,
-    that has two functions in it, for the entire game to work.
 
-    Some ground rules:
-        -The base level of computation is an agent.
-        -An agent interacts with the world through a specific set of inputs and outputs.
-        -The agent's inputs are designated by a list of "sensors" (or whatever the fuck you want to call it)
-        -These are things like Sight, Sound, Collision, user input, etc
-        -Using this the run-time system can generate events specific to each agent and feed each agent the events they require as they occur.
-        -Agent output is fedback into the system in the form of a "gameObject" that has all the necessary informations the run-time system needs.
-        -Agents contain game specifc data that the user specifies.
-        -The run time doesn't care about this data at all, in the end it's really just used to transform the game object which is what the system really cares about.
-        -Agents run in a loop until terminated
+--------------------------
+--SS - Monadic state
+--------------------------
+data SignalState = SignalState {
+    sigStateTime   :: Time,
+    sigStateWindow :: GLFW.Window
+    } deriving (Show)
 
-    To make use of this system the end-user creates a data object and makes it an instance of AgentType type class:
+newtype SS a = SS {runSS :: SignalState -> IO (a, SignalState) }
 
-        class AgentType a where
-            agentEvent       :: Event a -> a -> Maybe a
-            updateGameObject :: Time -> a -> GameObject -> GameObject
+instance Functor SS where
+    fmap f (SS xcont) = SS $ \state -> xcont state >>= \x -> return (f $ fst x, snd x)
 
-    The agentEvent function is called each time there is event that has occurred that the agent cares about.
-    This function is used purely to update the internal state of the agent. The run-time system cares not what happens.
-    These events can occur WHENEVER.
+instance Applicative SS where
+    pure x                = SS $ \state -> return (x , state)
+    SS fcont <*> SS xcont = SS $ \state -> do
+        f <- fcont state
+        x <- xcont $ snd f
+        return (fst f $ fst x, snd x)
 
-    The updateGameObject function is called regulary, and is asynchronous to the agentEvnt function calls.
-    It simply takes the current state of the agent and updates it's associated GameObject as required.
-    This can update everything from the model or shaders used for rendering, the position of the agent in the world,
-    or it can dynamically alter the sensor the agent is using (thus changing what events it will receive).
+instance Monad SS where
+    return        = pure
+    SS xsig >>= f = SS $ \state -> do
+        (x, state') <- xsig state
+        let (SS g)      = f x
+        g state'
 
-    This allows agents to do things like put on nightvision goggles, changing it's ability to see, etc.
+instance MonadIO SS where
+    liftIO action = SS $ \state -> do
+        a <- action
+        return (a, state)
 
-    FRP variation:
-        -Instead of an event driven system, agent's behaviors could be described in terms of a signal graph a la' FRP
--}
+get :: (SignalState -> a) -> SS a
+get getter = SS $ \state -> return (getter state, state)
+
+-------------------------------------------------------
+--SignalM - Applicative Signals with internal state
+-------------------------------------------------------
+newtype SignalM a = SignalM {runSigM :: SS (a, SignalM a)}
+
+instance Functor SignalM where
+    fmap f sig = SignalM $ do
+        ~(x, cont) <- runSigM sig
+        return (f x, fmap f cont)
+
+instance Applicative SignalM where
+    pure x        = SignalM $ return (x, pure x)
+    fsig <*> xsig = SignalM $ do
+        ~(f, fcont) <- runSigM fsig
+        ~(x, xcont) <- runSigM xsig
+        return $ (f x, fcont <*> xcont)
+
+-------------------------------------------------------
+--SignalM - Arrow instance
+-------------------------------------------------------
+newtype SigArrow a b = SigArrow {runSigArrow :: (SignalM (a -> b))}
+
+sigArr :: SignalM (a -> b) -> SigArrow a b
+sigArr f = SigArrow f
+
+instance Cat.Category SigArrow where
+    id                            = SigArrow $ pure id
+    SigArrow fsig . SigArrow gsig = SigArrow $ SignalM $ do
+        ~(f, fcont) <- runSigM fsig
+        ~(g, gcont) <- runSigM gsig
+        return (f . g, runSigArrow $ SigArrow fcont Cat.. SigArrow gcont)
 
 
---Some base level data types
-type Range   = Double
-data Key     = KeyW | KeyA | KeyS | KeyD
-data Event a = Sight     a Vector3 Range --Agent Seen,  Position seen at, range to agent
-             | Sound     a Vector3 Range --Agent Heard, Direction heard,  range from sound
-             | Collision a Vector3       --Agent collided with, Point of collision (We can actually generate LOTS of collision data)
-             | MousePos    Vector2
-             | MousePressUp
-             | MousePressDown
-             | MouseClick
-             | KeyUp     Key
-             | KeyDown   Key
-             | TimeEvent Time
+instance Arrow SigArrow where
+    arr f                 = SigArrow $ pure f
+    first (SigArrow fsig) = SigArrow $ SignalM $ do
+        ~(f, fcont) <- runSigM fsig
+        return (\(b, d) -> (f b, d), runSigArrow $ first (SigArrow fcont))
 
------------------------------------
+sigLoopA :: a -> SigArrow a a -> SignalM a
+sigLoopA x fsig = sigLoop x (runSigArrow fsig)
+
+-------------------------------------------------------
 -- Run time
------------------------------------
-
---An agent is a self-contained Unit
-data Agent a = Agent {
-    agentData       :: a,          --This is game specific data
-    agentGameObject :: GameObject, --This is the object the run time interacts with, used for rendering, position data, etc
-    agentSensors    :: [Sensor]    --These serve as the means for interactivity in the game. Each sensor has a list of readings it has received since the last update.
-}
-
---These serve as the means for interactivity in the game.
---Each sensor has a list of readings it has received since the last update.
---Each agent can have any combinations of these, and have them in multiples
---They can also be dynamically changed at run time.
---For example, this allows agents to have one collider proximity detection of enemies, and another collider for taking damage, and another for physics simulations
-data Sensor = Vision  Range    --Implemented via collision detection
-            | Hearing Range    --Implemented via collision detection
-            | Physics Collider --Implemented via collision detection
-            | SystemInput      --Implemented via system
-            | Temporal         --Implemented via system
-                               --Other Shit?
-
---How do we spawn new agents in the game? Maybe a specific spawn manager agent type
---Returning Just a keeps the agent running, Returning Nothing ends the agent
-class AgentType a where
-    agentEvent       :: Event a -> a -> Maybe a
-    updateGameObject :: Time -> a -> (GameObject, [Sensor]) -> (GameObject, [Sensor])
-
-startAgent :: AgentType a => Agent a -> IO ()
-startAgent agent = do
-    mailBox <- atomically $ newTMVar (agentGameObject agent, agentSensors agent, [])
-    _       <- forkIO $ agentLoop agent (UID 0) mailBox
-    return ()
+-------------------------------------------------------
+runSignalM :: Show a => SignalM a -> IO()
+runSignalM s = initWindow >>= \mw -> case mw of
+    Nothing -> print "Error starting GLFW." >> return ()
+    Just w  -> do
+        putStrLn "Starting Necronomicon"
+        currentTime <- getCurrentTime
+        let state = SignalState (Time 0) w
+        run False w s state currentTime
     where
-        agentLoop (Agent a _ s) uid mailBox = do
-            (g, _, es) <- atomically $ takeTMVar mailBox
-            t          <- fmap Time getCurrentTime
-            case foldM (\acc e -> agentEvent e acc) a (TimeEvent t : es) of
-                Nothing -> return ()
-                Just a' -> do
-                    let (g', s') = updateGameObject t a (g, s)
-                    atomically $ putTMVar mailBox (g', s', [])
-                    agentLoop (Agent a' g' s') uid mailBox
+        run quit window (SignalM (SS sig)) state runTime'
+            | quit      = print "Qutting" >> return ()
+            | otherwise = do
+                GLFW.pollEvents
+                q                    <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'Escape
+                currentTime          <- getCurrentTime
+                let delta             = Time $ currentTime - runTime'
+                (~(x, cont), state') <- sig (state{sigStateTime = delta})
+                print x
+                putStrLn ""
+                threadDelay $ 16667
+                run q window cont state' currentTime
 
------------------------------------
--- User land
------------------------------------
-newtype Health = Health Double deriving (Eq, Show, Ord, Num, Fractional, Real)
-newtype Damage = Damage Double deriving (Eq, Show, Ord, Num, Fractional, Real)
+-------------------------------------------------------
+-- Combinators
+-------------------------------------------------------
 
---Not strictly necessary, but it can be good to design agents as Finite State Machines
-data HeroState = HeroIdle
-               | HeroMoving Vector3
-               | HeroAttacking Time
-               | HeroDamaged   Time
+time :: SignalM Double
+time = SignalM $ liftIO getCurrentTime >>= \t -> return (t, time)
 
---Each Agent would likely have similar (or even shared) state objects
-data MegaDark  = Hero   Health HeroState
-               | Enemy  Health
-               | Bullet Damage
+mousePos :: SignalM (Double, Double)
+mousePos = SignalM $ do
+    w <- get sigStateWindow
+    m <- liftIO $ GLFW.getCursorPos w
+    return (m, mousePos)
 
-instance AgentType MegaDark where
-    agentEvent event h@(Hero health _)
-        | health <= 0            = Nothing
-        | Collision e p <- event = Just $ collide e p h
-        | KeyDown   k   <- event = Just $ moveHero k h
-        | TimeEvent t   <- event = Just $ tickHero t h
-    agentEvent _ m = Just m
+sigLoop :: a -> SignalM (a -> a) -> SignalM a
+sigLoop x fsig = SignalM $ do
+    ~(f, fcont) <- runSigM fsig
+    let x' = f x
+    return (x, sigLoop x' fcont)
 
-    --Right now the sensor list and game object are only apart so that I don't have to break code in the project.
-    --They really should be fused together for simplicity if this is the direction we go
-    updateGameObject t (Hero _ (HeroMoving dir)) (g, s) = (move g (dir * realToFrac t), s)
-    updateGameObject _  _                         g     = g
+sigFix :: (SignalM a -> SignalM a) -> a -> SignalM a
+sigFix f x = SignalM $ SS cont
+    where
+        cont state = mfix $ \ ~(~(x', xcont), _) -> do
+            let fcont = delayM x . f $ delayM x' xcont
+            (runSS (runSigM fcont)) state
 
-----------------------
--- Update Hero State
-----------------------
+foldp :: (a -> b -> b) -> b -> SignalM a -> SignalM b
+foldp f b asig = SignalM $ do
+    ~(a, acont) <- runSigM asig
+    let b' = f a b
+    return (b, foldp f b' acont)
 
-tickHero :: Time -> MegaDark -> MegaDark
-tickHero t (Hero health (HeroAttacking at))
-    | at - t <= 0 = Hero health $ HeroIdle
-    | otherwise   = Hero health $ HeroAttacking $ at - t
-tickHero t (Hero health (HeroDamaged dt))
-    | dt - t <= 0 = Hero health $ HeroIdle
-    | otherwise   = Hero health $ HeroDamaged $ dt - t
-tickHero _ h = h
-
-collide :: MegaDark -> Vector3 -> MegaDark -> MegaDark
-collide (Bullet damage) _ (Hero health _) = Hero (health - realToFrac damage) $ HeroDamaged 1
-collide  _              _  h              = h
-
-moveHero :: Key -> MegaDark -> MegaDark
-moveHero _ (Hero health (HeroAttacking t)) = Hero health $ HeroAttacking t
-moveHero _ (Hero health (HeroDamaged   t)) = Hero health $ HeroDamaged t
-moveHero k (Hero health  _               ) = case k of
-    KeyW -> Hero health $ HeroMoving up
-    KeyS -> Hero health $ HeroMoving down
-    KeyA -> Hero health $ HeroMoving left3
-    KeyD -> Hero health $ HeroMoving right3
-moveHero _ m = m
+delayM :: a -> SignalM a -> SignalM a
+delayM aPrev curSig = SignalM $ return (aPrev, curSig)

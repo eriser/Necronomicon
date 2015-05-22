@@ -1,37 +1,129 @@
-{-# LANGUAGE Arrows #-}
--- import Necronomicon
-import Necronomicon.FRP.SignalA
-import Control.Arrow hiding (second)
+-- {-# LANGUAGE Arrows #-}
+import Necronomicon
+-- import Necronomicon.FRP.SignalA
+-- import Control.Arrow
 
 main :: IO ()
+main = print "test"
+
+type Health = Double
+type Damage = Double
+
+data HeroState = HeroIdle | HeroMoving Vector3 | HeroAttacking Time | HeroDamaged Time
+data Hero      = Hero HeroState Health
+
+data BulletState = Flying Vector3 | DeathAnimation Time
+data Bullet      = Bullet BulletState
+
+
+data PhysM     = EnemyWeapon
+               | HeroWeapon
+               | Player
+               | Neutral
+               deriving (Enum)
+
+type MegaDark = (Entity Hero, [Entity Bullet])
+
+megaDark :: Input -> MegaDark -> MegaDark
+megaDark i (hero, bullets) = (updateHero i hero, mapCollapse (updateBullet i) bullets)
+
+updateBullet :: Input -> Entity Bullet -> Maybe (Entity Bullet)
+updateBullet i (Entity bullet@(Bullet s) gameObject)
+    | DeathAnimation t <- s, t > realToFrac (runTime i) = Nothing
+    | otherwise                                         = Just $ Entity bullet' (moveGO bullet')
+    where
+        moveGO (Bullet (Flying d)) = move gameObject d
+        bullet'                    = foldr checkCollider bullet $ collisions gameObject
+        checkCollider c b
+            | EnemyWeapon <- tag c = b
+            | otherwise            = Bullet . DeathAnimation . realToFrac $ runTime i + 0.5
+
+updateHero :: Input -> Entity Hero -> Entity Hero
+updateHero i (Entity hero gameObject) = Entity hero' (updateGO hero')
+    where
+        hero'                            = moveHero $ attack $ tickHero $ foldr checkCollider hero $ collisions gameObject
+        updateGO (Hero (HeroMoving d) _) = move gameObject d
+        updateGO  _                      = gameObject
+
+        moveHero h@(Hero state health)
+            | HeroIdle     <- state, Just (x, y) <- moveKeys i = h' x y
+            | HeroMoving _ <- state, Just (x, y) <- moveKeys i = h' x y
+            | otherwise                                        = h
+            where
+                h' x y = Hero (HeroMoving $ Vector3 x y 0) health
+
+        attack h@(Hero state health)
+            | HeroIdle     <- state, Just _ <- mouseClick i = h'
+            | HeroMoving _ <- state, Just _ <- mouseClick i = h'
+            | otherwise                                     = h
+            where
+                h' = Hero (HeroAttacking . realToFrac $ runTime i + 1) health
+
+        tickHero h@(Hero state health)
+            | HeroAttacking t <- state, t > realToFrac (runTime i) = h'
+            | HeroDamaged   t <- state, t > realToFrac (runTime i) = h'
+            | otherwise                                            = h
+            where
+                h' = Hero HeroIdle health
+
+        checkCollider c h@(Hero state health)
+            | EnemyWeapon <- tag c = Hero (HeroDamaged . realToFrac $ runTime i + 1) (health - 10)
+            | otherwise            = h
+
+mapCollapse :: (a -> Maybe a) -> [a] -> [a]
+mapCollapse f xs = foldr collapse [] xs
+    where
+        collapse x xs'
+            | Just x' <- f x = x' : xs'
+            | otherwise      = xs'
+
+-- main = runSignalM sigLoopTest
 -- main = runSignalSS gameS
-main = runSignalA gameA
+-- main = runSignalA gameA
+-- main = runSignalA $ constant (1 :: Int) >>> state 0 (+)
 -- main = runSignal game
 
+-- sigATest :: SignalM Double
+-- sigATest = fmap fst $ sigLoopA (0, 0) $ proc (a, b) -> do
+--     a' <- sigArr $ (+) <~ fmap fst mousePos -< b
+--     b' <- sigArr $ (+) <~ fmap snd mousePos -< a
+--     returnA -< (a', b')
+--
+-- sigLoopTest :: SignalM Double
+-- sigLoopTest = sigLoop 0 mouseCounter
+--     where
+--         mouseCounter = (+) <~ fmap fst mousePos
+--
+-- sigLoopTest :: SignalM Double
+-- sigLoopTest = mouseCounter
+    -- where
+        -- mouseCounter = (+) <~ fmap fst mousePos ~~ delayM 0 mouseCounter
+--
+-- sigLoopTest :: SignalM Double
+-- sigLoopTest = fmap fst $ sigLoop (0, 0) scene
+--     where
+--         scene = (\hf ef (h', e') -> (hf e', ef h')) <~ hero ~~ enemy
+--         hero  = (\h e -> h + e) <~ pure 1
+--         enemy = (\e h -> h + e) <~ pure 1
 
-gameA :: SignalA () Int
-gameA = proc () -> do
-    rec a <- arr (+1) <<< delayA 0 -< b
-        b <- arr (+1) <<< delayA 0 -< a
-    returnA -< b
+-- sigLoopTest :: SignalM Double
+-- sigLoopTest = foldp (\h m e -> h + m + e) 0 (fmap fst mousePos) ~~ pure 2
+    -- where
+    --     scene = (\hf ef (h', e') -> (hf e', ef h')) <~ hero ~~ enemy
+    --     hero  = foldp (\h e -> h + e + 1) 0 (pure 0)
+    --     enemy = foldp (\e h -> h + h + 1) 0 (pure 0)
+
+-- gameA :: SignalA () Int
+-- gameA = proc () -> do
+--     rec a <- arr (+1)             -< b
+--         b <- arr (+1) <<< delay 0 -< a
+--     returnA -< b
 
 -- game :: Signal Int
 -- game = h
     -- where
         -- h = (+1) <~ delay 0 e
         -- e = (+1) <~ delay 0 h
-
--- instance Show (Int -> Int) where
-    -- show _ = "(Int -> Int)"
-
--- gameS :: SignalS Int
--- gameS = pureS (+) `apS` pureS 1 `apS` pureS 666
--- gameS = (fmapS (+) (pureS 666)) `apS` pureS 666
--- gameS = h
-    -- where
-        -- This goes infinite....gotta figure that out!
-        -- h = fmapS (+ 1) $ delayS 0 h
-
 {-
 main = print $ megaDark $ Root []
 
