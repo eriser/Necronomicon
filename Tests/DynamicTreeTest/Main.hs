@@ -53,13 +53,13 @@ updateHero :: World -> Entity Hero -> Entity Hero
 updateHero w (Entity hero g) = Entity hero' (updateGO hero')
     where
         hero'                            = moveHero $ attack $ tickHero $ foldr checkCollider hero $ collisions g
-        updateGO (Hero (HeroMoving d) _) = g `rotate` Vector3 (_y d * deltaTime w) (negate (_x d) * deltaTime w) 0
+        updateGO (Hero (HeroMoving d) _) = g `rotate` Vector3 (_y d * deltaTime w * negate 100) (_x d * deltaTime w * negate 100) 0
         updateGO  _                      = g
 
         moveHero h@(Hero state health)
-            | HeroIdle     <- state, Just (x, y) <- moveKeysPressed w = h' x y
-            | HeroMoving _ <- state, Just (x, y) <- moveKeysPressed w = h' x y
-            | otherwise                                               = h
+            | HeroIdle     <- state, Just (x, y) <- mouseMoved w = h' x y
+            | HeroMoving _ <- state, Just (x, y) <- mouseMoved w = h' x y
+            | otherwise                                          = h
             where
                 h' x y = Hero (HeroMoving $ Vector3 x y 0) health
 

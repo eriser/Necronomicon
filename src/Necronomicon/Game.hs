@@ -251,6 +251,8 @@ runGame f inits = initWindow >>= \mw -> case mw of
     Just w  -> do
         putStrLn "Starting Necronomicon"
 
+        GLFW.setCursorInputMode w GLFW.CursorInputMode'Hidden
+
         resources   <- newResources
         currentTime <- getCurrentTime
         let world = mkWorld{runTime = currentTime}
@@ -267,7 +269,11 @@ runGame f inits = initWindow >>= \mw -> case mw of
                 sKey <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'S
                 dKey <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'D
                 mb   <- (== GLFW.MouseButtonState'Pressed) <$> GLFW.getMouseButton window GLFW.MouseButton'1
+                (ww, wh) <- (\(wd, hd) -> (fromIntegral wd, fromIntegral hd)) <$> GLFW.getWindowSize window
+                mp       <- (\(cx, cy) -> ((cx - ww * 0.5) / ww, (cy - wh * 0.5) / wh)) <$> GLFW.getCursorPos window
                 currentTime <- getCurrentTime
+
+                GLFW.setCursorInputMode window GLFW.CursorInputMode'Hidden
 
                 let world' = world {
                         deltaTime       = currentTime - runTime world,
@@ -276,15 +282,19 @@ runGame f inits = initWindow >>= \mw -> case mw of
                         --Signal Style
                         moveKeys        = (if aKey then -1 else 0 + if dKey then 1 else 0, if wKey then 1 else 0 + if sKey then -1 else 0),
                         mouseIsDown     = mb,
+                        mousePosition   = mp,
 
                         --Event Style
                         moveKeysPressed = Just (if aKey then -1 else 0 + if dKey then 1 else 0, if wKey then 1 else 0 + if sKey then -1 else 0),
-                        mouseClicked    = mb && not (mouseIsDown world)
+                        mouseClicked    = mb && not (mouseIsDown world),
+                        mouseMoved      = if mp /= mousePosition world then Just mp else Nothing
                     }
                     s'          = f world' s
                     g           = gchildren_ (getGameObjects s' []) gameObject
                     (g', tree') = update (g, tree)
                     (s'', _)    = setGameObjects s' (children g')
+
+                GLFW.setCursorPos window (ww * 0.5) (wh * 0.5)
 
                 renderGraphicsG window resources True g' g' tree'
                 threadDelay $ 16667
