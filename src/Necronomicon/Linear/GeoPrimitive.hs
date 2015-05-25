@@ -4,6 +4,7 @@ import Necronomicon.Linear.Math
 import Necronomicon.Linear.Matrix
 import Necronomicon.Linear.Vector
 import Test.QuickCheck
+import Data.Binary
 
 ---------------------------------------
 -- Geometric Primitive
@@ -24,6 +25,13 @@ data Sphere = Sphere {
     sphCenter :: Vector3,
     sphRadius :: Double
 }   deriving (Eq, Show)
+
+instance Binary AABB where
+    put (AABB mn mx) = put mn >> put mx
+    get              = AABB <$> get <*> get
+instance Binary Sphere where
+    put (Sphere c r) = put c >> put r
+    get              = Sphere <$> get <*> get
 
 instance Arbitrary AABB where
     arbitrary = do

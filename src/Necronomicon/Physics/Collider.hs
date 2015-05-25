@@ -1,18 +1,34 @@
 module Necronomicon.Physics.Collider where
 
+import Necronomicon.Graphics.Model (UID(..))
 import Necronomicon.Linear
 import Necronomicon.Graphics.HalfEdge
+import Data.Binary
 
 -------------------------------------------------------
 -- Colliders
 -------------------------------------------------------
 data Collision = Collision Int deriving (Show)
-data UID       = UID Int | New deriving (Show)
 data Collider = SphereCollider  UID Matrix4x4 Sphere   [Collision]
               | BoxCollider     UID Matrix4x4 OBB      [Collision]
               | CapsuleCollider UID Matrix4x4 Capsule  [Collision]
               | MeshCollider    UID Matrix4x4 HalfEdge [Collision]
               deriving (Show)
+
+instance Binary Collision where
+    put (Collision t) = put t
+    get               = Collision <$> get
+instance Binary Collider where
+    put (SphereCollider  uid m s cs) = put (0 :: Word8) >> put uid >> put m >> put s >> put cs
+    put (BoxCollider     uid m s cs) = put (1 :: Word8) >> put uid >> put m >> put s >> put cs
+    put (CapsuleCollider uid m s cs) = put (2 :: Word8) >> put uid >> put m >> put s >> put cs
+    put (MeshCollider    uid m s cs) = put (3 :: Word8) >> put uid >> put m >> put s >> put cs
+
+    get = (get :: Get Word8) >>= \t -> case t of
+        0 -> SphereCollider  <$> get <*> get <*> get <*> get
+        1 -> BoxCollider     <$> get <*> get <*> get <*> get
+        2 -> CapsuleCollider <$> get <*> get <*> get <*> get
+        _ -> MeshCollider    <$> get <*> get <*> get <*> get
 
 colliderID :: Collider -> UID
 colliderID (SphereCollider  uid _ _ _) = uid

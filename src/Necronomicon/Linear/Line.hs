@@ -3,6 +3,7 @@ module Necronomicon.Linear.Line where
 import Necronomicon.Linear.GeoPrimitive
 import Necronomicon.Linear.Vector
 import Necronomicon.Linear.Math
+import Data.Binary
 
 ---------------------------------------
 -- Line
@@ -11,6 +12,10 @@ data Line = Line {
     lineStart :: Vector3,
     lineEnd   :: Vector3
 }   deriving (Show)
+
+instance Binary Line where
+    put (Line s e) = put s >> put e
+    get            = Line <$> get <*> get 
 
 instance GeoPrimitive Line where
     enclosingAABB                      = error "Line doesn't have a sane enclosing AABB implementation"

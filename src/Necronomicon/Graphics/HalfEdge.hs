@@ -7,6 +7,7 @@ import           Debug.Trace
 import qualified Data.Set                           as Set
 import qualified Data.Vector                        as V
 import qualified Data.Map                           as Map
+import           Data.Binary
 
 ---------------------------------------
 -- HalfEdge Mesh
@@ -36,6 +37,11 @@ data HalfEdge = HalfEdge {
     nextEdge :: HalfEdge,
     face1    :: Maybe Face
 }
+
+--TODO: Finish HalfEdge Binary serialization
+instance Binary HalfEdge where
+    put = error "HalfEdge binary instance still needs to be implemented."
+    get = error "HalfEdge binary instance still needs to be implemented."
 
 instance Show HalfEdge where
     show he = unlines . fst $ go he Set.empty

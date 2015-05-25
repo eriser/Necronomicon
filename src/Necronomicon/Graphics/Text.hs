@@ -47,7 +47,7 @@ fontFace ft fp = withCString fp $ \str ->
         peek ptr
 
 drawText :: String -> Font -> (NecroTex.Texture -> Material) -> Model
-drawText text font material = FontRenderer text font material
+drawText text font material = FontRenderer text font (material NecroTex.EmptyTexture)
 
 loadFontAtlas :: Font -> IO LoadedFont
 loadFontAtlas font = do
@@ -82,7 +82,7 @@ loadFontAtlas font = do
     vertexBuffer:_ <- genObjectNames 1
     indexBuffer :_ <- genObjectNames 1
 
-    return $ LoadedFont (NecroTex.Texture [] (return atlasTexture)) atlasWidth' atlasHeight' charMap vertexBuffer indexBuffer
+    return $ LoadedFont (NecroTex.LoadedTexture atlasTexture) atlasWidth' atlasHeight' charMap vertexBuffer indexBuffer
 
 addCharToAtlas :: Double -> FT_Face -> Map.Map Char CharMetric -> Int -> IO()
 addCharToAtlas w ff charMap char = do
@@ -146,13 +146,13 @@ fontScale :: Double
 fontScale = 1 / 1080
 
 --Change dynamic meshes to "load" their buffers the first time, so users don't have to supply them
-renderFont :: String -> Font -> (NecroTex.Texture -> Material) -> Linear.Matrix4x4 -> Linear.Matrix4x4 -> Resources -> IO()
-renderFont text font material modelView proj resources = do
+renderFont :: String -> Font -> Resources -> IO (NecroTex.Texture, Mesh)
+renderFont text font resources = do
     loadedFont <- getFont resources font
     let characterMesh                       = textMesh (characters loadedFont) (atlasWidth loadedFont) (atlasHeight loadedFont)
-        fontMesh                            = DynamicMesh (fontKey font) vertices colors uvs indices
         (vertices,colors,uvs,indices,_,_,_) = foldl' characterMesh ([],[],[],[],0,0,0) text
-    drawMeshWithMaterial (material $ atlas loadedFont) fontMesh modelView proj resources
+        fontMesh                            = DynamicMesh (fontKey font) vertices colors uvs indices
+    return (atlas loadedFont, fontMesh)
 
 textMesh :: Map.Map Char CharMetric ->
             Double ->

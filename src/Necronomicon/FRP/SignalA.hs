@@ -1,6 +1,6 @@
 module Necronomicon.FRP.SignalA where
 ------------------------------------------------------
-import           Control.Arrow                      hiding (second)
+import           Control.Arrow                     hiding (second)
 import           Control.Concurrent
 import qualified Control.Category                  as Cat
 import qualified Graphics.UI.GLFW                  as GLFW

@@ -1492,8 +1492,8 @@ audioBuffer index = Signal $ \_ -> if index < 8
 --consider dynamic texture constructor similar to dynamic mesh?
 audioTexture :: Int -> Signal Texture
 audioTexture index
-    | index < 8 = Signal $ \_ -> makeAudioTexture index >>= \t -> return $ \_ -> return $ Change t
-    | otherwise = Signal $ \_ -> return $ \_ -> return $ NoChange emptyTexture
+    | index < 8 = Signal $ \_ -> return $ \_ -> return $ Change $ AudioTexture index
+    | otherwise = Signal $ \_ -> return $ \_ -> return $ NoChange EmptyTexture
 
 playSynthN :: Signal Bool -> String -> [Signal Double] -> Signal ()
 playSynthN playSig synthName argSigs = Signal $ \state -> do

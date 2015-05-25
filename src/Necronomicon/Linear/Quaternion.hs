@@ -28,8 +28,13 @@ module Necronomicon.Linear.Quaternion (Quaternion(Quaternion,qw,qv),
 
 import Necronomicon.Linear.Math
 import Necronomicon.Linear.Vector
+import Data.Binary
 
 data Quaternion = Quaternion { qw::Double, qv::Vector3 } deriving (Show, Eq)
+
+instance Binary Quaternion where
+    put (Quaternion w v) = put w >> put v
+    get                  = Quaternion <$> get <*> get
 
 -- AxisAngle is a different type to make explicit the different usages. Arguments order is reversed to make this clearer.
 data AxisAngle = AxisAngle { aaAxis::Vector3, aaAngle::Double } deriving (Show, Eq)

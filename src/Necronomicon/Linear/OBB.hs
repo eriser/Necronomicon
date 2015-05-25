@@ -5,12 +5,17 @@ import Necronomicon.Linear.Vector
 import Necronomicon.Linear.Matrix
 import Necronomicon.Linear.Math
 -- import Necronomicon.Linear.AABB
+import Data.Binary
 
 ---------------------------------------
 -- Oriented Bounding Box
 ---------------------------------------
 
 data OBB = OBB { obbExtents :: Vector3 } deriving (Show)
+
+instance Binary OBB where
+    put (OBB e) = put e
+    get         = OBB <$> get
 
 instance GeoPrimitive OBB where
     enclosingSphere (OBB (Vector3 hw hh hd)) t   = Sphere (matOrigin t) $ max (hw * 2) $ max (hh * 2) (hd * 2)

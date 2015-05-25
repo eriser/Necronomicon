@@ -222,11 +222,14 @@ executable GenCalcBindings
 executable DynamicTreeTest
     main-is:          Main.hs
     default-language: Haskell2010
-    ghc-options:      -Wall -Werror -debug
+    ghc-options:      -Wall -Werror -debug -O3
     hs-source-dirs:   Tests/DynamicTreeTest
+    default-extensions: DeriveGeneric
     build-depends:    base             == 4.*,
                       Necronomicon,
-                      QuickCheck
+                      QuickCheck,
+                      binary,
+                      bytestring
 
 executable GenerativeTest
     main-is:          Main.hs

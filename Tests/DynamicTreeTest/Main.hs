@@ -1,27 +1,64 @@
--- {-# LANGUAGE Arrows #-}
 import Necronomicon
--- import Necronomicon.FRP.SignalA
--- import Control.Arrow
+import Data.Binary
+import GHC.Generics
+
+import qualified Data.ByteString.Lazy as B
+import qualified Numeric as N (showHex)
+
+prettyPrint :: B.ByteString -> String
+prettyPrint = concat . map (flip N.showHex "") . B.unpack
 
 main :: IO ()
-main = print "test"
+main = do
+    let s = (mkHero, [mkBullet]) :: MegaDark
+    print s
+    putStrLn ""
+    let e = encode s
+        d = decode e :: MegaDark
+    putStrLn $ prettyPrint e
+    putStrLn ""
+    print d
+    putStrLn ""
+    print $ show s == show d
 
 type Health = Double
-type Damage = Double
+-- type Damage = Double
 
-data HeroState = HeroIdle | HeroMoving Vector3 | HeroAttacking Timer | HeroDamaged Timer
-data Hero      = Hero HeroState Health
+data HeroState = HeroIdle | HeroMoving Vector3 | HeroAttacking Timer | HeroDamaged Timer deriving (Show, Generic)
+data Hero      = Hero HeroState Health deriving (Show, Generic)
 
-data BulletState = Flying Vector3 | DeathAnimation Timer
-data Bullet      = Bullet BulletState
+data BulletState = Flying Vector3 | DeathAnimation Timer deriving (Show, Generic)
+data Bullet      = Bullet BulletState deriving (Show, Generic)
 
+type MegaDark = (Entity Hero, [Entity Bullet])
+
+instance Binary HeroState
+instance Binary Hero
+instance Binary BulletState
+instance Binary Bullet
+
+mkHero :: Entity Hero
+mkHero = Entity h g
+    where
+        h = Hero HeroIdle 100
+        g = gameObject{camera = Just c, collider = boxCollider 1 1 1, model = m}
+        c = Camera 30 0.1 1000 black [postRenderFX blur]
+        m = Just $ Model cube $ vertexColored white
+
+mkBullet :: Entity Bullet
+mkBullet = Entity b g
+    where
+        b = Bullet (Flying 1)
+        g = gameObject{collider = boxCollider 1 1 1, model = m}
+        m = Just $ Model cube $ vertexColored green
+
+{-
 data PhysM = EnemyWeapon
            | HeroWeapon
            | Player
            | Neutral
-           deriving (Enum)
+           deriving (Enum, Show, Generic)
 
-type MegaDark = (Entity Hero, [Entity Bullet])
 
 megaDark :: World -> MegaDark -> MegaDark
 megaDark w (hero, bullets) = (updateHero w hero, mapCollapse (updateBullet w) bullets)
@@ -68,94 +105,4 @@ updateHero w (Entity hero g) = Entity hero' (updateGO hero')
         checkCollider c h@(Hero state health)
             | EnemyWeapon <- tag c = Hero (HeroDamaged $ timer 1 w) (health - 10)
             | otherwise            = h
-
--- main = runSignalM sigLoopTest
--- main = runSignalSS gameS
--- main = runSignalA gameA
--- main = runSignalA $ constant (1 :: Int) >>> state 0 (+)
--- main = runSignal game
-
--- sigATest :: SignalM Double
--- sigATest = fmap fst $ sigLoopA (0, 0) $ proc (a, b) -> do
---     a' <- sigArr $ (+) <~ fmap fst mousePos -< b
---     b' <- sigArr $ (+) <~ fmap snd mousePos -< a
---     returnA -< (a', b')
---
--- sigLoopTest :: SignalM Double
--- sigLoopTest = sigLoop 0 mouseCounter
---     where
---         mouseCounter = (+) <~ fmap fst mousePos
---
--- sigLoopTest :: SignalM Double
--- sigLoopTest = mouseCounter
-    -- where
-        -- mouseCounter = (+) <~ fmap fst mousePos ~~ delayM 0 mouseCounter
---
--- sigLoopTest :: SignalM Double
--- sigLoopTest = fmap fst $ sigLoop (0, 0) scene
---     where
---         scene = (\hf ef (h', e') -> (hf e', ef h')) <~ hero ~~ enemy
---         hero  = (\h e -> h + e) <~ pure 1
---         enemy = (\e h -> h + e) <~ pure 1
-
--- sigLoopTest :: SignalM Double
--- sigLoopTest = foldp (\h m e -> h + m + e) 0 (fmap fst mousePos) ~~ pure 2
-    -- where
-    --     scene = (\hf ef (h', e') -> (hf e', ef h')) <~ hero ~~ enemy
-    --     hero  = foldp (\h e -> h + e + 1) 0 (pure 0)
-    --     enemy = foldp (\e h -> h + h + 1) 0 (pure 0)
-
--- gameA :: SignalA () Int
--- gameA = proc () -> do
---     rec a <- arr (+1)             -< b
---         b <- arr (+1) <<< delay 0 -< a
---     returnA -< b
-
--- game :: Signal Int
--- game = h
-    -- where
-        -- h = (+1) <~ delay 0 e
-        -- e = (+1) <~ delay 0 h
-{-
-main = print $ megaDark $ Root []
-
---This is just a demo
-type Health    = Double
-data MegaDark  = Hero  Health GameObject
-               | Enemy Health GameObject
-               | Root  [MegaDark]
-               deriving (Show)
-
---No deriving....time for template haskell?
-instance GameType MegaDark where
-    _gameObject (Hero  _ g) = g
-    _gameObject (Enemy _ g) = g
-    _gameObject  _          = gameObject
-
-    gameObject_ g (Hero  h _) = Hero  h g
-    gameObject_ g (Enemy h _) = Enemy h g
-    gameObject_ _  g          = g
-
-    children (Root c) = c
-    children  _       = []
-
-    gchildren_ c (Root _) = Root c
-    gchildren_ _  g       = g
-
-mkEnemy :: Vector3 -> MegaDark
-mkEnemy    p = Enemy 100 gameObject{
-    pos      = p,
-    collider = boxCollider 1 1 1
-}
-
-mkHero  :: MegaDark
-mkHero       = Hero  100 gameObject{
-    pos      = Vector3 0 0 10,
-    collider = boxCollider 1 2 1,
-    camera   = Just $ Camera (60/2) 0.1 1000 black []
-}
-
-megaDark :: MegaDark -> MegaDark
-megaDark (Root [h, e1, e2, e3, e4]) = Root [h `rotate` Vector3 0.1 0.05 0, e1, e2, e3, e4]
-megaDark  _                         = Root [mkHero, mkEnemy 1, mkEnemy 2, mkEnemy (-1), mkEnemy (-2)]
 -}

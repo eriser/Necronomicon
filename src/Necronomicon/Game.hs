@@ -15,6 +15,8 @@ import Necronomicon.Physics.DynamicTree
 import Necronomicon.Graphics
 import Necronomicon.Utility              (getCurrentTime)
 
+import Data.Binary
+
 -------------------------------------------------------
 -- TODO: Ideas
 -- Clockwork world / minature-golem-esque world?
@@ -34,42 +36,33 @@ data GameObject = GameObject {
     collider :: Maybe Collider,
     model    :: Maybe Model,
     camera   :: Maybe Camera,
-    gameChildren :: [GameObject]
+    children :: [GameObject]
 } deriving (Show)
 
--------------------------------------------------------
--- GameType
--------------------------------------------------------
+instance Binary GameObject where
+    put (GameObject p r s c m cam cs) = put p >> put r >> put s >> put c >> put m >> put cam >> put cs
+    get                               = GameObject <$> get <*> get <*> get <*> get <*> get <*> get <*> get
 
-class GameType a where
-    _gameObject :: a -> GameObject
-    gameObject_ :: GameObject -> a -> a
-    children    :: a -> [a]
-    gchildren_  :: [a] -> a -> a
+-------------------------------------------------------
+-- GameObject API
+-------------------------------------------------------
 
 gameObject :: GameObject
 gameObject = GameObject 0 identity 1 Nothing Nothing Nothing []
 
+rotate :: GameObject -> Vector3 -> GameObject
+rotate g (Vector3 x y z) = g{rot = rot g * fromEuler' x y z}
 
-{-
-    implement:
-    move, rotate, etc
--}
-
-rotate :: GameType a => a -> Vector3 -> a
-rotate gt (Vector3 x y z) = gameObject_ (g{rot = rot g * fromEuler' x y z}) gt
-    where
-        g = _gameObject gt
-
-move :: GameType a => a -> Vector3 -> a
-move gt dir = gameObject_ (g{pos = pos g + dir}) gt
-    where
-        g = _gameObject gt
+move :: GameObject -> Vector3 -> GameObject
+move g dir = g{pos = pos g + dir}
 
 collisions :: GameObject -> [Collision]
 collisions g
     | Just c <- collider g = colliderCollisions c
     | otherwise            = []
+
+gchildren_ :: [GameObject] -> GameObject -> GameObject
+gchildren_ cs (GameObject p r s c m cm _) = GameObject p r s c m cm cs
 
 -------------------------------------------------------
 -- GameObject - Getters / Setters
@@ -91,11 +84,7 @@ removeChild (GameObject p r s c m cm cs) n
     where
         (cs1, cs2) = splitAt n cs
 
-instance GameType GameObject where
-    _gameObject                                = id
-    gameObject_ g _                            = g
-    children       (GameObject _ _ _ _ _ _ gs) = gs
-    gchildren_  gs (GameObject p r s c m cm _) = GameObject p r s c m cm gs
+
 
 -------------------------------------------------------
 -- GameObject - Folding / Mapping
@@ -105,7 +94,7 @@ foldChildren :: (GameObject -> a -> a) -> a -> GameObject -> a
 foldChildren f acc g = foldr (\c acc' -> foldChildren f acc' c) (f g acc) (children g)
 
 mapFold :: ((GameObject, a) -> (GameObject, a)) -> (GameObject, a) -> (GameObject, a)
-mapFold f gacc = (gchildren_ gcs g, acc')
+mapFold f gacc = (  gchildren_ gcs g, acc')
     where
         (g,   acc)      = f gacc
         (gcs, acc')     = foldr mapC ([], acc) (children g)
@@ -173,10 +162,12 @@ drawGame world view proj resources debug g = do
 
 drawG :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> Bool -> GameObject -> IO Matrix4x4
 drawG world view proj resources debug g
-    | Just (Model mesh mat)             <- model g    = drawMeshWithMaterial mat mesh modelView proj resources >> return newWorld
-    | Just (FontRenderer text font mat) <- model g    = renderFont text font mat      modelView proj resources >> return newWorld
-    | debug, Just c                     <- collider g = debugDrawCollider c           view      proj resources >> return newWorld
-    | otherwise                                       = return newWorld
+    | Just (Model mesh mat) <- model g    = drawMeshWithMaterial mat mesh modelView proj resources >> return newWorld
+    | Just (FontRenderer text font mat) <- model g = do
+        (fontTexture, fontMesh) <- renderFont text font resources
+        drawMeshWithMaterial (setEmptyTextures fontTexture mat) fontMesh modelView proj resources >> return newWorld
+    | debug, Just c  <- collider g = debugDrawCollider c           view      proj resources >> return newWorld
+    | otherwise                    = return newWorld
     where
         newWorld  = world .*. transMat g
         modelView = view  .*. newWorld
@@ -229,8 +220,8 @@ renderCameraG (w,h) view scene resources debug so t = case camera so of
             GL.clearColor GL.$= GL.Color4 (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a)
             GL.clear [GL.ColorBuffer,GL.DepthBuffer]
             postFX <- getPostFX resources (fromIntegral w,fromIntegral h) fx
-            let (Material mdraw) = postRenderMaterial postFX (Texture [] . return .GL.TextureObject $ postRenderTex postFX)
-            mdraw (rect 1 1) identity4 (orthoMatrix 0 1 0 1 (-1) 1) resources
+            let postFXMat = setEmptyTextures (LoadedTexture $ GL.TextureObject $ postRenderTex postFX) (postRenderMaterial postFX)
+            drawMeshWithMaterial postFXMat (rect 1 1) identity4 (orthoMatrix 0 1 0 1 (-1) 1) resources
 
             GL.depthFunc     GL.$= Just GL.Less
             GL.blend         GL.$= GL.Enabled
@@ -398,7 +389,11 @@ data World = World {
 data Entity a = Entity {
     userData   :: a,
     entityData :: GameObject
-}
+} deriving (Show)
+
+instance Binary a => Binary (Entity a) where
+    put (Entity a g) = put a >> put g
+    get              = Entity <$> get <*> get
 
 class Scene a where
     getGameObjects :: a -> [GameObject] -> [GameObject]
@@ -543,7 +538,11 @@ instance (Scene a, Scene b, Scene c, Scene d, Scene e, Scene f, Scene g, Scene h
             (e10', gs11) = setGameObjects e10 gs10
 
 -- state timing convenience functions
-data Timer = Timer { timerStartTime :: Double, timerEndTime :: Double }
+data Timer = Timer { timerStartTime :: Double, timerEndTime :: Double } deriving (Show)
+
+instance Binary Timer where
+    put (Timer s e) = put s >> put e
+    get             = Timer <$> get <*> get
 
 timer :: Double -> World -> Timer
 timer t w = Timer (runTime w) (runTime w + t)

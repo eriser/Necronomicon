@@ -69,8 +69,9 @@ renderCamera (w,h) view scene resources so = case _camera so of
             GL.clearColor GL.$= GL.Color4 (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a)
             GL.clear [GL.ColorBuffer,GL.DepthBuffer]
             postFX <- getPostFX resources (fromIntegral w,fromIntegral h) fx
-            let (Material mdraw) = postRenderMaterial postFX (Texture [] . return .GL.TextureObject $ postRenderTex postFX)
-            mdraw (rect 1 1) identity4 (orthoMatrix 0 1 0 1 (-1) 1) resources
+            let postFXMat = setEmptyTextures (LoadedTexture $ GL.TextureObject $ postRenderTex postFX) (postRenderMaterial postFX)
+            -- mdraw (rect 1 1) identity4 (orthoMatrix 0 1 0 1 (-1) 1) resources
+            drawMeshWithMaterial postFXMat (rect 1 1) identity4 (orthoMatrix 0 1 0 1 (-1) 1) resources
 
             GL.depthFunc     GL.$= Just GL.Less
             GL.blend         GL.$= GL.Enabled
@@ -99,7 +100,7 @@ renderGraphics window resources scene gui = do
 ---------------------------------------
 
 loadPostFX :: PostRenderingFX -> (Double,Double) -> IO LoadedPostRenderingFX
-loadPostFX (PostRenderingFX name mat) (w,h) = do
+loadPostFX (PostRenderingFX name _ mat) (w,h) = do
 
     --Init FBO Texture
     glActiveTexture gl_TEXTURE0
@@ -153,9 +154,12 @@ freePostFX post = do
 
 --Take into account reshape
 getPostFX :: Resources -> (Double,Double) -> PostRenderingFX -> IO LoadedPostRenderingFX
-getPostFX resources dim fx@(PostRenderingFX name _) = readIORef (postRenderRef resources) >>= \effects -> case Map.lookup name effects of
+getPostFX resources dim fx@(PostRenderingFX name _ _) = readIORef (postRenderRef resources) >>= \effects -> case Map.lookup name effects of
     Nothing       -> loadPostFX fx dim >>= \loadedFX -> (writeIORef (postRenderRef resources) $ Map.insert name loadedFX effects) >> return loadedFX
     Just loadedFX -> return loadedFX
 
-glow :: PostRenderingFX
-glow = PostRenderingFX "glow" blur
+--Can we make a more general form to take any material which takes a texture, like the new font system?
+postRenderFX :: (Texture -> Material) -> PostRenderingFX
+postRenderFX mat = PostRenderingFX (vs ++ "+" ++ fs) New mat'
+    where
+        mat'@(Material _ vs fs _ _) = mat EmptyTexture
