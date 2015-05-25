@@ -7,7 +7,7 @@ main = runGame megaDark initScene
 
 type MegaDark    = (Entity Hero, [Entity Bullet])
 type Health      = Double
-data HeroState   = HeroIdle | HeroMoving Vector3 | HeroAttacking Timer | HeroDamaged Timer deriving (Show, Generic)
+data HeroState   = HeroIdle | HeroMoving Vector3 Vector3 | HeroAttacking Timer | HeroDamaged Timer deriving (Show, Generic)
 data Hero        = Hero HeroState Health deriving (Show, Generic)
 data BulletState = Flying Vector3 | DeathAnimation Timer deriving (Show, Generic)
 data Bullet      = Bullet BulletState deriving (Show, Generic)
@@ -29,7 +29,7 @@ mkHero = Entity h g
         h = Hero HeroIdle 100
         g = gameObject {
             pos    = Vector3 0 0 (-6),
-            rot    = fromEuler' 0 180 0,
+            rot    = fromEuler' 0 (-180) 0,
             camera = Just $ Camera 30 0.1 1000 black []
         }
 
@@ -52,20 +52,25 @@ megaDark w (hero, bullets) = (updateHero w hero, mapCollapse (updateBullet w) bu
 updateHero :: World -> Entity Hero -> Entity Hero
 updateHero w (Entity hero g) = Entity hero' (updateGO hero')
     where
-        hero'                            = moveHero $ attack $ tickHero $ foldr checkCollider hero $ collisions g
-        updateGO (Hero (HeroMoving d) _) = g `rotate` Vector3 (_y d * deltaTime w * negate 100) (_x d * deltaTime w * negate 100) 0
-        updateGO  _                      = g
+        hero'                              = moveHero $ rotateHero $ attack $ tickHero $ foldr checkCollider hero $ collisions g
+        updateGO (Hero (HeroMoving m r) _) = g
+            `rotate`    (r * realToFrac (deltaTime w * negate 100))
+            `translate` (m * realToFrac (deltaTime w * 10))
+        updateGO  _                        = g
 
         moveHero h@(Hero state health)
-            | HeroIdle     <- state, Just (x, y) <- mouseMoved w = h' x y
-            | HeroMoving _ <- state, Just (x, y) <- mouseMoved w = h' x y
-            | otherwise                                          = h
-            where
-                h' x y = Hero (HeroMoving $ Vector3 x y 0) health
+            | HeroIdle       <- state, Just (x, y) <- moveKeysPressed w = Hero (HeroMoving (Vector3 x 0 (-y)) 0) health
+            | HeroMoving _ r <- state, Just (x, y) <- moveKeysPressed w = Hero (HeroMoving (Vector3 x 0 (-y)) r) health
+            | otherwise                                                 = h
+
+        rotateHero h@(Hero state health)
+            | HeroIdle       <- state, Just (x, y) <- mouseMoved w = Hero (HeroMoving 0 $ Vector3 y x 0) health
+            | HeroMoving m _ <- state, Just (x, y) <- mouseMoved w = Hero (HeroMoving m $ Vector3 y x 0) health
+            | otherwise                                            = h
 
         attack h@(Hero state health)
-            | HeroIdle     <- state, mouseClicked w = h'
-            | HeroMoving _ <- state, mouseClicked w = h'
+            | HeroIdle       <- state, mouseClicked w = h'
+            | HeroMoving _ _ <- state, mouseClicked w = h'
             | otherwise                             = h
             where
                 h' = Hero (HeroAttacking $ timer 1 w) health
@@ -86,7 +91,7 @@ updateBullet w (Entity bullet@(Bullet s) g)
     | DeathAnimation t <- s, timerReady t w = Nothing
     | otherwise                             = Just $ Entity bullet' (moveGO bullet')
     where
-        moveGO (Bullet (Flying d)) = g `rotate` (d * realToFrac (runTime w))
+        moveGO (Bullet (Flying d)) = g `rotate` (d * realToFrac (deltaTime w))
         moveGO  _                  = g
         bullet'                    = foldr checkCollider bullet $ collisions g
         checkCollider c b

@@ -56,6 +56,9 @@ rotate g (Vector3 x y z) = g{rot = rot g * fromEuler' x y z}
 move :: GameObject -> Vector3 -> GameObject
 move g dir = g{pos = pos g + dir}
 
+translate :: GameObject -> Vector3 -> GameObject
+translate g dir = g{pos = pos g + (dir .*. rotMat g)}
+
 collisions :: GameObject -> [Collision]
 collisions g
     | Just c <- collider g = colliderCollisions c
@@ -67,6 +70,9 @@ gchildren_ cs (GameObject p r s c m cm _) = GameObject p r s c m cm cs
 -------------------------------------------------------
 -- GameObject - Getters / Setters
 -------------------------------------------------------
+
+rotMat :: GameObject -> Matrix3x3
+rotMat (GameObject _ r _ _ _ _ _) = rotFromQuaternion r
 
 transMat :: GameObject -> Matrix4x4
 transMat (GameObject p r s _ _ _ _) = trsMatrix p r s
@@ -83,7 +89,6 @@ removeChild (GameObject p r s c m cm cs) n
     | otherwise = GameObject p r s c m cm $ cs1 ++ tail cs2
     where
         (cs1, cs2) = splitAt n cs
-
 
 
 -------------------------------------------------------
@@ -285,7 +290,7 @@ runGame f inits = initWindow >>= \mw -> case mw of
                         mousePosition   = mp,
 
                         --Event Style
-                        moveKeysPressed = Just (if aKey then -1 else 0 + if dKey then 1 else 0, if wKey then 1 else 0 + if sKey then -1 else 0),
+                        moveKeysPressed = if moveKeys world /= moveKeys world' then Just (if aKey then -1 else 0 + if dKey then 1 else 0, if wKey then 1 else 0 + if sKey then -1 else 0) else Nothing,
                         mouseClicked    = mb && not (mouseIsDown world),
                         mouseMoved      = if mp /= mousePosition world then Just mp else Nothing
                     }
@@ -295,6 +300,7 @@ runGame f inits = initWindow >>= \mw -> case mw of
                     (s'', _)    = setGameObjects s' (children g')
 
                 GLFW.setCursorPos window (ww * 0.5) (wh * 0.5)
+                GLFW.setCursorInputMode window GLFW.CursorInputMode'Hidden
 
                 renderGraphicsG window resources True g' g' tree'
                 threadDelay $ 16667
