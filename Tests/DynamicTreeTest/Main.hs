@@ -2,83 +2,58 @@ import Necronomicon
 import Data.Binary
 import GHC.Generics
 
-import qualified Data.ByteString.Lazy as B
-import qualified Numeric as N (showHex)
-
-prettyPrint :: B.ByteString -> String
-prettyPrint = concat . map (flip N.showHex "") . B.unpack
-
 main :: IO ()
-main = do
-    let s = (mkHero, [mkBullet]) :: MegaDark
-    print s
-    putStrLn ""
-    let e = encode s
-        d = decode e :: MegaDark
-    putStrLn $ prettyPrint e
-    putStrLn ""
-    print d
-    putStrLn ""
-    print $ show s == show d
+main = runGame megaDark initScene
 
-type Health = Double
--- type Damage = Double
-
-data HeroState = HeroIdle | HeroMoving Vector3 | HeroAttacking Timer | HeroDamaged Timer deriving (Show, Generic)
-data Hero      = Hero HeroState Health deriving (Show, Generic)
-
+type MegaDark    = (Entity Hero, [Entity Bullet])
+type Health      = Double
+data HeroState   = HeroIdle | HeroMoving Vector3 | HeroAttacking Timer | HeroDamaged Timer deriving (Show, Generic)
+data Hero        = Hero HeroState Health deriving (Show, Generic)
 data BulletState = Flying Vector3 | DeathAnimation Timer deriving (Show, Generic)
 data Bullet      = Bullet BulletState deriving (Show, Generic)
-
-type MegaDark = (Entity Hero, [Entity Bullet])
+data PhysM       = EnemyWeapon
+                 | HeroWeapon
+                 | Player
+                 | Neutral
+                 deriving (Enum, Show, Generic)
 
 instance Binary HeroState
 instance Binary Hero
 instance Binary BulletState
 instance Binary Bullet
+instance Binary PhysM
 
 mkHero :: Entity Hero
 mkHero = Entity h g
     where
         h = Hero HeroIdle 100
-        g = gameObject{camera = Just c, collider = boxCollider 1 1 1, model = m}
-        c = Camera 30 0.1 1000 black [postRenderFX blur]
-        m = Just $ Model cube $ vertexColored white
+        g = gameObject {
+            pos    = Vector3 0 0 (-6),
+            rot    = fromEuler' 0 180 0,
+            camera = Just $ Camera 30 0.1 1000 black []
+        }
 
-mkBullet :: Entity Bullet
-mkBullet = Entity b g
+mkBullet :: Vector3 -> Entity Bullet
+mkBullet p = Entity b g
     where
-        b = Bullet (Flying 1)
-        g = gameObject{collider = boxCollider 1 1 1, model = m}
-        m = Just $ Model cube $ vertexColored green
+        b = Bullet (Flying $ Vector3 1 1 0)
+        g = gameObject {
+            pos      = p,
+            collider = boxCollider 1 1 1,
+            model    = Just $ Model cube $ vertexColored white
+        }
 
-{-
-data PhysM = EnemyWeapon
-           | HeroWeapon
-           | Player
-           | Neutral
-           deriving (Enum, Show, Generic)
-
+initScene :: MegaDark
+initScene = (mkHero, [mkBullet $ Vector3 (-2) 0 0, mkBullet $ Vector3 0 0 0, mkBullet $ Vector3 2 0 0])
 
 megaDark :: World -> MegaDark -> MegaDark
 megaDark w (hero, bullets) = (updateHero w hero, mapCollapse (updateBullet w) bullets)
-
-updateBullet :: World -> Entity Bullet -> Maybe (Entity Bullet)
-updateBullet w (Entity bullet@(Bullet s) g)
-    | DeathAnimation t <- s, timerReady t w = Nothing
-    | otherwise                             = Just $ Entity bullet' (moveGO bullet')
-    where
-        moveGO (Bullet (Flying d)) = move g d
-        bullet'                    = foldr checkCollider bullet $ collisions g
-        checkCollider c b
-            | EnemyWeapon <- tag c = b
-            | otherwise            = Bullet . DeathAnimation $ timer 0.5 w
 
 updateHero :: World -> Entity Hero -> Entity Hero
 updateHero w (Entity hero g) = Entity hero' (updateGO hero')
     where
         hero'                            = moveHero $ attack $ tickHero $ foldr checkCollider hero $ collisions g
-        updateGO (Hero (HeroMoving d) _) = move g d
+        updateGO (Hero (HeroMoving d) _) = g `rotate` Vector3 (_y d * deltaTime w) (negate (_x d) * deltaTime w) 0
         updateGO  _                      = g
 
         moveHero h@(Hero state health)
@@ -102,7 +77,18 @@ updateHero w (Entity hero g) = Entity hero' (updateGO hero')
             where
                 h' = Hero HeroIdle health
 
-        checkCollider c h@(Hero state health)
+        checkCollider c h@(Hero _ health)
             | EnemyWeapon <- tag c = Hero (HeroDamaged $ timer 1 w) (health - 10)
             | otherwise            = h
--}
+
+updateBullet :: World -> Entity Bullet -> Maybe (Entity Bullet)
+updateBullet w (Entity bullet@(Bullet s) g)
+    | DeathAnimation t <- s, timerReady t w = Nothing
+    | otherwise                             = Just $ Entity bullet' (moveGO bullet')
+    where
+        moveGO (Bullet (Flying d)) = g `rotate` (d * realToFrac (runTime w))
+        moveGO  _                  = g
+        bullet'                    = foldr checkCollider bullet $ collisions g
+        checkCollider c b
+            | EnemyWeapon <- tag c = b
+            | otherwise            = Bullet . DeathAnimation $ timer 0.5 w

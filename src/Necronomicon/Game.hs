@@ -245,129 +245,50 @@ renderGraphicsG window resources debug scene _ t = do
     GLFW.pollEvents
     -- GL.flush
 
-runGame :: (GameObject -> GameObject) -> GameObject -> IO()
-runGame f initg = initWindow >>= \mw -> case mw of
+runGame :: (Scene a, Binary a, Show a) => (World -> a -> a) -> a -> IO()
+runGame f inits = initWindow >>= \mw -> case mw of
     Nothing -> print "Error starting GLFW." >> return ()
     Just w  -> do
         putStrLn "Starting Necronomicon"
 
-        -- GLFW.setCursorPosCallback   w $ Just $ mousePosEvent   signalState
-        -- GLFW.setMouseButtonCallback w $ Just $ mousePressEvent signalState
-        -- GLFW.setKeyCallback         w $ Just $ keyPressEvent   signalState
-        -- GLFW.setWindowSizeCallback  w $ Just $ dimensionsEvent signalState
-
         resources   <- newResources
         currentTime <- getCurrentTime
-        renderNecronomicon False w resources initg empty currentTime
+        let world = mkWorld{runTime = currentTime}
+        renderNecronomicon False w resources inits empty world
     where
-        --event callbacks
-        -- mousePressEvent state _ _ GLFW.MouseButtonState'Released _ = atomically $ writeTChan (mouseButtonBuffer state) $ False
-        -- mousePressEvent state _ _ GLFW.MouseButtonState'Pressed  _ = atomically $ writeTChan (mouseButtonBuffer state) $ True
-        -- dimensionsEvent state _ x y = writeToSignal (dimensionsSignal state) $ Vector2 (fromIntegral x) (fromIntegral y)
-        -- keyPressEvent   state _ k _ GLFW.KeyState'Pressed  _       = do
-            -- atomically $ writeTChan (keySignalBuffer state)   (glfwKeyToEventKey k,True)
-            -- atomically $ writeTChan (keysPressedBuffer state) (glfwKeyToEventKey k)
-        -- keyPressEvent   state _ k _ GLFW.KeyState'Released _       = atomically $ writeTChan (keySignalBuffer state) (glfwKeyToEventKey k,False)
-        -- keyPressEvent   _ _ _ _ _ _                            = return ()
-        --
-        -- mousePosEvent state w x y = do
-        --     (wx,wy) <- GLFW.getWindowSize w
-        --     let pos = (x / fromIntegral wx,y / fromIntegral wy)
-        --     writeToSignal (mouseSignal state) pos
-
-        renderNecronomicon quit window resources g tree runTime'
+        renderNecronomicon quit window resources s tree world
             | quit      = print "Qutting" >> return ()
             | otherwise = do
 
                 GLFW.pollEvents
-                q <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'Escape
+                qKey <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'Escape
+                wKey <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'W
+                aKey <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'A
+                sKey <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'S
+                dKey <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'D
+                mb   <- (== GLFW.MouseButtonState'Pressed) <$> GLFW.getMouseButton window GLFW.MouseButton'1
                 currentTime <- getCurrentTime
 
-                let _           = currentTime - runTime'
-                    (g', tree') = update (f g, tree)
+                let world' = world {
+                        deltaTime       = currentTime - runTime world,
+                        runTime         = currentTime,
+
+                        --Signal Style
+                        moveKeys        = (if aKey then -1 else 0 + if dKey then 1 else 0, if wKey then 1 else 0 + if sKey then -1 else 0),
+                        mouseIsDown     = mb,
+
+                        --Event Style
+                        moveKeysPressed = Just (if aKey then -1 else 0 + if dKey then 1 else 0, if wKey then 1 else 0 + if sKey then -1 else 0),
+                        mouseClicked    = mb && not (mouseIsDown world)
+                    }
+                    s'          = f world' s
+                    g           = gchildren_ (getGameObjects s' []) gameObject
+                    (g', tree') = update (g, tree)
+                    (s'', _)    = setGameObjects s' (children g')
 
                 renderGraphicsG window resources True g' g' tree'
                 threadDelay $ 16667
-                renderNecronomicon q window resources g' tree' currentTime
-
--------------------------------------------------------
--- Testing
--------------------------------------------------------
-
-data TreeTest = TestInsert GameObject
-              | TestUpdate Int Vector3
-              | TestRemove Int
-              deriving (Show)
-
-instance Arbitrary TreeTest where
-    arbitrary = choose (0, 2) >>= \which -> case (which :: Int) of
-        0 -> arbitrary >>= return . TestInsert
-        1 -> arbitrary >>= \w -> arbitrary >>= \h -> arbitrary >>= \d -> arbitrary >>= \index -> return (TestUpdate index $ Vector3 w h d)
-        _ -> arbitrary >>= return . TestRemove
-
-instance Arbitrary GameObject where
-    arbitrary = do
-        (w,  h,  d)  <- arbitrary
-        (px, py, pz) <- arbitrary
-        (rx, ry, rz) <- arbitrary
-        (sx, sy, sz) <- arbitrary
-        return $ GameObject (Vector3 px py pz) (fromEuler' rx ry rz) (Vector3 sx sy sz) (boxCollider w h d) Nothing Nothing []
-
-dynTreeTester :: ((GameObject, DynamicTree) -> Bool) -> [[TreeTest]] -> Bool
-dynTreeTester f uss = fst $ foldr updateTest start uss
-    where
-        start                    = (True, (GameObject 0 identity 1 Nothing Nothing Nothing [], empty))
-        updateTest us (True,  t) = let res = update (foldr test' t us) in (f res, res)
-        updateTest _  (False, t) = (False, t)
-        test' (TestInsert c)     (g, t) = (gaddChild   c g, t)
-        test' (TestRemove i)     (g, t) = (removeChild g i, t)
-        test' (TestUpdate i tr)  (g, t)
-            | null cs2  = (g, t)
-            | otherwise = (gchildren_ cs' g, t)
-            where
-                cs'        = cs1 ++ (c : tail cs2)
-                (cs1, cs2) = splitAt i $ children g
-                c = GameObject tr identity 1 (collider (head cs2)) Nothing Nothing (children (head cs2))
-
-validateIDs :: (GameObject, DynamicTree) -> Bool
-validateIDs (g, t) = sort (tids (nodes t) []) == gids && sort nids == gids
-    where
-        -- trace (show t ++ "\n") $
-        tids  Tip           acc = acc
-        tids (Leaf _ uid)   acc = uid : acc
-        tids (Node _ l r _) acc = tids r $ tids l acc
-        (_, nids)               = V.foldl' (\(i, ids) x -> if x == Nothing then (i + 1, ids) else (i + 1, i : ids) ) (0, []) $ nodeData t
-        gid g' acc              = case collider g' of
-            Just (SphereCollider (UID c) _ _ _) -> c : acc
-            Just (BoxCollider    (UID c) _ _ _) -> c : acc
-            _                                   -> acc
-        gids                    = sort $ foldChildren gid [] g
-
-dynTreeTest :: IO ()
-dynTreeTest = do
-    putStrLn "----------------------------------------------------------------------------------------"
-    putStrLn "validateIDs test"
-    putStrLn ""
-    quickCheckWith (stdArgs { maxSize = 100, maxSuccess = 100 }) $ dynTreeTester validateIDs
-
-
--------------------------------------------------------
--- Debug drawing
--------------------------------------------------------
-
-debugDrawCollider :: Collider -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ()
-debugDrawCollider (BoxCollider _ t (OBB hs) _) view proj resources = drawMeshWithMaterial (debugDraw green) cubeOutline (view .*. t .*. trsMatrix 0 identity (hs * 2)) proj resources
-debugDrawCollider  _                       _         _    _        = return ()
-
-debugDrawAABB :: Color -> AABB -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ()
-debugDrawAABB c aabb view proj resources = drawMeshWithMaterial (debugDraw c) cubeOutline (view .*. trsMatrix (center aabb) identity (size aabb)) proj resources
-
-debugDrawDynamicTree :: DynamicTree -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ()
-debugDrawDynamicTree tree view proj resources = drawNode (nodes tree)
-    where
-        drawNode (Node aabb l r _) = debugDrawAABB blue   aabb view proj resources >> drawNode l >> drawNode r
-        drawNode (Leaf aabb _)     = debugDrawAABB whiteA aabb view proj resources
-        drawNode  Tip              = return ()
+                renderNecronomicon qKey window resources s'' tree' world'
 
 -------------------------------------------------------
 -- Entity
@@ -379,12 +300,16 @@ data World = World {
     deltaTime     :: Double,
     mousePosition :: (Double, Double),
     moveKeys      :: (Double, Double),
+    mouseIsDown   :: Bool,
 
     --Event Style
     mouseClicked    :: Bool,
     mouseMoved      :: Maybe (Double, Double),
     moveKeysPressed :: Maybe (Double, Double)
 }
+
+mkWorld :: World
+mkWorld = World 0 0 (0, 0) (0, 0) False False Nothing Nothing
 
 data Entity a = Entity {
     userData   :: a,
@@ -548,7 +473,7 @@ timer :: Double -> World -> Timer
 timer t w = Timer (runTime w) (runTime w + t)
 
 timerReady :: Timer -> World -> Bool
-timerReady (Timer _ endTime) i = endTime > runTime i
+timerReady (Timer _ endTime) i = runTime i >= endTime
 
 mapCollapse :: (a -> Maybe a) -> [a] -> [a]
 mapCollapse f xs = foldr collapse [] xs
@@ -556,3 +481,83 @@ mapCollapse f xs = foldr collapse [] xs
         collapse x xs'
             | Just x' <- f x = x' : xs'
             | otherwise      = xs'
+
+
+-------------------------------------------------------
+-- Testing
+-------------------------------------------------------
+
+data TreeTest = TestInsert GameObject
+              | TestUpdate Int Vector3
+              | TestRemove Int
+              deriving (Show)
+
+instance Arbitrary TreeTest where
+    arbitrary = choose (0, 2) >>= \which -> case (which :: Int) of
+        0 -> arbitrary >>= return . TestInsert
+        1 -> arbitrary >>= \w -> arbitrary >>= \h -> arbitrary >>= \d -> arbitrary >>= \index -> return (TestUpdate index $ Vector3 w h d)
+        _ -> arbitrary >>= return . TestRemove
+
+instance Arbitrary GameObject where
+    arbitrary = do
+        (w,  h,  d)  <- arbitrary
+        (px, py, pz) <- arbitrary
+        (rx, ry, rz) <- arbitrary
+        (sx, sy, sz) <- arbitrary
+        return $ GameObject (Vector3 px py pz) (fromEuler' rx ry rz) (Vector3 sx sy sz) (boxCollider w h d) Nothing Nothing []
+
+dynTreeTester :: ((GameObject, DynamicTree) -> Bool) -> [[TreeTest]] -> Bool
+dynTreeTester f uss = fst $ foldr updateTest start uss
+    where
+        start                    = (True, (GameObject 0 identity 1 Nothing Nothing Nothing [], empty))
+        updateTest us (True,  t) = let res = update (foldr test' t us) in (f res, res)
+        updateTest _  (False, t) = (False, t)
+        test' (TestInsert c)     (g, t) = (gaddChild   c g, t)
+        test' (TestRemove i)     (g, t) = (removeChild g i, t)
+        test' (TestUpdate i tr)  (g, t)
+            | null cs2  = (g, t)
+            | otherwise = (gchildren_ cs' g, t)
+            where
+                cs'        = cs1 ++ (c : tail cs2)
+                (cs1, cs2) = splitAt i $ children g
+                c = GameObject tr identity 1 (collider (head cs2)) Nothing Nothing (children (head cs2))
+
+validateIDs :: (GameObject, DynamicTree) -> Bool
+validateIDs (g, t) = sort (tids (nodes t) []) == gids && sort nids == gids
+    where
+        -- trace (show t ++ "\n") $
+        tids  Tip           acc = acc
+        tids (Leaf _ uid)   acc = uid : acc
+        tids (Node _ l r _) acc = tids r $ tids l acc
+        (_, nids)               = V.foldl' (\(i, ids) x -> if x == Nothing then (i + 1, ids) else (i + 1, i : ids) ) (0, []) $ nodeData t
+        gid g' acc              = case collider g' of
+            Just (SphereCollider (UID c) _ _ _) -> c : acc
+            Just (BoxCollider    (UID c) _ _ _) -> c : acc
+            _                                   -> acc
+        gids                    = sort $ foldChildren gid [] g
+
+dynTreeTest :: IO ()
+dynTreeTest = do
+    putStrLn "----------------------------------------------------------------------------------------"
+    putStrLn "validateIDs test"
+    putStrLn ""
+    quickCheckWith (stdArgs { maxSize = 100, maxSuccess = 100 }) $ dynTreeTester validateIDs
+
+
+-------------------------------------------------------
+-- Debug drawing
+-------------------------------------------------------
+
+debugDrawCollider :: Collider -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ()
+debugDrawCollider (BoxCollider _ t (OBB hs) _) view proj resources = drawMeshWithMaterial (debugDraw green) cubeOutline (view .*. t .*. trsMatrix 0 identity (hs * 2)) proj resources
+debugDrawCollider  _                       _         _    _        = return ()
+
+debugDrawAABB :: Color -> AABB -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ()
+debugDrawAABB c aabb view proj resources = drawMeshWithMaterial (debugDraw c) cubeOutline (view .*. trsMatrix (center aabb) identity (size aabb)) proj resources
+
+debugDrawDynamicTree :: DynamicTree -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ()
+debugDrawDynamicTree tree view proj resources = drawNode (nodes tree)
+    where
+        drawNode (Node aabb l r _) = debugDrawAABB blue   aabb view proj resources >> drawNode l >> drawNode r
+        drawNode (Leaf aabb _)     = debugDrawAABB whiteA aabb view proj resources
+        drawNode  Tip              = return ()
