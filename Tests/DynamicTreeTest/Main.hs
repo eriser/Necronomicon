@@ -50,13 +50,11 @@ megaDark :: World -> MegaDark -> MegaDark
 megaDark w (hero, bullets) = (updateHero w hero, mapCollapse (updateBullet w) bullets)
 
 updateHero :: World -> Entity Hero -> Entity Hero
-updateHero w (Entity hero g) = Entity hero' (updateGO hero')
+updateHero w (Entity hero g) = Entity hero' (g' hero')
     where
-        hero'                              = moveHero $ rotateHero $ attack $ tickHero $ foldr checkCollider hero $ collisions g
-        updateGO (Hero (HeroMoving m r) _) = g
-            `rotate`    (r * realToFrac (deltaTime w * negate 100))
-            `translate` (m * realToFrac (deltaTime w * 10))
-        updateGO  _                        = g
+        hero'                        = moveHero $ rotateHero $ attack $ tickHero $ foldr checkCollider hero $ collisions g
+        g' (Hero (HeroMoving m r) _) = translate (m * realToFrac (deltaTime w * 10)) $ rotate (r * realToFrac (deltaTime w * negate 100)) g
+        g'  _                        = g
 
         moveHero h@(Hero state health)
             | HeroIdle       <- state, Just (x, y) <- moveKeysPressed w = Hero (HeroMoving (Vector3 x 0 (-y)) 0) health
@@ -71,7 +69,7 @@ updateHero w (Entity hero g) = Entity hero' (updateGO hero')
         attack h@(Hero state health)
             | HeroIdle       <- state, mouseClicked w = h'
             | HeroMoving _ _ <- state, mouseClicked w = h'
-            | otherwise                             = h
+            | otherwise                               = h
             where
                 h' = Hero (HeroAttacking $ timer 1 w) health
 
@@ -89,11 +87,11 @@ updateHero w (Entity hero g) = Entity hero' (updateGO hero')
 updateBullet :: World -> Entity Bullet -> Maybe (Entity Bullet)
 updateBullet w (Entity bullet@(Bullet s) g)
     | DeathAnimation t <- s, timerReady t w = Nothing
-    | otherwise                             = Just $ Entity bullet' (moveGO bullet')
+    | otherwise                             = Just $ Entity bullet' (g' bullet')
     where
-        moveGO (Bullet (Flying d)) = g `rotate` (d * realToFrac (deltaTime w))
-        moveGO  _                  = g
-        bullet'                    = foldr checkCollider bullet $ collisions g
+        g' (Bullet (Flying d)) = rotate (d * realToFrac (deltaTime w)) g
+        g'  _                  = g
+        bullet'                = foldr checkCollider bullet $ collisions g
         checkCollider c b
             | EnemyWeapon <- tag c = b
             | otherwise            = Bullet . DeathAnimation $ timer 0.5 w

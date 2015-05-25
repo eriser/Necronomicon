@@ -50,14 +50,14 @@ instance Binary GameObject where
 gameObject :: GameObject
 gameObject = GameObject 0 identity 1 Nothing Nothing Nothing []
 
-rotate :: GameObject -> Vector3 -> GameObject
-rotate g (Vector3 x y z) = g{rot = rot g * fromEuler' x y z}
+rotate :: Vector3 -> GameObject -> GameObject
+rotate (Vector3 x y z) g = g{rot = rot g * fromEuler' x y z}
 
-move :: GameObject -> Vector3 -> GameObject
-move g dir = g{pos = pos g + dir}
+move :: Vector3 -> GameObject -> GameObject
+move dir g = g{pos = pos g + dir}
 
-translate :: GameObject -> Vector3 -> GameObject
-translate g dir = g{pos = pos g + (dir .*. rotMat g)}
+translate :: Vector3 -> GameObject -> GameObject
+translate dir g = g{pos = pos g + (dir .*. rotMat g)}
 
 collisions :: GameObject -> [Collision]
 collisions g
