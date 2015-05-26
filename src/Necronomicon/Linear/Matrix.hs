@@ -377,6 +377,15 @@ rotFromQuaternion (Quaternion w (Vector3 x y z)) =
         x2 = x * x
         y2 = y * y
         z2 = z * z
+-- rotFromQuaternion (Quaternion w (Vector3 x y z)) =
+--     Matrix3x3
+--     (Vector3 (1 - 2 * z2 - 2 * y2)   (negate 2 * z * w + 2 * y * x) (2 * y * w + 2 * z * x))
+--     (Vector3 (2 * x * y + 2 * w * z) (1 - 2 * z2 - 2 * x2)          (2 * z * y - 2 * x * w))
+--     (Vector3 (2 * x * z - 2 * w * y) (2 * y * z + 2 * w * x)        (1 - 2 * y2 - 2 * x2))
+--     where
+--         x2 = x * x
+--         y2 = y * y
+--         z2 = z * z
 
 -- | Construct a transformation matrix from a rotation matrix and a translation vector.
 transformationMatrix :: Matrix3x3 -> Vector3 -> Matrix4x4

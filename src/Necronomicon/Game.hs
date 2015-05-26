@@ -57,7 +57,7 @@ move :: Vector3 -> GameObject -> GameObject
 move dir g = g{pos = pos g + dir}
 
 translate :: Vector3 -> GameObject -> GameObject
-translate dir g = g{pos = pos g + (dir .*. rotMat g)}
+translate dir g = g{pos = pos g + transformVector (rot g) dir}
 
 collisions :: GameObject -> [Collision]
 collisions g
@@ -89,7 +89,6 @@ removeChild (GameObject p r s c m cm cs) n
     | otherwise = GameObject p r s c m cm $ cs1 ++ tail cs2
     where
         (cs1, cs2) = splitAt n cs
-
 
 -------------------------------------------------------
 -- GameObject - Folding / Mapping

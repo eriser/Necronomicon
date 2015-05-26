@@ -124,18 +124,18 @@ transformVector (Quaternion w v1@(Vector3 x1 y1 z1)) v2@(Vector3 x2 y2 z2) = Vec
 fromEuler :: Euler -> Quaternion
 fromEuler (Euler p h b) = Quaternion w (Vector3 x y z)
     where
-        zRotation = b * 0.5
-        yRotation = h * 0.5
         xRotation = p * 0.5
+        yRotation = h * 0.5
+        zRotation = b * 0.5
         cx = cos xRotation
-        sx = sin xRotation
         cy = cos yRotation
-        sy = sin yRotation
         cz = cos zRotation
+        sx = sin xRotation
+        sy = sin yRotation
         sz = sin zRotation
         w = cx*cy*cz - sx*sy*sz
         x = sx*cy*cz + cx*sy*sz
-        y = cx*sy*cz + sx*cy*sz
+        y = cx*sy*cz - sx*cy*sz
         z = cx*cy*sz + sx*sy*cz
 
 fromEuler' :: Double -> Double -> Double -> Quaternion
@@ -193,6 +193,7 @@ instance LinearMath Quaternion Double where
     (.*.) = apply (*)
     (./.) = apply (/)
     apply f (Quaternion w (Vector3 x y z)) s = Quaternion (f w s) (Vector3 (f x s) (f y s) (f z s))
+
 
 instance LinearFunction Quaternion where
     type Scalar Quaternion = Double

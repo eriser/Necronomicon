@@ -30,13 +30,14 @@ mkHero = Entity h g
         g = gameObject {
             pos    = Vector3 0 0 (-6),
             rot    = fromEuler' 0 (-180) 0,
+            collider = boxCollider 1 1 1,
             camera = Just $ Camera 30 0.1 1000 black []
         }
 
 mkBullet :: Vector3 -> Entity Bullet
 mkBullet p = Entity b g
     where
-        b = Bullet (Flying $ Vector3 1 1 0)
+        b = Bullet (Flying $ Vector3 1 1 1)
         g = gameObject {
             pos      = p,
             collider = boxCollider 1 1 1,
@@ -52,7 +53,7 @@ megaDark w (hero, bullets) = (updateHero w hero, mapCollapse (updateBullet w) bu
 updateHero :: World -> Entity Hero -> Entity Hero
 updateHero w (Entity hero g) = Entity hero' (g' hero')
     where
-        hero'                        = moveHero $ rotateHero $ attack $ tickHero $ foldr checkCollider hero $ collisions g
+        hero'                        = moveHero . rotateHero . attack . tickHero . foldr checkCollider hero $ collisions g
         g' (Hero (HeroMoving m r) _) = translate (m * realToFrac (deltaTime w * 10)) $ rotate (r * realToFrac (deltaTime w * negate 100)) g
         g'  _                        = g
 
