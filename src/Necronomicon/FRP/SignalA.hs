@@ -148,7 +148,8 @@ runSignalA s = initWindow >>= \mw -> case mw of
 --------------------------
 data SignalState = SignalState {
     sigStateTime   :: Time,
-    sigStateWindow :: GLFW.Window
+    sigStateWindow :: GLFW.Window,
+    sigMouse       :: (Double, Double)
     } deriving (Show)
 
 newtype SS a = SS {runSS :: SignalState -> IO (a, SignalState) }
@@ -229,7 +230,7 @@ runSignalM s = initWindow >>= \mw -> case mw of
     Just w  -> do
         putStrLn "Starting Necronomicon"
         currentTime <- getCurrentTime
-        let state = SignalState (Time 0) w
+        let state = SignalState (Time 0) w (0, 0)
         run False w s state currentTime
     where
         run quit window (SignalM (SS sig)) state runTime'
@@ -279,3 +280,83 @@ foldp f b asig = SignalM $ do
 
 delayM :: a -> SignalM a -> SignalM a
 delayM aPrev curSig = SignalM $ return (aPrev, curSig)
+
+
+-------------------------------------------------------
+-- Comonad FRP
+-------------------------------------------------------
+
+data SignalC a = SignalC { cur :: a, next :: SignalState -> SignalC a }
+
+class Functor w => Comonad w where
+    extract   :: w a -> a
+    duplicate :: w a -> w (w a)
+    extend    :: (w a -> b) -> w a -> w b
+
+instance Functor SignalC where
+    fmap f s = SignalC c (\state -> let n = fmap f $ next s state in n)
+        where
+            c = f $ cur  s
+
+-- instance Applicative SignalC where
+    -- pure x = sx
+        -- where
+            -- sx = SignalC x $ \_ -> sx
+    -- sf <*> sx = SignalC x cont
+        -- where
+            -- x          = extract sf $ extract sx
+            -- cont state = next sf state <*> next sx state
+
+instance Comonad SignalC where
+    extract    = cur
+    duplicate  = extend id
+    extend f s = SignalC c n
+        where
+            c = f s
+            n = \state -> extend f $ next s state
+
+(<<=) :: Comonad w => (w a -> b) -> w a -> w b
+(<<=) = extend
+
+(=>>) :: Comonad w => w a -> (w a -> b) -> w b
+(=>>) = flip extend
+
+infixr 1 <<=
+infixl 1 =>>
+
+mousePosC :: SignalC (Double, Double)
+mousePosC = mouseGo (0, 0)
+    where
+        mouseGo c = SignalC c $ \state -> mouseGo (sigMouse state)
+
+delayC :: a -> SignalC a -> SignalC a
+delayC initX s = SignalC initX $ \_ -> s
+
+sigLoopC :: SignalC (SignalC a -> a) -> SignalC a -> SignalC a
+sigLoopC f x = SignalC (extract x') $ \state -> sigLoopC (next f state) x'
+    where
+        x' = extract f <<= x
+
+runSignalC :: Show a => SignalC a -> IO ()
+runSignalC sig = initWindow >>= \mw -> case mw of
+    Nothing -> print "Error starting GLFW." >> return ()
+    Just w  -> do
+        putStrLn "Starting Necronomicon"
+        currentTime <- getCurrentTime
+        let state = SignalState (Time 0) w (0, 0)
+        run False w sig state currentTime
+    where
+        run quit window s state runTime'
+            | quit      = print "Qutting" >> return ()
+            | otherwise = do
+                GLFW.pollEvents
+                q                    <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'Escape
+                mp                   <- GLFW.getCursorPos window
+                currentTime          <- getCurrentTime
+                let delta             = Time $ currentTime - runTime'
+                    state'            = state{sigStateTime = delta, sigMouse = mp}
+                    s'                = next s state'
+                print $ extract s'
+                putStrLn ""
+                threadDelay $ 16667
+                run q window s' state' currentTime

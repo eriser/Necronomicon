@@ -1,3 +1,19 @@
+import Necronomicon.FRP.SignalA
+
+main :: IO ()
+main = runSignalC counter
+-- main = runSignalC $ mouses <<= mousePosC
+
+-- mouses :: SignalC (Double, Double) -> ((Double, Double), (Double, Double))
+-- mouses m = (prev m, extract m)
+
+counter :: SignalC Double
+counter = sigLoopC (mousePosC =>> countSig) inith
+    where
+        inith        = SignalC 0 $ \_ -> inith
+        countSig m h = extract h + fst (extract m)
+
+{-
 import Necronomicon
 import Data.Binary
 import GHC.Generics
@@ -96,3 +112,4 @@ updateBullet w (Entity bullet@(Bullet s) g)
         checkCollider c b
             | EnemyWeapon <- tag c = b
             | otherwise            = Bullet . DeathAnimation $ timer 0.5 w
+-}
