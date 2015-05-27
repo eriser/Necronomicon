@@ -283,7 +283,7 @@ delayM aPrev curSig = SignalM $ return (aPrev, curSig)
 
 
 -------------------------------------------------------
--- Comonad FRP
+-- Comonadic FRP
 -------------------------------------------------------
 
 data SignalC a = SignalC { cur :: a, next :: SignalState -> SignalC a }
@@ -298,14 +298,14 @@ instance Functor SignalC where
         where
             c = f $ cur  s
 
--- instance Applicative SignalC where
-    -- pure x = sx
-        -- where
-            -- sx = SignalC x $ \_ -> sx
-    -- sf <*> sx = SignalC x cont
-        -- where
-            -- x          = extract sf $ extract sx
-            -- cont state = next sf state <*> next sx state
+instance Applicative SignalC where
+    pure x = sx
+        where
+            sx = SignalC x $ \_ -> sx
+    sf <*> sx = SignalC x cont
+        where
+            x          = extract sf $ extract sx
+            cont state = next sf state <*> next sx state
 
 instance Comonad SignalC where
     extract    = cur
@@ -323,19 +323,6 @@ instance Comonad SignalC where
 
 infixr 1 <<=
 infixl 1 =>>
-
-mousePosC :: SignalC (Double, Double)
-mousePosC = mouseGo (0, 0)
-    where
-        mouseGo c = SignalC c $ \state -> mouseGo (sigMouse state)
-
-delayC :: a -> SignalC a -> SignalC a
-delayC initX s = SignalC initX $ \_ -> s
-
-sigLoopC :: SignalC (SignalC a -> a) -> SignalC a -> SignalC a
-sigLoopC f x = SignalC (extract x') $ \state -> sigLoopC (next f state) x'
-    where
-        x' = extract f <<= x
 
 runSignalC :: Show a => SignalC a -> IO ()
 runSignalC sig = initWindow >>= \mw -> case mw of
@@ -360,3 +347,15 @@ runSignalC sig = initWindow >>= \mw -> case mw of
                 putStrLn ""
                 threadDelay $ 16667
                 run q window s' state' currentTime
+
+mousePosC :: SignalC (Double, Double)
+mousePosC = mouseGo (0, 0)
+    where
+        mouseGo c = SignalC c $ \state -> mouseGo (sigMouse state)
+
+sigLoopC :: (a -> SignalC a) -> a -> SignalC a
+sigLoopC f initx = go (pure initx)
+    where
+        go x = SignalC (extract x') $ \state -> go (next x' state)
+            where
+                x' = f $ extract x
