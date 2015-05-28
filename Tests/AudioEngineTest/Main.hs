@@ -25,6 +25,9 @@ delaySynthC freq delayTime = dup s +> delayC 1 (lag 1 [delayTime, delayTime - 0.
     where
         s = sin $ lag 0.1 freq
 
+feedSynth :: UGen -> UGen -> UGen
+feedSynth x y = feedback (\a b -> [a,b] * 0.1 + sin [lag 0.1 x, lag 0.1 y] |> delayC 0.1 0.1 |> gain 0.9) |> gain 0.4 |> out 0
+
 main :: IO ()
 main = runSignal
        <| play (toggle <| isDown keyD) reverbSynth
@@ -32,6 +35,7 @@ main = runSignal
        <> play (toggle <| isDown keyW) delaySynthL (mouseX ~> scale 20 10000)  mouseY
        <> play (toggle <| isDown keyD) delaySynthC (mouseX ~> scale 20 10000)  mouseY
        <> play (toggle <| isDown keyS) combSynthN  (mouseX ~> scale 20 10000) (mouseY * 10)
+       <> play (toggle <| isDown keyF) feedSynth (mouseX ~> scale 2 20000) (mouseY ~> scale 2 20000)
 
 -- main :: IO ()
 -- main = runSignal <| synthDefs *> tempo (pure 150) *> testGUI <> sections <> hyperTerrainSounds
