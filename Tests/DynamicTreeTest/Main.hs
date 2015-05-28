@@ -1,18 +1,15 @@
 import Necronomicon.FRP.SignalA
 
 main :: IO ()
-main = runSignalC counter
--- main = runSignalC $ mouses <<= mousePosC
--- mouses :: SignalC (Double, Double) -> ((Double, Double), (Double, Double))
--- mouses m = (prev m, extract m)
+main = runSignal counter
 
-counter :: SignalC (Double, Double)
-counter = sigLoopC sigCount (0, 0)
+counter :: Signal (Double, Double)
+counter = sigLoop sigCount (0, 0)
     where
         sigCount s = (,) <~ hsig ~~ esig
             where
-                hsig = pureCount (fst s) <~ fmap fst mousePosC
-                esig = pureCount (snd s) <~ fmap snd mousePosC
+                hsig = pureCount (fst s) <~ fmap fst mousePos
+                esig = pureCount (snd s) <~ fmap snd mousePos
         pureCount x y = x + y
 {-
 import Necronomicon
