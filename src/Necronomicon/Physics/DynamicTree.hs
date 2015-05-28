@@ -114,6 +114,7 @@ fromUpdate (Changed    t) = t
 fromUpdate (NotChanged t) = t
 fromUpdate  _             = Tip
 
+--TODO: Fix movement based enlargement for Dynamic Tree AABB
 enlargeAABB2 :: AABB -> AABB -> AABB
 enlargeAABB2 _ a = enlargeAABB a
 -- enlargeAABB2 aabb aabb2 = AABB

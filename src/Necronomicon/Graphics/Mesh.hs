@@ -6,6 +6,7 @@ import           Necronomicon.Graphics.Model
 import           Necronomicon.Graphics.Shader
 import           Necronomicon.Graphics.Texture
 import           Necronomicon.Linear
+import           Necronomicon.Util.TGA              (loadTextureFromTGA)
 
 import           Data.IORef
 import           Foreign.Storable                   (sizeOf)
@@ -48,7 +49,7 @@ cube = Mesh "~c" vertices colors uvs indices
                     Vector3   0.5  (-0.5) (-0.5),
                     Vector3 (-0.5)   0.5  (-0.5),
                     Vector3   0.5    0.5  (-0.5)]
-        colors   = repeat white
+        colors   = replicate 8 white
         uvs      = [Vector2 0 0,
                     Vector2 1 0,
                     Vector2 0 1,
@@ -75,7 +76,7 @@ cubeOutline = Mesh "*c" vertices colors uvs indices
                     Vector3   0.5  (-0.5) (-0.5),
                     Vector3 (-0.5)   0.5  (-0.5),
                     Vector3   0.5    0.5  (-0.5)]
-        colors   = repeat white
+        colors   = replicate 8 white
         uvs      = [Vector2 0 0,
                     Vector2 1 0,
                     Vector2 0 1,
@@ -105,8 +106,9 @@ sphere latitudes longitudes = Mesh (show latitudes ++ show longitudes ++ "sphere
                                  (cos (toRadians t))
                                  (sin (toRadians t) * cos (toRadians u))
         vertices       = map toVertex $ zip (cycle us) (ts >>= replicate longitudes)
-        colors         = repeat white
-        uvs            = repeat 0
+        lvs            = length vertices
+        colors         = replicate lvs white
+        uvs            = replicate lvs 0
         indices        = foldr (\i acc -> i + 1 : i + 2 : i + 3 : i + 1 : i + 0 : i + 2 : acc) [] [0,4..latitudes * longitudes]
 
 dynRect :: Double -> Double -> Mesh
@@ -125,6 +127,146 @@ tri triSize color = Mesh (show triSize ++ "tri") vertices colors uvs indices
         uvs      = [Vector2 0 0,Vector2 1 0,Vector2 0 1]
         indices  = [0,1,2]
 
+loadProgram :: GL.Program -> IO ()
+loadProgram program = GL.currentProgram  GL.$= Just program
+
+uniformD :: GL.UniformLocation -> Double -> IO ()
+uniformD loc v = GL.uniform loc GL.$= GL.Index1 (realToFrac v :: GL.GLfloat)
+
+getShader :: Resources -> Shader -> IO LoadedShader
+getShader resources sh = readIORef (shadersRef resources) >>= \shaders ->
+    case IntMap.lookup (key sh) shaders of
+        Nothing           -> loadShader sh >>= \loadedShader -> (writeIORef (shadersRef resources) $ IntMap.insert (key sh) loadedShader shaders) >> return loadedShader
+        Just loadedShader -> return loadedShader
+
+getTexture :: Resources -> Texture -> IO GL.TextureObject
+getTexture resources (AudioTexture i) = readIORef (texturesRef resources) >>= \textures -> case Map.lookup ("audio" ++ show i) textures of
+    Nothing      -> loadAudioTexture i >>= \texture -> (writeIORef (texturesRef resources) $ Map.insert ("audio" ++ show i) texture textures) >> setAudioTexture i texture
+    Just texture -> setAudioTexture i texture
+getTexture resources EmptyTexture     = readIORef (texturesRef resources) >>= \textures -> case Map.lookup "empty" textures of
+    Nothing      -> newBoundTexUnit 0 >>= \texture -> (writeIORef (texturesRef resources) $ Map.insert "empty" texture textures) >> return texture
+    Just texture -> return texture
+getTexture resources (TGATexture path) = readIORef (texturesRef resources) >>= \textures -> case Map.lookup path textures of
+    Nothing      -> loadTextureFromTGA path >>= \texture -> (writeIORef (texturesRef resources) $ Map.insert path texture textures) >> return texture
+    Just texture -> return texture
+getTexture _ (LoadedTexture t) = return t
+
+getMesh :: Resources -> Mesh -> IO LoadedMesh
+getMesh resources mesh@(Mesh mKey _ _ _ _) = readIORef (meshesRef resources) >>= \meshes -> case Map.lookup mKey meshes of
+    Nothing         -> loadMesh mesh >>= \loadedMesh -> (writeIORef (meshesRef resources) $ Map.insert mKey loadedMesh meshes) >> return loadedMesh
+    Just loadedMesh -> return loadedMesh
+getMesh resources mesh@(DynamicMesh mKey v c u i) = readIORef (meshesRef resources) >>= \meshes -> case Map.lookup mKey meshes of
+    Nothing              -> loadMesh mesh >>= \loadedMesh@(vbuf,ibuf,_,_) -> (writeIORef (meshesRef resources) (Map.insert mKey loadedMesh meshes)) >> dynamicDrawMesh vbuf ibuf v c u i
+    Just (vbuf,ibuf,_,_) -> dynamicDrawMesh vbuf ibuf v c u i
+
+dynamicDrawMesh :: GL.BufferObject -> GL.BufferObject -> [Vector3] -> [Color] -> [Vector2] -> [Int] -> IO LoadedMesh
+dynamicDrawMesh vBuf iBuf vertices colors uvs indices = do
+    vertexBuffer  <- makeDynamicBuffer vBuf GL.ArrayBuffer        (map realToFrac (posColorUV vertices colors uvs) :: [GL.GLfloat])
+    indexBuffer   <- makeDynamicBuffer iBuf GL.ElementArrayBuffer (map fromIntegral indices :: [GL.GLuint])
+    return (vertexBuffer,indexBuffer,length indices,vadPosColorUV)
+
+loadMesh :: Mesh -> IO LoadedMesh
+loadMesh (Mesh _ vertices colors uvs indices) = do
+    vertexBuffer  <- makeBuffer GL.ArrayBuffer        (map realToFrac (posColorUV vertices colors uvs) :: [GL.GLfloat])
+    indexBuffer   <- makeBuffer GL.ElementArrayBuffer (map fromIntegral indices :: [GL.GLuint])
+    return (vertexBuffer,indexBuffer,length indices,vadPosColorUV)
+loadMesh (DynamicMesh _ _ _ _ _) = do
+    vertexBuffer:_ <- GL.genObjectNames 1
+    indexBuffer :_ <- GL.genObjectNames 1
+    return (vertexBuffer,indexBuffer,0,[])
+
+vadPosColorUV :: [GL.VertexArrayDescriptor GL.GLfloat]
+vadPosColorUV = [vertexVad,colorVad,uvVad]
+    where
+        vertexVad  = GL.VertexArrayDescriptor 3 GL.Float (fromIntegral $ sizeOf (undefined::GL.GLfloat) * 8) offset0
+        colorVad   = GL.VertexArrayDescriptor 3 GL.Float (fromIntegral $ sizeOf (undefined::GL.GLfloat) * 8) (offsetPtr $ sizeOf (undefined :: GL.GLfloat) * 3)
+        uvVad      = GL.VertexArrayDescriptor 2 GL.Float (fromIntegral $ sizeOf (undefined::GL.GLfloat) * 8) (offsetPtr $ sizeOf (undefined :: GL.GLfloat) * 6)
+
+posColorUV :: [Vector3] -> [Color] -> [Vector2] -> [Double]
+posColorUV [] _ _ = []
+posColorUV _ [] _ = []
+posColorUV _ _ [] = []
+posColorUV (Vector3 x y z : vs) (RGB  r g b   : cs) (Vector2 u v : uvs) = x : y : z : r : g : b : u : v : posColorUV vs cs uvs
+posColorUV (Vector3 x y z : vs) (RGBA r g b _ : cs) (Vector2 u v : uvs) = x : y : z : r : g : b : u : v : posColorUV vs cs uvs
+
+setupAttribute :: (GL.AttribLocation,GL.VertexArrayDescriptor GL.GLfloat) -> IO()
+setupAttribute (loc,vad) = do
+    GL.vertexAttribPointer loc  GL.$= (GL.ToFloat, vad)
+    GL.vertexAttribArray   loc  GL.$= GL.Enabled
+
+bindThenDraw :: GL.PrimitiveMode -> GL.UniformLocation -> GL.UniformLocation -> Matrix4x4 -> Matrix4x4 -> GL.BufferObject -> GL.BufferObject -> [(GL.AttribLocation,GL.VertexArrayDescriptor GL.GLfloat)] -> Int -> IO()
+bindThenDraw primitiveMode (GL.UniformLocation mv) (GL.UniformLocation pr) modelView proj vertexBuffer indexBuffer atributesAndVads numIndices = do
+    VS.unsafeWith (VS.fromList . map realToFrac $ mat4ToList modelView) $ \ptr -> GLRaw.glUniformMatrix4fv mv 1 0 ptr
+    VS.unsafeWith (VS.fromList . map realToFrac $ mat4ToList proj     ) $ \ptr -> GLRaw.glUniformMatrix4fv pr 1 0 ptr
+    GL.bindBuffer GL.ArrayBuffer GL.$= Just vertexBuffer
+    mapM_ setupAttribute atributesAndVads
+    GL.bindBuffer GL.ElementArrayBuffer GL.$= Just indexBuffer
+    GL.drawElements primitiveMode (fromIntegral numIndices) GL.UnsignedInt offset0
+    GL.currentProgram GL.$= Nothing
+
+debugDraw :: Color -> Material
+debugDraw (RGBA r g b a) = Material New "colored-vert.glsl" "colored-frag.glsl" [UniformVec4 "baseColor" (Vector4 r g b a)] GL.Lines
+debugDraw (RGB  r g b  ) = Material New "colored-vert.glsl" "colored-frag.glsl" [UniformVec4 "baseColor" (Vector4 r g b 1)] GL.Lines
+
+vertexColored :: Color -> Material
+vertexColored (RGBA r g b a) = material "colored-vert.glsl" "colored-frag.glsl" [UniformVec4 "baseColor" (Vector4 r g b a)]
+vertexColored (RGB  r g b  ) = material "colored-vert.glsl" "colored-frag.glsl" [UniformVec4 "baseColor" (Vector4 r g b 1)]
+
+ambient   :: Texture -> Material
+ambient   tex = material "ambient-vert.glsl" "ambient-frag.glsl"   [UniformTexture "tex" tex]
+
+uvTest    :: Texture -> Material
+uvTest    tex = material "ambient-vert.glsl" "uvTest-frag.glsl"    [UniformTexture "tex" tex]
+
+colorTest :: Texture -> Material
+colorTest tex = material "ambient-vert.glsl" "colorTest-frag.glsl" [UniformTexture "tex" tex]
+
+blur      :: Texture -> Material
+blur      tex = material "ambient-vert.glsl" "blur-frag.glsl"      [UniformTexture "tex" tex]
+
+glowFX    :: Material
+glowFX        = material "ambient-vert.glsl" "blur-frag.glsl"      [UniformTexture "tex" EmptyTexture]
+
+setEmptyTextures :: Texture -> Material -> Material
+setEmptyTextures tex (Material uid vs fs us primMode) = Material uid vs fs (foldr updateTex [] us) primMode
+    where
+        updateTex (UniformTexture t EmptyTexture) us' = UniformTexture t tex : us'
+        updateTex  u                              us' = u : us'
+
+material :: String -> String -> [Uniform] -> Material
+material vs fs us = Material New vs fs us GL.Triangles
+
+drawMeshWithMaterial :: Material -> Mesh -> Matrix4x4 -> Matrix4x4 -> Resources -> IO()
+drawMeshWithMaterial (Material _ vs fs us primMode) mesh modelView proj resources = do
+    (program, uniforms, attributes)                                  <- getShader resources sh
+    (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh   resources mesh
+    let ulocs         = take (length uniforms - 2) uniforms
+        (mv : pr : _) = drop (length uniforms - 2) uniforms
+
+    loadProgram program
+    foldM_ (\t (uloc, uval) -> setUniform resources uloc uval t) 0 $ zip ulocs us
+
+    bindThenDraw primMode mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
+    where
+        sh = shader
+             (vs ++ " + " ++ fs) --Replace with UIDs
+             (map uniformName us ++ ["modelView", "proj"])
+             ["position","in_color","in_uv"]
+             (loadVertexShader   vs)
+             (loadFragmentShader fs)
+
+setUniform :: Resources -> GL.UniformLocation -> Uniform -> Int -> IO Int
+setUniform r loc (UniformTexture _ v) t = getTexture r v >>= setTextureUniform loc t >> return (t + 1)
+setUniform _ loc (UniformScalar  _ v) t = GL.uniform loc GL.$= GL.Index1  (realToFrac v :: GL.GLfloat) >> return t
+setUniform _ loc (UniformVec2    _ v) t = GL.uniform loc GL.$= toGLVertex2 v >> return t
+setUniform _ loc (UniformVec3    _ v) t = GL.uniform loc GL.$= toGLVertex3 v >> return t
+setUniform _ loc (UniformVec4    _ v) t = GL.uniform loc GL.$= toGLVertex4 v >> return t
+setUniform _ _ _                      t = return t
+
+--------------------
+-- Old System
+--------------------
+{-
 debugDraw :: Color -> Material
 debugDraw (RGBA r g b a) = Material draw
     where
@@ -205,78 +347,6 @@ blur tex = Material draw
             GL.uniform texu    GL.$= GL.TextureUnit 0
             bindThenDraw GL.Triangles mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
 
-loadProgram :: GL.Program -> IO ()
-loadProgram program = GL.currentProgram  GL.$= Just program
-
-uniformD :: GL.UniformLocation -> Double -> IO ()
-uniformD loc v = GL.uniform loc GL.$= GL.Index1 (realToFrac v :: GL.GLfloat)
-
-getShader :: Resources -> Shader -> IO LoadedShader
-getShader resources sh = readIORef (shadersRef resources) >>= \shaders ->
-    case IntMap.lookup (key sh) shaders of
-        Nothing           -> loadShader sh >>= \loadedShader -> (writeIORef (shadersRef resources) $ IntMap.insert (key sh) loadedShader shaders) >> return loadedShader
-        Just loadedShader -> return loadedShader
-
-getTexture :: Resources -> Texture -> IO GL.TextureObject
-getTexture resources tex = case textureKey tex of
-    [] -> loadTexture tex
-    _  -> readIORef (texturesRef resources) >>= \textures -> case Map.lookup (textureKey tex) textures of
-        Nothing      -> loadTexture tex >>= \texture -> (writeIORef (texturesRef resources) $ Map.insert (textureKey tex) texture textures) >> return texture
-        Just texture -> return texture
-
-getMesh :: Resources -> Mesh -> IO LoadedMesh
-getMesh resources mesh@(Mesh mKey _ _ _ _) = readIORef (meshesRef resources) >>= \meshes -> case Map.lookup mKey meshes of
-    Nothing         -> loadMesh mesh >>= \loadedMesh -> (writeIORef (meshesRef resources) $ Map.insert mKey loadedMesh meshes) >> return loadedMesh
-    Just loadedMesh -> return loadedMesh
-getMesh resources mesh@(DynamicMesh mKey v c u i) = readIORef (meshesRef resources) >>= \meshes -> case Map.lookup mKey meshes of
-    Nothing              -> loadMesh mesh >>= \loadedMesh@(vbuf,ibuf,_,_) -> (writeIORef (meshesRef resources) (Map.insert mKey loadedMesh meshes)) >> dynamicDrawMesh vbuf ibuf v c u i
-    Just (vbuf,ibuf,_,_) -> dynamicDrawMesh vbuf ibuf v c u i
-
-dynamicDrawMesh :: GL.BufferObject -> GL.BufferObject -> [Vector3] -> [Color] -> [Vector2] -> [Int] -> IO LoadedMesh
-dynamicDrawMesh vBuf iBuf vertices colors uvs indices = do
-    vertexBuffer  <- makeDynamicBuffer vBuf GL.ArrayBuffer        (map realToFrac (posColorUV vertices colors uvs) :: [GL.GLfloat])
-    indexBuffer   <- makeDynamicBuffer iBuf GL.ElementArrayBuffer (map fromIntegral indices :: [GL.GLuint])
-    return (vertexBuffer,indexBuffer,length indices,vadPosColorUV)
-
-loadMesh :: Mesh -> IO LoadedMesh
-loadMesh (Mesh _ vertices colors uvs indices) = do
-    vertexBuffer  <- makeBuffer GL.ArrayBuffer        (map realToFrac (posColorUV vertices colors uvs) :: [GL.GLfloat])
-    indexBuffer   <- makeBuffer GL.ElementArrayBuffer (map fromIntegral indices :: [GL.GLuint])
-    return (vertexBuffer,indexBuffer,length indices,vadPosColorUV)
-loadMesh (DynamicMesh _ _ _ _ _) = do
-    vertexBuffer:_ <- GL.genObjectNames 1
-    indexBuffer :_ <- GL.genObjectNames 1
-    return (vertexBuffer,indexBuffer,0,[])
-
-vadPosColorUV :: [GL.VertexArrayDescriptor GL.GLfloat]
-vadPosColorUV = [vertexVad,colorVad,uvVad]
-    where
-        vertexVad  = GL.VertexArrayDescriptor 3 GL.Float (fromIntegral $ sizeOf (undefined::GL.GLfloat) * 8) offset0
-        colorVad   = GL.VertexArrayDescriptor 3 GL.Float (fromIntegral $ sizeOf (undefined::GL.GLfloat) * 8) (offsetPtr $ sizeOf (undefined :: GL.GLfloat) * 3)
-        uvVad      = GL.VertexArrayDescriptor 2 GL.Float (fromIntegral $ sizeOf (undefined::GL.GLfloat) * 8) (offsetPtr $ sizeOf (undefined :: GL.GLfloat) * 6)
-
-posColorUV :: [Vector3] -> [Color] -> [Vector2] -> [Double]
-posColorUV [] _ _ = []
-posColorUV _ [] _ = []
-posColorUV _ _ [] = []
-posColorUV (Vector3 x y z : vs) (RGB  r g b   : cs) (Vector2 u v : uvs) = x : y : z : r : g : b : u : v : posColorUV vs cs uvs
-posColorUV (Vector3 x y z : vs) (RGBA r g b _ : cs) (Vector2 u v : uvs) = x : y : z : r : g : b : u : v : posColorUV vs cs uvs
-
-setupAttribute :: (GL.AttribLocation,GL.VertexArrayDescriptor GL.GLfloat) -> IO()
-setupAttribute (loc,vad) = do
-    GL.vertexAttribPointer loc  GL.$= (GL.ToFloat, vad)
-    GL.vertexAttribArray   loc  GL.$= GL.Enabled
-
-bindThenDraw :: GL.PrimitiveMode -> GL.UniformLocation -> GL.UniformLocation -> Matrix4x4 -> Matrix4x4 -> GL.BufferObject -> GL.BufferObject -> [(GL.AttribLocation,GL.VertexArrayDescriptor GL.GLfloat)] -> Int -> IO()
-bindThenDraw primitiveMode (GL.UniformLocation mv) (GL.UniformLocation pr) modelView proj vertexBuffer indexBuffer atributesAndVads numIndices = do
-    VS.unsafeWith (VS.fromList . map realToFrac $ mat4ToList modelView) $ \ptr -> GLRaw.glUniformMatrix4fv mv 1 0 ptr
-    VS.unsafeWith (VS.fromList . map realToFrac $ mat4ToList proj     ) $ \ptr -> GLRaw.glUniformMatrix4fv pr 1 0 ptr
-    GL.bindBuffer GL.ArrayBuffer GL.$= Just vertexBuffer
-    mapM_ setupAttribute atributesAndVads
-    GL.bindBuffer GL.ElementArrayBuffer GL.$= Just indexBuffer
-    GL.drawElements primitiveMode (fromIntegral numIndices) GL.UnsignedInt offset0
-    GL.currentProgram GL.$= Nothing
-
 vertexColoredShader :: Shader
 vertexColoredShader = shader
                       "vertexColored"
@@ -317,31 +387,6 @@ blurShader          = shader
                       (loadVertexShader   "ambient-vert.glsl")
                       (loadFragmentShader "blur-frag.glsl")
 
-data Uniform = UniformTexture String Texture
-             | UniformScalar  String Double
-             | UniformVec2    String Vector2
-             | UniformVec3    String Vector3
-             | UniformVec4    String Vector4
-             | MatrixView     String
-             | Proj           String
-
-uniformName :: Uniform -> String
-uniformName (UniformTexture s _) = s
-uniformName (UniformScalar  s _) = s
-uniformName (UniformVec2    s _) = s
-uniformName (UniformVec3    s _) = s
-uniformName (UniformVec4    s _) = s
-uniformName (MatrixView     s  ) = s
-uniformName (Proj           s  ) = s
-
-setUniform :: Resources -> GL.UniformLocation -> Uniform -> Int -> IO Int
-setUniform r loc (UniformTexture _ v) t = getTexture r v >>= setTextureUniform loc t >> return (t + 1)
-setUniform _ loc (UniformScalar  _ v) t = GL.uniform loc GL.$= GL.Index1  (realToFrac v :: GL.GLfloat) >> return t
-setUniform _ loc (UniformVec2    _ v) t = GL.uniform loc GL.$= toGLVertex2 v >> return t
-setUniform _ loc (UniformVec3    _ v) t = GL.uniform loc GL.$= toGLVertex3 v >> return t
-setUniform _ loc (UniformVec4    _ v) t = GL.uniform loc GL.$= toGLVertex4 v >> return t
-setUniform _ _ _                      t = return t
-
 material :: String -> String -> [Uniform] -> Material
 material vs fs us = Material drawMat
     where
@@ -362,3 +407,4 @@ material vs fs us = Material drawMat
             ["position","in_color","in_uv"]
             (loadVertexShader   vs)
             (loadFragmentShader fs)
+-}

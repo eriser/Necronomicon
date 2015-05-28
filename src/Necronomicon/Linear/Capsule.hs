@@ -3,6 +3,7 @@ module Necronomicon.Linear.Capsule where
 import Necronomicon.Linear.GeoPrimitive
 import Necronomicon.Linear.Vector
 import Necronomicon.Linear.Line
+import Data.Binary
 
 ---------------------------------------
 -- Capsule
@@ -12,6 +13,10 @@ data Capsule = Capsule {
     capsuleLine   :: Line,
     capsuleRadius :: Double
 }   deriving (Show)
+
+instance Binary Capsule where
+    put (Capsule l r) = put l >> put r
+    get               = Capsule <$> get <*> get
 
 instance GeoPrimitive Capsule where
     maximalPoint (Capsule (Line start end) r) _ d

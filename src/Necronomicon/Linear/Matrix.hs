@@ -9,14 +9,25 @@ import Necronomicon.Linear.Quaternion
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.Rendering.OpenGL.GL.CoordTrans as GLC
 import Foreign.Ptr (Ptr)
+import Data.Binary
 
 -- Matrices - Row Major
-data Matrix2x2  = Matrix2x2 Vector2 Vector2                 deriving (Show,Eq,Ord)
-data Matrix3x3  = Matrix3x3 Vector3 Vector3 Vector3         deriving (Show,Eq,Ord)
-data Matrix4x4  = Matrix4x4 Vector4 Vector4 Vector4 Vector4 deriving (Eq,Ord)
+data Matrix2x2 = Matrix2x2 Vector2 Vector2                 deriving (Show,Eq,Ord)
+data Matrix3x3 = Matrix3x3 Vector3 Vector3 Vector3         deriving (Show,Eq,Ord)
+data Matrix4x4 = Matrix4x4 Vector4 Vector4 Vector4 Vector4 deriving (Show,Eq,Ord)
 
-instance Show Matrix4x4 where
-    show (Matrix4x4 x y z w) = "Matrix4x4\n" ++ show x ++ "\n" ++ show y ++ "\n" ++ show z ++ "\n" ++ show w
+instance Binary Matrix2x2 where
+    put (Matrix2x2 x y) = put x >> put y
+    get                 = Matrix2x2 <$> get <*> get
+instance Binary Matrix3x3 where
+    put (Matrix3x3 x y z) = put x >> put y >> put z
+    get                   = Matrix3x3 <$> get <*> get <*> get
+instance Binary Matrix4x4 where
+    put (Matrix4x4 x y z w) = put x >> put y >> put z >> put w
+    get                     = Matrix4x4 <$> get <*> get <*> get <*> get
+
+-- instance Show Matrix4x4 where
+    -- show (Matrix4x4 x y z w) = "Matrix4x4\n" ++ show x ++ "\n" ++ show y ++ "\n" ++ show z ++ "\n" ++ show w
 
 -- Matrix class
 class Matrix a where
@@ -252,7 +263,7 @@ instance Vector Matrix2x2 where
     w_  _ = undefined
     _w_ _ = undefined
 
-    _swizzle2  get get' v = Matrix2x2 (get v) (get' v)
+    _swizzle2  getm getm' v = Matrix2x2 (getm v) (getm' v)
     swizzle2_  set set' v = set' (_y v) . set (_x v)
     _swizzle2_ mdf mdf' f = mdf' f . mdf f
 
@@ -289,7 +300,7 @@ instance Vector Matrix3x3 where
     swizzle2_ _ _ _ = undefined
     _swizzle2_ mdf mdf' f = mdf' f . mdf f
 
-    _swizzle3  get get' get'' v = Matrix3x3 (get v) (get' v) (get'' v)
+    _swizzle3  getm getm' getm'' v = Matrix3x3 (getm v) (getm' v) (getm'' v)
     swizzle3_  set set' set'' v = set'' (_z v) . set' (_y v) . set (_x v)
     _swizzle3_ mdf mdf' mdf'' f = mdf'' f . mdf' f . mdf f
 
@@ -325,7 +336,7 @@ instance Vector Matrix4x4 where
     swizzle3_ _ _ _ _ = undefined
     _swizzle3_ mdf mdf' mdf'' f = mdf'' f . mdf' f . mdf f
 
-    _swizzle4  get get' get'' get''' v = Matrix4x4 (get v) (get' v) (get'' v) (get''' v)
+    _swizzle4  getm getm' getm'' getm''' v = Matrix4x4 (getm v) (getm' v) (getm'' v) (getm''' v)
     swizzle4_  set set' set'' set''' v = set''' (_w v) . set'' (_z v) . set' (_y v) . set (_x v)
     _swizzle4_ mdf mdf' mdf'' mdf''' f = mdf''' f . mdf'' f . mdf' f . mdf f
 
@@ -366,6 +377,15 @@ rotFromQuaternion (Quaternion w (Vector3 x y z)) =
         x2 = x * x
         y2 = y * y
         z2 = z * z
+-- rotFromQuaternion (Quaternion w (Vector3 x y z)) =
+--     Matrix3x3
+--     (Vector3 (1 - 2 * z2 - 2 * y2)   (negate 2 * z * w + 2 * y * x) (2 * y * w + 2 * z * x))
+--     (Vector3 (2 * x * y + 2 * w * z) (1 - 2 * z2 - 2 * x2)          (2 * z * y - 2 * x * w))
+--     (Vector3 (2 * x * z - 2 * w * y) (2 * y * z + 2 * w * x)        (1 - 2 * y2 - 2 * x2))
+--     where
+--         x2 = x * x
+--         y2 = y * y
+--         z2 = z * z
 
 -- | Construct a transformation matrix from a rotation matrix and a translation vector.
 transformationMatrix :: Matrix3x3 -> Vector3 -> Matrix4x4

@@ -4,9 +4,17 @@ import Prelude
 import qualified Graphics.Rendering.OpenGL as GL
 
 import Necronomicon.Linear.Vector
+import Data.Binary
 
 --Vector4 instance?
 data Color = RGB Double Double Double | RGBA Double Double Double Double deriving (Show, Eq)
+
+instance Binary Color where
+    put (RGB  r g b  ) = put (0 :: Word8) >> put r >> put g >> put b
+    put (RGBA r g b a) = put (1 :: Word8) >> put r >> put g >> put b >> put a
+    get                = (get :: Get Word8) >>= \t -> case t of
+        0 -> RGB  <$> get <*> get <*> get
+        _ -> RGBA <$> get <*> get <*> get <*> get
 
 instance Num Color where
     (+)     c1 c2 = cadd c1 c2

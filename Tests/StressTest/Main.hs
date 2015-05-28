@@ -32,14 +32,14 @@ section1 :: Signal ()
 section1 = scene [pure cam,oscSig]
     where
         oscSig         = oscillatorObject <~ audioTexture 2 ~~ audioTexture 3 ~~ audioTexture 4
-        cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [glow]
+        cam            = perspCamera (Vector3 0 0 10) identity 60 0.1 1000 black [postRenderFX blur]
 
 section2 :: Signal ()
 section2 = scene [camSig,terrainSig]
     where
         terrainSig     = terrainObject <~ audioTexture 2 ~~ audioTexture 3 ~~ audioTexture 4 ~~ time
         camSig         = cam <~ time * 0.125
-        cam t          = perspCamera p r 60 0.1 1000 black [glow]
+        cam t          = perspCamera p r 60 0.1 1000 black [postRenderFX blur]
             where
                 p = Vector3 (sin t * 8) (cos (t * 0.75) * 5) (sin (t * 0.333) * 4)
                 r = inverse <| lookAt (_z_ (* (-3)) <| p) 0
@@ -49,7 +49,7 @@ section3 = scene [camSig,sphereSig]
     where
         sphereSig      = sphereObject <~ audioTexture 2 ~~ audioTexture 3 ~~ audioTexture 4 ~~ time ~~ pure 36
         camSig         = cam <~ time * 0.05
-        cam t          = perspCamera p r 60 0.1 1000 black [glow]
+        cam t          = perspCamera p r 60 0.1 1000 black [postRenderFX blur]
             where
                 p = Vector3 (cos (t * 0.7453) * 5) (sin (t * 0.912) * 8) (sin (t * 0.4543) * 4)
                 r = inverse <| lookAt (_z_ (* (-2.5)) <| p) 0

@@ -15,6 +15,8 @@ import Necronomicon.Physics.DynamicTree
 import Necronomicon.Graphics
 import Necronomicon.Utility              (getCurrentTime)
 
+import Data.Binary
+
 -------------------------------------------------------
 -- TODO: Ideas
 -- Clockwork world / minature-golem-esque world?
@@ -34,46 +36,43 @@ data GameObject = GameObject {
     collider :: Maybe Collider,
     model    :: Maybe Model,
     camera   :: Maybe Camera,
-    gameChildren :: [GameObject]
+    children :: [GameObject]
 } deriving (Show)
 
--------------------------------------------------------
--- GameType
--------------------------------------------------------
+instance Binary GameObject where
+    put (GameObject p r s c m cam cs) = put p >> put r >> put s >> put c >> put m >> put cam >> put cs
+    get                               = GameObject <$> get <*> get <*> get <*> get <*> get <*> get <*> get
 
-class GameType a where
-    _gameObject :: a -> GameObject
-    gameObject_ :: GameObject -> a -> a
-    children    :: a -> [a]
-    gchildren_  :: [a] -> a -> a
+-------------------------------------------------------
+-- GameObject API
+-------------------------------------------------------
 
 gameObject :: GameObject
 gameObject = GameObject 0 identity 1 Nothing Nothing Nothing []
 
+rotate :: Vector3 -> GameObject -> GameObject
+rotate (Vector3 x y z) g = g{rot = rot g * fromEuler' x y z}
 
-{-
-    implement:
-    move, rotate, etc
--}
+move :: Vector3 -> GameObject -> GameObject
+move dir g = g{pos = pos g + dir}
 
-rotate :: GameType a => a -> Vector3 -> a
-rotate gt (Vector3 x y z) = gameObject_ (g{rot = rot g * fromEuler' x y z}) gt
-    where
-        g = _gameObject gt
-
-move :: GameType a => a -> Vector3 -> a
-move gt dir = gameObject_ (g{pos = pos g + dir}) gt
-    where
-        g = _gameObject gt
+translate :: Vector3 -> GameObject -> GameObject
+translate dir g = g{pos = pos g + transformVector (rot g) dir}
 
 collisions :: GameObject -> [Collision]
 collisions g
     | Just c <- collider g = colliderCollisions c
     | otherwise            = []
 
+gchildren_ :: [GameObject] -> GameObject -> GameObject
+gchildren_ cs (GameObject p r s c m cm _) = GameObject p r s c m cm cs
+
 -------------------------------------------------------
 -- GameObject - Getters / Setters
 -------------------------------------------------------
+
+rotMat :: GameObject -> Matrix3x3
+rotMat (GameObject _ r _ _ _ _ _) = rotFromQuaternion r
 
 transMat :: GameObject -> Matrix4x4
 transMat (GameObject p r s _ _ _ _) = trsMatrix p r s
@@ -91,12 +90,6 @@ removeChild (GameObject p r s c m cm cs) n
     where
         (cs1, cs2) = splitAt n cs
 
-instance GameType GameObject where
-    _gameObject                                = id
-    gameObject_ g _                            = g
-    children       (GameObject _ _ _ _ _ _ gs) = gs
-    gchildren_  gs (GameObject p r s c m cm _) = GameObject p r s c m cm gs
-
 -------------------------------------------------------
 -- GameObject - Folding / Mapping
 -------------------------------------------------------
@@ -105,7 +98,7 @@ foldChildren :: (GameObject -> a -> a) -> a -> GameObject -> a
 foldChildren f acc g = foldr (\c acc' -> foldChildren f acc' c) (f g acc) (children g)
 
 mapFold :: ((GameObject, a) -> (GameObject, a)) -> (GameObject, a) -> (GameObject, a)
-mapFold f gacc = (gchildren_ gcs g, acc')
+mapFold f gacc = (  gchildren_ gcs g, acc')
     where
         (g,   acc)      = f gacc
         (gcs, acc')     = foldr mapC ([], acc) (children g)
@@ -173,10 +166,12 @@ drawGame world view proj resources debug g = do
 
 drawG :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> Bool -> GameObject -> IO Matrix4x4
 drawG world view proj resources debug g
-    | Just (Model mesh mat)             <- model g    = drawMeshWithMaterial mat mesh modelView proj resources >> return newWorld
-    | Just (FontRenderer text font mat) <- model g    = renderFont text font mat      modelView proj resources >> return newWorld
-    | debug, Just c                     <- collider g = debugDrawCollider c           view      proj resources >> return newWorld
-    | otherwise                                       = return newWorld
+    | Just (Model mesh mat) <- model g    = drawMeshWithMaterial mat mesh modelView proj resources >> return newWorld
+    | Just (FontRenderer text font mat) <- model g = do
+        (fontTexture, fontMesh) <- renderFont text font resources
+        drawMeshWithMaterial (setEmptyTextures fontTexture mat) fontMesh modelView proj resources >> return newWorld
+    | debug, Just c  <- collider g = debugDrawCollider c           view      proj resources >> return newWorld
+    | otherwise                    = return newWorld
     where
         newWorld  = world .*. transMat g
         modelView = view  .*. newWorld
@@ -229,8 +224,8 @@ renderCameraG (w,h) view scene resources debug so t = case camera so of
             GL.clearColor GL.$= GL.Color4 (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a)
             GL.clear [GL.ColorBuffer,GL.DepthBuffer]
             postFX <- getPostFX resources (fromIntegral w,fromIntegral h) fx
-            let (Material mdraw) = postRenderMaterial postFX (Texture [] . return .GL.TextureObject $ postRenderTex postFX)
-            mdraw (rect 1 1) identity4 (orthoMatrix 0 1 0 1 (-1) 1) resources
+            let postFXMat = setEmptyTextures (LoadedTexture $ GL.TextureObject $ postRenderTex postFX) (postRenderMaterial postFX)
+            drawMeshWithMaterial postFXMat (rect 1 1) identity4 (orthoMatrix 0 1 0 1 (-1) 1) resources
 
             GL.depthFunc     GL.$= Just GL.Less
             GL.blend         GL.$= GL.Enabled
@@ -254,50 +249,254 @@ renderGraphicsG window resources debug scene _ t = do
     GLFW.pollEvents
     -- GL.flush
 
-runGame :: (GameObject -> GameObject) -> GameObject -> IO()
-runGame f initg = initWindow >>= \mw -> case mw of
+runGame :: (Scene a, Binary a, Show a) => (World -> a -> a) -> a -> IO()
+runGame f inits = initWindow >>= \mw -> case mw of
     Nothing -> print "Error starting GLFW." >> return ()
     Just w  -> do
         putStrLn "Starting Necronomicon"
 
-        -- GLFW.setCursorPosCallback   w $ Just $ mousePosEvent   signalState
-        -- GLFW.setMouseButtonCallback w $ Just $ mousePressEvent signalState
-        -- GLFW.setKeyCallback         w $ Just $ keyPressEvent   signalState
-        -- GLFW.setWindowSizeCallback  w $ Just $ dimensionsEvent signalState
+        GLFW.setCursorInputMode w GLFW.CursorInputMode'Hidden
 
         resources   <- newResources
         currentTime <- getCurrentTime
-        renderNecronomicon False w resources initg empty currentTime
+        let world = mkWorld{runTime = currentTime}
+        renderNecronomicon False w resources inits empty world
     where
-        --event callbacks
-        -- mousePressEvent state _ _ GLFW.MouseButtonState'Released _ = atomically $ writeTChan (mouseButtonBuffer state) $ False
-        -- mousePressEvent state _ _ GLFW.MouseButtonState'Pressed  _ = atomically $ writeTChan (mouseButtonBuffer state) $ True
-        -- dimensionsEvent state _ x y = writeToSignal (dimensionsSignal state) $ Vector2 (fromIntegral x) (fromIntegral y)
-        -- keyPressEvent   state _ k _ GLFW.KeyState'Pressed  _       = do
-            -- atomically $ writeTChan (keySignalBuffer state)   (glfwKeyToEventKey k,True)
-            -- atomically $ writeTChan (keysPressedBuffer state) (glfwKeyToEventKey k)
-        -- keyPressEvent   state _ k _ GLFW.KeyState'Released _       = atomically $ writeTChan (keySignalBuffer state) (glfwKeyToEventKey k,False)
-        -- keyPressEvent   _ _ _ _ _ _                            = return ()
-        --
-        -- mousePosEvent state w x y = do
-        --     (wx,wy) <- GLFW.getWindowSize w
-        --     let pos = (x / fromIntegral wx,y / fromIntegral wy)
-        --     writeToSignal (mouseSignal state) pos
-
-        renderNecronomicon quit window resources g tree runTime'
+        renderNecronomicon quit window resources s tree world
             | quit      = print "Qutting" >> return ()
             | otherwise = do
 
                 GLFW.pollEvents
-                q <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'Escape
+                qKey <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'Escape
+                wKey <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'W
+                aKey <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'A
+                sKey <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'S
+                dKey <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'D
+                mb   <- (== GLFW.MouseButtonState'Pressed) <$> GLFW.getMouseButton window GLFW.MouseButton'1
+                (ww, wh) <- (\(wd, hd) -> (fromIntegral wd, fromIntegral hd)) <$> GLFW.getWindowSize window
+                mp       <- (\(cx, cy) -> ((cx - ww * 0.5) / ww, (cy - wh * 0.5) / wh)) <$> GLFW.getCursorPos window
                 currentTime <- getCurrentTime
 
-                let _           = currentTime - runTime'
-                    (g', tree') = update (f g, tree)
+                GLFW.setCursorInputMode window GLFW.CursorInputMode'Hidden
+
+                let world' = world {
+                        deltaTime       = currentTime - runTime world,
+                        runTime         = currentTime,
+
+                        --Signal Style
+                        moveKeys        = (if aKey then -1 else 0 + if dKey then 1 else 0, if wKey then 1 else 0 + if sKey then -1 else 0),
+                        mouseIsDown     = mb,
+                        mousePosition   = mp,
+
+                        --Event Style
+                        moveKeysPressed = if moveKeys world /= moveKeys world' then Just (if aKey then -1 else 0 + if dKey then 1 else 0, if wKey then 1 else 0 + if sKey then -1 else 0) else Nothing,
+                        mouseClicked    = mb && not (mouseIsDown world),
+                        mouseMoved      = if mp /= mousePosition world then Just mp else Nothing
+                    }
+                    s'          = f world' s
+                    g           = gchildren_ (getGameObjects s' []) gameObject
+                    (g', tree') = update (g, tree)
+                    (s'', _)    = setGameObjects s' (children g')
+
+                GLFW.setCursorPos window (ww * 0.5) (wh * 0.5)
+                GLFW.setCursorInputMode window GLFW.CursorInputMode'Hidden
 
                 renderGraphicsG window resources True g' g' tree'
                 threadDelay $ 16667
-                renderNecronomicon q window resources g' tree' currentTime
+                renderNecronomicon qKey window resources s'' tree' world'
+
+-------------------------------------------------------
+-- Entity
+-------------------------------------------------------
+
+data World = World {
+    --SignalStyle
+    runTime       :: Double,
+    deltaTime     :: Double,
+    mousePosition :: (Double, Double),
+    moveKeys      :: (Double, Double),
+    mouseIsDown   :: Bool,
+
+    --Event Style
+    mouseClicked    :: Bool,
+    mouseMoved      :: Maybe (Double, Double),
+    moveKeysPressed :: Maybe (Double, Double)
+}
+
+mkWorld :: World
+mkWorld = World 0 0 (0, 0) (0, 0) False False Nothing Nothing
+
+data Entity a = Entity {
+    userData   :: a,
+    entityData :: GameObject
+} deriving (Show)
+
+instance Binary a => Binary (Entity a) where
+    put (Entity a g) = put a >> put g
+    get              = Entity <$> get <*> get
+
+class Scene a where
+    getGameObjects :: a -> [GameObject] -> [GameObject]
+    setGameObjects :: a -> [GameObject] -> (a, [GameObject])
+
+instance Scene (Entity a) where
+    getGameObjects (Entity _ g) gs = g : gs
+    setGameObjects (Entity a _) gs = (Entity a $ head gs, tail gs)
+
+instance Scene a => Scene [a] where
+    getGameObjects es gs = foldr (\e gs' -> getGameObjects e gs') gs es
+    setGameObjects es gs = fmap reverse $ foldl foldE ([], gs) es
+        where
+            foldE (es', gs') e = (e' : es', gs'')
+                where
+                    (e', gs'') = setGameObjects e gs'
+
+instance (Scene a, Scene b) => Scene (a, b) where
+    getGameObjects (e1, e2) gs  = getGameObjects e1 $ getGameObjects e2 gs
+    setGameObjects (e1, e2) gs1 = ((e1', e2'), gs3)
+        where
+            (e1', gs2) = setGameObjects e1 gs1
+            (e2', gs3) = setGameObjects e2 gs2
+
+instance (Scene a, Scene b, Scene c) => Scene (a, b, c) where
+    getGameObjects (e1, e2, e3) gs  = getGameObjects e1 $ getGameObjects e2 $ getGameObjects e3 gs
+    setGameObjects (e1, e2, e3) gs1 = ((e1', e2', e3'), gs4)
+        where
+            (e1', gs2) = setGameObjects e1 gs1
+            (e2', gs3) = setGameObjects e2 gs2
+            (e3', gs4) = setGameObjects e3 gs3
+
+instance (Scene a, Scene b, Scene c, Scene d) => Scene (a, b, c, d) where
+    getGameObjects (e1, e2, e3, e4) gs  = getGameObjects e1 $ getGameObjects e2 $ getGameObjects e3 $ getGameObjects e4 gs
+    setGameObjects (e1, e2, e3, e4) gs1 = ((e1', e2', e3', e4'), gs5)
+        where
+            (e1', gs2) = setGameObjects e1 gs1
+            (e2', gs3) = setGameObjects e2 gs2
+            (e3', gs4) = setGameObjects e3 gs3
+            (e4', gs5) = setGameObjects e4 gs4
+
+instance (Scene a, Scene b, Scene c, Scene d, Scene e) => Scene (a, b, c, d, e) where
+    getGameObjects (e1, e2, e3, e4, e5) gs  = getGameObjects e1 $ getGameObjects e2 $ getGameObjects e3 $ getGameObjects e4 $ getGameObjects e5 gs
+    setGameObjects (e1, e2, e3, e4, e5) gs1 = ((e1', e2', e3', e4', e5'), gs6)
+        where
+            (e1', gs2) = setGameObjects e1 gs1
+            (e2', gs3) = setGameObjects e2 gs2
+            (e3', gs4) = setGameObjects e3 gs3
+            (e4', gs5) = setGameObjects e4 gs4
+            (e5', gs6) = setGameObjects e5 gs5
+
+instance (Scene a, Scene b, Scene c, Scene d, Scene e, Scene f) => Scene (a, b, c, d, e, f) where
+    getGameObjects (e1, e2, e3, e4, e5, e6) gs  = getGameObjects e1 $ getGameObjects e2 $ getGameObjects e3 $ getGameObjects e4 $ getGameObjects e5 $ getGameObjects e6 gs
+    setGameObjects (e1, e2, e3, e4, e5, e6) gs1 = ((e1', e2', e3', e4', e5', e6'), gs7)
+        where
+            (e1', gs2) = setGameObjects e1 gs1
+            (e2', gs3) = setGameObjects e2 gs2
+            (e3', gs4) = setGameObjects e3 gs3
+            (e4', gs5) = setGameObjects e4 gs4
+            (e5', gs6) = setGameObjects e5 gs5
+            (e6', gs7) = setGameObjects e6 gs6
+
+instance (Scene a, Scene b, Scene c, Scene d, Scene e, Scene f, Scene g) => Scene (a, b, c, d, e, f, g) where
+    getGameObjects (e1, e2, e3, e4, e5, e6, e7) gs  = getGameObjects e1 $ getGameObjects e2 $ getGameObjects e3 $ getGameObjects e4 $ getGameObjects e5 $ getGameObjects e6 $ getGameObjects e7 gs
+    setGameObjects (e1, e2, e3, e4, e5, e6, e7) gs1 = ((e1', e2', e3', e4', e5', e6', e7'), gs8)
+        where
+            (e1', gs2) = setGameObjects e1 gs1
+            (e2', gs3) = setGameObjects e2 gs2
+            (e3', gs4) = setGameObjects e3 gs3
+            (e4', gs5) = setGameObjects e4 gs4
+            (e5', gs6) = setGameObjects e5 gs5
+            (e6', gs7) = setGameObjects e6 gs6
+            (e7', gs8) = setGameObjects e7 gs7
+
+instance (Scene a, Scene b, Scene c, Scene d, Scene e, Scene f, Scene g, Scene h) => Scene (a, b, c, d, e, f, g, h) where
+    getGameObjects (e1, e2, e3, e4, e5, e6, e7, e8) gs  =
+        getGameObjects e1 $
+        getGameObjects e2 $
+        getGameObjects e3 $
+        getGameObjects e4 $
+        getGameObjects e5 $
+        getGameObjects e6 $
+        getGameObjects e7 $
+        getGameObjects e8 gs
+    setGameObjects (e1, e2, e3, e4, e5, e6, e7, e8) gs1 = ((e1', e2', e3', e4', e5', e6', e7', e8'), gs9)
+        where
+            (e1', gs2) = setGameObjects e1 gs1
+            (e2', gs3) = setGameObjects e2 gs2
+            (e3', gs4) = setGameObjects e3 gs3
+            (e4', gs5) = setGameObjects e4 gs4
+            (e5', gs6) = setGameObjects e5 gs5
+            (e6', gs7) = setGameObjects e6 gs6
+            (e7', gs8) = setGameObjects e7 gs7
+            (e8', gs9) = setGameObjects e8 gs8
+
+instance (Scene a, Scene b, Scene c, Scene d, Scene e, Scene f, Scene g, Scene h, Scene i) => Scene (a, b, c, d, e, f, g, h, i) where
+    getGameObjects (e1, e2, e3, e4, e5, e6, e7, e8, e9) gs  =
+        getGameObjects e1 $
+        getGameObjects e2 $
+        getGameObjects e3 $
+        getGameObjects e4 $
+        getGameObjects e5 $
+        getGameObjects e6 $
+        getGameObjects e7 $
+        getGameObjects e8 $
+        getGameObjects e9 gs
+    setGameObjects (e1, e2, e3, e4, e5, e6, e7, e8, e9) gs1 = ((e1', e2', e3', e4', e5', e6', e7', e8', e9'), gs10)
+        where
+            (e1', gs2)  = setGameObjects e1 gs1
+            (e2', gs3)  = setGameObjects e2 gs2
+            (e3', gs4)  = setGameObjects e3 gs3
+            (e4', gs5)  = setGameObjects e4 gs4
+            (e5', gs6)  = setGameObjects e5 gs5
+            (e6', gs7)  = setGameObjects e6 gs6
+            (e7', gs8)  = setGameObjects e7 gs7
+            (e8', gs9)  = setGameObjects e8 gs8
+            (e9', gs10) = setGameObjects e9 gs9
+
+instance (Scene a, Scene b, Scene c, Scene d, Scene e, Scene f, Scene g, Scene h, Scene i, Scene j) => Scene (a, b, c, d, e, f, g, h, i, j) where
+    getGameObjects (e1, e2, e3, e4, e5, e6, e7, e8, e9, e10) gs  =
+        getGameObjects e1 $
+        getGameObjects e2 $
+        getGameObjects e3 $
+        getGameObjects e4 $
+        getGameObjects e5 $
+        getGameObjects e6 $
+        getGameObjects e7 $
+        getGameObjects e8 $
+        getGameObjects e9 $
+        getGameObjects e10 gs
+    setGameObjects (e1, e2, e3, e4, e5, e6, e7, e8, e9, e10) gs1 = ((e1', e2', e3', e4', e5', e6', e7', e8', e9', e10'), gs11)
+        where
+            (e1',  gs2)  = setGameObjects e1  gs1
+            (e2',  gs3)  = setGameObjects e2  gs2
+            (e3',  gs4)  = setGameObjects e3  gs3
+            (e4',  gs5)  = setGameObjects e4  gs4
+            (e5',  gs6)  = setGameObjects e5  gs5
+            (e6',  gs7)  = setGameObjects e6  gs6
+            (e7',  gs8)  = setGameObjects e7  gs7
+            (e8',  gs9)  = setGameObjects e8  gs8
+            (e9',  gs10) = setGameObjects e9  gs9
+            (e10', gs11) = setGameObjects e10 gs10
+
+-- state timing convenience functions
+data Timer = Timer { timerStartTime :: Double, timerEndTime :: Double } deriving (Show)
+
+instance Binary Timer where
+    put (Timer s e) = put s >> put e
+    get             = Timer <$> get <*> get
+
+timer :: Double -> World -> Timer
+timer t w = Timer (runTime w) (runTime w + t)
+
+timerReady :: Timer -> World -> Bool
+timerReady (Timer _ endTime) i = runTime i >= endTime
+
+mapCollapse :: (a -> Maybe a) -> [a] -> [a]
+mapCollapse f xs = foldr collapse [] xs
+    where
+        collapse x xs'
+            | Just x' <- f x = x' : xs'
+            | otherwise      = xs'
+
 
 -------------------------------------------------------
 -- Testing
@@ -377,62 +576,3 @@ debugDrawDynamicTree tree view proj resources = drawNode (nodes tree)
         drawNode (Node aabb l r _) = debugDrawAABB blue   aabb view proj resources >> drawNode l >> drawNode r
         drawNode (Leaf aabb _)     = debugDrawAABB whiteA aabb view proj resources
         drawNode  Tip              = return ()
-
-
--------------------------------------------------------
--- Entity
--------------------------------------------------------
-
--- newtype Time = Time Double deriving (Num, Floating, Fractional, Real, Show, Eq, Ord)
-
-data Input = Input {
-    mousePosition :: (Double, Double),
-    runTime       :: Double,
-    deltaTime     :: Double,
-    moveKeys      :: Maybe (Double, Double),
-    mouseClick    :: Maybe ()
-}
-
-data Entity a = Entity {
-    userData   :: a,
-    entityData :: GameObject
-}
-
-class World a where
-    updateWorld :: a -> a
-
-instance World (Entity a) where
-    updateWorld = undefined
-
-instance World a => World [a] where
-    updateWorld = undefined
-
-instance (World a, World b) => World (a, b) where
-    updateWorld = undefined
-
-instance (World a, World b, World c) => World (a, b, c) where
-    updateWorld = undefined
-
-instance (World a, World b, World c, World d) => World (a, b, c, d) where
-    updateWorld = undefined
-
-instance (World a, World b, World c, World d, World e) => World (a, b, c, d, e) where
-    updateWorld = undefined
-
-instance (World a, World b, World c, World d, World e, World f) => World (a, b, c, d, e, f) where
-    updateWorld = undefined
-
-instance (World a, World b, World c, World d, World e, World f, World g) => World (a, b, c, d, e, f, g) where
-    updateWorld = undefined
-
-instance (World a, World b, World c, World d, World e, World f, World g, World h) => World (a, b, c, d, e, f, g, h) where
-    updateWorld = undefined
-
-instance (World a, World b, World c, World d, World e, World f, World g, World h, World i) => World (a, b, c, d, e, f, g, h, i) where
-    updateWorld = undefined
-
-instance (World a, World b, World c, World d, World e, World f, World g, World h, World i, World j) => World (a, b, c, d, e, f, g, h, i, j) where
-    updateWorld = undefined
-
-instance World a => World (a, a) where
-    updateWorld = undefined

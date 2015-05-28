@@ -1,14 +1,12 @@
 module Necronomicon.FRP.SignalA where
-------------------------------------------------------
-import           Control.Arrow                      hiding (second)
-import           Control.Concurrent
-import qualified Control.Category                  as Cat
-import qualified Graphics.UI.GLFW                  as GLFW
-import           Control.Monad.Trans               (MonadIO, liftIO)
-import           Control.Monad.Fix
 
+------------------------------------------------------
+import           Control.Concurrent
+import           Control.Applicative
 import           Necronomicon.Graphics
 import           Necronomicon.Utility              (getCurrentTime)
+import qualified Graphics.UI.GLFW                  as GLFW
+
 ------------------------------------------------------
 
 (<~) :: Functor f => (a -> b) -> f a -> f b
@@ -26,256 +24,107 @@ infixr 4 ~>
 newtype Time = Time Double deriving (Eq, Show, Ord, Num, Fractional, Real)
 
 -------------------------------------------------------
--- AFRP
--------------------------------------------------------
---Live coding?
---Hybrid approach!?!??!
-
--- type Time       = Double
-data SignalA a b = SignalGen   (Time -> a -> (SignalA a b, b))          --Normal Signal, depends on time and input sample
-                 | SignalArr   (Time -> a -> (SignalA a b, b)) (a -> b) --Lifted pure function, depends purely on input sample
-                 | SignalConst (Time -> a -> (SignalA a b, b))  b       --Constant Signal, not dependent on time or input sample
-
-runS :: SignalA a b -> (Time -> a -> (SignalA a b, b))
-runS (SignalGen   f)   = f
-runS (SignalArr   f _) = f
-runS (SignalConst f _) = f
-
-constant :: b -> SignalA a b
-constant b = sig
-    where
-        sig       = SignalConst cont b
-        cont _ _ = (sig, b)
-
-instance Cat.Category SignalA where
-    id                                = SignalArr (\_ x -> (Cat.id, x)) id
-    SignalConst _ c . _               = constant c
-    SignalArr   _ f . SignalConst _ c = constant (f c)
-    SignalArr   _ f . SignalArr   _ g = arr (f . g)
-    sb . sa                           = SignalGen cont
-        where
-            cont dt x = (sbCont Cat.. saCont, x2)
-                where
-                    (saCont, x1) = runS sa dt x
-                    (sbCont, x2) = runS sb dt x1
-
-instance Arrow SignalA where
-    arr f = sig
-        where
-            sig      = SignalArr cont f
-            cont _ a = (sig, f a)
-
-    first (SignalConst _ c) = sig
-        where
-            sig           = SignalArr cont (\(_,d) -> (c, d))
-            cont _ (_, d) = (sig, (c, d))
-    first (SignalArr _ f) = sig
-        where
-            sig           = SignalArr cont (\(b, d) -> (f b, d))
-            cont _ (b, d) = (sig, (f b, d))
-    first (SignalGen cont1) = sig
-        where
-            sig           = SignalGen cont
-            cont t (b, d) = (first cont2, (c, d))
-                where
-                    (cont2, c) = cont1 t b
-
-instance Functor (SignalA a) where
-    fmap f a = a >>> arr f -- Maybe implement this for better efficiency
-
-instance Applicative (SignalA a) where
-    pure      = constant
-    af <*> ax = fmap (uncurry ($)) (af &&& ax) -- Maybe implement this for better efficiency
-
--- spawner :: (spawnInput -> [s]) -> (updateInput -> s -> Maybe s) -> SignalA (spawnInput, updateInput) [s]
--- spawner spawn update = spawner' []
---     where
---         spawner' ss = SignalGen cont
---             where
---                 cont _ (spawnInput, updateInput) = (spawner' ss', ss')
---                     where
---                         ss' = foldr updateAndPrune (spawn spawnInput) ss
---                         updateAndPrune s acc = case update updateInput s of
---                             Just s' -> s' : acc
---                             _       -> acc
-
-delay :: a -> SignalA a a
-delay a = SignalGen $ \_ a' -> (delay a', a)
---
--- state :: s -> (a -> s -> s) -> SignalA a s
--- state s f = SignalGen $ \_ a -> let x = f a s in (state x f, x)
-
--- foldp :: (a -> s -> s) -> s -> SignalA a s
--- foldp = flip stateA
-
---try a test with an open loop feedback for game entities
---maybe need delay combinator
-
-instance ArrowLoop SignalA where
-    loop (SignalConst _ c) = constant (fst c)
-    loop  sig              = SignalGen $ \dt b -> let (sig', (c, d)) = runS sig dt (b, d) in (loop sig', c)
-
-
-runSignalA :: Show a => SignalA () a -> IO()
-runSignalA s = initWindow >>= \mw -> case mw of
-    Nothing -> print "Error starting GLFW." >> return ()
-    Just w  -> do
-        putStrLn "Starting Necronomicon"
-        currentTime <- getCurrentTime
-        run False w s currentTime
-    where
-        run quit window sig runTime'
-            | quit      = print "Qutting" >> return ()
-            | otherwise = do
-                GLFW.pollEvents
-                q <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'Escape
-                currentTime <- getCurrentTime
-
-                let delta     = Time $ currentTime - runTime'
-                    (sig', x) = runS sig delta ()
-
-                print x
-                threadDelay $ 16667
-                run q window sig' currentTime
-
-
--------------------------------------------------------
--- Applicative Signals 2.0
+-- Comonadic FRP
 -------------------------------------------------------
 
---------------------------
---SS - Monadic state
---------------------------
+--merge ALL events?
+--Handle all events that occur between frames?
+data Event a = Change [a] | NoChange a deriving (Show)
+
+--Maybe changes are lists for multiple events that happen between frames
+unEvent :: Event a -> a
+unEvent (Change   as) = head as
+unEvent (NoChange a)  = a
+
+instance Functor Event where
+    fmap f (Change   a) = Change   $ fmap f a
+    fmap f (NoChange a) = NoChange $ f a
+
 data SignalState = SignalState {
-    sigStateTime   :: Time,
-    sigStateWindow :: GLFW.Window
-    } deriving (Show)
+    sigStateTime   :: Event Time,
+    sigMouse       :: Event (Double, Double)
+}   deriving (Show)
 
-newtype SS a = SS {runSS :: SignalState -> IO (a, SignalState) }
+data Signal a = Signal { prev :: a, extract :: Event a, next :: SignalState -> Signal a }
 
-instance Functor SS where
-    fmap f (SS xcont) = SS $ \state -> xcont state >>= \x -> return (f $ fst x, snd x)
+instance Functor Signal where
+    fmap f inits = go (f $ unEvent $ extract inits) inits
+        where
+            go p s
+                | Change x <- extract s = let x' = fmap f x in Signal p (Change  x') $ \state -> go (head x') (next s state)
+                | otherwise             =                      Signal p (NoChange p) $ \state -> go p         (next s state)
 
-instance Applicative SS where
-    pure x                = SS $ \state -> return (x , state)
-    SS fcont <*> SS xcont = SS $ \state -> do
-        f <- fcont state
-        x <- xcont $ snd f
-        return (fst f $ fst x, snd x)
+zipApLonger :: [a -> b] -> [a] -> [b]
+zipApLonger [] _  = []
+zipApLonger _  [] = []
+zipApLonger (f : []) (a : as) =  f a : map f     as
+zipApLonger (f : fs) (a : []) =  f a : map ($ a) fs
+zipApLonger (f : fs) (a : as) =  f a : zipApLonger fs as
 
-instance Monad SS where
-    return        = pure
-    SS xsig >>= f = SS $ \state -> do
-        (x, state') <- xsig state
-        let (SS g)      = f x
-        g state'
+instance Applicative Signal where
+    pure x = Signal x (Change [x]) $ \_ -> sx
+        where
+            sx = Signal x (NoChange x) $ \_ -> sx
+    initsf <*> initsx = go (unEvent (extract initsf) $ unEvent (extract initsx)) initsf initsx
+        where
+            go p sf sx
+                | Change   f <- ef, Change   x <- ex = contC $ zipApLonger f x
+                | NoChange f <- ef, Change   x <- ex = contC $ map f x
+                | Change   f <- ef, NoChange x <- ex = contC $ map ($ x) f
+                | otherwise                          = contN
+                where
+                    ef       = extract sf
+                    ex       = extract sx
+                    contC x' = Signal p (Change  x') $ \state -> go (head x') (next sf state) (next sx state)
+                    contN    = Signal p (NoChange p) $ \state -> go p         (next sf state) (next sx state)
 
-instance MonadIO SS where
-    liftIO action = SS $ \state -> do
-        a <- action
-        return (a, state)
+instance Alternative Signal where
+    empty       = error "You cannot have an empty signal."
+    is1 <|> is2 = go (unEvent $ extract is1) is1 is2
+        where
+            go p s1 s2
+                | Change es1 <- extract s1, Change es2 <- extract s2 = let ss = es1 ++ es2 in Signal p (Change ss) $ \state -> go (head ss) (next s1 state) (next s2 state)
+                | Change es1 <- extract s1                           = Signal p (Change  es1) $ \state -> go (head es1) (next s1 state) (next s2 state)
+                | Change es2 <- extract s2                           = Signal p (Change  es2) $ \state -> go (head es2) (next s1 state) (next s2 state)
+                | otherwise                                          = Signal p (NoChange  p) $ \state -> go  p         (next s1 state) (next s2 state)
 
-get :: (SignalState -> a) -> SS a
-get getter = SS $ \state -> return (getter state, state)
-
--------------------------------------------------------
---SignalM - Applicative Signals with internal state
--------------------------------------------------------
-newtype SignalM a = SignalM {runSigM :: SS (a, SignalM a)}
-
-instance Functor SignalM where
-    fmap f sig = SignalM $ do
-        ~(x, cont) <- runSigM sig
-        return (f x, fmap f cont)
-
-instance Applicative SignalM where
-    pure x        = SignalM $ return (x, pure x)
-    fsig <*> xsig = SignalM $ do
-        ~(f, fcont) <- runSigM fsig
-        ~(x, xcont) <- runSigM xsig
-        return $ (f x, fcont <*> xcont)
-
--------------------------------------------------------
---SignalM - Arrow instance
--------------------------------------------------------
-newtype SigArrow a b = SigArrow {runSigArrow :: (SignalM (a -> b))}
-
-sigArr :: SignalM (a -> b) -> SigArrow a b
-sigArr f = SigArrow f
-
-instance Cat.Category SigArrow where
-    id                            = SigArrow $ pure id
-    SigArrow fsig . SigArrow gsig = SigArrow $ SignalM $ do
-        ~(f, fcont) <- runSigM fsig
-        ~(g, gcont) <- runSigM gsig
-        return (f . g, runSigArrow $ SigArrow fcont Cat.. SigArrow gcont)
-
-
-instance Arrow SigArrow where
-    arr f                 = SigArrow $ pure f
-    first (SigArrow fsig) = SigArrow $ SignalM $ do
-        ~(f, fcont) <- runSigM fsig
-        return (\(b, d) -> (f b, d), runSigArrow $ first (SigArrow fcont))
-
-sigLoopA :: a -> SigArrow a a -> SignalM a
-sigLoopA x fsig = sigLoop x (runSigArrow fsig)
-
--------------------------------------------------------
--- Run time
--------------------------------------------------------
-runSignalM :: Show a => SignalM a -> IO()
-runSignalM s = initWindow >>= \mw -> case mw of
+runSignal :: Show a => Signal a -> IO ()
+runSignal sig = initWindow >>= \mw -> case mw of
     Nothing -> print "Error starting GLFW." >> return ()
     Just w  -> do
         putStrLn "Starting Necronomicon"
         currentTime <- getCurrentTime
-        let state = SignalState (Time 0) w
-        run False w s state currentTime
+        let state = SignalState (Change [Time 0]) (Change [(0, 0)])
+        run False w sig state currentTime
     where
-        run quit window (SignalM (SS sig)) state runTime'
+        run quit window s state runTime'
             | quit      = print "Qutting" >> return ()
             | otherwise = do
                 GLFW.pollEvents
                 q                    <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'Escape
+                mp                   <- GLFW.getCursorPos window
                 currentTime          <- getCurrentTime
                 let delta             = Time $ currentTime - runTime'
-                (~(x, cont), state') <- sig (state{sigStateTime = delta})
-                print x
+                    state'            = state{sigStateTime = Change [delta], sigMouse = if mp /= unEvent (sigMouse state) then Change [mp] else NoChange mp}
+                    s'                = next s state'
+                print $ extract s'
                 putStrLn ""
                 threadDelay $ 16667
-                run q window cont state' currentTime
+                run q window s' state' currentTime
 
--------------------------------------------------------
--- Combinators
--------------------------------------------------------
-
-time :: SignalM Double
-time = SignalM $ liftIO getCurrentTime >>= \t -> return (t, time)
-
-mousePos :: SignalM (Double, Double)
-mousePos = SignalM $ do
-    w <- get sigStateWindow
-    m <- liftIO $ GLFW.getCursorPos w
-    return (m, mousePos)
-
-sigLoop :: a -> SignalM (a -> a) -> SignalM a
-sigLoop x fsig = SignalM $ do
-    ~(f, fcont) <- runSigM fsig
-    let x' = f x
-    return (x, sigLoop x' fcont)
-
-sigFix :: (SignalM a -> SignalM a) -> a -> SignalM a
-sigFix f x = SignalM $ SS cont
+mousePos :: Signal (Double, Double)
+mousePos = go (0, 0) (Change [(0, 0)])
     where
-        cont state = mfix $ \ ~(~(x', xcont), _) -> do
-            let fcont = delayM x . f $ delayM x' xcont
-            (runSS (runSigM fcont)) state
+        go p c = Signal p c $ \state -> go (unEvent c) (sigMouse state)
 
-foldp :: (a -> b -> b) -> b -> SignalM a -> SignalM b
-foldp f b asig = SignalM $ do
-    ~(a, acont) <- runSigM asig
-    let b' = f a b
-    return (b, foldp f b' acont)
+deltaTime :: Signal Time
+deltaTime = go 0 (NoChange 0)
+    where
+        go p c = Signal p c $ \state -> go (unEvent c) (sigStateTime state)
 
-delayM :: a -> SignalM a -> SignalM a
-delayM aPrev curSig = SignalM $ return (aPrev, curSig)
+sigLoop :: (a -> Signal a) -> a -> Signal a
+sigLoop f initx = go initx (pure initx)
+    where
+        go p x = Signal p (extract x') $ \state -> go (unEvent $ extract x') (next x' state)
+            where
+                x' = f $ unEvent $ extract x
