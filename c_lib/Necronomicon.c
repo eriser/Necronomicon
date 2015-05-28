@@ -2574,7 +2574,17 @@ void sin_k_calc(ugen u)
 	);
 }
 
-void local_out_calc(ugen u)
+void local_out_k_calc(ugen u)
+{
+	double in = *UGEN_INPUT_BUFFER(u, 0);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+
+	AUDIO_LOOP(
+		UGEN_OUT(out, in);
+	);
+}
+
+void local_out_a_calc(ugen u)
 {
 	double* in = UGEN_INPUT_BUFFER(u, 0);
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
