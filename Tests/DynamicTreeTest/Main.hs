@@ -1,16 +1,19 @@
 import Necronomicon.FRP.SignalA
+import Control.Applicative
 
 main :: IO ()
-main = runSignal counter
+main = runSignal $ mousePos <|> mousePos <|> mousePos
+-- main = runSignal counter
+--
+-- counter :: Signal (Double, Double)
+-- counter = sigLoop sigCount (0, 0)
+--     where
+--         sigCount s = (,) <~ hsig ~~ esig
+--             where
+--                 hsig = pureCount (fst s) <~ fmap fst mousePos
+--                 esig = pureCount (snd s) <~ fmap snd mousePos
+--         pureCount x y = x + y
 
-counter :: Signal (Double, Double)
-counter = sigLoop sigCount (0, 0)
-    where
-        sigCount s = (,) <~ hsig ~~ esig
-            where
-                hsig = pureCount (fst s) <~ fmap fst mousePos
-                esig = pureCount (snd s) <~ fmap snd mousePos
-        pureCount x y = x + y
 {-
 import Necronomicon
 import Data.Binary
