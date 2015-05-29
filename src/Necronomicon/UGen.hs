@@ -176,9 +176,6 @@ selectRateByArg kCalc aCalc argIndex (UGenFunc unit _ con dec args) = UGenFunc u
 -- used during compiling to correctly handle synth argument compilation
 -- consume :: UGen -> Int -> Compiled (UGen, Int)
 
-prFeedback :: UGen -> Int -> (UGen, Int)
-prFeedback us i = (us, i)
-
 -- uappend :: [UGen] -> UGen -> [UGen]
 -- uappend us us' = us ++ map (: []) us'
 
@@ -395,28 +392,42 @@ foreign import ccall "&poll_deconstructor" pollDeconstructor :: CUGenFunc
 poll :: UGen -> UGen
 poll input = _useq (multiChannelExpandUGen Poll pollCalc pollConstructor pollDeconstructor [input]) input
 
--- foreign import ccall "&local_in_calc" localInCalc :: CUGenFunc
+localInChannel :: Int -> UGenChannel
+localInChannel busNum = UGenFunc (LocalIn busNum) nullFunPtr nullConstructor nullDeconstructor []
+
 localIn :: Int -> UGen
-localIn busNum = UGen [UGenFunc (LocalIn busNum) nullFunPtr nullConstructor nullDeconstructor []]
+localIn busNum = UGen [localInChannel busNum]
 
--- foreign import ccall "&local_out_calc" localOutCalc :: CUGenFunc
--- localOut :: Int -> UGen -> UGen
--- localOut busNum input = foldr (\((UGenFunc (LocalOut feedBus) f c d is), i) acc -> UGenFunc (LocalOut (feedBus + i)) f c d is : acc) [] $ zip lOut [0..]
---     where
---         lOut = multiChannelExpandUGen (LocalOut busNum) localOutCalc nullConstructor nullDeconstructor [input]
---
--- feedback :: (UGen -> UGen) -> UGen
--- feedback f = expand . localOut 0 $ output
---     where
---         (output, numInputs) = prFeedback f 0
---         -- Pad with extra localOut buses if numInputs is larger than numOutputs
---         expand larr = larr ++ (foldl (\acc i -> acc ++ (localOut i [0])) [] (drop (length larr) [0..(numInputs - 1)]))
+foreign import ccall "&local_out_k_calc" localOutKCalc :: CUGenFunc
+foreign import ccall "&local_out_a_calc" localOutACalc :: CUGenFunc
 
-feedback :: (UGen -> UGen) -> UGen
-feedback _ = 0
+localOut :: Int -> UGen -> UGen
+localOut busNum input = UGen $ foldr (\((UGenFunc (LocalOut feedBus) f c d is), i) acc -> UGenFunc (LocalOut (feedBus + i)) f c d is : acc) [] $ zip lOuts [0..]
+    where
+        (UGen lOuts) = optimizeUGenCalcFunc [localOutKCalc, localOutACalc] $ multiChannelExpandUGen (LocalOut busNum) localOutKCalc nullConstructor nullDeconstructor [input]
 
---oscillators
---dictionary passing style ugens?
+-- feedback (\input feedbackChannels -> {- feedback function -}) inputUGen
+-- feedback :: (UGen -> UGen -> UGen) -> UGen -> UGen
+-- feedback f input = localOut 0 . f input . UGen $ map localInChannel [0 .. numChannels input]
+
+class FeedbackType a where
+    prFeedback :: a -> Int -> (UGen, Int)
+
+instance FeedbackType b => FeedbackType (UGen -> b) where
+    prFeedback f i = prFeedback (f $ localIn i) (i + 1)
+
+instance FeedbackType UGen where
+    prFeedback ug i = (ug, i)
+
+feedback :: (FeedbackType b) => (UGen -> b) -> UGen
+feedback f = expand . localOut 0 $ output
+    where
+        (output, numInputs) = prFeedback f 0
+        -- Pad with extra localOut buses if numInputs is larger than numOutputs
+        expand :: UGen -> UGen
+        expand larr = larr <> (foldl (\acc i -> acc <> (localOut i 0)) [] (drop (numChannels larr) [0..(numInputs - 1)]))
+
+
 foreign import ccall "&accumulator_constructor" accumulatorConstructor :: CUGenFunc
 foreign import ccall "&accumulator_deconstructor" accumulatorDeconstructor :: CUGenFunc
 
@@ -1337,6 +1348,9 @@ mapUGen f (UGen us) = foldl (\acc u -> acc <> f (UGen [u])) mempty us
 
 mapUGenChannels :: (UGenChannel -> UGenChannel) -> UGen -> UGen
 mapUGenChannels f (UGen us) = UGen <| map f us
+
+numChannels :: UGen -> Int
+numChannels (UGen us) = length us
 
 -- myCoolSynth' :: UGen' -> UGen' -> UGen'
 -- myCoolSynth' f1 f2 = sinOsc (f1 <> f2) + sinOsc (f1 <> 0)
