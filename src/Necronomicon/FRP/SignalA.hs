@@ -2,11 +2,10 @@ module Necronomicon.FRP.SignalA where
 
 ------------------------------------------------------
 import           Control.Concurrent
-import           Control.Applicative
 import           Necronomicon.Graphics
 import           Necronomicon.Utility              (getCurrentTime)
 import qualified Graphics.UI.GLFW                  as GLFW
-
+import           Data.IORef
 ------------------------------------------------------
 
 (<~) :: Functor f => (a -> b) -> f a -> f b
@@ -23,21 +22,18 @@ infixr 4 ~>
 
 newtype Time = Time Double deriving (Eq, Show, Ord, Num, Fractional, Real)
 
--------------------------------------------------------
--- Comonadic FRP
--------------------------------------------------------
+----------------------------------
+-- RunTime
+----------------------------------
 
---merge ALL events?
---Handle all events that occur between frames?
-data Event a = Change [a] | NoChange a deriving (Show)
+data Event a = Change a | NoChange a deriving (Show)
 
---Maybe changes are lists for multiple events that happen between frames
 unEvent :: Event a -> a
-unEvent (Change   as) = head as
-unEvent (NoChange a)  = a
+unEvent (Change   a) = a
+unEvent (NoChange a) = a
 
 instance Functor Event where
-    fmap f (Change   a) = Change   $ fmap f a
+    fmap f (Change   a) = Change   $ f a
     fmap f (NoChange a) = NoChange $ f a
 
 data SignalState = SignalState {
@@ -45,75 +41,83 @@ data SignalState = SignalState {
     sigMouse       :: Event (Double, Double)
 }   deriving (Show)
 
+data EventBuffer = EventBuffer {
+    mouseBuffer :: IORef [(Double, Double)]
+}
+
+eventBufferCallback :: IORef [a] -> a -> IO ()
+eventBufferCallback ref x = readIORef ref >>= writeIORef ref . (x :)
+
+consumeEvent :: IORef [a] -> a -> IO (Event a)
+consumeEvent ref defaultX = readIORef ref >>= \rxs -> case rxs of
+    []     -> return $ NoChange defaultX
+    x : xs -> writeIORef ref xs >> return (Change x)
+
 data Signal a = Signal { prev :: a, extract :: Event a, next :: SignalState -> Signal a }
 
 instance Functor Signal where
-    fmap f inits = go (f $ unEvent $ extract inits) inits
+    fmap f inits = go (f $ prev inits) inits
         where
-            go p s
-                | Change x <- extract s = let x' = fmap f x in Signal p (Change  x') $ \state -> go (head x') (next s state)
-                | otherwise             =                      Signal p (NoChange p) $ \state -> go p         (next s state)
-
-zipApLonger :: [a -> b] -> [a] -> [b]
-zipApLonger [] _  = []
-zipApLonger _  [] = []
-zipApLonger (f : []) (a : as) =  f a : map f     as
-zipApLonger (f : fs) (a : []) =  f a : map ($ a) fs
-zipApLonger (f : fs) (a : as) =  f a : zipApLonger fs as
+            go p s = case extract s of
+                Change x -> let x' = f x in Signal p (Change  x') $ \state -> go x' (next s state)
+                _        -> Signal p (NoChange p) $ \state -> go p  (next s state)
 
 instance Applicative Signal where
-    pure x = Signal x (Change [x]) $ \_ -> sx
+    pure x = Signal x (Change x) $ \_ -> sx
         where
             sx = Signal x (NoChange x) $ \_ -> sx
-    initsf <*> initsx = go (unEvent (extract initsf) $ unEvent (extract initsx)) initsf initsx
+    initsf <*> initsx = go (prev initsf $ prev initsx) initsf initsx
         where
             go p sf sx
-                | Change   f <- ef, Change   x <- ex = contC $ zipApLonger f x
-                | NoChange f <- ef, Change   x <- ex = contC $ map f x
-                | Change   f <- ef, NoChange x <- ex = contC $ map ($ x) f
+                | Change   f <- ef                   = contC $ f $ unEvent ex
+                | NoChange f <- ef, Change   x <- ex = contC $ f x
                 | otherwise                          = contN
                 where
                     ef       = extract sf
                     ex       = extract sx
-                    contC x' = Signal p (Change  x') $ \state -> go (head x') (next sf state) (next sx state)
-                    contN    = Signal p (NoChange p) $ \state -> go p         (next sf state) (next sx state)
-
-instance Alternative Signal where
-    empty       = error "You cannot have an empty signal."
-    is1 <|> is2 = go (unEvent $ extract is1) is1 is2
-        where
-            go p s1 s2
-                | Change es1 <- extract s1, Change es2 <- extract s2 = let ss = es1 ++ es2 in Signal p (Change ss) $ \state -> go (head ss) (next s1 state) (next s2 state)
-                | Change es1 <- extract s1                           = Signal p (Change  es1) $ \state -> go (head es1) (next s1 state) (next s2 state)
-                | Change es2 <- extract s2                           = Signal p (Change  es2) $ \state -> go (head es2) (next s1 state) (next s2 state)
-                | otherwise                                          = Signal p (NoChange  p) $ \state -> go  p         (next s1 state) (next s2 state)
+                    contC x' = Signal p (Change  x') $ \state -> go x' (next sf state) (next sx state)
+                    contN    = Signal p (NoChange p) $ \state -> go p  (next sf state) (next sx state)
 
 runSignal :: Show a => Signal a -> IO ()
-runSignal sig = initWindow >>= \mw -> case mw of
+runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
     Nothing -> print "Error starting GLFW." >> return ()
     Just w  -> do
         putStrLn "Starting Necronomicon"
         currentTime <- getCurrentTime
-        let state = SignalState (Change [Time 0]) (Change [(0, 0)])
-        run False w sig state currentTime
+
+        --Setup refs and callbacks
+        mousePosRef <- newIORef []
+        GLFW.setCursorPosCallback w $ Just $ \_ x y -> eventBufferCallback mousePosRef (x, y)
+
+        let state = SignalState (Change $ Time 0) (Change (0, 0))
+            eb    = EventBuffer mousePosRef
+
+        run False w sig state currentTime eb
     where
-        run quit window s state runTime'
+        run quit window s state runTime' eb
             | quit      = print "Qutting" >> return ()
             | otherwise = do
                 GLFW.pollEvents
                 q                    <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'Escape
-                mp                   <- GLFW.getCursorPos window
+                mouseEvent           <- consumeEvent (mouseBuffer eb) (unEvent $ sigMouse state)
                 currentTime          <- getCurrentTime
                 let delta             = Time $ currentTime - runTime'
-                    state'            = state{sigStateTime = Change [delta], sigMouse = if mp /= unEvent (sigMouse state) then Change [mp] else NoChange mp}
+                    state'            = state{sigStateTime = Change delta, sigMouse = mouseEvent}
                     s'                = next s state'
-                print $ extract s'
-                putStrLn ""
+
+                case extract s' of
+                    NoChange _ -> return ()
+                    Change   x -> print x >> putStrLn ""
+
                 threadDelay $ 16667
-                run q window s' state' currentTime
+                run q window s' state' currentTime eb
+
+----------------------------------
+-- Input Signals
+----------------------------------
 
 mousePos :: Signal (Double, Double)
-mousePos = go (0, 0) (Change [(0, 0)])
+mousePos = go (0, 0) (Change (0, 0))
     where
         go p c = Signal p c $ \state -> go (unEvent c) (sigMouse state)
 
@@ -122,9 +126,25 @@ deltaTime = go 0 (NoChange 0)
     where
         go p c = Signal p c $ \state -> go (unEvent c) (sigStateTime state)
 
+----------------------------------
+-- Combinators
+----------------------------------
+
 sigLoop :: (a -> Signal a) -> a -> Signal a
 sigLoop f initx = go initx (pure initx)
     where
         go p x = Signal p (extract x') $ \state -> go (unEvent $ extract x') (next x' state)
             where
                 x' = f $ unEvent $ extract x
+
+collapse :: [Signal a] -> Signal [a]
+collapse is = go [] is
+    where
+        collect s acc = case extract s of
+            NoChange _ -> acc
+            Change   x -> x : acc
+        go p ss = Signal p ss' $ \state -> go (unEvent ss') (map (\s -> next s state) ss)
+            where
+                ss' = case foldr collect [] ss of
+                    [] -> NoChange p
+                    xs -> Change   xs

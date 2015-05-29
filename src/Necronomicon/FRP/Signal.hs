@@ -311,7 +311,7 @@ scene :: [Signal SceneObject] -> Signal ()
 scene os = render $ root <~ combine os
 
 runSignal :: (Show a) => Signal a -> IO()
-runSignal s = initWindow >>= \mw -> case mw of
+runSignal s = initWindow (1920, 1080) True >>= \mw -> case mw of
     Nothing -> print "Error starting GLFW." >> return ()
     Just w  -> do
         print "Starting signal run time"

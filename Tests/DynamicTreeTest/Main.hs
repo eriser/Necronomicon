@@ -1,19 +1,22 @@
 import Necronomicon.FRP.SignalA
-import Control.Applicative
+
+-- data CollapseTest = MouseTest (Double, Double) | TimeTest Time deriving (Show)
+data MegaDark = MegaDark Double Double deriving (Show)
 
 main :: IO ()
-main = runSignal $ mousePos <|> mousePos <|> mousePos
--- main = runSignal counter
---
--- counter :: Signal (Double, Double)
--- counter = sigLoop sigCount (0, 0)
---     where
---         sigCount s = (,) <~ hsig ~~ esig
---             where
---                 hsig = pureCount (fst s) <~ fmap fst mousePos
---                 esig = pureCount (snd s) <~ fmap snd mousePos
---         pureCount x y = x + y
+-- main = runSignal $ collapse [MouseTest <~ mousePos, TimeTest <~ deltaTime]
+main = runSignal counter
 
+--Should fed back values be signals with change event information?
+--Is it correct for the feedback to only update when something changes????
+
+counter :: Signal MegaDark
+counter = sigLoop sigCount (MegaDark 0 0)
+    where
+        sigCount (MegaDark h e) = MegaDark <~ hsig ~~ esig
+            where
+                hsig = (+h) <~ fmap fst mousePos
+                esig = (+e) <~ fmap snd mousePos
 {-
 import Necronomicon
 import Data.Binary

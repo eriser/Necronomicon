@@ -250,7 +250,7 @@ renderGraphicsG window resources debug scene _ t = do
     -- GL.flush
 
 runGame :: (Scene a, Binary a, Show a) => (World -> a -> a) -> a -> IO()
-runGame f inits = initWindow >>= \mw -> case mw of
+runGame f inits = initWindow (1920, 1080) True >>= \mw -> case mw of
     Nothing -> print "Error starting GLFW." >> return ()
     Just w  -> do
         putStrLn "Starting Necronomicon"
