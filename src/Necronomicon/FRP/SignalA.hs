@@ -2,10 +2,12 @@ module Necronomicon.FRP.SignalA where
 
 ------------------------------------------------------
 import           Control.Concurrent
+import           Data.IORef
+import qualified Graphics.UI.GLFW                  as GLFW
+import qualified Data.IntMap                       as IntMap
+
 import           Necronomicon.Graphics
 import           Necronomicon.Utility              (getCurrentTime)
-import qualified Graphics.UI.GLFW                  as GLFW
-import           Data.IORef
 ------------------------------------------------------
 
 (<~) :: Functor f => (a -> b) -> f a -> f b
@@ -39,20 +41,25 @@ instance Functor Event where
 data SignalState = SignalState {
     sigRunTime     :: Event Time,
     sigDeltaTime   :: Event Time,
-    sigMouse       :: Event (Double, Double)
+    sigMouse       :: Event (Double, Double),
+    sigKeys        :: IntMap.IntMap (Event Bool)
 }   deriving (Show)
 
 data EventBuffer = EventBuffer {
-    mouseBuffer :: IORef [(Double, Double)]
+    mouseBuffer :: IORef [(Double, Double)],
+    keysBuffer  :: IORef (IntMap.IntMap [Bool])
 }
 
 eventBufferCallback :: IORef [a] -> a -> IO ()
 eventBufferCallback ref x = readIORef ref >>= writeIORef ref . (x :)
 
-consumeEvent :: IORef [a] -> a -> IO (Event a)
-consumeEvent ref defaultX = readIORef ref >>= \rxs -> case rxs of
-    []     -> return $ NoChange defaultX
-    x : xs -> writeIORef ref xs >> return (Change x)
+keyEventCallback :: IORef (IntMap.IntMap [Bool]) -> Key -> Bool -> IO ()
+keyEventCallback ref k p = do
+    keys <- readIORef ref
+    let enumK = fromEnum k
+    case IntMap.lookup enumK keys of
+        Nothing -> writeIORef ref $ IntMap.insert enumK [p]      keys
+        Just ps -> writeIORef ref $ IntMap.insert enumK (p : ps) keys
 
 buildSignalStates :: SignalState -> [(Double, Double)] -> [SignalState]
 buildSignalStates ss  []      = ss{sigRunTime = Change (unEvent $ sigRunTime ss), sigDeltaTime = Change (unEvent $ sigDeltaTime ss)} : []
@@ -99,10 +106,11 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
 
         --Setup refs and callbacks
         mousePosRef <- newIORef []
+        keysRef     <- newIORef IntMap.empty
         GLFW.setCursorPosCallback w $ Just $ \_ x y -> eventBufferCallback mousePosRef (x, y)
 
-        let state = SignalState (Change $ Time 0) (Change $ Time 0) (Change (0, 0))
-            eb    = EventBuffer mousePosRef
+        let state = SignalState (Change $ Time 0) (Change $ Time 0) (Change (0, 0)) mkKeyMap
+            eb    = EventBuffer mousePosRef keysRef
 
         run False w sig state currentTime eb
     where
@@ -142,6 +150,194 @@ runTime :: Signal Time
 runTime = go 0 (NoChange 0)
     where
         go p c = Signal p c $ \state -> go (unEvent c) (sigRunTime state)
+
+type Key  = GLFW.Key
+
+mkKeyMap :: IntMap.IntMap (Event Bool)
+mkKeyMap = IntMap.fromList $ map (\k -> (fromEnum k, NoChange False)) [keyA, keyB, keyC, keyD, keyE, keyF, keyG, keyH, keyI, keyJ, keyK, keyL, keyM, keyN, keyO, keyP, keyQ, keyR, keyS, keyT, keyU, keyV, keyW, keyX, keyY, keyZ]
+
+keyA :: GLFW.Key
+keyA = GLFW.Key'A
+
+keyB :: GLFW.Key
+keyB = GLFW.Key'B
+
+keyC :: GLFW.Key
+keyC = GLFW.Key'C
+
+keyD :: GLFW.Key
+keyD = GLFW.Key'D
+
+keyE :: GLFW.Key
+keyE = GLFW.Key'E
+
+keyF :: GLFW.Key
+keyF = GLFW.Key'F
+
+keyG :: GLFW.Key
+keyG = GLFW.Key'G
+
+keyH :: GLFW.Key
+keyH = GLFW.Key'H
+
+keyI :: GLFW.Key
+keyI = GLFW.Key'I
+
+keyJ :: GLFW.Key
+keyJ = GLFW.Key'J
+
+keyK :: GLFW.Key
+keyK = GLFW.Key'K
+
+keyL :: GLFW.Key
+keyL = GLFW.Key'L
+
+keyM :: GLFW.Key
+keyM = GLFW.Key'M
+
+keyN :: GLFW.Key
+keyN = GLFW.Key'N
+
+keyO :: GLFW.Key
+keyO = GLFW.Key'O
+
+keyP :: GLFW.Key
+keyP = GLFW.Key'P
+
+keyQ :: GLFW.Key
+keyQ = GLFW.Key'Q
+
+keyR :: GLFW.Key
+keyR = GLFW.Key'R
+
+keyS :: GLFW.Key
+keyS = GLFW.Key'S
+
+keyT :: GLFW.Key
+keyT = GLFW.Key'T
+
+keyU :: GLFW.Key
+keyU = GLFW.Key'U
+
+keyV :: GLFW.Key
+keyV = GLFW.Key'V
+
+keyW :: GLFW.Key
+keyW = GLFW.Key'W
+
+keyX :: GLFW.Key
+keyX = GLFW.Key'X
+
+keyY :: GLFW.Key
+keyY = GLFW.Key'Y
+
+keyZ :: GLFW.Key
+keyZ = GLFW.Key'Z
+
+keyEnter :: GLFW.Key
+keyEnter  = GLFW.Key'Enter
+
+keyLCtrl :: GLFW.Key
+keyLCtrl  = GLFW.Key'LeftControl
+
+keyRCtrl :: GLFW.Key
+keyRCtrl  = GLFW.Key'RightControl
+
+keyLAlt :: GLFW.Key
+keyLAlt   = GLFW.Key'LeftAlt
+
+keyRAlt :: GLFW.Key
+keyRAlt   = GLFW.Key'RightAlt
+
+keySpace :: GLFW.Key
+keySpace  = GLFW.Key'Space
+
+keyLShift :: GLFW.Key
+keyLShift = GLFW.Key'LeftShift
+
+keyRShift :: GLFW.Key
+keyRShift = GLFW.Key'RightShift
+
+keyBackspace :: GLFW.Key
+keyBackspace = GLFW.Key'Backspace
+
+key0 :: GLFW.Key
+key0 = GLFW.Key'0
+
+key1 :: GLFW.Key
+key1 = GLFW.Key'1
+
+key2 :: GLFW.Key
+key2 = GLFW.Key'2
+
+key3 :: GLFW.Key
+key3 = GLFW.Key'3
+
+key4 :: GLFW.Key
+key4 = GLFW.Key'4
+
+key5 :: GLFW.Key
+key5 = GLFW.Key'5
+
+key6 :: GLFW.Key
+key6 = GLFW.Key'6
+
+key7 :: GLFW.Key
+key7 = GLFW.Key'7
+
+key8 :: GLFW.Key
+key8 = GLFW.Key'8
+
+key9 :: GLFW.Key
+key9 = GLFW.Key'9
+
+keyApostrophe :: GLFW.Key
+keyApostrophe = GLFW.Key'Apostrophe
+
+keyComma :: GLFW.Key
+keyComma = GLFW.Key'Comma
+
+keyMinus :: GLFW.Key
+keyMinus = GLFW.Key'Minus
+
+keyEqual :: GLFW.Key
+keyEqual = GLFW.Key'Equal
+
+keyPeriod :: GLFW.Key
+keyPeriod = GLFW.Key'Period
+
+keySlash :: GLFW.Key
+keySlash = GLFW.Key'Slash
+
+keySemiColon :: GLFW.Key
+keySemiColon = GLFW.Key'Semicolon
+
+keyLeftBracket :: GLFW.Key
+keyLeftBracket = GLFW.Key'LeftBracket
+
+keyBackSlash :: GLFW.Key
+keyBackSlash = GLFW.Key'Backslash
+
+keyRightBracket :: GLFW.Key
+keyRightBracket = GLFW.Key'RightBracket
+
+keyGraveAccent :: GLFW.Key
+keyGraveAccent = GLFW.Key'GraveAccent
+
+keyUp :: GLFW.Key
+keyUp    = GLFW.Key'Up
+
+keyDown :: GLFW.Key
+keyDown  = GLFW.Key'Down
+
+keyLeft :: GLFW.Key
+keyLeft  = GLFW.Key'Left
+
+keyRight :: GLFW.Key
+keyRight = GLFW.Key'Right
+
+-- wasd :: Signal (Double, Double)
+-- wasd =
 
 ----------------------------------
 -- Combinators
