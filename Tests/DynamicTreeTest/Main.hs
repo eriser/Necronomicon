@@ -1,10 +1,10 @@
 import Necronomicon.FRP.SignalA
 
--- data CollapseTest = MouseTest (Double, Double) | TimeTest Time deriving (Show)
+-- data CollapseTest = MouseTest (Double, Double) | DTimeTest Time | RTimeTest Time deriving (Show)
 data MegaDark = MegaDark Double Double deriving (Show)
 
 main :: IO ()
--- main = runSignal $ collapse [MouseTest <~ mousePos, TimeTest <~ deltaTime]
+-- main = runSignal $ collapse [MouseTest <~ mousePos, DTimeTest <~ deltaTime, RTimeTest <~ runTime]
 main = runSignal counter
 
 --Should fed back values be signals with change event information?

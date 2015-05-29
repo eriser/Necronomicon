@@ -37,7 +37,8 @@ instance Functor Event where
     fmap f (NoChange a) = NoChange $ f a
 
 data SignalState = SignalState {
-    sigStateTime   :: Event Time,
+    sigRunTime     :: Event Time,
+    sigDeltaTime   :: Event Time,
     sigMouse       :: Event (Double, Double)
 }   deriving (Show)
 
@@ -52,6 +53,17 @@ consumeEvent :: IORef [a] -> a -> IO (Event a)
 consumeEvent ref defaultX = readIORef ref >>= \rxs -> case rxs of
     []     -> return $ NoChange defaultX
     x : xs -> writeIORef ref xs >> return (Change x)
+
+buildSignalStates :: SignalState -> [(Double, Double)] -> [SignalState]
+buildSignalStates ss  []      = ss{sigRunTime = Change (unEvent $ sigRunTime ss), sigDeltaTime = Change (unEvent $ sigDeltaTime ss)} : []
+buildSignalStates ss (m : []) = let ss' = ss{sigRunTime = Change (unEvent $ sigRunTime ss), sigDeltaTime = Change (unEvent $ sigDeltaTime ss), sigMouse = Change m} in ss' : []
+buildSignalStates ss (m : ms) = let ss' = ss{sigMouse = Change m} in ss' : buildSignalStates ss' ms
+
+produceSignalStates :: SignalState -> EventBuffer -> Time -> Time -> IO [SignalState]
+produceSignalStates state ebuf rt dt = do
+    ms <- readIORef (mouseBuffer ebuf)
+    writeIORef (mouseBuffer ebuf) []
+    return . reverse $ buildSignalStates state{sigRunTime = NoChange rt, sigDeltaTime = NoChange dt, sigMouse = NoChange (unEvent $ sigMouse state)} ms
 
 data Signal a = Signal { prev :: a, extract :: Event a, next :: SignalState -> Signal a }
 
@@ -89,7 +101,7 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
         mousePosRef <- newIORef []
         GLFW.setCursorPosCallback w $ Just $ \_ x y -> eventBufferCallback mousePosRef (x, y)
 
-        let state = SignalState (Change $ Time 0) (Change (0, 0))
+        let state = SignalState (Change $ Time 0) (Change $ Time 0) (Change (0, 0))
             eb    = EventBuffer mousePosRef
 
         run False w sig state currentTime eb
@@ -98,19 +110,19 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
             | quit      = print "Qutting" >> return ()
             | otherwise = do
                 GLFW.pollEvents
-                q                    <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'Escape
-                mouseEvent           <- consumeEvent (mouseBuffer eb) (unEvent $ sigMouse state)
-                currentTime          <- getCurrentTime
-                let delta             = Time $ currentTime - runTime'
-                    state'            = state{sigStateTime = Change delta, sigMouse = mouseEvent}
-                    s'                = next s state'
+
+                q           <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'Escape
+                currentTime <- getCurrentTime
+                let delta    = Time $ currentTime - runTime'
+                states      <- produceSignalStates state eb (Time currentTime) delta
+                let s'       = foldr (\state' s'' -> next s'' state') s states
 
                 case extract s' of
                     NoChange _ -> return ()
-                    Change   x -> print x >> putStrLn ""
+                    Change   x -> print x
 
                 threadDelay $ 16667
-                run q window s' state' currentTime eb
+                run q window s' (last states) currentTime eb
 
 ----------------------------------
 -- Input Signals
@@ -124,7 +136,12 @@ mousePos = go (0, 0) (Change (0, 0))
 deltaTime :: Signal Time
 deltaTime = go 0 (NoChange 0)
     where
-        go p c = Signal p c $ \state -> go (unEvent c) (sigStateTime state)
+        go p c = Signal p c $ \state -> go (unEvent c) (sigDeltaTime state)
+
+runTime :: Signal Time
+runTime = go 0 (NoChange 0)
+    where
+        go p c = Signal p c $ \state -> go (unEvent c) (sigRunTime state)
 
 ----------------------------------
 -- Combinators
