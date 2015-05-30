@@ -1,7 +1,7 @@
 import Necronomicon.FRP.SignalA
 
 -- data CollapseTest = MouseTest (Double, Double) | DTimeTest Time | RTimeTest Time deriving (Show)
-data MegaDark = MegaDark Double Double deriving (Show)
+data MegaDark = MegaDark Double Double deriving (Show, Eq)
 
 main :: IO ()
 -- main = runSignal $ collapse [MouseTest <~ mousePos, DTimeTest <~ deltaTime, RTimeTest <~ runTime]

@@ -148,7 +148,7 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
 
                 case extract s' of
                     NoChange _ -> return ()
-                    Change   x -> print x >> putStrLn ""
+                    Change   x -> print x
 
                 threadDelay $ 16667
                 run q window s' (last states) currentTime eb
@@ -388,12 +388,15 @@ wasd = go <~ isDown keyW ~~ isDown keyA ~~ isDown keyS ~~ isDown keyD
 -- Combinators
 ----------------------------------
 
-sigLoop :: (a -> Signal a) -> a -> Signal a
+--Watch this, several items need to be hashed out
+--Is checking for equality after function application the correct semantics for Change / NoChange???
+sigLoop :: Eq a => (a -> Signal a) -> a -> Signal a
 sigLoop f initx = go initx (pure initx)
     where
-        go p x = Signal p (extract x') $ \state -> go (unEvent $ extract x') (next x' state)
+        go p x = Signal p (e $ unEvent $ extract x') $ \state -> go (unEvent $ extract x') (next x' state)
             where
                 x' = f $ unEvent $ extract x
+                e  = if unEvent (extract x') == p then NoChange else Change
 
 collapse :: [Signal a] -> Signal [a]
 collapse is = go [] is
