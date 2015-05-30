@@ -8,7 +8,7 @@ main = runSignal $ sigLoop megaDark initScene
 data MegaDark    = MegaDark (Entity Hero) [Entity Bullet] deriving (Show, Eq)
 type Health      = Double
 data HeroInput   = HeroKeys (Double, Double) | HeroMouse (Double, Double) | HeroTick Time Time | HeroClick Time
-data HeroState   = HeroIdle | HeroMoving Vector3 Vector3 | HeroAttacking Time | HeroDamaged Time deriving (Show, Eq, Generic)
+data HeroState   = HeroIdle | HeroMoving Vector3 | HeroAttacking Time | HeroDamaged Time deriving (Show, Eq, Generic)
 data Hero        = Hero HeroState Health deriving (Show, Eq, Generic)
 data BulletState = Flying Vector3 | DeathAnimation Time deriving (Show, Eq, Generic)
 data Bullet      = Bullet BulletState deriving (Show, Eq, Generic)
@@ -52,31 +52,30 @@ megaDark (MegaDark hero bullets) = MegaDark <~ heroSig ~~ pure bullets
         heroSig = foldr updateHero hero <~ combine
                 [ HeroTick  <~ deltaTime ~~ runTime
                 , HeroKeys  <~ wasd
-                , HeroMouse <~ mousePos
+                , HeroMouse <~ mousePosR
                 , HeroClick <~ sampleOn mouseClick runTime ]
 
 
 updateHero :: HeroInput -> Entity Hero -> Entity Hero
 
 updateHero (HeroMouse (x, y)) h@(Entity (Hero state health) g)
-    | HeroIdle       <- state = Entity (Hero (HeroMoving 0 $ Vector3 y x 0) health) g --directly rotate with mouse?
-    | HeroMoving p _ <- state = Entity (Hero (HeroMoving p $ Vector3 y x 0) health) g
-    | otherwise               = h
+    | HeroIdle     <- state = Entity (Hero state health) $ rotate (Vector3 y x 0) g
+    | HeroMoving _ <- state = Entity (Hero state health) $ rotate (Vector3 y x 0) g
+    | otherwise             = h
 
 updateHero (HeroKeys (x, y)) h@(Entity (Hero state health) g)
-    | HeroIdle       <- state = Entity (Hero (HeroMoving (Vector3 x 0 (-y)) 0) health) g
-    | HeroMoving _ r <- state = Entity (Hero (HeroMoving (Vector3 x 0 (-y)) r) health) g
+    | HeroIdle     <- state = Entity (Hero (HeroMoving $ Vector3 x 0 (-y)) health) g
+    | HeroMoving _ <- state = Entity (Hero (HeroMoving $ Vector3 x 0 (-y)) health) g
     | otherwise               = h
 
 updateHero (HeroTick dt rt) h@(Entity (Hero state health) g)
-    | HeroMoving  p r <- state = Entity (Hero state health) $ translate (p * realToFrac dt) $ rotate (r * realToFrac dt) g
-    | HeroAttacking t <- state
-    , t > rt                   = Entity (Hero HeroIdle health) g
-    | otherwise                = h
+    | HeroMoving    p <- state         = Entity (Hero state health) $ translate (p * realToFrac dt) g
+    | HeroAttacking t <- state, t > rt = Entity (Hero HeroIdle health) g
+    | otherwise                        = h
 
 updateHero (HeroClick t) h@(Entity (Hero state health) g)
     | HeroDamaged _ <- state = h
-    | otherwise              = Entity (Hero (HeroAttacking t) health) g
+    | otherwise              = Entity (Hero (HeroAttacking $ t + 1) health) g
 
 {-
 import Necronomicon
