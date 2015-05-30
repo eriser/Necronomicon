@@ -55,11 +55,11 @@ megaDark (MegaDark hero bullets) = MegaDark <~ heroSig ~~ pure bullets
                 , HeroMouse <~ mousePos
                 , HeroClick <~ sampleOn mouseClick runTime ]
 
+
 updateHero :: HeroInput -> Entity Hero -> Entity Hero
 
---directly rotate with mouse?
 updateHero (HeroMouse (x, y)) h@(Entity (Hero state health) g)
-    | HeroIdle       <- state = Entity (Hero (HeroMoving 0 $ Vector3 y x 0) health) g
+    | HeroIdle       <- state = Entity (Hero (HeroMoving 0 $ Vector3 y x 0) health) g --directly rotate with mouse?
     | HeroMoving p _ <- state = Entity (Hero (HeroMoving p $ Vector3 y x 0) health) g
     | otherwise               = h
 
@@ -77,17 +77,6 @@ updateHero (HeroTick dt rt) h@(Entity (Hero state health) g)
 updateHero (HeroClick t) h@(Entity (Hero state health) g)
     | HeroDamaged _ <- state = h
     | otherwise              = Entity (Hero (HeroAttacking t) health) g
-
---Should fed back values be signals with change event information?
---Is it correct for the feedback to only update when something changes????
---
--- counter :: Signal MegaDark
--- counter = sigLoop sigCount (MegaDark 0 0)
---     where
---         sigCount (MegaDark h e) = MegaDark <~ hsig ~~ esig
---             where
---                 hsig = (+h) <~ fmap fst mousePos
---                 esig = (+e) <~ fmap snd mousePos
 
 {-
 import Necronomicon
