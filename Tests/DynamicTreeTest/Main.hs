@@ -6,7 +6,7 @@ import Necronomicon.FRP.SignalA
 main :: IO ()
 -- main = runSignal $ collapse [MouseTest <~ mousePos, DTimeTest <~ deltaTime, RTimeTest <~ runTime]
 -- main = runSignal counter
-main = runSignal wasd
+main = runSignal $ collapse [wasd, mousePos]
 
 --Should fed back values be signals with change event information?
 --Is it correct for the feedback to only update when something changes????

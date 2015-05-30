@@ -157,20 +157,19 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
 -- Input Signals
 ----------------------------------
 
-mousePos :: Signal (Double, Double)
-mousePos = go (0, 0) (Change (0, 0))
+standardInputSignal :: (Event a) -> (SignalState -> Event a) -> Signal a
+standardInputSignal initX getter = go (unEvent initX) initX
     where
-        go p c = Signal p c $ \state -> go (unEvent c) (sigMouse state)
+        go p c = Signal p c $ \state -> go (unEvent c) (getter state)
+
+mousePos :: Signal (Double, Double)
+mousePos = standardInputSignal (Change (0, 0)) sigMouse
 
 deltaTime :: Signal Time
-deltaTime = go 0 (NoChange 0)
-    where
-        go p c = Signal p c $ \state -> go (unEvent c) (sigDeltaTime state)
+deltaTime = standardInputSignal (NoChange 0) sigDeltaTime
 
 runTime :: Signal Time
-runTime = go 0 (NoChange 0)
-    where
-        go p c = Signal p c $ \state -> go (unEvent c) (sigRunTime state)
+runTime = standardInputSignal (NoChange 0) sigRunTime
 
 type Key = GLFW.Key
 
