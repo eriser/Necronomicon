@@ -53,7 +53,7 @@ data EventBuffer = EventBuffer {
 eventBufferCallback :: IORef [a] -> a -> IO ()
 eventBufferCallback ref x = readIORef ref >>= writeIORef ref . (x :)
 
-keyEventCallback :: IORef (IntMap.IntMap [Bool]) -> Key -> Bool -> IO ()
+keyEventCallback :: IORef (IntMap.IntMap [Bool]) -> GLFW.Key -> Bool -> IO ()
 keyEventCallback ref k p = do
     keys <- readIORef ref
     let enumK = fromEnum k
@@ -61,16 +61,36 @@ keyEventCallback ref k p = do
         Nothing -> writeIORef ref $ IntMap.insert enumK [p]      keys
         Just ps -> writeIORef ref $ IntMap.insert enumK (p : ps) keys
 
-buildSignalStates :: SignalState -> [(Double, Double)] -> [SignalState]
-buildSignalStates ss  []      = ss{sigRunTime = Change (unEvent $ sigRunTime ss), sigDeltaTime = Change (unEvent $ sigDeltaTime ss)} : []
-buildSignalStates ss (m : []) = let ss' = ss{sigRunTime = Change (unEvent $ sigRunTime ss), sigDeltaTime = Change (unEvent $ sigDeltaTime ss), sigMouse = Change m} in ss' : []
-buildSignalStates ss (m : ms) = let ss' = ss{sigMouse = Change m} in ss' : buildSignalStates ss' ms
+collectKeys :: [(Int, [Bool])] -> ([(Int, Bool)], [(Int, [Bool])])
+collectKeys ks = foldr collect ([], []) ks
+    where
+        collect (_, [])     (eks, ks') = (eks, ks')
+        collect (k, e : es) (eks, ks') = ((k, e) : eks, (k, es) : ks')
+
+buildSignalStates :: SignalState -> [(Double, Double)] -> [(Int, [Bool])] -> [SignalState] -> [SignalState]
+buildSignalStates ss ms ks acc
+    | [] <- ms, [] <- ek, [] <- acc =         ss{sigRunTime = Change (unEvent $ sigRunTime ss), sigDeltaTime = Change (unEvent $ sigDeltaTime ss)} : []
+    | [] <- ms, [] <- ek            = (head acc){sigRunTime = Change (unEvent $ sigRunTime ss), sigDeltaTime = Change (unEvent $ sigDeltaTime ss)} : tail acc
+    | otherwise                     = buildSignalStates ss' (if null ms then [] else tail ms) ks' $ ss' : acc
+    where
+        (ek, ks') = collectKeys ks
+        ss'       = ss {
+            sigMouse = if null ms then sigMouse ss else Change (head ms),
+            sigKeys  = foldr (\(k, p) kb -> IntMap.insert k (Change p) kb) (sigKeys ss) ek
+        }
 
 produceSignalStates :: SignalState -> EventBuffer -> Time -> Time -> IO [SignalState]
 produceSignalStates state ebuf rt dt = do
     ms <- readIORef (mouseBuffer ebuf)
+    ks <- IntMap.toList <~ readIORef (keysBuffer  ebuf)
     writeIORef (mouseBuffer ebuf) []
-    return . reverse $ buildSignalStates state{sigRunTime = NoChange rt, sigDeltaTime = NoChange dt, sigMouse = NoChange (unEvent $ sigMouse state)} ms
+    writeIORef (keysBuffer  ebuf) IntMap.empty
+    return $ buildSignalStates state {
+        sigRunTime   = NoChange rt,
+        sigDeltaTime = NoChange dt,
+        sigMouse     = NoChange (unEvent $ sigMouse state),
+        sigKeys      = IntMap.map (NoChange . unEvent) (sigKeys state)
+    } ms ks []
 
 data Signal a = Signal { prev :: a, extract :: Event a, next :: SignalState -> Signal a }
 
@@ -107,7 +127,8 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
         --Setup refs and callbacks
         mousePosRef <- newIORef []
         keysRef     <- newIORef IntMap.empty
-        GLFW.setCursorPosCallback w $ Just $ \_ x y -> eventBufferCallback mousePosRef (x, y)
+        GLFW.setCursorPosCallback w $ Just $ \_ x y     -> eventBufferCallback mousePosRef (x, y)
+        GLFW.setKeyCallback       w $ Just $ \_ k _ p _ -> if p == GLFW.KeyState'Repeating then return () else keyEventCallback keysRef k (p /= GLFW.KeyState'Released)
 
         let state = SignalState (Change $ Time 0) (Change $ Time 0) (Change (0, 0)) mkKeyMap
             eb    = EventBuffer mousePosRef keysRef
@@ -127,7 +148,7 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
 
                 case extract s' of
                     NoChange _ -> return ()
-                    Change   x -> print x
+                    Change   x -> print x >> putStrLn ""
 
                 threadDelay $ 16667
                 run q window s' (last states) currentTime eb
@@ -151,7 +172,7 @@ runTime = go 0 (NoChange 0)
     where
         go p c = Signal p c $ \state -> go (unEvent c) (sigRunTime state)
 
-type Key  = GLFW.Key
+type Key = GLFW.Key
 
 mkKeyMap :: IntMap.IntMap (Event Bool)
 mkKeyMap = IntMap.fromList $ map (\k -> (fromEnum k, NoChange False)) [keyA, keyB, keyC, keyD, keyE, keyF, keyG, keyH, keyI, keyJ, keyK, keyL, keyM, keyN, keyO, keyP, keyQ, keyR, keyS, keyT, keyU, keyV, keyW, keyX, keyY, keyZ]
@@ -336,9 +357,21 @@ keyLeft  = GLFW.Key'Left
 keyRight :: GLFW.Key
 keyRight = GLFW.Key'Right
 
--- wasd :: Signal (Double, Double)
--- wasd =
+isUp :: Key -> Signal Bool
+isUp k = not <~ isDown k
 
+isDown :: Key -> Signal Bool
+isDown k = go False (NoChange False)
+    where
+        go p c       = Signal p c (cont c)
+        cont c state = go (unEvent c) $ case IntMap.lookup (fromEnum k) (sigKeys state) of
+            Nothing -> error $ "Couldn't find key: " ++ show k
+            Just ek -> ek
+
+wasd :: Signal (Double, Double)
+wasd = go <~ isDown keyW ~~ isDown keyA ~~ isDown keyS ~~ isDown keyD
+    where
+        go w a s d = (((if d then 1 else 0) + (if a then (-1) else 0)),((if w then 1 else 0) + (if s then (-1) else 0)))
 ----------------------------------
 -- Combinators
 ----------------------------------
