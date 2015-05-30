@@ -637,3 +637,6 @@ sampleOn ss' s' = go (prev s') ss' s'
         go p ss s
             | Change _ <- extract ss = Signal p (Change $ unEvent $ extract s) $ \state -> go (unEvent $ extract s) (next ss state) (next s state)
             | otherwise              = Signal p (NoChange p)                   $ \state -> go p                     (next ss state) (next s state)
+
+-- lagSig :: (Fractional a,Eq a,Ord a) => Double -> Signal a -> Signal a
+-- lagSig

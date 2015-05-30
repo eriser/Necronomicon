@@ -59,14 +59,18 @@ megaDark (MegaDark hero bullets) = MegaDark <~ heroSig ~~ pure bullets
 updateHero :: HeroInput -> Entity Hero -> Entity Hero
 
 updateHero (HeroMouse (x, y)) h@(Entity (Hero state health) g)
-    | HeroIdle     <- state = Entity (Hero state health) $ rotate (Vector3 y x 0) g
-    | HeroMoving _ <- state = Entity (Hero state health) $ rotate (Vector3 y x 0) g
+    | HeroIdle     <- state = h'
+    | HeroMoving _ <- state = h'
     | otherwise             = h
+    where
+        h' = Entity (Hero state health) $ rotate (Vector3 y x 0) g
 
 updateHero (HeroKeys (x, y)) h@(Entity (Hero state health) g)
-    | HeroIdle     <- state = Entity (Hero (HeroMoving $ Vector3 x 0 (-y)) health) g
-    | HeroMoving _ <- state = Entity (Hero (HeroMoving $ Vector3 x 0 (-y)) health) g
-    | otherwise               = h
+    | HeroIdle     <- state = h'
+    | HeroMoving _ <- state = h'
+    | otherwise             = h
+    where
+        h' = Entity (Hero (HeroMoving $ Vector3 x 0 (-y)) health) g
 
 updateHero (HeroTick dt rt) h@(Entity (Hero state health) g)
     | HeroMoving    p <- state         = Entity (Hero state health) $ translate (p * realToFrac dt) g
