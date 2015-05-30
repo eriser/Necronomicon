@@ -1,12 +1,12 @@
 import Necronomicon.FRP.SignalA
 
--- data CollapseTest = MouseTest (Double, Double) | DTimeTest Time | RTimeTest Time deriving (Show)
+-- data CombineTest = MouseTest (Double, Double) | DTimeTest Time | RTimeTest Time deriving (Show)
 data MegaDark = MegaDark Double Double deriving (Show, Eq)
 
 main :: IO ()
--- main = runSignal $ collapse [MouseTest <~ mousePos, DTimeTest <~ deltaTime, RTimeTest <~ runTime]
+-- main = runSignal $ combine [MouseTest <~ mousePos, DTimeTest <~ deltaTime, RTimeTest <~ runTime]
 main = runSignal counter
--- main = runSignal $ collapse [wasd, mousePos]
+-- main = runSignal $ combine [wasd, mousePos]
 
 --Should fed back values be signals with change event information?
 --Is it correct for the feedback to only update when something changes????
@@ -69,7 +69,7 @@ initScene :: MegaDark
 initScene = (mkHero, [mkBullet $ Vector3 (-2) 0 0, mkBullet $ Vector3 0 0 0, mkBullet $ Vector3 2 0 0])
 
 megaDark :: World -> MegaDark -> MegaDark
-megaDark w (hero, bullets) = (updateHero w hero, mapCollapse (updateBullet w) bullets)
+megaDark w (hero, bullets) = (updateHero w hero, filterMap (updateBullet w) bullets)
 
 updateHero :: World -> Entity Hero -> Entity Hero
 updateHero w (Entity hero g) = Entity hero' (g' hero')

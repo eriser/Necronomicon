@@ -6,7 +6,8 @@ module Necronomicon.Utility (hash,
                              getCurrentTime,
                              showBinary,
                              showHex,
-                             chunksOf) where
+                             chunksOf,
+                             filterMap) where
 
 import Data.Bits
 import Data.List (foldl')
@@ -67,3 +68,10 @@ chunksOf _ [] = []
 chunksOf n xs =
     let (ys, zs) = splitAt n xs
     in   ys : chunksOf n zs
+
+filterMap :: (a -> Maybe b) -> [a] -> [b]
+filterMap f xs = foldr collapse [] xs
+    where
+        collapse x xs'
+            | Just x' <- f x = x' : xs'
+            | otherwise      = xs'

@@ -490,14 +490,6 @@ timer t w = Timer (runTime w) (runTime w + t)
 timerReady :: Timer -> World -> Bool
 timerReady (Timer _ endTime) i = runTime i >= endTime
 
-mapCollapse :: (a -> Maybe a) -> [a] -> [a]
-mapCollapse f xs = foldr collapse [] xs
-    where
-        collapse x xs'
-            | Just x' <- f x = x' : xs'
-            | otherwise      = xs'
-
-
 -------------------------------------------------------
 -- Testing
 -------------------------------------------------------

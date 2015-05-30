@@ -398,8 +398,8 @@ sigLoop f initx = go initx (pure initx)
                 x' = f $ unEvent $ extract x
                 e  = if unEvent (extract x') == p then NoChange else Change
 
-collapse :: [Signal a] -> Signal [a]
-collapse is = go [] is
+combine :: [Signal a] -> Signal [a]
+combine is = go [] is
     where
         collect s acc = case extract s of
             NoChange _ -> acc
@@ -409,3 +409,38 @@ collapse is = go [] is
                 ss' = case foldr collect [] ss of
                     [] -> NoChange p
                     xs -> Change   xs
+
+keepIf :: (a -> Bool) -> a -> Signal a -> Signal a
+keepIf f x s' = go x s'
+    where
+        go p s
+            | NoChange _ <- extract s = s
+            | f $ unEvent $ extract s = s
+            | otherwise               = Signal p (NoChange p) $ \state -> go p $ next s state
+
+dropIf :: (a -> Bool) -> a -> Signal a -> Signal a
+dropIf f x s' = go x s'
+    where
+        go p s
+            | NoChange _ <- extract s       = s
+            | not $ f $ unEvent $ extract s = s
+            | otherwise                     = Signal p (NoChange p) $ \state -> go p $ next s state
+
+keepWhen :: Signal Bool -> Signal a -> Signal a
+keepWhen bs s
+    | NoChange _ <- extract s = s
+    | unEvent $ extract bs    = s
+    | otherwise               = Signal (prev s) (NoChange (prev s)) $ \state -> keepWhen (next bs state) (next s state)
+
+dropWhen :: Signal Bool -> Signal a -> Signal a
+dropWhen bs s
+    | NoChange _ <- extract s    = s
+    | not $ unEvent $ extract bs = s
+    | otherwise                  = Signal (prev s) (NoChange (prev s)) $ \state -> dropWhen (next bs state) (next s state)
+
+sampleOn :: Signal a -> Signal b -> Signal b
+sampleOn ss' s' = go (prev s') ss' s'
+    where
+        go p ss s
+            | Change _ <- extract ss = Signal p (Change $ unEvent $ extract s) $ \state -> go (unEvent $ extract s) (next ss state) (next s state)
+            | otherwise              = Signal p (NoChange p)                   $ \state -> go p                     (next ss state) (next s state)
