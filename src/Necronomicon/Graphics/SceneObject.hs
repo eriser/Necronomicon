@@ -15,7 +15,7 @@ data Camera = Camera {
     _far        :: Double,
     _clearColor :: Color,
     _fx         :: [PostRenderingFX]
-    } deriving (Show)
+    } deriving (Show, Eq)
 
 instance Binary Camera where
     put (Camera fov n far c fx) = put fov >> put n >> put far >> put c >> put fx

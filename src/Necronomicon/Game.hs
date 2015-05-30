@@ -37,7 +37,7 @@ data GameObject = GameObject {
     model    :: Maybe Model,
     camera   :: Maybe Camera,
     children :: [GameObject]
-} deriving (Show)
+} deriving (Show, Eq)
 
 instance Binary GameObject where
     put (GameObject p r s c m cam cs) = put p >> put r >> put s >> put c >> put m >> put cam >> put cs
@@ -329,7 +329,7 @@ mkWorld = World 0 0 (0, 0) (0, 0) False False Nothing Nothing
 data Entity a = Entity {
     userData   :: a,
     entityData :: GameObject
-} deriving (Show)
+} deriving (Show, Eq)
 
 instance Binary a => Binary (Entity a) where
     put (Entity a g) = put a >> put g

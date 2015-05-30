@@ -12,7 +12,7 @@ import Data.Binary
 data Capsule = Capsule {
     capsuleLine   :: Line,
     capsuleRadius :: Double
-}   deriving (Show)
+}   deriving (Show, Eq)
 
 instance Binary Capsule where
     put (Capsule l r) = put l >> put r

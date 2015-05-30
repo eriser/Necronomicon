@@ -12,12 +12,12 @@ import qualified Data.Map as Map
 import Data.Binary
 
 --Need To add a resources module that sits on top of model, mesh, texture, etc in hierarchy
-data UID             = UID Int | New                                                                                        deriving (Show)
-data Mesh            = Mesh String [Vector3] [Color] [Vector2] [Int] | DynamicMesh String [Vector3] [Color] [Vector2] [Int] deriving (Show)
-data Model           = Model Mesh Material | FontRenderer String Font Material                                              deriving (Show)
-data Material        = Material UID String String [Uniform] GL.PrimitiveMode                                                deriving (Show)
-data PostRenderingFX = PostRenderingFX String UID Material                                                                  deriving (Show)
-data Font            = Font {fontKey :: String, fontSize :: Int}                                                            deriving (Show)
+data UID             = UID Int | New                                                                                        deriving (Show, Eq)
+data Mesh            = Mesh String [Vector3] [Color] [Vector2] [Int] | DynamicMesh String [Vector3] [Color] [Vector2] [Int] deriving (Show, Eq)
+data Model           = Model Mesh Material | FontRenderer String Font Material                                              deriving (Show, Eq)
+data Material        = Material UID String String [Uniform] GL.PrimitiveMode                                                deriving (Show, Eq)
+data PostRenderingFX = PostRenderingFX String UID Material                                                                  deriving (Show, Eq)
+data Font            = Font {fontKey :: String, fontSize :: Int}                                                            deriving (Show, Eq)
 data Uniform         = UniformTexture String Texture
                      | UniformScalar  String Double
                      | UniformVec2    String Vector2
@@ -25,7 +25,7 @@ data Uniform         = UniformTexture String Texture
                      | UniformVec4    String Vector4
                      | MatrixView     String
                      | Proj           String
-                     deriving (Show)
+                     deriving (Show, Eq)
 
 uniformName :: Uniform -> String
 uniformName (UniformTexture s _) = s

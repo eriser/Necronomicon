@@ -16,7 +16,7 @@ data Texture = TGATexture   String
              | AudioTexture Int
              | EmptyTexture
              | LoadedTexture GL.TextureObject
-             deriving (Show)
+             deriving (Show, Eq)
 
 instance Binary Texture where
     put (TGATexture    s) = put (0 :: Word8) >> put s

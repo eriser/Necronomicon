@@ -38,6 +38,10 @@ data HalfEdge = HalfEdge {
     face1    :: Maybe Face
 }
 
+--TODO: Finish HalfEdge EQ instance
+instance Eq HalfEdge where
+    (==) = error "HalfEdge Eq instance still need to be implemented."
+
 --TODO: Finish HalfEdge Binary serialization
 instance Binary HalfEdge where
     put = error "HalfEdge binary instance still needs to be implemented."

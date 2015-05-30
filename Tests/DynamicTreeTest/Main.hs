@@ -1,13 +1,82 @@
 import Necronomicon.FRP.SignalA
-
--- data CombineTest = MouseTest (Double, Double) | DTimeTest Time | RTimeTest Time deriving (Show)
--- data MegaDark = MegaDark Double Double deriving (Show, Eq)
+import GHC.Generics
+import Data.Binary
 
 main :: IO ()
-main = runSignal $ every second
--- main = runSignal $ combine [MouseTest <~ mousePos, DTimeTest <~ deltaTime, RTimeTest <~ runTime]
--- main = runSignal counter
--- main = runSignal $ combine [wasd, mousePos]
+main = runSignal $ sigLoop megaDark initScene
+
+data MegaDark    = MegaDark (Entity Hero) [Entity Bullet] deriving (Show, Eq)
+type Health      = Double
+data HeroInput   = HeroKeys (Double, Double) | HeroMouse (Double, Double) | HeroTick Time Time | HeroClick Time
+data HeroState   = HeroIdle | HeroMoving Vector3 Vector3 | HeroAttacking Time | HeroDamaged Time deriving (Show, Eq, Generic)
+data Hero        = Hero HeroState Health deriving (Show, Eq, Generic)
+data BulletState = Flying Vector3 | DeathAnimation Time deriving (Show, Eq, Generic)
+data Bullet      = Bullet BulletState deriving (Show, Eq, Generic)
+data PhysM       = EnemyWeapon
+                 | HeroWeapon
+                 | Player
+                 | Neutral
+                 deriving (Enum, Show, Eq, Generic)
+
+instance Binary HeroState
+instance Binary Hero
+instance Binary BulletState
+instance Binary Bullet
+instance Binary PhysM
+
+mkHero :: Entity Hero
+mkHero = Entity h g
+    where
+        h = Hero HeroIdle 100
+        g = gameObject
+          { pos      = Vector3 0 0 (-6)
+          , rot      = fromEuler' 0 (-180) 0
+          , collider = boxCollider 1 1 1
+          , camera   = Just $ Camera 30 0.1 1000 black [] }
+
+mkBullet :: Vector3 -> Entity Bullet
+mkBullet p = Entity b g
+    where
+        b = Bullet (Flying $ Vector3 1 1 1)
+        g = gameObject
+          { pos      = p
+          , collider = boxCollider 1 1 1
+          , model    = Just $ Model cube $ vertexColored white }
+
+initScene :: MegaDark
+initScene = MegaDark mkHero [mkBullet $ Vector3 (-2) 0 0, mkBullet $ Vector3 0 0 0, mkBullet $ Vector3 2 0 0]
+
+megaDark :: MegaDark -> Signal MegaDark
+megaDark (MegaDark hero bullets) = MegaDark <~ heroSig ~~ pure bullets
+    where
+        heroSig = foldr updateHero hero <~ combine
+                [ HeroTick  <~ deltaTime ~~ runTime
+                , HeroKeys  <~ wasd
+                , HeroMouse <~ mousePos
+                , HeroClick <~ sampleOn mouseClick runTime ]
+
+updateHero :: HeroInput -> Entity Hero -> Entity Hero
+
+--directly rotate with mouse?
+updateHero (HeroMouse (x, y)) h@(Entity (Hero state health) g)
+    | HeroIdle       <- state = Entity (Hero (HeroMoving 0 $ Vector3 y x 0) health) g
+    | HeroMoving p _ <- state = Entity (Hero (HeroMoving p $ Vector3 y x 0) health) g
+    | otherwise               = h
+
+updateHero (HeroKeys (x, y)) h@(Entity (Hero state health) g)
+    | HeroIdle       <- state = Entity (Hero (HeroMoving (Vector3 x 0 (-y)) 0) health) g
+    | HeroMoving _ r <- state = Entity (Hero (HeroMoving (Vector3 x 0 (-y)) r) health) g
+    | otherwise               = h
+
+updateHero (HeroTick dt rt) h@(Entity (Hero state health) g)
+    | HeroMoving  p r <- state = Entity (Hero state health) $ translate (p * realToFrac dt) $ rotate (r * realToFrac dt) g
+    | HeroAttacking t <- state
+    , t > rt                   = Entity (Hero HeroIdle health) g
+    | otherwise                = h
+
+updateHero (HeroClick t) h@(Entity (Hero state health) g)
+    | HeroDamaged _ <- state = h
+    | otherwise              = Entity (Hero (HeroAttacking t) health) g
 
 --Should fed back values be signals with change event information?
 --Is it correct for the feedback to only update when something changes????
@@ -19,6 +88,7 @@ main = runSignal $ every second
 --             where
 --                 hsig = (+h) <~ fmap fst mousePos
 --                 esig = (+e) <~ fmap snd mousePos
+
 {-
 import Necronomicon
 import Data.Binary

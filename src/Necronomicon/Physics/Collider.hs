@@ -8,12 +8,12 @@ import Data.Binary
 -------------------------------------------------------
 -- Colliders
 -------------------------------------------------------
-data Collision = Collision Int deriving (Show)
+data Collision = Collision Int deriving (Show, Eq)
 data Collider = SphereCollider  UID Matrix4x4 Sphere   [Collision]
               | BoxCollider     UID Matrix4x4 OBB      [Collision]
               | CapsuleCollider UID Matrix4x4 Capsule  [Collision]
               | MeshCollider    UID Matrix4x4 HalfEdge [Collision]
-              deriving (Show)
+              deriving (Show, Eq)
 
 instance Binary Collision where
     put (Collision t) = put t

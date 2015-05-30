@@ -11,11 +11,11 @@ import Data.Binary
 data Line = Line {
     lineStart :: Vector3,
     lineEnd   :: Vector3
-}   deriving (Show)
+}   deriving (Show, Eq)
 
 instance Binary Line where
     put (Line s e) = put s >> put e
-    get            = Line <$> get <*> get 
+    get            = Line <$> get <*> get
 
 instance GeoPrimitive Line where
     enclosingAABB                      = error "Line doesn't have a sane enclosing AABB implementation"

@@ -1,4 +1,119 @@
-module Necronomicon.FRP.SignalA where
+module Necronomicon.FRP.SignalA (
+    Signal,
+    (<~),
+    (~~),
+    (~>),
+    Time,
+    mousePos,
+    mouseX,
+    mouseY,
+    mouseButton,
+    mouseClick,
+    keyA,
+    keyB,
+    keyC,
+    keyD,
+    keyE,
+    keyF,
+    keyG,
+    keyH,
+    keyI,
+    keyJ,
+    keyK,
+    keyL,
+    keyM,
+    keyN,
+    keyO,
+    keyP,
+    keyQ,
+    keyR,
+    keyS,
+    keyT,
+    keyU,
+    keyV,
+    keyW,
+    keyX,
+    keyY,
+    keyZ,
+    keyEnter,
+    keyLCtrl,
+    keyRCtrl,
+    keyLAlt,
+    keyRAlt,
+    keySpace,
+    keyLShift,
+    keyRShift,
+    keyBackspace,
+    key0,
+    key1,
+    key2,
+    key3,
+    key4,
+    key5,
+    key6,
+    key7,
+    key8,
+    key9,
+    keyApostrophe,
+    keyComma,
+    keyMinus,
+    keyEqual,
+    keyPeriod,
+    keySlash,
+    keySemiColon,
+    keyLeftBracket,
+    keyBackSlash,
+    keyRightBracket,
+    keyGraveAccent,
+    keyUp,
+    keyDown,
+    keyLeft,
+    keyRight,
+    isDown,
+    isUp,
+    wasd,
+    deltaTime,
+    runTime,
+    every,
+    fps,
+    millisecond,
+    second,
+    minute,
+    hour,
+    sigLoop,
+    combine,
+    keepIf,
+    dropIf,
+    keepWhen,
+    dropWhen,
+    sampleOn,
+    runSignal,
+    module Necronomicon.Language.Layout,
+    module Necronomicon.Networking,
+    module Necronomicon.Math,
+    module Necronomicon.UGen,
+    module Necronomicon.Patterns,
+    module Necronomicon.Runtime,
+    module Necronomicon.Linear,
+    module Necronomicon.Noise,
+    module Necronomicon.Graphics,
+    module Necronomicon.Utility,
+    module Necronomicon.Game,
+    module Necronomicon.Physics) where
+
+--Fake Necro import and re-exports
+import Necronomicon.Networking
+import Necronomicon.Language.Layout
+import Necronomicon.Math
+import Necronomicon.UGen
+import Necronomicon.Patterns hiding (tempo, Time)
+import Necronomicon.Runtime
+import Necronomicon.Linear
+import Necronomicon.Noise
+-- import Necronomicon.Graphics
+-- import Necronomicon.Utility
+import Necronomicon.Game hiding (runTime, deltaTime)
+import Necronomicon.Physics
 
 ------------------------------------------------------
 import           Control.Concurrent
@@ -6,6 +121,7 @@ import           Data.IORef
 import qualified Graphics.UI.GLFW                  as GLFW
 import qualified Data.IntMap                       as IntMap
 
+import           Data.Binary
 import           Necronomicon.Graphics
 import           Necronomicon.Utility              (getCurrentTime)
 ------------------------------------------------------
@@ -22,7 +138,7 @@ import           Necronomicon.Utility              (getCurrentTime)
 infixl 4 <~,~~
 infixr 4 ~>
 
-newtype Time = Time Double deriving (Eq, Show, Ord, Num, Fractional, Real)
+newtype Time = Time Double deriving (Eq, Show, Ord, Num, Fractional, Real, Binary)
 
 ----------------------------------
 -- RunTime
@@ -42,11 +158,13 @@ data SignalState = SignalState {
     sigRunTime     :: Event Time,
     sigDeltaTime   :: Event Time,
     sigMouse       :: Event (Double, Double),
+    sigMouseButton :: Event Bool,
     sigKeys        :: IntMap.IntMap (Event Bool)
 }   deriving (Show)
 
 data EventBuffer = EventBuffer {
     mouseBuffer :: IORef [(Double, Double)],
+    mbBuffer    :: IORef [Bool],
     keysBuffer  :: IORef (IntMap.IntMap [Bool])
 }
 
@@ -67,30 +185,34 @@ collectKeys ks = foldr collect ([], []) ks
         collect (_, [])     (eks, ks') = (eks, ks')
         collect (k, e : es) (eks, ks') = ((k, e) : eks, (k, es) : ks')
 
-buildSignalStates :: SignalState -> [(Double, Double)] -> [(Int, [Bool])] -> [SignalState] -> [SignalState]
-buildSignalStates ss ms ks acc
+buildSignalStates :: SignalState -> [(Double, Double)] -> [Bool] -> [(Int, [Bool])] -> [SignalState] -> [SignalState]
+buildSignalStates ss ms bs ks acc
     | [] <- ms, [] <- ek, [] <- acc =         ss{sigRunTime = Change (unEvent $ sigRunTime ss), sigDeltaTime = Change (unEvent $ sigDeltaTime ss)} : []
     | [] <- ms, [] <- ek            = (head acc){sigRunTime = Change (unEvent $ sigRunTime ss), sigDeltaTime = Change (unEvent $ sigDeltaTime ss)} : tail acc
-    | otherwise                     = buildSignalStates ss' (if null ms then [] else tail ms) ks' $ ss' : acc
+    | otherwise                     = buildSignalStates ss' (eventTail ms) (eventTail  bs) ks' $ ss' : acc
     where
-        (ek, ks') = collectKeys ks
-        ss'       = ss {
-            sigMouse = if null ms then sigMouse ss else Change (head ms),
-            sigKeys  = foldr (\(k, p) kb -> IntMap.insert k (Change p) kb) (sigKeys ss) ek
+        (ek, ks')    = collectKeys ks
+        eventTail es = if null es then [] else es
+        ss'          = ss {
+            sigMouse       = if null ms then sigMouse       ss else Change (head ms),
+            sigMouseButton = if null bs then sigMouseButton ss else Change (head bs),
+            sigKeys        = foldr (\(k, p) kb -> IntMap.insert k (Change p) kb) (sigKeys ss) ek
         }
 
 produceSignalStates :: SignalState -> EventBuffer -> Time -> Time -> IO [SignalState]
 produceSignalStates state ebuf rt dt = do
     ms <- readIORef (mouseBuffer ebuf)
+    bs <- readIORef (mbBuffer ebuf)
     ks <- IntMap.toList <~ readIORef (keysBuffer  ebuf)
     writeIORef (mouseBuffer ebuf) []
     writeIORef (keysBuffer  ebuf) IntMap.empty
     return $ buildSignalStates state {
-        sigRunTime   = NoChange rt,
-        sigDeltaTime = NoChange dt,
-        sigMouse     = NoChange (unEvent $ sigMouse state),
-        sigKeys      = IntMap.map (NoChange . unEvent) (sigKeys state)
-    } ms ks []
+        sigRunTime     = NoChange rt,
+        sigDeltaTime   = NoChange dt,
+        sigMouse       = NoChange (unEvent $ sigMouse state),
+        sigMouseButton = NoChange (unEvent $ sigMouseButton state),
+        sigKeys        = IntMap.map (NoChange . unEvent) (sigKeys state)
+    } ms bs ks []
 
 data Signal a = Signal { prev :: a, extract :: Event a, next :: SignalState -> Signal a }
 
@@ -126,12 +248,14 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
 
         --Setup refs and callbacks
         mousePosRef <- newIORef []
+        mbRef       <- newIORef []
         keysRef     <- newIORef IntMap.empty
-        GLFW.setCursorPosCallback w $ Just $ \_ x y     -> eventBufferCallback mousePosRef (x, y)
-        GLFW.setKeyCallback       w $ Just $ \_ k _ p _ -> if p == GLFW.KeyState'Repeating then return () else keyEventCallback keysRef k (p /= GLFW.KeyState'Released)
+        GLFW.setCursorPosCallback   w $ Just $ \_ x y -> eventBufferCallback mousePosRef (x, y)
+        GLFW.setMouseButtonCallback w $ Just $ \_ _ s _ -> eventBufferCallback mbRef (s == GLFW.MouseButtonState'Pressed)
+        GLFW.setKeyCallback         w $ Just $ \_ k _ p _ -> if p == GLFW.KeyState'Repeating then return () else keyEventCallback keysRef k (p /= GLFW.KeyState'Released)
 
-        let state = SignalState (Change $ Time 0) (Change $ Time 0) (Change (0, 0)) mkKeyMap
-            eb    = EventBuffer mousePosRef keysRef
+        let state = SignalState (Change 0) (Change 0) (Change (0, 0)) (Change False) mkKeyMap
+            eb    = EventBuffer mousePosRef mbRef keysRef
 
         run False w sig state currentTime eb
     where
@@ -146,9 +270,9 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
                 states      <- produceSignalStates state eb (Time currentTime) delta
                 let s'       = foldr (\state' s'' -> next s'' state') s states
 
-                case extract s' of
-                    NoChange _ -> return ()
-                    Change   x -> print x
+                -- case extract s' of
+                --     NoChange _ -> return ()
+                --     Change   x -> print x
 
                 threadDelay $ 16667
                 run q window s' (last states) currentTime eb
@@ -158,7 +282,7 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
 ----------------------------------
 
 standardInputSignal :: a -> (SignalState -> Event a) -> Signal a
-standardInputSignal initX getter = go initX (Change initX)
+standardInputSignal initX getter = go initX (NoChange initX)
     where
         go p c = Signal p c $ \state -> go (unEvent c) (getter state)
 
@@ -170,6 +294,12 @@ mouseX = fst <~ mousePos
 
 mouseY :: Signal Double
 mouseY = snd <~ mousePos
+
+mouseButton :: Signal Bool
+mouseButton = standardInputSignal False sigMouseButton
+
+mouseClick :: Signal ()
+mouseClick = const () <~ keepIf id False mouseButton
 
 type Key = GLFW.Key
 
@@ -434,10 +564,10 @@ fps fpst = go 0 0 (NoChange 0)
 sigLoop :: Eq a => (a -> Signal a) -> a -> Signal a
 sigLoop f initx = go initx (pure initx)
     where
-        go p x = Signal p (e $ unEvent $ extract x') $ \state -> go (unEvent $ extract x') (next x' state)
+        go p x = Signal p (extract x') $ \state -> go (unEvent $ extract x') (next x' state)
             where
                 x' = f $ unEvent $ extract x
-                e  = if unEvent (extract x') == p then NoChange else Change
+                -- e  = if unEvent (extract x') == p then NoChange else Change
 
 combine :: [Signal a] -> Signal [a]
 combine is = go [] is

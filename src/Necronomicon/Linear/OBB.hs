@@ -11,7 +11,7 @@ import Data.Binary
 -- Oriented Bounding Box
 ---------------------------------------
 
-data OBB = OBB { obbExtents :: Vector3 } deriving (Show)
+data OBB = OBB { obbExtents :: Vector3 } deriving (Show, Eq)
 
 instance Binary OBB where
     put (OBB e) = put e
