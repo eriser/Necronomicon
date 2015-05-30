@@ -171,12 +171,6 @@ mouseX = fst <~ mousePos
 mouseY :: Signal Double
 mouseY = snd <~ mousePos
 
-deltaTime :: Signal Time
-deltaTime = standardInputSignal 0 sigDeltaTime
-
-runTime :: Signal Time
-runTime = standardInputSignal 0 sigRunTime
-
 type Key = GLFW.Key
 
 mkKeyMap :: IntMap.IntMap (Event Bool)
@@ -384,6 +378,53 @@ wasd :: Signal (Double, Double)
 wasd = go <~ isDown keyW ~~ isDown keyA ~~ isDown keyS ~~ isDown keyD
     where
         go w a s d = (((if d then 1 else 0) + (if a then (-1) else 0)),((if w then 1 else 0) + (if s then (-1) else 0)))
+
+----------------------------------
+-- Time
+----------------------------------
+
+millisecond :: Time
+millisecond = 0.001
+
+second :: Time
+second = 1
+
+minute :: Time
+minute = 60
+
+hour :: Time
+hour = 3600
+
+deltaTime :: Signal Time
+deltaTime = standardInputSignal 0 sigDeltaTime
+
+runTime :: Signal Time
+runTime = standardInputSignal 0 sigRunTime
+
+every :: Time -> Signal Time
+every t = go 0 0 (NoChange 0) (NoChange 0)
+    where
+        go p dt sigDT rt
+            | NoChange _ <- sigDT = Signal p (NoChange p) $ \state -> go p            dt    (sigDeltaTime state) (sigRunTime state)
+            | NoChange _ <- rt    = Signal p (NoChange p) $ \state -> go p            dt    (sigDeltaTime state) (sigRunTime state)
+            | diffT >= 0          = Signal p rt           $ \state -> go (unEvent rt) diffT (sigDeltaTime state) (sigRunTime state)
+            | otherwise           = Signal p (NoChange p) $ \state -> go p            dt'   (sigDeltaTime state) (sigRunTime state)
+            where
+                dt'   = dt + unEvent sigDT
+                diffT = dt' - t
+
+fps :: Time -> Signal Time
+fps fpst = go 0 0 (NoChange 0)
+    where
+        t = 1 / fpst
+        go p dt sigDT
+            | NoChange _ <- sigDT = Signal p (NoChange p) $ \state -> go p   dt    (sigDeltaTime state)
+            | diffT >= 0          = Signal p (Change dt') $ \state -> go dt' diffT (sigDeltaTime state)
+            | otherwise           = Signal p (NoChange p) $ \state -> go p   dt'   (sigDeltaTime state)
+            where
+                dt'   = dt + unEvent sigDT
+                diffT = dt' - t
+
 ----------------------------------
 -- Combinators
 ----------------------------------
@@ -414,7 +455,7 @@ keepIf :: (a -> Bool) -> a -> Signal a -> Signal a
 keepIf f x s' = go x s'
     where
         go p s
-            | NoChange _ <- extract s = s
+            | NoChange _ <- extract s = Signal p (NoChange p) $ \state -> go p $ next s state
             | f $ unEvent $ extract s = s
             | otherwise               = Signal p (NoChange p) $ \state -> go p $ next s state
 
@@ -422,19 +463,19 @@ dropIf :: (a -> Bool) -> a -> Signal a -> Signal a
 dropIf f x s' = go x s'
     where
         go p s
-            | NoChange _ <- extract s       = s
+            | NoChange _ <- extract s       = Signal p (NoChange p) $ \state -> go p $ next s state
             | not $ f $ unEvent $ extract s = s
             | otherwise                     = Signal p (NoChange p) $ \state -> go p $ next s state
 
 keepWhen :: Signal Bool -> Signal a -> Signal a
 keepWhen bs s
-    | NoChange _ <- extract s = s
+    | NoChange _ <- extract s = Signal (prev s) (NoChange (prev s)) $ \state -> keepWhen (next bs state) (next s state)
     | unEvent $ extract bs    = s
     | otherwise               = Signal (prev s) (NoChange (prev s)) $ \state -> keepWhen (next bs state) (next s state)
 
 dropWhen :: Signal Bool -> Signal a -> Signal a
 dropWhen bs s
-    | NoChange _ <- extract s    = s
+    | NoChange _ <- extract s    = Signal (prev s) (NoChange (prev s)) $ \state -> dropWhen (next bs state) (next s state)
     | not $ unEvent $ extract bs = s
     | otherwise                  = Signal (prev s) (NoChange (prev s)) $ \state -> dropWhen (next bs state) (next s state)
 

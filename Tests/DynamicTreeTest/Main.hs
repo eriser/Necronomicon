@@ -1,23 +1,24 @@
 import Necronomicon.FRP.SignalA
 
 -- data CombineTest = MouseTest (Double, Double) | DTimeTest Time | RTimeTest Time deriving (Show)
-data MegaDark = MegaDark Double Double deriving (Show, Eq)
+-- data MegaDark = MegaDark Double Double deriving (Show, Eq)
 
 main :: IO ()
+main = runSignal $ every second
 -- main = runSignal $ combine [MouseTest <~ mousePos, DTimeTest <~ deltaTime, RTimeTest <~ runTime]
-main = runSignal counter
+-- main = runSignal counter
 -- main = runSignal $ combine [wasd, mousePos]
 
 --Should fed back values be signals with change event information?
 --Is it correct for the feedback to only update when something changes????
-
-counter :: Signal MegaDark
-counter = sigLoop sigCount (MegaDark 0 0)
-    where
-        sigCount (MegaDark h e) = MegaDark <~ hsig ~~ esig
-            where
-                hsig = (+h) <~ fmap fst mousePos
-                esig = (+e) <~ fmap snd mousePos
+--
+-- counter :: Signal MegaDark
+-- counter = sigLoop sigCount (MegaDark 0 0)
+--     where
+--         sigCount (MegaDark h e) = MegaDark <~ hsig ~~ esig
+--             where
+--                 hsig = (+h) <~ fmap fst mousePos
+--                 esig = (+e) <~ fmap snd mousePos
 {-
 import Necronomicon
 import Data.Binary
