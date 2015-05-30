@@ -158,7 +158,7 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
 ----------------------------------
 
 standardInputSignal :: a -> (SignalState -> Event a) -> Signal a
-standardInputSignal initX getter = go initX (NoChange initX)
+standardInputSignal initX getter = go initX (Change initX)
     where
         go p c = Signal p c $ \state -> go (unEvent c) (getter state)
 
