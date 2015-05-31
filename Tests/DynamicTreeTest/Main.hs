@@ -3,9 +3,9 @@ import GHC.Generics
 import Data.Binary
 
 main :: IO ()
-main = runSignal $ sigLoop megaDark initScene
+main = runGameSignal $ sigLoop megaDark initScene
 
-data MegaDark    = MegaDark (Entity Hero) [Entity Bullet] deriving (Show, Eq)
+data MegaDark    = MegaDark (Entity Hero) [Entity Bullet] deriving (Show, Eq, Generic)
 type Health      = Double
 data HeroInput   = HeroKeys (Double, Double) | HeroMouse (Double, Double) | HeroTick Time Time | HeroClick Time
 data HeroState   = HeroIdle | HeroMoving Vector3 | HeroAttacking Time | HeroDamaged Time deriving (Show, Eq, Generic)
@@ -23,6 +23,8 @@ instance Binary Hero
 instance Binary BulletState
 instance Binary Bullet
 instance Binary PhysM
+instance Binary MegaDark
+instance Scene  MegaDark
 
 mkHero :: Entity Hero
 mkHero = Entity h g

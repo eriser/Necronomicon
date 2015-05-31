@@ -4,6 +4,8 @@ module Necronomicon.FRP.SignalA (
     (~~),
     (~>),
     Time,
+    runSignal,
+    runGameSignal,
     mousePos,
     mousePosR,
     mouseX,
@@ -88,7 +90,6 @@ module Necronomicon.FRP.SignalA (
     keepWhen,
     dropWhen,
     sampleOn,
-    runSignal,
     module Necronomicon.Language.Layout,
     module Necronomicon.Networking,
     module Necronomicon.Math,
@@ -113,7 +114,6 @@ import Necronomicon.Linear
 import Necronomicon.Noise
 -- import Necronomicon.Graphics
 -- import Necronomicon.Utility
-import Necronomicon.Game hiding (runTime, deltaTime)
 import Necronomicon.Physics
 
 ------------------------------------------------------
@@ -121,10 +121,11 @@ import           Control.Concurrent
 import           Data.IORef
 import qualified Graphics.UI.GLFW                  as GLFW
 import qualified Data.IntMap                       as IntMap
-
 import           Data.Binary
+
 import           Necronomicon.Graphics
 import           Necronomicon.Utility              (getCurrentTime)
+import           Necronomicon.Game hiding (runTime, deltaTime)
 ------------------------------------------------------
 
 (<~) :: Functor f => (a -> b) -> f a -> f b
@@ -250,12 +251,19 @@ instance Applicative Signal where
                     contC x' = Signal p (Change  x') $ \state -> go x' (next sf state) (next sx state)
                     contN    = Signal p (NoChange p) $ \state -> go p  (next sf state) (next sx state)
 
-runSignal :: Show a => Signal a -> IO ()
-runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
+runGameSignal :: (Show a, Binary a, Scene a) => Signal a -> IO ()
+runGameSignal = runSignal'
+
+runSignal :: (Show a, Binary a) => Signal a -> IO ()
+runSignal x = runSignal' $ flip Entity gameObject <~ x
+
+runSignal' :: (Show a, Binary a, Scene a) => Signal a -> IO ()
+runSignal' sig = initWindow (800, 600) False >>= \mw -> case mw of
     Nothing -> print "Error starting GLFW." >> return ()
     Just w  -> do
         putStrLn "Starting Necronomicon"
         currentTime <- getCurrentTime
+        resources   <- newResources
 
         GLFW.setCursorInputMode w GLFW.CursorInputMode'Disabled
 
@@ -273,9 +281,9 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
         let state = SignalState (Change 0) (Change 0) (Change (0, 0)) (Change False) mkKeyMap (Change (fromIntegral ww, fromIntegral wh))
             eb    = EventBuffer mousePosRef mbRef keysRef dimRef
 
-        run False w sig state currentTime eb
+        run False w sig state currentTime eb resources
     where
-        run quit window s state runTime' eb
+        run quit window s state runTime' eb resources
             | quit      = print "Qutting" >> return ()
             | otherwise = do
                 GLFW.pollEvents
@@ -288,10 +296,16 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
 
                 case extract s' of
                     NoChange _ -> return ()
-                    Change   x -> print x
+                    Change   x -> do
+                        -- print x
+                        let gs = getGameObjects x []
+                        print gs
+                        putStrLn ""
+
+                -- renderGraphicsG window resources True g' g' tree'
 
                 threadDelay $ 16667
-                run q window s' (last states) currentTime eb
+                run q window s' (last states) currentTime eb resources
 
 ----------------------------------
 -- Input Signals

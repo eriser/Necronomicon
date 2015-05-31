@@ -1,3 +1,6 @@
+{-# LANGUAGE DefaultSignatures #-}
+{-# LANGUAGE FlexibleContexts #-}
+
 module Necronomicon.Game where
 
 -- import Debug.Trace
@@ -16,6 +19,7 @@ import Necronomicon.Graphics
 import Necronomicon.Utility              (getCurrentTime)
 
 import Data.Binary
+import GHC.Generics
 
 -------------------------------------------------------
 -- TODO: Ideas
@@ -339,6 +343,12 @@ class Scene a where
     getGameObjects :: a -> [GameObject] -> [GameObject]
     setGameObjects :: a -> [GameObject] -> (a, [GameObject])
 
+    default getGameObjects :: (Generic a, GScene (Rep a)) => a -> [GameObject] -> [GameObject]
+    getGameObjects x gs = getGameObjectsG (from x) gs
+
+    default setGameObjects :: (Generic a, GScene (Rep a)) => a -> [GameObject] -> (a, [GameObject])
+    setGameObjects x gs = (to x', gs') where (x', gs') = setGameObjectsG (from x) gs
+
 instance Scene (Entity a) where
     getGameObjects (Entity _ g) gs = g : gs
     setGameObjects (Entity a _) gs = (Entity a $ head gs, tail gs)
@@ -476,6 +486,40 @@ instance (Scene a, Scene b, Scene c, Scene d, Scene e, Scene f, Scene g, Scene h
             (e8',  gs9)  = setGameObjects e8  gs8
             (e9',  gs10) = setGameObjects e9  gs9
             (e10', gs11) = setGameObjects e10 gs10
+
+class GScene f where
+    getGameObjectsG :: f a -> [GameObject] -> [GameObject]
+    setGameObjectsG :: f a -> [GameObject] -> (f a, [GameObject])
+
+--Generic Scene Instances
+instance GScene V1 where
+    getGameObjectsG _ gs = gs
+    setGameObjectsG _ gs = (undefined, gs)
+
+instance GScene U1 where
+    getGameObjectsG _ gs = gs
+    setGameObjectsG _ gs = (U1, gs)
+
+instance (GScene f, GScene g) => GScene ((:+:) f g) where
+    getGameObjectsG (L1 x) gs = getGameObjectsG x gs
+    getGameObjectsG (R1 x) gs = getGameObjectsG x gs
+    setGameObjectsG (L1 x) gs = (L1 x', gs') where (x', gs') = setGameObjectsG x gs
+    setGameObjectsG (R1 x) gs = (R1 x', gs') where (x', gs') = setGameObjectsG x gs
+
+instance (GScene f, GScene g) => GScene ((:*:) f g) where
+    getGameObjectsG (x :*: y) gs = getGameObjectsG x $ getGameObjectsG y gs
+    setGameObjectsG (x :*: y) gs = (x' :*: y', gs3)
+        where
+            (x', gs2) = setGameObjectsG x gs
+            (y', gs3) = setGameObjectsG y gs2
+
+instance (Scene c) => GScene (K1 i c) where
+    getGameObjectsG (K1 x) gs = getGameObjects x gs
+    setGameObjectsG (K1 x) gs = (K1 x', gs') where (x', gs') = setGameObjects x gs
+
+instance (GScene f) => GScene (M1 i t f) where
+    getGameObjectsG (M1 x) gs = getGameObjectsG x gs
+    setGameObjectsG (M1 x) gs = (M1 x', gs') where (x', gs') = setGameObjectsG x gs
 
 -- state timing convenience functions
 data Timer = Timer { timerStartTime :: Double, timerEndTime :: Double } deriving (Show)
