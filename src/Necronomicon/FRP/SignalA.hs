@@ -115,7 +115,6 @@ import Necronomicon.Runtime
 import Necronomicon.Linear
 import Necronomicon.Noise
 -- import Necronomicon.Graphics
--- import Necronomicon.Utility
 import Necronomicon.Physics
 
 ------------------------------------------------------
@@ -129,7 +128,7 @@ import           Control.Monad                     (foldM)
 
 import qualified Necronomicon.Physics.DynamicTree  as DynTree
 import           Necronomicon.Graphics
-import           Necronomicon.Utility              (getCurrentTime)
+import           Necronomicon.Utility              
 import           Necronomicon.Game hiding (runTime, deltaTime)
 ------------------------------------------------------
 

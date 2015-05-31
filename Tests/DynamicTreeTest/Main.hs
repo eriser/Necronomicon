@@ -8,9 +8,10 @@ main = runGameSignal megaDark initScene
 
 data MegaDark    = MegaDark { hero :: Entity Hero, bullets :: [Entity Bullet] } deriving (Show, Eq, Generic)
 type Health      = Double
-data HeroInput   = HeroKeys (Double, Double) | HeroMouse (Double, Double) | HeroTick Time Time | HeroClick Time
+data HeroInput   = HeroKeys (Double, Double) | HeroMouse (Double, Double) | HeroTick Time Time | HeroClick Time | HeroCollision Time Collision
 data HeroState   = HeroIdle | HeroMoving Vector3 | HeroAttacking Time | HeroDamaged Time deriving (Show, Eq, Generic)
 data Hero        = Hero HeroState Health deriving (Show, Eq, Generic)
+data BulletInput = BulletCollision Time Collision | BulletTick Time Time
 data BulletState = Flying Vector3 | DeathAnimation Time deriving (Show, Eq, Generic)
 data Bullet      = Bullet BulletState deriving (Show, Eq, Generic)
 data PhysM       = EnemyWeapon
@@ -50,17 +51,19 @@ initScene :: MegaDark
 initScene = MegaDark mkHero [mkBullet $ Vector3 (-2) 0 0, mkBullet $ Vector3 0 0 0, mkBullet $ Vector3 2 0 0]
 
 megaDark :: Signal MegaDark -> Signal MegaDark
-megaDark mega = MegaDark <~ heroSig ~~ fmap bullets mega
+megaDark mega = MegaDark <~ heroSig ~~ bSig
     where
-        heroSig = foldr updateHero <~ fmap hero mega ~~ combine
+        heroSig = foldr updateHero <~ fmap hero mega ~~ hInput
+        hInput  = (++) <~ hcs ~~ combine
                 [ HeroTick  <~ deltaTime ~~ runTime
                 , HeroKeys  <~ wasd
                 , HeroMouse <~ mousePosR
                 , HeroClick <~ sampleOn mouseClick runTime ]
+        hcs     = (\m t -> map (HeroCollision t) . collisions . entityData $ hero m) <~ mega ~~ runTime
+        bSig    = updateBullets <~ deltaTime ~~ runTime ~~ fmap bullets mega
 
 
 updateHero :: HeroInput -> Entity Hero -> Entity Hero
-
 updateHero (HeroMouse (x, y)) h@(Entity (Hero state health) g)
     | HeroIdle     <- state = h'
     | HeroMoving _ <- state = h'
@@ -78,11 +81,32 @@ updateHero (HeroKeys (x, y)) h@(Entity (Hero state health) g)
 updateHero (HeroTick dt rt) h@(Entity (Hero state health) g)
     | HeroMoving    p <- state         = Entity (Hero state health) $ translate (p * realToFrac dt * 1.25) g
     | HeroAttacking t <- state, t > rt = Entity (Hero HeroIdle health) g
+    | HeroDamaged   t <- state, t > rt = Entity (Hero HeroIdle health) g
     | otherwise                        = h
 
 updateHero (HeroClick t) h@(Entity (Hero state health) g)
     | HeroDamaged _ <- state = h
-    | otherwise              = Entity (Hero (HeroAttacking $ t + 1) health) g
+    | otherwise              = Entity (Hero (HeroAttacking $ t + 3) health) g
+
+updateHero (HeroCollision t c) h@(Entity (Hero state health) g)
+    | EnemyWeapon <- tag c = Entity (Hero (HeroDamaged $ t + 3) (health - 10)) g
+    | otherwise            = h
+
+updateBullets :: Time -> Time -> [Entity Bullet] -> [Entity Bullet]
+updateBullets rt dt bs = filterMap update bs
+    where
+        update b = foldr (\i -> (>>= updateBullet i)) (Just b)
+                <| BulletTick rt dt : map (BulletCollision rt) (collisions $ entityData b)
+
+updateBullet :: BulletInput -> Entity Bullet -> Maybe (Entity Bullet)
+updateBullet (BulletTick dt rt) b@(Entity (Bullet state) g)
+    | DeathAnimation t <- state, t > rt = Nothing
+    | Flying         d <- state         = Just $ Entity (Bullet state) $ rotate (d * realToFrac dt) g
+    | otherwise                         = Just b
+
+updateBullet (BulletCollision t c) b@(Entity (Bullet state) g)
+    | EnemyWeapon <- tag c = Just $ b
+    | otherwise            = Just $ Entity (Bullet $ DeathAnimation $ t + 1) g
 
 {-
 import Necronomicon
