@@ -1,4 +1,6 @@
 module Necronomicon.FRP.SignalA (
+    -- SignalE,
+    -- sigLoopE,
     Signal,
     (<~),
     (~~),
@@ -83,7 +85,7 @@ module Necronomicon.FRP.SignalA (
     second,
     minute,
     hour,
-    sigLoop,
+    -- sigLoop,
     combine,
     keepIf,
     dropIf,
@@ -118,11 +120,14 @@ import Necronomicon.Physics
 
 ------------------------------------------------------
 import           Control.Concurrent
+-- import           Control.Concurrent.STM
 import           Data.IORef
 import qualified Graphics.UI.GLFW                  as GLFW
 import qualified Data.IntMap                       as IntMap
 import           Data.Binary
+import           Control.Monad                     (foldM)
 
+import qualified Necronomicon.Physics.DynamicTree  as DynTree
 import           Necronomicon.Graphics
 import           Necronomicon.Utility              (getCurrentTime)
 import           Necronomicon.Game hiding (runTime, deltaTime)
@@ -226,19 +231,19 @@ produceSignalStates state ebuf rt dt = do
            , sigKeys        = IntMap.map (NoChange . unEvent) (sigKeys state)
            , sigDimensions  = NoChange . unEvent $ sigDimensions state } ms bs ks ds []
 
-data Signal a = Signal { prev :: a, extract :: Event a, next :: SignalState -> Signal a }
+data Signal a = Signal { prev :: a, extract :: Event a, next :: SignalState -> IO (Signal a) }
 
 instance Functor Signal where
     fmap f inits = go (f $ prev inits) inits
         where
             go p s = case extract s of
-                Change x -> let x' = f x in Signal p (Change  x') $ \state -> go x' (next s state)
-                _        -> Signal p (NoChange p) $ \state -> go p  (next s state)
+                Change x -> let x' = f x in Signal p (Change  x') $ \state -> go x' <~ next s state
+                _        -> Signal p (NoChange p) $ \state -> go p <~ next s state
 
 instance Applicative Signal where
-    pure x = Signal x (Change x) $ \_ -> sx
+    pure x = Signal x (Change x) $ \_ -> return sx
         where
-            sx = Signal x (NoChange x) $ \_ -> sx
+            sx = Signal x (NoChange x) $ \_ -> return sx
     initsf <*> initsx = go (prev initsf $ prev initsx) initsf initsx
         where
             go p sf sx
@@ -248,17 +253,23 @@ instance Applicative Signal where
                 where
                     ef       = extract sf
                     ex       = extract sx
-                    contC x' = Signal p (Change  x') $ \state -> go x' (next sf state) (next sx state)
-                    contN    = Signal p (NoChange p) $ \state -> go p  (next sf state) (next sx state)
+                    contC x' = Signal p (Change  x') $ \state -> go x' <~ next sf state ~~ next sx state
+                    contN    = Signal p (NoChange p) $ \state -> go p  <~ next sf state ~~ next sx state
 
-runGameSignal :: (Show a, Binary a, Scene a) => Signal a -> IO ()
+runGameSignal :: (Show a, Binary a, Scene a) => (Signal a -> Signal a) -> a -> IO ()
 runGameSignal = runSignal'
 
 runSignal :: (Show a, Binary a) => Signal a -> IO ()
-runSignal x = runSignal' $ flip Entity gameObject <~ x
+-- runSignal x = runSignal' $ flip Entity gameObject <~ x
+runSignal = undefined
 
-runSignal' :: (Show a, Binary a, Scene a) => Signal a -> IO ()
-runSignal' sig = initWindow (800, 600) False >>= \mw -> case mw of
+prevSig :: a -> IORef a -> Signal a
+prevSig initX ref = go initX initX
+    where
+        go p c = Signal p (Change c) $ \_ -> go c <~ readIORef ref
+
+runSignal' :: (Show a, Binary a, Scene a) => (Signal a -> Signal a) -> a -> IO ()
+runSignal' f initX = initWindow (1920, 1080) True >>= \mw -> case mw of
     Nothing -> print "Error starting GLFW." >> return ()
     Just w  -> do
         putStrLn "Starting Necronomicon"
@@ -278,12 +289,14 @@ runSignal' sig = initWindow (800, 600) False >>= \mw -> case mw of
         GLFW.setWindowSizeCallback  w $ Just $ \_ x y     -> eventBufferCallback mousePosRef (fromIntegral x, fromIntegral y)
 
         (ww, wh) <- GLFW.getWindowSize w
-        let state = SignalState (Change 0) (Change 0) (Change (0, 0)) (Change False) mkKeyMap (Change (fromIntegral ww, fromIntegral wh))
+        prevRef  <- newIORef initX
+        let sig   = f $ prevSig initX prevRef
+            state = SignalState (Change 0) (Change 0) (Change (0, 0)) (Change False) mkKeyMap (Change (fromIntegral ww, fromIntegral wh))
             eb    = EventBuffer mousePosRef mbRef keysRef dimRef
-
-        run False w sig state currentTime eb resources
+        writeIORef prevRef $ unEvent $ extract sig
+        run False w sig state currentTime eb resources DynTree.empty prevRef
     where
-        run quit window s state runTime' eb resources
+        run quit window s state runTime' eb resources tree prevRef
             | quit      = print "Qutting" >> return ()
             | otherwise = do
                 GLFW.pollEvents
@@ -292,20 +305,23 @@ runSignal' sig = initWindow (800, 600) False >>= \mw -> case mw of
                 currentTime <- getCurrentTime
                 let delta    = Time $ currentTime - runTime'
                 states      <- produceSignalStates state eb (Time currentTime) delta
-                let s'       = foldr (\state' s'' -> next s'' state') s states
+                s'          <- foldM (\s'' state' -> writeIORef prevRef (unEvent $ extract s'') >> next s'' state') s states
 
-                case extract s' of
-                    NoChange _ -> return ()
+                (s'', tree'') <- case extract s' of
+                    NoChange _ -> return (s', tree)
                     Change   x -> do
-                        -- print x
-                        let gs = getGameObjects x []
-                        print gs
-                        putStrLn ""
+                        let gs          = getGameObjects x []
+                            g           = gchildren_ gs gameObject
+                            (g', tree') = update (g, tree)
 
-                -- renderGraphicsG window resources True g' g' tree'
+                        -- print x
+                        -- print gs
+                        -- putStrLn ""
+                        renderGraphicsG window resources True g' g' tree'
+                        return (Signal (prev s') (Change $ fst $ setGameObjects x (children g')) (next s'), tree')
 
                 threadDelay $ 16667
-                run q window s' (last states) currentTime eb resources
+                run q window s'' (last states) currentTime eb resources tree'' prevRef
 
 ----------------------------------
 -- Input Signals
@@ -314,7 +330,7 @@ runSignal' sig = initWindow (800, 600) False >>= \mw -> case mw of
 standardInputSignal :: a -> (SignalState -> Event a) -> Signal a
 standardInputSignal initX getter = go initX (NoChange initX)
     where
-        go p c = Signal p c $ \state -> go (unEvent c) (getter state)
+        go p c = Signal p c $ \state -> return $ go (unEvent c) (getter state)
 
 mousePos :: Signal (Double, Double)
 mousePos = standardInputSignal (0, 0) sigMouse
@@ -322,8 +338,9 @@ mousePos = standardInputSignal (0, 0) sigMouse
 mousePosR :: Signal (Double, Double)
 mousePosR = go (0, 0) (0, 0) (NoChange (0, 0)) (1920, 1080)
     where
-        go pr (px, py) (Change (cx, cy)) (ww, wh) = Signal pr (Change  rel) $ \state -> go rel (cx, cy) (sigMouse state) (unEvent $ sigDimensions state) where rel = ((cx - px) / ww, (cy - py) / wh)
-        go pr pa       _                 _        = Signal pr (NoChange pr) $ \state -> go pr  pa       (sigMouse state) (unEvent $ sigDimensions state)
+        go pr (px, py) (Change (cx, cy)) (ww, wh) = Signal pr (Change  rel) $ \state -> return $ go rel (cx, cy) (sigMouse state) (unEvent $ sigDimensions state)
+            where rel = ((cx - px) / ww, (cy - py) / wh)
+        go pr pa       _                 _        = Signal pr (NoChange pr) $ \state -> return $ go pr pa (sigMouse state) (unEvent $ sigDimensions state)
 
 mouseX :: Signal Double
 mouseX = fst <~ mousePos
@@ -536,7 +553,7 @@ isDown :: Key -> Signal Bool
 isDown k = go False (NoChange False)
     where
         go p c       = Signal p c (cont c)
-        cont c state = go (unEvent c) $ case IntMap.lookup (fromEnum k) (sigKeys state) of
+        cont c state = return $ go (unEvent c) $ case IntMap.lookup (fromEnum k) (sigKeys state) of
             Nothing -> error $ "Couldn't find key: " ++ show k
             Just ek -> ek
 
@@ -571,10 +588,10 @@ every :: Time -> Signal Time
 every t = go 0 0 (NoChange 0) (NoChange 0)
     where
         go p dt sigDT rt
-            | NoChange _ <- sigDT = Signal p (NoChange p) $ \state -> go p            dt    (sigDeltaTime state) (sigRunTime state)
-            | NoChange _ <- rt    = Signal p (NoChange p) $ \state -> go p            dt    (sigDeltaTime state) (sigRunTime state)
-            | diffT >= 0          = Signal p rt           $ \state -> go (unEvent rt) diffT (sigDeltaTime state) (sigRunTime state)
-            | otherwise           = Signal p (NoChange p) $ \state -> go p            dt'   (sigDeltaTime state) (sigRunTime state)
+            | NoChange _ <- sigDT = Signal p (NoChange p) $ \state -> return $ go p            dt    (sigDeltaTime state) (sigRunTime state)
+            | NoChange _ <- rt    = Signal p (NoChange p) $ \state -> return $ go p            dt    (sigDeltaTime state) (sigRunTime state)
+            | diffT >= 0          = Signal p rt           $ \state -> return $ go (unEvent rt) diffT (sigDeltaTime state) (sigRunTime state)
+            | otherwise           = Signal p (NoChange p) $ \state -> return $ go p            dt'   (sigDeltaTime state) (sigRunTime state)
             where
                 dt'   = dt + unEvent sigDT
                 diffT = dt' - t
@@ -584,9 +601,9 @@ fps fpst = go 0 0 (NoChange 0)
     where
         t = 1 / fpst
         go p dt sigDT
-            | NoChange _ <- sigDT = Signal p (NoChange p) $ \state -> go p   dt    (sigDeltaTime state)
-            | diffT >= 0          = Signal p (Change dt') $ \state -> go dt' diffT (sigDeltaTime state)
-            | otherwise           = Signal p (NoChange p) $ \state -> go p   dt'   (sigDeltaTime state)
+            | NoChange _ <- sigDT = Signal p (NoChange p) $ \state -> return $ go p   dt    (sigDeltaTime state)
+            | diffT >= 0          = Signal p (Change dt') $ \state -> return $ go dt' diffT (sigDeltaTime state)
+            | otherwise           = Signal p (NoChange p) $ \state -> return $ go p   dt'   (sigDeltaTime state)
             where
                 dt'   = dt + unEvent sigDT
                 diffT = dt' - t
@@ -597,13 +614,13 @@ fps fpst = go 0 0 (NoChange 0)
 
 --Watch this, several items need to be hashed out
 --Is checking for equality after function application the correct semantics for Change / NoChange???
-sigLoop :: Eq a => (a -> Signal a) -> a -> Signal a
-sigLoop f initx = go initx (pure initx)
-    where
-        go p x = Signal p (e $ unEvent $ extract x') $ \state -> go (unEvent $ extract x') (next x' state)
-            where
-                x' = f $ unEvent $ extract x
-                e  = if unEvent (extract x') == p then NoChange else Change
+-- sigLoop :: Eq a => (a -> Signal a) -> a -> Signal a
+-- sigLoop f initx = go initx (pure initx)
+--     where
+--         go p x = Signal p (extract x') $ \state -> go (unEvent $ extract x') (next x' state)
+--             where
+--                 x' = f $ unEvent $ extract x
+--                 -- e  = if unEvent (extract x') == p then NoChange else Change
 
 combine :: [Signal a] -> Signal [a]
 combine is = go [] is
@@ -611,7 +628,7 @@ combine is = go [] is
         collect s acc = case extract s of
             NoChange _ -> acc
             Change   x -> x : acc
-        go p ss = Signal p ss' $ \state -> go (unEvent ss') (map (\s -> next s state) ss)
+        go p ss = Signal p ss' $ \state -> go (unEvent ss') <~ mapM (\s -> next s state) ss
             where
                 ss' = case foldr collect [] ss of
                     [] -> NoChange p
@@ -621,36 +638,139 @@ keepIf :: (a -> Bool) -> a -> Signal a -> Signal a
 keepIf f x s' = go x s'
     where
         go p s
-            | NoChange _ <- extract s = Signal p (NoChange p) $ \state -> go p $ next s state
+            | NoChange _ <- extract s = Signal p (NoChange p) $ \state -> next s state >>= return . go p
             | f $ unEvent $ extract s = s
-            | otherwise               = Signal p (NoChange p) $ \state -> go p $ next s state
+            | otherwise               = Signal p (NoChange p) $ \state -> next s state >>= return . go p
 
 dropIf :: (a -> Bool) -> a -> Signal a -> Signal a
 dropIf f x s' = go x s'
     where
         go p s
-            | NoChange _ <- extract s       = Signal p (NoChange p) $ \state -> go p $ next s state
+            | NoChange _ <- extract s       = Signal p (NoChange p) $ \state -> next s state >>= return . go p
             | not $ f $ unEvent $ extract s = s
-            | otherwise                     = Signal p (NoChange p) $ \state -> go p $ next s state
+            | otherwise                     = Signal p (NoChange p) $ \state -> next s state >>= return . go p
 
 keepWhen :: Signal Bool -> Signal a -> Signal a
 keepWhen bs s
-    | NoChange _ <- extract s = Signal (prev s) (NoChange (prev s)) $ \state -> keepWhen (next bs state) (next s state)
+    | NoChange _ <- extract s = Signal (prev s) (NoChange (prev s)) $ \state -> keepWhen <~ next bs state ~~ next s state
     | unEvent $ extract bs    = s
-    | otherwise               = Signal (prev s) (NoChange (prev s)) $ \state -> keepWhen (next bs state) (next s state)
+    | otherwise               = Signal (prev s) (NoChange (prev s)) $ \state -> keepWhen <~ next bs state ~~ next s state
 
 dropWhen :: Signal Bool -> Signal a -> Signal a
 dropWhen bs s
-    | NoChange _ <- extract s    = Signal (prev s) (NoChange (prev s)) $ \state -> dropWhen (next bs state) (next s state)
+    | NoChange _ <- extract s    = Signal (prev s) (NoChange (prev s)) $ \state -> dropWhen <~ next bs state ~~ next s state
     | not $ unEvent $ extract bs = s
-    | otherwise                  = Signal (prev s) (NoChange (prev s)) $ \state -> dropWhen (next bs state) (next s state)
+    | otherwise                  = Signal (prev s) (NoChange (prev s)) $ \state -> dropWhen <~ next bs state ~~ next s state
 
 sampleOn :: Signal a -> Signal b -> Signal b
 sampleOn ss' s' = go (prev s') ss' s'
     where
         go p ss s
-            | Change _ <- extract ss = Signal p (Change $ unEvent $ extract s) $ \state -> go (unEvent $ extract s) (next ss state) (next s state)
-            | otherwise              = Signal p (NoChange p)                   $ \state -> go p                     (next ss state) (next s state)
+            | Change _ <- extract ss = Signal p (Change $ unEvent $ extract s) $ \state -> go (unEvent $ extract s) <~ next ss state ~~ next s state
+            | otherwise              = Signal p (NoChange p)                   $ \state -> go p                     <~ next ss state ~~ next s state
 
 -- lagSig :: (Fractional a,Eq a,Ord a) => Double -> Signal a -> Signal a
 -- lagSig
+
+
+----------------------------------
+-- SignalE
+----------------------------------
+{-
+data SignalStateE = SignalStateE { mouseChan :: TChan (Event (Double, Double))
+                                 , deltaChan :: TChan (Event Time) }
+
+data SignalE a = SignalE (SignalStateE -> IO (TChan (Event a), a))
+               | PureE a
+
+instance Functor SignalE where
+    fmap f (PureE     x) = PureE $ f x
+    fmap f (SignalE sig) = SignalE $ \state -> do
+        (bInBox, x) <- sig state
+        inBox       <- atomically $ dupTChan bInBox
+        outBox      <- atomically $ newBroadcastTChan
+        let fx       = f x
+        ref         <- newIORef $ NoChange fx
+        _           <- forkIO $ cont inBox outBox ref
+        return (outBox, fx)
+        where
+            cont inBox outBox ref = atomically (readTChan inBox) >>= \ex -> case ex of
+                NoChange _ -> readIORef ref >>= \fx -> atomically (writeTChan outBox fx) >> cont inBox outBox ref
+                Change   x -> let fx = Change (f x) in writeIORef ref fx >> atomically (writeTChan outBox fx) >> cont inBox outBox ref
+
+instance Applicative SignalE where
+    pure                          = PureE
+    PureE   fsig <*> PureE   xsig = PureE $ fsig xsig
+    PureE   fsig <*> SignalE xsig = fmap fsig     $ SignalE xsig
+    SignalE fsig <*> PureE   xsig = fmap ($ xsig) $ SignalE fsig
+    SignalE fsig <*> SignalE xsig = SignalE $ \state -> do
+        (bInBoxF, f) <- fsig state
+        (bInBoxX, x) <- xsig state
+        fInBox       <- atomically $ dupTChan bInBoxF
+        xInBox       <- atomically $ dupTChan bInBoxX
+        outBox       <- atomically $ newBroadcastTChan
+        let fx        = f x
+        ref          <- newIORef $ NoChange fx
+        _            <- forkIO $ cont fInBox xInBox outBox ref
+        return (outBox, fx)
+        where
+            cont fInBox xInBox outBox ref = atomically (readTChan fInBox) >>= \ef -> atomically (readTChan xInBox) >>= \ex -> case (ef, ex) of
+                (Change   f, Change   x) -> let fx = Change (f x) in writeIORef ref fx >> atomically (writeTChan outBox fx) >> cont fInBox xInBox outBox ref
+                (NoChange f, Change   x) -> let fx = Change (f x) in writeIORef ref fx >> atomically (writeTChan outBox fx) >> cont fInBox xInBox outBox ref
+                (Change   f, NoChange x) -> let fx = Change (f x) in writeIORef ref fx >> atomically (writeTChan outBox fx) >> cont fInBox xInBox outBox ref
+                _                        -> readIORef ref >>= \fx -> atomically (writeTChan outBox fx) >> cont fInBox xInBox outBox ref
+
+sigLoopE :: Show a => (SignalE a -> SignalE a) -> a -> IO ()
+sigLoopE f initX = initWindow (800, 600) False >>= \mw -> case mw of
+    Nothing -> print "Error starting GLFW." >> return ()
+    Just w  -> do
+        putStrLn "Starting Necronomicon"
+        currentTime <- getCurrentTime
+        resources   <- newResources
+
+        GLFW.setCursorInputMode w GLFW.CursorInputMode'Disabled
+
+        --Setup refs and callbacks
+        mpc <- atomically newBroadcastTChan
+        dtc <- atomically newBroadcastTChan
+
+        -- GLFW.setCursorPosCallback   w $ Just $ \_ x y     -> atomically (writeTChan mpc (x, y))
+        -- GLFW.setKeyCallback         w $ Just $ \_ k _ p _ -> if p == GLFW.KeyState'Repeating then return () else atomically  keysRef k (p /= GLFW.KeyState'Released)
+        -- GLFW.setMouseButtonCallback w $ Just $ \_ _ s _   -> eventBufferCallback mbRef (s == GLFW.MouseButtonState'Pressed)
+        -- GLFW.setWindowSizeCallback  w $ Just $ \_ x y     -> eventBufferCallback mousePosRef (fromIntegral x, fromIntegral y)
+
+        -- (ww, wh) <- GLFW.getWindowSize w
+
+        inputBox         <- atomically $ newBroadcastTChan
+        let inputSig      = SignalE $ \_ -> return (inputBox, initX)
+            state         = SignalStateE mpc dtc
+            (SignalE sig) = f inputSig
+
+        (bOutBox, outX)  <- sig state
+        outputBox        <- atomically $ dupTChan bOutBox
+
+        run False w inputBox outputBox (Change outX) state currentTime resources DynTree.empty
+    where
+        run quit window inputBox outputBox prevX state runTime' resources tree
+            | quit      = print "Qutting" >> return ()
+            | otherwise = do
+                GLFW.pollEvents
+
+                q           <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'Escape
+                currentTime <- getCurrentTime
+                let delta    = Time $ currentTime - runTime'
+
+                atomically $ do
+                    writeTChan inputBox          $ prevX
+                    writeTChan (mouseChan state) $ NoChange (0, 0)
+                    writeTChan (deltaChan state) $ Change   delta
+
+                output <- atomically $ readTChan outputBox
+
+                case output of
+                    NoChange _ -> return ()
+                    Change   x -> print x
+
+                threadDelay $ 16667
+                run q window inputBox outputBox output state currentTime resources tree
+-}

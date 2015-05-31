@@ -1,11 +1,12 @@
 import Necronomicon.FRP.SignalA
 import GHC.Generics
 import Data.Binary
+-- import Debug.Trace
 
 main :: IO ()
-main = runGameSignal $ sigLoop megaDark initScene
+main = runGameSignal megaDark initScene
 
-data MegaDark    = MegaDark (Entity Hero) [Entity Bullet] deriving (Show, Eq, Generic)
+data MegaDark    = MegaDark { hero :: Entity Hero, bullets :: [Entity Bullet] } deriving (Show, Eq, Generic)
 type Health      = Double
 data HeroInput   = HeroKeys (Double, Double) | HeroMouse (Double, Double) | HeroTick Time Time | HeroClick Time
 data HeroState   = HeroIdle | HeroMoving Vector3 | HeroAttacking Time | HeroDamaged Time deriving (Show, Eq, Generic)
@@ -48,10 +49,10 @@ mkBullet p = Entity b g
 initScene :: MegaDark
 initScene = MegaDark mkHero [mkBullet $ Vector3 (-2) 0 0, mkBullet $ Vector3 0 0 0, mkBullet $ Vector3 2 0 0]
 
-megaDark :: MegaDark -> Signal MegaDark
-megaDark (MegaDark hero bullets) = MegaDark <~ heroSig ~~ pure bullets
+megaDark :: Signal MegaDark -> Signal MegaDark
+megaDark mega = MegaDark <~ heroSig ~~ fmap bullets mega
     where
-        heroSig = foldr updateHero hero <~ combine
+        heroSig = foldr updateHero <~ fmap hero mega ~~ combine
                 [ HeroTick  <~ deltaTime ~~ runTime
                 , HeroKeys  <~ wasd
                 , HeroMouse <~ mousePosR
@@ -65,7 +66,7 @@ updateHero (HeroMouse (x, y)) h@(Entity (Hero state health) g)
     | HeroMoving _ <- state = h'
     | otherwise             = h
     where
-        h' = Entity (Hero state health) $ rotate (Vector3 y x 0) g
+        h' = Entity (Hero state health) $ rotate (Vector3 y x 0 * negate 0.7) g
 
 updateHero (HeroKeys (x, y)) h@(Entity (Hero state health) g)
     | HeroIdle     <- state = h'
@@ -75,7 +76,7 @@ updateHero (HeroKeys (x, y)) h@(Entity (Hero state health) g)
         h' = Entity (Hero (HeroMoving $ Vector3 x 0 (-y)) health) g
 
 updateHero (HeroTick dt rt) h@(Entity (Hero state health) g)
-    | HeroMoving    p <- state         = Entity (Hero state health) $ translate (p * realToFrac dt) g
+    | HeroMoving    p <- state         = Entity (Hero state health) $ translate (p * realToFrac dt * 1.25) g
     | HeroAttacking t <- state, t > rt = Entity (Hero HeroIdle health) g
     | otherwise                        = h
 
