@@ -1,6 +1,4 @@
 module Necronomicon.FRP.SignalA (
-    -- SignalE,
-    -- sigLoopE,
     Signal,
     (<~),
     (~~),
@@ -92,6 +90,7 @@ module Necronomicon.FRP.SignalA (
     keepWhen,
     dropWhen,
     sampleOn,
+    switch,
     module Necronomicon.Language.Layout,
     module Necronomicon.Networking,
     module Necronomicon.Math,
@@ -128,7 +127,7 @@ import           Control.Monad                     (foldM)
 
 import qualified Necronomicon.Physics.DynamicTree  as DynTree
 import           Necronomicon.Graphics
-import           Necronomicon.Utility              
+import           Necronomicon.Utility
 import           Necronomicon.Game hiding (runTime, deltaTime)
 ------------------------------------------------------
 
@@ -611,16 +610,6 @@ fps fpst = go 0 0 (NoChange 0)
 -- Combinators
 ----------------------------------
 
---Watch this, several items need to be hashed out
---Is checking for equality after function application the correct semantics for Change / NoChange???
--- sigLoop :: Eq a => (a -> Signal a) -> a -> Signal a
--- sigLoop f initx = go initx (pure initx)
---     where
---         go p x = Signal p (extract x') $ \state -> go (unEvent $ extract x') (next x' state)
---             where
---                 x' = f $ unEvent $ extract x
---                 -- e  = if unEvent (extract x') == p then NoChange else Change
-
 combine :: [Signal a] -> Signal [a]
 combine is = go [] is
     where
@@ -668,108 +657,16 @@ sampleOn ss' s' = go (prev s') ss' s'
             | Change _ <- extract ss = Signal p (Change $ unEvent $ extract s) $ \state -> go (unEvent $ extract s) <~ next ss state ~~ next s state
             | otherwise              = Signal p (NoChange p)                   $ \state -> go p                     <~ next ss state ~~ next s state
 
+switch :: Signal Int -> [Signal a] -> Signal a
+switch i' ss' = go ss' (prev $ ss' !! unEvent (extract i')) (ss' !! unEvent (extract i')) i'
+    where
+        go ss p c i
+            | Change  _ <- extract i = Signal p (extract n) $ \state -> go ss (unEvent $ extract n) <~ next n state ~~ next i state
+            | otherwise              = Signal p (extract c) $ \state -> go ss (unEvent $ extract c) <~ next c state ~~ next i state
+            where
+                n = ss !! unEvent (extract i)
+
 -- lagSig :: (Fractional a,Eq a,Ord a) => Double -> Signal a -> Signal a
 -- lagSig
 
-
-----------------------------------
--- SignalE
-----------------------------------
-{-
-data SignalStateE = SignalStateE { mouseChan :: TChan (Event (Double, Double))
-                                 , deltaChan :: TChan (Event Time) }
-
-data SignalE a = SignalE (SignalStateE -> IO (TChan (Event a), a))
-               | PureE a
-
-instance Functor SignalE where
-    fmap f (PureE     x) = PureE $ f x
-    fmap f (SignalE sig) = SignalE $ \state -> do
-        (bInBox, x) <- sig state
-        inBox       <- atomically $ dupTChan bInBox
-        outBox      <- atomically $ newBroadcastTChan
-        let fx       = f x
-        ref         <- newIORef $ NoChange fx
-        _           <- forkIO $ cont inBox outBox ref
-        return (outBox, fx)
-        where
-            cont inBox outBox ref = atomically (readTChan inBox) >>= \ex -> case ex of
-                NoChange _ -> readIORef ref >>= \fx -> atomically (writeTChan outBox fx) >> cont inBox outBox ref
-                Change   x -> let fx = Change (f x) in writeIORef ref fx >> atomically (writeTChan outBox fx) >> cont inBox outBox ref
-
-instance Applicative SignalE where
-    pure                          = PureE
-    PureE   fsig <*> PureE   xsig = PureE $ fsig xsig
-    PureE   fsig <*> SignalE xsig = fmap fsig     $ SignalE xsig
-    SignalE fsig <*> PureE   xsig = fmap ($ xsig) $ SignalE fsig
-    SignalE fsig <*> SignalE xsig = SignalE $ \state -> do
-        (bInBoxF, f) <- fsig state
-        (bInBoxX, x) <- xsig state
-        fInBox       <- atomically $ dupTChan bInBoxF
-        xInBox       <- atomically $ dupTChan bInBoxX
-        outBox       <- atomically $ newBroadcastTChan
-        let fx        = f x
-        ref          <- newIORef $ NoChange fx
-        _            <- forkIO $ cont fInBox xInBox outBox ref
-        return (outBox, fx)
-        where
-            cont fInBox xInBox outBox ref = atomically (readTChan fInBox) >>= \ef -> atomically (readTChan xInBox) >>= \ex -> case (ef, ex) of
-                (Change   f, Change   x) -> let fx = Change (f x) in writeIORef ref fx >> atomically (writeTChan outBox fx) >> cont fInBox xInBox outBox ref
-                (NoChange f, Change   x) -> let fx = Change (f x) in writeIORef ref fx >> atomically (writeTChan outBox fx) >> cont fInBox xInBox outBox ref
-                (Change   f, NoChange x) -> let fx = Change (f x) in writeIORef ref fx >> atomically (writeTChan outBox fx) >> cont fInBox xInBox outBox ref
-                _                        -> readIORef ref >>= \fx -> atomically (writeTChan outBox fx) >> cont fInBox xInBox outBox ref
-
-sigLoopE :: Show a => (SignalE a -> SignalE a) -> a -> IO ()
-sigLoopE f initX = initWindow (800, 600) False >>= \mw -> case mw of
-    Nothing -> print "Error starting GLFW." >> return ()
-    Just w  -> do
-        putStrLn "Starting Necronomicon"
-        currentTime <- getCurrentTime
-        resources   <- newResources
-
-        GLFW.setCursorInputMode w GLFW.CursorInputMode'Disabled
-
-        --Setup refs and callbacks
-        mpc <- atomically newBroadcastTChan
-        dtc <- atomically newBroadcastTChan
-
-        -- GLFW.setCursorPosCallback   w $ Just $ \_ x y     -> atomically (writeTChan mpc (x, y))
-        -- GLFW.setKeyCallback         w $ Just $ \_ k _ p _ -> if p == GLFW.KeyState'Repeating then return () else atomically  keysRef k (p /= GLFW.KeyState'Released)
-        -- GLFW.setMouseButtonCallback w $ Just $ \_ _ s _   -> eventBufferCallback mbRef (s == GLFW.MouseButtonState'Pressed)
-        -- GLFW.setWindowSizeCallback  w $ Just $ \_ x y     -> eventBufferCallback mousePosRef (fromIntegral x, fromIntegral y)
-
-        -- (ww, wh) <- GLFW.getWindowSize w
-
-        inputBox         <- atomically $ newBroadcastTChan
-        let inputSig      = SignalE $ \_ -> return (inputBox, initX)
-            state         = SignalStateE mpc dtc
-            (SignalE sig) = f inputSig
-
-        (bOutBox, outX)  <- sig state
-        outputBox        <- atomically $ dupTChan bOutBox
-
-        run False w inputBox outputBox (Change outX) state currentTime resources DynTree.empty
-    where
-        run quit window inputBox outputBox prevX state runTime' resources tree
-            | quit      = print "Qutting" >> return ()
-            | otherwise = do
-                GLFW.pollEvents
-
-                q           <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'Escape
-                currentTime <- getCurrentTime
-                let delta    = Time $ currentTime - runTime'
-
-                atomically $ do
-                    writeTChan inputBox          $ prevX
-                    writeTChan (mouseChan state) $ NoChange (0, 0)
-                    writeTChan (deltaChan state) $ Change   delta
-
-                output <- atomically $ readTChan outputBox
-
-                case output of
-                    NoChange _ -> return ()
-                    Change   x -> print x
-
-                threadDelay $ 16667
-                run q window inputBox outputBox output state currentTime resources tree
--}
+--timeStamp

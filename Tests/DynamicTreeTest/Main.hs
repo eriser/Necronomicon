@@ -88,15 +88,17 @@ updateHero (HeroClick t) h@(Entity (Hero state health) g)
     | HeroDamaged _ <- state = h
     | otherwise              = Entity (Hero (HeroAttacking $ t + 3) health) g
 
-updateHero (HeroCollision t c) h@(Entity (Hero state health) g)
+updateHero (HeroCollision t c) h@(Entity (Hero _ health) g)
     | EnemyWeapon <- tag c = Entity (Hero (HeroDamaged $ t + 3) (health - 10)) g
     | otherwise            = h
 
+
+
 updateBullets :: Time -> Time -> [Entity Bullet] -> [Entity Bullet]
-updateBullets rt dt bs = filterMap update bs
+updateBullets rt dt bs = filterMap updateM bs
     where
-        update b = foldr (\i -> (>>= updateBullet i)) (Just b)
-                <| BulletTick rt dt : map (BulletCollision rt) (collisions $ entityData b)
+        updateM b = foldr (\i -> (>>= updateBullet i)) (Just b)
+                 <| BulletTick rt dt : map (BulletCollision rt) (collisions $ entityData b)
 
 updateBullet :: BulletInput -> Entity Bullet -> Maybe (Entity Bullet)
 updateBullet (BulletTick dt rt) b@(Entity (Bullet state) g)
@@ -104,7 +106,7 @@ updateBullet (BulletTick dt rt) b@(Entity (Bullet state) g)
     | Flying         d <- state         = Just $ Entity (Bullet state) $ rotate (d * realToFrac dt) g
     | otherwise                         = Just b
 
-updateBullet (BulletCollision t c) b@(Entity (Bullet state) g)
+updateBullet (BulletCollision t c) b@(Entity _ g)
     | EnemyWeapon <- tag c = Just $ b
     | otherwise            = Just $ Entity (Bullet $ DeathAnimation $ t + 1) g
 
