@@ -194,8 +194,10 @@ collectKeys ks = foldr collect ([], []) ks
 
 buildSignalStates :: SignalState -> [(Double, Double)] -> [Bool] -> [(Int, [Bool])] -> [(Double, Double)] -> [SignalState] -> [SignalState]
 buildSignalStates ss ms bs ks ds acc
-    | [] <- ms, [] <- ek, [] <- acc =         ss{sigRunTime = Change (unEvent $ sigRunTime ss), sigDeltaTime = Change (unEvent $ sigDeltaTime ss)} : []
-    | [] <- ms, [] <- ek            = (head acc){sigRunTime = Change (unEvent $ sigRunTime ss), sigDeltaTime = Change (unEvent $ sigDeltaTime ss)} : tail acc
+    | [] <- ms, [] <- ek
+    , [] <- bs, [] <- ds, [] <- acc = ss{sigRunTime = Change (unEvent $ sigRunTime ss), sigDeltaTime = Change (unEvent $ sigDeltaTime ss)} : []
+    | [] <- ms, [] <- ek
+    , [] <- bs, [] <- ds            = (head acc){sigRunTime = Change (unEvent $ sigRunTime ss), sigDeltaTime = Change (unEvent $ sigDeltaTime ss)} : tail acc
     | otherwise                     = buildSignalStates ss' (eventTail ms) (eventTail bs) ks' (eventTail ds) $ ss' : acc
     where
         (ek, ks')    = collectKeys ks
@@ -204,7 +206,7 @@ buildSignalStates ss ms bs ks ds acc
                      { sigMouse       = if null ms then sigMouse       ss else Change (head ms)
                      , sigMouseButton = if null bs then sigMouseButton ss else Change (head bs)
                      , sigKeys        = foldr (\(k, p) kb -> IntMap.insert k (Change p) kb) (sigKeys ss) ek
-                     , sigDimensions  = if null bs then sigDimensions  ss else Change (head ds) }
+                     , sigDimensions  = if null ds then sigDimensions  ss else Change (head ds) }
 
 produceSignalStates :: SignalState -> EventBuffer -> Time -> Time -> IO [SignalState]
 produceSignalStates state ebuf rt dt = do
