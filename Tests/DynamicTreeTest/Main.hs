@@ -80,8 +80,8 @@ updateHero (HeroKeys (x, y)) h@(Entity (Hero state health) g)
 
 updateHero (HeroTick dt rt) h@(Entity (Hero state health) g)
     | HeroMoving    p <- state         = Entity (Hero state health) $ translate (p * realToFrac dt * 1.25) g
-    | HeroAttacking t <- state, t > rt = Entity (Hero HeroIdle health) g
-    | HeroDamaged   t <- state, t > rt = Entity (Hero HeroIdle health) g
+    | HeroAttacking t <- state, rt > t = Entity (Hero HeroIdle health) g
+    | HeroDamaged   t <- state, rt > t = Entity (Hero HeroIdle health) g
     | otherwise                        = h
 
 updateHero (HeroClick t) h@(Entity (Hero state health) g)
@@ -102,7 +102,7 @@ updateBullets rt dt bs = filterMap updateM bs
 
 updateBullet :: BulletInput -> Entity Bullet -> Maybe (Entity Bullet)
 updateBullet (BulletTick dt rt) b@(Entity (Bullet state) g)
-    | DeathAnimation t <- state, t > rt = Nothing
+    | DeathAnimation t <- state, rt > t = Nothing
     | Flying         d <- state         = Just $ Entity (Bullet state) $ rotate (d * realToFrac dt) g
     | otherwise                         = Just b
 
