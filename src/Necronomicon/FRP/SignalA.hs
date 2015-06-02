@@ -6,6 +6,7 @@ module Necronomicon.FRP.SignalA (
     Time,
     runSignal,
     runGameSignal,
+    dimensions,
     mousePos,
     mousePosR,
     mouseX,
@@ -353,6 +354,9 @@ mouseButton = standardInputSignal False sigMouseButton
 
 mouseClick :: Signal ()
 mouseClick = const () <~ keepIf id False mouseButton
+
+dimensions :: Signal (Double, Double)
+dimensions = standardInputSignal (0, 0) sigDimensions
 
 type Key = GLFW.Key
 

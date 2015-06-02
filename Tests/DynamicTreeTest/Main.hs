@@ -70,7 +70,8 @@ updateHero (HeroMouse (x, y)) h@(Entity (Hero state health) g)
     | HeroMoving _ <- state = h'
     | otherwise             = h
     where
-        h' = Entity (Hero state health) <| rotate (Vector3 y x 0 * negate 0.7) g
+        rscale = -0.7
+        h'     = Entity (Hero state health) g{rot = fromEuler' 0 (x *rscale) 0 * (rot g * fromEuler' (y * rscale) 0 0) }
 
 updateHero (HeroKeys (x, y)) h@(Entity (Hero state health) g)
     | HeroIdle     <- state = h'
