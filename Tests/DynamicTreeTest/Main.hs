@@ -34,7 +34,7 @@ mkHero = Entity h g
         h = Hero HeroIdle 100
         g = gameObject
           { pos      = Vector3 0 0 (-6)
-          , rot      = fromEuler 0 180 0
+          , rot      = fromEuler 0 0 0
           , collider = boxCollider 1 1 1
           , camera   = Just <| Camera 30 0.1 1000 black [] }
 
@@ -53,14 +53,15 @@ initScene = MegaDark mkHero [mkBullet <| Vector3 (-2) 0 0, mkBullet <| Vector3 0
 megaDark :: Signal MegaDark -> Signal MegaDark
 megaDark mega = MegaDark <~ heroSig ~~ bSig
     where
+        bSig    = updateBullets <~ deltaTime ~~ runTime ~~ fmap bullets mega
+
         heroSig = foldr updateHero <~ fmap hero mega ~~ hInput
         hcs     = map <~ fmap HeroCollision runTime ~~ fmap (collisions . entityData . hero) mega
         hInput  = (++) <~ hcs ~~ combine
                 [ HeroTick  <~ deltaTime ~~ runTime
                 , HeroKeys  <~ wasd
-                , HeroMouse <~ foldp fpsMouse (0, 0) mousePosR
+                , HeroMouse <~ foldp fpsMouse (180, 0) mousePosR
                 , HeroClick <~ sampleOn mouseClick runTime ]
-        bSig    = updateBullets <~ deltaTime ~~ runTime ~~ fmap bullets mega
 
 fpsMouse :: (Double, Double) -> (Double, Double) -> (Double, Double)
 fpsMouse (mx, my) (px, py) = (x, y)
@@ -107,7 +108,7 @@ updateBullets rt dt bs = filterMap updateM bs
 updateBullet :: Entity Bullet -> BulletInput -> Maybe (Entity Bullet)
 updateBullet b@(Entity (Bullet state) g) (BulletTick dt rt)
     | DeathAnimation t <- state, rt > t = Nothing
-    | Flying         d <- state         = Just <| Entity (Bullet state) <| rotate (d * realToFrac dt) g
+    | Flying         d <- state         = Just <| Entity (Bullet state) <| rotate (d * realToFrac dt * 10) g
     | otherwise                         = Just b
 
 updateBullet b@(Entity _ g) (BulletCollision t c)
