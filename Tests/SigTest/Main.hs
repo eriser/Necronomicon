@@ -91,7 +91,7 @@ oscillatorObject a1 a2 a3 = SceneObject (-3) identity 1 (Model mesh oscMaterial)
              UniformTexture "tex3" a3]
 
 sphereObject :: Texture -> Texture -> Texture -> Double -> Double -> SceneObject
-sphereObject a1 a2 a3 t _ = SceneObject 0 (fromEuler' 0 (t * 0.1765) (t * 0.0825)) 1 (Model mesh sphereMaterial) []
+sphereObject a1 a2 a3 t _ = SceneObject 0 (fromEuler 0 (t * 0.1765) (t * 0.0825)) 1 (Model mesh sphereMaterial) []
     where
         latitudes      = 36.0
         longitudes     = 32.0

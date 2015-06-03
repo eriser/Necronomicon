@@ -200,7 +200,7 @@ rayIntersectsAABB ray@(Ray org@(Vector3 ox oy oz) (Vector3 dx dy dz)) aabb@(AABB
     To clamp our values to our finite ray we clamp t to the ranges of 0 and l.
 -}
 closestPointOnRay :: Vector3 -> Ray -> Vector3
-closestPointOnRay q (Ray porg dir) = q' $ clamp 0 l t
+closestPointOnRay q (Ray porg dir) = q' $ clamp l t 0
     where
         d     = normalize dir
         l     = magnitude dir

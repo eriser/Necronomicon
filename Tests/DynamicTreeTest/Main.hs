@@ -1,7 +1,6 @@
 import Necronomicon.FRP.SignalA
 import GHC.Generics
 import Data.Binary
--- import Debug.Trace
 import Control.Monad (foldM)
 
 main :: IO ()
@@ -35,7 +34,7 @@ mkHero = Entity h g
         h = Hero HeroIdle 100
         g = gameObject
           { pos      = Vector3 0 0 (-6)
-          , rot      = fromEuler' 0 (-180) 0
+          , rot      = fromEuler 0 180 0
           , collider = boxCollider 1 1 1
           , camera   = Just <| Camera 30 0.1 1000 black [] }
 
@@ -55,14 +54,19 @@ megaDark :: Signal MegaDark -> Signal MegaDark
 megaDark mega = MegaDark <~ heroSig ~~ bSig
     where
         heroSig = foldr updateHero <~ fmap hero mega ~~ hInput
+        hcs     = map <~ fmap HeroCollision runTime ~~ fmap (collisions . entityData . hero) mega
         hInput  = (++) <~ hcs ~~ combine
                 [ HeroTick  <~ deltaTime ~~ runTime
                 , HeroKeys  <~ wasd
-                , HeroMouse <~ mousePosR
+                , HeroMouse <~ foldp fpsMouse (0, 0) mousePosR
                 , HeroClick <~ sampleOn mouseClick runTime ]
-        hcs     = (\m t -> map (HeroCollision t) . collisions . entityData <| hero m) <~ mega ~~ runTime
         bSig    = updateBullets <~ deltaTime ~~ runTime ~~ fmap bullets mega
 
+fpsMouse :: (Double, Double) -> (Double, Double) -> (Double, Double)
+fpsMouse (mx, my) (px, py) = (x, y)
+    where
+        x = floatRem 360   <| px + mx * 80
+        y = clamp (-90) 90 <| py + my * 80
 
 updateHero :: HeroInput -> Entity Hero -> Entity Hero
 updateHero (HeroMouse (x, y)) h@(Entity (Hero state health) g)
@@ -70,8 +74,7 @@ updateHero (HeroMouse (x, y)) h@(Entity (Hero state health) g)
     | HeroMoving _ <- state = h'
     | otherwise             = h
     where
-        rscale = -0.7
-        h'     = Entity (Hero state health) g{rot = fromEuler' 0 (x *rscale) 0 * (rot g * fromEuler' (y * rscale) 0 0) }
+        h' = Entity (Hero state health) g{rot = fromEuler 0 (-x) 0 * fromEuler (-y) 0 0}
 
 updateHero (HeroKeys (x, y)) h@(Entity (Hero state health) g)
     | HeroIdle     <- state = h'

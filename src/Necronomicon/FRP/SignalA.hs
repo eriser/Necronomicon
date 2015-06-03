@@ -85,6 +85,7 @@ module Necronomicon.FRP.SignalA (
     minute,
     hour,
     -- sigLoop,
+    foldp,
     combine,
     keepIf,
     dropIf,
@@ -615,6 +616,15 @@ fps fpst = go 0 0 (NoChange 0)
 ----------------------------------
 -- Combinators
 ----------------------------------
+
+foldp :: (a -> b -> b) -> b -> Signal a -> Signal b
+foldp f i sa = go i sa
+    where
+        go b a
+            | NoChange _ <- extract a = Signal b (NoChange b) $ \state -> go b  <~ next a state
+            | otherwise               = Signal b (Change  b') $ \state -> go b' <~ next a state
+            where
+                b' = f (unEvent $ extract a) b
 
 combine :: [Signal a] -> Signal [a]
 combine is = go [] is

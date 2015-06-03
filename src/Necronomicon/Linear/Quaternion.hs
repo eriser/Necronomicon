@@ -54,22 +54,25 @@ axisAngle :: Quaternion -> AxisAngle
 axisAngle q = AxisAngle (getAxis q) (getAngle q)
 
 pitch :: Quaternion -> Double
-pitch (Quaternion w (Vector3 x y z)) = atan2 a b
+pitch (Quaternion w (Vector3 x y z)) = radToDeg $ atan2 a b
     where
         a = 2.0 * (y*z + w*x)
         b = w*w - x*x - y*y + z*z
 
 heading :: Quaternion -> Double
-heading (Quaternion w (Vector3 x y z)) = sin (-2.0 * (x*z - w*y))
+heading (Quaternion w (Vector3 x y z)) = radToDeg $ sin (-2.0 * (x*z - w*y))
 
 bank :: Quaternion -> Double
-bank (Quaternion w (Vector3 x y z)) = atan2 a b
+bank (Quaternion w (Vector3 x y z)) = radToDeg $ atan2 a b
     where
         a = 2.0 * (x*y + w*z)
         b = w*w + x*x - y*y - z*z
 
-euler :: Quaternion -> Euler
-euler q = Euler (pitch q) (heading q) (bank q)
+-- euler :: Quaternion -> Euler
+-- euler q = Euler (pitch q) (heading q) (bank q)
+
+euler :: Quaternion -> Vector3
+euler q = Vector3 (pitch q) (heading q) (bank q)
 
 conjugate :: Quaternion -> Quaternion
 conjugate (Quaternion w v) = Quaternion w ((-1::Double) .*. v)
@@ -121,8 +124,8 @@ transformVector (Quaternion w v1@(Vector3 x1 y1 z1)) v2@(Vector3 x2 y2 z2) = Vec
         z3 = pMult*z2 + vMult*z1 + crossMult*(x1*y2 - y1*x2)
 
 -- zyx (bank,heading,pitch) rotation order as per OpenGL
-fromEuler :: Euler -> Quaternion
-fromEuler (Euler p h b) = Quaternion w (Vector3 x y z)
+fromEuler' :: Euler -> Quaternion
+fromEuler' (Euler p h b) = Quaternion w (Vector3 x y z)
     where
         xRotation = p * 0.5
         yRotation = h * 0.5
@@ -138,8 +141,8 @@ fromEuler (Euler p h b) = Quaternion w (Vector3 x y z)
         y = cx*sy*cz - sx*cy*sz
         z = cx*cy*sz + sx*sy*cz
 
-fromEuler' :: Double -> Double -> Double -> Quaternion
-fromEuler' p h b = fromEuler (Euler p h b)
+fromEuler :: Double -> Double -> Double -> Quaternion
+fromEuler p h b = fromEuler' (Euler (degToRad p) (degToRad h) (degToRad b))
 
 fromAxisAngle :: AxisAngle -> Quaternion
 fromAxisAngle (AxisAngle axis angl) = Quaternion (cos $ angl * 0.5) (sin (angl * 0.5) .*. normalize axis)

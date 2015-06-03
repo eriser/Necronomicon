@@ -24,6 +24,9 @@ log2 = log 2
 radToDeg :: Double -> Double
 radToDeg r = (r * 360) / twoPi
 
+degToRad :: Double -> Double
+degToRad = (* 0.0174532925)
+
 linearInterpolation :: Double -> Double -> Double -> Double
 linearInterpolation from to delta = (1-delta) * from + delta * to;
 
@@ -43,4 +46,7 @@ nearZero v = v < epsilon
 -- clamp mn mx = min mx . max mn
 
 clamp :: Ord a => a -> a -> a -> a
-clamp x mn mx = min mx (max x mn)
+clamp mn mx x = min mx (max x mn)
+
+floatRem :: RealFrac a => a -> a -> a
+floatRem y x = x - (y * (fromIntegral (truncate (x/y) :: Int)))
