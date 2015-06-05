@@ -1,8 +1,33 @@
 import Necronomicon.FRP.SignalA
-import GHC.Generics
-import Data.Binary
-import Control.Monad (foldM)
+-- import GHC.Generics
+-- import Data.Binary
+-- import Control.Monad (foldM)
+--
+-- main :: IO ()
+-- main = print "test"
 
+main :: IO ()
+main = runSignal mousePos
+-- main = runSignal counter
+
+-- counter :: Signal Int
+-- counter = h
+--     where
+--         (h, hs) = stream 0 $ (+1) <~ hs
+
+-- counter :: Signal Double
+-- counter = (\a b c -> a * b / c) <~ h ~~ pure 10 ~~ e
+--    where
+--        (h, hs) = stream 0 $ (+1) <~ es
+--        (e, es) = stream 0 $ (+1) <~ hs
+
+-- counter :: Signal Int
+-- counter = (+) <~ h ~~ e
+--     where
+--         (h, hs) = stream 0 $ (+1) <~ es
+--         (e, es) = stream 0 $ (+1) <~ hs
+
+{-
 main :: IO ()
 main = runGameSignal megaDark initScene
 
@@ -63,6 +88,17 @@ megaDark mega = MegaDark <~ heroSig ~~ bSig
                 , HeroMouse <~ foldp fpsMouse (180, 0) mousePosR
                 , HeroClick <~ sampleOn mouseClick runTime ]
 
+-- megaDark :: Signal MegaDark
+-- megaDark = MegaDark <~ present hs ~~ present bs
+--     where
+--         bs = stream mkBullets <| updateBullets <~ past bs ~~ ((,) <~ deltaTime ~~ runTime)
+--         hs = stream mkHero    <| updateHero    <~ present hs ~~ merge
+--                 [ HeroTick      <~ deltaTime ~~ runTime
+--                 , HeroKeys      <~ wasd
+--                 , HeroMouse     <~ foldp fpsMouse (180, 0) mousePosR
+--                 , HeroClick     <~ sampleOn mouseClick runTime
+--                 , HeroCollision <~ collisions (past hs) ]
+
 fpsMouse :: (Double, Double) -> (Double, Double) -> (Double, Double)
 fpsMouse (mx, my) (px, py) = (x, y)
     where
@@ -114,6 +150,8 @@ updateBullet b@(Entity (Bullet state) g) (BulletTick dt rt)
 updateBullet b@(Entity _ g) (BulletCollision t c)
     | EnemyWeapon <- tag c = Just <| b
     | otherwise            = Just <| Entity (Bullet <| DeathAnimation <| t + 1) g
+-}
+
 
 {-
 import Necronomicon

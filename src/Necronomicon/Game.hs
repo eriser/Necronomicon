@@ -61,7 +61,8 @@ move :: Vector3 -> GameObject -> GameObject
 move dir g = g{pos = pos g + dir}
 
 translate :: Vector3 -> GameObject -> GameObject
-translate dir g = g{pos = pos g + transformVector (rot g) dir}
+-- translate dir g = g{pos = pos g + transformVector (rot g) dir}
+translate dir g = g{pos = pos g + (dir .*. rotFromQuaternion (rot g))}
 
 collisions :: GameObject -> [Collision]
 collisions g

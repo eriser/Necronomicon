@@ -157,7 +157,7 @@ fromAA' :: Vector3 -> Double -> Quaternion
 fromAA' = fromAxisAngle'
 
 slerp :: Quaternion -> Quaternion -> Double -> Quaternion
-slerp q1@(Quaternion w1 v1) q2 t = Quaternion (w1*k1 + w3*k2) ((k1 .*. v1) + (k2 .*. v3))
+slerp q1@(Quaternion w1 v1) q2 t = normalize $ Quaternion (w1*k1 + w3*k2) ((k1 .*. v1) + (k2 .*. v3))
     where
         cO = dot q1 q2
         cosOmega = abs cO
@@ -169,9 +169,9 @@ slerp q1@(Quaternion w1 v1) q2 t = Quaternion (w1*k1 + w3*k2) ((k1 .*. v1) + (k2
         k2 = if cosOmega > 0.9999 then t else sin (t * omega) * oneOverSinOmega
 
 instance Num Quaternion where
-    (+) (Quaternion w1 v1) (Quaternion w2 v2) = Quaternion (w1 + w2) (v1 + v2)
-    (-) (Quaternion w1 v1) (Quaternion w2 v2) = Quaternion (w1 - w2) (v1 - v2)
-    (*) (Quaternion w1 v1) (Quaternion w2 v2) = Quaternion w v
+    (+) (Quaternion w1 v1) (Quaternion w2 v2) = normalize $ Quaternion (w1 + w2) (v1 + v2)
+    (-) (Quaternion w1 v1) (Quaternion w2 v2) = normalize $ Quaternion (w1 - w2) (v1 - v2)
+    (*) (Quaternion w1 v1) (Quaternion w2 v2) = normalize $ Quaternion w v
         where
             w = w1*w2 - dot v1 v2
             v = (w1 .*. v2) + (w2 .*. v1) + cross v1 v2
@@ -203,9 +203,10 @@ instance LinearFunction Quaternion where
     magnitude    q                                       = sqrt (sqrMagnitude q)
     sqrMagnitude   (Quaternion w  v )                    = w*w + sqrMagnitude v
     dot            (Quaternion w1 v1) (Quaternion w2 v2) = w1*w2 + dot v1 v2
-    normalize    q@(Quaternion w  v )                    = if mag > 0 then Quaternion (w/mag) (v .*. mag) else identity
+    -- normalize    q@(Quaternion w  v )                    = if mag > 0 then Quaternion (w/mag) (v .*. mag) else identity
+    normalize    q@(Quaternion w  v )                    = if mag > 0 then Quaternion (w * mag) (v .*. mag) else identity
         where
-            mag = magnitude q
+            mag = 1 / magnitude q
 
     lerp q1 q2 t                                         = if cosTheta >= epsilon then qStd else qInv
         where
