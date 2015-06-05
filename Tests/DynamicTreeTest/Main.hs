@@ -7,9 +7,11 @@ import Necronomicon.FRP.SignalA
 -- main = print "test"
 
 main :: IO ()
-main = runSignal mousePos
--- main = runSignal counter
+main = runSignal h
+    where
+        h = (+1) <~ delay 0 h :: Signal Int
 
+-- main = runSignal mousePos
 -- counter :: Signal Int
 -- counter = h
 --     where

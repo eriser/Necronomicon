@@ -210,22 +210,29 @@ stream initx sig = runST $ do
 --             return (scont >>= \s' -> writeIORef ref s' >> return s', s)
 --     return (writer, reader)
 
--- stream' :: a -> Signal a -> Signal a
--- stream' initx sig = runST $ do
---     ref     <- newSTRef Nothing
---     contRef <- newSTRef Nothing
---
---     let writerReader = Signal $ \state -> do
---             return (cont state, initx)
---             where
---                 cont state = unsafeSTToIO (readSTRef ref) >>= \mx -> case mx of
---                     Just x  -> unsafeSTToIO (writeSTRef ref Nothing) >> return x
---                     Nothing -> unsafeSTToIO (readSTRef contRef) >>= \mc -> case mc of
---                         Nothing    -> unSignal sig state >>= \(scont, s') -> unsafeSTToIO (writeSTRef contRef (Just scont)) >> unsafeSTToIO (writeSTRef ref $ Just $ Change s') >> return (Change s')
---                         Just scont -> scont >>= \s' -> unsafeSTToIO (writeSTRef ref $ Just s') >> return s'
---                         -- Nothing -> error "Malformed stream: A consumer is attempting to consume a value, but the producer has not generated a value."
---
---     return writerReader
+--implement this with signal state and no unsafe business, possible?
+delay :: a -> Signal a -> Signal a
+delay initx sig = runST $ do
+    sync    <- newSTRef Nothing
+    ref     <- newSTRef (Change initx)
+
+    let writerReader = Signal $ \state -> unsafeSTToIO (readSTRef sync) >>= \sx -> case sx of
+            Just  _ -> return (unsafeSTToIO (readSTRef ref), initx)
+            Nothing -> do
+                unsafeSTToIO (writeSTRef sync $ Just ())
+                (scont, _) <- unSignal sig state
+                fref       <- newIORef $ Change initx
+                return (cont scont fref, initx)
+                where
+                    cont scont fref = do
+                        prev <- readIORef fref
+                        unsafeSTToIO (writeSTRef ref prev)
+                        s    <- scont
+                        writeIORef fref s
+                        return prev
+
+
+    return writerReader
 
 
 {-
