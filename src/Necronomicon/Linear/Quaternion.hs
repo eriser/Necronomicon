@@ -54,22 +54,25 @@ axisAngle :: Quaternion -> AxisAngle
 axisAngle q = AxisAngle (getAxis q) (getAngle q)
 
 pitch :: Quaternion -> Double
-pitch (Quaternion w (Vector3 x y z)) = atan2 a b
+pitch (Quaternion w (Vector3 x y z)) = radToDeg $ atan2 a b
     where
         a = 2.0 * (y*z + w*x)
         b = w*w - x*x - y*y + z*z
 
 heading :: Quaternion -> Double
-heading (Quaternion w (Vector3 x y z)) = sin (-2.0 * (x*z - w*y))
+heading (Quaternion w (Vector3 x y z)) = radToDeg $ sin (-2.0 * (x*z - w*y))
 
 bank :: Quaternion -> Double
-bank (Quaternion w (Vector3 x y z)) = atan2 a b
+bank (Quaternion w (Vector3 x y z)) = radToDeg $ atan2 a b
     where
         a = 2.0 * (x*y + w*z)
         b = w*w + x*x - y*y - z*z
 
-euler :: Quaternion -> Euler
-euler q = Euler (pitch q) (heading q) (bank q)
+-- euler :: Quaternion -> Euler
+-- euler q = Euler (pitch q) (heading q) (bank q)
+
+euler :: Quaternion -> Vector3
+euler q = Vector3 (pitch q) (heading q) (bank q)
 
 conjugate :: Quaternion -> Quaternion
 conjugate (Quaternion w v) = Quaternion w ((-1::Double) .*. v)
@@ -121,8 +124,8 @@ transformVector (Quaternion w v1@(Vector3 x1 y1 z1)) v2@(Vector3 x2 y2 z2) = Vec
         z3 = pMult*z2 + vMult*z1 + crossMult*(x1*y2 - y1*x2)
 
 -- zyx (bank,heading,pitch) rotation order as per OpenGL
-fromEuler :: Euler -> Quaternion
-fromEuler (Euler p h b) = Quaternion w (Vector3 x y z)
+fromEuler' :: Euler -> Quaternion
+fromEuler' (Euler p h b) = Quaternion w (Vector3 x y z)
     where
         xRotation = p * 0.5
         yRotation = h * 0.5
@@ -138,8 +141,8 @@ fromEuler (Euler p h b) = Quaternion w (Vector3 x y z)
         y = cx*sy*cz - sx*cy*sz
         z = cx*cy*sz + sx*sy*cz
 
-fromEuler' :: Double -> Double -> Double -> Quaternion
-fromEuler' p h b = fromEuler (Euler p h b)
+fromEuler :: Double -> Double -> Double -> Quaternion
+fromEuler p h b = fromEuler' (Euler (degToRad p) (degToRad h) (degToRad b))
 
 fromAxisAngle :: AxisAngle -> Quaternion
 fromAxisAngle (AxisAngle axis angl) = Quaternion (cos $ angl * 0.5) (sin (angl * 0.5) .*. normalize axis)
@@ -154,7 +157,7 @@ fromAA' :: Vector3 -> Double -> Quaternion
 fromAA' = fromAxisAngle'
 
 slerp :: Quaternion -> Quaternion -> Double -> Quaternion
-slerp q1@(Quaternion w1 v1) q2 t = Quaternion (w1*k1 + w3*k2) ((k1 .*. v1) + (k2 .*. v3))
+slerp q1@(Quaternion w1 v1) q2 t = normalize $ Quaternion (w1*k1 + w3*k2) ((k1 .*. v1) + (k2 .*. v3))
     where
         cO = dot q1 q2
         cosOmega = abs cO
@@ -166,9 +169,9 @@ slerp q1@(Quaternion w1 v1) q2 t = Quaternion (w1*k1 + w3*k2) ((k1 .*. v1) + (k2
         k2 = if cosOmega > 0.9999 then t else sin (t * omega) * oneOverSinOmega
 
 instance Num Quaternion where
-    (+) (Quaternion w1 v1) (Quaternion w2 v2) = Quaternion (w1 + w2) (v1 + v2)
-    (-) (Quaternion w1 v1) (Quaternion w2 v2) = Quaternion (w1 - w2) (v1 - v2)
-    (*) (Quaternion w1 v1) (Quaternion w2 v2) = Quaternion w v
+    (+) (Quaternion w1 v1) (Quaternion w2 v2) = normalize $ Quaternion (w1 + w2) (v1 + v2)
+    (-) (Quaternion w1 v1) (Quaternion w2 v2) = normalize $ Quaternion (w1 - w2) (v1 - v2)
+    (*) (Quaternion w1 v1) (Quaternion w2 v2) = normalize $ Quaternion w v
         where
             w = w1*w2 - dot v1 v2
             v = (w1 .*. v2) + (w2 .*. v1) + cross v1 v2
@@ -200,9 +203,10 @@ instance LinearFunction Quaternion where
     magnitude    q                                       = sqrt (sqrMagnitude q)
     sqrMagnitude   (Quaternion w  v )                    = w*w + sqrMagnitude v
     dot            (Quaternion w1 v1) (Quaternion w2 v2) = w1*w2 + dot v1 v2
-    normalize    q@(Quaternion w  v )                    = if mag > 0 then Quaternion (w/mag) (v .*. mag) else identity
+    -- normalize    q@(Quaternion w  v )                    = if mag > 0 then Quaternion (w/mag) (v .*. mag) else identity
+    normalize    q@(Quaternion w  v )                    = if mag > 0 then Quaternion (w * mag) (v .*. mag) else identity
         where
-            mag = magnitude q
+            mag = 1 / magnitude q
 
     lerp q1 q2 t                                         = if cosTheta >= epsilon then qStd else qInv
         where

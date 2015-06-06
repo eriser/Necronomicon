@@ -1,8 +1,35 @@
 import Necronomicon.FRP.SignalA
-import GHC.Generics
-import Data.Binary
--- import Debug.Trace
+-- import GHC.Generics
+-- import Data.Binary
+-- import Control.Monad (foldM)
+--
+-- main :: IO ()
+-- main = print "test"
 
+main :: IO ()
+main = runSignal h
+    where
+        h = (+1) <~ delay 0 h :: Signal Int
+
+-- main = runSignal mousePos
+-- counter :: Signal Int
+-- counter = h
+--     where
+--         (h, hs) = stream 0 $ (+1) <~ hs
+
+-- counter :: Signal Double
+-- counter = (\a b c -> a * b / c) <~ h ~~ pure 10 ~~ e
+--    where
+--        (h, hs) = stream 0 $ (+1) <~ es
+--        (e, es) = stream 0 $ (+1) <~ hs
+
+-- counter :: Signal Int
+-- counter = (+) <~ h ~~ e
+--     where
+--         (h, hs) = stream 0 $ (+1) <~ es
+--         (e, es) = stream 0 $ (+1) <~ hs
+
+{-
 main :: IO ()
 main = runGameSignal megaDark initScene
 
@@ -34,34 +61,51 @@ mkHero = Entity h g
         h = Hero HeroIdle 100
         g = gameObject
           { pos      = Vector3 0 0 (-6)
-          , rot      = fromEuler' 0 (-180) 0
+          , rot      = fromEuler 0 0 0
           , collider = boxCollider 1 1 1
-          , camera   = Just $ Camera 30 0.1 1000 black [] }
+          , camera   = Just <| Camera 30 0.1 1000 black [] }
 
 mkBullet :: Vector3 -> Entity Bullet
 mkBullet p = Entity b g
     where
-        b = Bullet (Flying $ Vector3 1 1 1)
+        b = Bullet (Flying <| Vector3 1 1 1)
         g = gameObject
           { pos      = p
           , collider = boxCollider 1 1 1
-          , model    = Just $ Model cube $ vertexColored white }
+          , model    = Just <| Model cube <| vertexColored white }
 
 initScene :: MegaDark
-initScene = MegaDark mkHero [mkBullet $ Vector3 (-2) 0 0, mkBullet $ Vector3 0 0 0, mkBullet $ Vector3 2 0 0]
+initScene = MegaDark mkHero [mkBullet <| Vector3 (-2) 0 0, mkBullet <| Vector3 0 0 0, mkBullet <| Vector3 2 0 0]
 
 megaDark :: Signal MegaDark -> Signal MegaDark
 megaDark mega = MegaDark <~ heroSig ~~ bSig
     where
+        bSig    = updateBullets <~ deltaTime ~~ runTime ~~ fmap bullets mega
+
         heroSig = foldr updateHero <~ fmap hero mega ~~ hInput
+        hcs     = map <~ fmap HeroCollision runTime ~~ fmap (collisions . entityData . hero) mega
         hInput  = (++) <~ hcs ~~ combine
                 [ HeroTick  <~ deltaTime ~~ runTime
                 , HeroKeys  <~ wasd
-                , HeroMouse <~ mousePosR
+                , HeroMouse <~ foldp fpsMouse (180, 0) mousePosR
                 , HeroClick <~ sampleOn mouseClick runTime ]
-        hcs     = (\m t -> map (HeroCollision t) . collisions . entityData $ hero m) <~ mega ~~ runTime
-        bSig    = updateBullets <~ deltaTime ~~ runTime ~~ fmap bullets mega
 
+-- megaDark :: Signal MegaDark
+-- megaDark = MegaDark <~ present hs ~~ present bs
+--     where
+--         bs = stream mkBullets <| updateBullets <~ past bs ~~ ((,) <~ deltaTime ~~ runTime)
+--         hs = stream mkHero    <| updateHero    <~ present hs ~~ merge
+--                 [ HeroTick      <~ deltaTime ~~ runTime
+--                 , HeroKeys      <~ wasd
+--                 , HeroMouse     <~ foldp fpsMouse (180, 0) mousePosR
+--                 , HeroClick     <~ sampleOn mouseClick runTime
+--                 , HeroCollision <~ collisions (past hs) ]
+
+fpsMouse :: (Double, Double) -> (Double, Double) -> (Double, Double)
+fpsMouse (mx, my) (px, py) = (x, y)
+    where
+        x = floatRem 360   <| px + mx * 80
+        y = clamp (-90) 90 <| py + my * 80
 
 updateHero :: HeroInput -> Entity Hero -> Entity Hero
 updateHero (HeroMouse (x, y)) h@(Entity (Hero state health) g)
@@ -69,44 +113,47 @@ updateHero (HeroMouse (x, y)) h@(Entity (Hero state health) g)
     | HeroMoving _ <- state = h'
     | otherwise             = h
     where
-        h' = Entity (Hero state health) $ rotate (Vector3 y x 0 * negate 0.7) g
+        h' = Entity (Hero state health) g{rot = fromEuler 0 (-x) 0 * fromEuler (-y) 0 0}
 
 updateHero (HeroKeys (x, y)) h@(Entity (Hero state health) g)
     | HeroIdle     <- state = h'
     | HeroMoving _ <- state = h'
     | otherwise             = h
     where
-        h' = Entity (Hero (HeroMoving $ Vector3 x 0 (-y)) health) g
+        h' = Entity (Hero (HeroMoving <| Vector3 x 0 (-y)) health) g
 
 updateHero (HeroTick dt rt) h@(Entity (Hero state health) g)
-    | HeroMoving    p <- state         = Entity (Hero state health) $ translate (p * realToFrac dt * 1.25) g
-    | HeroAttacking t <- state, t > rt = Entity (Hero HeroIdle health) g
-    | HeroDamaged   t <- state, t > rt = Entity (Hero HeroIdle health) g
+    | HeroMoving    p <- state         = Entity (Hero state health) <| translate (p * realToFrac dt * 1.25) g
+    | HeroAttacking t <- state, rt > t = Entity (Hero HeroIdle health) g
+    | HeroDamaged   t <- state, rt > t = Entity (Hero HeroIdle health) g
     | otherwise                        = h
 
 updateHero (HeroClick t) h@(Entity (Hero state health) g)
     | HeroDamaged _ <- state = h
-    | otherwise              = Entity (Hero (HeroAttacking $ t + 3) health) g
+    | otherwise              = Entity (Hero (HeroAttacking <| t + 3) health) g
 
-updateHero (HeroCollision t c) h@(Entity (Hero state health) g)
-    | EnemyWeapon <- tag c = Entity (Hero (HeroDamaged $ t + 3) (health - 10)) g
+updateHero (HeroCollision t c) h@(Entity (Hero _ health) g)
+    | EnemyWeapon <- tag c = Entity (Hero (HeroDamaged <| t + 3) (health - 10)) g
     | otherwise            = h
 
-updateBullets :: Time -> Time -> [Entity Bullet] -> [Entity Bullet]
-updateBullets rt dt bs = filterMap update bs
-    where
-        update b = foldr (\i -> (>>= updateBullet i)) (Just b)
-                <| BulletTick rt dt : map (BulletCollision rt) (collisions $ entityData b)
 
-updateBullet :: BulletInput -> Entity Bullet -> Maybe (Entity Bullet)
-updateBullet (BulletTick dt rt) b@(Entity (Bullet state) g)
-    | DeathAnimation t <- state, t > rt = Nothing
-    | Flying         d <- state         = Just $ Entity (Bullet state) $ rotate (d * realToFrac dt) g
+
+updateBullets :: Time -> Time -> [Entity Bullet] -> [Entity Bullet]
+updateBullets rt dt bs = filterMap updateM bs
+    where
+        updateM b = foldM updateBullet b <| BulletTick rt dt : map (BulletCollision rt) (collisions <| entityData b)
+
+updateBullet :: Entity Bullet -> BulletInput -> Maybe (Entity Bullet)
+updateBullet b@(Entity (Bullet state) g) (BulletTick dt rt)
+    | DeathAnimation t <- state, rt > t = Nothing
+    | Flying         d <- state         = Just <| Entity (Bullet state) <| rotate (d * realToFrac dt * 10) g
     | otherwise                         = Just b
 
-updateBullet (BulletCollision t c) b@(Entity (Bullet state) g)
-    | EnemyWeapon <- tag c = Just $ b
-    | otherwise            = Just $ Entity (Bullet $ DeathAnimation $ t + 1) g
+updateBullet b@(Entity _ g) (BulletCollision t c)
+    | EnemyWeapon <- tag c = Just <| b
+    | otherwise            = Just <| Entity (Bullet <| DeathAnimation <| t + 1) g
+-}
+
 
 {-
 import Necronomicon
@@ -142,21 +189,21 @@ mkHero = Entity h g
             pos    = Vector3 0 0 (-6),
             rot    = fromEuler' 0 (-180) 0,
             collider = boxCollider 1 1 1,
-            camera = Just $ Camera 30 0.1 1000 black []
+            camera = Just <| Camera 30 0.1 1000 black []
         }
 
 mkBullet :: Vector3 -> Entity Bullet
 mkBullet p = Entity b g
     where
-        b = Bullet (Flying $ Vector3 1 1 1)
+        b = Bullet (Flying <| Vector3 1 1 1)
         g = gameObject {
             pos      = p,
             collider = boxCollider 1 1 1,
-            model    = Just $ Model cube $ vertexColored white
+            model    = Just <| Model cube <| vertexColored white
         }
 
 initScene :: MegaDark
-initScene = (mkHero, [mkBullet $ Vector3 (-2) 0 0, mkBullet $ Vector3 0 0 0, mkBullet $ Vector3 2 0 0])
+initScene = (mkHero, [mkBullet <| Vector3 (-2) 0 0, mkBullet <| Vector3 0 0 0, mkBullet <| Vector3 2 0 0])
 
 megaDark :: World -> MegaDark -> MegaDark
 megaDark w (hero, bullets) = (updateHero w hero, filterMap (updateBullet w) bullets)
@@ -164,8 +211,8 @@ megaDark w (hero, bullets) = (updateHero w hero, filterMap (updateBullet w) bull
 updateHero :: World -> Entity Hero -> Entity Hero
 updateHero w (Entity hero g) = Entity hero' (g' hero')
     where
-        hero'                        = moveHero . rotateHero . attack . tickHero . foldr checkCollider hero $ collisions g
-        g' (Hero (HeroMoving m r) _) = translate (m * realToFrac (deltaTime w * 10)) $ rotate (r * realToFrac (deltaTime w * negate 100)) g
+        hero'                        = moveHero . rotateHero . attack . tickHero . foldr checkCollider hero <| collisions g
+        g' (Hero (HeroMoving m r) _) = translate (m * realToFrac (deltaTime w * 10)) <| rotate (r * realToFrac (deltaTime w * negate 100)) g
         g'  _                        = g
 
         moveHero h@(Hero state health)
@@ -174,8 +221,8 @@ updateHero w (Entity hero g) = Entity hero' (g' hero')
             | otherwise                                                 = h
 
         rotateHero h@(Hero state health)
-            | HeroIdle       <- state, Just (x, y) <- mouseMoved w = Hero (HeroMoving 0 $ Vector3 y x 0) health
-            | HeroMoving m _ <- state, Just (x, y) <- mouseMoved w = Hero (HeroMoving m $ Vector3 y x 0) health
+            | HeroIdle       <- state, Just (x, y) <- mouseMoved w = Hero (HeroMoving 0 <| Vector3 y x 0) health
+            | HeroMoving m _ <- state, Just (x, y) <- mouseMoved w = Hero (HeroMoving m <| Vector3 y x 0) health
             | otherwise                                            = h
 
         attack h@(Hero state health)
@@ -183,7 +230,7 @@ updateHero w (Entity hero g) = Entity hero' (g' hero')
             | HeroMoving _ _ <- state, mouseClicked w = h'
             | otherwise                               = h
             where
-                h' = Hero (HeroAttacking $ timer 1 w) health
+                h' = Hero (HeroAttacking <| timer 1 w) health
 
         tickHero h@(Hero state health)
             | HeroAttacking t <- state, timerReady t w = h'
@@ -193,18 +240,18 @@ updateHero w (Entity hero g) = Entity hero' (g' hero')
                 h' = Hero HeroIdle health
 
         checkCollider c h@(Hero _ health)
-            | EnemyWeapon <- tag c = Hero (HeroDamaged $ timer 1 w) (health - 10)
+            | EnemyWeapon <- tag c = Hero (HeroDamaged <| timer 1 w) (health - 10)
             | otherwise            = h
 
 updateBullet :: World -> Entity Bullet -> Maybe (Entity Bullet)
 updateBullet w (Entity bullet@(Bullet s) g)
     | DeathAnimation t <- s, timerReady t w = Nothing
-    | otherwise                             = Just $ Entity bullet' (g' bullet')
+    | otherwise                             = Just <| Entity bullet' (g' bullet')
     where
         g' (Bullet (Flying d)) = rotate (d * realToFrac (deltaTime w)) g
         g'  _                  = g
-        bullet'                = foldr checkCollider bullet $ collisions g
+        bullet'                = foldr checkCollider bullet <| collisions g
         checkCollider c b
             | EnemyWeapon <- tag c = b
-            | otherwise            = Bullet . DeathAnimation $ timer 0.5 w
+            | otherwise            = Bullet . DeathAnimation <| timer 0.5 w
 -}

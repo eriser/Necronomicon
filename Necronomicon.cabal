@@ -36,7 +36,7 @@ library
     Install-Includes:	Necronomicon.h
     C-Sources:    		c_lib/Necronomicon.c
     ghc-options:        -threaded -O3 -Wall -Werror
-    default-extensions: FlexibleInstances MultiParamTypeClasses ForeignFunctionInterface QuasiQuotes TemplateHaskell TypeFamilies BangPatterns RankNTypes GeneralizedNewtypeDeriving 
+    default-extensions: FlexibleInstances MultiParamTypeClasses ForeignFunctionInterface QuasiQuotes TemplateHaskell TypeFamilies BangPatterns RankNTypes GeneralizedNewtypeDeriving
 
     exposed-modules:
         Necronomicon
@@ -222,7 +222,7 @@ executable GenCalcBindings
 executable DynamicTreeTest
     main-is:          Main.hs
     default-language: Haskell2010
-    ghc-options:      -Wall -O3
+    ghc-options:      -Wall -O3 -Werror
     hs-source-dirs:   Tests/DynamicTreeTest
     default-extensions: DeriveGeneric
     build-depends:    base             == 4.*,

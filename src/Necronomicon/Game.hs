@@ -55,13 +55,14 @@ gameObject :: GameObject
 gameObject = GameObject 0 identity 1 Nothing Nothing Nothing []
 
 rotate :: Vector3 -> GameObject -> GameObject
-rotate (Vector3 x y z) g = g{rot = rot g * fromEuler' x y z}
+rotate (Vector3 x y z) g = g{rot = rot g * fromEuler x y z}
 
 move :: Vector3 -> GameObject -> GameObject
 move dir g = g{pos = pos g + dir}
 
 translate :: Vector3 -> GameObject -> GameObject
-translate dir g = g{pos = pos g + transformVector (rot g) dir}
+-- translate dir g = g{pos = pos g + transformVector (rot g) dir}
+translate dir g = g{pos = pos g + (dir .*. rotFromQuaternion (rot g))}
 
 collisions :: GameObject -> [Collision]
 collisions g
@@ -555,7 +556,7 @@ instance Arbitrary GameObject where
         (px, py, pz) <- arbitrary
         (rx, ry, rz) <- arbitrary
         (sx, sy, sz) <- arbitrary
-        return $ GameObject (Vector3 px py pz) (fromEuler' rx ry rz) (Vector3 sx sy sz) (boxCollider w h d) Nothing Nothing []
+        return $ GameObject (Vector3 px py pz) (fromEuler rx ry rz) (Vector3 sx sy sz) (boxCollider w h d) Nothing Nothing []
 
 dynTreeTester :: ((GameObject, DynamicTree) -> Bool) -> [[TreeTest]] -> Bool
 dynTreeTester f uss = fst $ foldr updateTest start uss

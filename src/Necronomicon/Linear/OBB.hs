@@ -23,7 +23,7 @@ instance GeoPrimitive OBB where
         where
             p            = matOrigin t
             (xb, yb, zb) = basis t
-            project a e  = a * realToFrac (clamp (a `dot` (q - p)) (-e) e)
+            project a e  = a * realToFrac (clamp (-e) e (a `dot` (q - p)))
     enclosingAABB   (OBB he) t = AABB (p - extents) (p + extents)
         where
             p            = matOrigin t

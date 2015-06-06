@@ -53,7 +53,7 @@ instance GeoPrimitive AABB where
             az | dz > 0    = mxz
                | otherwise = mnz
     enclosingAABB    a _             = a
-    closestPoint    (AABB mn mx) _ q = clamp q mn mx
+    closestPoint    (AABB mn mx) _ q = clamp mn mx q
     enclosingSphere (AABB mn mx) _   = Sphere (mn + halfSize) (magnitude halfSize)
         where
             halfSize = (mx - mn) * 0.5
