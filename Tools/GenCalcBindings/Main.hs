@@ -22,11 +22,11 @@ generateCalcDefine funcName defineName args = inlineFunc ++ foldr (++) "" macroL
         lengthArgs = length args
         inlineFuncName = funcName ++ "InlineCalc"
         inlineFuncArgs = foldl (\a b -> a ++ (if null a then "" else ", ") ++ b) "" $ map (\s -> "double " ++ s) args
-        inlineFunc = "static inline double " ++ inlineFuncName ++ "(" ++ inlineFuncArgs ++ ")\n{\n    double y = 0; // CALC CODE HERE\n    return y;\n}\n\n"
+        inlineFunc = "__attribute__((always_inline)) static inline double " ++ inlineFuncName ++ "(" ++ inlineFuncArgs ++ ")\n{\n    double y = 0; // CALC CODE HERE\n    return y;\n}\n\n"
         calcDefineLine = "#define " ++ defineName ++ "(CONTROL_ARGS, AUDIO_ARGS)"
         inputs = map argIndexToInputString ([0 .. (max 0 (lengthArgs -1 ))] :: [Int])
         outputs = ["double* out = UGEN_OUTPUT_BUFFER(u, 0);"]
-        argIndexToInputString index = "double* in" ++ show index ++ " UGEN_INPUT_BUFFER(u, " ++ show index ++ ");"
+        argIndexToInputString index = "double* in" ++ show index ++ " = UGEN_INPUT_BUFFER(u, " ++ show index ++ ");"
         argLines = map (\arg -> "double " ++ arg ++ ";") args
         audioLoopFuncCall = "    UGEN_OUT(out, " ++ inlineFuncName ++ "(" ++ foldl (\a b -> a ++ (if null a then "" else ", ") ++ b) "" args ++ "));"
         macroLines = calcDefineLine : inputs ++ outputs ++ argLines ++ ["CONTROL_ARGS", "AUDIO_LOOP(", "    AUDIO_ARGS", audioLoopFuncCall, ");"]
@@ -77,7 +77,7 @@ generateCCode name args = (generateCalcDefine name calcDefineName args) ++ "\n\n
         argToDefines :: (String, Int) -> (ArgDefine, ArgDefine)
         argToDefines (arg, i) = (argToControlDefine arg i, argToAudioDefine arg i)
         createCFunction :: Int -> String
-        createCFunction i = "// " ++ (show i) ++ "\n" ++ "void " ++ cname ++ "(ugen u)\n{\n    " ++ calcDefineName ++ "(" ++ fguts ++ "    )\n}"
+        createCFunction i = "// " ++ (show i) ++ "\n" ++ "__attribute__((flatten)) void " ++ cname ++ "(ugen u)\n{\n    " ++ calcDefineName ++ "(" ++ fguts ++ "    )\n}"
             where
                 (CalcFuncBindingData cname _ rates) = cfuncData !! i
                 fguts = argPrefix ++ "// Control Arguments" ++ controlArgs' ++ "," ++ argPrefix ++ "// Audio Arguments" ++ audioArgs' ++ "\n"

@@ -30,7 +30,7 @@ data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Env Double 
               | LPF | HPF | BPF | Notch | AllPass | PeakEQ | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int
               | Clip | SoftClip | Poly3 | TanHDist | SinDist | Wrap | DelayN Double | DelayL Double | DelayC Double | CombN Double | CombL Double | CombC Double
               | Negate | Crush | Decimate | FreeVerb | Pluck Double | WhiteNoise | Abs | Signum | Pow | Exp | Log | Cos | ASin | ACos
-              | ATan | LogBase | Sqrt | Tan | SinH | CosH | TanH | ASinH | ATanH | ACosH | TimeMicros | TimeSecs | USeq
+              | ATan | LogBase | Sqrt | Tan | SinH | CosH | TanH | ASinH | ATanH | ACosH | TimeMicros | TimeSecs | USeq | Limiter Double
               deriving (Show, Eq, Ord)
 
 data UGenRate = ControlRate | AudioRate deriving (Show, Enum, Eq, Ord)
@@ -979,6 +979,68 @@ freeverb mix' roomSize damp input = optimizeUGenCalcFunc cfuncs $ multiChannelEx
                 freeverbKKAACalc, freeverbAKAACalc, freeverbKAAACalc, freeverbAAAACalc
             ]
 
+foreign import ccall "&limiter_constructor" limiterConstructor :: CUGenFunc
+foreign import ccall "&limiter_deconstructor" limiterDeconstructor :: CUGenFunc
+foreign import ccall "&limiter_kkkkk_calc" limiterKKKKKCalc :: CUGenFunc
+foreign import ccall "&limiter_akkkk_calc" limiterAKKKKCalc :: CUGenFunc
+foreign import ccall "&limiter_kakkk_calc" limiterKAKKKCalc :: CUGenFunc
+foreign import ccall "&limiter_aakkk_calc" limiterAAKKKCalc :: CUGenFunc
+foreign import ccall "&limiter_kkakk_calc" limiterKKAKKCalc :: CUGenFunc
+foreign import ccall "&limiter_akakk_calc" limiterAKAKKCalc :: CUGenFunc
+foreign import ccall "&limiter_kaakk_calc" limiterKAAKKCalc :: CUGenFunc
+foreign import ccall "&limiter_aaakk_calc" limiterAAAKKCalc :: CUGenFunc
+foreign import ccall "&limiter_kkkak_calc" limiterKKKAKCalc :: CUGenFunc
+foreign import ccall "&limiter_akkak_calc" limiterAKKAKCalc :: CUGenFunc
+foreign import ccall "&limiter_kakak_calc" limiterKAKAKCalc :: CUGenFunc
+foreign import ccall "&limiter_aakak_calc" limiterAAKAKCalc :: CUGenFunc
+foreign import ccall "&limiter_kkaak_calc" limiterKKAAKCalc :: CUGenFunc
+foreign import ccall "&limiter_akaak_calc" limiterAKAAKCalc :: CUGenFunc
+foreign import ccall "&limiter_kaaak_calc" limiterKAAAKCalc :: CUGenFunc
+foreign import ccall "&limiter_aaaak_calc" limiterAAAAKCalc :: CUGenFunc
+foreign import ccall "&limiter_kkkka_calc" limiterKKKKACalc :: CUGenFunc
+foreign import ccall "&limiter_akkka_calc" limiterAKKKACalc :: CUGenFunc
+foreign import ccall "&limiter_kakka_calc" limiterKAKKACalc :: CUGenFunc
+foreign import ccall "&limiter_aakka_calc" limiterAAKKACalc :: CUGenFunc
+foreign import ccall "&limiter_kkaka_calc" limiterKKAKACalc :: CUGenFunc
+foreign import ccall "&limiter_akaka_calc" limiterAKAKACalc :: CUGenFunc
+foreign import ccall "&limiter_kaaka_calc" limiterKAAKACalc :: CUGenFunc
+foreign import ccall "&limiter_aaaka_calc" limiterAAAKACalc :: CUGenFunc
+foreign import ccall "&limiter_kkkaa_calc" limiterKKKAACalc :: CUGenFunc
+foreign import ccall "&limiter_akkaa_calc" limiterAKKAACalc :: CUGenFunc
+foreign import ccall "&limiter_kakaa_calc" limiterKAKAACalc :: CUGenFunc
+foreign import ccall "&limiter_aakaa_calc" limiterAAKAACalc :: CUGenFunc
+foreign import ccall "&limiter_kkaaa_calc" limiterKKAAACalc :: CUGenFunc
+foreign import ccall "&limiter_akaaa_calc" limiterAKAAACalc :: CUGenFunc
+foreign import ccall "&limiter_kaaaa_calc" limiterKAAAACalc :: CUGenFunc
+foreign import ccall "&limiter_aaaaa_calc" limiterAAAAACalc :: CUGenFunc
+
+{-
+    Peak Limiter
+    lookahead : In Seconds
+    attack : In Seconds
+    release : In Seconds
+    threshold : In decibels
+    knee : A ratio of the threshold, 0 - 1
+-}
+
+limiter :: Double -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen
+limiter lookahead attack release threshold knee input = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen (Limiter lookahead) limiterAAAAACalc limiterConstructor limiterDeconstructor inputs
+    where
+        inputs = [attack, release, threshold, knee, input]
+        cfuncs = [
+                limiterKKKKKCalc, limiterAKKKKCalc, limiterKAKKKCalc, limiterAAKKKCalc,
+                limiterKKAKKCalc, limiterAKAKKCalc, limiterKAAKKCalc, limiterAAAKKCalc,
+                limiterKKKAKCalc, limiterAKKAKCalc, limiterKAKAKCalc, limiterAAKAKCalc,
+                limiterKKAAKCalc, limiterAKAAKCalc, limiterKAAAKCalc, limiterAAAAKCalc,
+                limiterKKKKACalc, limiterAKKKACalc, limiterKAKKACalc, limiterAAKKACalc,
+                limiterKKAKACalc, limiterAKAKACalc, limiterKAAKACalc, limiterAAAKACalc,
+                limiterKKKAACalc, limiterAKKAACalc, limiterKAKAACalc, limiterAAKAACalc,
+                limiterKKAAACalc, limiterAKAAACalc, limiterKAAAACalc, limiterAAAAACalc
+            ]
+
+masterLimiter :: UGen -> UGen
+masterLimiter = limiter 0.01 0.01 0.03 (-18) 0.2
+
 dup :: UGen -> UGen
 dup u = u <> u
 
@@ -1269,7 +1331,7 @@ compileUGen (UGenNum d) _ key = do
     wire <- nextWireIndex
     addConstant key (CompiledConstant (CDouble d) wire)
     return wire
-compileUGen (UGenFunc USeq _ _ _ _) args _ = return $ last args -- Return the last argumen of USeq as the output of that ugen
+compileUGen (UGenFunc USeq _ _ _ _) args _ = return $ last args -- Return the last argument of USeq as the output of that ugen
 compileUGen ugen@(UGenFunc (DelayN maxDelayTime) _ _ _ _) args key = liftIO (new $ CDouble maxDelayTime) >>= \maxDelayTimePtr ->
     compileUGenWithConstructorArgs ugen maxDelayTimePtr args key
 compileUGen ugen@(UGenFunc (DelayL maxDelayTime) _ _ _ _) args key = liftIO (new $ CDouble maxDelayTime) >>= \maxDelayTimePtr ->
@@ -1290,6 +1352,8 @@ compileUGen ugen@(UGenFunc (Env2 numValues numDurations) _ _ _ _) args key = lif
     compileUGenWithConstructorArgs ugen numDurationsPtr args key
 compileUGen ugen@(UGenFunc (Random seed rmin rmax) _ _ _ _) args key = liftIO (newArray [CDouble seed,CDouble rmin,CDouble rmax]) >>= \randValuesPtr ->
     compileUGenWithConstructorArgs ugen randValuesPtr args key
+compileUGen ugen@(UGenFunc (Limiter lookahead) _ _ _ _) args key = liftIO (new $ CDouble lookahead) >>= \lookaheadPtr ->
+    compileUGenWithConstructorArgs ugen lookaheadPtr args key
 compileUGen ugen args key = compileUGenWithConstructorArgs ugen nullPtr args key
 
 
