@@ -1,0 +1,23 @@
+------------------------------------------------------------------------------------
+-- Necronomicon GHCI REPL settings. Useful for quick synth testing and iteration.
+------------------------------------------------------------------------------------
+
+-- Set necessary extensions
+:set -XFlexibleInstances -XMultiParamTypeClasses -XForeignFunctionInterface -XQuasiQuotes -XTemplateHaskell -XTypeFamilies -XBangPatterns -XRankNTypes -XGeneralizedNewtypeDeriving
+
+-- Set up ghci for multiple lines
+:set +m
+
+-- load the Necronomicon module
+:m Necronomicon Control.Monad.Trans
+
+:set prompt  "λ: "
+
+:unset -fwarn-name-shadowing
+
+-- boot the necronomicon interpreter
+necroVars <- beginNecroInterpreter
+
+let n = nInteract necroVars
+
+print "...the blind cosmos grinds aimlessly on from nothing to something and from something back to nothing again, neither heeding nor knowing the wishes or existence of the minds that flicker for a second now and then in the darkness."

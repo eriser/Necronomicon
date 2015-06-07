@@ -8086,11 +8086,12 @@ __attribute__((always_inline)) static inline double limiterInlineCalc(
 	double y = read_index < 0 ? 0 : samples[read_index & num_samples_mask];
 	samples[write_index & num_samples_mask] = x;
 	data->write_index = write_index + 1;
+
+	// Calculate gain based on soft/hard knee. Threshold, knee_width, lower_knee_bound, and upper_knee_bound are in decibels.
 	const double envelope_out_db = AMP2DB(envelope_out);
 	double scale = 1;
 	double gain;
 
-	// Calculate gain based on soft/hard knee. Threshold, knee_width, lower_knee_bound, and upper_knee_bound are in decibels.
 	if (knee_width > 0.0 && envelope_out_db > lower_knee_bound && envelope_out_db < upper_knee_bound)
 	{
 		scale = ((envelope_out_db - lower_knee_bound) / knee_width) * 0.5;

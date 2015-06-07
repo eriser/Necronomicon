@@ -272,12 +272,12 @@ shutdownNecronomicon = do
 
 {-| GHCI Repl functions ---------------------------------------------------------------------------------------------------------------------------------
     GHCI instructions, line by line.
-    cd $NECRO -- In a terminal, change directory to the Necronomicon cabal sandbox
-    ghci -no-user-package-db -package-db .cabal-sandbox/x86_64-linux-ghc-7.8.4-packages.conf.d -- This is so you can run from the cabal sandbox correctly
-    :m Necronomicon -- load the Necronomicon module
-    necroVars <- beginNecronomiconInterpreter -- This boots the necronomicon engine
-    nInteract necroVars $ compileSynthDef "LineSynth" lineSynth -- Compile a synth definition
-    nInteract necroVars $ playSynth "LineSynth" [440] >> playSynth "LineSynth" [660]  -- Use that synth definition
+    -- Make sure to have jack started before you begin.
+    cd $NECRO/repl # In a terminal, change directory to the Necronomicon cabal sandbox
+    # This is so you can run from the cabal sandbox correctly
+    ghci -no-user-package-db -package-db ../.cabal-sandbox/x86_64-linux-ghc-7.10.1-packages.conf.d
+    n $ compileSynthDef "LineSynth" lineSynth -- Compile a synth definition
+    n $ playSynth "LineSynth" [440, 0] >> playSynth "LineSynth" [660, 1]  -- Use that synth definition
     endNecroInterpreter necroVars -- Don't forget to shutdown the necronomicon engine before leaving!
 -}
 
