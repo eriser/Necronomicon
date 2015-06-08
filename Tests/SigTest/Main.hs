@@ -4,13 +4,12 @@ import Data.Fixed (mod')
 
 --Get chords up and running
 
-main :: IO ()
-main = runSignal <| testGUI <> sections <> hyperTerrainSounds
 
-hyperTerrainSounds :: Signal ()
-hyperTerrainSounds = play (pure True) masterSynth -- Master Synth, used for limiting
-                     <> metallicPattern
-                     <> play (toggle <| combo [alt,isDown keyA]) triOsc32  (mouseToSlendro <~ mouseX) (mouseToSlendro <~ mouseY)
+------------------------------------------------------------------------------------------
+-- {- buses
+------------------------------------------------------------------------------------------
+
+-- Master 50, 51
 
 masterOutBus :: UGen
 masterOutBus = 50
@@ -20,6 +19,45 @@ masterOutRightBus = 51
 
 masterOut :: UGen -> UGen
 masterOut = out masterOutBus
+
+-- Cave 20, 21
+
+caveBus :: UGen
+caveBus = 20
+
+caveRightBus :: UGen
+caveRightBus = 21
+
+caveOut :: UGen -> UGen
+caveOut = out caveBus
+
+-- Broodling 200, 201
+
+broodlingBus :: UGen
+broodlingBus = 200
+
+broodlingRightBus :: UGen
+broodlingRightBus = 201
+
+broodlingOut :: UGen -> UGen
+broodlingOut = out broodlingBus
+
+-- Artifact 150 - 158
+
+artifactOut :: UGen -> UGen
+artifactOut = out <| random 0 150 158
+
+------------------------------------------------------------------------------------------
+-- buses -}
+------------------------------------------------------------------------------------------
+
+main :: IO ()
+main = runSignal <| testGUI <> sections <> hyperTerrainSounds
+
+hyperTerrainSounds :: Signal ()
+hyperTerrainSounds = play (pure True) masterSynth -- Master Synth, used for limiting
+                     <> metallicPattern
+                     <> play (toggle <| combo [alt,isDown keyA]) triOsc32  (mouseToSlendro <~ mouseX) (mouseToSlendro <~ mouseY)
 
 masterSynth :: UGen
 masterSynth = auxIn [masterOutBus, masterOutRightBus] |> masterLimiter |> out 0
@@ -161,15 +199,15 @@ triOsc32 mx my = feedback fSig |> verb |> gain 0.0385 |> masterOut
 caveTime :: UGen
 caveTime = [l * 0.875 + r * 0.125, r * 0.875 + l * 0.125] |> poll |> masterOut
     where
-        l    = auxIn 20 |> verb
-        r    = auxIn 21 |> verb
+        l    = auxIn caveBus |> verb
+        r    = auxIn caveRightBus |> verb
         verb = freeverb 0.5 1.0 0.1
 
 visAux :: UGen -> UGen -> UGen -> UGen
 visAux bus a u = _useq (auxThrough bus (left u * a)) u
 
 metallicBass :: UGen -> UGen -> UGen
-metallicBass f panPos = sig + sig2 + sig3 |> softclip 0.2 |> lpf (f * 3) 1 |> e |> visAux 2 2 |> pan panPos |> out 20
+metallicBass f panPos = sig + sig2 + sig3 |> softclip 0.2 |> lpf (f * 3) 1 |> e |> visAux 2 2 |> pan panPos |> caveOut
     where
         sig    = sin (f * random 0 0.999 1.001) |> gain 0.15
         sig2   = sin (f * random 1 0.499 0.500) |> gain 0.15
@@ -191,7 +229,7 @@ hyperMelody f = [s,s2] |> gain 0.04 |> e |> visAux (random 0 2 5) 20 |> masterOu
 
 --add sins for visuals and modulation
 reverseSwell :: UGen -> UGen
-reverseSwell f =  sig1 + sig2 + sig3 |> e |> tanhDist (random 31 0.25 1) |> (+ whiteNoise * 0.25) |> gain 0.03 |> filt |> e |> pan 0.75 |> out 20
+reverseSwell f =  sig1 + sig2 + sig3 |> e |> tanhDist (random 31 0.25 1) |> (+ whiteNoise * 0.25) |> gain 0.03 |> filt |> e |> pan 0.75 |> caveOut
     where
         hf   = f * 0.5
         e    = env [0,1,0]         [4,4] 3
@@ -206,7 +244,7 @@ reverseSwell f =  sig1 + sig2 + sig3 |> e |> tanhDist (random 31 0.25 1) |> (+ w
         mod4 = saw (random 11 0.5 2.0)  |> range 0.01 1
 
 reverseSwell2 :: UGen -> UGen
-reverseSwell2 f = sig1 + sig2 + sig3 |> e |> tanhDist (random 32 0.25 1) |> (+ whiteNoise * 0.25) |> gain 0.03 |> filt |> e |> pan 0.25 |> out 20
+reverseSwell2 f = sig1 + sig2 + sig3 |> e |> tanhDist (random 32 0.25 1) |> (+ whiteNoise * 0.25) |> gain 0.03 |> filt |> e |> pan 0.25 |> caveOut
     where
         hf   = f * 0.5
         e    = env [0,1,0]         [4,4] 3
@@ -220,13 +258,14 @@ reverseSwell2 f = sig1 + sig2 + sig3 |> e |> tanhDist (random 32 0.25 1) |> (+ w
         mod3 = saw (random 10 0.25 1.0) |> range 0.25 1
         mod4 = saw (random 11 0.5 2.0)  |> range 0.01 1
 
+fromSlendro :: Rational -> UGen
+fromSlendro degree = UGen [UGenNum . fromRational $ d2f slendro degree]
+
 shake :: UGen -> UGen
-shake d = sig1 + sig2 |> e |> bpf 500 0.1 |> pan 0.75 |> masterOut
+shake d = whiteNoise |> e2 |> bpf (fromSlendro 13) 0.7 |> e |> pan 0.25 |> mixThrough caveBus 0.3 |> masterOut
     where
-        sig1 = whiteNoise |> bpf (12000 |> e2)            3 |> gain 0.2
-        sig2 = whiteNoise |> bpf (9000 + 12000 * d |> e2) 4 |> gain 0.2
-        e    = perc 0.01 (d*6) 1 (-24)
-        e2   = env2 [1,1,0.125] [0.01,d*6] (-24)
+        e = env [0, 0.1, 0.05, 0] [0.0001, 0.02, d] (-16)
+        e2 = perc2 0.01 0.1 4 (-32)
 
 floorPerc :: UGen -> UGen
 floorPerc d = sig1 + sig2 |> e |> pan 0.35 |> gain 0.3 |> masterOut
@@ -292,25 +331,25 @@ metallicPattern3_2 = playSynthPattern (toggle <| combo [alt,isDown keyD]) metall
 
 
 shakePattern :: Signal ()
-shakePattern = playSynthPattern (toggle <| combo [alt,isDown keyD]) shake (pmap (* 0.1) <| ploop [sec1])
+shakePattern = playSynthPattern (toggle <| combo [alt,isDown keyD]) shake (ploop [sec1])
     where
-        sec1 = [lich| _
-                      6   [_ 2] [_ 1]
-                      4   [_ 2] [_ 1]
-                      6   [_ 2] [_ 1]
-                      4   [_ 2] [_ 1]
-                      6   [_ 2] [2 2 2]
-                      4   [_ 2] [_ 1]
-                      6   [_ 2] [_ 1]
-                      4   [_ 2] [_ 1]
-                      6   [_ 2] [_ 1]
-                      4   [_ 2] [_ 1]
-                      6   [_ 2] [_ 1]
-                      4   [_ 2] [_ 1]
-                      6   [_ 2] [2 2 2]
-                      4   [_ 2] [_ 1]
-                      6   [_ 2] [_ 1]
-                      4   [_ 2]       |]
+        sec1 = [lich| 1
+                      1 2 [_ 1]
+                      _ 4 [_ 1]
+                      _ 2 [_ 1]
+                      _ 6 [_ 1]
+                      _ 2 [2 2]
+                      _ 4 [_ 1]
+                      _ 2 [_ 1]
+                      _ 6 [_ 1]
+                      _ 2 [_ 1]
+                      _ 4 [_ 1]
+                      _ 2 [_ 1]
+                      _ 6 [_ 1]
+                      _ 2 [2 2]
+                      _ 4 [_ 1]
+                      _ 2 [_ 1]
+                      _ 6       |]
 
 floorPattern :: Signal ()
 floorPattern = playSynthPattern (toggle <| combo [alt,isDown keyO]) floorPerc (pmap (* 0.5) <| ploop [sec1])
@@ -635,22 +674,23 @@ subControlPattern = fx <> playSynthPattern (toggle <| combo [alt,isDown keyZ]) s
                       [1 1 1 1] [1 1 1 1] [1 1 1 1] [1 1 1 1] [1 1 1 1] |]
         sec2 = [lich| [3 3 3 3] [3 3 3 3] [3 3 3 3] [3 3 3 3] [3 3 3 3]
                       [4 4 4 4] [4 4 4 4] [4 4 4 4] [6 6 6 6] [6 6 6 6] |]
+
 broodHive :: UGen
 broodHive = pl |> gain 0.1 |> masterOut
     where
-        pl = {- pluck 40 freqs 5 (aux |> bpf freqs 3) + -} combC 1.7 1.7 1.1 aux + combC 2.4 2.4 1.1 aux + combC 3.5 3.5 1.1 aux
+        pl = {- pluck 40 freqs 5 (aux |> bpf freqs 3) + -} combC 1.7 1.7 0.3 aux + combC 2.4 2.4 0.3 aux + combC 3.5 3.5 0.3 aux
         -- freqs = map (fromRational . d2f slendro) [1,3]
-        aux1 = auxIn 200
-        aux2 = auxIn 201
+        aux1 = auxIn broodlingBus
+        aux2 = auxIn broodlingRightBus
         aux  = [aux1, aux2]
 
 broodling :: UGen -> UGen
-broodling f = pulse [f, f/2, f/4] (p 1) |> mix |> lpf (p (f * 4)) 1 |> add (sin (f / 4) |> gain 0.5) |> p |> gain 0.7 |> out 200
+broodling f = pulse [f, f/2, f/4] (p 1) |> mix |> lpf (p (f * 4)) 1 |> add (sin (f / 4) |> gain 0.5) |> p |> gain 0.7 |> broodlingOut
     where
         p = perc 0.01 1.25 1 (-8)
 
 broodling2 :: UGen -> UGen
-broodling2 f = pulse [f, f/2, f/4] (p 1) |> mix |> lpf (p (f * 4)) 1 |> add (sin (f / 2) |> gain 0.5) |> p |> gain 0.7 |> out 201
+broodling2 f = pulse [f, f/2, f/4] (p 1) |> mix |> lpf (p (f * 4)) 1 |> add (sin (f / 2) |> gain 0.5) |> p |> gain 0.7 |> out broodlingRightBus
     where
         p = perc 0.01 1.25 1 (-8)
 
@@ -673,9 +713,6 @@ broodlingPattern = fx
                         _ 8 [_ 8] _ 8 8     8 _ _ 8
                         _ 3 3     _ 3 3 [_ 3] 3 _ _
                   |]
-
-artifactOut :: UGen -> UGen
-artifactOut = out <| random 0 150 158
 
 squareEnv :: UGen -> UGen
 squareEnv = env [0,1,1,0] [0,0.4,0] 0

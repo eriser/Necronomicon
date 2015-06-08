@@ -2298,13 +2298,10 @@ AUDIO_LOOP(                                 \
 // 0
 __attribute__((flatten)) void umax_kk_calc(ugen u)
 {
-    UMAX_CALC(
-        // Control Arguments
-        UMAX_AK               /* 0 */
-        UMAX_BK               /* 1 */,
-        // Audio Arguments
-        /* no audio args */
-    )
+	double* in0 = UGEN_INPUT_BUFFER(u, 0);
+	double* in1 = UGEN_INPUT_BUFFER(u, 1);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	*out = fmax(*in0, *in1);
 }
 
 // 1
@@ -2365,13 +2362,10 @@ AUDIO_LOOP(                                 \
 // 0
 __attribute__((flatten)) void umin_kk_calc(ugen u)
 {
-    UMIN_CALC(
-        // Control Arguments
-        UMIN_AK               /* 0 */
-        UMIN_BK               /* 1 */,
-        // Audio Arguments
-        /* no audio args */
-    )
+	double* in0 = UGEN_INPUT_BUFFER(u, 0);
+	double* in1 = UGEN_INPUT_BUFFER(u, 1);
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	*out = fmin(*in0, *in1);
 }
 
 // 1

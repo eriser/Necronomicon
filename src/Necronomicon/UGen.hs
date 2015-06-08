@@ -129,7 +129,7 @@ polymorphicRateUGenUnits = S.fromList [
         Exp, Log, Cos, ASin, ACos, ATan, LogBase, Sqrt,
         Tan, TanH, SinH, CosH, ASinH, ATanH, ACosH, Range,
         ExpRange, Clip, SoftClip, Poly3, TanHDist, SinDist,
-        Wrap
+        Wrap, UMax, UMin
     ]
 
 ugenRate :: UGenChannel -> UGenRate
@@ -407,6 +407,12 @@ auxIn channel = optimizeUGenCalcFunc [inKCalc, inACalc] $ multiChannelExpandUGen
 
 auxThrough :: UGen -> UGen -> UGen
 auxThrough channel input = _useq (out channel input) input
+
+mixThrough :: UGen -> UGen -> UGen -> UGen
+mixThrough channel wetToDryRatio input = _useq (out channel (input * wetAmp)) (input * dryAmp)
+    where
+        wetAmp = constrain 0 1 wetToDryRatio
+        dryAmp = 1 - wetAmp
 
 foreign import ccall "&poll_calc" pollCalc :: CUGenFunc
 foreign import ccall "&poll_constructor" pollConstructor :: CUGenFunc
@@ -1170,6 +1176,16 @@ setSynthArg synth argIndex argValue = sendMessage (SetSynthArg synth (fromIntegr
 
 setSynthArgs :: Synth -> [Rational] -> Necronomicon ()
 setSynthArgs synth argValues = sendMessage (SetSynthArgs synth $ map (CDouble . fromRational) argValues)
+
+pSynthStream :: String -> PStream (String, UGen) -> PDef
+pSynthStream name layout = pstream name pBeatFunc layout
+    where
+        pBeatFunc = return (\synth t -> playSynthAtJackTimeAndMaybeCompile synth [] t >> return ())
+
+pSynthArgStream :: String -> PStream Rational -> PDef
+pSynthArgStream synthName layout = pstream ("__pattern__" ++ synthName) pBeatFunc layout
+    where
+        pBeatFunc = return (\arg t -> playSynthAtJackTime synthName [arg] t >> return ())
 
 compileSynthDef :: UGenType a => String -> a -> Necronomicon ()
 compileSynthDef name synthDef = liftIO (runCompileSynthDef name synthDef) >>= addSynthDef
