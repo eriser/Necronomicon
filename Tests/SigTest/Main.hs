@@ -221,11 +221,18 @@ metallic4 :: UGen -> UGen
 metallic4 f = metallicBass f 0.25
 
 hyperMelody :: UGen -> UGen
-hyperMelody f = [s,s2] |> gain 0.04 |> e |> visAux (random 0 2 5) 20 |> masterOut
+hyperMelody f = [s,s2] |> gain 0.15 |> e |> visAux (random 0 2 5) 20 |> masterOut
     where
-        e  = env [0,1,0.15, 0] [0.0001,0.1, 7] (-1.5)
+        e  = env [0, 1, 0.15, 0] [0.0001, 0.1, 7] (-1.5)
         s  = sin <| sin 3 * 6 + f * 2
         s2 = sin <| sin 6 * 9 + f
+
+hyperMelodyHarmony :: UGen -> UGen
+hyperMelodyHarmony f = [s, s2] |> lpf (fromSlendro 25) 0.3 |> e |> visAux (random 0 2 5) 20 |> masterOut
+    where
+        e  = env [0, 0.3, 0.05, 0] [0.0001, 0.1, 7] (-8)
+        s  = sin <| sin 3 * 6 + f
+        s2 = sin <| sin 6 * 9 + f * 2
 
 --add sins for visuals and modulation
 reverseSwell :: UGen -> UGen
@@ -416,11 +423,11 @@ hyperMelodyPattern = playSynthPattern (toggle <| combo [alt,isDown keyF]) hyperM
                 |]
 
 hyperMelodyPattern2 :: Signal ()
-hyperMelodyPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyH]) hyperMelody (pmap ((*2) . d2f sigScale) <| ploop [sec1])
+hyperMelodyPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyH]) hyperMelodyHarmony (pmap ((*2) . d2f sigScale) <| ploop [sec1])
     where
         sec1 = [lich| 4 _ 3 _ 2 _ _ _
                       4 _ 3 _ 2 _ 3 _
-                      [4 6 8] 7 _ _ _ _ _ _
+                      2 1 _ _ _ _ _ _
                       _ _ _ _ _ _ _ _
                       4 _ 3 _ 2 _ _ _
                       4 _ 3 _ 2 _ 3 _
