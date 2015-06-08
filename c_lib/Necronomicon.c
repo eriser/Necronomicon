@@ -64,7 +64,7 @@ double RECIP_SAMPLE_RATE = 1.0 / 44100.0;
 double TABLE_MUL_RECIP_SAMPLE_RATE = TABLE_SIZE * (1.0 / 44100.0);
 double TWO_PI_TIMES_RECIP_SAMPLE_RATE;
 unsigned int BLOCK_SIZE = 64;
-double LOG_001;
+#define LOG_001 -6.907755278982137
 
 /////////////////////
 // Hashing
@@ -1347,7 +1347,6 @@ void init_rt_thread()
 	TABLE_MUL_RECIP_SAMPLE_RATE = TABLE_SIZE * RECIP_SAMPLE_RATE;
 	usecs_per_frame = USECS_PER_SECOND / SAMPLE_RATE;
 	TWO_PI_TIMES_RECIP_SAMPLE_RATE = TWO_PI * RECIP_SAMPLE_RATE;
-	LOG_001 = log(0.001);
 
 	synth_table = hash_table_new();
 	rt_fifo = new_message_fifo();
@@ -3169,16 +3168,14 @@ double decay_time;					   \
 double feedback;					   \
 double* in2 = UGEN_INPUT_BUFFER(u, 2); \
 
-#define CALC_FEEDBACK(delay_time, decay_time)				       \
-({															       \
-	double ret = 0;												   \
-	if ((delay_time != 0) && (decay_time != 0))					   \
-	{															   \
-		ret = exp(LOG_001 * delay_time / fabs(decay_time));		   \
-		ret = copysignf(ret, decay_time);						   \
-	}															   \
-	ret;														   \
-})                                                                 \
+static inline double CALC_FEEDBACK(double delay_time, double decay_time)
+{
+	if (delay_time == 0.0 || decay_time == 0.0)
+		return 0.0;
+
+	double absret = exp(LOG_001 * delay_time / fabs(decay_time));
+	return copysign(absret, decay_time);
+}
 
 #define COMBN_CALC(CONTROL_ARGS, AUDIO_ARGS)									\
 INIT_DELAY(u);																	\
@@ -3189,6 +3186,7 @@ AUDIO_LOOP(																		\
 	AUDIO_ARGS																	\
 	iread_index = write_index - (long) delay_time;								\
 	y = iread_index < 0 ? 0 : buffer.samples[iread_index & num_samples_mask];	\
+	feedback = CALC_FEEDBACK(delay_time, decay_time);							\
 	buffer.samples[write_index & num_samples_mask] = x + (feedback * y);		\
 	++write_index;																\
 	UGEN_OUT(out, y);															\
@@ -3197,8 +3195,8 @@ FINISH_DELAY();																	\
 
 #define COMBN_DELAY_TIMEK delay_time = fmin(data.max_delay_time, fmax(1, (*in0) * SAMPLE_RATE));
 #define COMBN_DELAY_TIMEA delay_time = fmin(data.max_delay_time, fmax(1, UGEN_IN(in0) * SAMPLE_RATE));
-#define COMBN_FEEDBACKK feedback = (*in1) * 0.1;
-#define COMBN_FEEDBACKA feedback = UGEN_IN(in1) * 0.1;
+#define COMBN_FEEDBACKK decay_time = (*in1) * SAMPLE_RATE;
+#define COMBN_FEEDBACKA decay_time = UGEN_IN(in1) * SAMPLE_RATE;
 #define COMBN_XK x = *in2;
 #define COMBN_XA x = UGEN_IN(in2);
 
@@ -3310,8 +3308,7 @@ unsigned int iread_index0, iread_index1;												\
 CONTROL_ARGS																			\
 AUDIO_LOOP(																				\
 	AUDIO_ARGS																			\
-	/* feedback = CALC_FEEDBACK(delay_time, decay_time); */								\
-	x = UGEN_IN(in2);																	\
+	feedback = CALC_FEEDBACK(delay_time, decay_time);									\
 	read_index = (double) write_index - delay_time;										\
 	iread_index0 = (long) read_index;													\
 																						\
@@ -3337,8 +3334,8 @@ FINISH_DELAY();																			\
 
 #define COMBL_DELAY_TIMEK delay_time = fmin(data.max_delay_time, fmax(1, (*in0) * SAMPLE_RATE));
 #define COMBL_DELAY_TIMEA delay_time = fmin(data.max_delay_time, fmax(1, UGEN_IN(in0) * SAMPLE_RATE));
-#define COMBL_FEEDBACKK feedback = (*in1) * 0.1;
-#define COMBL_FEEDBACKA feedback = UGEN_IN(in1) * 0.1;
+#define COMBL_FEEDBACKK decay_time = (*in1) * SAMPLE_RATE;
+#define COMBL_FEEDBACKA decay_time = UGEN_IN(in1) * SAMPLE_RATE;
 #define COMBL_XK x = *in2;
 #define COMBL_XA x = UGEN_IN(in2);
 
@@ -3450,8 +3447,7 @@ unsigned int iread_index0, iread_index1, iread_index2, iread_index3;											\
 CONTROL_ARGS																									\
 AUDIO_LOOP(																										\
 	AUDIO_ARGS																									\
-	/* feedback = CALC_FEEDBACK(delay_time, decay_time); */														\
-	x = UGEN_IN(in2);																							\
+	feedback = CALC_FEEDBACK(delay_time, decay_time);															\
 	read_index  = (double) write_index - delay_time;															\
 	iread_index1 = (long) read_index;																			\
 	iread_index2 = iread_index1 - 1;																			\
@@ -3472,8 +3468,8 @@ FINISH_DELAY();																									\
 
 #define COMBC_DELAY_TIMEK delay_time = fmin(data.max_delay_time, fmax(1, (*in0) * SAMPLE_RATE));
 #define COMBC_DELAY_TIMEA delay_time = fmin(data.max_delay_time, fmax(1, UGEN_IN(in0) * SAMPLE_RATE));
-#define COMBC_FEEDBACKK feedback = (*in1) * 0.1;
-#define COMBC_FEEDBACKA feedback = UGEN_IN(in1) * 0.1;
+#define COMBC_FEEDBACKK decay_time = (*in1) * SAMPLE_RATE;
+#define COMBC_FEEDBACKA decay_time = UGEN_IN(in1) * SAMPLE_RATE;
 #define COMBC_XK x = *in2;
 #define COMBC_XA x = UGEN_IN(in2);
 

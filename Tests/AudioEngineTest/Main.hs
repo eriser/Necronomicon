@@ -5,10 +5,8 @@ import Necronomicon
 reverbSynth :: UGen
 reverbSynth = auxIn [50, 51] |> freeverb 0.5 1 0.5 |> gain 0.5 |> out 0
 
-combSynthN :: UGen -> UGen -> UGen
-combSynthN freq _ = s +> combC 1 0.5 1 |> gain 0.1 |> out 0
-    where
-        s = sin $ lag 0.1 freq
+combSynthC :: UGen -> UGen -> UGen
+combSynthC freq decayTime = pulse (lag 0.1 freq) 0.5 |> combC 1 0.1 (lag 0.1 decayTime) |> gain 0.1 |> dup |> out 0
 
 delaySynthN :: UGen -> UGen -> UGen
 delaySynthN freq _ = s +> delayN 1 1 |> gain 0.1 |> dup |> out 0
@@ -48,7 +46,7 @@ main = runSignal
        <> play (toggle <| isDown keyA) delaySynthN (mouseX ~> scale 20 10000)  mouseY
        <> play (toggle <| isDown keyW) delaySynthL (mouseX ~> scale 20 10000)  mouseY
        <> play (toggle <| isDown keyD) delaySynthC (mouseX ~> scale 20 10000)  mouseY
-       <> play (toggle <| isDown keyS) combSynthN  (mouseX ~> scale 20 10000) (mouseY * 10)
+       <> play (toggle <| isDown keyS) combSynthC  (mouseX ~> scale 1 4000) (mouseY ~> scale 0 20)
        <> play (toggle <| isDown keyF) feedSynth (mouseX ~> scale 2 20000) (mouseY ~> scale 2 20000)
        <> play (toggle <| isDown keyL) limiterSynth (mouseX ~> scale 0 4)
        <> play (toggle <| isDown keyN) noLimiterSynth (mouseX ~> scale 0 4)
