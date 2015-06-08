@@ -1,4 +1,132 @@
-module Necronomicon.FRP.SignalA where
+module Necronomicon.FRP.SignalA (
+    Signal,
+    (<~),
+    (~~),
+    (~>),
+    Time,
+    delay,
+    runSignal,
+    necro,
+    dimensions,
+    mousePos,
+    mouseDelta,
+    mouseX,
+    mouseY,
+    mouseButton,
+    mouseClick,
+    keyA,
+    keyB,
+    keyC,
+    keyD,
+    keyE,
+    keyF,
+    keyG,
+    keyH,
+    keyI,
+    keyJ,
+    keyK,
+    keyL,
+    keyM,
+    keyN,
+    keyO,
+    keyP,
+    keyQ,
+    keyR,
+    keyS,
+    keyT,
+    keyU,
+    keyV,
+    keyW,
+    keyX,
+    keyY,
+    keyZ,
+    keyEnter,
+    keyLCtrl,
+    keyRCtrl,
+    keyLAlt,
+    keyRAlt,
+    keySpace,
+    keyLShift,
+    keyRShift,
+    keyBackspace,
+    key0,
+    key1,
+    key2,
+    key3,
+    key4,
+    key5,
+    key6,
+    key7,
+    key8,
+    key9,
+    keyApostrophe,
+    keyComma,
+    keyMinus,
+    keyEqual,
+    keyPeriod,
+    keySlash,
+    keySemiColon,
+    keyLeftBracket,
+    keyBackSlash,
+    keyRightBracket,
+    keyGraveAccent,
+    keyUp,
+    keyDown,
+    keyLeft,
+    keyRight,
+    isDown,
+    isUp,
+    wasd,
+    keyboard,
+    deltaTime,
+    runTime,
+    every,
+    fps,
+    millisecond,
+    second,
+    minute,
+    hour,
+    foldp,
+    combine,
+    filterIf,
+    filterWhen,
+    filterRepeats,
+    sampleOn,
+    switch,
+    count,
+    sigPrint,
+    fmap2,
+    fmap3,
+    fmap4,
+    fmap5,
+    fmap6,
+    fmap7,
+    fmap8,
+    module Necronomicon.Language.Layout,
+    module Necronomicon.Networking,
+    module Necronomicon.Math,
+    module Necronomicon.UGen,
+    module Necronomicon.Patterns,
+    module Necronomicon.Runtime,
+    module Necronomicon.Linear,
+    module Necronomicon.Noise,
+    module Necronomicon.Graphics,
+    module Necronomicon.Utility,
+    module Necronomicon.Game,
+    module Necronomicon.Physics,
+    module Data.Monoid) where
+
+--Fake Necro import and re-exports
+import Necronomicon.Networking
+import Necronomicon.Language.Layout
+import Necronomicon.Math
+import Necronomicon.UGen
+import Necronomicon.Patterns hiding (tempo, Time)
+import Necronomicon.Runtime
+import Necronomicon.Linear
+import Necronomicon.Noise
+import Necronomicon.Physics
+
 
 ------------------------------------------------------
 import           Control.Concurrent
@@ -8,14 +136,18 @@ import           Control.Monad.ST
 import           Control.Monad.ST.Unsafe
 import           Data.STRef
 import qualified Graphics.UI.GLFW                  as GLFW
+import qualified Data.Vector                       as V
+import qualified Data.Vector.Mutable               as MV
+import qualified Data.IntMap                       as IntMap
+import           Data.Monoid
 
 import qualified Necronomicon.Physics.DynamicTree  as DynTree
 import           Necronomicon.Graphics
 import           Necronomicon.Utility
--- import           Necronomicon.Game hiding (runTime, deltaTime)
+import           Necronomicon.Game hiding (runTime, deltaTime)
 ------------------------------------------------------
 
-
+--Express signals in terms of "hot" and "cold" signals when they are not being observed
 (<~) :: Functor f => (a -> b) -> f a -> f b
 (<~) = fmap
 
@@ -25,7 +157,7 @@ import           Necronomicon.Utility
 (~>) :: Functor f => f a -> (a -> b) -> f b
 (~>) = flip fmap
 
-infixl 4 <~,~~
+infixl 4 <~, ~~
 infixr 4 ~>
 
 newtype Time = Time Double deriving (Eq, Show, Ord, Num, Fractional, Real, Binary)
@@ -41,17 +173,21 @@ unEvent :: Event a -> a
 unEvent (Change   a) = a
 unEvent (NoChange a) = a
 
+hasChanged :: Event a -> Bool
+hasChanged (Change _) = True
+hasChanged  _         = False
+
 instance Functor Event where
     fmap f (Change   a) = Change   $ f a
     fmap f (NoChange a) = NoChange $ f a
 
-data Signal a = Signal { unSignal :: SignalState -> IO ( IO (Event a), a) }
+newtype Signal a = Signal { unSignal :: SignalState -> IO ( IO (Event a), a) }
 
 instance Functor Signal where
     fmap f xsig = Signal $ \state -> do
         (xcont, x) <- unSignal xsig state
-        let fx = f x
-        ref   <- newIORef fx
+        let fx      = f x
+        ref        <- newIORef fx
         return (cont xcont ref, fx)
         where
             cont xcont ref = xcont >>= \xe -> case xe of
@@ -64,12 +200,50 @@ instance Applicative Signal where
         (fcont, f) <- unSignal fsig state
         (xcont, x) <- unSignal xsig state
         let fx      = f x
-        ref        <- newIORef fx
+        ref   <- newIORef fx
         return (cont fcont xcont ref, fx)
         where
             cont fcont xcont ref = fcont >>= \ef -> xcont >>= \ex -> case (ef, ex) of
                 (NoChange _, NoChange _) -> readIORef ref >>= return . NoChange
                 _                        -> let fx = (unEvent ef $ unEvent ex) in writeIORef ref fx >> return (Change fx)
+
+instance Num a => Num (Signal a) where
+    (+)         = fmap2 (+)
+    (*)         = fmap2 (*)
+    (-)         = fmap2 (-)
+    negate      = fmap negate
+    abs         = fmap abs
+    signum      = fmap signum
+    fromInteger = pure . fromInteger
+
+instance Fractional a => Fractional (Signal a) where
+    (/) = fmap2 (/)
+    fromRational = pure . fromRational
+
+instance Floating a => Floating (Signal a) where
+    pi      = pure pi
+    (**)    = fmap2 (**)
+    exp     = fmap exp
+    log     = fmap log
+    sin     = fmap sin
+    cos     = fmap cos
+    asin    = fmap asin
+    acos    = fmap acos
+    atan    = fmap atan
+    logBase = fmap2 logBase
+    sqrt    = fmap sqrt
+    tan     = fmap tan
+    tanh    = fmap tanh
+    sinh    = fmap sinh
+    cosh    = fmap cosh
+    asinh   = fmap asinh
+    atanh   = fmap atanh
+    acosh   = fmap acosh
+
+instance Monoid a => Monoid (Signal a) where
+    mconcat ss = foldr (<>) (pure mempty) ss
+    mempty     = pure mempty
+    mappend    = fmap2 mappend
 
 
 ----------------------------------
@@ -84,15 +258,11 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
         putStrLn "Starting Necronomicon"
         currentTime <- getCurrentTime
         resources   <- newResources
-        -- (ww, wh)    <- GLFW.getWindowSize w
+        (ww, wh)    <- GLFW.getWindowSize w
 
         --Setup Inputs
-        state <- mkSignalState
-        GLFW.setCursorInputMode     w GLFW.CursorInputMode'Disabled
-        GLFW.setCursorPosCallback   w $ Just $ \_ x y     -> inputCallback (mousePosRef state) (x, y)
-        -- GLFW.setMouseButtonCallback w $ Just $ \_ _ s _   -> eventBufferCallback mbRef (s == GLFW.MouseButtonState'Pressed)
-        -- GLFW.setKeyCallback         w $ Just $ \_ k _ p _ -> if p == GLFW.KeyState'Repeating then return () else keyEventCallback keysRef k (p /= GLFW.KeyState'Released)
-        -- GLFW.setWindowSizeCallback  w $ Just $ \_ x y     -> eventBufferCallback mousePosRef (fromIntegral x, fromIntegral y)
+        state <- mkSignalState (fromIntegral ww, fromIntegral wh)
+        setInputCallbacks w state
 
         (scont, _) <- unSignal sig state
         run False w scont state currentTime resources DynTree.empty
@@ -113,13 +283,37 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
                 let loop = do
                         s >>= \es -> case es of
                             NoChange _  -> return ()
-                            Change   s' -> print s'
+                            Change   _  -> return () -- print s'
                         nextState state
                         signalStateUpToDate state >>= \u -> if u then return () else loop
                 loop
                 threadDelay $ 16667
                 run q window s state currentTime resources tree
 
+necro :: Signal (Entity a) -> Signal (Entity a)
+necro sig = Signal $ \state -> do
+    vec        <- readIORef $ objectRef state
+    uid : uids <- readIORef $ uidRef    state
+    (scont, s) <- unSignal sig state
+
+    writeIORef (uidRef state) uids
+
+    if uid < MV.length vec
+        then MV.write vec uid (Just $ gameObject s) >> writeIORef (objectRef state) vec
+        else do
+            vec' <- MV.unsafeGrow vec (MV.length vec)
+            MV.write vec' uid (Just $ gameObject s)
+            writeIORef (objectRef state) vec'
+
+    return (cont (objectRef state) scont uid, s)
+    where
+        cont oref scont uid = scont >>= \se -> case se of
+            NoChange _ -> return se
+            Change   s -> do
+                vec <- readIORef oref
+                MV.write vec uid (Just $ gameObject s)
+                writeIORef oref vec
+                return $ Change s
 
 ----------------------------------
 -- Input
@@ -142,98 +336,570 @@ upToDate :: EventList a -> Bool
 upToDate (_, []) = True
 upToDate _       = False
 
+data SignalState = SignalState
+                 { objectRef     :: IORef (MV.IOVector (Maybe GameObject))
+                 , uidRef        :: IORef [Int]
+                 , runTimeRef    :: IORef (EventList Time)
+                 , deltaTimeRef  :: IORef (EventList Time)
+                 , mousePosRef   :: IORef (EventList (Double, Double))
+                 , mouseClickRef :: IORef (EventList Bool)
+                 , keyboardRef   :: IORef (IntMap.IntMap (EventList Bool))
+                 , dimensionsRef :: IORef (EventList (Double, Double)) }
+
+mkSignalState :: (Double, Double) -> IO SignalState
+mkSignalState dims = SignalState
+                  <~ (MV.new 16 >>= newIORef)
+                  ~~ newIORef [0..]
+                  ~~ newIORef (0, [])
+                  ~~ newIORef (0, [])
+                  ~~ newIORef ((0, 0), [])
+                  ~~ newIORef (False, [])
+                  ~~ newIORef IntMap.empty
+                  ~~ newIORef (dims, [])
+
 nextState :: SignalState -> IO ()
 nextState state = do
-    modifyIORef (runTimeRef   state) nextEvent
-    modifyIORef (deltaTimeRef state) nextEvent
-    modifyIORef (mousePosRef  state) nextEvent
+    modifyIORef (runTimeRef    state) nextEvent
+    modifyIORef (deltaTimeRef  state) nextEvent
+    modifyIORef (mousePosRef   state) nextEvent
+    modifyIORef (mouseClickRef state) nextEvent
+    modifyIORef (keyboardRef   state) $ IntMap.map nextEvent
+    modifyIORef (dimensionsRef state) nextEvent
 
 signalStateUpToDate :: SignalState -> IO Bool
 signalStateUpToDate state = do
-    rt <- readIORef (runTimeRef state)
-    dt <- readIORef (runTimeRef state)
-    mp <- readIORef (runTimeRef state)
-    case (rt, dt, mp) of
-        ((_, []), (_, []), (_, [])) -> return True
-        _                           -> return False
+    rt <- readIORef (runTimeRef    state)
+    dt <- readIORef (deltaTimeRef  state)
+    mp <- readIORef (mousePosRef   state)
+    mc <- readIORef (mouseClickRef state)
+    kb <- readIORef (keyboardRef   state)
+    dm <- readIORef (dimensionsRef state)
+    return $ upToDate rt
+          && upToDate dt
+          && upToDate mp
+          && upToDate mc
+          && foldr (\(_, bs) acc -> acc && (upToDate bs)) True (IntMap.toList kb)
+          && upToDate dm
 
-data SignalState = SignalState
-                 { runTimeRef   :: IORef (EventList Time)
-                 , deltaTimeRef :: IORef (EventList Time)
-                 , mousePosRef  :: IORef (EventList (Double, Double)) }
-
-mkSignalState :: IO SignalState
-mkSignalState = SignalState <~ newIORef (0, []) ~~ newIORef (0, []) ~~ newIORef ((0, 0), [])
+setInputCallbacks :: GLFW.Window -> SignalState -> IO ()
+setInputCallbacks w state = do
+    GLFW.setCursorInputMode     w GLFW.CursorInputMode'Disabled
+    GLFW.setCursorPosCallback   w $ Just $ \_ x y     -> inputCallback (mousePosRef   state) (x, y)
+    GLFW.setMouseButtonCallback w $ Just $ \_ _ s _   -> inputCallback (mouseClickRef state) (s == GLFW.MouseButtonState'Pressed)
+    GLFW.setKeyCallback         w $ Just $ \_ k _ p _ -> if p == GLFW.KeyState'Repeating then return () else keyboardCallback (keyboardRef state) k (p /= GLFW.KeyState'Released)
+    GLFW.setWindowSizeCallback  w $ Just $ \_ x y     -> inputCallback (dimensionsRef state) (fromIntegral x, fromIntegral y)
 
 inputCallback :: IORef (EventList a) -> a -> IO ()
 inputCallback ref x = modifyIORef ref (eventCons x)
 
-standardInputSignal :: (SignalState -> IORef (EventList a)) -> Signal a
-standardInputSignal getter = Signal $ \state -> do
+keyboardCallback :: IORef (IntMap.IntMap (EventList Bool)) -> GLFW.Key -> Bool -> IO ()
+keyboardCallback ref k b = do
+    ks <- readIORef ref
+    case IntMap.lookup (fromEnum k) ks of
+        Nothing -> writeIORef ref $ IntMap.insert (fromEnum k) (False, [b])     ks
+        Just es -> writeIORef ref $ IntMap.insert (fromEnum k) (eventCons b es) ks
+
+inputSignal :: (SignalState -> IORef (EventList a)) -> Signal a
+inputSignal getter = Signal $ \state -> do
     let ref = getter state
-    es     <- readIORef ref
-    return (readIORef ref >>= return . eventHead, unEvent $ eventHead es)
+    e      <- unEvent . eventHead <~ readIORef ref
+    return (readIORef ref >>= return . eventHead, e)
+
+runTime :: Signal Time
+runTime = inputSignal runTimeRef
+
+deltaTime :: Signal Time
+deltaTime = inputSignal deltaTimeRef
 
 mousePos :: Signal (Double, Double)
-mousePos = standardInputSignal mousePosRef
+mousePos = inputSignal mousePosRef
+
+mouseDelta :: Signal (Double, Double)
+mouseDelta = Signal $ \state -> do
+    let dimref = dimensionsRef state
+        mref   = mousePosRef   state
+    ref       <- newIORef ((0, 0), (0, 0))
+    return (cont ref dimref mref, (0, 0))
+    where
+        cont ref dimref mref = readIORef mref >>= \mes -> case eventHead mes of
+            NoChange      _ -> NoChange . snd <~ readIORef ref
+            Change (mx, my) -> do
+                (ww, wh) <- unEvent . eventHead <~ readIORef dimref
+                (px, py) <- fst <~ readIORef ref
+                let delta = ((mx - px) / ww, (my - py) / wh)
+                writeIORef ref ((mx, my), delta)
+                return $ Change delta
+
+mouseButton :: Signal Bool
+mouseButton = inputSignal mouseClickRef
+
+mouseClick :: Signal ()
+mouseClick = const () <~ filterIf not True mouseButton
+
+mouseX :: Signal Double
+mouseX = fst <~ mousePos
+
+mouseY :: Signal Double
+mouseY = snd <~ mousePos
+
+dimensions :: Signal (Double, Double)
+dimensions = inputSignal dimensionsRef
+
+type Key = GLFW.Key
+
+keyA :: GLFW.Key
+keyA = GLFW.Key'A
+
+keyB :: GLFW.Key
+keyB = GLFW.Key'B
+
+keyC :: GLFW.Key
+keyC = GLFW.Key'C
+
+keyD :: GLFW.Key
+keyD = GLFW.Key'D
+
+keyE :: GLFW.Key
+keyE = GLFW.Key'E
+
+keyF :: GLFW.Key
+keyF = GLFW.Key'F
+
+keyG :: GLFW.Key
+keyG = GLFW.Key'G
+
+keyH :: GLFW.Key
+keyH = GLFW.Key'H
+
+keyI :: GLFW.Key
+keyI = GLFW.Key'I
+
+keyJ :: GLFW.Key
+keyJ = GLFW.Key'J
+
+keyK :: GLFW.Key
+keyK = GLFW.Key'K
+
+keyL :: GLFW.Key
+keyL = GLFW.Key'L
+
+keyM :: GLFW.Key
+keyM = GLFW.Key'M
+
+keyN :: GLFW.Key
+keyN = GLFW.Key'N
+
+keyO :: GLFW.Key
+keyO = GLFW.Key'O
+
+keyP :: GLFW.Key
+keyP = GLFW.Key'P
+
+keyQ :: GLFW.Key
+keyQ = GLFW.Key'Q
+
+keyR :: GLFW.Key
+keyR = GLFW.Key'R
+
+keyS :: GLFW.Key
+keyS = GLFW.Key'S
+
+keyT :: GLFW.Key
+keyT = GLFW.Key'T
+
+keyU :: GLFW.Key
+keyU = GLFW.Key'U
+
+keyV :: GLFW.Key
+keyV = GLFW.Key'V
+
+keyW :: GLFW.Key
+keyW = GLFW.Key'W
+
+keyX :: GLFW.Key
+keyX = GLFW.Key'X
+
+keyY :: GLFW.Key
+keyY = GLFW.Key'Y
+
+keyZ :: GLFW.Key
+keyZ = GLFW.Key'Z
+
+keyEnter :: GLFW.Key
+keyEnter  = GLFW.Key'Enter
+
+keyLCtrl :: GLFW.Key
+keyLCtrl  = GLFW.Key'LeftControl
+
+keyRCtrl :: GLFW.Key
+keyRCtrl  = GLFW.Key'RightControl
+
+keyLAlt :: GLFW.Key
+keyLAlt   = GLFW.Key'LeftAlt
+
+keyRAlt :: GLFW.Key
+keyRAlt   = GLFW.Key'RightAlt
+
+keySpace :: GLFW.Key
+keySpace  = GLFW.Key'Space
+
+keyLShift :: GLFW.Key
+keyLShift = GLFW.Key'LeftShift
+
+keyRShift :: GLFW.Key
+keyRShift = GLFW.Key'RightShift
+
+keyBackspace :: GLFW.Key
+keyBackspace = GLFW.Key'Backspace
+
+key0 :: GLFW.Key
+key0 = GLFW.Key'0
+
+key1 :: GLFW.Key
+key1 = GLFW.Key'1
+
+key2 :: GLFW.Key
+key2 = GLFW.Key'2
+
+key3 :: GLFW.Key
+key3 = GLFW.Key'3
+
+key4 :: GLFW.Key
+key4 = GLFW.Key'4
+
+key5 :: GLFW.Key
+key5 = GLFW.Key'5
+
+key6 :: GLFW.Key
+key6 = GLFW.Key'6
+
+key7 :: GLFW.Key
+key7 = GLFW.Key'7
+
+key8 :: GLFW.Key
+key8 = GLFW.Key'8
+
+key9 :: GLFW.Key
+key9 = GLFW.Key'9
+
+keyApostrophe :: GLFW.Key
+keyApostrophe = GLFW.Key'Apostrophe
+
+keyComma :: GLFW.Key
+keyComma = GLFW.Key'Comma
+
+keyMinus :: GLFW.Key
+keyMinus = GLFW.Key'Minus
+
+keyEqual :: GLFW.Key
+keyEqual = GLFW.Key'Equal
+
+keyPeriod :: GLFW.Key
+keyPeriod = GLFW.Key'Period
+
+keySlash :: GLFW.Key
+keySlash = GLFW.Key'Slash
+
+keySemiColon :: GLFW.Key
+keySemiColon = GLFW.Key'Semicolon
+
+keyLeftBracket :: GLFW.Key
+keyLeftBracket = GLFW.Key'LeftBracket
+
+keyBackSlash :: GLFW.Key
+keyBackSlash = GLFW.Key'Backslash
+
+keyRightBracket :: GLFW.Key
+keyRightBracket = GLFW.Key'RightBracket
+
+keyGraveAccent :: GLFW.Key
+keyGraveAccent = GLFW.Key'GraveAccent
+
+keyUp :: GLFW.Key
+keyUp    = GLFW.Key'Up
+
+keyDown :: GLFW.Key
+keyDown  = GLFW.Key'Down
+
+keyLeft :: GLFW.Key
+keyLeft  = GLFW.Key'Left
+
+keyRight :: GLFW.Key
+keyRight = GLFW.Key'Right
+
+isUp :: Key -> Signal Bool
+isUp k = not <~ isDown k
+
+isDown :: Key -> Signal Bool
+isDown k = Signal $ \state -> return (cont (keyboardRef state), False)
+    where
+        cont ref = do
+            ks <- readIORef ref
+            case IntMap.lookup (fromEnum k) ks of
+                Nothing -> return $ NoChange False
+                Just el -> return $ eventHead el
+
+wasd :: Signal (Double, Double)
+wasd = go <~ isDown keyW ~~ isDown keyA ~~ isDown keyS ~~ isDown keyD
+    where
+        go w a s d = (((if d then 1 else 0) + (if a then (-1) else 0)),((if w then 1 else 0) + (if s then (-1) else 0)))
+
+keyboard :: Signal [Key]
+keyboard = filterRepeats $ Signal $ \state -> do
+    let ref = keyboardRef state
+    return (cont ref, [])
+    where
+        addKey (k, el) acc = if unEvent (eventHead el) then toEnum k : acc else acc
+        cont ref = do
+            ks <- readIORef ref
+            let ks' = foldr addKey [] (IntMap.toList ks)
+            return $ Change ks'
+
+-----------------------------------------------------------------
+-- Time
+-----------------------------------------------------------------
+
+millisecond    :: Time
+second         :: Time
+minute         :: Time
+hour           :: Time
+
+millisecond      = 0.001
+second           = 1
+minute           = 60
+hour             = 3600
+
+every :: Time -> Signal Time
+every time = Signal $ \state -> do
+    let dtref = deltaTimeRef state
+        rtref = runTimeRef   state
+    ref      <- newIORef 0
+    accref   <- newIORef 0
+    return (cont dtref rtref accref ref, 0)
+    where
+        cont dtref rtref accref ref = readIORef dtref >>= \edt -> case eventHead edt of
+            NoChange _ -> NoChange <~ readIORef ref
+            Change  dt -> do
+                acc  <- readIORef accref
+                rt   <- unEvent . eventHead <~ readIORef rtref
+                let acc' = acc + dt
+                if acc' >= time
+                    then writeIORef accref (acc' - time) >> return (Change rt)
+                    else writeIORef accref acc' >> (NoChange <~ readIORef ref)
+
+fps :: Time -> Signal Time
+fps rtime = Signal $ \state -> do
+    let dtref = deltaTimeRef state
+    ref      <- newIORef 0
+    accref   <- newIORef 0
+    return (cont dtref accref ref, 0)
+    where
+        time = 1 / rtime
+        cont dtref accref ref = readIORef dtref >>= \edt -> case eventHead edt of
+            NoChange _ -> NoChange <~ readIORef ref
+            Change  dt -> do
+                acc  <- readIORef accref
+                let acc' = acc + dt
+                if acc' >= time
+                    then writeIORef accref (acc' - time) >> return (Change acc')
+                    else writeIORef accref acc' >> (NoChange <~ readIORef ref)
+
+-- lagSig :: (Fractional a,Eq a,Ord a) => Double -> Signal a -> Signal a
+-- lagSig lagTime sig = Signal $ \state -> do
+--     sCont     <- unSignal sig state
+--     sValue    <- unEvent <~ sCont updateZero
+--     ref       <- newIORef (sValue,sValue,1)
+--     return $ processSignal sCont sValue ref
+--     where
+--         processSignal sCont _ ref update = sCont update >>= \s -> case s of
+--             Change v -> do
+--                 (start,end,acc) <- readIORef ref
+--                 let _           = min (acc + (updateDelta update) * lagTime) 1
+--                 let value'      = start * (fromRational . toRational $ 1 - acc) + end * (fromRational $ toRational acc)
+--                 writeIORef ref (value',v,0)
+--                 return $ Change value'
+--             NoChange _ -> do
+--                 (start,end,acc) <- readIORef ref
+--                 if acc >= 1
+--                     then return (NoChange end)
+--                     else do
+--                         let acc'         = min (acc + (updateDelta update) * lagTime) 1
+--                         let value'       = start * (fromRational . toRational $ 1 - acc) + end * (fromRational $ toRational acc)
+--                         writeIORef ref (start,end,acc')
+--                         return $ Change value'
 
 ----------------------------------
 -- Combinators
 ----------------------------------
 
---This is still a hack, but theoretically a less unsound hack. Everything should be fully sequenced at all times,
---As we are either living in the ST monad (during intialization), or a single threaded IO environment (with a static graph),
---During run time.
---NOTE: For streaming to work as expected you must use the head of the stream somewhere in the signal graph before the tail!
-stream :: a -> Signal a -> (Signal a, Signal a)
-stream initx sig = runST $ do
-    ref       <- newSTRef Nothing
-    let reader = Signal $ \_ -> return (readCont, initx)
-            where
-                readCont = unsafeSTToIO (readSTRef ref) >>= \mx -> case mx of
-                    Just x  -> return x
-                    Nothing -> error "Malformed stream: The tail of the stream has appeared before the head of the stream in the signal graph."
+fmap2 :: Applicative f => (a -> b -> c) -> f a -> f b -> f c
+fmap2 f a b = f <~ a ~~ b
 
-        writer = Signal $ \state -> do
-            (scont, s) <- unSignal sig state
-            unsafeSTToIO (writeSTRef ref $ Just $ Change s)
-            return (scont >>= \s' -> unsafeSTToIO (writeSTRef ref $ Just s') >> return s', s)
-    return (writer, reader)
+fmap3 :: Applicative f => (a -> b -> c -> d) -> f a -> f b -> f c -> f d
+fmap3 f a b c = f <~ a ~~ b ~~ c
 
--- This works, but is a total hack. It guarantees that the sequencing is correct, at least internally.
--- stream :: a -> Signal a -> (Signal a, Signal a)
--- stream initx sig = unsafePerformIO $ do
---     ref       <- newIORef (Change initx)
---     let reader = Signal $ \_ -> return (readIORef ref, initx)
---         writer = Signal $ \state -> do
---             (scont, s) <- unSignal sig state
---             return (scont >>= \s' -> writeIORef ref s' >> return s', s)
---     return (writer, reader)
+fmap4 :: Applicative f => (a -> b -> c -> d -> e) -> f a -> f b -> f c -> f d -> f e
+fmap4 f a b c d = f <~ a ~~ b ~~ c ~~ d
+
+fmap5 :: Applicative f => (a -> b -> c -> d -> e -> ff) -> f a -> f b -> f c -> f d -> f e -> f ff
+fmap5 f a b c d e = f <~ a ~~ b ~~ c ~~ d ~~ e
+
+fmap6 :: Applicative f => (a -> b -> c -> d -> e -> ff -> g) -> f a -> f b -> f c -> f d -> f e -> f ff -> f g
+fmap6 f a b c d e f' = f <~ a ~~ b ~~ c ~~ d ~~ e ~~ f'
+
+fmap7 :: Applicative f => (a -> b -> c -> d -> e -> ff -> g -> h) -> f a -> f b -> f c -> f d -> f e -> f ff -> f g -> f h
+fmap7 f a b c d e f' g = f <~ a ~~ b ~~ c ~~ d ~~ e ~~ f' ~~ g
+
+fmap8 :: Applicative f => (a -> b -> c -> d -> e -> ff -> g -> h -> i) -> f a -> f b -> f c -> f d -> f e -> f ff -> f g -> f h -> f i
+fmap8 f a b c d e f' g h = f <~ a ~~ b ~~ c ~~ d ~~ e ~~ f' ~~ g ~~ h
+
 
 --implement this with signal state and no unsafe business, possible?
 delay :: a -> Signal a -> Signal a
 delay initx sig = runST $ do
-    sync    <- newSTRef Nothing
-    ref     <- newSTRef (Change initx)
+    sync <- newSTRef Nothing
+    ref  <- newSTRef (Change initx)
+    return $ Signal $ \state -> unsafeSTToIO (readSTRef sync) >>= \sx -> case sx of
+        Just  _ -> return (unsafeSTToIO $ readSTRef ref, initx)
+        Nothing -> do
+            unsafeSTToIO (writeSTRef sync $ Just ())
+            (scont, _) <- unSignal sig state
+            fref       <- newIORef $ Change initx
+            return (cont scont fref, initx)
+            where
+                cont scont fref = do
+                    prev <- readIORef fref
+                    unsafeSTToIO (writeSTRef ref prev)
+                    s    <- scont
+                    writeIORef fref s
+                    return prev
 
-    let writerReader = Signal $ \state -> unsafeSTToIO (readSTRef sync) >>= \sx -> case sx of
-            Just  _ -> return (unsafeSTToIO (readSTRef ref), initx)
-            Nothing -> do
-                unsafeSTToIO (writeSTRef sync $ Just ())
-                (scont, _) <- unSignal sig state
-                fref       <- newIORef $ Change initx
-                return (cont scont fref, initx)
-                where
-                    cont scont fref = do
-                        prev <- readIORef fref
-                        unsafeSTToIO (writeSTRef ref prev)
-                        s    <- scont
-                        writeIORef fref s
-                        return prev
+foldp :: (a -> b -> b) -> b -> Signal a -> Signal b
+foldp f b sig = Signal $ \state -> do
+    (scont, _) <- unSignal sig state
+    ref        <- newIORef b
+    return (cont scont ref, b)
+    where
+        cont scont ref = scont >>= \se -> case se of
+            NoChange _ -> do
+                prev <- readIORef ref
+                return $ NoChange prev
+            Change s -> do
+                prev <- readIORef ref
+                let nextV = f s prev
+                writeIORef ref nextV
+                return $ Change nextV
 
+--Use a blackhole setting method!?!?!?
+--This only works if you go into recursion land once at a time.
+--Can this be proven?
+-- delay' :: a -> Signal a -> Signal a
+-- delay' initx sig = Signal $ \state uids -> do
+--     print $ head uids
+--     (scont, _, _, uids') <- unSignal sig state $ tail uids
+--     ref                  <- newIORef $ Change initx
+--     return (cont scont ref, initx, head uids, uids')
+--     where
+--         cont scont ref = do
+--             prev <- readIORef ref
+--             s    <- scont
+--             writeIORef ref s
+--             return prev
 
-    return writerReader
+--Would it be possible to do a ticked merge???
+combine :: [Signal a] -> Signal [a]
+combine signals = Signal $ \state -> do
+    continuations <- mapM (\s -> fmap fst $ unSignal s state) signals
+    return (cont continuations, [])
+    where
+        cont continuations = do
+            events <- sequence continuations
+            let events' = foldr (\e acc -> if hasChanged e then unEvent e : acc else acc) [] events
+            return $ Change events'
 
+filterIf :: (a -> Bool) -> a -> Signal a -> Signal a
+filterIf sPred sInit signal = Signal $ \state ->do
+    (scont, sValue) <- unSignal signal state
+    let s   = if not (sPred sValue) then sValue else sInit
+    ref    <- newIORef s
+    return (cont scont ref, s)
+    where
+        cont scont ref = scont >>= \sValue -> case sValue of
+            NoChange _ -> readIORef ref >>= return . NoChange
+            Change   s -> if sPred s
+                then readIORef  ref   >>= return . NoChange
+                else writeIORef ref s >>  return  (Change s)
+
+filterWhen :: Signal Bool -> Signal a -> Signal a
+filterWhen sPred xsig = Signal $ \state -> do
+    (pcont, _) <- unSignal sPred state
+    (xcont, x) <- unSignal xsig  state
+    ref        <- newIORef x
+    return (cont pcont xcont ref, x)
+    where
+        cont pcont xcont ref = do
+            pValue <- unEvent <~ pcont
+            if pValue then readIORef ref >>= return . NoChange else xcont >>= \xe -> case xe of
+                NoChange _  -> return xe
+                Change   x' -> writeIORef ref x' >> return xe
+
+filterRepeats :: (Eq a) => Signal a -> Signal a
+filterRepeats signal = Signal $ \state -> do
+    (scont, s) <- unSignal signal state
+    ref        <- newIORef s
+    return (cont ref scont, s)
+    where
+        cont ref scont = scont >>= \value -> case value of
+            NoChange _ -> readIORef ref >>= return . NoChange
+            Change   v -> readIORef ref >>= \prev -> if prev == v
+                then return $ NoChange v
+                else writeIORef ref v >> return (Change v)
+
+sampleOn :: Signal a -> Signal b -> Signal b
+sampleOn asig bsig = Signal $ \state -> do
+    (aCont, _) <- unSignal asig state
+    (bCont, b) <- unSignal bsig state
+    ref        <- newIORef b
+    return (cont aCont bCont ref, b)
+    where
+        cont acont bcont ref = acont >>= \ea -> case ea of
+            NoChange _ -> readIORef ref >>= return . NoChange
+            Change   _ -> bcont >>= \eb -> case eb of
+                NoChange _ -> readIORef  ref   >>= return . Change
+                Change   b -> writeIORef ref b >>  return  (Change b)
+
+count :: Signal a -> Signal Int
+count signal = Signal $ \state -> do
+    (scont, _) <- unSignal signal state
+    ref        <- newIORef 0
+    return (cont scont ref, 0)
+    where
+        cont scont ref = scont >>= \es -> case es of
+            NoChange _ -> readIORef ref >>= return . NoChange
+            Change   _ -> do
+                n <- readIORef ref
+                let result = n + 1
+                writeIORef ref result
+                return $ Change result
+
+switch :: Signal Int -> [Signal a] -> Signal a
+switch intSig signals = Signal $ \state -> do
+    (iCont,  i) <- unSignal intSig state
+    (sConts, s) <- (\(x, y) -> (V.fromList x, V.fromList y)) <~ unzip <~ mapM (\s -> unSignal s state) signals
+    let x        = s V.! clamp 0 (V.length s - 1) i
+    return (cont iCont sConts, x)
+    where
+        cont iCont sConts = iCont ~> unEvent >>= \index -> sConts V.! clamp 0 (V.length sConts - 1) index
+
+sigPrint :: Show a => Signal a -> Signal ()
+sigPrint sig = Signal $ \state -> do
+    (scont, s) <- unSignal sig state
+    print s
+    return (cont scont, ())
+    where
+        cont scont = scont >>= \se -> case se of
+            NoChange _ -> return $ NoChange ()
+            Change   s -> print s >> return (Change ())
 
 {-
 module Necronomicon.FRP.SignalA (

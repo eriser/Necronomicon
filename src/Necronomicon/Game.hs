@@ -34,6 +34,7 @@ import GHC.Generics
 
 -- data Transform  = Transform Vector3 Quaternion Vector3 deriving (Show)
 data GameObject = GameObject {
+    gid      :: UID,
     pos      :: Vector3,
     rot      :: Quaternion,
     gscale   :: Vector3,
@@ -44,15 +45,15 @@ data GameObject = GameObject {
 } deriving (Show, Eq)
 
 instance Binary GameObject where
-    put (GameObject p r s c m cam cs) = put p >> put r >> put s >> put c >> put m >> put cam >> put cs
-    get                               = GameObject <$> get <*> get <*> get <*> get <*> get <*> get <*> get
+    put (GameObject uid p r s c m cam cs) = put uid >> put p >> put r >> put s >> put c >> put m >> put cam >> put cs
+    get                                   = GameObject <$> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get
 
 -------------------------------------------------------
 -- GameObject API
 -------------------------------------------------------
 
-gameObject :: GameObject
-gameObject = GameObject 0 identity 1 Nothing Nothing Nothing []
+mkGameObject :: GameObject
+mkGameObject = GameObject New 0 identity 1 Nothing Nothing Nothing []
 
 rotate :: Vector3 -> GameObject -> GameObject
 rotate (Vector3 x y z) g = g{rot = rot g * fromEuler x y z}
@@ -70,28 +71,28 @@ collisions g
     | otherwise            = []
 
 gchildren_ :: [GameObject] -> GameObject -> GameObject
-gchildren_ cs (GameObject p r s c m cm _) = GameObject p r s c m cm cs
+gchildren_ cs (GameObject uid p r s c m cm _) = GameObject uid p r s c m cm cs
 
 -------------------------------------------------------
 -- GameObject - Getters / Setters
 -------------------------------------------------------
 
 rotMat :: GameObject -> Matrix3x3
-rotMat (GameObject _ r _ _ _ _ _) = rotFromQuaternion r
+rotMat (GameObject _ _ r _ _ _ _ _) = rotFromQuaternion r
 
 transMat :: GameObject -> Matrix4x4
-transMat (GameObject p r s _ _ _ _) = trsMatrix p r s
+transMat (GameObject _ p r s _ _ _ _) = trsMatrix p r s
 
 collider_ :: Collider -> GameObject -> GameObject
-collider_ c (GameObject p r s _ m cm cs) = GameObject p r s (Just c) m cm cs
+collider_ c (GameObject u p r s _ m cm cs) = GameObject u p r s (Just c) m cm cs
 
 gaddChild :: GameObject -> GameObject -> GameObject
-gaddChild g (GameObject p r s c m cm cs) = GameObject p r s c m cm (g : cs)
+gaddChild g (GameObject u p r s c m cm cs) = GameObject u p r s c m cm (g : cs)
 
 removeChild :: GameObject -> Int -> GameObject
-removeChild (GameObject p r s c m cm cs) n
-    | null cs2  = GameObject p r s c m cm cs
-    | otherwise = GameObject p r s c m cm $ cs1 ++ tail cs2
+removeChild (GameObject u p r s c m cm cs) n
+    | null cs2  = GameObject u p r s c m cm cs
+    | otherwise = GameObject u p r s c m cm $ cs1 ++ tail cs2
     where
         (cs1, cs2) = splitAt n cs
 
@@ -299,7 +300,7 @@ runGame f inits = initWindow (1920, 1080) True >>= \mw -> case mw of
                         mouseMoved      = if mp /= mousePosition world then Just mp else Nothing
                     }
                     s'          = f world' s
-                    g           = gchildren_ (getGameObjects s' []) gameObject
+                    g           = gchildren_ (getGameObjects s' []) mkGameObject
                     (g', tree') = update (g, tree)
                     (s'', _)    = setGameObjects s' (children g')
 
@@ -333,7 +334,7 @@ mkWorld = World 0 0 (0, 0) (0, 0) False False Nothing Nothing
 
 data Entity a = Entity {
     userData   :: a,
-    entityData :: GameObject
+    gameObject :: GameObject
 } deriving (Show, Eq)
 
 instance Binary a => Binary (Entity a) where
@@ -556,12 +557,12 @@ instance Arbitrary GameObject where
         (px, py, pz) <- arbitrary
         (rx, ry, rz) <- arbitrary
         (sx, sy, sz) <- arbitrary
-        return $ GameObject (Vector3 px py pz) (fromEuler rx ry rz) (Vector3 sx sy sz) (boxCollider w h d) Nothing Nothing []
+        return $ GameObject New (Vector3 px py pz) (fromEuler rx ry rz) (Vector3 sx sy sz) (boxCollider w h d) Nothing Nothing []
 
 dynTreeTester :: ((GameObject, DynamicTree) -> Bool) -> [[TreeTest]] -> Bool
 dynTreeTester f uss = fst $ foldr updateTest start uss
     where
-        start                    = (True, (GameObject 0 identity 1 Nothing Nothing Nothing [], empty))
+        start                    = (True, (GameObject New 0 identity 1 Nothing Nothing Nothing [], empty))
         updateTest us (True,  t) = let res = update (foldr test' t us) in (f res, res)
         updateTest _  (False, t) = (False, t)
         test' (TestInsert c)     (g, t) = (gaddChild   c g, t)
@@ -572,7 +573,7 @@ dynTreeTester f uss = fst $ foldr updateTest start uss
             where
                 cs'        = cs1 ++ (c : tail cs2)
                 (cs1, cs2) = splitAt i $ children g
-                c = GameObject tr identity 1 (collider (head cs2)) Nothing Nothing (children (head cs2))
+                c = GameObject New tr identity 1 (collider (head cs2)) Nothing Nothing (children (head cs2))
 
 validateIDs :: (GameObject, DynamicTree) -> Bool
 validateIDs (g, t) = sort (tids (nodes t) []) == gids && sort nids == gids
@@ -582,11 +583,11 @@ validateIDs (g, t) = sort (tids (nodes t) []) == gids && sort nids == gids
         tids (Leaf _ uid)   acc = uid : acc
         tids (Node _ l r _) acc = tids r $ tids l acc
         (_, nids)               = V.foldl' (\(i, ids) x -> if x == Nothing then (i + 1, ids) else (i + 1, i : ids) ) (0, []) $ nodeData t
-        gid g' acc              = case collider g' of
+        gid' g' acc             = case collider g' of
             Just (SphereCollider (UID c) _ _ _) -> c : acc
             Just (BoxCollider    (UID c) _ _ _) -> c : acc
             _                                   -> acc
-        gids                    = sort $ foldChildren gid [] g
+        gids                    = sort $ foldChildren gid' [] g
 
 dynTreeTest :: IO ()
 dynTreeTest = do
