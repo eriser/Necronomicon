@@ -1039,7 +1039,7 @@ limiter lookahead attack release threshold knee input = optimizeUGenCalcFunc cfu
             ]
 
 masterLimiter :: UGen -> UGen
-masterLimiter = limiter 0.01 0.01 0.03 (-18) 0.2
+masterLimiter = limiter 0.01 0.01 0.03 (-9) 0.1
 
 dup :: UGen -> UGen
 dup u = u <> u

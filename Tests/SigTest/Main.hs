@@ -10,6 +10,16 @@ main = runSignal <| testGUI <> sections <> hyperTerrainSounds
 hyperTerrainSounds :: Signal ()
 hyperTerrainSounds = metallicPattern
                   <> play (toggle <| combo [alt,isDown keyA]) triOsc32  (mouseToSlendro <~ mouseX) (mouseToSlendro <~ mouseY)
+                  <> play (pure True) masterSynth -- Master Synth, used for limiting
+
+masterOutBus :: UGen
+masterOutBus = 50
+
+masterOutRightBus :: UGen
+masterOutRightBus = 51
+
+masterSynth :: UGen
+masterSynth = auxIn [masterOutBus, masterOutRightBus] |> masterLimiter |> poll |> out 0
 
 mouseToSlendro :: Double -> Double
 mouseToSlendro m = fromRational . d2f slendro . toRational <| (floor <| scale 0 24 m :: Integer)
@@ -129,7 +139,7 @@ testGUI = gui [chatBox,netBox,ubox]
                           (vertexColored (RGBA 1 1 1 0.1))
 
 triOsc32 :: UGen -> UGen -> UGen
-triOsc32 mx my = feedback fSig |> verb |> gain 0.0385 |> out 0
+triOsc32 mx my = feedback fSig |> verb |> gain 0.0385 |> out masterOutBus
     where
         f1     = lag 0.25 mx
         f2     = lag 0.25 my
@@ -146,7 +156,7 @@ triOsc32 mx my = feedback fSig |> verb |> gain 0.0385 |> out 0
                 sig6 = sinOsc (f1 * 0.25 - sig3 * 261.6255653006) * (sinOsc ( i * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 60 |> gain 0.5 +> d
 
 caveTime :: UGen
-caveTime = [l * 0.875 + r * 0.125, r * 0.875 + l * 0.125] |> out 0
+caveTime = [l * 0.875 + r * 0.125, r * 0.875 + l * 0.125] |> out masterOutBus
     where
         l    = auxIn 20 |> verb
         r    = auxIn 21 |> verb
@@ -188,7 +198,7 @@ metallic4 f = sig + sig2 + sig3 |> e |> visAux 3 2 |> softclip 2 |> filt |> e |>
         e2     = env2     [1,1,0.25,0.25] [0.01,1,5] (-3)
 
 hyperMelody :: UGen -> UGen
-hyperMelody f = [s,s2] |> gain 0.04 |> e |> visAux (random 0 2 5) 20 |> out 0
+hyperMelody f = [s,s2] |> gain 0.04 |> e |> visAux (random 0 2 5) 20 |> out masterOutBus
     where
         e  = env [0,1,0.15, 0] [0.0001,0.1, 7] (-1.5)
         s  = sin <| sin 3 * 6 + f * 2
@@ -226,7 +236,7 @@ reverseSwell2 f = sig1 + sig2 + sig3 |> e |> tanhDist (random 32 0.25 1) |> (+ w
         mod4 = saw (random 11 0.5 2.0)  |> range 0.01 1
 
 shake :: UGen -> UGen
-shake d = sig1 + sig2 |> e |> gain 0.4 |> pan 0.75 |> out 0
+shake d = sig1 + sig2 |> e |> gain 0.4 |> pan 0.75 |> out masterOutBus
     where
         sig1 = whiteNoise |> bpf (12000 |> e2)            3 |> gain 0.05
         sig2 = whiteNoise |> bpf (9000 + 12000 * d |> e2) 4 |> gain 0.05
@@ -234,7 +244,7 @@ shake d = sig1 + sig2 |> e |> gain 0.4 |> pan 0.75 |> out 0
         e2   = env2 [1,1,0.125] [0.01,d*6] (-24)
 
 floorPerc :: UGen -> UGen
-floorPerc d = sig1 + sig2 |> e |> pan 0.35 |> gain 0.3 |> out 0
+floorPerc d = sig1 + sig2 |> e |> pan 0.35 |> gain 0.3 |> out masterOutBus
     where
         -- p a u = [u * (1 - a), u * a]
         sig1  = sin 40
@@ -408,7 +418,7 @@ pulseDemon f = [s, s2] |> filt |> softclip (random 31 100 200) |> gain 0.0225 |>
         filt = lpf   (f * random 19 2 16 |> e2) 3
 
 demonCave :: UGen -> UGen -> UGen -> UGen
-demonCave f1 f2 g = [l * 0.875 + r * 0.125, r * 0.875 + l * 0.125] |> gain g |> out 0
+demonCave f1 f2 g = [l * 0.875 + r * 0.125, r * 0.875 + l * 0.125] |> gain g |> out masterOutBus
     where
         l     = auxIn 18 |> filt1 +> d2 |> verb +> d
         r     = auxIn 19 |> filt2 +> d2 |> verb +> d
@@ -457,7 +467,7 @@ pulseDemonPattern3 = playSynthPattern (toggle <| combo [alt,isDown keyB]) pulseD
                 |]
 
 halfVerb :: UGen
-halfVerb = [l * 0.9 + r * 0.1, r * 0.9 + l * 0.1] |> out 0
+halfVerb = [l * 0.9 + r * 0.1, r * 0.9 + l * 0.1] |> out masterOutBus
     where
         l     = auxIn 22 |> verb |> auxThrough 2 |> auxThrough 3
         r     = auxIn 23 |> verb |> auxThrough 3 |> auxThrough 4
@@ -509,7 +519,7 @@ manaLeakPrimePattern = playSynthPattern (toggle <| combo [alt,isDown keyT]) mana
                       _ _ _ _ _ _ _ _ |]
 
 subDestruction :: UGen -> UGen -> UGen
-subDestruction f1 f2 = [l, r] |> gain 0.5 |> out 0
+subDestruction f1 f2 = [l, r] |> gain 0.5 |> out masterOutBus
     where
         l         = auxIn 24 |> df filt1
         r         = auxIn 25 |> df filt2
@@ -522,7 +532,7 @@ subDestruction f1 f2 = [l, r] |> gain 0.5 |> out 0
 ------------------------------------
 
 floorPerc2 :: UGen -> UGen
-floorPerc2 d = sig1 + sig2 |> e |> pan 0.35 |> gain 0.45 |> out 0
+floorPerc2 d = sig1 + sig2 |> e |> pan 0.35 |> gain 0.45 |> out masterOutBus
     where
         -- p a u = [u * (1 - a), u * a]
         sig1  = sin <| e2 90
@@ -531,7 +541,7 @@ floorPerc2 d = sig1 + sig2 |> e |> pan 0.35 |> gain 0.45 |> out 0
         e2    = env [1,0.9, 0] [0.01,d] (-3)
 
 shakeSnare :: UGen -> UGen
-shakeSnare d = sig1 + sig2 |> e |> gain 0.9 |> pan 0.75 |> out 0
+shakeSnare d = sig1 + sig2 |> e |> gain 0.9 |> pan 0.75 |> out masterOutBus
     where
         -- p a u = [u * (1 - a), u * a]
         sig1  = whiteNoise |> bpf (12000 |> e2) 3 |> gain 0.05
@@ -541,7 +551,7 @@ shakeSnare d = sig1 + sig2 |> e |> gain 0.9 |> pan 0.75 |> out 0
 
 
 shake2 :: UGen -> UGen
-shake2 d = sig1 |> e |> gain 0.6 |> pan 0.6 |> out 0
+shake2 d = sig1 |> e |> gain 0.6 |> pan 0.6 |> out masterOutBus
     where
         -- p a u = [u * (1 - a), u * a]
         sig1  = whiteNoise |> bpf (12000 |> e2) 9 |> gain 0.05
@@ -570,7 +580,7 @@ section2Drums = floorPattern2 <> shake2Pattern <> shake1Pattern <> omniPrimePatt
                 sec1 = [lich| [6 1] [_ 1] [_ 6] [_ 1] |]
 
 omniPrime :: UGen -> UGen
-omniPrime f = [s, s2] |> softclip 20 |> filt |> gain 0.75 |> e |> auxThrough 4 |> pan 0.2 |> out 0
+omniPrime f = [s, s2] |> softclip 20 |> filt |> gain 0.75 |> e |> auxThrough 4 |> pan 0.2 |> out masterOutBus
     where
         e   = env [0,1,0.1,0] [0.01,0.1,1.5] (-4)
         e2  = env [523.251130601,f * 1.5,f, f] [0.01,0.1,1.5] (-4)
@@ -588,7 +598,7 @@ omniPrimePattern = playSynthPattern (toggle <| combo [alt,isDown keyQ]) omniPrim
                 |]
 
 distortedBassPrime :: UGen -> UGen
-distortedBassPrime f = [s, s2] |> e |> softclip 400 |> filt |> softclip 50 |> filt2 |> gain 0.1 |> verb |> e |> out 0
+distortedBassPrime f = [s, s2] |> e |> softclip 400 |> filt |> softclip 50 |> filt2 |> gain 0.1 |> verb |> e |> out masterOutBus
     where
         e   = env [0,1,0] [0.1,6.75] (-4)
         -- e2  = env [523.251130601,f,f] [0.05,3.95] (-3)
@@ -641,7 +651,7 @@ subControlPattern = fx <> playSynthPattern (toggle <| combo [alt,isDown keyZ]) s
         sec2 = [lich| [3 3 3 3] [3 3 3 3] [3 3 3 3] [3 3 3 3] [3 3 3 3]
                       [4 4 4 4] [4 4 4 4] [4 4 4 4] [6 6 6 6] [6 6 6 6] |]
 broodHive :: UGen
-broodHive = pl |> gain 0.1 |> out 0
+broodHive = pl |> gain 0.1 |> out masterOutBus
     where
         pl = {- pluck 40 freqs 5 (aux |> bpf freqs 3) + -} combC 1.7 1.7 1.1 aux + combC 2.4 2.4 1.1 aux + combC 3.5 3.5 1.1 aux
         -- freqs = map (fromRational . d2f slendro) [1,3]
@@ -743,33 +753,33 @@ manaVault :: UGen
 manaVault = sin broodBassFreq + (saw broodBassFreq |> gain 0.1) |> perc 0.04 0.1 0.5 (-8) |> artifactOut
 
 trinisphere :: UGen
-trinisphere = auxIn 150 |> hpf (moxFreq 0 0.5) 9 |> gain 0.2 |> out 0
+trinisphere = auxIn 150 |> hpf (moxFreq 0 0.5) 9 |> gain 0.2 |> out masterOutBus
 
 trinisphere' :: UGen
-trinisphere' = auxIn 151 |> bpf (moxFreq 1 0.5) 9 |> gain 0.2 |> out 1
+trinisphere' = auxIn 151 |> bpf (moxFreq 1 0.5) 9 |> gain 0.2 |> out masterOutRightBus
 
 trinisphere'' :: UGen
-trinisphere'' = auxIn 152 |> lpf (moxFreq 4 1) 9 |> dup |> gain 0.5 |> gain 0.2 |> out 0
+trinisphere'' = auxIn 152 |> lpf (moxFreq 4 1) 9 |> dup |> gain 0.5 |> gain 0.2 |> out masterOutBus
 
 gitaxianProbe :: UGen
-gitaxianProbe = auxIn 153 |> gain (saw (moxFreq 7 0) + saw (moxFreq 8 0)) +> combC 0.8 0.8 1.1 |> gain 0.2 |> out 0
+gitaxianProbe = auxIn 153 |> gain (saw (moxFreq 7 0) + saw (moxFreq 8 0)) +> combC 0.8 0.8 1.1 |> gain 0.2 |> out masterOutBus
 
 expeditionMap :: UGen
-expeditionMap = auxIn 154 |> decimate [noise0 0.25 |> range 100 10000, noise0 0.5 |> range 100 10000] |> gain 0.2 |> out 0
+expeditionMap = auxIn 154 |> decimate [noise0 0.25 |> range 100 10000, noise0 0.5 |> range 100 10000] |> gain 0.2 |> out masterOutBus
 
 goblinCharBelcher :: UGen
-goblinCharBelcher = auxIn 155 |> crush 8 |> pan 0.75 |> gain 0.2 |> out 0
+goblinCharBelcher = auxIn 155 |> crush 8 |> pan 0.75 |> gain 0.2 |> out masterOutBus
 
 tolarianAcademy :: UGen
-tolarianAcademy = [combC 1.7 1.7 1.1 aux, combC 2.4 2.4 1.1 aux] |> add (dup aux) |> gain 0.2 |> out 0
+tolarianAcademy = [combC 1.7 1.7 1.1 aux, combC 2.4 2.4 1.1 aux] |> add (dup aux) |> gain 0.2 |> out masterOutBus
     where
         aux = auxIn 156
 
 bs :: UGen
-bs = whiteNoise |> perc 0.001 1 1 (-64) |> crush 8 |> decimate 5000 |> out 1
+bs = whiteNoise |> perc 0.001 1 1 (-64) |> crush 8 |> decimate 5000 |> out masterOutRightBus
 
 bb :: UGen
-bb = sin (moxFreq 0 0.125) + (saw (moxFreq 0 0.125) |> gain 0.3) +> clip 20 +> tanhDist 5 |> perc 0.04 0.75 0.15 (-8) |> dup |> out 0
+bb = sin (moxFreq 0 0.125) + (saw (moxFreq 0 0.125) |> gain 0.3) +> clip 20 +> tanhDist 5 |> perc 0.04 0.75 0.15 (-8) |> dup |> out masterOutBus
 
 terraNovaPattern :: Signal ()
 terraNovaPattern = fxSynth trinisphere
