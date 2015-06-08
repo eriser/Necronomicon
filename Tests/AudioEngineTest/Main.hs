@@ -34,6 +34,14 @@ limiterSynth preGain = sin 440 |> dup |> gain (lag 0.1 preGain) |> masterLimiter
 noLimiterSynth :: UGen -> UGen
 noLimiterSynth preGain = sin 440 |> dup |> gain (lag 0.1 preGain) |> out 0
 
+minMaxSynth :: UGen -> UGen
+minMaxSynth x = freq |> poll |> sin |> gain 0.3 |> out 0
+    where
+        freq = constrain 666 1313 $ lag 0.1 x
+
+lpfSynth :: UGen -> UGen
+lpfSynth freq = pulse 80 0.5 |> lpf (lag 0.1 freq) 3 |> gain 0.2 |> dup |> out 0
+
 main :: IO ()
 main = runSignal
        <| play (toggle <| isDown keyR) reverbSynth
@@ -44,6 +52,8 @@ main = runSignal
        <> play (toggle <| isDown keyF) feedSynth (mouseX ~> scale 2 20000) (mouseY ~> scale 2 20000)
        <> play (toggle <| isDown keyL) limiterSynth (mouseX ~> scale 0 4)
        <> play (toggle <| isDown keyN) noLimiterSynth (mouseX ~> scale 0 4)
+       <> play (toggle <| isDown keyM) minMaxSynth (mouseX ~> scale 20 2000)
+       <> play (toggle <| isDown keyP) lpfSynth (mouseX ~> scale 20 4000)
 
 -- main :: IO ()
 -- main = runSignal <| synthDefs *> tempo (pure 150) *> testGUI <> sections <> hyperTerrainSounds

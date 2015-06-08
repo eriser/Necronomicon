@@ -29,7 +29,7 @@ data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Env Double 
               | SyncSaw | SyncPulse | SyncOsc | Random Double Double Double | NoiseN | NoiseL | NoiseC | Dust | Dust2 | Impulse | Range | ExpRange
               | LPF | HPF | BPF | Notch | AllPass | PeakEQ | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int
               | Clip | SoftClip | Poly3 | TanHDist | SinDist | Wrap | DelayN Double | DelayL Double | DelayC Double | CombN Double | CombL Double | CombC Double
-              | Negate | Crush | Decimate | FreeVerb | Pluck Double | WhiteNoise | Abs | Signum | Pow | Exp | Log | Cos | ASin | ACos
+              | Negate | Crush | Decimate | FreeVerb | Pluck Double | WhiteNoise | Abs | Signum | Pow | Exp | Log | Cos | ASin | ACos | UMax | UMin
               | ATan | LogBase | Sqrt | Tan | SinH | CosH | TanH | ASinH | ATanH | ACosH | TimeMicros | TimeSecs | USeq | Limiter Double
               deriving (Show, Eq, Ord)
 
@@ -322,6 +322,29 @@ foreign import ccall "&acosh_k_calc" acoshKCalc :: CUGenFunc
 foreign import ccall "&acosh_a_calc" acoshACalc :: CUGenFunc
 uacosh :: UGen -> UGen
 uacosh x = optimizeUGenCalcFunc [acoshKCalc, acoshACalc] $ multiChannelExpandUGen ACosH acoshACalc nullConstructor nullDeconstructor [x]
+
+foreign import ccall "&umax_kk_calc" umaxKKCalc :: CUGenFunc
+foreign import ccall "&umax_ak_calc" umaxAKCalc :: CUGenFunc
+foreign import ccall "&umax_ka_calc" umaxKACalc :: CUGenFunc
+foreign import ccall "&umax_aa_calc" umaxAACalc :: CUGenFunc
+
+umax :: UGen -> UGen -> UGen
+umax a b = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen UMax umaxAACalc nullConstructor nullDeconstructor [a, b]
+    where
+        cfuncs = [umaxKKCalc, umaxAKCalc, umaxKACalc, umaxAACalc]
+
+foreign import ccall "&umin_kk_calc" uminKKCalc :: CUGenFunc
+foreign import ccall "&umin_ak_calc" uminAKCalc :: CUGenFunc
+foreign import ccall "&umin_ka_calc" uminKACalc :: CUGenFunc
+foreign import ccall "&umin_aa_calc" uminAACalc :: CUGenFunc
+
+umin :: UGen -> UGen -> UGen
+umin a b = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen UMin uminAACalc nullConstructor nullDeconstructor [a, b]
+    where
+        cfuncs = [uminKKCalc, uminAKCalc, uminKACalc, uminAACalc]
+
+constrain :: UGen -> UGen -> UGen -> UGen
+constrain minValue maxValue input = umax minValue $ umin maxValue input
 
 foreign import ccall "&line_k_calc" lineKCalc :: CUGenFunc
 foreign import ccall "&line_a_calc" lineACalc :: CUGenFunc
@@ -1039,7 +1062,7 @@ limiter lookahead attack release threshold knee input = optimizeUGenCalcFunc cfu
             ]
 
 masterLimiter :: UGen -> UGen
-masterLimiter = limiter 0.01 0.01 0.03 (-9) 0.1
+masterLimiter = limiter 0.01 0.01 0.03 (-18) 0.1
 
 dup :: UGen -> UGen
 dup u = u <> u

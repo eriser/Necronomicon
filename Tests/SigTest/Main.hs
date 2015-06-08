@@ -19,7 +19,7 @@ masterOutRightBus :: UGen
 masterOutRightBus = 51
 
 masterSynth :: UGen
-masterSynth = auxIn [masterOutBus, masterOutRightBus] |> masterLimiter |> poll |> out 0
+masterSynth = auxIn [masterOutBus, masterOutRightBus] |> masterLimiter |> out 0
 
 mouseToSlendro :: Double -> Double
 mouseToSlendro m = fromRational . d2f slendro . toRational <| (floor <| scale 0 24 m :: Integer)
@@ -156,7 +156,7 @@ triOsc32 mx my = feedback fSig |> verb |> gain 0.0385 |> out masterOutBus
                 sig6 = sinOsc (f1 * 0.25 - sig3 * 261.6255653006) * (sinOsc ( i * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 60 |> gain 0.5 +> d
 
 caveTime :: UGen
-caveTime = [l * 0.875 + r * 0.125, r * 0.875 + l * 0.125] |> out masterOutBus
+caveTime = [l * 0.875 + r * 0.125, r * 0.875 + l * 0.125] |> poll |> out masterOutBus
     where
         l    = auxIn 20 |> verb
         r    = auxIn 21 |> verb
@@ -165,24 +165,23 @@ caveTime = [l * 0.875 + r * 0.125, r * 0.875 + l * 0.125] |> out masterOutBus
 visAux :: UGen -> UGen -> UGen -> UGen
 visAux bus a u = _useq (auxThrough bus (left u * a)) u
 
-metallic3 :: UGen -> UGen
-metallic3 f = sig + sig2 + sig3 |> e |> visAux 2 2 |> softclip 2 |> filt |> e |> gain 0.065 |> pan 0.75 |> out 20
+metallicBass :: UGen -> UGen -> UGen
+metallicBass f panPos = sig + sig2 + sig3 |> softclip 0.2 |> lpf (f * 3) 1 |> e |> visAux 2 2 |> pan panPos |> out 20
     where
         sig    = sin (f * random 0 0.999 1.001) |> gain 0.15
         sig2   = sin (f * random 1 0.499 0.500) |> gain 0.15
         sig3   = sin (f * random 2 0.499 0.501) |> gain 0.15
+        e      = env [0, 1, 0.01, 0] [0.1, 6, 0.1] (-1)
 
-        filt1  = lpf (f * random 3 4  8  |> e2) 2 >>> gain 0.1
-        filt2  = lpf (f * random 4 2  4  |> e2) 3 >>> gain 0.2
-        filt3  = lpf (f * random 5 6  10 |> e2) 3
-        filt4  = lpf (f * random 6 12 24 |> e2) 3
-        filt s = filt1 s + filt2 s + filt3 s + filt4 s
-
-        e      = env      [0,1,0.01,0]    [0.1, 6,0.1] (-1)
-        e2     = env2     [1,1,0.25,0.25] [0.01,1,5]   (-3)
+metallic3 :: UGen -> UGen
+metallic3 f = metallicBass f 0.75
 
 metallic4 :: UGen -> UGen
-metallic4 f = sig + sig2 + sig3 |> e |> visAux 3 2 |> softclip 2 |> filt |> e |> gain 0.065 |> pan 0.25 |> out 20
+metallic4 f = metallicBass f 0.25
+
+{-
+metallic4 :: UGen -> UGen
+metallic4 f = sig + sig2 + sig3 |> e |> visAux 3 2 {- |> softclip 2 -} |> filt |> e |> gain 0.065 |> pan 0.25 |> out 20
     where
         sig    = sin (f * random 0 0.999 1.001) |> gain 0.15
         sig2   = sin (f * random 1 0.499 0.500) |> gain 0.15
@@ -196,6 +195,7 @@ metallic4 f = sig + sig2 + sig3 |> e |> visAux 3 2 |> softclip 2 |> filt |> e |>
 
         e      = env      [0,1,0.01,0]    [0.1, 6,0.1] (-1)
         e2     = env2     [1,1,0.25,0.25] [0.01,1,5] (-3)
+-}
 
 hyperMelody :: UGen -> UGen
 hyperMelody f = [s,s2] |> gain 0.04 |> e |> visAux (random 0 2 5) 20 |> out masterOutBus

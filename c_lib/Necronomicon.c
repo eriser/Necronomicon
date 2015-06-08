@@ -2274,6 +2274,143 @@ void acosh_k_calc(ugen u)
 	*out = acosh(in[0]);
 }
 
+
+// max
+
+#define UMAX_CALC(CONTROL_ARGS, AUDIO_ARGS) \
+double* in0 = UGEN_INPUT_BUFFER(u, 0);      \
+double* in1 = UGEN_INPUT_BUFFER(u, 1);      \
+double* out = UGEN_OUTPUT_BUFFER(u, 0);     \
+double a;                                   \
+double b;                                   \
+CONTROL_ARGS                                \
+AUDIO_LOOP(                                 \
+    AUDIO_ARGS                              \
+    UGEN_OUT(out, fmax(a, b));    			\
+);                                          \
+
+
+#define UMAX_AK a = *in0;
+#define UMAX_AA a = UGEN_IN(in0);
+#define UMAX_BK b = *in1;
+#define UMAX_BA b = UGEN_IN(in1);
+
+
+// 0
+__attribute__((flatten)) void umax_kk_calc(ugen u)
+{
+    UMAX_CALC(
+        // Control Arguments
+        UMAX_AK               /* 0 */
+        UMAX_BK               /* 1 */,
+        // Audio Arguments
+        /* no audio args */
+    )
+}
+
+// 1
+__attribute__((flatten)) void umax_ak_calc(ugen u)
+{
+    UMAX_CALC(
+        // Control Arguments
+        UMAX_BK               /* 1 */,
+        // Audio Arguments
+        UMAX_AA               /* 0 */
+    )
+}
+
+// 2
+__attribute__((flatten)) void umax_ka_calc(ugen u)
+{
+    UMAX_CALC(
+        // Control Arguments
+        UMAX_AK               /* 0 */,
+        // Audio Arguments
+        UMAX_BA               /* 1 */
+    )
+}
+
+// 3
+__attribute__((flatten)) void umax_aa_calc(ugen u)
+{
+    UMAX_CALC(
+        // Control Arguments
+        /* no control args */,
+        // Audio Arguments
+        UMAX_AA               /* 0 */
+        UMAX_BA               /* 1 */
+    )
+}
+
+// min
+
+#define UMIN_CALC(CONTROL_ARGS, AUDIO_ARGS) \
+double* in0 = UGEN_INPUT_BUFFER(u, 0);      \
+double* in1 = UGEN_INPUT_BUFFER(u, 1);      \
+double* out = UGEN_OUTPUT_BUFFER(u, 0);     \
+double a;                                   \
+double b;                                   \
+CONTROL_ARGS                                \
+AUDIO_LOOP(                                 \
+    AUDIO_ARGS                              \
+    UGEN_OUT(out, fmin(a, b));    			\
+);                                          \
+
+
+#define UMIN_AK a = *in0;
+#define UMIN_AA a = UGEN_IN(in0);
+#define UMIN_BK b = *in1;
+#define UMIN_BA b = UGEN_IN(in1);
+
+
+// 0
+__attribute__((flatten)) void umin_kk_calc(ugen u)
+{
+    UMIN_CALC(
+        // Control Arguments
+        UMIN_AK               /* 0 */
+        UMIN_BK               /* 1 */,
+        // Audio Arguments
+        /* no audio args */
+    )
+}
+
+// 1
+__attribute__((flatten)) void umin_ak_calc(ugen u)
+{
+    UMIN_CALC(
+        // Control Arguments
+        UMIN_BK               /* 1 */,
+        // Audio Arguments
+        UMIN_AA               /* 0 */
+    )
+}
+
+// 2
+__attribute__((flatten)) void umin_ka_calc(ugen u)
+{
+    UMIN_CALC(
+        // Control Arguments
+        UMIN_AK               /* 0 */,
+        // Audio Arguments
+        UMIN_BA               /* 1 */
+    )
+}
+
+// 3
+__attribute__((flatten)) void umin_aa_calc(ugen u)
+{
+    UMIN_CALC(
+        // Control Arguments
+        /* no control args */,
+        // Audio Arguments
+        UMIN_AA               /* 0 */
+        UMIN_BA               /* 1 */
+    )
+}
+
+// line
+
 void line_constructor(ugen* u)
 {
 	u->data = malloc(UINT_SIZE); // Line time
