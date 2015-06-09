@@ -344,6 +344,7 @@ instance Binary a => Binary (Entity a) where
 class Scene a where
     getGameObjects :: a -> [GameObject] -> [GameObject]
     setGameObjects :: a -> [GameObject] -> (a, [GameObject])
+    --getCollisions?
 
     default getGameObjects :: (Generic a, GScene (Rep a)) => a -> [GameObject] -> [GameObject]
     getGameObjects x gs = getGameObjectsG (from x) gs

@@ -52,6 +52,12 @@ mkBullet p = Entity b g
 initBullets :: [Entity Bullet]
 initBullets = [mkBullet <| Vector3 (-2) 0 0, mkBullet <| Vector3 0 0 0, mkBullet <| Vector3 2 0 0]
 
+--Try a true event based version?
+--But where events are derived only from the base types: deltaTime, keys, mouse, collisions
+--Delays with feedback cause infinite change, and are called with any event loop?
+--Perhaps use things such as sampleOn and a theoretical sync function to tame feedback in specific places
+--A scalpel instead of a hammer
+--The other option is that merge has semantics for handling improperly live feedback loops.
 megaDark :: Signal MegaDark
 megaDark = MegaDark <~ hero ~~ bullets
     where
