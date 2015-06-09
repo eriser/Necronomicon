@@ -197,7 +197,7 @@ triOsc32 mx my = feedback fSig |> verb |> gain 0.0385 |> masterOut
                 sig6 = sinOsc (f1 * 0.25 - sig3 * 261.6255653006) * (sinOsc ( i * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 60 |> gain 0.5 +> d
 
 caveTime :: UGen
-caveTime = [l * 0.875 + r * 0.125, r * 0.875 + l * 0.125] |> poll |> masterOut
+caveTime = [l * 0.875 + r * 0.125, r * 0.875 + l * 0.125] |> masterOut
     where
         l    = auxIn caveBus |> verb
         r    = auxIn caveRightBus |> verb
@@ -234,9 +234,8 @@ hyperMelodyHarmony f = [s, s2] |> lpf (fromSlendro 25) 0.3 |> e |> visAux (rando
         s  = sin <| sin 3 * 6 + f
         s2 = sin <| sin 6 * 9 + f * 2
 
---add sins for visuals and modulation
-reverseSwell :: UGen -> UGen
-reverseSwell f =  sig1 + sig2 + sig3 |> e |> tanhDist (random 31 0.25 1) |> (+ whiteNoise * 0.25) |> gain 0.03 |> filt |> e |> pan 0.75 |> caveOut
+reverseSwellPanned :: UGen -> UGen -> UGen
+reverseSwellPanned f panPos =  sig1 + sig2 + sig3 |> e |> tanhDist (random 31 0.25 1) |> (+ whiteNoise * 0.25) |> gain 0.35 |> filt |> e |> pan panPos |> caveOut
     where
         hf   = f * 0.5
         e    = env [0,1,0]         [4,4] 3
@@ -250,20 +249,12 @@ reverseSwell f =  sig1 + sig2 + sig3 |> e |> tanhDist (random 31 0.25 1) |> (+ w
         mod3 = saw (random 10 0.25 1.0) |> range 0.25 1
         mod4 = saw (random 11 0.5 2.0)  |> range 0.01 1
 
+--add sins for visuals and modulation
+reverseSwell :: UGen -> UGen
+reverseSwell f = reverseSwellPanned f 0.75
+
 reverseSwell2 :: UGen -> UGen
-reverseSwell2 f = sig1 + sig2 + sig3 |> e |> tanhDist (random 32 0.25 1) |> (+ whiteNoise * 0.25) |> gain 0.03 |> filt |> e |> pan 0.25 |> caveOut
-    where
-        hf   = f * 0.5
-        e    = env [0,1,0]         [4,4] 3
-        e2   = env [0.125,1,0.125] [4,4] 3
-        sig1 = saw (hf * random 0 0.995 1.005) * mod1
-        sig2 = saw (f  * random 2 0.995 1.005) * mod2
-        sig3 = saw (hf * random 4 0.495 0.505) * mod4 * 0.5
-        filt = lpf (f  * random 6 3 11         * mod3 |> e2) 2
-        mod1 = saw (random 8 0.5 2.0)   |> range 0.01 1
-        mod2 = saw (random 9 0.5 2.0)   |> range 0.01 1
-        mod3 = saw (random 10 0.25 1.0) |> range 0.25 1
-        mod4 = saw (random 11 0.5 2.0)  |> range 0.01 1
+reverseSwell2 f = reverseSwellPanned f 0.25
 
 fromSlendro :: Rational -> UGen
 fromSlendro degree = UGen [UGenNum . fromRational $ d2f slendro degree]
@@ -427,7 +418,7 @@ hyperMelodyPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyH]) hyper
     where
         sec1 = [lich| 4 _ 3 _ 2 _ _ _
                       4 _ 3 _ 2 _ 3 _
-                      2 1 _ _ _ _ _ _
+                      _ _ _ _ _ _ _ 0
                       _ _ _ _ _ _ _ _
                       4 _ 3 _ 2 _ _ _
                       4 _ 3 _ 2 _ 3 _
