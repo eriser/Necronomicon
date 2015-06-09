@@ -353,6 +353,7 @@ class Scene a where
 
 instance Scene (Entity a) where
     getGameObjects (Entity _ g) gs = g : gs
+    setGameObjects (Entity a g) [] = (Entity a g, [])
     setGameObjects (Entity a _) gs = (Entity a $ head gs, tail gs)
 
 instance Scene a => Scene [a] where

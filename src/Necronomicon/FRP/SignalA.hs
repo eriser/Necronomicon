@@ -279,41 +279,44 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
                 modifyIORef (runTimeRef   state) (eventCons $ Time currentTime)
                 modifyIORef (deltaTimeRef state) (eventCons $ Time delta)
 
-                -- print "preloop"
                 let loop = do
                         s >>= \es -> case es of
                             NoChange _  -> return ()
-                            Change   _  -> return () -- print s'
+                            Change   s' -> print s'
                         nextState state
                         signalStateUpToDate state >>= \u -> if u then return () else loop
                 loop
                 threadDelay $ 16667
                 run q window s state currentTime resources tree
 
-necro :: Signal (Entity a) -> Signal (Entity a)
+necro :: Scene a => Signal a -> Signal a
 necro sig = Signal $ \state -> do
-    vec        <- readIORef $ objectRef state
-    uid : uids <- readIORef $ uidRef    state
-    (scont, s) <- unSignal sig state
-
-    writeIORef (uidRef state) uids
-
-    if uid < MV.length vec
-        then MV.write vec uid (Just $ gameObject s) >> writeIORef (objectRef state) vec
-        else do
-            vec' <- MV.unsafeGrow vec (MV.length vec)
-            MV.write vec' uid (Just $ gameObject s)
-            writeIORef (objectRef state) vec'
-
-    return (cont (objectRef state) scont uid, s)
+    (scont, s)     <- unSignal sig state
+    s'             <- writeGS s state
+    return (cont scont state, s')
     where
-        cont oref scont uid = scont >>= \se -> case se of
+        setNewUIDS g@GameObject{gid = New} (gs, uid : uids) = (g{gid = UID uid} : gs, uids)
+        setNewUIDS _             acc             = acc
+
+        writeG state g = readIORef (objectRef state) >>= \vec -> do
+            let x | UID uid <- gid g, uid < MV.length vec = MV.write vec uid (Just g) >> writeIORef (objectRef state) vec
+                  | UID uid <- gid g                      = do
+                      vec' <- MV.unsafeGrow vec (MV.length vec)
+                      MV.write vec' uid (Just g)
+                      writeIORef (objectRef state) vec'
+                  | otherwise = print "Error: GameObject without a UID found in necro update" >> return ()
+            x
+
+        writeGS s state = do
+            uids           <- readIORef $ uidRef state
+            let (gs, uids') = foldr setNewUIDS ([], uids) $ getGameObjects s []
+            mapM_ (writeG state) gs
+            writeIORef (uidRef state) uids'
+            return $ fst $ setGameObjects s gs
+
+        cont scont state = scont >>= \se -> case se of
             NoChange _ -> return se
-            Change   s -> do
-                vec <- readIORef oref
-                MV.write vec uid (Just $ gameObject s)
-                writeIORef oref vec
-                return $ Change s
+            Change   s -> Change <~ writeGS s state
 
 ----------------------------------
 -- Input
