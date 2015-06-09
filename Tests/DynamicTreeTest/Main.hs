@@ -3,6 +3,8 @@ import GHC.Generics
 import Data.Binary
 import Control.Monad (foldM)
 
+--9c68QrEP4v6i
+
 main :: IO ()
 main = runSignal megaDark
 
@@ -53,7 +55,7 @@ initBullets = [mkBullet <| Vector3 (-2) 0 0, mkBullet <| Vector3 0 0 0, mkBullet
 megaDark :: Signal MegaDark
 megaDark = MegaDark <~ hero ~~ bullets
     where
-        bullets = delay initBullets <| updateBullets <~ deltaTime ~~ runTime ~~ bullets
+        bullets = delay initBullets <| necro <| updateBullets <~ deltaTime ~~ runTime ~~ bullets
 
         hero    = delay mkHero <| necro <| foldr updateHero <~ hero ~~ hinput
         hinput  = combine
