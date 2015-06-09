@@ -42,10 +42,10 @@ broodlingRightBus = 201
 broodlingOut :: UGen -> UGen
 broodlingOut = out broodlingBus
 
--- Artifact 150 - 158
+-- Artifact 150 - 156
 
 artifactOut :: UGen -> UGen
-artifactOut = out <| random 0 150 158
+artifactOut = out <| random 0 150 156
 
 ------------------------------------------------------------------------------------------
 -- buses -}
@@ -221,14 +221,14 @@ metallic4 :: UGen -> UGen
 metallic4 f = metallicBass f 0.25
 
 hyperMelody :: UGen -> UGen
-hyperMelody f = [s,s2] |> gain 0.15 |> e |> visAux (random 0 2 5) 20 |> masterOut
+hyperMelody f = [s,s2] |> gain 0.15 |> e |> visAux (random 0 2 5) 2 |> masterOut
     where
         e  = env [0, 1, 0.15, 0] [0.0001, 0.1, 7] (-1.5)
         s  = sin <| sin 3 * 6 + f * 2
         s2 = sin <| sin 6 * 9 + f
 
 hyperMelodyHarmony :: UGen -> UGen
-hyperMelodyHarmony f = [s, s2] |> lpf (fromSlendro 25) 0.3 |> e |> visAux (random 0 2 5) 20 |> masterOut
+hyperMelodyHarmony f = [s, s2] |> lpf (fromSlendro 25) 0.3 |> e |> visAux (random 0 2 5) 2 |> masterOut
     where
         e  = env [0, 0.3, 0.05, 0] [0.0001, 0.1, 7] (-8)
         s  = sin <| sin 3 * 6 + f
@@ -674,23 +674,22 @@ subControlPattern = fx <> playSynthPattern (toggle <| combo [alt,isDown keyZ]) s
                       [4 4 4 4] [4 4 4 4] [4 4 4 4] [6 6 6 6] [6 6 6 6] |]
 
 broodHive :: UGen
-broodHive = pl |> gain 0.1 |> masterOut
+broodHive = dls + (aux * 0.25)|> masterOut
     where
-        pl = {- pluck 40 freqs 5 (aux |> bpf freqs 3) + -} combC 1.7 1.7 0.3 aux + combC 2.4 2.4 0.3 aux + combC 3.5 3.5 0.3 aux
-        -- freqs = map (fromRational . d2f slendro) [1,3]
+        dls = feedback <| \in0 in1 -> let ins = masterLimiter ([in0, in1] + aux) |> gain 0.5 in delayC 2 2 ins + delayC 1 1 ins
         aux1 = auxIn broodlingBus
         aux2 = auxIn broodlingRightBus
         aux  = [aux1, aux2]
 
 broodling :: UGen -> UGen
-broodling f = pulse [f, f/2, f/4] (p 1) |> mix |> lpf (p (f * 4)) 1 |> add (sin (f / 4) |> gain 0.5) |> p |> gain 0.7 |> broodlingOut
+broodling f = pulse [f, f/2, f/4] 0.5 |> mix |> p |> broodlingOut
     where
-        p = perc 0.01 1.25 1 (-8)
+        p = perc 0.0001 0.1 1 (-8)
 
 broodling2 :: UGen -> UGen
-broodling2 f = pulse [f, f/2, f/4] (p 1) |> mix |> lpf (p (f * 4)) 1 |> add (sin (f / 2) |> gain 0.5) |> p |> gain 0.7 |> out broodlingRightBus
+broodling2 f = saw [f, f/2, f/4] |> mix |> p |> out broodlingRightBus
     where
-        p = perc 0.01 1.25 1 (-8)
+        p = perc 0.0001 0.1 1 (-8)
 
 broodBassFreq :: UGen
 broodBassFreq = UGen [UGenNum . (/4) . fromRational $ d2f slendro 1]
@@ -713,7 +712,10 @@ broodlingPattern = fx
                   |]
 
 squareEnv :: UGen -> UGen
-squareEnv = env [0,1,1,0] [0,0.4,0] 0
+squareEnv = varSquareEnv 0.2
+
+varSquareEnv :: UGen -> UGen -> UGen
+varSquareEnv dur = env [0,1,1,0] [0.0001, dur, 0.0001] (-4)
 
 moxFreq :: Rational -> Double -> UGen
 moxFreq degree scalar = UGen [UGenNum . (*scalar) . fromRational $ d2f slendro degree]
@@ -737,52 +739,52 @@ moxRuby''''' :: UGen
 moxRuby''''' = lfpulse 20 0 |> squareEnv |> artifactOut
 
 moxPearl :: UGen
-moxPearl = whiteNoise |> perc 0.001 (random 0 0.1 1) 1 (-24) |> artifactOut
+moxPearl = whiteNoise |> varSquareEnv (random 0 0.1 1) |> artifactOut
 
 moxPearl' :: UGen
-moxPearl' = noise0 (moxFreq 8 0.25) |> perc 0.001 0.1 1 (-8) |> artifactOut
+moxPearl' = noise0 (moxFreq 8 0.25) |> squareEnv |> artifactOut
 
 moxPearl'' :: UGen
-moxPearl'' = noise2 (moxFreq 7 0.25) |> perc 0.001 0.1 1 (-8) |> artifactOut
+moxPearl'' = noise2 (moxFreq 7 0.25) |> squareEnv |> artifactOut
 
 moxSapphire :: UGen
-moxSapphire = sin (moxFreq 6 1) + sin (moxFreq 7 1) |> perc 0.001 0.2 1 (-8) |> artifactOut
+moxSapphire = sin (moxFreq 6 1) + sin (moxFreq 7 1) |> squareEnv |> artifactOut
 
 moxSapphire' :: UGen
-moxSapphire' = sin (moxFreq 12 1) + sin (moxFreq 13 1) |> perc 0.001 0.1 1 (-8) |> artifactOut
+moxSapphire' = sin (moxFreq 12 1) + sin (moxFreq 13 1) |> squareEnv |> artifactOut
 
 moxSapphire'' :: UGen
-moxSapphire'' = sin (moxFreq 16 1) + sin (moxFreq 17 1) |> perc 0.001 0.1 1 (-8) |> artifactOut
+moxSapphire'' = sin (moxFreq 16 1) + sin (moxFreq 17 1) |> squareEnv |> artifactOut
 
 moxJet :: UGen
-moxJet = noise0 (moxFreq 1 0.25) |> perc 0.001 0.1 1 (-8) |> artifactOut
+moxJet = noise0 (moxFreq 1 0.25) |> squareEnv |> artifactOut
 
 moxJet' :: UGen
-moxJet' = noise0 (moxFreq 0 0.25) |> perc 0.001 0.1 1 (-8) |> artifactOut
+moxJet' = noise0 (moxFreq 0 0.25) |> squareEnv |> artifactOut
 
 moxEmerald :: UGen
-moxEmerald = lfsaw (moxFreq 0 0.5) 0 |> perc 0.001 0.1 1 (-16) |> artifactOut
+moxEmerald = lfsaw (moxFreq 0 0.5) 0 |> squareEnv |> artifactOut
 
 moxEmerald' :: UGen
-moxEmerald' = lfsaw (moxFreq 1 0.5) 0 |> negate |> perc 0.001 0.1 1 (-8) |> artifactOut
+moxEmerald' = lfsaw (moxFreq 1 0.5) 0 |> negate |> squareEnv |> artifactOut
 
 moxEmerald'' :: UGen
-moxEmerald'' = lfsaw (moxFreq 5 0.5) 0 |> perc 0.001 0.1 1 (-8) |> artifactOut
+moxEmerald'' = lfsaw (moxFreq 5 0.5) 0 |> squareEnv |> artifactOut
 
 manaVault :: UGen
-manaVault = sin broodBassFreq + (saw broodBassFreq |> gain 0.1) |> perc 0.04 0.1 0.5 (-8) |> artifactOut
+manaVault = sin broodBassFreq + (saw broodBassFreq |> gain 0.1) |> squareEnv |> artifactOut
 
 trinisphere :: UGen
-trinisphere = auxIn 150 |> hpf (moxFreq 0 0.5) 9 |> gain 0.2 |> masterOut
+trinisphere = auxIn 150 |> hpf (moxFreq 0 0.5) 3 |> gain 0.2 |> masterOut
 
 trinisphere' :: UGen
-trinisphere' = auxIn 151 |> bpf (moxFreq 1 0.5) 9 |> gain 0.2 |> out masterOutRightBus
+trinisphere' = auxIn 151 |> bpf (moxFreq 1 0.5) 2 |> gain 0.2 |> out masterOutRightBus
 
 trinisphere'' :: UGen
-trinisphere'' = auxIn 152 |> lpf (moxFreq 4 1) 9 |> dup |> gain 0.5 |> gain 0.2 |> masterOut
+trinisphere'' = auxIn 152 |> lpf (moxFreq 4 1) 1 |> dup |> gain 0.5 |> gain 0.2 |> masterOut
 
 gitaxianProbe :: UGen
-gitaxianProbe = auxIn 153 |> gain (saw (moxFreq 7 0) + saw (moxFreq 8 0)) +> combC 0.8 0.8 1.1 |> gain 0.2 |> masterOut
+gitaxianProbe = auxIn 153 |> gain (saw (moxFreq 7 0) + saw (moxFreq 8 0)) +> combC 0.8 0.8 0.3 |> gain 0.2 |> masterOut
 
 expeditionMap :: UGen
 expeditionMap = auxIn 154 |> decimate [noise0 0.25 |> range 100 10000, noise0 0.5 |> range 100 10000] |> gain 0.2 |> masterOut
@@ -791,15 +793,15 @@ goblinCharBelcher :: UGen
 goblinCharBelcher = auxIn 155 |> crush 8 |> pan 0.75 |> gain 0.2 |> masterOut
 
 tolarianAcademy :: UGen
-tolarianAcademy = [combC 1.7 1.7 1.1 aux, combC 2.4 2.4 1.1 aux] |> add (dup aux) |> gain 0.2 |> masterOut
+tolarianAcademy = [combC 1.7 1.7 0.3 aux, combC 2.4 2.4 0.3 aux] |> add (dup aux) |> gain 0.2 |> masterOut
     where
         aux = auxIn 156
 
 bs :: UGen
-bs = whiteNoise |> perc 0.001 1 1 (-64) |> crush 8 |> decimate 5000 |> out masterOutRightBus
+bs = whiteNoise |> gain 2 |> hpf (fromSlendro 0) 1 |> lpf (fromSlendro 20) 1 |> env [0, 1, 0.05, 0.05, 0] [0.01, 0.1, 1, 0.001] (-4) |> out masterOutRightBus
 
 bb :: UGen
-bb = sin (moxFreq 0 0.125) + (saw (moxFreq 0 0.125) |> gain 0.3) +> clip 20 +> tanhDist 5 |> perc 0.04 0.75 0.15 (-8) |> dup |> masterOut
+bb = sin (moxFreq 0 0.125) + saw (moxFreq 0 0.125) +> clip 20 +> tanhDist 1 |> lpf 1000 0.01 |> perc 0.001 0.3 0.3 (-8) |> dup |> masterOut
 
 terraNovaPattern :: Signal ()
 terraNovaPattern = fxSynth trinisphere

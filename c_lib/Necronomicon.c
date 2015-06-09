@@ -102,6 +102,7 @@ jack_time_t next_cycle_usecs = 0;
 float period_usecs = 0;
 const jack_time_t USECS_PER_SECOND = 1000000;
 double usecs_per_frame = 1000000 / 44100;
+jack_time_t BLOCK_SIZE_USECS = 0;
 
 float out_bus_buffers[16][512];
 unsigned int  out_bus_buffer_index = 0;
@@ -563,10 +564,28 @@ void process_synth(synth_node* synth)
 	_necronomicon_current_node_object = *synth;
 	ugen* ugen_graph = _necronomicon_current_node_object.ugen_graph;
 	unsigned int num_ugens = _necronomicon_current_node_object.num_ugens;
+	unsigned int _start_frame;
+
+	if (synth->time > 0) // Initial schedule for synth, begin playing part way through block according to scheduled time
+	{
+		// find the current frame. jack_time_t is platform dependant and sometimes signed or unsigned.
+		// So let's convert to a type larger enough to contain all positive values from a uint_64_t but also supports negatives.
+		long long time_dif = (long long) synth->time - (long long) current_cycle_usecs;
+		_start_frame = time_dif <= 0 ? 0 : ((double) time_dif / usecs_per_frame);
+		synth->time = 0;
+		// printf("initial start frame: %u\n", _start_frame);
+	}
+
+	else // Normal playback, full block
+	{
+		_start_frame = 0;
+	}
+
 	unsigned int i;
 	ugen graph_node;
 	for (i = 0; i < num_ugens; ++i)
 	{
+		_block_frame = _start_frame;
 		graph_node = ugen_graph[i];
 		graph_node.calc(graph_node);
 	}
@@ -575,11 +594,11 @@ void process_synth(synth_node* synth)
 #define UGEN_INPUT_BUFFER(ugen, index) (_necronomicon_current_node_object.ugen_wires + (ugen.inputs[index] * BLOCK_SIZE))
 #define UGEN_OUTPUT_BUFFER(ugen, index) (_necronomicon_current_node_object.ugen_wires + (ugen.outputs[index] * BLOCK_SIZE))
 
-#define AUDIO_LOOP(func)										  \
-for (_block_frame = 0; _block_frame < BLOCK_SIZE; ++_block_frame) \
-{                                                                 \
-	func                                                          \
-}                                                                 \
+#define AUDIO_LOOP(func)							\
+for (; _block_frame < BLOCK_SIZE; ++_block_frame) 	\
+{													\
+	func 											\
+}													\
 
 #define UGEN_IN(wire_frame_buffer) wire_frame_buffer[_block_frame]
 #define UGEN_OUT(wire_frame_buffer, out_value) wire_frame_buffer[_block_frame] = out_value
@@ -1104,12 +1123,18 @@ void add_scheduled_synths()
 {
 	scheduled_list_read_index = scheduled_list_read_index & FIFO_SIZE_MASK;
 	scheduled_list_write_index = scheduled_list_write_index & FIFO_SIZE_MASK;
+	jack_time_t lookahead_usecs = current_cycle_usecs + BLOCK_SIZE_USECS;
 	while (scheduled_list_read_index != scheduled_list_write_index)
 	{
 		// puts("||| add_scheduled_synths scheduled_list_read_index != scheduled_list_write_index |||");
-		synth_node* node = SCHEDULED_LIST_POP();
+		synth_node* node = SCHEDULED_LIST_PEEK();
+
+		if (node != NULL && node->time > lookahead_usecs)
+			return;
+
 		// Uncomment to print timing information for synths
 		// printf("add_synth: time: %llu, current_cycle_usecs: %llu, current_cycle_usecs - time: %llu\n", node->time, current_cycle_usecs, current_cycle_usecs - node->time);
+		SCHEDULED_LIST_POP(); // Commit pop off the scheduled node list;
 		add_synth(node);
 		scheduled_list_read_index = scheduled_list_read_index & FIFO_SIZE_MASK;
 		scheduled_list_write_index = scheduled_list_write_index & FIFO_SIZE_MASK;
@@ -1346,6 +1371,7 @@ void init_rt_thread()
 	RECIP_SAMPLE_RATE = 1.0 / SAMPLE_RATE;
 	TABLE_MUL_RECIP_SAMPLE_RATE = TABLE_SIZE * RECIP_SAMPLE_RATE;
 	usecs_per_frame = USECS_PER_SECOND / SAMPLE_RATE;
+	BLOCK_SIZE_USECS = usecs_per_frame * (double) BLOCK_SIZE;
 	TWO_PI_TIMES_RECIP_SAMPLE_RATE = TWO_PI * RECIP_SAMPLE_RATE;
 
 	synth_table = hash_table_new();
