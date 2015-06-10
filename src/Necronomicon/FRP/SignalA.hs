@@ -822,6 +822,9 @@ foldp f b sig = Signal $ \state -> do
                 writeIORef ref nextV
                 return $ Change nextV
 
+-- folds :: (Signal a -> Signal b -> Signal b) -> b -> Signal a -> Signal b
+-- folds f b sig = undefined
+
 --Would it be possible to do a ticked merge???
 -- combine :: [Signal a] -> Signal [a]
 -- combine signals = Signal $ \state -> do
