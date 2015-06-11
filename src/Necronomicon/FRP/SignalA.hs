@@ -92,6 +92,7 @@ module Necronomicon.FRP.SignalA (
     hour,
     merge,
     mergeMany,
+    collisionMany,
     foldp,
     folds,
     -- combine,
@@ -673,6 +674,11 @@ collision :: Signal (Entity a) -> Signal Collision
 collision _ = Signal $ \_ -> return (cont, Collision 0, IntSet.empty)
     where
         cont _ = return $ NoChange $ Collision 0
+
+collisionMany :: Signal [Entity a] -> Signal [Maybe Collision]
+collisionMany _ = Signal $ \_ -> return (cont, [], IntSet.empty)
+    where
+        cont _ = return $ NoChange []
 
 -----------------------------------------------------------------
 -- Time

@@ -1,7 +1,6 @@
 import Necronomicon.FRP.SignalA
 import GHC.Generics
 import Data.Binary
-import Control.Monad (foldM)
 
 --9c68QrEP4v6i
 main :: IO ()
@@ -12,7 +11,7 @@ type Health      = Double
 data HeroInput   = HeroKeys (Double, Double) | HeroMouse (Double, Double) | HeroTick (Time, Time) | HeroClick Time | HeroCollision (Time, Collision)
 data HeroState   = HeroIdle | HeroMoving Vector3 | HeroAttacking Time | HeroDamaged Time deriving (Show, Eq, Generic)
 data Hero        = Hero HeroState Health deriving (Show, Eq, Generic)
-data BulletInput = BulletCollision Time Collision | BulletTick Time Time
+data BulletInput = BulletCollision (Time, [Maybe Collision]) | BulletTick (Time, Time)
 data BulletState = Flying Vector3 | DeathAnimation Time deriving (Show, Eq, Generic)
 data Bullet      = Bullet BulletState deriving (Show, Eq, Generic)
 data PhysM       = EnemyWeapon
@@ -27,7 +26,6 @@ instance Binary BulletState
 instance Binary Bullet
 instance Binary PhysM
 instance Binary MegaDark
-instance Scene  MegaDark
 
 mkHero :: Entity Hero
 mkHero = Entity h g
@@ -54,17 +52,16 @@ initBullets = [mkBullet <| Vector3 (-2) 0 0, mkBullet <| Vector3 0 0 0, mkBullet
 megaDark :: Signal MegaDark
 megaDark = MegaDark <~ hero ~~ bullets
     where
-        bullets = folds (necro `dot2` fmap2 updateBullets) initBullets <| tick
+        bullets = folds (necro `dot2` fmap2 updateBullets) initBullets <| mergeMany
+                [ BulletTick      <~ tick
+                , BulletCollision <~ timestamp (collisionMany bullets) ]
+
         hero    = folds (necro `dot2` fmap2 updateHero)    mkHero      <| mergeMany
                 [ HeroTick      <~ tick
                 , HeroKeys      <~ wasd
                 , HeroMouse     <~ foldp fpsMouse (180, 0) mouseDelta
                 , HeroClick     <~ sampleOn mouseClick runTime
-                , HeroCollision <~ timestamp (collision hero)]
-
-
-        -- bullets = delay initBullets <| necro <| updateBullets <~ deltaTime ~~ runTime ~~ bullets
-        -- hero    = delay mkHero <| necro <| updateHero <~ hero ~~ mergeMany
+                , HeroCollision <~ timestamp (collision hero) ]
 
 fpsMouse :: (Double, Double) -> (Double, Double) -> (Double, Double)
 fpsMouse (mx, my) (px, py) = (x, y)
@@ -102,20 +99,23 @@ updateHero (HeroCollision (t, c)) h@(Entity (Hero _ health) g)
     | otherwise            = h
 
 
-updateBullets :: (Time, Time) -> [Entity Bullet] -> [Entity Bullet]
-updateBullets (rt, dt) bs = filterMap updateM bs
-    where
-        updateM b = foldM updateBullet b <| BulletTick rt dt : map (BulletCollision rt) (collisions <| gameObject b)
+updateBullets :: BulletInput -> [Entity Bullet] -> [Entity Bullet]
+updateBullets (BulletTick t)            bs = filterMap (tickBullet t) bs
+updateBullets (BulletCollision (t, cs)) bs = map (bulletCollision t) <| zip cs bs
 
-updateBullet :: Entity Bullet -> BulletInput -> Maybe (Entity Bullet)
-updateBullet b@(Entity (Bullet state) g) (BulletTick dt rt)
+tickBullet :: (Time, Time) -> Entity Bullet -> Maybe (Entity Bullet)
+tickBullet (dt, rt) b@(Entity (Bullet state) g)
     | DeathAnimation t <- state, rt > t = Nothing
     | Flying         d <- state         = Just <| Entity (Bullet state) <| rotate (d * realToFrac dt * 10) g
     | otherwise                         = Just b
 
-updateBullet b@(Entity _ g) (BulletCollision t c)
-    | EnemyWeapon <- tag c = Just <| b
-    | otherwise            = Just <| Entity (Bullet <| DeathAnimation <| t + 1) g
+bulletCollision :: Time -> (Maybe Collision, Entity Bullet) -> Entity Bullet
+bulletCollision t (c, b)
+    | Nothing          <- mtag = b
+    | Just EnemyWeapon <- mtag = b
+    | otherwise                = Entity (Bullet <| DeathAnimation <| t + 1) <| gameObject b
+    where
+        mtag = fmap tag c
 
 {-
 main :: IO ()
