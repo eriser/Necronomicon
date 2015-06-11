@@ -7,7 +7,8 @@ module Necronomicon.Utility (hash,
                              showBinary,
                              showHex,
                              chunksOf,
-                             filterMap) where
+                             filterMap,
+                             dot2) where
 
 import Data.Bits
 import Data.List (foldl')
@@ -39,6 +40,9 @@ infixl 0 |>
 a <| b = a b
 
 infixr 0 <|
+
+dot2 :: (c -> d) -> (a -> b -> c) -> a -> b -> d
+dot2 = ((.).(.))
 
 getCurrentTime :: IO Double
 getCurrentTime = getTime >>= \currentTime -> case currentTime of

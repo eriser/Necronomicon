@@ -5,6 +5,7 @@ module Necronomicon.FRP.SignalA (
     (~~),
     (~>),
     Time,
+    tick,
     delay,
     runSignal,
     necro,
@@ -92,6 +93,7 @@ module Necronomicon.FRP.SignalA (
     merge,
     mergeMany,
     foldp,
+    folds,
     -- combine,
     filterIf,
     filterWhen,
@@ -404,6 +406,9 @@ deltaTime = inputSignal 200 deltaTimeRef
 runTime :: Signal Time
 runTime = inputSignal 200 runTimeRef
 
+tick :: Signal (Time, Time)
+tick = (,) <~ deltaTime ~~ runTime
+
 mousePos :: Signal (Double, Double)
 mousePos = inputSignal 201 mousePosRef
 
@@ -669,7 +674,6 @@ collision _ = Signal $ \_ -> return (cont, Collision 0, IntSet.empty)
     where
         cont _ = return $ NoChange $ Collision 0
 
-
 -----------------------------------------------------------------
 -- Time
 -----------------------------------------------------------------
@@ -822,10 +826,32 @@ foldp f b sig = Signal $ \state -> do
                 writeIORef ref nextV
                 return $ Change nextV
 
--- folds :: (Signal a -> Signal b -> Signal b) -> b -> Signal a -> Signal b
--- folds f b sig = undefined
 
---Would it be possible to do a ticked merge???
+--This requires delay hackery, but satisfies all goals.
+folds :: (Signal input -> Signal state -> Signal state) -> state -> Signal input -> Signal state
+folds f b inputSig = stateSig
+    where
+        stateSig = delay b $ f inputSig stateSig
+
+--This method doesn't need a hack, but doesn't provide external delaying, only internal :\
+-- folds :: (Signal input -> Signal state -> Signal state) -> state -> Signal input -> Signal state
+-- folds f b asig = Signal $ \state -> do
+--     ref              <- newIORef b
+--     (_, _, uids)     <- unSignal (f asig (pure b)) state
+--     let sig           = f asig $ refReader ref uids
+--     (scont, s, _)    <- unSignal sig state
+--     return (cont scont ref uids, s, uids)
+--     where
+--         cont scont ref uids eid
+--             | not $ IntSet.member eid uids = readIORef ref >>= return . NoChange
+--             | otherwise                    = do
+--                 prev <- readIORef ref
+--                 s    <- unEvent <~ scont eid
+--                 writeIORef ref s
+--                 return $ Change prev
+-- refReader :: IORef a -> IntSet.IntSet -> Signal a
+-- refReader ref uids = Signal $ \_ -> readIORef ref >>= \x -> return (\_ -> readIORef ref >>= return . Change, x, uids)
+
 -- combine :: [Signal a] -> Signal [a]
 -- combine signals = Signal $ \state -> do
 --     (continuations, vs, uids) <- unzip3 <~ mapM (\s -> fmap fst $ unSignal s state) signals

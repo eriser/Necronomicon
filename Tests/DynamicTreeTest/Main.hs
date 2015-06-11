@@ -9,7 +9,7 @@ main = runSignal megaDark
 
 data MegaDark    = MegaDark (Entity Hero) [Entity Bullet] deriving (Show, Eq, Generic)
 type Health      = Double
-data HeroInput   = HeroKeys (Double, Double) | HeroMouse (Double, Double) | HeroTick Time Time | HeroClick Time | HeroCollision (Time, Collision)
+data HeroInput   = HeroKeys (Double, Double) | HeroMouse (Double, Double) | HeroTick (Time, Time) | HeroClick Time | HeroCollision (Time, Collision)
 data HeroState   = HeroIdle | HeroMoving Vector3 | HeroAttacking Time | HeroDamaged Time deriving (Show, Eq, Generic)
 data Hero        = Hero HeroState Health deriving (Show, Eq, Generic)
 data BulletInput = BulletCollision Time Collision | BulletTick Time Time
@@ -54,14 +54,17 @@ initBullets = [mkBullet <| Vector3 (-2) 0 0, mkBullet <| Vector3 0 0 0, mkBullet
 megaDark :: Signal MegaDark
 megaDark = MegaDark <~ hero ~~ bullets
     where
-        bullets = delay initBullets <| necro <| updateBullets <~ deltaTime ~~ runTime ~~ bullets
-
-        hero    = delay mkHero <| necro <| updateHero <~ hero ~~ mergeMany
-                [ HeroTick      <~ deltaTime ~~ runTime
+        bullets = folds (necro `dot2` fmap2 updateBullets) initBullets <| tick
+        hero    = folds (necro `dot2` fmap2 updateHero)    mkHero      <| mergeMany
+                [ HeroTick      <~ tick
                 , HeroKeys      <~ wasd
                 , HeroMouse     <~ foldp fpsMouse (180, 0) mouseDelta
                 , HeroClick     <~ sampleOn mouseClick runTime
                 , HeroCollision <~ timestamp (collision hero)]
+
+
+        -- bullets = delay initBullets <| necro <| updateBullets <~ deltaTime ~~ runTime ~~ bullets
+        -- hero    = delay mkHero <| necro <| updateHero <~ hero ~~ mergeMany
 
 fpsMouse :: (Double, Double) -> (Double, Double) -> (Double, Double)
 fpsMouse (mx, my) (px, py) = (x, y)
@@ -69,38 +72,38 @@ fpsMouse (mx, my) (px, py) = (x, y)
         x = floatRem 360   <| px + mx * 80
         y = clamp (-90) 90 <| py + my * 80
 
-updateHero :: Entity Hero -> HeroInput -> Entity Hero
-updateHero h@(Entity (Hero state health) g) (HeroMouse (x, y))
+updateHero :: HeroInput -> Entity Hero -> Entity Hero
+updateHero (HeroMouse (x, y)) h@(Entity (Hero state health) g)
     | HeroIdle     <- state = h'
     | HeroMoving _ <- state = h'
     | otherwise             = h
     where
         h' = Entity (Hero state health) g{rot = fromEuler 0 (-x) 0 * fromEuler (-y) 0 0}
 
-updateHero h@(Entity (Hero state health) g) (HeroKeys (x, y))
+updateHero (HeroKeys (x, y)) h@(Entity (Hero state health) g)
     | HeroIdle     <- state = h'
     | HeroMoving _ <- state = h'
     | otherwise             = h
     where
         h' = Entity (Hero (HeroMoving <| Vector3 x 0 (-y)) health) g
 
-updateHero h@(Entity (Hero state health) g) (HeroTick dt rt)
+updateHero (HeroTick (dt, rt)) h@(Entity (Hero state health) g)
     | HeroMoving    p <- state         = Entity (Hero state health) <| translate (p * realToFrac dt * 1.25) g
     | HeroAttacking t <- state, rt > t = Entity (Hero HeroIdle health) g
     | HeroDamaged   t <- state, rt > t = Entity (Hero HeroIdle health) g
     | otherwise                        = h
 
-updateHero h@(Entity (Hero state health) g) (HeroClick t)
+updateHero (HeroClick t) h@(Entity (Hero state health) g)
     | HeroDamaged _ <- state = h
     | otherwise              = Entity (Hero (HeroAttacking <| t + 3) health) g
 
-updateHero h@(Entity (Hero _ health) g) (HeroCollision (t, c))
+updateHero (HeroCollision (t, c)) h@(Entity (Hero _ health) g)
     | EnemyWeapon <- tag c = Entity (Hero (HeroDamaged <| t + 3) (health - 10)) g
     | otherwise            = h
 
 
-updateBullets :: Time -> Time -> [Entity Bullet] -> [Entity Bullet]
-updateBullets rt dt bs = filterMap updateM bs
+updateBullets :: (Time, Time) -> [Entity Bullet] -> [Entity Bullet]
+updateBullets (rt, dt) bs = filterMap updateM bs
     where
         updateM b = foldM updateBullet b <| BulletTick rt dt : map (BulletCollision rt) (collisions <| gameObject b)
 
