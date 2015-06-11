@@ -95,6 +95,7 @@ module Necronomicon.FRP.SignalA (
     collisionMany,
     foldp,
     folds,
+    foldg,
     -- combine,
     filterIf,
     filterWhen,
@@ -670,6 +671,7 @@ keyboard = Signal $ \state -> do
             | eid > 150 = readIORef ref >>= return . NoChange . ksList
             | otherwise = readIORef ref >>= return . Change   . ksList
 
+--Collision and delay are motivating examples of events with multiple uids associated...maybe?
 collision :: Signal (Entity a) -> Signal Collision
 collision _ = Signal $ \_ -> return (cont, Collision 0, IntSet.empty)
     where
@@ -838,6 +840,11 @@ folds :: (Signal input -> Signal state -> Signal state) -> state -> Signal input
 folds f b inputSig = stateSig
     where
         stateSig = delay b $ f inputSig stateSig
+
+foldg :: Scene scene => (input -> scene -> scene) -> scene -> Signal input -> Signal scene
+foldg f scene input = sceneSig
+    where
+        sceneSig = delay scene $ necro $ f <~ input ~~ sceneSig
 
 --This method doesn't need a hack, but doesn't provide external delaying, only internal :\
 -- folds :: (Signal input -> Signal state -> Signal state) -> state -> Signal input -> Signal state

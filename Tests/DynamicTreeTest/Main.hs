@@ -52,16 +52,16 @@ initBullets = [mkBullet <| Vector3 (-2) 0 0, mkBullet <| Vector3 0 0 0, mkBullet
 megaDark :: Signal MegaDark
 megaDark = MegaDark <~ hero ~~ bullets
     where
-        bullets = folds (necro `dot2` fmap2 updateBullets) initBullets <| mergeMany
+        bullets = foldg updateBullets initBullets <| mergeMany
                 [ BulletTick      <~ tick
                 , BulletCollision <~ timestamp (collisionMany bullets) ]
 
-        hero    = folds (necro `dot2` fmap2 updateHero)    mkHero      <| mergeMany
-                [ HeroTick      <~ tick
-                , HeroKeys      <~ wasd
-                , HeroMouse     <~ foldp fpsMouse (180, 0) mouseDelta
-                , HeroClick     <~ sampleOn mouseClick runTime
-                , HeroCollision <~ timestamp (collision hero) ]
+        hero    = foldg updateHero mkHero <| mergeMany
+                [ HeroTick        <~ tick
+                , HeroKeys        <~ wasd
+                , HeroMouse       <~ foldp fpsMouse (180, 0) mouseDelta
+                , HeroClick       <~ sampleOn mouseClick runTime
+                , HeroCollision   <~ timestamp (collision hero) ]
 
 fpsMouse :: (Double, Double) -> (Double, Double) -> (Double, Double)
 fpsMouse (mx, my) (px, py) = (x, y)
