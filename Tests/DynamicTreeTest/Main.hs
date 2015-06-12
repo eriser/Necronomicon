@@ -33,7 +33,7 @@ mkHero = Entity h g
         h = Hero HeroIdle 100
         g = mkGameObject
           { pos      = Vector3 0 0 (-6)
-          , rot      = fromEuler 0 0 0
+          , rot      = fromEuler 0 180 0
           , collider = boxCollider 1 1 1
           , camera   = Just <| Camera 30 0.1 1000 black [] }
 

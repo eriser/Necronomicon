@@ -323,9 +323,9 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
 
         setInputCallbacks w eventInbox
 
-        run False w scont currentTime resources DynTree.empty eventInbox
+        run False w scont currentTime resources DynTree.empty eventInbox state
     where
-        run quit window s runTime' resources tree eventInbox
+        run quit window s runTime' resources tree eventInbox state
             | quit      = print "Qutting" >> return ()
             | otherwise = do
                 GLFW.pollEvents
@@ -335,8 +335,14 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
                 let delta    = currentTime - runTime'
                 atomically   $ writeTChan eventInbox $ TimeEvent (Time delta) (Time currentTime)
 
+                -- (g, tree')  <- (\g -> update (g, tree)) . flip gchildren_ mkGameObject . MV.toList <~ readIORef (objectRef state)
+                gs   <- filterMap id . V.toList <~ (readIORef (objectRef state) >>= V.freeze)
+                let g = gchildren_ gs mkGameObject
+                renderGraphicsG window resources True g g tree
+                -- return (Signal (prev s') (Change $ fst $ setGameObjects x (children g')) (next s'), tree')
+
                 threadDelay  $ 16667
-                run q window s currentTime resources tree eventInbox
+                run q window s currentTime resources tree eventInbox state
 
 processEvents :: Show a => (Int -> IO (Event a)) -> SignalState -> TChan InputEvent -> IO ()
 processEvents sig ss inbox = forever $ atomically (readTChan inbox) >>= \e -> case e of
@@ -346,11 +352,37 @@ processEvents sig ss inbox = forever $ atomically (readTChan inbox) >>= \e -> ca
     DimensionsEvent  dm    -> writeIORef  (dimensionsRef ss) dm >> sig 203 >>= printEvent
     KeyEvent         k b   -> modifyIORef (keyboardRef   ss) (\ks -> IntMap.insert (fromEnum k) b ks) >> sig (fromEnum k) >>= printEvent
     where
-        printEvent (Change e) = print e
+        printEvent (Change _) = return () -- print e
         printEvent  _         = return ()
 
 necro :: Scene a => Signal a -> Signal a
-necro = fmap id
+necro sig = Signal $ \state -> do
+    (scont, s, uids) <- unSignal sig state
+    -- s'               <- writeGS s state
+    return (cont scont state, s, uids)
+    where
+        setNewUIDS g@GameObject{gid = New} (gs, uid : uids) = (g{gid = UID uid} : gs, uids)
+        setNewUIDS g (gs, uids) = (g : gs, uids)
+
+        writeG state g = readIORef (objectRef state) >>= \vec -> do
+            let x | UID uid <- gid g, uid < MV.length vec = MV.write vec uid (Just g) >> writeIORef (objectRef state) vec
+                  | UID uid <- gid g                      = do
+                      vec' <- MV.unsafeGrow vec (MV.length vec)
+                      MV.write vec' uid (Just g)
+                      writeIORef (objectRef state) vec'
+                  | otherwise = print "Error: GameObject without a UID found in necro update" >> return ()
+            x
+
+        writeGS s state = do
+            uids           <- readIORef $ uidRef state
+            let (gs, uids') = foldr setNewUIDS ([], uids) $ getGameObjects s []
+            mapM_ (writeG state) gs
+            writeIORef (uidRef state) uids'
+            return $ fst $ setGameObjects s gs
+
+        cont scont state eid = scont eid >>= \se -> case se of
+            NoChange _ -> return se
+            Change   s -> Change <~ writeGS s state
 
 ----------------------------------
 -- Input
@@ -368,7 +400,7 @@ data SignalState = SignalState
 
 mkSignalState :: (Double, Double) -> IO SignalState
 mkSignalState dims = SignalState
-                  <~ (MV.new 16 >>= newIORef)
+                  <~ (V.thaw (V.fromList (replicate 16 Nothing)) >>= newIORef)
                   ~~ newIORef [0..]
                   ~~ newIORef 0
                   ~~ newIORef 0
