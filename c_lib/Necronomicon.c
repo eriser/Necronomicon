@@ -1715,6 +1715,8 @@ U.d;															\
 #define AMP2DB(amp) (log10(amp * 20.0))
 #define DB2AMP(db) (pow(10, db / 20.0))
 
+#define LAGRANGE_2ND_ORDER(x0, x1, y0, y1, x) ((x - x1) / (x0 - x1) * y0 + (x - x0) / (x1 - x0) * y1)
+
 /*
 #define CUBIC_INTERP(A,B,C,D,DELTA) \
 ({                                  \
@@ -8220,6 +8222,10 @@ void limiter_deconstructor(ugen* u)
 	free(u->data);
 }
 
+// 2nd order lagrange factoring out the left side for y0 = 0 and the y1 multiplication as y1 == ratio == 1 in a limter.
+// ((x - x1) / (x0 - x1) * y0{{0}} + (x - x0) / (x1 - x0) * y1{{scale:1}})
+#define LIMITER_LAGRANGE(x0, x1, x) ((x - x0) / (x1 - x0))
+
 __attribute__((always_inline)) static inline double limiterInlineCalc(
 	sample_buffer buffer, double* samples, unsigned int num_samples_mask, limiter_data* data, double lookahead, double attack_gain,
 	double release_gain, double threshold, double knee_width, double lower_knee_bound, double upper_knee_bound, double x, double envelope_in)
@@ -8242,21 +8248,14 @@ __attribute__((always_inline)) static inline double limiterInlineCalc(
 
 	// Calculate gain based on soft/hard knee. Threshold, knee_width, lower_knee_bound, and upper_knee_bound are in decibels.
 	const double envelope_out_db = AMP2DB(envelope_out);
-	double scale = 1;
-	double gain;
+	double gain = 1;
 
 	if (knee_width > 0.0 && envelope_out_db > lower_knee_bound && envelope_out_db < upper_knee_bound)
 	{
-		scale = ((envelope_out_db - lower_knee_bound) / knee_width) * 0.5;
-		gain = lower_knee_bound - envelope_out_db;
+		gain = LIMITER_LAGRANGE(lower_knee_bound, upper_knee_bound, envelope_out_db);
 	}
 
-	else
-	{
-		gain = threshold - envelope_out_db;
-	}
-
-	gain = DB2AMP(fmin(0, scale * gain));
+	gain = DB2AMP(fmin(0, gain * (threshold - envelope_out_db)));
 	return y * gain;
 }
 
