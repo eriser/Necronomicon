@@ -2,7 +2,7 @@ module Necronomicon.Graphics.Mesh where
 
 import           Necronomicon.Graphics.BufferObject
 import           Necronomicon.Graphics.Color
-import           Necronomicon.Graphics.Model
+import           Necronomicon.Graphics.Resources
 import           Necronomicon.Graphics.Shader
 import           Necronomicon.Graphics.Texture
 import           Necronomicon.Linear
@@ -31,7 +31,7 @@ import qualified Graphics.Rendering.OpenGL.Raw      as GLRaw (glUniformMatrix4fv
 -}
 
 rect :: Double -> Double -> Mesh
-rect w h = Mesh (show w ++ show h ++ "rect") vertices colors uvs indices
+rect w h = mkMesh (show w ++ show h ++ "~rect") vertices colors uvs indices
     where
         vertices = [Vector3 0 0 0,Vector3 w 0 0,Vector3 0 h 0,Vector3 w h 0]
         colors   = [white,white,white,white]
@@ -39,7 +39,7 @@ rect w h = Mesh (show w ++ show h ++ "rect") vertices colors uvs indices
         indices  = [2,0,1,3,2,1]
 
 cube :: Mesh
-cube = Mesh "~c" vertices colors uvs indices
+cube = mkMesh "~cube" vertices colors uvs indices
     where
         vertices = [Vector3 (-0.5) (-0.5)   0.5,
                     Vector3   0.5  (-0.5)   0.5,
@@ -66,7 +66,7 @@ cube = Mesh "~c" vertices colors uvs indices
                     0,4,5,1,0,5] -- Bottom
 
 cubeOutline :: Mesh
-cubeOutline = Mesh "*c" vertices colors uvs indices
+cubeOutline = mkMesh "*cube" vertices colors uvs indices
     where
         vertices = [Vector3 (-0.5) (-0.5)   0.5,
                     Vector3   0.5  (-0.5)   0.5,
@@ -93,7 +93,7 @@ cubeOutline = Mesh "*c" vertices colors uvs indices
                     1,0,0,4,4,5,5,1] -- Bottom
 
 sphere :: Int -> Int -> Mesh
-sphere latitudes longitudes = Mesh (show latitudes ++ show longitudes ++ "sphere") vertices colors uvs indices
+sphere latitudes longitudes = mkMesh (show latitudes ++ show longitudes ++ "sphere") vertices colors uvs indices
     where
         toRadians      = (* 0.0174532925)
         latitudesReal  = fromIntegral latitudes
@@ -112,7 +112,7 @@ sphere latitudes longitudes = Mesh (show latitudes ++ show longitudes ++ "sphere
         indices        = foldr (\i acc -> i + 1 : i + 2 : i + 3 : i + 1 : i + 0 : i + 2 : acc) [] [0,4..latitudes * longitudes]
 
 dynRect :: Double -> Double -> Mesh
-dynRect w h = DynamicMesh (show w ++ show h ++ "rect") vertices colors uvs indices
+dynRect w h = mkDynamicMesh (show w ++ show h ++ "~dynrect") vertices colors uvs indices
     where
         vertices = [Vector3 0 0 0,Vector3 w 0 0,Vector3 0 h 0,Vector3 w h 0]
         colors   = [white, white, white, white]
@@ -120,7 +120,7 @@ dynRect w h = DynamicMesh (show w ++ show h ++ "rect") vertices colors uvs indic
         indices  = [2,0,1,3,2,1]
 
 tri :: Double -> Color -> Mesh
-tri triSize color = Mesh (show triSize ++ "tri") vertices colors uvs indices
+tri triSize color = mkMesh (show triSize ++ "~dyntri") vertices colors uvs indices
     where
         vertices = [Vector3 0 0 0, Vector3 triSize 0 0, Vector3 0 triSize 0]
         colors   = [color,color,color]
@@ -152,11 +152,11 @@ getTexture resources (TGATexture path) = readIORef (texturesRef resources) >>= \
 getTexture _ (LoadedTexture t) = return t
 
 getMesh :: Resources -> Mesh -> IO LoadedMesh
-getMesh resources mesh@(Mesh mKey _ _ _ _) = readIORef (meshesRef resources) >>= \meshes -> case Map.lookup mKey meshes of
-    Nothing         -> loadMesh mesh >>= \loadedMesh -> (writeIORef (meshesRef resources) $ Map.insert mKey loadedMesh meshes) >> return loadedMesh
+getMesh resources m@(Mesh _ mKey _ _ _ _) = readIORef (meshesRef resources) >>= \mkMeshes -> case Map.lookup mKey mkMeshes of
+    Nothing         -> loadMesh m >>= \loadedMesh -> (writeIORef (meshesRef resources) $ Map.insert mKey loadedMesh mkMeshes) >> return loadedMesh
     Just loadedMesh -> return loadedMesh
-getMesh resources mesh@(DynamicMesh mKey v c u i) = readIORef (meshesRef resources) >>= \meshes -> case Map.lookup mKey meshes of
-    Nothing              -> loadMesh mesh >>= \loadedMesh@(vbuf,ibuf,_,_) -> (writeIORef (meshesRef resources) (Map.insert mKey loadedMesh meshes)) >> dynamicDrawMesh vbuf ibuf v c u i
+getMesh resources m@(DynamicMesh _ mKey v c u i) = readIORef (meshesRef resources) >>= \mkMeshes -> case Map.lookup mKey mkMeshes of
+    Nothing              -> loadMesh m >>= \loadedMesh@(vbuf,ibuf,_,_) -> (writeIORef (meshesRef resources) (Map.insert mKey loadedMesh mkMeshes)) >> dynamicDrawMesh vbuf ibuf v c u i
     Just (vbuf,ibuf,_,_) -> dynamicDrawMesh vbuf ibuf v c u i
 
 dynamicDrawMesh :: GL.BufferObject -> GL.BufferObject -> [Vector3] -> [Color] -> [Vector2] -> [Int] -> IO LoadedMesh
@@ -166,11 +166,11 @@ dynamicDrawMesh vBuf iBuf vertices colors uvs indices = do
     return (vertexBuffer,indexBuffer,length indices,vadPosColorUV)
 
 loadMesh :: Mesh -> IO LoadedMesh
-loadMesh (Mesh _ vertices colors uvs indices) = do
+loadMesh (Mesh _ _ vertices colors uvs indices) = do
     vertexBuffer  <- makeBuffer GL.ArrayBuffer        (map realToFrac (posColorUV vertices colors uvs) :: [GL.GLfloat])
     indexBuffer   <- makeBuffer GL.ElementArrayBuffer (map fromIntegral indices :: [GL.GLuint])
     return (vertexBuffer,indexBuffer,length indices,vadPosColorUV)
-loadMesh (DynamicMesh _ _ _ _ _) = do
+loadMesh (DynamicMesh _ _ _ _ _ _) = do
     vertexBuffer:_ <- GL.genObjectNames 1
     indexBuffer :_ <- GL.genObjectNames 1
     return (vertexBuffer,indexBuffer,0,[])
@@ -237,9 +237,9 @@ material :: String -> String -> [Uniform] -> Material
 material vs fs us = Material New vs fs us GL.Triangles
 
 drawMeshWithMaterial :: Material -> Mesh -> Matrix4x4 -> Matrix4x4 -> Resources -> IO()
-drawMeshWithMaterial (Material _ vs fs us primMode) mesh modelView proj resources = do
+drawMeshWithMaterial (Material _ vs fs us primMode) m modelView proj resources = do
     (program, uniforms, attributes)                                  <- getShader resources sh
-    (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh   resources mesh
+    (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh   resources m
     let ulocs         = take (length uniforms - 2) uniforms
         (mv : pr : _) = drop (length uniforms - 2) uniforms
 
@@ -270,9 +270,9 @@ setUniform _ _ _                      t = return t
 debugDraw :: Color -> Material
 debugDraw (RGBA r g b a) = Material draw
     where
-        draw mesh modelView proj resources = do
+        draw mkMesh modelView proj resources = do
             (program,baseColor:mv:pr:_,attributes)                     <- getShader resources vertexColoredShader
-            (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:_) <- getMesh   resources mesh
+            (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:_) <- getMesh   resources mkMesh
 
             GL.currentProgram    GL.$= Just program
             GL.uniform baseColor GL.$= (GL.Vertex4 (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a) :: GL.Vertex4 GL.GLfloat)
@@ -282,9 +282,9 @@ debugDraw (RGB r g b) = vertexColored (RGBA r g b 1)
 vertexColored :: Color -> Material
 vertexColored (RGBA r g b a) = Material draw
     where
-        draw mesh modelView proj resources = do
+        draw mkMesh modelView proj resources = do
             (program,baseColor:mv:pr:_,attributes)                     <- getShader resources vertexColoredShader
-            (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:_) <- getMesh   resources mesh
+            (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:_) <- getMesh   resources mkMesh
 
             GL.currentProgram    GL.$= Just program
             GL.uniform baseColor GL.$= (GL.Vertex4 (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a) :: GL.Vertex4 GL.GLfloat)
@@ -294,9 +294,9 @@ vertexColored (RGB r g b) = vertexColored (RGBA r g b 1)
 ambient :: Texture -> Material
 ambient tex = Material draw
     where
-        draw mesh modelView proj resources = do
+        draw mkMesh modelView proj resources = do
             (program,texu:mv:pr:_,attributes)                                <- getShader  resources ambientShader
-            (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh    resources mesh
+            (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh    resources mkMesh
             texture                                                          <- getTexture resources tex
 
             GL.currentProgram  GL.$= Just program
@@ -308,9 +308,9 @@ ambient tex = Material draw
 uvTest :: Texture -> Material
 uvTest tex = Material draw
     where
-        draw mesh modelView proj resources = do
+        draw mkMesh modelView proj resources = do
             (program,texu:mv:pr:_,attributes)                                <- getShader  resources uvTestShader
-            (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh    resources mesh
+            (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh    resources mkMesh
             texture                                                          <- getTexture resources tex
 
             GL.currentProgram  GL.$= Just program
@@ -322,9 +322,9 @@ uvTest tex = Material draw
 colorTest :: Texture -> Material
 colorTest tex = Material draw
     where
-        draw mesh modelView proj resources = do
+        draw mkMesh modelView proj resources = do
             (program,texu:mv:pr:_,attributes)                                <- getShader  resources colorTestShader
-            (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh    resources mesh
+            (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh    resources mkMesh
             texture                                                          <- getTexture resources tex
 
             GL.currentProgram  GL.$= Just program
@@ -336,9 +336,9 @@ colorTest tex = Material draw
 blur :: Texture -> Material
 blur tex = Material draw
     where
-        draw mesh modelView proj resources = do
+        draw mkMesh modelView proj resources = do
             (program,texu:mv:pr:_,attributes)                                <- getShader  resources blurShader
-            (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh    resources mesh
+            (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh    resources mkMesh
             texture                                                          <- getTexture resources tex
 
             GL.currentProgram  GL.$= Just program
@@ -390,9 +390,9 @@ blurShader          = shader
 material :: String -> String -> [Uniform] -> Material
 material vs fs us = Material drawMat
     where
-        drawMat mesh modelView proj resources = do
+        drawMat mkMesh modelView proj resources = do
             (program, uniforms, attributes)                                  <- getShader resources terrainShader
-            (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh   resources mesh
+            (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh   resources mkMesh
             let ulocs         = take (length uniforms - 2) uniforms
                 (mv : pr : _) = drop (length uniforms - 2) uniforms
 

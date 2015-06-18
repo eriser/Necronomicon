@@ -1,6 +1,6 @@
 module Necronomicon.Physics.Collider where
 
-import Necronomicon.Graphics.Model (UID(..))
+import Necronomicon.Graphics.Resources (UID(..))
 import Necronomicon.Linear
 import Necronomicon.Graphics.HalfEdge
 import Data.Binary
@@ -48,11 +48,11 @@ colliderTransform_ t (BoxCollider     uid _ x cs) = BoxCollider     uid t x cs
 colliderTransform_ t (CapsuleCollider uid _ x cs) = CapsuleCollider uid t x cs
 colliderTransform_ t (MeshCollider    uid _ x cs) = MeshCollider    uid t x cs
 
-boxCollider :: Double -> Double -> Double -> Maybe Collider
-boxCollider w h d = Just $ BoxCollider New identity4 (OBB $ Vector3 (w * 0.5) (h * 0.5) (d * 0.5)) []
+boxCollider :: Double -> Double -> Double -> Collider
+boxCollider w h d = BoxCollider New identity4 (OBB $ Vector3 (w * 0.5) (h * 0.5) (d * 0.5)) []
 
-sphereCollider :: Double -> Maybe Collider
-sphereCollider r = Just $ SphereCollider New identity4 (Sphere 0 r) []
+sphereCollider :: Double -> Collider
+sphereCollider r = SphereCollider New identity4 (Sphere 0 r) []
 
 --Problem is in THIS matrix
 colliderAABB :: Collider -> AABB

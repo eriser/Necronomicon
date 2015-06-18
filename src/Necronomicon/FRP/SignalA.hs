@@ -245,6 +245,22 @@ instance Applicative Signal where
                         writeIORef ref fx
                         return $ Change fx
 
+    Pure   _ *> Pure   g = Pure g
+    Pure   _ *> Signal g = Signal g
+    Signal f *> Pure   g = Signal $ \state -> do
+        (fcont, _, fids) <- f state
+        return (cont fcont, g, fids)
+        where
+            cont fcont eid = fcont eid >> return (NoChange g)
+    Signal f *> Signal g = Signal $ \state -> do
+        (fcont,  _, fids) <- f state
+        (gcont, g', gids) <- g state
+        return (cont fcont gcont, g', IntSet.union fids gids)
+        where
+            cont fcont gcont eid = fcont eid >> gcont eid
+
+    (<*) = flip (*>)
+
 instance Alternative Signal where
     empty                 = Signal $ \_ -> return (const $ error "A Signal cannot be empty.", error "A Signal cannot be empty.", IntSet.empty)
     Pure   x <|> Pure _   = Pure x
@@ -314,7 +330,7 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
         putStrLn "Starting Necronomicon"
 
         currentTime   <- getCurrentTime
-        resources     <- newResources
+        resources     <- mkResources
         (ww, wh)      <- GLFW.getWindowSize w
         state         <- mkSignalState (fromIntegral ww, fromIntegral wh)
         (scont, _, _) <- unSignal sig state
@@ -335,6 +351,7 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
                 let delta    = currentTime - runTime'
                 atomically   $ writeTChan eventInbox $ TimeEvent (Time delta) (Time currentTime)
 
+                --Need to redo the resources system. It is....not efficient as is.
                 -- (g, tree')  <- (\g -> update (g, tree)) . flip gchildren_ mkGameObject . MV.toList <~ readIORef (objectRef state)
                 gs   <- filterMap id . V.toList <~ (readIORef (objectRef state) >>= V.freeze)
                 let g = gchildren_ gs mkGameObject
@@ -355,6 +372,8 @@ processEvents sig ss inbox = forever $ atomically (readTChan inbox) >>= \e -> ca
         printEvent (Change _) = return () -- print e
         printEvent  _         = return ()
 
+--Perhaps instead of a vector of maybes it instead a pooling system
+--With a free list and an assigned list
 necro :: Scene a => Signal a -> Signal a
 necro sig = Signal $ \state -> do
     (scont, s, uids) <- unSignal sig state
@@ -365,10 +384,11 @@ necro sig = Signal $ \state -> do
         setNewUIDS g (gs, uids) = (g : gs, uids)
 
         writeG state g = readIORef (objectRef state) >>= \vec -> do
-            let x | UID uid <- gid g, uid < MV.length vec = MV.write vec uid (Just g) >> writeIORef (objectRef state) vec
+            let x | UID uid <- gid g, uid < MV.length vec = MV.unsafeWrite vec uid (Just g) >> writeIORef (objectRef state) vec
                   | UID uid <- gid g                      = do
                       vec' <- MV.unsafeGrow vec (MV.length vec)
-                      MV.write vec' uid (Just g)
+                      mapM_ (\i -> MV.unsafeWrite vec' i Nothing) [uid..MV.length vec' - 1]
+                      MV.unsafeWrite vec' uid (Just g)
                       writeIORef (objectRef state) vec'
                   | otherwise = print "Error: GameObject without a UID found in necro update" >> return ()
             x
@@ -1254,7 +1274,7 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
         --Init
         putStrLn "Starting Necronomicon"
         currentTime <- getCurrentTime
-        resources   <- newResources
+        resources   <- mkResources
         (ww, wh)    <- GLFW.getWindowSize w
 
         --Setup Inputs
@@ -1296,10 +1316,10 @@ necro sig = Signal $ \state -> do
         setNewUIDS _             acc             = acc
 
         writeG state g = readIORef (objectRef state) >>= \vec -> do
-            let x | UID uid <- gid g, uid < MV.length vec = MV.write vec uid (Just g) >> writeIORef (objectRef state) vec
+            let x | UID uid <- gid g, uid < MV.length vec = MV.unsafeWrite vec uid (Just g) >> writeIORef (objectRef state) vec
                   | UID uid <- gid g                      = do
                       vec' <- MV.unsafeGrow vec (MV.length vec)
-                      MV.write vec' uid (Just g)
+                      MV.unsafeWrite vec' uid (Just g)
                       writeIORef (objectRef state) vec'
                   | otherwise = print "Error: GameObject without a UID found in necro update" >> return ()
             x
@@ -2179,7 +2199,7 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
     Just w  -> do
         putStrLn "Starting Necronomicon"
         currentTime <- getCurrentTime
-        resources   <- newResources
+        resources   <- mkResources
 
         GLFW.setCursorInputMode w GLFW.CursorInputMode'Disabled
 
@@ -2244,7 +2264,7 @@ runSignal' f initX = initWindow (1920, 1080) True >>= \mw -> case mw of
     Just w  -> do
         putStrLn "Starting Necronomicon"
         currentTime <- getCurrentTime
-        resources   <- newResources
+        resources   <- mkResources
 
         GLFW.setCursorInputMode w GLFW.CursorInputMode'Disabled
 

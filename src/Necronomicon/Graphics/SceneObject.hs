@@ -1,7 +1,7 @@
 module Necronomicon.Graphics.SceneObject where
 
 import           Necronomicon.Graphics.Color
-import           Necronomicon.Graphics.Model
+import           Necronomicon.Graphics.Resources
 import           Necronomicon.Graphics.Mesh          (drawMeshWithMaterial, setEmptyTextures)
 import           Necronomicon.Graphics.Text          (renderFont)
 import           Necronomicon.Linear
@@ -158,7 +158,7 @@ drawScene world view proj resources g = draw world view proj resources g >>= \ne
 
 draw :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> SceneObject -> IO Matrix4x4
 draw world view proj resources g
-    | Just (Model mesh material )            <- _model g = drawMeshWithMaterial material mesh modelView proj resources >> return newWorld
+    | Just (Model m material )            <- _model g = drawMeshWithMaterial material m modelView proj resources >> return newWorld
     | Just (FontRenderer text font material) <- _model g = do
         (fontTexture, fontMesh) <- renderFont text font resources
         drawMeshWithMaterial (setEmptyTextures fontTexture material) fontMesh modelView proj resources >> return newWorld

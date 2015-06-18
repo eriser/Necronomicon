@@ -1,7 +1,7 @@
 module Necronomicon.Graphics.HalfEdge where
 
 import           Necronomicon.Linear
-import           Necronomicon.Graphics.Model
+import           Necronomicon.Graphics.Resources
 import           Necronomicon.Utility               (chunksOf)
 import           Debug.Trace
 import qualified Data.Set                           as Set
@@ -79,9 +79,9 @@ adjacentFaces f = (face2 e1, face2 e2, face2 e3)
 data IndirectHalfEdge     = IndirectHalfEdge Int (Int, Int) (Int, Int)
 data IndirectHalfEdgeMesh = IndirectHalfEdgeMesh (Map.Map (Int, Int) IndirectHalfEdge) (V.Vector (Vector3, Vector2)) [(Int, Int)]
 
-meshToHalfEdge :: Mesh -> HalfEdge
-meshToHalfEdge (DynamicMesh n vs cs uvs is) = meshToHalfEdge $ Mesh n vs cs uvs is
-meshToHalfEdge (Mesh        _ vs _  uvs is) = indirectToDirectHalfEdge . foldr insertFace (IndirectHalfEdgeMesh Map.empty (V.fromList $ zip vs uvs) []) $ chunksOf 3 is
+mkMeshToHalfEdge :: Mesh -> HalfEdge
+mkMeshToHalfEdge (DynamicMesh _ n vs cs uvs is) = mkMeshToHalfEdge $ mkMesh n vs cs uvs is
+mkMeshToHalfEdge (Mesh        _ _ vs _  uvs is) = indirectToDirectHalfEdge . foldr insertFace (IndirectHalfEdgeMesh Map.empty (V.fromList $ zip vs uvs) []) $ chunksOf 3 is
     where
         insertFace (i1 : i2 : i3 : _) (IndirectHalfEdgeMesh m vv heis) = IndirectHalfEdgeMesh m' vv ((i1, i2) : (i2, i3) : (i3, i1) : heis)
             where

@@ -6,7 +6,6 @@ import Data.Binary
 main :: IO ()
 main = runSignal megaDark
 
-data MegaDark    = MegaDark (Entity Hero) [Entity Bullet] deriving (Show, Eq, Generic)
 type Health      = Double
 data HeroInput   = HeroKeys (Double, Double) | HeroMouse (Double, Double) | HeroTick (Time, Time) | HeroClick Time | HeroCollision (Time, Collision)
 data HeroState   = HeroIdle | HeroMoving Vector3 | HeroAttacking Time | HeroDamaged Time deriving (Show, Eq, Generic)
@@ -25,7 +24,6 @@ instance Binary Hero
 instance Binary BulletState
 instance Binary Bullet
 instance Binary PhysM
-instance Binary MegaDark
 
 mkHero :: Entity Hero
 mkHero = Entity h g
@@ -34,7 +32,7 @@ mkHero = Entity h g
         g = mkGameObject
           { pos      = Vector3 0 0 (-6)
           , rot      = fromEuler 0 180 0
-          , collider = boxCollider 1 1 1
+          , collider = Just <| boxCollider 1 1 1
           , camera   = Just <| Camera 30 0.1 1000 black [] }
 
 mkBullet :: Vector3 -> Entity Bullet
@@ -43,14 +41,14 @@ mkBullet p = Entity b g
         b = Bullet (Flying <| Vector3 1 1 1)
         g = mkGameObject
           { pos      = p
-          , collider = boxCollider 1 1 1
+          , collider = Just <| boxCollider 1 1 1
           , model    = Just <| Model cube <| vertexColored white }
 
 initBullets :: [Entity Bullet]
 initBullets = [mkBullet <| Vector3 (-2) 0 0, mkBullet <| Vector3 0 0 0, mkBullet <| Vector3 2 0 0]
 
-megaDark :: Signal MegaDark
-megaDark = MegaDark <~ hero ~~ bullets
+megaDark :: Signal ()
+megaDark = hero *> bullets *> pure ()
     where
         bullets = foldg updateBullets initBullets <| mergeMany
                 [ BulletTick      <~ tick

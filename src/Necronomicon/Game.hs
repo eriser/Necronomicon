@@ -172,7 +172,7 @@ drawGame world view proj resources debug g = do
 
 drawG :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> Bool -> GameObject -> IO Matrix4x4
 drawG world view proj resources debug g
-    | Just (Model mesh mat) <- model g    = drawMeshWithMaterial mat mesh modelView proj resources >> return newWorld
+    | Just (Model m mat) <- model g    = drawMeshWithMaterial mat m modelView proj resources >> return newWorld
     | Just (FontRenderer text font mat) <- model g = do
         (fontTexture, fontMesh) <- renderFont text font resources
         drawMeshWithMaterial (setEmptyTextures fontTexture mat) fontMesh modelView proj resources >> return newWorld
@@ -252,7 +252,7 @@ renderGraphicsG window resources debug scene _ t = do
     -- drawGame identity4 identity4 (orthoMatrix 0 (fromIntegral w / fromIntegral h) 1 0 (-1) 1) resources False gui
 
     GLFW.swapBuffers window
-    GLFW.pollEvents
+    -- GLFW.pollEvents
     -- GL.flush
 
 runGame :: (Scene a, Binary a, Show a) => (World -> a -> a) -> a -> IO()
@@ -263,7 +263,7 @@ runGame f inits = initWindow (1920, 1080) True >>= \mw -> case mw of
 
         GLFW.setCursorInputMode w GLFW.CursorInputMode'Hidden
 
-        resources   <- newResources
+        resources   <- mkResources
         currentTime <- getCurrentTime
         let world = mkWorld{runTime = currentTime}
         renderNecronomicon False w resources inits empty world
@@ -559,7 +559,7 @@ instance Arbitrary GameObject where
         (px, py, pz) <- arbitrary
         (rx, ry, rz) <- arbitrary
         (sx, sy, sz) <- arbitrary
-        return $ GameObject New (Vector3 px py pz) (fromEuler rx ry rz) (Vector3 sx sy sz) (boxCollider w h d) Nothing Nothing []
+        return $ GameObject New (Vector3 px py pz) (fromEuler rx ry rz) (Vector3 sx sy sz) (Just $ boxCollider w h d) Nothing Nothing []
 
 dynTreeTester :: ((GameObject, DynamicTree) -> Bool) -> [[TreeTest]] -> Bool
 dynTreeTester f uss = fst $ foldr updateTest start uss
