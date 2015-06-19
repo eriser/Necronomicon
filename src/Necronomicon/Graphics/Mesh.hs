@@ -146,15 +146,18 @@ getTexture resources (AudioTexture i) = readIORef (texturesRef resources) >>= \t
 getTexture resources EmptyTexture     = readIORef (texturesRef resources) >>= \textures -> case Map.lookup "empty" textures of
     Nothing      -> newBoundTexUnit 0 >>= \texture -> (writeIORef (texturesRef resources) $ Map.insert "empty" texture textures) >> return texture
     Just texture -> return texture
-getTexture resources (TGATexture path) = readIORef (texturesRef resources) >>= \textures -> case Map.lookup path textures of
+getTexture resources (TGATexture Nothing path) = readIORef (texturesRef resources) >>= \textures -> case Map.lookup path textures of
     Nothing      -> loadTextureFromTGA path >>= \texture -> (writeIORef (texturesRef resources) $ Map.insert path texture textures) >> return texture
     Just texture -> return texture
+getTexture _ (TGATexture (Just tex) _) = return tex
 getTexture _ (LoadedTexture t) = return t
 
 getMesh :: Resources -> Mesh -> IO LoadedMesh
+getMesh _       (Mesh (Just m) _ _ _ _ _) = return m
 getMesh resources m@(Mesh _ mKey _ _ _ _) = readIORef (meshesRef resources) >>= \mkMeshes -> case Map.lookup mKey mkMeshes of
     Nothing         -> loadMesh m >>= \loadedMesh -> (writeIORef (meshesRef resources) $ Map.insert mKey loadedMesh mkMeshes) >> return loadedMesh
     Just loadedMesh -> return loadedMesh
+getMesh _       (DynamicMesh (Just m) _ _ _ _ _) = return m
 getMesh resources m@(DynamicMesh _ mKey v c u i) = readIORef (meshesRef resources) >>= \mkMeshes -> case Map.lookup mKey mkMeshes of
     Nothing              -> loadMesh m >>= \loadedMesh@(vbuf,ibuf,_,_) -> (writeIORef (meshesRef resources) (Map.insert mKey loadedMesh mkMeshes)) >> dynamicDrawMesh vbuf ibuf v c u i
     Just (vbuf,ibuf,_,_) -> dynamicDrawMesh vbuf ibuf v c u i
@@ -205,8 +208,8 @@ bindThenDraw primitiveMode (GL.UniformLocation mv) (GL.UniformLocation pr) model
     GL.currentProgram GL.$= Nothing
 
 debugDraw :: Color -> Material
-debugDraw (RGBA r g b a) = Material New "colored-vert.glsl" "colored-frag.glsl" [UniformVec4 "baseColor" (Vector4 r g b a)] GL.Lines
-debugDraw (RGB  r g b  ) = Material New "colored-vert.glsl" "colored-frag.glsl" [UniformVec4 "baseColor" (Vector4 r g b 1)] GL.Lines
+debugDraw (RGBA r g b a) = Material Nothing "colored-vert.glsl" "colored-frag.glsl" [UniformVec4 "baseColor" (Vector4 r g b a)] GL.Lines
+debugDraw (RGB  r g b  ) = Material Nothing "colored-vert.glsl" "colored-frag.glsl" [UniformVec4 "baseColor" (Vector4 r g b 1)] GL.Lines
 
 vertexColored :: Color -> Material
 vertexColored (RGBA r g b a) = material "colored-vert.glsl" "colored-frag.glsl" [UniformVec4 "baseColor" (Vector4 r g b a)]
@@ -234,11 +237,11 @@ setEmptyTextures tex (Material uid vs fs us primMode) = Material uid vs fs (fold
         updateTex  u                              us' = u : us'
 
 material :: String -> String -> [Uniform] -> Material
-material vs fs us = Material New vs fs us GL.Triangles
+material vs fs us = Material Nothing vs fs us GL.Triangles
 
 drawMeshWithMaterial :: Material -> Mesh -> Matrix4x4 -> Matrix4x4 -> Resources -> IO()
-drawMeshWithMaterial (Material _ vs fs us primMode) m modelView proj resources = do
-    (program, uniforms, attributes)                                  <- getShader resources sh
+drawMeshWithMaterial (Material mat vs fs us primMode) m modelView proj resources = do
+    (program, uniforms, attributes)                                  <- s
     (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh   resources m
     let ulocs         = take (length uniforms - 2) uniforms
         (mv : pr : _) = drop (length uniforms - 2) uniforms
@@ -248,6 +251,9 @@ drawMeshWithMaterial (Material _ vs fs us primMode) m modelView proj resources =
 
     bindThenDraw primMode mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
     where
+        s  = case mat of
+            Just js -> return js
+            _       -> getShader resources sh
         sh = shader
              (vs ++ " + " ++ fs) --Replace with UIDs
              (map uniformName us ++ ["modelView", "proj"])
@@ -262,6 +268,26 @@ setUniform _ loc (UniformVec2    _ v) t = GL.uniform loc GL.$= toGLVertex2 v >> 
 setUniform _ loc (UniformVec3    _ v) t = GL.uniform loc GL.$= toGLVertex3 v >> return t
 setUniform _ loc (UniformVec4    _ v) t = GL.uniform loc GL.$= toGLVertex4 v >> return t
 setUniform _ _ _                      t = return t
+
+--------------------
+-- New New  System
+--------------------
+
+--CM: TODO: Finish new resource drawing
+-- getMesh' :: Resources' -> Mesh -> IO LoadedMesh
+-- getMesh' resources m@(Mesh New mKey _ _ _ _) = readIORef (meshRef resources) >>= \meshes -> case Map.lookup mKey meshes of
+    -- Just  i -> readIORef (meshRef resources) >>= \vec -> MV.unsafeRead vec i
+    -- Nothing -> error $ "Couldn't find mesh: " ++ mKey
+-- getMesh' _ _ = error "New resource made it into getMesh'"
+
+--
+-- getMesh' resources m@(Mesh uid mKey _ _ _ _) = readIORef (meshesRef resources) >>= \mkMeshes -> case Map.lookup mKey mkMeshes of
+--     Nothing         -> loadMesh m >>= \loadedMesh -> (writeIORef (meshesRef resources) $ Map.insert mKey loadedMesh mkMeshes) >> return loadedMesh
+--     Just loadedMesh -> return loadedMesh
+-- getMesh resources m@(DynamicMesh _ mKey v c u i) = readIORef (meshesRef resources) >>= \mkMeshes -> case Map.lookup mKey mkMeshes of
+--     Nothing              -> loadMesh m >>= \loadedMesh@(vbuf,ibuf,_,_) -> (writeIORef (meshesRef resources) (Map.insert mKey loadedMesh mkMeshes)) >> dynamicDrawMesh vbuf ibuf v c u i
+--     Just (vbuf,ibuf,_,_) -> dynamicDrawMesh vbuf ibuf v c u i
+
 
 --------------------
 -- Old System

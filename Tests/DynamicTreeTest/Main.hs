@@ -9,7 +9,7 @@ main = runSignal megaDark
 type Health      = Double
 data HeroInput   = HeroKeys (Double, Double) | HeroMouse (Double, Double) | HeroTick (Time, Time) | HeroClick Time | HeroCollision (Time, Collision)
 data HeroState   = HeroIdle | HeroMoving Vector3 | HeroAttacking Time | HeroDamaged Time deriving (Show, Eq, Generic)
-data Hero        = Hero HeroState Health deriving (Show, Eq, Generic)
+data Hero        = Hero HeroState Health (Double, Double) deriving (Show, Eq, Generic)
 data BulletInput = BulletCollision (Time, [Maybe Collision]) | BulletTick (Time, Time)
 data BulletState = Flying Vector3 | DeathAnimation Time deriving (Show, Eq, Generic)
 data Bullet      = Bullet BulletState deriving (Show, Eq, Generic)
@@ -28,7 +28,7 @@ instance Binary PhysM
 mkHero :: Entity Hero
 mkHero = Entity h g
     where
-        h = Hero HeroIdle 100
+        h = Hero HeroIdle 100 (180, 0)
         g = mkGameObject
           { pos      = Vector3 0 0 (-6)
           , rot      = fromEuler 0 180 0
@@ -57,43 +57,39 @@ megaDark = hero *> bullets *> pure ()
         hero    = foldg updateHero mkHero <| mergeMany
                 [ HeroTick        <~ tick
                 , HeroKeys        <~ wasd
-                , HeroMouse       <~ foldp fpsMouse (180, 0) mouseDelta
+                , HeroMouse       <~ mouseDelta
                 , HeroClick       <~ sampleOn mouseClick runTime
                 , HeroCollision   <~ timestamp (collision hero) ]
 
-fpsMouse :: (Double, Double) -> (Double, Double) -> (Double, Double)
-fpsMouse (mx, my) (px, py) = (x, y)
+updateHero :: HeroInput -> Entity Hero -> Entity Hero
+updateHero (HeroMouse (mx, my)) h@(Entity (Hero state health (px, py)) g)
+    | HeroIdle     <- state = h'
+    | HeroMoving _ <- state = h'
+    | otherwise             = h
     where
         x = floatRem 360   <| px + mx * 80
         y = clamp (-90) 90 <| py + my * 80
+        h' = Entity (Hero state health (x, y)) g{rot = fromEuler 0 (-x) 0 * fromEuler (-y) 0 0}
 
-updateHero :: HeroInput -> Entity Hero -> Entity Hero
-updateHero (HeroMouse (x, y)) h@(Entity (Hero state health) g)
+updateHero (HeroKeys (x, y)) h@(Entity (Hero state health fpr) g)
     | HeroIdle     <- state = h'
     | HeroMoving _ <- state = h'
     | otherwise             = h
     where
-        h' = Entity (Hero state health) g{rot = fromEuler 0 (-x) 0 * fromEuler (-y) 0 0}
+        h' = Entity (Hero (HeroMoving <| Vector3 x 0 (-y)) health fpr) g
 
-updateHero (HeroKeys (x, y)) h@(Entity (Hero state health) g)
-    | HeroIdle     <- state = h'
-    | HeroMoving _ <- state = h'
-    | otherwise             = h
-    where
-        h' = Entity (Hero (HeroMoving <| Vector3 x 0 (-y)) health) g
-
-updateHero (HeroTick (dt, rt)) h@(Entity (Hero state health) g)
-    | HeroMoving    p <- state         = Entity (Hero state health) <| translate (p * realToFrac dt * 1.25) g
-    | HeroAttacking t <- state, rt > t = Entity (Hero HeroIdle health) g
-    | HeroDamaged   t <- state, rt > t = Entity (Hero HeroIdle health) g
+updateHero (HeroTick (dt, rt)) h@(Entity (Hero state health fpr) g)
+    | HeroMoving    p <- state         = Entity (Hero state health fpr) <| translate (p * realToFrac dt * 1.25) g
+    | HeroAttacking t <- state, rt > t = Entity (Hero HeroIdle health fpr) g
+    | HeroDamaged   t <- state, rt > t = Entity (Hero HeroIdle health fpr) g
     | otherwise                        = h
 
-updateHero (HeroClick t) h@(Entity (Hero state health) g)
+updateHero (HeroClick t) h@(Entity (Hero state health fpr) g)
     | HeroDamaged _ <- state = h
-    | otherwise              = Entity (Hero (HeroAttacking <| t + 3) health) g
+    | otherwise              = Entity (Hero (HeroAttacking <| t + 3) health fpr) g
 
-updateHero (HeroCollision (t, c)) h@(Entity (Hero _ health) g)
-    | EnemyWeapon <- tag c = Entity (Hero (HeroDamaged <| t + 3) (health - 10)) g
+updateHero (HeroCollision (t, c)) h@(Entity (Hero _ health fpr) g)
+    | EnemyWeapon <- tag c = Entity (Hero (HeroDamaged <| t + 3) (health - 10) fpr) g
     | otherwise            = h
 
 

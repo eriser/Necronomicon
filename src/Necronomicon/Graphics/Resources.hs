@@ -9,18 +9,18 @@ import qualified Graphics.Rendering.OpenGL as GL
 import qualified Data.IntMap               as IntMap
 import qualified Data.Map                  as Map
 -- import qualified Data.Vector               as V
-import qualified Data.Vector.Mutable       as MV
+-- import qualified Data.Vector.Mutable       as MV
 
 import Data.Binary
 
 --Need To add a resources module that sits on top of model, mkMesh, texture, etc in hierarchy
-data UID             = UID Int | New                                            deriving (Show, Eq)
-data Mesh            = Mesh        UID String [Vector3] [Color] [Vector2] [Int]
-                     | DynamicMesh UID String [Vector3] [Color] [Vector2] [Int] deriving (Show, Eq)
-data Model           = Model Mesh Material | FontRenderer String Font Material  deriving (Show, Eq)
-data Material        = Material UID String String [Uniform] GL.PrimitiveMode    deriving (Show, Eq)
-data PostRenderingFX = PostRenderingFX UID String Material                      deriving (Show, Eq)
-data Font            = Font {fontKey :: String, fontSize :: Int}                deriving (Show, Eq)
+data UID             = UID Int | New                                                             deriving (Show, Eq)
+data Material        = Material    (Maybe LoadedShader) String String [Uniform] GL.PrimitiveMode deriving (Show, Eq)
+data Mesh            = Mesh        (Maybe LoadedMesh)   String [Vector3] [Color] [Vector2] [Int]
+                     | DynamicMesh (Maybe LoadedMesh)   String [Vector3] [Color] [Vector2] [Int] deriving (Show, Eq)
+data Model           = Model Mesh Material | FontRenderer String Font Material                   deriving (Show, Eq)
+data PostRenderingFX = PostRenderingFX (Maybe LoadedPostRenderingFX) String Material             deriving (Show, Eq)
+data Font            = Font {fontKey :: String, fontSize :: Int}                                 deriving (Show, Eq)
 data Uniform         = UniformTexture String Texture
                      | UniformScalar  String Double
                      | UniformVec2    String Vector2
@@ -41,14 +41,14 @@ uniformName (Proj           s  ) = s
 
 
 mkMesh :: String -> [Vector3] -> [Color] -> [Vector2] -> [Int] -> Mesh
-mkMesh = Mesh New
+mkMesh = Mesh Nothing
 
 mkDynamicMesh :: String -> [Vector3] -> [Color] -> [Vector2] -> [Int] -> Mesh
-mkDynamicMesh = DynamicMesh New
+mkDynamicMesh = DynamicMesh Nothing
 
 --Can we make a more general form to take any material which takes a texture, like the new font system?
 postRenderFX :: (Texture -> Material) -> PostRenderingFX
-postRenderFX mat = PostRenderingFX New (vs ++ "+" ++ fs) mat'
+postRenderFX mat = PostRenderingFX Nothing (vs ++ "+" ++ fs) mat'
     where
         mat'@(Material _ vs fs _ _) = mat EmptyTexture
 
@@ -62,17 +62,17 @@ data Resources = Resources
    , meshesRef            :: IORef (Map.Map String LoadedMesh)
    , fontsRef             :: IORef (Map.Map String LoadedFont)
    , postRenderRef        :: IORef (Map.Map String LoadedPostRenderingFX) }
-
-data Resources' = Resources'
-   { shaderRef  :: IORef (MV.IOVector LoadedShader)
-   , textureRef :: IORef (MV.IOVector GL.TextureObject)
-   , meshRef    :: IORef (MV.IOVector LoadedMesh)
-   , fontRef    :: IORef (MV.IOVector LoadedFont)
-   , postRef    :: IORef (MV.IOVector LoadedPostRenderingFX)
-   , textureIxs :: IORef (Map.Map String Int)
-   , meshIxs    :: IORef (Map.Map String Int)
-   , fontIxs    :: IORef (Map.Map String Int)
-   , postIxs    :: IORef (Map.Map String Int) }
+--
+-- data Resources' = Resources'
+--    { shaderIxs  :: IORef (MV.IOVector LoadedShader)
+--    , textureIxs :: IORef (MV.IOVector GL.TextureObject)
+--    , meshIxs    :: IORef (MV.IOVector LoadedMesh)
+--    , fontIxs    :: IORef (MV.IOVector LoadedFont)
+--    , postIxs    :: IORef (MV.IOVector LoadedPostRenderingFX)
+--    , textureRef :: IORef (Map.Map String Int)
+--    , meshRef    :: IORef (Map.Map String Int)
+--    , fontRef    :: IORef (Map.Map String Int)
+--    , postRef    :: IORef (Map.Map String Int) }
 
 data CharMetric = CharMetric
   { character             :: Char
@@ -105,7 +105,7 @@ data LoadedPostRenderingFX = LoadedPostRenderingFX
   , postRenderTex         :: GL.GLuint
   , postRenderRBO         :: GL.GLuint
   , postRenderFBO         :: GL.GLuint
-  , status                :: GL.GLenum } deriving (Show)
+  , status                :: GL.GLenum } deriving (Show, Eq)
 
 instance Show Resources where
     show _ = "Resources"
@@ -118,17 +118,17 @@ mkResources = Resources
           <*> newIORef Map.empty
           <*> newIORef Map.empty
 
-mkResources' :: IO Resources'
-mkResources' = Resources'
-          <$> (newIORef =<< MV.new 0)
-          <*> (newIORef =<< MV.new 0)
-          <*> (newIORef =<< MV.new 0)
-          <*> (newIORef =<< MV.new 0)
-          <*> (newIORef =<< MV.new 0)
-          <*> newIORef Map.empty
-          <*> newIORef Map.empty
-          <*> newIORef Map.empty
-          <*> newIORef Map.empty
+-- mkResources' :: IO Resources'
+-- mkResources' = Resources'
+--           <$> (newIORef =<< MV.new 0)
+--           <*> (newIORef =<< MV.new 0)
+--           <*> (newIORef =<< MV.new 0)
+--           <*> (newIORef =<< MV.new 0)
+--           <*> (newIORef =<< MV.new 0)
+--           <*> newIORef Map.empty
+--           <*> newIORef Map.empty
+--           <*> newIORef Map.empty
+--           <*> newIORef Map.empty
 
 ------------------------------
 -- Serialization
@@ -145,8 +145,8 @@ instance Binary Mesh where
     put (Mesh        _ s v c u i) = put (0 :: Word8) >> put s >> put v >> put c >> put u >> put i
     put (DynamicMesh _ s v c u i) = put (1 :: Word8) >> put s >> put v >> put c >> put u >> put i
     get                           = (get :: Get Word8) >>= \t -> case t of
-        0 -> Mesh        New <$> get <*> get <*> get <*> get <*> get
-        _ -> DynamicMesh New <$> get <*> get <*> get <*> get <*> get
+        0 -> Mesh        Nothing <$> get <*> get <*> get <*> get <*> get
+        _ -> DynamicMesh Nothing <$> get <*> get <*> get <*> get <*> get
 
 instance Binary Model where
     put (Model       me mat) = put (0 :: Word8) >> put me >> put mat
@@ -156,8 +156,8 @@ instance Binary Model where
         _ -> FontRenderer <$> get <*> get <*> get
 
 instance Binary PostRenderingFX where
-    put (PostRenderingFX n u m) = put n >> put u >> put m
-    get                         = PostRenderingFX <$> get <*> get <*> get
+    put (PostRenderingFX _ u m) = put u >> put m
+    get                         = PostRenderingFX Nothing <$> get <*> get
 
 instance Binary Font where
     put (Font k s) = put k >> put s
@@ -181,8 +181,7 @@ instance Binary Uniform where
         _ -> Proj           <$> get
 
 instance Binary Material where
-    put (Material uid vs fs us pm) = do
-        put uid
+    put (Material _ vs fs us pm) = do
         put vs
         put fs
         put us
@@ -190,7 +189,7 @@ instance Binary Material where
         where
             pmi GL.Lines = 0
             pmi _        = 1
-    get = Material <$> get <*> get <*> get <*> get <*> (pmi <$> (get :: Get Int))
+    get = Material Nothing <$> get <*> get <*> get <*> (pmi <$> (get :: Get Int))
         where
             pmi 0 = GL.Lines
             pmi _ = GL.Triangles
