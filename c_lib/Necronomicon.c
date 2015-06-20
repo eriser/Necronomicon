@@ -3469,15 +3469,14 @@ INIT_DELAY(u);																									\
 INIT_COMB(u);																									\
 double* samples = buffer.samples;																				\
 double delta;																									\
-double read_index;																								\
 long idelay_time;																								\
 CONTROL_ARGS																									\
 AUDIO_LOOP(																										\
 	AUDIO_ARGS																									\
-	feedback = CALC_FEEDBACK(delay_time, decay_time);															\
 	idelay_time = delay_time;																					\
 	delta = delay_time - (double) idelay_time;																	\
 	y = delayC(write_index, idelay_time, delta, num_samples_mask, samples);										\
+	feedback = CALC_FEEDBACK(delay_time, decay_time);															\
 	samples[write_index & num_samples_mask] = x + (feedback * y);												\
 	++write_index;																								\
 	UGEN_OUT(out, y);																							\
