@@ -23,7 +23,7 @@ import           Graphics.Rendering.OpenGL.Raw.EXT.TextureSwizzle    (gl_TEXTURE
 import qualified Data.Map                                            as Map
 
 import qualified Necronomicon.Graphics.Color                         as Color (Color (..), white)
-import           Necronomicon.Graphics.Model
+import           Necronomicon.Graphics.Resources
 import qualified Necronomicon.Graphics.Texture                       as NecroTex
 import qualified Necronomicon.Linear                                 as Linear
 import           Paths_Necronomicon
@@ -145,13 +145,13 @@ getFont resources font = readIORef (fontsRef resources) >>= \fonts ->
 fontScale :: Double
 fontScale = 1 / 1080
 
---Change dynamic meshes to "load" their buffers the first time, so users don't have to supply them
+--Change dynamic mkMeshes to "load" their buffers the first time, so users don't have to supply them
 renderFont :: String -> Font -> Resources -> IO (NecroTex.Texture, Mesh)
 renderFont text font resources = do
     loadedFont <- getFont resources font
     let characterMesh                       = textMesh (characters loadedFont) (atlasWidth loadedFont) (atlasHeight loadedFont)
         (vertices,colors,uvs,indices,_,_,_) = foldl' characterMesh ([],[],[],[],0,0,0) text
-        fontMesh                            = DynamicMesh (fontKey font) vertices colors uvs indices
+        fontMesh                            = mkDynamicMesh (fontKey font) vertices colors uvs indices
     return (atlas loadedFont, fontMesh)
 
 textMesh :: Map.Map Char CharMetric ->

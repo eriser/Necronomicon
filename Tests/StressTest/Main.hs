@@ -55,9 +55,9 @@ section3 = scene [camSig,sphereSig]
                 r = inverse <| lookAt (_z_ (* (-2.5)) <| p) 0
 
 terrainObject :: Texture -> Texture -> Texture -> Double -> SceneObject
-terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 0 (-6)) identity (Vector3 0.125 1 0.125) (Model mesh terrainMaterial) []
+terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 0 (-6)) identity (Vector3 0.125 1 0.125) (Model m terrainMaterial) []
     where
-        mesh             = Mesh "simplex" vertices colors uvs indices
+        m                = mkMesh "simplex" vertices colors uvs indices
         (w,h)            = (256.0,256.0)
         (tscale,vscale)  = (1 / 6,2.5)
         values           = [(x,0,y) | (x,y) <- map (\n -> (mod' n w, n / h)) [0..w*h]]
@@ -83,9 +83,9 @@ terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 0 (-6)) identity (Vector3 0
              UniformScalar  "time" t]
 
 oscillatorObject :: Texture -> Texture -> Texture -> SceneObject
-oscillatorObject a1 a2 a3 = SceneObject (-3) identity 1 (Model mesh oscMaterial) []
+oscillatorObject a1 a2 a3 = SceneObject (-3) identity 1 (Model m oscMaterial) []
     where
-        mesh        = Mesh "osc1" vertices colors uvs indices
+        m           = mkMesh "osc1" vertices colors uvs indices
         indices     = foldr (\i acc -> i + 1 : i + 2 : i + 3 : i + 1 : i + 0 : i + 2 : acc) [] [0..511]
         uvs         = repeat 0
         colors      = repeat black
@@ -98,7 +98,7 @@ oscillatorObject a1 a2 a3 = SceneObject (-3) identity 1 (Model mesh oscMaterial)
              UniformTexture "tex3" a3]
 
 sphereObject :: Texture -> Texture -> Texture -> Double -> Double -> SceneObject
-sphereObject a1 a2 a3 t _ = SceneObject 0 (fromEuler 0 (t * 0.1765) (t * 0.0825)) 1 (Model mesh sphereMaterial) []
+sphereObject a1 a2 a3 t _ = SceneObject 0 (fromEuler 0 (t * 0.1765) (t * 0.0825)) 1 (Model m sphereMaterial) []
     where
         latitudes      = 36.0
         longitudes     = 32.0
@@ -109,7 +109,7 @@ sphereObject a1 a2 a3 t _ = SceneObject 0 (fromEuler 0 (t * 0.1765) (t * 0.0825)
         uvs            = repeat 0
         l              = floor longitudes
         indices        = foldr (\i acc -> i + 1 : i + l : i + l + 1 : i + 1 : i + 0 : i + l : acc) [] [0,4..floor (latitudes * longitudes) - l]
-        mesh           = Mesh "aSphere" vertices colors uvs indices
+        m           = mkMesh "aSphere" vertices colors uvs indices
         sphereMaterial = material
             "sphere-vert.glsl"
             "sphere-frag.glsl"

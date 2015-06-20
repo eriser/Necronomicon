@@ -12,21 +12,21 @@ import           Foreign
 import           Foreign.C
 import           Data.Binary
 
-data Texture = TGATexture   String
+data Texture = TGATexture   (Maybe GL.TextureObject) String
              | AudioTexture Int
              | EmptyTexture
              | LoadedTexture GL.TextureObject
              deriving (Show, Eq)
 
 instance Binary Texture where
-    put (TGATexture    s) = put (0 :: Word8) >> put s
+    put (TGATexture  _ s) = put (0 :: Word8) >> put s
     put (AudioTexture  i) = put (1 :: Word8) >> put i
     put (EmptyTexture   ) = put (2 :: Word8)
     put (LoadedTexture _) = put (2 :: Word8)
 
     get = (get :: Get Word8) >>= \t -> case t of
-        0 -> TGATexture   <$> (get :: Get String)
-        1 -> AudioTexture <$> (get :: Get Int)
+        0 -> TGATexture   Nothing <$> (get :: Get String)
+        1 -> AudioTexture         <$> (get :: Get Int)
         _ -> return EmptyTexture
 
 newBoundTexUnit :: Int -> IO GL.TextureObject
@@ -38,7 +38,7 @@ newBoundTexUnit u = do
     return tex
 
 tga :: String -> Texture
-tga path = TGATexture path
+tga path = TGATexture Nothing path
 
 foreign import ccall "&out_bus_buffers" outBusBuffers :: Ptr CFloat
 

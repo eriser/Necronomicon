@@ -161,7 +161,7 @@ import qualified Data.IntMap                       as IntMap
 import           Data.IORef
 import qualified Graphics.UI.GLFW                  as GLFW
 import           Necronomicon.Graphics.Camera      (renderGraphics)
-import           Necronomicon.Graphics.Model       ( newResources)
+import           Necronomicon.Graphics.Resources   (mkResources)
 import           Necronomicon.Graphics.SceneObject (SceneObject, root)
 import           Necronomicon.Graphics.Texture
 import           Necronomicon.Graphics             (initWindow)
@@ -338,7 +338,7 @@ runSignal s = initWindow (1920, 1080) True >>= \mw -> case mw of
 
         threadDelay $ 16667
 
-        resources <- newResources
+        resources <- mkResources
         renderNecronomicon False w signalLoop signalState resources 0
     where
         --event callbacks
@@ -1489,7 +1489,7 @@ audioBuffer index = Signal $ \_ -> if index < 8
             array <- peekArray 512 $ advancePtr outBusBuffers (512 * index)
             return $ Change $ map realToFrac array
 
---consider dynamic texture constructor similar to dynamic mesh?
+--consider dynamic texture constructor similar to dynamic mkMesh?
 audioTexture :: Int -> Signal Texture
 audioTexture index
     | index < 8 = Signal $ \_ -> return $ \_ -> return $ Change $ AudioTexture index

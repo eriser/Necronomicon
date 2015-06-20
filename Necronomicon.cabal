@@ -91,6 +91,7 @@ library
         Necronomicon.Graphics.Text
         Necronomicon.Graphics.Texture
         Necronomicon.Graphics.Model
+        Necronomicon.Graphics.Resources
         Necronomicon.Game
         Necronomicon.Physics
         Necronomicon.Physics.Collider

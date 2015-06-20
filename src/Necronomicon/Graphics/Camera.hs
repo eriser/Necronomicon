@@ -6,7 +6,7 @@ import           Graphics.Rendering.OpenGL.Raw
 import qualified Graphics.UI.GLFW                  as GLFW
 import           Necronomicon.Graphics.Color
 import           Necronomicon.Graphics.Mesh
-import           Necronomicon.Graphics.Model
+import           Necronomicon.Graphics.Resources
 import           Necronomicon.Graphics.SceneObject
 import           Necronomicon.Graphics.Texture
 import           Necronomicon.Linear
@@ -100,7 +100,7 @@ renderGraphics window resources scene gui = do
 ---------------------------------------
 
 loadPostFX :: PostRenderingFX -> (Double,Double) -> IO LoadedPostRenderingFX
-loadPostFX (PostRenderingFX name _ mat) (w,h) = do
+loadPostFX (PostRenderingFX _ name mat) (w,h) = do
 
     --Init FBO Texture
     glActiveTexture gl_TEXTURE0
@@ -154,12 +154,6 @@ freePostFX post = do
 
 --Take into account reshape
 getPostFX :: Resources -> (Double,Double) -> PostRenderingFX -> IO LoadedPostRenderingFX
-getPostFX resources dim fx@(PostRenderingFX name _ _) = readIORef (postRenderRef resources) >>= \effects -> case Map.lookup name effects of
+getPostFX resources dim fx@(PostRenderingFX _ name _) = readIORef (postRenderRef resources) >>= \effects -> case Map.lookup name effects of
     Nothing       -> loadPostFX fx dim >>= \loadedFX -> (writeIORef (postRenderRef resources) $ Map.insert name loadedFX effects) >> return loadedFX
     Just loadedFX -> return loadedFX
-
---Can we make a more general form to take any material which takes a texture, like the new font system?
-postRenderFX :: (Texture -> Material) -> PostRenderingFX
-postRenderFX mat = PostRenderingFX (vs ++ "+" ++ fs) New mat'
-    where
-        mat'@(Material _ vs fs _ _) = mat EmptyTexture
