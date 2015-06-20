@@ -238,6 +238,56 @@ renderCameraG (w,h) view scene resources debug so t = case camera so of
             GL.blendBuffer 0 GL.$= GL.Enabled
             GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
 
+renderCameraG' :: (Int,Int) -> Matrix4x4 -> Camera -> Resources -> Bool -> GameObject -> DynamicTree -> IO ()
+renderCameraG' (w,h) view c resources debug scene t = do
+        let  ratio         = fromIntegral w / fromIntegral h
+        let (RGBA r g b a) = case _clearColor c of
+                RGB r' g' b' -> RGBA r' g' b' 1.0
+                c'           -> c'
+
+        --If we have anye post-rendering fx let's bind their fbo
+        case _fx c of
+            []   -> return ()
+            fx:_ -> getPostFX resources (fromIntegral w,fromIntegral h) fx >>= \postFX -> glBindFramebuffer gl_FRAMEBUFFER (postRenderFBO postFX)
+
+        GL.depthFunc     GL.$= Just GL.Less
+        GL.blend         GL.$= GL.Enabled
+        GL.blendBuffer 0 GL.$= GL.Enabled
+        GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
+
+        GL.clearColor GL.$= GL.Color4 (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a)
+        GL.clear [GL.ColorBuffer,GL.DepthBuffer]
+
+        GL.viewport GL.$= (GL.Position 0 0, GL.Size (fromIntegral w) (fromIntegral h))
+        GL.loadIdentity
+
+        case _fov c of
+            0 -> drawGame identity4 (invert view) (orthoMatrix 0 ratio 1 0 (-1) 1) resources debug scene
+            _ -> do
+                let invView = invert view
+                drawGame identity4 invView (perspMatrix (_fov c) ratio (_near c) (_far c)) resources debug scene
+                if debug then debugDrawDynamicTree t invView (perspMatrix (_fov c) ratio (_near c) (_far c)) resources else return ()
+
+        mapM_ (drawPostRenderFX (RGBA r g b a)) $ _fx c
+    where
+        drawPostRenderFX (RGB r g b) fx = drawPostRenderFX (RGBA r g b 1) fx
+        drawPostRenderFX (RGBA r g b a) fx = do
+            glBindFramebuffer gl_FRAMEBUFFER 0
+            GL.depthFunc     GL.$= Nothing
+            GL.blend         GL.$= GL.Disabled
+            GL.blendBuffer 0 GL.$= GL.Disabled
+
+            GL.clearColor GL.$= GL.Color4 (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a)
+            GL.clear [GL.ColorBuffer,GL.DepthBuffer]
+            postFX <- getPostFX resources (fromIntegral w,fromIntegral h) fx
+            let postFXMat = setEmptyTextures (LoadedTexture $ GL.TextureObject $ postRenderTex postFX) (postRenderMaterial postFX)
+            drawMeshWithMaterial postFXMat (rect 1 1) identity4 (orthoMatrix 0 1 0 1 (-1) 1) resources
+
+            GL.depthFunc     GL.$= Just GL.Less
+            GL.blend         GL.$= GL.Enabled
+            GL.blendBuffer 0 GL.$= GL.Enabled
+            GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
+
 renderCamerasG :: (Int,Int) -> Matrix4x4 -> GameObject -> Resources -> Bool -> DynamicTree -> GameObject -> IO ()
 renderCamerasG (w,h) view scene resources debug t g = renderCameraG (w,h) view scene resources debug g t >>= \newView -> mapM_ (renderCamerasG (w,h) newView scene resources debug t) (children g)
 

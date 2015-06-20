@@ -374,29 +374,32 @@ processEvents sig ss inbox = forever $ atomically (readTChan inbox) >>= \e -> ca
 
 --Perhaps instead of a vector of maybes it instead a pooling system
 --With a free list and an assigned list
+--Need to set up system to reclaim unused blocks
 necro :: Scene a => Signal a -> Signal a
 necro sig = Signal $ \state -> do
     (scont, s, uids) <- unSignal sig state
-    -- s'               <- writeGS s state
     return (cont scont state, s, uids)
     where
-        setNewUIDS g@GameObject{gid = New} (gs, uid : uids) = (g{gid = UID uid} : gs, uids)
-        setNewUIDS g (gs, uids) = (g : gs, uids)
+        updateObjects r oref (gs, uids) g = case g of
+            GameObject{gid = (UID _), model = (Just (Model (Mesh        (Just _) _ _ _ _ _) (Material (Just _) _ _ _ _)))} ->     writeG oref g  >> return (g  : gs, uids)
+            GameObject{gid = (UID _), model = (Just (Model (DynamicMesh (Just _) _ _ _ _ _) (Material (Just _) _ _ _ _)))} ->     writeG oref g  >> return (g  : gs, uids)
+            GameObject{gid = New} -> loadNewModel r (model g) >>= \model' -> let g' = g{model = model', gid = UID (head uids)} in writeG oref g' >> return (g' : gs, tail uids)
+            _                     -> loadNewModel r (model g) >>= \model' -> let g' = g{model = model'}                        in writeG oref g' >> return (g' : gs, uids)
 
-        writeG state g = readIORef (objectRef state) >>= \vec -> do
-            let x | UID uid <- gid g, uid < MV.length vec = MV.unsafeWrite vec uid (Just g) >> writeIORef (objectRef state) vec
+        writeG oref g = readIORef oref >>= \vec -> do
+            let x | UID uid <- gid g, uid < MV.length vec = MV.unsafeWrite vec uid (Just g) >> writeIORef oref vec
                   | UID uid <- gid g                      = do
                       vec' <- MV.unsafeGrow vec (MV.length vec)
+                      putStrLn $ "Expanding object vec to length: " ++ show (MV.length vec')
                       mapM_ (\i -> MV.unsafeWrite vec' i Nothing) [uid..MV.length vec' - 1]
                       MV.unsafeWrite vec' uid (Just g)
-                      writeIORef (objectRef state) vec'
+                      writeIORef oref vec'
                   | otherwise = print "Error: GameObject without a UID found in necro update" >> return ()
             x
 
         writeGS s state = do
-            uids           <- readIORef $ uidRef state
-            let (gs, uids') = foldr setNewUIDS ([], uids) $ getGameObjects s []
-            mapM_ (writeG state) gs
+            uids        <- readIORef $ uidRef state
+            (gs, uids') <- foldM (updateObjects (sigResources state) (objectRef state)) ([], uids) $ getGameObjects s []
             writeIORef (uidRef state) uids'
             return $ fst $ setGameObjects s gs
 
@@ -408,6 +411,7 @@ necro sig = Signal $ \state -> do
 -- Input
 ----------------------------------
 
+--Need resources structure in here!
 data SignalState = SignalState
                  { objectRef     :: IORef (MV.IOVector (Maybe GameObject))
                  , uidRef        :: IORef [Int]
@@ -416,7 +420,8 @@ data SignalState = SignalState
                  , mousePosRef   :: IORef (Double, Double)
                  , mouseClickRef :: IORef Bool
                  , keyboardRef   :: IORef (IntMap.IntMap Bool)
-                 , dimensionsRef :: IORef (Double, Double) }
+                 , dimensionsRef :: IORef (Double, Double)
+                 , sigResources  :: Resources }
 
 mkSignalState :: (Double, Double) -> IO SignalState
 mkSignalState dims = SignalState
@@ -428,6 +433,7 @@ mkSignalState dims = SignalState
                   ~~ newIORef False
                   ~~ newIORef IntMap.empty
                   ~~ newIORef dims
+                  ~~ mkResources
 
 data InputEvent = TimeEvent        Time Time
                 | MouseEvent      (Double, Double)

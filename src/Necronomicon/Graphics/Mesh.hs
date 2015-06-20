@@ -1,6 +1,5 @@
 module Necronomicon.Graphics.Mesh where
 
-import           Necronomicon.Graphics.BufferObject
 import           Necronomicon.Graphics.Color
 import           Necronomicon.Graphics.Resources
 import           Necronomicon.Graphics.Shader
@@ -9,10 +8,8 @@ import           Necronomicon.Linear
 import           Necronomicon.Util.TGA              (loadTextureFromTGA)
 
 import           Data.IORef
-import           Foreign.Storable                   (sizeOf)
 import           Control.Monad                      (foldM_)
 
-import qualified Data.IntMap                        as IntMap
 import qualified Data.Map                           as Map
 import qualified Data.Vector.Storable               as VS (fromList, unsafeWith)
 import qualified Graphics.Rendering.OpenGL          as GL
@@ -133,12 +130,6 @@ loadProgram program = GL.currentProgram  GL.$= Just program
 uniformD :: GL.UniformLocation -> Double -> IO ()
 uniformD loc v = GL.uniform loc GL.$= GL.Index1 (realToFrac v :: GL.GLfloat)
 
-getShader :: Resources -> Shader -> IO LoadedShader
-getShader resources sh = readIORef (shadersRef resources) >>= \shaders ->
-    case IntMap.lookup (key sh) shaders of
-        Nothing           -> loadShader sh >>= \loadedShader -> (writeIORef (shadersRef resources) $ IntMap.insert (key sh) loadedShader shaders) >> return loadedShader
-        Just loadedShader -> return loadedShader
-
 getTexture :: Resources -> Texture -> IO GL.TextureObject
 getTexture resources (AudioTexture i) = readIORef (texturesRef resources) >>= \textures -> case Map.lookup ("audio" ++ show i) textures of
     Nothing      -> loadAudioTexture i >>= \texture -> (writeIORef (texturesRef resources) $ Map.insert ("audio" ++ show i) texture textures) >> setAudioTexture i texture
@@ -151,46 +142,6 @@ getTexture resources (TGATexture Nothing path) = readIORef (texturesRef resource
     Just texture -> return texture
 getTexture _ (TGATexture (Just tex) _) = return tex
 getTexture _ (LoadedTexture t) = return t
-
-getMesh :: Resources -> Mesh -> IO LoadedMesh
-getMesh _       (Mesh (Just m) _ _ _ _ _) = return m
-getMesh resources m@(Mesh _ mKey _ _ _ _) = readIORef (meshesRef resources) >>= \mkMeshes -> case Map.lookup mKey mkMeshes of
-    Nothing         -> loadMesh m >>= \loadedMesh -> (writeIORef (meshesRef resources) $ Map.insert mKey loadedMesh mkMeshes) >> return loadedMesh
-    Just loadedMesh -> return loadedMesh
-getMesh _       (DynamicMesh (Just m) _ _ _ _ _) = return m
-getMesh resources m@(DynamicMesh _ mKey v c u i) = readIORef (meshesRef resources) >>= \mkMeshes -> case Map.lookup mKey mkMeshes of
-    Nothing              -> loadMesh m >>= \loadedMesh@(vbuf,ibuf,_,_) -> (writeIORef (meshesRef resources) (Map.insert mKey loadedMesh mkMeshes)) >> dynamicDrawMesh vbuf ibuf v c u i
-    Just (vbuf,ibuf,_,_) -> dynamicDrawMesh vbuf ibuf v c u i
-
-dynamicDrawMesh :: GL.BufferObject -> GL.BufferObject -> [Vector3] -> [Color] -> [Vector2] -> [Int] -> IO LoadedMesh
-dynamicDrawMesh vBuf iBuf vertices colors uvs indices = do
-    vertexBuffer  <- makeDynamicBuffer vBuf GL.ArrayBuffer        (map realToFrac (posColorUV vertices colors uvs) :: [GL.GLfloat])
-    indexBuffer   <- makeDynamicBuffer iBuf GL.ElementArrayBuffer (map fromIntegral indices :: [GL.GLuint])
-    return (vertexBuffer,indexBuffer,length indices,vadPosColorUV)
-
-loadMesh :: Mesh -> IO LoadedMesh
-loadMesh (Mesh _ _ vertices colors uvs indices) = do
-    vertexBuffer  <- makeBuffer GL.ArrayBuffer        (map realToFrac (posColorUV vertices colors uvs) :: [GL.GLfloat])
-    indexBuffer   <- makeBuffer GL.ElementArrayBuffer (map fromIntegral indices :: [GL.GLuint])
-    return (vertexBuffer,indexBuffer,length indices,vadPosColorUV)
-loadMesh (DynamicMesh _ _ _ _ _ _) = do
-    vertexBuffer:_ <- GL.genObjectNames 1
-    indexBuffer :_ <- GL.genObjectNames 1
-    return (vertexBuffer,indexBuffer,0,[])
-
-vadPosColorUV :: [GL.VertexArrayDescriptor GL.GLfloat]
-vadPosColorUV = [vertexVad,colorVad,uvVad]
-    where
-        vertexVad  = GL.VertexArrayDescriptor 3 GL.Float (fromIntegral $ sizeOf (undefined::GL.GLfloat) * 8) offset0
-        colorVad   = GL.VertexArrayDescriptor 3 GL.Float (fromIntegral $ sizeOf (undefined::GL.GLfloat) * 8) (offsetPtr $ sizeOf (undefined :: GL.GLfloat) * 3)
-        uvVad      = GL.VertexArrayDescriptor 2 GL.Float (fromIntegral $ sizeOf (undefined::GL.GLfloat) * 8) (offsetPtr $ sizeOf (undefined :: GL.GLfloat) * 6)
-
-posColorUV :: [Vector3] -> [Color] -> [Vector2] -> [Double]
-posColorUV [] _ _ = []
-posColorUV _ [] _ = []
-posColorUV _ _ [] = []
-posColorUV (Vector3 x y z : vs) (RGB  r g b   : cs) (Vector2 u v : uvs) = x : y : z : r : g : b : u : v : posColorUV vs cs uvs
-posColorUV (Vector3 x y z : vs) (RGBA r g b _ : cs) (Vector2 u v : uvs) = x : y : z : r : g : b : u : v : posColorUV vs cs uvs
 
 setupAttribute :: (GL.AttribLocation,GL.VertexArrayDescriptor GL.GLfloat) -> IO()
 setupAttribute (loc,vad) = do

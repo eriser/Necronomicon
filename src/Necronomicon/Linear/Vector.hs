@@ -6,9 +6,15 @@ import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.Rendering.OpenGL.GL.Tensor as GLT
 import qualified Data.Binary as B
 
-data Vector2 = Vector2 Double Double                     deriving (Show,Eq,Ord)
-data Vector3 = Vector3 Double Double Double              deriving (Show,Eq    )
-data Vector4 = Vector4 Double Double Double Double       deriving (Show,Eq,Ord)
+data Vector2 = Vector2 {-# UNPACK #-} !Double
+                       {-# UNPACK #-} !Double deriving (Show,Eq,Ord)
+data Vector3 = Vector3 {-# UNPACK #-} !Double
+                       {-# UNPACK #-} !Double
+                       {-# UNPACK #-} !Double deriving (Show,Eq    )
+data Vector4 = Vector4 {-# UNPACK #-} !Double
+                       {-# UNPACK #-} !Double
+                       {-# UNPACK #-} !Double
+                       {-# UNPACK #-} !Double deriving (Show,Eq,Ord)
 
 --Vector class
 class Vector a where
