@@ -1718,23 +1718,24 @@ U.d;															\
 #define LAGRANGE_2ND_ORDER(x0, x1, y0, y1, x) ((x - x1) / (x0 - x1) * y0 + (x - x0) / (x1 - x0) * y1)
 
 /*
-#define CUBIC_INTERP(A,B,C,D,DELTA) \
-({                                  \
-	double delta2 = DELTA * DELTA;  \
-	double a0     = D - C - A + B;  \
-	double a1     = A - B - a0;     \
-	double a2     = C - A;          \
+#define CUBIC_INTERP(A, B, C, D, DELTA) 				\
+({                                  					\
+	const double delta2 = DELTA * DELTA;  				\
+	const double a0     = D - C - A + B;  				\
+	const double a1     = A - B - a0;     				\
+	const double a2     = C - A;          				\
 	a0 * DELTA * delta2 + a1 * delta2 + a2 * DELTA + B; \
-	})*/
+})*/
 
-#define CUBIC_INTERP(y0, y1, y2, y3, x)                 \
-({                                                      \
-	double c0 = y1;                                     \
-	double c1 = 0.5f * (y2 - y0);                       \
-	double c2 = y0 - 2.5f * y1 + 2.f * y2 - 0.5f * y3;  \
-	double c3 = 0.5f * (y3 - y0) + 1.5f * (y1 - y2);    \
-	((c3 * x + c2) * x + c1) * x + c0;					\
-})														\
+
+#define CUBIC_INTERP(y0, y1, y2, y3, x)                 		\
+({                                                      		\
+	const double c0 = y1;                                     	\
+	const double c1 = 0.5 * (y2 - y0);                       	\
+	const double c2 = y0 - 2.5 * y1 + 2.0 * y2 - 0.5 * y3;  	\
+	const double c3 = 0.5 * (y3 - y0) + 1.5 * (y1 - y2);    	\
+	((c3 * x + c2) * x + c1) * x + c0;							\
+})
 
 #define BIN_OP_CALC(OP, CONTROL_ARGS, AUDIO_ARGS) \
 double* in0 = UGEN_INPUT_BUFFER(u, 0);            \
@@ -2537,12 +2538,12 @@ union {																											\
 CONTROL_ARGS																									\
 AUDIO_LOOP(																										\
 	AUDIO_ARGS																									\
-	if(data.time >= data.nextTotalDuration)																		\
+	if (data.time >= data.nextTotalDuration)																	\
 	{																											\
 		data.index = data.index + 1;																			\
-		if(data.index >= maxIndex)																				\
+		if (data.index >= maxIndex)																				\
 		{																										\
-			if(scheduled_for_removal == false)																	\
+			if (scheduled_for_removal == false)																	\
 			{																									\
 				try_schedule_current_synth_for_removal();														\
 				scheduled_for_removal = true;																	\
@@ -2550,12 +2551,12 @@ AUDIO_LOOP(																										\
 			UGEN_OUT(out,data.nextValue);																		\
 			continue;																							\
 		}																										\
-		else if(data.index < maxIndex)																			\
+		else if (data.index < maxIndex)																			\
 		{																										\
 			int dursOffset = 2 + data.numValues;																\
 			double nextDuration = UGEN_IN(UGEN_INPUT_BUFFER(u, (data.index % data.numValues) + dursOffset));	\
 																												\
-			if(data.nextTotalDuration < 0)																		\
+			if (data.nextTotalDuration < 0)																		\
 				data.curTotalDuration = 0;																		\
 			else																								\
 				data.curTotalDuration = data.nextTotalDuration;													\
@@ -2564,12 +2565,12 @@ AUDIO_LOOP(																										\
 			data.currentValue      = UGEN_IN(UGEN_INPUT_BUFFER(u, MIN(data.index, maxIndex) + 2));				\
 			data.nextValue         = UGEN_IN(UGEN_INPUT_BUFFER(u, MIN(data.index + 1, maxIndex) + 2));			\
 																												\
-			if(nextDuration == 0.0)																				\
+			if (nextDuration == 0.0)																			\
 				data.recipDuration = 0.0;																		\
 			else																								\
 				data.recipDuration = 1.0 / nextDuration;														\
 																												\
-			if(curve < 0)																						\
+			if (curve < 0)																						\
 				data.curve = 1 / ((curve * -1) + 1);															\
 			else																								\
 				data.curve = curve + 1;																			\
@@ -2612,20 +2613,20 @@ union {																											\
 CONTROL_ARGS																									\
 AUDIO_LOOP(																										\
 	AUDIO_ARGS																									\
-	if(data.time >= data.nextTotalDuration)																		\
+	if (data.time >= data.nextTotalDuration)																	\
 	{																											\
 		data.index = data.index + 1;																			\
-		if(data.index >= maxIndex)																				\
+		if (data.index >= maxIndex)																				\
 		{																										\
 			UGEN_OUT(out,data.nextValue);																		\
 			continue;																							\
 		}																										\
-		else if(data.index < maxIndex)																			\
+		else if (data.index < maxIndex)																			\
 		{																										\
 			int dursOffset = 2 + data.numValues;																\
 			double nextDuration = *UGEN_INPUT_BUFFER(u, (data.index % data.numValues) + dursOffset);			\
 																												\
-			if(data.nextTotalDuration < 0)																		\
+			if (data.nextTotalDuration < 0)																		\
 				data.curTotalDuration = 0;																		\
 			else																								\
 				data.curTotalDuration = data.nextTotalDuration;													\
@@ -2634,12 +2635,12 @@ AUDIO_LOOP(																										\
 			data.currentValue      = *UGEN_INPUT_BUFFER(u, MIN(data.index, maxIndex) + 2);						\
 			data.nextValue         = *UGEN_INPUT_BUFFER(u, MIN(data.index + 1, maxIndex) + 2);					\
 																												\
-			if(nextDuration == 0.0)																				\
+			if (nextDuration == 0.0)																			\
 				data.recipDuration = 0.0;																		\
 			else																								\
 				data.recipDuration = 1.0 / nextDuration;														\
 																												\
-			if(curve < 0)																						\
+			if (curve < 0)																						\
 				data.curve = 1 / ((curve * -1) + 1);															\
 			else																								\
 				data.curve = curve + 1;																			\
@@ -2885,19 +2886,23 @@ void delayN_constructor(ugen* u)
 	*((delay_data*) u->data) = data;
 }
 
+const unsigned int MAX_DELAYL_OFFSET = 1;
+
 void delayL_constructor(ugen* u)
 {
 	u->data = malloc(DELAY_DATA_SIZE);
 	double max_delay_time = fmax(2, u->constructor_args[0] * SAMPLE_RATE);
-	delay_data data = { acquire_sample_buffer(max_delay_time), fmax(0, max_delay_time - 1), 0 };
+	delay_data data = { acquire_sample_buffer(max_delay_time + MAX_DELAYL_OFFSET), fmax(0, max_delay_time), 0 };
 	*((delay_data*) u->data) = data;
 }
+
+const unsigned int MAX_DELAYC_OFFSET = 2;
 
 void delayC_constructor(ugen* u)
 {
 	u->data = malloc(DELAY_DATA_SIZE);
 	double max_delay_time = fmax(3, u->constructor_args[0] * SAMPLE_RATE);
-	delay_data data = { acquire_sample_buffer(max_delay_time), fmax(0, max_delay_time - 2), 0 };
+	delay_data data = { acquire_sample_buffer(max_delay_time + MAX_DELAYC_OFFSET), fmax(0, max_delay_time), 0 };
 	*((delay_data*) u->data) = data;
 }
 
@@ -2988,37 +2993,45 @@ void delayN_aa_calc(ugen u)
     )
 }
 
+inline double delayL(long write_index, long idelay_time, double delta, unsigned int num_samples_mask, double* samples)
+{
+	const long iread_index0 = write_index - idelay_time;
+	double y;
+
+	if (iread_index0 < 0)
+	{
+		y = 0;
+	}
+
+	else
+	{
+		long iread_index1;
+		double y0, y1;
+		iread_index1 = iread_index0 - 1;
+		y0 = samples[iread_index0 & num_samples_mask];
+		y1 = iread_index1 < 0 ? 0 : samples[iread_index1 & num_samples_mask];
+		y  = LINEAR_INTERP(y0, y1, delta);
+	}
+
+	return y;
+}
+
 #define DELAYL_CALC(CONTROL_ARGS, AUDIO_ARGS)											\
 INIT_DELAY(u);																			\
-double y0, y1;																			\
 double delta;																			\
-double read_index;																		\
-unsigned int iread_index0, iread_index1;												\
+long idelay_time;																		\
 CONTROL_ARGS																			\
 AUDIO_LOOP(																				\
 	AUDIO_ARGS																			\
-	read_index = (double) write_index - delay_time;										\
-	iread_index0 = (long) read_index;													\
-																						\
-	if (iread_index0 < 0)																\
-	{																					\
-		y = 0;																			\
-	}																					\
-																						\
-	else																				\
-	{																					\
-		iread_index1 = iread_index0 - 1;												\
-		delta = read_index - iread_index0;												\
-		y0 = buffer.samples[iread_index0 & num_samples_mask];							\
-		y1 = iread_index1 < 0 ? 0 : buffer.samples[iread_index1 & num_samples_mask];	\
-		y  = LINEAR_INTERP(y0, y1, delta);												\
-	}																					\
-																						\
+	idelay_time = delay_time;															\
+	delta = delay_time - (double) idelay_time;											\
+	y = delayL(write_index, idelay_time, delta, num_samples_mask, buffer.samples);		\
 	buffer.samples[write_index & num_samples_mask] = x;									\
 	++write_index;																		\
 	UGEN_OUT(out, y);																	\
 );																						\
 FINISH_DELAY();																			\
+
 
 #define DELAYL_DELAY_TIMEK delay_time = fmin(data.max_delay_time, fmax(1, (*in0) * SAMPLE_RATE));
 #define DELAYL_DELAY_TIMEA delay_time = fmin(data.max_delay_time, fmax(1, UGEN_IN(in0) * SAMPLE_RATE));
@@ -3071,39 +3084,56 @@ void delayL_aa_calc(ugen u)
     )
 }
 
-inline double delayC(unsigned int iread_index0, unsigned int iread_index1, unsigned int iread_index2, unsigned int iread_index3, unsigned int num_samples_mask, double delta, double* samples)
+inline double delayC(long write_index, long idelay_time, double delta, unsigned int num_samples_mask, double* samples)
 {
-	double y0, y1, y2, y3;
-	if(iread_index1 < 0)
-	{
-		y0 = samples[iread_index0 & num_samples_mask];
-		y1 = y2 = y3 = 0;
-	}
+	const long iread_index1 = write_index - idelay_time;
+	const long iread_index0 = iread_index1 + 1;
+	double y;
 
-	else if(iread_index2 < 0)
+	if (iread_index0 < 0)
 	{
-		y0 = samples[iread_index0 & num_samples_mask];
-		y1 = samples[iread_index1 & num_samples_mask];
-		y2 = y3 = 0;
-	}
-
-	else if(iread_index3 < 0)
-	{
-		y0 = samples[iread_index0 & num_samples_mask];
-		y1 = samples[iread_index1 & num_samples_mask];
-		y2 = samples[iread_index1 & num_samples_mask];
-		y3 = 0;
+		y = 0;
 	}
 
 	else
 	{
-		y0 = samples[iread_index0 & num_samples_mask];
-		y1 = samples[iread_index1 & num_samples_mask];
-		y2 = samples[iread_index2 & num_samples_mask];
-		y3 = samples[iread_index3 & num_samples_mask];
+		const long iread_index2 = iread_index1 - 1;
+		const long iread_index3 = iread_index1 - 2;
+		double y0, y1, y2, y3;
+
+		if (iread_index1 < 0)
+		{
+			y0 = samples[iread_index0 & num_samples_mask];
+			y1 = y2 = y3 = 0;
+		}
+
+		else if (iread_index2 < 0)
+		{
+			y0 = samples[iread_index0 & num_samples_mask];
+			y1 = samples[iread_index1 & num_samples_mask];
+			y2 = y3 = 0;
+		}
+
+		else if (iread_index3 < 0)
+		{
+			y0 = samples[iread_index0 & num_samples_mask];
+			y1 = samples[iread_index1 & num_samples_mask];
+			y2 = samples[iread_index1 & num_samples_mask];
+			y3 = 0;
+		}
+
+		else
+		{
+			y0 = samples[iread_index0 & num_samples_mask];
+			y1 = samples[iread_index1 & num_samples_mask];
+			y2 = samples[iread_index2 & num_samples_mask];
+			y3 = samples[iread_index3 & num_samples_mask];
+		}
+
+		y = CUBIC_INTERP(y0, y1, y2, y3, delta);
 	}
 
-	return CUBIC_INTERP(y0, y1, y2, y3, delta);
+	return y;
 }
 
 #define DELAYC_CALC(CONTROL_ARGS, AUDIO_ARGS)																	\
@@ -3111,31 +3141,22 @@ INIT_DELAY(u);																									\
 double* samples = buffer.samples;																				\
 double delta;																									\
 double read_index;																								\
-unsigned int iread_index0, iread_index1, iread_index2, iread_index3;											\
+long idelay_time;																								\
 CONTROL_ARGS																									\
 AUDIO_LOOP(																										\
 	AUDIO_ARGS																									\
-	read_index  = (double) write_index - delay_time;															\
-	iread_index1 = (long) read_index;																			\
-	iread_index2 = iread_index1 - 1;																			\
-	iread_index3 = iread_index1 - 2;																			\
-	iread_index0 = iread_index1 + 1;																			\
-	delta = read_index - iread_index0;																			\
-																												\
-	if (iread_index0 < 0)																						\
-		y = 0;																									\
-	else																										\
-		y = delayC(iread_index0, iread_index1, iread_index2, iread_index3, num_samples_mask, delta, samples);	\
-																												\
+	idelay_time = delay_time;																					\
+	delta = delay_time - (double) idelay_time;																	\
+	y = delayC(write_index, idelay_time, delta, num_samples_mask, samples);										\
 	buffer.samples[write_index & num_samples_mask] = x;															\
 	++write_index;																								\
 	UGEN_OUT(out, y);																							\
 );																												\
-FINISH_DELAY();																									\
+FINISH_DELAY();
 
 // Clamp delay at 1 to prevent the + 1 iread_index3 from reading on the wrong side of the write head
-#define DELAYC_DELAY_TIMEK delay_time = fmin(data.max_delay_time, fmax(2, (*in0) * SAMPLE_RATE));
-#define DELAYC_DELAY_TIMEA delay_time = fmin(data.max_delay_time, fmax(2, UGEN_IN(in0) * SAMPLE_RATE));
+#define DELAYC_DELAY_TIMEK delay_time = fmin(data.max_delay_time, fmax(1.0, (*in0) * SAMPLE_RATE));
+#define DELAYC_DELAY_TIMEA delay_time = fmin(data.max_delay_time, fmax(1.0, UGEN_IN(in0) * SAMPLE_RATE));
 #define DELAYC_XK x = *in1;
 #define DELAYC_XA x = UGEN_IN(in1);
 
@@ -3323,31 +3344,15 @@ void combN_aaa_calc(ugen u)
 #define COMBL_CALC(CONTROL_ARGS, AUDIO_ARGS)											\
 INIT_DELAY(u);																			\
 INIT_COMB(u);																			\
-double y0, y1;																			\
 double delta;																			\
-double read_index;																		\
-unsigned int iread_index0, iread_index1;												\
+long idelay_time;																		\
 CONTROL_ARGS																			\
 AUDIO_LOOP(																				\
 	AUDIO_ARGS																			\
+	idelay_time = delay_time;															\
+	delta = delay_time - (double) idelay_time;											\
+	y = delayL(write_index, idelay_time, delta, num_samples_mask, buffer.samples);		\
 	feedback = CALC_FEEDBACK(delay_time, decay_time);									\
-	read_index = (double) write_index - delay_time;										\
-	iread_index0 = (long) read_index;													\
-																						\
-	if (iread_index0 < 0)																\
-	{																					\
-		y = 0;																			\
-	}																					\
-																						\
-	else																				\
-	{																					\
-		iread_index1 = iread_index0 - 1;												\
-		delta = read_index - iread_index0;												\
-		y0 = buffer.samples[iread_index0 & num_samples_mask];							\
-		y1 = iread_index1 < 0 ? 0 : buffer.samples[iread_index1 & num_samples_mask];	\
-		y  = LINEAR_INTERP(y0, y1, delta);												\
-	}																					\
-																						\
 	buffer.samples[write_index & num_samples_mask] = x + (feedback * y);				\
 	++write_index;																		\
 	UGEN_OUT(out, y);																	\
@@ -3465,31 +3470,22 @@ INIT_COMB(u);																									\
 double* samples = buffer.samples;																				\
 double delta;																									\
 double read_index;																								\
-unsigned int iread_index0, iread_index1, iread_index2, iread_index3;											\
+long idelay_time;																								\
 CONTROL_ARGS																									\
 AUDIO_LOOP(																										\
 	AUDIO_ARGS																									\
 	feedback = CALC_FEEDBACK(delay_time, decay_time);															\
-	read_index  = (double) write_index - delay_time;															\
-	iread_index1 = (long) read_index;																			\
-	iread_index2 = iread_index1 - 1;																			\
-	iread_index3 = iread_index1 - 2;																			\
-	iread_index0 = iread_index1 + 1;																			\
-	delta = read_index - iread_index0;																			\
-																												\
-	if (iread_index0 < 0)																						\
-		y = 0;																									\
-	else																										\
-		y = delayC(iread_index0, iread_index1, iread_index2, iread_index3, num_samples_mask, delta, samples);	\
-																												\
+	idelay_time = delay_time;																					\
+	delta = delay_time - (double) idelay_time;																	\
+	y = delayC(write_index, idelay_time, delta, num_samples_mask, samples);										\
 	samples[write_index & num_samples_mask] = x + (feedback * y);												\
 	++write_index;																								\
 	UGEN_OUT(out, y);																							\
 );																												\
-FINISH_DELAY();																									\
+FINISH_DELAY();
 
-#define COMBC_DELAY_TIMEK delay_time = fmin(data.max_delay_time, fmax(1, (*in0) * SAMPLE_RATE));
-#define COMBC_DELAY_TIMEA delay_time = fmin(data.max_delay_time, fmax(1, UGEN_IN(in0) * SAMPLE_RATE));
+#define COMBC_DELAY_TIMEK delay_time = fmin(data.max_delay_time, fmax(1.0, (*in0) * SAMPLE_RATE));
+#define COMBC_DELAY_TIMEA delay_time = fmin(data.max_delay_time, fmax(1.0, UGEN_IN(in0) * SAMPLE_RATE));
 #define COMBC_FEEDBACKK decay_time = (*in1) * SAMPLE_RATE;
 #define COMBC_FEEDBACKA decay_time = UGEN_IN(in1) * SAMPLE_RATE;
 #define COMBC_XK x = *in2;
@@ -3953,9 +3949,9 @@ void test_doubly_linked_list()
 ({                           \
 	double x   = X * AMOUNT; \
 	double ret = x;          \
-	if(x >= 1)               \
+	if (x >= 1)              \
 		ret = x - 2;         \
-	else if(x < -1)          \
+	else if (x < -1)         \
 		ret = x + 2;         \
 	ret;                     \
 })
@@ -4178,7 +4174,7 @@ inline void add_blep(minblep* mb, double offset, double amp)
 	// add
 	for(i=0; i < mb->nInit; i++, in += KTABLE, out++)
 	{
-		if(out >= bufferEnd)
+		if (out >= bufferEnd)
 			out = mb->buffer;
 
 		f = LERP(in[0],in[1],frac);
@@ -4188,7 +4184,7 @@ inline void add_blep(minblep* mb, double offset, double amp)
 	// copy
 	for(; i < cBLEP; i++, in += KTABLE, out++)
 	{
-		if(out >= bufferEnd)
+		if (out >= bufferEnd)
 			out = mb->buffer;
 
 		f = LERP(in[0],in[1],frac);
@@ -4210,7 +4206,7 @@ AUDIO_LOOP(									\
 	/* create waveform */					\
 	mb.phase += freq;						\
 	/* add BLEP at end of waveform */		\
-	if(mb.phase >= 1)						\
+	if (mb.phase >= 1)						\
 	{										\
 		mb.phase  = mb.phase - 1.0;			\
 		mb.output = 0.0;					\
@@ -4218,11 +4214,11 @@ AUDIO_LOOP(									\
 	}										\
 	y = mb.phase;							\
 	/* add BLEP buffer contents */			\
-	if(mb.nInit)							\
+	if (mb.nInit)							\
 	{										\
 		y += mb.buffer[mb.iBuffer];			\
 		mb.nInit--;							\
-		if(++mb.iBuffer >= mb.cBuffer)		\
+		if (++mb.iBuffer >= mb.cBuffer)		\
 			mb.iBuffer=0;					\
 	}										\
 	UGEN_OUT(out, y);						\
@@ -4266,18 +4262,18 @@ AUDIO_LOOP(												\
 		add_blep(&mb, mb.phase/freq,1.0);				\
 	}													\
 	/* add BLEP in middle of wavefor for squarewave */	\
-	if(!mb.output && mb.phase > pwm)					\
+	if (!mb.output && mb.phase > pwm)					\
 	{													\
 		mb.output = 1.0;								\
 		add_blep(&mb, (mb.phase - pwm) / freq,-1.0);	\
 	}													\
 	y = mb.output;										\
 	/* add BLEP buffer contents */						\
-	if(mb.nInit)										\
+	if (mb.nInit)										\
 	{													\
 		y += mb.buffer[mb.iBuffer];						\
 		mb.nInit--;										\
-		if(++mb.iBuffer >= mb.cBuffer)					\
+		if (++mb.iBuffer >= mb.cBuffer)					\
 			mb.iBuffer=0;								\
 	}													\
 	UGEN_OUT(out, y);									\
@@ -4332,13 +4328,13 @@ AUDIO_LOOP(										\
 	/* create waveform */						\
 	mb.phase += freq;							\
 	/* add BLEP at end of waveform */			\
-	if(mb.phase >= 1)							\
+	if (mb.phase >= 1)							\
 	{											\
 		mb.phase  = mb.phase - 1.0;				\
 		mb.output = 0.0;						\
 		add_blep(&mb, mb.phase/freq,1.0);		\
 	}											\
-	else if(mb.prevSyncAmp < 0 && sync > 0)		\
+	else if (mb.prevSyncAmp < 0 && sync > 0)	\
 	{											\
 		mb.phase  = 0.0;						\
 		mb.output = 0.0;						\
@@ -4346,11 +4342,11 @@ AUDIO_LOOP(										\
 	}											\
 	y = mb.phase;								\
 	/* add BLEP buffer contents */				\
-	if(mb.nInit)								\
+	if (mb.nInit)								\
 	{											\
 		y += mb.buffer[mb.iBuffer];				\
 		mb.nInit--;								\
-		if(++mb.iBuffer >= mb.cBuffer)			\
+		if (++mb.iBuffer >= mb.cBuffer)			\
 			mb.iBuffer=0;						\
 	}											\
 	mb.prevSyncAmp = sync;						\
@@ -4408,19 +4404,19 @@ AUDIO_LOOP(												\
 	/* create waveform */								\
 	mb.phase += freq;									\
 	/* add BLEP at end of waveform */					\
-	if(mb.phase >= 1)									\
+	if (mb.phase >= 1)									\
 	{													\
 		mb.phase  = mb.phase - 1.0;						\
 		mb.output = -1.0;								\
 		add_blep(&mb, mb.phase/freq,1.0);				\
 	}													\
 	/* add BLEP in middle of wavefor for squarewave */	\
-	if(!mb.output && mb.phase > pwm)					\
+	if (!mb.output && mb.phase > pwm)					\
 	{													\
 		mb.output = 1.0;								\
 		add_blep(&mb, (mb.phase - pwm) / freq,-1.0);	\
 	}													\
-	if(mb.prevSyncAmp < 0 && sync > 0)					\
+	if (mb.prevSyncAmp < 0 && sync > 0)					\
 	{													\
 		mb.phase  = 0.0;								\
 		mb.output = 1.0;								\
@@ -4428,11 +4424,11 @@ AUDIO_LOOP(												\
 	}													\
 	y = mb.output;										\
 	/* add BLEP buffer contents */						\
-	if(mb.nInit)										\
+	if (mb.nInit)										\
 	{													\
 		y += mb.buffer[mb.iBuffer];						\
 		mb.nInit--;										\
-		if(++mb.iBuffer >= mb.cBuffer)					\
+		if (++mb.iBuffer >= mb.cBuffer)					\
 			mb.iBuffer=0;								\
 	}													\
 	mb.prevSyncAmp = sync;								\
@@ -4544,7 +4540,7 @@ AUDIO_LOOP(																				\
 	mb.masterPhase = WRAP(mb.masterPhase + (masterFreq * RECIP_SAMPLE_RATE) * 1.0,1.0);	\
 																						\
 	/* add BLEP at end of waveform */													\
-	if(mb.phase >= 1)																	\
+	if (mb.phase >= 1)																	\
 	{																					\
 		mb.phase  = mb.phase - 1.0;														\
 		mb.output = -1.0;																\
@@ -4552,33 +4548,33 @@ AUDIO_LOOP(																				\
 	}																					\
 																						\
 	/* add BLEP in middle of wavefor for squarewave */									\
-	else if(slaveWave && !mb.output && mb.phase > pwm)									\
+	else if (slaveWave && !mb.output && mb.phase > pwm)									\
 	{																					\
 		mb.output = 1.0;																\
 		add_blep(&mb, (mb.phase - pwm) / freqN,-1.0);									\
 	}																					\
 																						\
-	else if(mb.prevSyncAmp <= 0 && mb.masterPhase > 0)									\
+	else if (mb.prevSyncAmp <= 0 && mb.masterPhase > 0)									\
 	{																					\
 		mb.phase  = mb.masterPhase * (slaveFreq / masterFreq);							\
-		if(!slaveWave)																	\
+		if (!slaveWave)																	\
 			mb.output = mb.masterPhase * (slaveFreq / masterFreq);						\
 		else																			\
 			mb.output = -1.0;															\
 		add_blep(&mb, mb.phase/freqN,1.0);												\
 	}																					\
 																						\
-	if(!slaveWave)																		\
+	if (!slaveWave)																		\
 		y = mb.phase;																	\
 	else																				\
 		y = mb.output;																	\
 																						\
 	/* add BLEP buffer contents */														\
-	if(mb.nInit)																		\
+	if (mb.nInit)																		\
 	{																					\
 		y += mb.buffer[mb.iBuffer];														\
 		mb.nInit--;																		\
-		if(++mb.iBuffer >= mb.cBuffer)													\
+		if (++mb.iBuffer >= mb.cBuffer)													\
 			mb.iBuffer=0;																\
 	}																					\
 	mb.prevSyncAmp = mb.masterPhase;													\
@@ -4833,7 +4829,7 @@ double freq;															\
 CONTROL_ARGS															\
 AUDIO_LOOP(																\
 	AUDIO_ARGS															\
-	if(rand.phase + RECIP_SAMPLE_RATE * freq >= 1.0)					\
+	if (rand.phase + RECIP_SAMPLE_RATE * freq >= 1.0)					\
 	{																	\
 		rand.phase  = fmod(rand.phase + RECIP_SAMPLE_RATE * freq,1.0);	\
 		rand.value0 = RAND_RANGE(-1,1);									\
@@ -4870,7 +4866,7 @@ double freq;															\
 CONTROL_ARGS															\
 AUDIO_LOOP(																\
 	AUDIO_ARGS															\
-	if(rand.phase + RECIP_SAMPLE_RATE * freq >= 1.0)					\
+	if (rand.phase + RECIP_SAMPLE_RATE * freq >= 1.0)					\
 	{																	\
 		rand.phase  = fmod(rand.phase + RECIP_SAMPLE_RATE * freq,1.0);	\
 		rand.value1 = rand.value0;										\
@@ -4908,7 +4904,7 @@ double freq;																					\
 CONTROL_ARGS																					\
 AUDIO_LOOP(																						\
 	AUDIO_ARGS																					\
-	if(rand.phase + RECIP_SAMPLE_RATE * freq >= 1.0)											\
+	if (rand.phase + RECIP_SAMPLE_RATE * freq >= 1.0)											\
 	{																							\
 		rand.phase  = fmod(rand.phase + RECIP_SAMPLE_RATE * freq,1.0);							\
 		rand.value3 = rand.value2;																\
@@ -5168,7 +5164,7 @@ CONTROL_ARGS									\
 AUDIO_LOOP(										\
 	AUDIO_ARGS									\
 	phase += freq * RECIP_SAMPLE_RATE;			\
-	if(phase >= 1)								\
+	if (phase >= 1)								\
 		UGEN_OUT(out,1);						\
 	else										\
 		UGEN_OUT(out,0);						\
@@ -5229,29 +5225,29 @@ void dust_deconstructor(ugen* u)
 	free(u->data);
 }
 
-#define DUST_CALC(CONTROL_ARGS, AUDIO_ARGS)						\
-double*  in0 = UGEN_INPUT_BUFFER(u, 0);							\
-double*  out = UGEN_OUTPUT_BUFFER(u, 0);						\
-dust_t  dust = *((dust_t*)u.data);								\
-if(dust.period == -1)											\
-	dust.period = RAND_RANGE(0,2);								\
-double density;													\
-CONTROL_ARGS													\
-AUDIO_LOOP(														\
-	AUDIO_ARGS													\
-	if(dust.phase + density * RECIP_SAMPLE_RATE >= dust.period)	\
-	{															\
-		dust.phase  = 0;										\
-		dust.period = RAND_RANGE(0,2);							\
-		UGEN_OUT(out,RAND_RANGE(-1,1));							\
-	}															\
-	else														\
-	{															\
-		dust.phase = dust.phase + density * RECIP_SAMPLE_RATE;	\
-		UGEN_OUT(out,0);										\
-	}															\
-);																\
-*((dust_t*)u.data) = dust;										\
+#define DUST_CALC(CONTROL_ARGS, AUDIO_ARGS)							\
+double*  in0 = UGEN_INPUT_BUFFER(u, 0);								\
+double*  out = UGEN_OUTPUT_BUFFER(u, 0);							\
+dust_t  dust = *((dust_t*)u.data);									\
+if (dust.period == -1)												\
+	dust.period = RAND_RANGE(0,2);									\
+double density;														\
+CONTROL_ARGS														\
+AUDIO_LOOP(															\
+	AUDIO_ARGS														\
+	if (dust.phase + density * RECIP_SAMPLE_RATE >= dust.period)	\
+	{																\
+		dust.phase  = 0;											\
+		dust.period = RAND_RANGE(0,2);								\
+		UGEN_OUT(out,RAND_RANGE(-1,1));								\
+	}																\
+	else															\
+	{																\
+		dust.phase = dust.phase + density * RECIP_SAMPLE_RATE;		\
+		UGEN_OUT(out,0);											\
+	}																\
+);																	\
+*((dust_t*)u.data) = dust;											\
 
 void dust_k_calc(ugen u)
 {
@@ -5269,29 +5265,29 @@ void dust_a_calc(ugen u)
 	)
 }
 
-#define DUST2_CALC(CONTROL_ARGS, AUDIO_ARGS)					\
-double*  in0 = UGEN_INPUT_BUFFER(u, 0);							\
-double*  out = UGEN_OUTPUT_BUFFER(u, 0);						\
-dust_t  dust = *((dust_t*)u.data);								\
-if(dust.period == -1)											\
-	dust.period = RAND_RANGE(0,2);								\
-double density;													\
-CONTROL_ARGS													\
-AUDIO_LOOP(														\
-	AUDIO_ARGS													\
-	if(dust.phase + density * RECIP_SAMPLE_RATE >= dust.period)	\
-	{															\
-		dust.phase  = 0;										\
-		dust.period = RAND_RANGE(0,2);							\
-		UGEN_OUT(out,RAND_RANGE(0,1));							\
-	}															\
-	else														\
-	{															\
-		dust.phase = dust.phase + density * RECIP_SAMPLE_RATE;	\
-		UGEN_OUT(out,0);										\
-	}															\
-);																\
-*((dust_t*)u.data) = dust;										\
+#define DUST2_CALC(CONTROL_ARGS, AUDIO_ARGS)						\
+double*  in0 = UGEN_INPUT_BUFFER(u, 0);								\
+double*  out = UGEN_OUTPUT_BUFFER(u, 0);							\
+dust_t  dust = *((dust_t*)u.data);									\
+if (dust.period == -1)												\
+	dust.period = RAND_RANGE(0,2);									\
+double density;														\
+CONTROL_ARGS														\
+AUDIO_LOOP(															\
+	AUDIO_ARGS														\
+	if (dust.phase + density * RECIP_SAMPLE_RATE >= dust.period)	\
+	{																\
+		dust.phase  = 0;											\
+		dust.period = RAND_RANGE(0,2);								\
+		UGEN_OUT(out,RAND_RANGE(0,1));								\
+	}																\
+	else															\
+	{																\
+		dust.phase = dust.phase + density * RECIP_SAMPLE_RATE;		\
+		UGEN_OUT(out,0);											\
+	}																\
+);																	\
+*((dust_t*)u.data) = dust;											\
 
 void dust2_k_calc(ugen u)
 {
@@ -5389,7 +5385,7 @@ CONTROL_ARGS														\
 AUDIO_LOOP(															\
 	AUDIO_ARGS														\
 																	\
-	if(freq != bi.prevF || q != bi.prevQ)							\
+	if (freq != bi.prevF || q != bi.prevQ)							\
 	{																\
 		/* branchless max? */										\
 		q     = MAX(q,0.00000001);									\
@@ -7778,7 +7774,7 @@ AUDIO_LOOP(														\
 	AUDIO_ARGS													\
     y = 0;														\
 																\
-	if(decimate.samples + rate >= 1)							\
+	if (decimate.samples + rate >= 1)							\
     {															\
         decimate.samples = fmod(decimate.samples + rate,1.0);	\
         decimate.prev    = x;									\
@@ -8799,7 +8795,7 @@ AUDIO_LOOP(																\
 	decay = pow(E, (-(n + 0.5) * 6.908) / duration) / cos(M_PI * freq);	\
 	y = 0;																\
 																		\
-	if(data.noiseSamples < n)											\
+	if (data.noiseSamples < n)											\
 	{																	\
 		y = x;															\
 		data.noiseSamples++;											\
@@ -8949,7 +8945,7 @@ void time_secs_calc(ugen u)
 
 float out_bus_rms(int bus)
 {
-	if(bus < 0 || bus > 7)
+	if (bus < 0 || bus > 7)
 		return 0.0;
 
 	float   squareSum    = 0;
