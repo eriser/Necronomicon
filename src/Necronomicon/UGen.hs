@@ -472,14 +472,18 @@ foreign import ccall "&lfpulse_ak_calc" lfpulseAKCalc :: CUGenFunc
 foreign import ccall "&lfpulse_ka_calc" lfpulseKACalc :: CUGenFunc
 foreign import ccall "&lfpulse_aa_calc" lfpulseAACalc :: CUGenFunc
 lfpulse :: UGen -> UGen -> UGen
-lfpulse freq phase = optimizeUGenCalcFunc [lfpulseKKCalc, lfpulseAKCalc, lfpulseKACalc, lfpulseAACalc] $ multiChannelExpandUGen LFPulse lfpulseAACalc accumulatorConstructor accumulatorDeconstructor [freq,phase]
+lfpulse freq phase = optimizeUGenCalcFunc [lfpulseKKCalc, lfpulseAKCalc, lfpulseKACalc, lfpulseAACalc] $ lfpulseUGen
+    where
+        lfpulseUGen = multiChannelExpandUGen LFPulse lfpulseAACalc accumulatorConstructor accumulatorDeconstructor [freq,phase]
 
 foreign import ccall "&impulse_kk_calc" impulseKKCalc :: CUGenFunc
 foreign import ccall "&impulse_ak_calc" impulseAKCalc :: CUGenFunc
 foreign import ccall "&impulse_ka_calc" impulseKACalc :: CUGenFunc
 foreign import ccall "&impulse_aa_calc" impulseAACalc :: CUGenFunc
 impulse :: UGen -> UGen -> UGen
-impulse freq phase = optimizeUGenCalcFunc [impulseKKCalc, impulseAKCalc, impulseKACalc, impulseAACalc] $ multiChannelExpandUGen Impulse impulseAACalc accumulatorConstructor accumulatorDeconstructor [freq,phase]
+impulse freq phase = optimizeUGenCalcFunc [impulseKKCalc, impulseAKCalc, impulseKACalc, impulseAACalc] $ impulseUGen
+    where
+        impulseUGen = multiChannelExpandUGen Impulse impulseAACalc accumulatorConstructor accumulatorDeconstructor [freq,phase]
 
 foreign import ccall "&dust_constructor"   dustConstructor   :: CUGenFunc
 foreign import ccall "&dust_deconstructor" dustDeconstructor :: CUGenFunc
@@ -1412,7 +1416,7 @@ testSynth synth args necroVars = do
     (runningSynth,_) <- runNecroState (playSynth "testSynth" args) necroVars
     return runningSynth
 
-stopTestSynth :: Synth -> NecroVars -> IO()
+stopTestSynth :: Synth -> NecroVars -> IO ()
 stopTestSynth synth necroVars = runNecroState (stopSynth synth) necroVars >> return ()
 
 
@@ -1420,7 +1424,7 @@ stopTestSynth synth necroVars = runNecroState (stopSynth synth) necroVars >> ret
 -- Experimental
 ------------------------------------------
 
-newtype UGen = UGen{ unUGen :: [UGenChannel] } deriving (Show, Eq)
+newtype UGen = UGen { unUGen :: [UGenChannel] } deriving (Show, Eq)
 
 instance Monoid UGen where
     mempty                    = UGen []
@@ -1454,9 +1458,6 @@ mapUGenChannels f (UGen us) = UGen <| map f us
 
 numChannels :: UGen -> Int
 numChannels (UGen us) = length us
-
--- myCoolSynth' :: UGen' -> UGen' -> UGen'
--- myCoolSynth' f1 f2 = sinOsc (f1 <> f2) + sinOsc (f1 <> 0)
 
 pan :: UGen -> UGen -> UGen
 pan a (UGen (u1:u2:us)) = (UGen [u1] * a + UGen [u2] * (1 - a)) <> (UGen [u1] * (1 - a) + UGen [u2] * a) <> UGen us

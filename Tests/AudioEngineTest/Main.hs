@@ -6,20 +6,20 @@ reverbSynth :: UGen
 reverbSynth = auxIn [50, 51] |> freeverb 0.5 1 0.5 |> gain 0.5 |> out 0
 
 combSynthC :: UGen -> UGen -> UGen
-combSynthC freq decayTime = pulse (lag 0.1 freq) 0.5 |> combC 1 0.1 (lag 0.1 decayTime) |> gain 0.1 |> dup |> out 0
+combSynthC freq decayTime = sin (lag 0.1 freq) |> combC 1 0.1 (lag 0.1 decayTime) |> gain 0.1 |> dup |> out 0
 
 delaySynthN :: UGen -> UGen -> UGen
-delaySynthN freq _ = s +> delayN 1 1 |> gain 0.1 |> dup |> out 0
+delaySynthN freq delayTime = s +> delayN 1 (lag 0.1 delayTime) |> gain 0.1 |> dup |> out 0
     where
         s = sin $ lag 0.1 freq
 
 delaySynthL :: UGen -> UGen -> UGen
-delaySynthL freq _ = s +> delayL 1 1 |> gain 0.1 |> out 0
+delaySynthL freq delayTime = s +> delayL 1 (lag 0.1 delayTime) |> gain 0.1 |> dup |> out 0
     where
         s = sin $ lag 0.1 freq
 
 delaySynthC :: UGen -> UGen -> UGen
-delaySynthC freq delayTime = dup s +> delayC 1 (lag 1 [delayTime, delayTime - 0.1]) |> gain 0.1 |> auxThrough 50 |> out 0
+delaySynthC freq delayTime = s +> delayC 1 (lag 0.1 delayTime) |> gain 0.1 |> dup |> out 0
     where
         s = sin $ lag 0.1 freq
 
@@ -40,6 +40,12 @@ minMaxSynth x = freq |> poll |> sin |> gain 0.3 |> out 0
 lpfSynth :: UGen -> UGen
 lpfSynth freq = pulse 80 0.5 |> lpf (lag 0.1 freq) 3 |> gain 0.2 |> dup |> out 0
 
+modulatingDelayC :: UGen
+modulatingDelayC = sin 440 |> delayC 1 delayTime |> dup |> gain 0.1 |> out 0
+    where
+        delayTime = sin 0.333333333333 |> range 0 1
+
+
 main :: IO ()
 main = runSignal
        <| play (toggle <| isDown keyR) reverbSynth
@@ -50,8 +56,9 @@ main = runSignal
        <> play (toggle <| isDown keyF) feedSynth (mouseX ~> scale 2 20000) (mouseY ~> scale 2 20000)
        <> play (toggle <| isDown keyL) limiterSynth (mouseX ~> scale 0 4)
        <> play (toggle <| isDown keyN) noLimiterSynth (mouseX ~> scale 0 4)
-       <> play (toggle <| isDown keyM) minMaxSynth (mouseX ~> scale 20 2000)
+       <> play (toggle <| isDown keyX) minMaxSynth (mouseX ~> scale 20 2000)
        <> play (toggle <| isDown keyP) lpfSynth (mouseX ~> scale 20 4000)
+       <> play (toggle <| isDown keyM) modulatingDelayC
 
 -- main :: IO ()
 -- main = runSignal <| synthDefs *> tempo (pure 150) *> testGUI <> sections <> hyperTerrainSounds
