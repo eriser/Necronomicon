@@ -351,11 +351,11 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
                 let delta    = currentTime - runTime'
                 atomically   $ writeTChan eventInbox $ TimeEvent (Time delta) (Time currentTime)
 
-                --Need to redo the resources system. It is....not efficient as is.
                 -- (g, tree')  <- (\g -> update (g, tree)) . flip gchildren_ mkGameObject . MV.toList <~ readIORef (objectRef state)
                 gs   <- filterMap id . V.toList <~ (readIORef (objectRef state) >>= V.freeze)
                 let g = gchildren_ gs mkGameObject
-                renderGraphicsG window resources True g g tree
+                renderGraphicsG window resources False g g tree
+                -- renderGraphicsG window resources True g g tree
                 -- return (Signal (prev s') (Change $ fst $ setGameObjects x (children g')) (next s'), tree')
 
                 threadDelay  $ 16667
@@ -397,6 +397,7 @@ necro sig = Signal $ \state -> do
                   | otherwise = print "Error: GameObject without a UID found in necro update" >> return ()
             x
 
+        --maybe a map gameobject or modify, etc to make this faster?
         writeGS s state = do
             uids        <- readIORef $ uidRef state
             (gs, uids') <- foldM (updateObjects (sigResources state) (objectRef state)) ([], uids) $ getGameObjects s []

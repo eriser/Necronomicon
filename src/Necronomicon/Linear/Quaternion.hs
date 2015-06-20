@@ -30,6 +30,7 @@ import Necronomicon.Linear.Math
 import Necronomicon.Linear.Vector
 import Data.Binary
 
+--unpack strict
 data Quaternion = Quaternion { qw::Double, qv::Vector3 } deriving (Show, Eq)
 
 instance Binary Quaternion where

@@ -6,6 +6,7 @@ import qualified Graphics.Rendering.OpenGL as GL
 import qualified Graphics.Rendering.OpenGL.GL.Tensor as GLT
 import qualified Data.Binary as B
 
+--TODO: Make more numeric types contain unpacked strict scalars
 data Vector2 = Vector2 {-# UNPACK #-} !Double
                        {-# UNPACK #-} !Double deriving (Show,Eq,Ord)
 data Vector3 = Vector3 {-# UNPACK #-} !Double
@@ -19,9 +20,6 @@ data Vector4 = Vector4 {-# UNPACK #-} !Double
 --Vector class
 class Vector a where
     type VectorComponent a :: *
-    type Swizzle2  a :: *
-    type Swizzle3  a :: *
-    type Swizzle4  a :: *
     toList :: a -> [VectorComponent a]
 
     --get
@@ -42,25 +40,9 @@ class Vector a where
     _z_    :: (VectorComponent a -> VectorComponent a) -> a -> a
     _w_    :: (VectorComponent a -> VectorComponent a) -> a -> a
 
-    --swizzle
-    _swizzle2 :: (a -> VectorComponent a) -> (a -> VectorComponent a) -> a -> Swizzle2 a
-    _swizzle3 :: (a -> VectorComponent a) -> (a -> VectorComponent a) -> (a -> VectorComponent a) -> a -> Swizzle3 a
-    _swizzle4 :: (a -> VectorComponent a) -> (a -> VectorComponent a) -> (a -> VectorComponent a) -> (a -> VectorComponent a) -> a -> Swizzle4 a
-
-    swizzle2_ :: (VectorComponent a -> a -> a) -> (VectorComponent a -> a -> a) -> Swizzle2 a -> a -> a
-    swizzle3_ :: (VectorComponent a -> a -> a) -> (VectorComponent a -> a -> a) -> (VectorComponent a -> a -> a) -> Swizzle3 a -> a -> a
-    swizzle4_ :: (VectorComponent a -> a -> a) -> (VectorComponent a -> a -> a) -> (VectorComponent a -> a -> a) -> (VectorComponent a -> a -> a) -> Swizzle4 a -> a -> a
-
-    _swizzle2_ :: ((VectorComponent a -> VectorComponent a) -> a -> a) -> ((VectorComponent a -> VectorComponent a) -> a -> a) -> (VectorComponent a -> VectorComponent a) -> a -> a
-    _swizzle3_ :: ((VectorComponent a -> VectorComponent a) -> a -> a) -> ((VectorComponent a -> VectorComponent a) -> a -> a) -> ((VectorComponent a -> VectorComponent a) -> a -> a) -> (VectorComponent a -> VectorComponent a) -> a -> a
-    _swizzle4_ :: ((VectorComponent a -> VectorComponent a) -> a -> a) -> ((VectorComponent a -> VectorComponent a) -> a -> a) -> ((VectorComponent a -> VectorComponent a) -> a -> a) -> ((VectorComponent a -> VectorComponent a) -> a -> a) -> (VectorComponent a -> VectorComponent a) -> a -> a
-
 --Vector Instances
 instance Vector Vector2 where
     type VectorComponent Vector2 = Double
-    type Swizzle2  Vector2 = Vector2
-    type Swizzle3  Vector2 = Vector3
-    type Swizzle4  Vector2 = Vector4
 
     toList (Vector2 x y) = [x, y]
     _x (Vector2 x _) = x
@@ -73,28 +55,13 @@ instance Vector Vector2 where
     z_ _ = undefined
     w_ _ = undefined
 
-    _swizzle2  get get' v = Vector2 (get v) (get' v)
-    swizzle2_  set set' v = set' (_y v) . set (_x v)
-    _swizzle2_ mdf mdf' f = mdf' f . mdf f
-
-    _swizzle3  _ _ _ = undefined
-    swizzle3_  _ _ _ = undefined
-    _swizzle3_ _ _ _ = undefined
-
-    _swizzle4  _ _ _ _ = undefined
-    swizzle4_  _ _ _ _ = undefined
-    _swizzle4_ _ _ _ _ = undefined
-
 instance Vector Vector3 where
     type VectorComponent Vector3 = Double
-    type Swizzle2  Vector3 = Vector2
-    type Swizzle3  Vector3 = Vector3
-    type Swizzle4  Vector3 = Vector4
 
-    toList (Vector3 x y z) = [x, y, z]
-    _x (Vector3 x _ _) = x
-    _y (Vector3 _ y _) = y
-    _z (Vector3 _ _ z) = z
+    toList !(Vector3 x y z) = [x, y, z]
+    _x !(Vector3 x _ _) = x
+    _y !(Vector3 _ y _) = y
+    _z !(Vector3 _ _ z) = z
     x_ x (Vector3 _ y z) = Vector3 x y z
     y_ y (Vector3 x _ z) = Vector3 x y z
     z_ z (Vector3 x y _) = Vector3 x y z
@@ -103,27 +70,15 @@ instance Vector Vector3 where
     _z_ f (Vector3 x y z) = Vector3 x y (f z)
 
     w_ _ = undefined
-    swizzle4_ _ _ _ _ = undefined
-
-    _swizzle2  get get' v = Vector2 (get v) (get' v)
-    swizzle2_  set set' v = set' (_y v) . set (_x v)
-    _swizzle2_ mdf mdf' f = mdf' f . mdf f
-
-    _swizzle3  get get' get'' v = Vector3 (get v) (get' v) (get'' v)
-    swizzle3_  set set' set'' v = set'' (_z v) . set' (_y v) . set (_x v)
-    _swizzle3_ mdf mdf' mdf'' f = mdf'' f . mdf' f . mdf f
 
 instance Vector Vector4 where
     type VectorComponent Vector4 = Double
-    type Swizzle2  Vector4 = Vector2
-    type Swizzle3  Vector4 = Vector3
-    type Swizzle4  Vector4 = Vector4
 
-    toList (Vector4 x y z w) = [x, y, z, w]
-    _x (Vector4 x _ _ _) = x
-    _y (Vector4 _ y _ _) = y
-    _z (Vector4 _ _ z _) = z
-    _w (Vector4 _ _ _ w) = w
+    toList !(Vector4 x y z w) = [x, y, z, w]
+    _x !(Vector4 x _ _ _) = x
+    _y !(Vector4 _ y _ _) = y
+    _z !(Vector4 _ _ z _) = z
+    _w !(Vector4 _ _ _ w) = w
     x_ x (Vector4 _ y z w) = Vector4 x y z w
     y_ y (Vector4 x _ z w) = Vector4 x y z w
     z_ z (Vector4 x y _ w) = Vector4 x y z w
@@ -133,56 +88,44 @@ instance Vector Vector4 where
     _z_ f (Vector4 x y z w) = Vector4 x y (f z) w
     _w_ f (Vector4 x y z w) = Vector4 x y z (f w)
 
-    _swizzle2  get get' v = Vector2 (get v) (get' v)
-    swizzle2_  set set' v = set' (_y v) . set (_x v)
-    _swizzle2_ mdf mdf' f = mdf' f . mdf f
-
-    _swizzle3  get get' get'' v = Vector3 (get v) (get' v) (get'' v)
-    swizzle3_  set set' set'' v = set'' (_z v) . set' (_y v) . set (_x v)
-    _swizzle3_ mdf mdf' mdf'' f = mdf'' f . mdf' f . mdf f
-
-    _swizzle4  get get' get'' get''' v = Vector4 (get v) (get' v) (get'' v) (get''' v)
-    swizzle4_  set set' set'' set''' v = set''' (_w v) . set'' (_z v) . set' (_y v) . set (_x v)
-    _swizzle4_ mdf mdf' mdf'' mdf''' f = mdf''' f . mdf'' f . mdf' f . mdf f
-
 --Num Instances
 instance Num Vector2 where
-    (+)         (Vector2 x1 y1) (Vector2 x2 y2) = Vector2 (x1+x2) (y1+y2)
-    (*)         (Vector2 x1 y1) (Vector2 x2 y2) = Vector2 (x1*x2) (y1*y2)
-    (-)         (Vector2 x1 y1) (Vector2 x2 y2) = Vector2 (x1-x2) (y1-y2)
-    negate      (Vector2 x  y )                 = Vector2 (-x) (-y)
-    abs         (Vector2 x  y )                 = Vector2 (abs x) (abs y)
-    signum      (Vector2 x  y )                 = Vector2 (signum x) (signum y)
-    fromInteger i                               = Vector2 (fromInteger i) (fromInteger i)
+    (+)         !(Vector2 x1 y1) !(Vector2 x2 y2) = Vector2 (x1+x2) (y1+y2)
+    (*)         !(Vector2 x1 y1) !(Vector2 x2 y2) = Vector2 (x1*x2) (y1*y2)
+    (-)         !(Vector2 x1 y1) !(Vector2 x2 y2) = Vector2 (x1-x2) (y1-y2)
+    negate      !(Vector2 x  y )                  = Vector2 (-x) (-y)
+    abs         !(Vector2 x  y )                  = Vector2 (abs x) (abs y)
+    signum      !(Vector2 x  y )                  = Vector2 (signum x) (signum y)
+    fromInteger i                                 = Vector2 (fromInteger i) (fromInteger i)
 
 instance Fractional Vector2 where
     Vector2 x1 y1 / Vector2 x2 y2 = Vector2 (x1/x2) (y1/y2)
     fromRational r = Vector2 (fromRational r) (fromRational r)
 
 instance Num Vector3 where
-    (+)         (Vector3 x1 y1 z1) (Vector3 x2 y2 z2) = Vector3 (x1+x2) (y1+y2) (z1+z2)
-    (*)         (Vector3 x1 y1 z1) (Vector3 x2 y2 z2) = Vector3 (x1*x2) (y1*y2) (z1*z2)
-    (-)         (Vector3 x1 y1 z1) (Vector3 x2 y2 z2) = Vector3 (x1-x2) (y1-y2) (z1-z2)
-    negate      (Vector3 x  y  z )                    = Vector3 (-x) (-y) (-z)
-    abs         (Vector3 x  y  z )                    = Vector3 (abs x) (abs y) (abs z)
-    signum      (Vector3 x  y  z )                    = Vector3 (signum x) (signum y) (signum z)
-    fromInteger i                                     = Vector3 (fromInteger i) (fromInteger i) (fromInteger i)
+    (+)         !(Vector3 x1 y1 z1) !(Vector3 x2 y2 z2) = Vector3 (x1+x2) (y1+y2) (z1+z2)
+    (*)         !(Vector3 x1 y1 z1) !(Vector3 x2 y2 z2) = Vector3 (x1*x2) (y1*y2) (z1*z2)
+    (-)         !(Vector3 x1 y1 z1) !(Vector3 x2 y2 z2) = Vector3 (x1-x2) (y1-y2) (z1-z2)
+    negate      !(Vector3 x  y  z )                     = Vector3 (-x) (-y) (-z)
+    abs         !(Vector3 x  y  z )                     = Vector3 (abs x) (abs y) (abs z)
+    signum      !(Vector3 x  y  z )                     = Vector3 (signum x) (signum y) (signum z)
+    fromInteger i                                       = Vector3 (fromInteger i) (fromInteger i) (fromInteger i)
 
 instance Fractional Vector3 where
-    Vector3 x1 y1 z1 / Vector3 x2 y2 z2 = Vector3 (x1/x2) (y1/y2) (z1/z2)
+    (/) !(Vector3 x1 y1 z1) !(Vector3 x2 y2 z2) = Vector3 (x1/x2) (y1/y2) (z1/z2)
     fromRational r = Vector3 (fromRational r) (fromRational r) (fromRational r)
 
 instance Num Vector4 where
-    (+)         (Vector4 x1 y1 z1 w1) (Vector4 x2 y2 z2 w2) = Vector4 (x1+x2) (y1+y2) (z1+z2) (w1+w2)
-    (*)         (Vector4 x1 y1 z1 w1) (Vector4 x2 y2 z2 w2) = Vector4 (x1*x2) (y1*y2) (z1*z2) (w1*w2)
-    (-)         (Vector4 x1 y1 z1 w1) (Vector4 x2 y2 z2 w2) = Vector4 (x1-x2) (y1-y2) (z1-z2) (w1-w2)
-    negate      (Vector4 x  y  z  w )                       = Vector4 (-x) (-y) (-z) (-w)
-    abs         (Vector4 x  y  z  w )                       = Vector4 (abs x) (abs y) (abs z) (abs w)
-    signum      (Vector4 x  y  z  w )                       = Vector4 (signum x) (signum y) (signum z) (signum w)
-    fromInteger i                                           = Vector4 (fromInteger i) (fromInteger i) (fromInteger i) (fromInteger i)
+    (+)         !(Vector4 x1 y1 z1 w1) !(Vector4 x2 y2 z2 w2) = Vector4 (x1+x2) (y1+y2) (z1+z2) (w1+w2)
+    (*)         !(Vector4 x1 y1 z1 w1) !(Vector4 x2 y2 z2 w2) = Vector4 (x1*x2) (y1*y2) (z1*z2) (w1*w2)
+    (-)         !(Vector4 x1 y1 z1 w1) !(Vector4 x2 y2 z2 w2) = Vector4 (x1-x2) (y1-y2) (z1-z2) (w1-w2)
+    negate      !(Vector4 x  y  z  w )                        = Vector4 (-x) (-y) (-z) (-w)
+    abs         !(Vector4 x  y  z  w )                        = Vector4 (abs x) (abs y) (abs z) (abs w)
+    signum      !(Vector4 x  y  z  w )                        = Vector4 (signum x) (signum y) (signum z) (signum w)
+    fromInteger i                                             = Vector4 (fromInteger i) (fromInteger i) (fromInteger i) (fromInteger i)
 
 instance Fractional Vector4 where
-    Vector4 x1 y1 z1 w1 / Vector4 x2 y2 z2 w2 = Vector4 (x1/x2) (y1/y2) (z1/z2) (w1/w2)
+    (/) !(Vector4 x1 y1 z1 w1) !(Vector4 x2 y2 z2 w2) = Vector4 (x1/x2) (y1/y2) (z1/z2) (w1/w2)
     fromRational r = Vector4 (fromRational r) (fromRational r) (fromRational r) (fromRational r)
 
 --LinearMath Instances
@@ -304,36 +247,36 @@ class LinearFunction a where
 
 instance LinearFunction Vector2 where
     type Scalar Vector2                                        = Double
-    sqrMagnitude (Vector2 x y)                                 = x*x + y*y
-    magnitude    (Vector2 x y)                                 = sqrt $ x*x + y*y
-    dot          (Vector2 x1 y1) (Vector2 x2 y2)               = x1*x2 + y1*y2
-    normalize  v@(Vector2 x y)                                 = Vector2 (x/mag) (y/mag) where mag = magnitude v
-    lerp         (Vector2 x1 y1) (Vector2 x2 y2) t             = Vector2 (linearInterpolation x1 x2 t) (linearInterpolation y1 y2 t)
-    distance   v1 v2                                           = magnitude $ v2 - v1
-    angle      v1 v2                                           = radToDeg . acos $ dot v1 v2 / (magnitude v1 * magnitude v2)
-    direction  v1 v2                                           = normalize $ v2 - v1
+    sqrMagnitude !(Vector2 x y)                                = x*x + y*y
+    magnitude    !(Vector2 x y)                                = sqrt $ x*x + y*y
+    dot          !(Vector2 x1 y1) (Vector2 x2 y2)              = x1*x2 + y1*y2
+    normalize  !v@(Vector2 x y)                                = Vector2 (x/mag) (y/mag) where mag = magnitude v
+    lerp         !(Vector2 x1 y1) (Vector2 x2 y2) t            = Vector2 (linearInterpolation x1 x2 t) (linearInterpolation y1 y2 t)
+    distance   !v1 !v2                                           = magnitude $ v2 - v1
+    angle      !v1 !v2                                           = radToDeg . acos $ dot v1 v2 / (magnitude v1 * magnitude v2)
+    direction  !v1 !v2                                           = normalize $ v2 - v1
 
 instance LinearFunction Vector3 where
     type Scalar Vector3                                        = Double
-    sqrMagnitude (Vector3 x y z)                               = x*x + y*y + z*z
-    magnitude    (Vector3 x y z)                               = sqrt $ x*x + y*y + z*z
-    dot          (Vector3 x1 y1 z1) (Vector3 x2 y2 z2)         = x1*x2 + y1*y2 + z1*z2
-    normalize  v@(Vector3 x y z)                               = Vector3 (x/mag) (y/mag) (z/mag) where mag = magnitude v
-    lerp         (Vector3 x1 y1 z1) (Vector3 x2 y2 z2) t       = Vector3 (linearInterpolation x1 x2 t) (linearInterpolation y1 y2 t) (linearInterpolation z1 z2 t)
-    distance   v1 v2                                           = magnitude $ v2 - v1
-    angle      v1 v2                                           = radToDeg . acos $ dot v1 v2 / (magnitude v1 * magnitude v2)
-    direction  v1 v2                                           = normalize $ v2 - v1
+    sqrMagnitude !(Vector3 x y z)                              = x*x + y*y + z*z
+    magnitude    !(Vector3 x y z)                              = sqrt $ x*x + y*y + z*z
+    dot          !(Vector3 x1 y1 z1) (Vector3 x2 y2 z2)        = x1*x2 + y1*y2 + z1*z2
+    normalize  !v@(Vector3 x y z)                              = Vector3 (x/mag) (y/mag) (z/mag) where mag = magnitude v
+    lerp         !(Vector3 x1 y1 z1) (Vector3 x2 y2 z2) t      = Vector3 (linearInterpolation x1 x2 t) (linearInterpolation y1 y2 t) (linearInterpolation z1 z2 t)
+    distance   !v1 !v2                                         = magnitude $ v2 - v1
+    angle      !v1 !v2                                         = radToDeg . acos $ dot v1 v2 / (magnitude v1 * magnitude v2)
+    direction  !v1 !v2                                         = normalize $ v2 - v1
 
 instance LinearFunction Vector4 where
-    type Scalar Vector4                                        = Double
-    sqrMagnitude (Vector4 x y z w)                             = x*x + y*y + z*z + w*w
-    magnitude    (Vector4 x y z w)                             = sqrt $ x*x + y*y + z*z + w*w
-    dot          (Vector4 x1 y1 z1 w1) (Vector4 x2 y2 z2 w2)   = x1*x2 + y1*y2 + z1*z2 + w1*w2
-    normalize  v@(Vector4 x y z w)                             = Vector4 (x/mag) (y/mag) (z/mag) (w/mag) where mag = magnitude v
-    lerp         (Vector4 x1 y1 z1 w1) (Vector4 x2 y2 z2 w2) t = Vector4 (linearInterpolation x1 x2 t) (linearInterpolation y1 y2 t) (linearInterpolation z1 z2 t) (linearInterpolation w1 w2 t)
-    distance   v1 v2                                           = magnitude $ v2 .-. v1
-    angle      v1 v2                                           = radToDeg . acos $ dot v1 v2 / (magnitude v1 * magnitude v2)
-    direction  v1 v2                                           = normalize $ v2 - v1
+    type Scalar Vector4                                         = Double
+    sqrMagnitude !(Vector4 x y z w)                             = x*x + y*y + z*z + w*w
+    magnitude    !(Vector4 x y z w)                             = sqrt $ x*x + y*y + z*z + w*w
+    dot          !(Vector4 x1 y1 z1 w1) (Vector4 x2 y2 z2 w2)   = x1*x2 + y1*y2 + z1*z2 + w1*w2
+    normalize  !v@(Vector4 x y z w)                             = Vector4 (x/mag) (y/mag) (z/mag) (w/mag) where mag = magnitude v
+    lerp         !(Vector4 x1 y1 z1 w1) (Vector4 x2 y2 z2 w2) t = Vector4 (linearInterpolation x1 x2 t) (linearInterpolation y1 y2 t) (linearInterpolation z1 z2 t) (linearInterpolation w1 w2 t)
+    distance   !v1 !v2                                          = magnitude $ v2 .-. v1
+    angle      !v1 !v2                                          = radToDeg . acos $ dot v1 v2 / (magnitude v1 * magnitude v2)
+    direction  !v1 !v2                                          = normalize $ v2 - v1
 
 
 --Vector specific functions
@@ -387,7 +330,7 @@ up4 :: Vector4
 up4      = Vector4   0   1   0   1
 
 cross :: Vector3 -> Vector3 -> Vector3
-cross (Vector3 x1 y1 z1) (Vector3 x2 y2 z2) = Vector3 (y1*z2-z1*y2) (z1*x2-x1*z2) (x1*y2-y1*x2)
+cross !(Vector3 x1 y1 z1) !(Vector3 x2 y2 z2) = Vector3 (y1*z2-z1*y2) (z1*x2-x1*z2) (x1*y2-y1*x2)
 
 (><) :: Vector3 -> Vector3 -> Vector3
 (><) = cross
@@ -395,28 +338,28 @@ cross (Vector3 x1 y1 z1) (Vector3 x2 y2 z2) = Vector3 (y1*z2-z1*y2) (z1*x2-x1*z2
 infixl 8 ><
 
 makeCeil :: Vector3 -> Vector3 -> Vector3
-makeCeil (Vector3 x1 y1 z1) (Vector3 x2 y2 z2) = Vector3 (max x1 x2) (max y1 y2) (max z1 z2)
+makeCeil !(Vector3 x1 y1 z1) !(Vector3 x2 y2 z2) = Vector3 (max x1 x2) (max y1 y2) (max z1 z2)
 
 makeFloor :: Vector3 -> Vector3 -> Vector3
 makeFloor (Vector3 x1 y1 z1) (Vector3 x2 y2 z2) = Vector3 (min x1 x2) (min y1 y2) (min z1 z2)
 
 toVec3 :: Vector2 -> Vector3
-toVec3 (Vector2 x y)     = Vector3 x y 0
+toVec3 !(Vector2 x y)     = Vector3 x y 0
 
 toGLVec3 :: Vector3 -> GL.Vector3 GL.GLdouble
-toGLVec3 (Vector3 x y z) = GL.Vector3 (realToFrac x) (realToFrac y) (realToFrac z) :: GL.Vector3 GL.GLdouble
+toGLVec3 !(Vector3 x y z) = GL.Vector3 (realToFrac x) (realToFrac y) (realToFrac z) :: GL.Vector3 GL.GLdouble
 
 toGLVec4 :: Vector4 -> GL.Vector4 GL.GLdouble
-toGLVec4 (Vector4 x y z w) = GL.Vector4 (realToFrac x) (realToFrac y) (realToFrac z) (realToFrac w) :: GL.Vector4 GL.GLdouble
+toGLVec4 !(Vector4 x y z w) = GL.Vector4 (realToFrac x) (realToFrac y) (realToFrac z) (realToFrac w) :: GL.Vector4 GL.GLdouble
 
 toGLVertex2 :: Vector2 -> GL.Vertex2 GL.GLfloat
-toGLVertex2 (Vector2 x y) = GL.Vertex2 (realToFrac x) (realToFrac y) :: GL.Vertex2 GL.GLfloat
+toGLVertex2 !(Vector2 x y) = GL.Vertex2 (realToFrac x) (realToFrac y) :: GL.Vertex2 GL.GLfloat
 
 toGLVertex3 :: Vector3 -> GL.Vertex3 GL.GLfloat
-toGLVertex3 (Vector3 x y z) = GL.Vertex3 (realToFrac x) (realToFrac y) (realToFrac z) ::GL.Vertex3 GL.GLfloat
+toGLVertex3 !(Vector3 x y z) = GL.Vertex3 (realToFrac x) (realToFrac y) (realToFrac z) ::GL.Vertex3 GL.GLfloat
 
 toGLVertex4 :: Vector4 -> GLT.Vertex4 GL.GLfloat
-toGLVertex4 (Vector4 x y z w) = GLT.Vertex4 (realToFrac x) (realToFrac y) (realToFrac z) (realToFrac w) ::GLT.Vertex4 GL.GLfloat
+toGLVertex4 !(Vector4 x y z w) = GLT.Vertex4 (realToFrac x) (realToFrac y) (realToFrac z) (realToFrac w) ::GLT.Vertex4 GL.GLfloat
 
 instance B.Binary Vector2 where
     put (Vector2 x y) = B.put (realToFrac x :: Float) >> B.put (realToFrac y :: Float)
@@ -439,4 +382,4 @@ instance Ord Vector3 where
     max (Vector3 ax ay az) (Vector3 bx by bz) = Vector3 (max ax bx) (max ay by) (max az bz)
 
 sameDirection :: Vector3 -> Vector3 -> Bool
-sameDirection a b = a `dot` b > 0
+sameDirection !a !b = a `dot` b > 0
