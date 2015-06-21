@@ -4,7 +4,6 @@ import Necronomicon.Linear.GeoPrimitive
 import Necronomicon.Linear.Vector
 import Necronomicon.Linear.Matrix
 import Necronomicon.Linear.Math
--- import Necronomicon.Linear.AABB
 import Data.Binary
 
 ---------------------------------------
@@ -13,10 +12,6 @@ import Data.Binary
 
 data OBB = OBB { obbExtents :: Vector3 } deriving (Show, Eq)
 
-instance Binary OBB where
-    put (OBB e) = put e
-    get         = OBB <$> get
-
 instance GeoPrimitive OBB where
     enclosingSphere (OBB (Vector3 hw hh hd)) t   = Sphere (matOrigin t) $ max (hw * 2) $ max (hh * 2) (hd * 2)
     closestPoint    (OBB (Vector3 hw hh hd)) t q = p + project xb hw + project yb hh + project zb hd
@@ -24,11 +19,12 @@ instance GeoPrimitive OBB where
             p            = matOrigin t
             (xb, yb, zb) = basis t
             project a e  = a * realToFrac (clamp (-e) e (a `dot` (q - p)))
-    enclosingAABB   (OBB he) t = AABB (p - extents) (p + extents)
-        where
-            p            = matOrigin t
-            (xb, yb, zb) = basis t
-            extents      = Vector3 (he `dot` abs xb) (he `dot` abs yb) (he `dot` abs zb)
+    enclosingAABB   _ _ = undefined --TODO: What is it about enclosingAABB that causes GHC to flip out!??!?!?
+    -- enclosingAABB   (OBB he) t = AABB (p - extents) (p + extents)
+    --     where
+    --         p            = matOrigin t
+    --         (xb, yb, zb) = basis t
+    --         extents      = Vector3 (he `dot` abs xb) (he `dot` abs yb) (he `dot` abs zb)
     maximalPoint    (OBB (Vector3 hw hh hd)) t d = p + ax + ay + az
         where
             p                       = matOrigin t
@@ -39,3 +35,8 @@ instance GeoPrimitive OBB where
                | otherwise          = yb * realToFrac (-hh)
             az | sameDirection zb d = zb * realToFrac   hd
                | otherwise          = zb * realToFrac (-hd)
+
+
+instance Binary OBB where
+    put (OBB e) = put e
+    get         = OBB <$> get

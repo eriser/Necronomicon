@@ -198,15 +198,15 @@ drawMeshWithMaterial (Material mat vs fs us primMode) m modelView proj resources
     loadProgram program
     foldM_ (\t (uloc, uval) -> setUniform resources uloc uval t) 0 $ zip ulocs us
 
-    bindThenDraw primMode mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
+    bindThenDraw primMode mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad, colorVad, uvVad]) numIndices
     where
         s  = case mat of
             Just js -> return js
             _       -> getShader resources sh
         sh = shader
-             (vs ++ " + " ++ fs) --Replace with UIDs
+             (vs ++ " + " ++ fs)
              ("modelView" : "proj" : map uniformName us)
-             ["position","in_color","in_uv"]
+             ["position", "in_color", "in_uv"]
              (loadVertexShader   vs)
              (loadFragmentShader fs)
 
@@ -217,169 +217,3 @@ setUniform _ loc (UniformVec2    _ v) t = GL.uniform loc GL.$= toGLVertex2 v >> 
 setUniform _ loc (UniformVec3    _ v) t = GL.uniform loc GL.$= toGLVertex3 v >> return t
 setUniform _ loc (UniformVec4    _ v) t = GL.uniform loc GL.$= toGLVertex4 v >> return t
 setUniform _ _ _                      t = return t
-
---------------------
--- New New  System
---------------------
-
---CM: TODO: Finish new resource drawing
--- getMesh' :: Resources' -> Mesh -> IO LoadedMesh
--- getMesh' resources m@(Mesh New mKey _ _ _ _) = readIORef (meshRef resources) >>= \meshes -> case Map.lookup mKey meshes of
-    -- Just  i -> readIORef (meshRef resources) >>= \vec -> MV.unsafeRead vec i
-    -- Nothing -> error $ "Couldn't find mesh: " ++ mKey
--- getMesh' _ _ = error "New resource made it into getMesh'"
-
---
--- getMesh' resources m@(Mesh uid mKey _ _ _ _) = readIORef (meshesRef resources) >>= \mkMeshes -> case Map.lookup mKey mkMeshes of
---     Nothing         -> loadMesh m >>= \loadedMesh -> (writeIORef (meshesRef resources) $ Map.insert mKey loadedMesh mkMeshes) >> return loadedMesh
---     Just loadedMesh -> return loadedMesh
--- getMesh resources m@(DynamicMesh _ mKey v c u i) = readIORef (meshesRef resources) >>= \mkMeshes -> case Map.lookup mKey mkMeshes of
---     Nothing              -> loadMesh m >>= \loadedMesh@(vbuf,ibuf,_,_) -> (writeIORef (meshesRef resources) (Map.insert mKey loadedMesh mkMeshes)) >> dynamicDrawMesh vbuf ibuf v c u i
---     Just (vbuf,ibuf,_,_) -> dynamicDrawMesh vbuf ibuf v c u i
-
-
---------------------
--- Old System
---------------------
-{-
-debugDraw :: Color -> Material
-debugDraw (RGBA r g b a) = Material draw
-    where
-        draw mkMesh modelView proj resources = do
-            (program,baseColor:mv:pr:_,attributes)                     <- getShader resources vertexColoredShader
-            (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:_) <- getMesh   resources mkMesh
-
-            GL.currentProgram    GL.$= Just program
-            GL.uniform baseColor GL.$= (GL.Vertex4 (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a) :: GL.Vertex4 GL.GLfloat)
-            bindThenDraw GL.Lines mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad]) numIndices
-debugDraw (RGB r g b) = vertexColored (RGBA r g b 1)
-
-vertexColored :: Color -> Material
-vertexColored (RGBA r g b a) = Material draw
-    where
-        draw mkMesh modelView proj resources = do
-            (program,baseColor:mv:pr:_,attributes)                     <- getShader resources vertexColoredShader
-            (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:_) <- getMesh   resources mkMesh
-
-            GL.currentProgram    GL.$= Just program
-            GL.uniform baseColor GL.$= (GL.Vertex4 (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a) :: GL.Vertex4 GL.GLfloat)
-            bindThenDraw GL.Triangles mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad]) numIndices
-vertexColored (RGB r g b) = vertexColored (RGBA r g b 1)
-
-ambient :: Texture -> Material
-ambient tex = Material draw
-    where
-        draw mkMesh modelView proj resources = do
-            (program,texu:mv:pr:_,attributes)                                <- getShader  resources ambientShader
-            (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh    resources mkMesh
-            texture                                                          <- getTexture resources tex
-
-            GL.currentProgram  GL.$= Just program
-            GL.activeTexture   GL.$= GL.TextureUnit 0
-            GL.textureBinding  GL.Texture2D GL.$= Just texture
-            GL.uniform texu    GL.$= GL.TextureUnit 0
-            bindThenDraw GL.Triangles mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
-
-uvTest :: Texture -> Material
-uvTest tex = Material draw
-    where
-        draw mkMesh modelView proj resources = do
-            (program,texu:mv:pr:_,attributes)                                <- getShader  resources uvTestShader
-            (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh    resources mkMesh
-            texture                                                          <- getTexture resources tex
-
-            GL.currentProgram  GL.$= Just program
-            GL.activeTexture   GL.$= GL.TextureUnit 0
-            GL.textureBinding  GL.Texture2D GL.$= Just texture
-            GL.uniform texu    GL.$= GL.TextureUnit 0
-            bindThenDraw GL.Triangles mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
-
-colorTest :: Texture -> Material
-colorTest tex = Material draw
-    where
-        draw mkMesh modelView proj resources = do
-            (program,texu:mv:pr:_,attributes)                                <- getShader  resources colorTestShader
-            (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh    resources mkMesh
-            texture                                                          <- getTexture resources tex
-
-            GL.currentProgram  GL.$= Just program
-            GL.activeTexture   GL.$= GL.TextureUnit 0
-            GL.textureBinding  GL.Texture2D GL.$= Just texture
-            GL.uniform texu    GL.$= GL.TextureUnit 0
-            bindThenDraw GL.Triangles mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
-
-blur :: Texture -> Material
-blur tex = Material draw
-    where
-        draw mkMesh modelView proj resources = do
-            (program,texu:mv:pr:_,attributes)                                <- getShader  resources blurShader
-            (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh    resources mkMesh
-            texture                                                          <- getTexture resources tex
-
-            GL.currentProgram  GL.$= Just program
-            GL.activeTexture   GL.$= GL.TextureUnit 0
-            GL.textureBinding  GL.Texture2D GL.$= Just texture
-            GL.uniform texu    GL.$= GL.TextureUnit 0
-            bindThenDraw GL.Triangles mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
-
-vertexColoredShader :: Shader
-vertexColoredShader = shader
-                      "vertexColored"
-                      ["baseColor","modelView","proj"]
-                      ["position","in_color"]
-                      (loadVertexShader   "colored-vert.glsl")
-                      (loadFragmentShader "colored-frag.glsl")
-
-ambientShader       :: Shader
-ambientShader       = shader
-                      "ambient"
-                      ["tex","modelView","proj"]
-                      ["position","in_color","in_uv"]
-                      (loadVertexShader   "ambient-vert.glsl")
-                      (loadFragmentShader "ambient-frag.glsl")
-
-uvTestShader        :: Shader
-uvTestShader        = shader
-                      "uvTest"
-                      ["tex","modelView","proj"]
-                      ["position","in_color","in_uv"]
-                      (loadVertexShader   "ambient-vert.glsl")
-                      (loadFragmentShader "uvTest-frag.glsl")
-
-colorTestShader     :: Shader
-colorTestShader     = shader
-                      "colorTest"
-                      ["tex","modelView","proj"]
-                      ["position","in_color","in_uv"]
-                      (loadVertexShader   "ambient-vert.glsl")
-                      (loadFragmentShader "colorTest-frag.glsl")
-
-blurShader          :: Shader
-blurShader          = shader
-                      "blur"
-                      ["tex","modelView","proj"]
-                      ["position","in_color","in_uv"]
-                      (loadVertexShader   "ambient-vert.glsl")
-                      (loadFragmentShader "blur-frag.glsl")
-
-material :: String -> String -> [Uniform] -> Material
-material vs fs us = Material drawMat
-    where
-        drawMat mkMesh modelView proj resources = do
-            (program, uniforms, attributes)                                  <- getShader resources terrainShader
-            (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh   resources mkMesh
-            let ulocs         = take (length uniforms - 2) uniforms
-                (mv : pr : _) = drop (length uniforms - 2) uniforms
-
-            loadProgram program
-            foldM_ (\t (uloc, uval) -> setUniform resources uloc uval t) 0 $ zip ulocs us
-
-            bindThenDraw GL.Triangles mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad,colorVad,uvVad]) numIndices
-
-        terrainShader = shader
-            (vs ++ " + " ++ fs)
-            (map uniformName us ++ ["modelView", "proj"])
-            ["position","in_color","in_uv"]
-            (loadVertexShader   vs)
-            (loadFragmentShader fs)
--}

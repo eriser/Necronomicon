@@ -1,7 +1,7 @@
 #version 130
-uniform mat4 modelView,proj;
+uniform mat4 modelView, proj;
 
-in  vec3 position,in_color;
+in  vec3 position, in_color;
 in  vec2 in_uv;
 
 out vec3 color;

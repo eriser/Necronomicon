@@ -262,9 +262,9 @@ loadNewMat r (Material Nothing vs fs us pr) = do
     return $ Material (Just sh') vs fs us pr
     where
         sh = shader
-            (vs ++ " + " ++ fs) --Replace with UIDs
+            (vs ++ " + " ++ fs)
             ("modelView" : "proj" : map uniformName us)
-            ["position","in_color","in_uv"]
+            ["position", "in_color", "in_uv"]
             (loadVertexShader   vs)
             (loadFragmentShader fs)
 loadNewMat _ m = return m

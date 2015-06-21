@@ -356,8 +356,9 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
                 -- gs   <- filterMap id . V.toList <~ (readIORef (objectRef state) >>= V.freeze)
                 -- let g = gchildren_ gs mkGameObject
                 -- renderGraphicsG window resources False g g tree
-                gstream <- GMV.mstream  <~ readIORef (objectRef state)
+                gstream <- GMV.mstream <~ readIORef (objectRef state)
                 cs      <- readIORef (cameraRef state)
+
                 mapM_ (renderWithCamera window resources gstream) cs
 
                 threadDelay  $ 16667

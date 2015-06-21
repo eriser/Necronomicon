@@ -1,8 +1,10 @@
 #version 130
-uniform mat4 modelView,proj;
+uniform mat4 modelView, proj;
 uniform vec4 baseColor;
 
-in  vec3 position,in_color;
+in  vec3 position, in_color;
+in  vec2 in_uv;
+
 out vec4 color;
 
 void main()
