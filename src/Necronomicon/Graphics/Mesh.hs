@@ -192,10 +192,8 @@ material vs fs us = Material Nothing vs fs us GL.Triangles
 
 drawMeshWithMaterial :: Material -> Mesh -> Matrix4x4 -> Matrix4x4 -> Resources -> IO()
 drawMeshWithMaterial (Material mat vs fs us primMode) m modelView proj resources = do
-    (program, uniforms, attributes)                                  <- s
-    (vertexBuffer,indexBuffer,numIndices,vertexVad:colorVad:uvVad:_) <- getMesh   resources m
-    let ulocs         = take (length uniforms - 2) uniforms
-        (mv : pr : _) = drop (length uniforms - 2) uniforms
+    (program, mv : pr : ulocs, attributes)                                    <- s
+    (vertexBuffer, indexBuffer, numIndices, vertexVad : colorVad : uvVad : _) <- getMesh resources m
 
     loadProgram program
     foldM_ (\t (uloc, uval) -> setUniform resources uloc uval t) 0 $ zip ulocs us
@@ -207,7 +205,7 @@ drawMeshWithMaterial (Material mat vs fs us primMode) m modelView proj resources
             _       -> getShader resources sh
         sh = shader
              (vs ++ " + " ++ fs) --Replace with UIDs
-             (map uniformName us ++ ["modelView", "proj"])
+             ("modelView" : "proj" : map uniformName us)
              ["position","in_color","in_uv"]
              (loadVertexShader   vs)
              (loadFragmentShader fs)

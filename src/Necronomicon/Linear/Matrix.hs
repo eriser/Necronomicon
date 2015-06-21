@@ -279,7 +279,7 @@ matZero4 = Matrix4x4 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0 0
 
 -- | Rotation matrix from a Quaternion.
 rotFromQuaternion :: Quaternion -> Matrix3x3
-rotFromQuaternion !(Quaternion w (Vector3 x y z)) =
+rotFromQuaternion !(Quaternion w x y z) =
     Matrix3x3
     (1-2*(y2+z2)) (2*(x*y-z*w)) (2*(x*z+y*w))
     (2*(x*y+z*w)) (1-2*(x2+z2)) (2*(y*z-x*w))

@@ -342,7 +342,7 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
         run False w scont currentTime resources DynTree.empty eventInbox state
     where
         run quit window s runTime' resources tree eventInbox state
-            | quit      = print "Qutting" >> return ()
+            | quit      = putStrLn "Qutting Necronomicon" >> return ()
             | otherwise = do
                 GLFW.pollEvents
                 q           <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'Escape
@@ -390,7 +390,6 @@ necro sig = Signal $ \state -> do
             let x | UID uid <- gid g, uid < MV.length vec = MV.unsafeWrite vec uid (Just g) >> writeIORef oref vec
                   | UID uid <- gid g                      = do
                       vec' <- MV.unsafeGrow vec (MV.length vec)
-                      putStrLn $ "Expanding object vec to length: " ++ show (MV.length vec')
                       mapM_ (\i -> MV.unsafeWrite vec' i Nothing) [uid..MV.length vec' - 1]
                       MV.unsafeWrite vec' uid (Just g)
                       writeIORef oref vec'

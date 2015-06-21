@@ -246,7 +246,6 @@ posColorUV (Vector3 x y z : vs) (RGBA r g b _ : cs) (Vector2 u v : uvs) = x : y 
 
 loadNewModel :: Resources -> Maybe Model -> IO (Maybe Model)
 loadNewModel r   (Just (Model me ma)) = do
-    print "loadNewModel"
     me' <- loadNewMesh r me
     ma' <- loadNewMat  r ma
     return . Just $ Model me' ma'
@@ -264,7 +263,7 @@ loadNewMat r (Material Nothing vs fs us pr) = do
     where
         sh = shader
             (vs ++ " + " ++ fs) --Replace with UIDs
-            (map uniformName us ++ ["modelView", "proj"])
+            ("modelView" : "proj" : map uniformName us)
             ["position","in_color","in_uv"]
             (loadVertexShader   vs)
             (loadFragmentShader fs)
