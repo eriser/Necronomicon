@@ -53,6 +53,8 @@ unsigned int UINT_SIZE = sizeof(unsigned int);
 #define TABLE_SIZE 256
 #define TABLE_SIZE_WRAP 255
 double RECIP_TABLE_SIZE = 1.0 / (double) TABLE_SIZE;
+unsigned int HALF_TABLE_SIZE = TABLE_SIZE / 2;
+unsigned int QUATER_TABLE_SIZE = TABLE_SIZE / 4;
 double sine_table[TABLE_SIZE];
 double cosn_table[TABLE_SIZE];
 double sinh_table[TABLE_SIZE];
@@ -3588,12 +3590,6 @@ void combC_aaa_calc(ugen u)
     )
 }
 
-void print_ugen(ugen* ugen)
-{
-	puts("(UGen");
-	printf(" (Calc %p)\n", ugen->calc);
-}
-
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 // Tests
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -5343,11 +5339,11 @@ void biquad_deconstructor(ugen* u)
 
 #define BIQUAD(B0,B1,B2,A0,A1,A2,X,X1,X2,Y1,Y2) ( (B0/A0)*X + (B1/A0)*X1 + (B2/A0)*X2 - (A1/A0)*Y1 - (A2/A0)*Y2 )
 
-#define TABLE_LOOKUP(VAL,TABLE)               \
-v1     = TABLE[((unsigned char) (VAL * TABLE_SIZE))];     \
-v2     = TABLE[((unsigned char) (VAL * TABLE_SIZE + 1))]; \
-delta  = VAL - ((long) VAL);	      \
-v1 + delta * (v2 - v1);			      \
+#define TABLE_LOOKUP(VAL,TABLE)               				\
+v1     = TABLE[((unsigned char) (VAL * TABLE_SIZE))];     	\
+v2     = TABLE[((unsigned char) (VAL * TABLE_SIZE + 1))];	\
+delta  = VAL - ((long) VAL);	      						\
+v1 + delta * (v2 - v1);			      						\
 
 #define LPF_CALC(CONTROL_ARGS, AUDIO_ARGS)							\
 double*  in0  = UGEN_INPUT_BUFFER(u, 0);							\
@@ -8742,6 +8738,85 @@ __attribute__((flatten)) void limiter_aaaaa_calc(ugen u)
         LIMITER_THRESHOLDA    /* 2 */
         LIMITER_KNEEA         /* 3 */
         LIMITER_INPUTA        /* 4 */
+    )
+}
+
+#define PAN_CALC(CONTROL_ARGS, AUDIO_ARGS)  	\
+double* in0 = UGEN_INPUT_BUFFER(u, 0);      	\
+double* in1 = UGEN_INPUT_BUFFER(u, 1);      	\
+double* out0 = UGEN_OUTPUT_BUFFER(u, 0);		\
+double* out1 = UGEN_OUTPUT_BUFFER(u, 1);		\
+double x, delta, pos, ampL, ampR;           	\
+unsigned char index1, index2;					\
+double sin1, sin2, cos1, cos2;					\
+CONTROL_ARGS                                	\
+AUDIO_LOOP(                                 	\
+    AUDIO_ARGS                              	\
+	UGEN_OUT(out0, x * ampL); 					\
+	UGEN_OUT(out1, x * ampR);					\
+);
+
+/* range is assumed to be -1 to 1 */
+#define PAN_CALC_LR_AMPS						\
+pos = (pos + 1) * (double) QUATER_TABLE_SIZE;	\
+index1 = pos;									\
+index2 = index1 + 1;							\
+sin1 = sine_table[index1];						\
+sin2 = sine_table[index2];						\
+cos1 = cosn_table[index1];						\
+cos2 = cosn_table[index2];						\
+delta = pos - ((long) pos);						\
+ampL = LERP(cos1, cos2, delta);       			\
+ampR = LERP(sin2, sin2, delta);
+
+#define PAN_POSK pos = *in0; PAN_CALC_LR_AMPS
+#define PAN_POSA pos = UGEN_IN(in0); PAN_CALC_LR_AMPS
+#define PAN_XK x = *in1;
+#define PAN_XA x = UGEN_IN(in1);
+
+// 0
+void pan_kk_calc(ugen u)
+{
+    PAN_CALC(
+        // Control Arguments
+        PAN_POSK              /* 0 */
+        PAN_XK                /* 1 */,
+        // Audio Arguments
+        /* no audio args */
+    )
+}
+
+// 1
+void pan_ak_calc(ugen u)
+{
+    PAN_CALC(
+        // Control Arguments
+        PAN_XK                /* 1 */,
+        // Audio Arguments
+        PAN_POSA              /* 0 */
+    )
+}
+
+// 2
+void pan_ka_calc(ugen u)
+{
+    PAN_CALC(
+        // Control Arguments
+        PAN_POSK              /* 0 */,
+        // Audio Arguments
+        PAN_XA                /* 1 */
+    )
+}
+
+// 3
+void pan_aa_calc(ugen u)
+{
+    PAN_CALC(
+        // Control Arguments
+        /* no control args */,
+        // Audio Arguments
+        PAN_POSA              /* 0 */
+        PAN_XA                /* 1 */
     )
 }
 

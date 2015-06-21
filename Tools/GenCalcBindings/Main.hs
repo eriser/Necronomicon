@@ -20,9 +20,9 @@ generateCalcDefine :: String -> String -> [String] -> String
 generateCalcDefine funcName defineName args = inlineFunc ++ foldr (++) "" macroLinesWithEndings
     where
         lengthArgs = length args
-        inlineFuncName = funcName ++ "InlineCalc"
+        inlineFuncName = funcName ++ "_inline_calc"
         inlineFuncArgs = foldl (\a b -> a ++ (if null a then "" else ", ") ++ b) "" $ map (\s -> "double " ++ s) args
-        inlineFunc = "__attribute__((always_inline)) static inline double " ++ inlineFuncName ++ "(" ++ inlineFuncArgs ++ ")\n{\n    double y = 0; // CALC CODE HERE\n    return y;\n}\n\n"
+        inlineFunc = "static inline double " ++ inlineFuncName ++ "(" ++ inlineFuncArgs ++ ")\n{\n    double y = 0; // CALC CODE HERE\n    return y;\n}\n\n"
         calcDefineLine = "#define " ++ defineName ++ "(CONTROL_ARGS, AUDIO_ARGS)"
         inputs = map argIndexToInputString ([0 .. (max 0 (lengthArgs -1 ))] :: [Int])
         outputs = ["double* out = UGEN_OUTPUT_BUFFER(u, 0);"]
@@ -77,7 +77,7 @@ generateCCode name args = (generateCalcDefine name calcDefineName args) ++ "\n\n
         argToDefines :: (String, Int) -> (ArgDefine, ArgDefine)
         argToDefines (arg, i) = (argToControlDefine arg i, argToAudioDefine arg i)
         createCFunction :: Int -> String
-        createCFunction i = "// " ++ (show i) ++ "\n" ++ "__attribute__((flatten)) void " ++ cname ++ "(ugen u)\n{\n    " ++ calcDefineName ++ "(" ++ fguts ++ "    )\n}"
+        createCFunction i = "// " ++ (show i) ++ "\n" ++ "void " ++ cname ++ "(ugen u)\n{\n    " ++ calcDefineName ++ "(" ++ fguts ++ "    )\n}"
             where
                 (CalcFuncBindingData cname _ rates) = cfuncData !! i
                 fguts = argPrefix ++ "// Control Arguments" ++ controlArgs' ++ "," ++ argPrefix ++ "// Audio Arguments" ++ audioArgs' ++ "\n"
