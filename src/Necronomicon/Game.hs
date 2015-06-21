@@ -3,12 +3,11 @@
 
 module Necronomicon.Game where
 
--- import Debug.Trace
 import Test.QuickCheck
 import Data.List (sort)
-import Control.Concurrent
 import Graphics.Rendering.OpenGL.Raw
 import qualified Data.Vector as V
+import qualified Data.Vector.Fusion.Stream.Monadic as S
 import qualified Graphics.Rendering.OpenGL         as GL
 import qualified Graphics.UI.GLFW                  as GLFW
 
@@ -16,7 +15,6 @@ import Necronomicon.Linear
 import Necronomicon.Physics
 import Necronomicon.Physics.DynamicTree
 import Necronomicon.Graphics
-import Necronomicon.Utility              (getCurrentTime)
 
 import Data.Binary
 import GHC.Generics
@@ -238,40 +236,38 @@ renderCameraG (w,h) view scene resources debug so t = case camera so of
             GL.blendBuffer 0 GL.$= GL.Enabled
             GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
 
-renderCameraG' :: (Int,Int) -> Matrix4x4 -> Camera -> Resources -> Bool -> GameObject -> DynamicTree -> IO ()
-renderCameraG' (w,h) view c resources debug scene t = do
-        let  ratio         = fromIntegral w / fromIntegral h
-        let (RGBA r g b a) = case _clearColor c of
+----------------------
+-- New Rendering
+----------------------
+cameraPreRender :: (Int, Int) -> Resources -> Camera -> IO ()
+cameraPreRender (w,h) resources c = do
+    let (RGBA r g b a) = case _clearColor c of
+            RGB r' g' b' -> RGBA r' g' b' 1.0
+            c'           -> c'
+
+    --If we have anye post-rendering fx let's bind their fbo
+    case _fx c of
+        []   -> return ()
+        fx:_ -> getPostFX resources (fromIntegral w,fromIntegral h) fx >>= \postFX -> glBindFramebuffer gl_FRAMEBUFFER (postRenderFBO postFX)
+
+    GL.depthFunc     GL.$= Just GL.Less
+    GL.blend         GL.$= GL.Enabled
+    GL.blendBuffer 0 GL.$= GL.Enabled
+    GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
+
+    GL.clearColor GL.$= GL.Color4 (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a)
+    GL.clear [GL.ColorBuffer,GL.DepthBuffer]
+
+    GL.viewport GL.$= (GL.Position 0 0, GL.Size (fromIntegral w) (fromIntegral h))
+    GL.loadIdentity
+
+cameraPostRender :: (Int, Int) -> Resources -> Camera -> IO ()
+cameraPostRender (w,h) resources c = mapM_ drawPostRenderFX $ _fx c
+    where
+        (RGBA r g b a) = case _clearColor c of
                 RGB r' g' b' -> RGBA r' g' b' 1.0
                 c'           -> c'
-
-        --If we have anye post-rendering fx let's bind their fbo
-        case _fx c of
-            []   -> return ()
-            fx:_ -> getPostFX resources (fromIntegral w,fromIntegral h) fx >>= \postFX -> glBindFramebuffer gl_FRAMEBUFFER (postRenderFBO postFX)
-
-        GL.depthFunc     GL.$= Just GL.Less
-        GL.blend         GL.$= GL.Enabled
-        GL.blendBuffer 0 GL.$= GL.Enabled
-        GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
-
-        GL.clearColor GL.$= GL.Color4 (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a)
-        GL.clear [GL.ColorBuffer,GL.DepthBuffer]
-
-        GL.viewport GL.$= (GL.Position 0 0, GL.Size (fromIntegral w) (fromIntegral h))
-        GL.loadIdentity
-
-        case _fov c of
-            0 -> drawGame identity4 (invert view) (orthoMatrix 0 ratio 1 0 (-1) 1) resources debug scene
-            _ -> do
-                let invView = invert view
-                drawGame identity4 invView (perspMatrix (_fov c) ratio (_near c) (_far c)) resources debug scene
-                if debug then debugDrawDynamicTree t invView (perspMatrix (_fov c) ratio (_near c) (_far c)) resources else return ()
-
-        mapM_ (drawPostRenderFX (RGBA r g b a)) $ _fx c
-    where
-        drawPostRenderFX (RGB r g b) fx = drawPostRenderFX (RGBA r g b 1) fx
-        drawPostRenderFX (RGBA r g b a) fx = do
+        drawPostRenderFX fx = do
             glBindFramebuffer gl_FRAMEBUFFER 0
             GL.depthFunc     GL.$= Nothing
             GL.blend         GL.$= GL.Disabled
@@ -287,6 +283,39 @@ renderCameraG' (w,h) view c resources debug scene t = do
             GL.blend         GL.$= GL.Enabled
             GL.blendBuffer 0 GL.$= GL.Enabled
             GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
+
+cameraRender :: (Int, Int) -> Resources -> Camera -> Matrix4x4 -> S.Stream IO (Maybe GameObject) -> IO ()
+cameraRender (w,h) resources c view scene = case _fov c of
+    0 -> S.mapM_ (renderGameObject (invert view) (orthoMatrix 0 ratio 1 0 (-1) 1) resources) scene
+    _ -> S.mapM_ (renderGameObject (invert view) (perspMatrix (_fov c) ratio (_near c) (_far c)) resources) scene
+    where
+        ratio = fromIntegral w / fromIntegral h
+
+renderGameObject :: Matrix4x4 -> Matrix4x4 -> Resources -> (Maybe GameObject) -> IO ()
+renderGameObject _    _    _         Nothing  = return ()
+renderGameObject view proj resources (Just g) = case model g of
+    Just (Model m mat)                -> drawMeshWithMaterial mat m modelView proj resources
+    Just (FontRenderer text font mat) -> do
+        (fontTexture, fontMesh) <- renderFont text font resources
+        drawMeshWithMaterial (setEmptyTextures fontTexture mat) fontMesh modelView proj resources
+    _                                 -> return ()
+    where
+        modelView = view .*. transMat g
+
+renderWithCamera :: GLFW.Window -> Resources -> S.Stream IO (Maybe GameObject) -> (Matrix4x4, Camera) -> IO ()
+renderWithCamera window resources scene (view, c) = do
+    (w,h) <- GLFW.getWindowSize window
+
+    cameraPreRender  (w, h) resources c
+    cameraRender     (w, h) resources c view scene
+    cameraPostRender (w, h) resources c
+
+    GLFW.swapBuffers window
+
+
+----------------------
+-- / New Rendering
+----------------------
 
 renderCamerasG :: (Int,Int) -> Matrix4x4 -> GameObject -> Resources -> Bool -> DynamicTree -> GameObject -> IO ()
 renderCamerasG (w,h) view scene resources debug t g = renderCameraG (w,h) view scene resources debug g t >>= \newView -> mapM_ (renderCamerasG (w,h) newView scene resources debug t) (children g)
@@ -304,62 +333,6 @@ renderGraphicsG window resources debug scene _ t = do
     GLFW.swapBuffers window
     -- GLFW.pollEvents
     -- GL.flush
-
-runGame :: (Scene a, Binary a, Show a) => (World -> a -> a) -> a -> IO()
-runGame f inits = initWindow (1920, 1080) True >>= \mw -> case mw of
-    Nothing -> print "Error starting GLFW." >> return ()
-    Just w  -> do
-        putStrLn "Starting Necronomicon"
-
-        GLFW.setCursorInputMode w GLFW.CursorInputMode'Hidden
-
-        resources   <- mkResources
-        currentTime <- getCurrentTime
-        let world = mkWorld{runTime = currentTime}
-        renderNecronomicon False w resources inits empty world
-    where
-        renderNecronomicon quit window resources s tree world
-            | quit      = print "Qutting" >> return ()
-            | otherwise = do
-
-                GLFW.pollEvents
-                qKey <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'Escape
-                wKey <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'W
-                aKey <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'A
-                sKey <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'S
-                dKey <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'D
-                mb   <- (== GLFW.MouseButtonState'Pressed) <$> GLFW.getMouseButton window GLFW.MouseButton'1
-                (ww, wh) <- (\(wd, hd) -> (fromIntegral wd, fromIntegral hd)) <$> GLFW.getWindowSize window
-                mp       <- (\(cx, cy) -> ((cx - ww * 0.5) / ww, (cy - wh * 0.5) / wh)) <$> GLFW.getCursorPos window
-                currentTime <- getCurrentTime
-
-                GLFW.setCursorInputMode window GLFW.CursorInputMode'Hidden
-
-                let world' = world {
-                        deltaTime       = currentTime - runTime world,
-                        runTime         = currentTime,
-
-                        --Signal Style
-                        moveKeys        = (if aKey then -1 else 0 + if dKey then 1 else 0, if wKey then 1 else 0 + if sKey then -1 else 0),
-                        mouseIsDown     = mb,
-                        mousePosition   = mp,
-
-                        --Event Style
-                        moveKeysPressed = if moveKeys world /= moveKeys world' then Just (if aKey then -1 else 0 + if dKey then 1 else 0, if wKey then 1 else 0 + if sKey then -1 else 0) else Nothing,
-                        mouseClicked    = mb && not (mouseIsDown world),
-                        mouseMoved      = if mp /= mousePosition world then Just mp else Nothing
-                    }
-                    s'          = f world' s
-                    g           = gchildren_ (getGameObjects s' []) mkGameObject
-                    (g', tree') = update (g, tree)
-                    (s'', _)    = setGameObjects s' (children g')
-
-                GLFW.setCursorPos window (ww * 0.5) (wh * 0.5)
-                GLFW.setCursorInputMode window GLFW.CursorInputMode'Hidden
-
-                renderGraphicsG window resources True g' g' tree'
-                threadDelay $ 16667
-                renderNecronomicon qKey window resources s'' tree' world'
 
 -------------------------------------------------------
 -- Entity

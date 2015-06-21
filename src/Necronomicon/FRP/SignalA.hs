@@ -147,8 +147,9 @@ import           Data.STRef
 import qualified Graphics.UI.GLFW                  as GLFW
 import qualified Data.Vector                       as V
 import qualified Data.Vector.Mutable               as MV
+import qualified Data.Vector.Generic.Mutable       as GMV
 import qualified Data.IntMap                       as IntMap
-import qualified Data.IntSet                        as IntSet
+import qualified Data.IntSet                       as IntSet
 import           Data.Monoid
 import           Control.Applicative
 import           Control.Monad
@@ -352,11 +353,12 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
                 atomically   $ writeTChan eventInbox $ TimeEvent (Time delta) (Time currentTime)
 
                 -- (g, tree')  <- (\g -> update (g, tree)) . flip gchildren_ mkGameObject . MV.toList <~ readIORef (objectRef state)
-                gs   <- filterMap id . V.toList <~ (readIORef (objectRef state) >>= V.freeze)
-                let g = gchildren_ gs mkGameObject
-                renderGraphicsG window resources False g g tree
-                -- renderGraphicsG window resources True g g tree
-                -- return (Signal (prev s') (Change $ fst $ setGameObjects x (children g')) (next s'), tree')
+                -- gs   <- filterMap id . V.toList <~ (readIORef (objectRef state) >>= V.freeze)
+                -- let g = gchildren_ gs mkGameObject
+                -- renderGraphicsG window resources False g g tree
+                gstream <- GMV.mstream  <~ readIORef (objectRef state)
+                cs      <- readIORef (cameraRef state)
+                mapM_ (renderWithCamera window resources gstream) cs
 
                 threadDelay  $ 16667
                 run q window s currentTime resources tree eventInbox state
@@ -380,11 +382,14 @@ necro sig = Signal $ \state -> do
     (scont, s, uids) <- unSignal sig state
     return (cont scont state, s, uids)
     where
-        updateObjects r oref (gs, uids) g = case g of
-            GameObject{gid = (UID _), model = (Just (Model (Mesh        (Just _) _ _ _ _ _) (Material (Just _) _ _ _ _)))} ->     writeG oref g  >> return (g  : gs, uids)
-            GameObject{gid = (UID _), model = (Just (Model (DynamicMesh (Just _) _ _ _ _ _) (Material (Just _) _ _ _ _)))} ->     writeG oref g  >> return (g  : gs, uids)
-            GameObject{gid = New} -> loadNewModel r (model g) >>= \model' -> let g' = g{model = model', gid = UID (head uids)} in writeG oref g' >> return (g' : gs, tail uids)
-            _                     -> loadNewModel r (model g) >>= \model' -> let g' = g{model = model'}                        in writeG oref g' >> return (g' : gs, uids)
+        updateObjects r cref oref (gs, uids) g = case g of
+            GameObject{gid = (UID _), model = (Just (Model (Mesh        (Just _) _ _ _ _ _) (Material (Just _) _ _ _ _)))} ->     writeG oref g  >> writeCam (gid g)  (camera g)  >> return (g  : gs, uids)
+            GameObject{gid = (UID _), model = (Just (Model (DynamicMesh (Just _) _ _ _ _ _) (Material (Just _) _ _ _ _)))} ->     writeG oref g  >> writeCam (gid g)  (camera g)  >> return (g  : gs, uids)
+            GameObject{gid = New} -> loadNewModel r (model g) >>= \model' -> let g' = g{model = model', gid = UID (head uids)} in writeG oref g' >> writeCam (gid g') (camera g') >> return (g' : gs, tail uids)
+            _                     -> loadNewModel r (model g) >>= \model' -> let g' = g{model = model'}                        in writeG oref g' >> writeCam (gid g') (camera g') >> return (g' : gs, uids)
+            where
+                writeCam (UID uid) (Just c) = modifyIORef cref (IntMap.insert uid (transMat g, c))
+                writeCam _         _        = return ()
 
         writeG oref g = readIORef oref >>= \vec -> do
             let x | UID uid <- gid g, uid < MV.length vec = MV.unsafeWrite vec uid (Just g) >> writeIORef oref vec
@@ -399,7 +404,7 @@ necro sig = Signal $ \state -> do
         --maybe a map gameobject or modify, etc to make this faster?
         writeGS s state = do
             uids        <- readIORef $ uidRef state
-            (gs, uids') <- foldM (updateObjects (sigResources state) (objectRef state)) ([], uids) $ getGameObjects s []
+            (gs, uids') <- foldM (updateObjects (sigResources state) (cameraRef state) (objectRef state)) ([], uids) $ getGameObjects s []
             writeIORef (uidRef state) uids'
             return $ fst $ setGameObjects s gs
 
@@ -413,8 +418,9 @@ necro sig = Signal $ \state -> do
 
 --Need resources structure in here!
 data SignalState = SignalState
-                 { objectRef     :: IORef (MV.IOVector (Maybe GameObject))
+                 { objectRef     :: IORef (MV.IOVector (Maybe GameObject)) --Should this be some kind of hash table instead!?!??!?
                  , uidRef        :: IORef [Int]
+                 , cameraRef     :: IORef (IntMap.IntMap (Matrix4x4, Camera))
                  , runTimeRef    :: IORef Time
                  , deltaTimeRef  :: IORef Time
                  , mousePosRef   :: IORef (Double, Double)
@@ -427,6 +433,7 @@ mkSignalState :: (Double, Double) -> IO SignalState
 mkSignalState dims = SignalState
                   <~ (V.thaw (V.fromList (replicate 16 Nothing)) >>= newIORef)
                   ~~ newIORef [0..]
+                  ~~ newIORef IntMap.empty
                   ~~ newIORef 0
                   ~~ newIORef 0
                   ~~ newIORef (0, 0)
