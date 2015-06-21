@@ -21,8 +21,13 @@ infixl 0 +>
 --------------------------------------------------------------------------------------
 -- UGen
 --------------------------------------------------------------------------------------
+
+newtype MultiOutChannelNumber = MultiOutChannelNumber Int deriving (Eq, Show)
+newtype MultiOutNumChannels = MultiOutNumChannels Int deriving (Eq, Show)
+
 data UGenChannel = UGenNum Double
                  | UGenFunc UGenUnit CUGenFunc CUGenFunc CUGenFunc [UGenChannel]
+                 | MultiOutUGenFunc MultiOutNumChannels MultiOutChannelNumber UGenChannel
                  deriving (Eq)
 
 data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Env Double Double | Env2 Double Double | Out | AuxIn | Poll | LFSaw | LFPulse | Saw | Pulse
@@ -30,7 +35,7 @@ data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Env Double 
               | LPF | HPF | BPF | Notch | AllPass | PeakEQ | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int
               | Clip | SoftClip | Poly3 | TanHDist | SinDist | Wrap | DelayN Double | DelayL Double | DelayC Double | CombN Double | CombL Double | CombC Double
               | Negate | Crush | Decimate | FreeVerb | Pluck Double | WhiteNoise | Abs | Signum | Pow | Exp | Log | Cos | ASin | ACos | UMax | UMin
-              | ATan | LogBase | Sqrt | Tan | SinH | CosH | TanH | ASinH | ATanH | ACosH | TimeMicros | TimeSecs | USeq | Limiter Double
+              | ATan | LogBase | Sqrt | Tan | SinH | CosH | TanH | ASinH | ATanH | ACosH | TimeMicros | TimeSecs | USeq | Limiter Double | Pan
               deriving (Show, Eq, Ord)
 
 data UGenRate = ControlRate | AudioRate deriving (Show, Enum, Eq, Ord)
@@ -38,6 +43,7 @@ data UGenRate = ControlRate | AudioRate deriving (Show, Enum, Eq, Ord)
 instance Show UGenChannel where
     show (UGenNum d)           = show d
     show (UGenFunc u _ _ _ us) = "(" ++ (show u) ++ " (" ++ foldl (\acc ug -> acc ++ show ug ++ " ") " " us ++ "))"
+    show (MultiOutUGenFunc channelNum numUGenChannels ugenChannel) = "(MultiOutUGenFunc " ++ show channelNum ++ " " ++ show numUGenChannels ++ " " ++ show ugenChannel ++  ")"
 
 instance Num UGen where
     (+)           = add
@@ -109,6 +115,7 @@ incrementArgWithChannels :: Int -> UGen -> UGen
 incrementArgWithChannels incrementedArgIndex (UGen ugens) = UGen $ map (incrementUGenChannels) (zip ugens [0..])
     where
         incrementUGenChannels (n@(UGenNum _), _) = n
+        incrementUGenChannels (n@(MultiOutUGenFunc _ _ _), _) = n
         incrementUGenChannels (UGenFunc n f c d args, channelOffset) = UGenFunc n f c d . map incrementSelectedArg $ zip args [0..]
             where
                 incrementSelectedArg (u, argIndex) = if argIndex == incrementedArgIndex then increment u else u
@@ -134,6 +141,7 @@ polymorphicRateUGenUnits = S.fromList [
 
 ugenRate :: UGenChannel -> UGenRate
 ugenRate (UGenNum _) = ControlRate
+ugenRate (MultiOutUGenFunc _ _ u) = ugenRate u
 ugenRate (UGenFunc (Arg _) _ _ _ _) = ControlRate
 ugenRate (UGenFunc (Random _ _ _) _ _ _ _) = ControlRate
 ugenRate (UGenFunc USeq _ _ _ args) = ugenRate $ last args
@@ -146,6 +154,7 @@ ugenRate (UGenFunc unit _ _ _ args) = if isPolyRate then polyRate else AudioRate
 -- This is used to look up the correct calc function to use based on the rates of the ugen's arguments
 argsToCalcIndex :: UGenChannel -> Int
 argsToCalcIndex (UGenNum _) = 0
+argsToCalcIndex (MultiOutUGenFunc _ _ u) = argsToCalcIndex u
 argsToCalcIndex (UGenFunc _ _ _ _ args) = foldl (\acc (x,i) -> acc + (if x > 0 then 2 ^ i else 0)) 0 $ zip bitArgs indexes
     where
         bitArgs = map (fromEnum . ugenRate) args
@@ -156,6 +165,7 @@ argsToCalcIndex (UGenFunc _ _ _ _ args) = foldl (\acc (x,i) -> acc + (if x > 0 t
 chooseCalcFunc :: [CUGenFunc] -> UGenChannel -> UGenChannel
 chooseCalcFunc _ u@(UGenNum _) = u
 chooseCalcFunc [] u = u
+chooseCalcFunc cfuncs (MultiOutUGenFunc n c u) = MultiOutUGenFunc n c $ chooseCalcFunc cfuncs u
 chooseCalcFunc cfuncs u@(UGenFunc unit _ con dec args) = UGenFunc unit cfunc con dec args
     where
         cfunc = cfuncs !! (max 0 (min (max 0 ((length cfuncs) - 1)) $ argsToCalcIndex u))
@@ -166,6 +176,7 @@ optimizeUGenCalcFunc cfuncs u = mapUGenChannels (chooseCalcFunc cfuncs) u
 -- Choose a calc function for a ugen based on a specific argument
 selectRateByArg :: CUGenFunc -> CUGenFunc -> Int -> UGenChannel -> UGenChannel
 selectRateByArg _ _ _ u@(UGenNum _) = u
+selectRateByArg kCalc aCalc argIndex (MultiOutUGenFunc _ _ u) = selectRateByArg kCalc aCalc argIndex u
 selectRateByArg kCalc aCalc argIndex (UGenFunc unit _ con dec args) = UGenFunc unit cfunc con dec args
     where
         rate = ugenRate (args !! (max 0 (min (max 0 ((length args) - 1)) argIndex)))
@@ -1074,6 +1085,23 @@ limiter lookahead attack release threshold knee input = optimizeUGenCalcFunc cfu
 masterLimiter :: UGen -> UGen
 masterLimiter = limiter 0.01 0.01 0.03 (-18) 0.1
 
+foreign import ccall "&pan_kk_calc" panKKCalc :: CUGenFunc
+foreign import ccall "&pan_ak_calc" panAKCalc :: CUGenFunc
+foreign import ccall "&pan_ka_calc" panKACalc :: CUGenFunc
+foreign import ccall "&pan_aa_calc" panAACalc :: CUGenFunc
+
+panCFuncs :: [CUGenFunc]
+panCFuncs = [panKKCalc, panAKCalc, panKACalc, panAACalc]
+
+-- Pan takes a mono signal and expands to a stereo field
+-- Note: multichannel inputs are simply mixed down to mono then panned.
+pan :: UGen -> UGen -> UGen
+pan (UGen (pos:[])) (UGen (x:[])) = optimizeUGenCalcFunc panCFuncs . createMultiOutUGenFromChannel 2 $ UGenFunc Pan panAACalc nullConstructor nullDeconstructor [pos, x]
+pan pos x = pan (UGen [head mixedPos]) (UGen [head mixedX])
+    where
+        (UGen mixedPos) = mix pos
+        (UGen mixedX) = mix x
+
 dup :: UGen -> UGen
 dup u = u <> u
 
@@ -1291,6 +1319,9 @@ setWireIndex wire = Compiled (\c -> return ((), c { compiledWireIndex = wire }))
 nextWireIndex :: Compiled CUInt
 nextWireIndex = getWireIndex >>= \wire -> setWireIndex (wire + 1) >> return wire
 
+nextWireIndexes :: Int -> Compiled [CUInt]
+nextWireIndexes n = mapM (\_ -> nextWireIndex) [0..n]
+
 initializeWireBufs :: CUInt -> [CompiledConstant] -> IO (Ptr CDouble)
 initializeWireBufs numWires constants = {-print ("Wire Buffers: " ++ (show folded)) >> -} getJackBlockSize >>= \blockSize ->
     let wires = foldl (++) [] $ map (replicate (fromIntegral blockSize)) folded in newArray wires
@@ -1348,10 +1379,24 @@ compileUGenGraphBranch ug = do
 
 compileUGenArgs :: UGenChannel -> Compiled [CUInt]
 compileUGenArgs (UGenFunc _ _ _ _ inputs) = mapM (compileUGenGraphBranch) inputs
+compileUGenArgs (MultiOutUGenFunc _ _ ugenChannelFunc) = compileUGenArgs ugenChannelFunc
 compileUGenArgs (UGenNum _) = return []
 
 compileUGenWithConstructorArgs :: UGenChannel -> Ptr CDouble -> [CUInt] -> String -> Compiled CUInt
 compileUGenWithConstructorArgs num@(UGenNum _) _ args key = compileUGen num args key -- This should not be used, but definition here to satisy warning
+compileUGenWithConstructorArgs (MultiOutUGenFunc (MultiOutNumChannels numUGenChannels) (MultiOutChannelNumber channelNumber) ugenChannelFunc) conArgs args _ = do
+    inputs <- liftIO (newArray args)
+    let channelNumbers = [0 .. (numUGenChannels - 1)]
+    let genKey n = show (MultiOutUGenFunc (MultiOutNumChannels numUGenChannels) (MultiOutChannelNumber n) ugenChannelFunc)
+    wires <- mapM (\_ -> nextWireIndex) channelNumbers
+    wireBufs <- liftIO $ newArray wires
+    let mkCUGen (UGenFunc _ calc cons decn _) = (CUGen calc cons decn nullPtr conArgs inputs wireBufs (fromEnum AudioRate) 0)
+        mkCUGen _ = (CUGen nullFunPtr nullFunPtr nullFunPtr nullPtr conArgs inputs wireBufs (fromEnum AudioRate) 0)  -- should never be reached
+    ugenGraph <- getGraph
+    setGraph ((mkCUGen ugenChannelFunc) : ugenGraph) -- work back to front to use cons over ++, reversed at the very end in runCompileSynthDef
+    -- compiles and caches every channel of the MultiOutUGenFunc all at once
+    mapM_ (\(wire, wireChannelNumber) -> getTable >>= \outputTable -> setTable (M.insert (genKey wireChannelNumber) wire outputTable)) $ zip wires channelNumbers
+    return $ wires !! channelNumber
 compileUGenWithConstructorArgs (UGenFunc _ calc cons decn _) conArgs args key = do
     inputs <- liftIO (newArray args)
     wire <- nextWireIndex
@@ -1359,7 +1404,6 @@ compileUGenWithConstructorArgs (UGenFunc _ calc cons decn _) conArgs args key = 
     addUGen key (CUGen calc cons decn nullPtr conArgs inputs wireBuf (fromEnum AudioRate) 0) wire
     return wire
 
--- To Do: Add multi-out ugen support
 compileUGen :: UGenChannel -> [CUInt] -> String -> Compiled CUInt
 compileUGen (UGenFunc (LocalIn feedBus) _ _ _ _) _ _ = do
     wire <- getOrAddCompiledFeedWire feedBus
@@ -1459,10 +1503,15 @@ mapUGenChannels f (UGen us) = UGen <| map f us
 numChannels :: UGen -> Int
 numChannels (UGen us) = length us
 
-pan :: UGen -> UGen -> UGen
-pan a (UGen (u1:u2:us)) = (UGen [u1] * a + UGen [u2] * (1 - a)) <> (UGen [u1] * (1 - a) + UGen [u2] * a) <> UGen us
-pan a (UGen (u:us))     = (UGen [u] * (1 - a)) <> (UGen [u] * a) <> UGen us
-pan _ us                = us
+createMultiOutUGenFromChannel :: Int -> UGenChannel -> UGen
+createMultiOutUGenFromChannel numUGenChannels ugenChannelFunc = UGen $ map createChannel [0 .. (numUGenChannels - 1)]
+    where
+        createChannel channelNumber = MultiOutUGenFunc (MultiOutNumChannels numUGenChannels) (MultiOutChannelNumber channelNumber) ugenChannelFunc
+
+fakepan :: UGen -> UGen -> UGen
+fakepan a (UGen (u1:u2:us)) = (UGen [u1] * a + UGen [u2] * (1 - a)) <> (UGen [u1] * (1 - a) + UGen [u2] * a) <> UGen us
+fakepan a (UGen (u:us))     = (UGen [u] * (1 - a)) <> (UGen [u] * a) <> UGen us
+fakepan _ us                = us
 
 mix :: UGen -> UGen
 mix (UGen us) = sum $ map (\u -> UGen [u]) us
