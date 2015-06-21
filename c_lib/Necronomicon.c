@@ -47,6 +47,8 @@ typedef enum { false, true } bool;
 
 const double TWO_PI = M_PI * 2;
 const double RECIP_TWO_PI =  1.0 / (M_PI * 2);
+const double HALF_PI = M_PI * 0.5;
+const double QUARTER_PI = M_PI * 0.25;
 unsigned int DOUBLE_SIZE = sizeof(double);
 unsigned int UINT_SIZE = sizeof(unsigned int);
 
@@ -60,6 +62,13 @@ double cosn_table[TABLE_SIZE];
 double sinh_table[TABLE_SIZE];
 double atan_table[TABLE_SIZE];
 double tanh_table[TABLE_SIZE];
+
+#define PAN_TABLE_SIZE 4096
+#define PAN_TABLE_SIZE_MASK 4095
+double PAN_RECIP_TABLE_SIZE = 1.0 / (double) TABLE_SIZE;
+unsigned int PAN_HALF_TABLE_SIZE = PAN_TABLE_SIZE / 2;
+unsigned int PAN_QUATER_TABLE_SIZE = PAN_TABLE_SIZE / 4;
+double pan_table[PAN_TABLE_SIZE];
 
 double SAMPLE_RATE = 44100;
 double RECIP_SAMPLE_RATE = 1.0 / 44100.0;
@@ -620,6 +629,11 @@ void initialize_wave_tables()
 		sinh_table[i] = sinh(TWO_PI * (((double) i) / ((double) TABLE_SIZE)));
 		atan_table[i] = atan(TWO_PI * (((double) i) / ((double) TABLE_SIZE)));
 		tanh_table[i] = tanh(TWO_PI * (((double) i) / ((double) TABLE_SIZE)));
+	}
+
+	for (i = 0; i < PAN_TABLE_SIZE; ++i)
+	{
+		pan_table[i] = (cos(TWO_PI * (((double) i) / ((double) PAN_TABLE_SIZE))) + 1) * 0.5;
 	}
 
 	// Needed to initialize minblep table.
@@ -8747,8 +8761,8 @@ double* in1 = UGEN_INPUT_BUFFER(u, 1);      	\
 double* out0 = UGEN_OUTPUT_BUFFER(u, 0);		\
 double* out1 = UGEN_OUTPUT_BUFFER(u, 1);		\
 double x, delta, pos, ampL, ampR;           	\
-unsigned char index1, index2;					\
-double sin1, sin2, cos1, cos2;					\
+unsigned int index1, index2;					\
+double cos1, cos2, cos3, cos4;					\
 CONTROL_ARGS                                	\
 AUDIO_LOOP(                                 	\
     AUDIO_ARGS                              	\
@@ -8758,16 +8772,11 @@ AUDIO_LOOP(                                 	\
 
 /* range is assumed to be -1 to 1 */
 #define PAN_CALC_LR_AMPS						\
-pos = (pos + 1) * (double) QUATER_TABLE_SIZE;	\
+pos = (pos + 1) * (double) PAN_HALF_TABLE_SIZE;	\
 index1 = pos;									\
-index2 = index1 + 1;							\
-sin1 = sine_table[index1];						\
-sin2 = sine_table[index2];						\
-cos1 = cosn_table[index1];						\
-cos2 = cosn_table[index2];						\
-delta = pos - ((long) pos);						\
-ampL = LERP(cos1, cos2, delta);       			\
-ampR = LERP(sin2, sin2, delta);
+index2 = pos + PAN_HALF_TABLE_SIZE;				\
+ampL = pan_table[index1 & PAN_TABLE_SIZE_MASK];	\
+ampR = pan_table[index2 & PAN_TABLE_SIZE_MASK];
 
 #define PAN_POSK pos = *in0; PAN_CALC_LR_AMPS
 #define PAN_POSA pos = UGEN_IN(in0); PAN_CALC_LR_AMPS
