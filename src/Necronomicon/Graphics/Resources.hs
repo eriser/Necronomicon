@@ -1,17 +1,16 @@
 module Necronomicon.Graphics.Resources where
 
+import Necronomicon.Graphics.BufferObject
 import Necronomicon.Linear
 import Necronomicon.Graphics.Shader
 import Necronomicon.Graphics.Texture
 import Necronomicon.Graphics.Color
 import Data.IORef
+import Data.Binary
+import Foreign.Storable                   (sizeOf)
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Data.IntMap               as IntMap
 import qualified Data.Map                  as Map
--- import qualified Data.Vector               as V
--- import qualified Data.Vector.Mutable       as MV
-
-import Data.Binary
 
 --Need To add a resources module that sits on top of model, mkMesh, texture, etc in hierarchy
 data UID             = UID Int | New                                                             deriving (Show, Eq)
@@ -194,62 +193,78 @@ instance Binary Material where
             pmi 0 = GL.Lines
             pmi _ = GL.Triangles
 
--------------------------------------------------------------
--- Old System
--------------------------------------------------------------
 
-{-
-data Model = Model        Mesh   Material
-           | FontRenderer String Font (Texture -> Material)
-           deriving (Show)
+------------------------------
+-- Loading Resources
+------------------------------
 
-instance Show (Texture -> Material) where
-    show _ = "TextureFunction"
+getShader :: Resources -> Shader -> IO LoadedShader
+getShader resources sh = readIORef (shadersRef resources) >>= \shaders ->
+    case IntMap.lookup (key sh) shaders of
+        Nothing           -> loadShader sh >>= \loadedShader -> (writeIORef (shadersRef resources) $ IntMap.insert (key sh) loadedShader shaders) >> return loadedShader
+        Just loadedShader -> return loadedShader
 
-data Mesh  = Mesh        String                          [Vector3] [Color] [Vector2] [Int]
-           | DynamicMesh String                          [Vector3] [Color] [Vector2] [Int]
-           deriving (Show)
+getMesh :: Resources -> Mesh -> IO LoadedMesh
+getMesh _       (Mesh (Just m) _ _ _ _ _) = return m
+getMesh resources m@(Mesh _ mKey _ _ _ _) = readIORef (meshesRef resources) >>= \mkMeshes -> case Map.lookup mKey mkMeshes of
+    Nothing         -> loadMesh m >>= \loadedMesh -> (writeIORef (meshesRef resources) $ Map.insert mKey loadedMesh mkMeshes) >> return loadedMesh
+    Just loadedMesh -> return loadedMesh
+getMesh _       (DynamicMesh (Just m) _ _ _ _ _) = return m
+getMesh resources m@(DynamicMesh _ mKey v c u i) = readIORef (meshesRef resources) >>= \mkMeshes -> case Map.lookup mKey mkMeshes of
+    Nothing              -> loadMesh m >>= \loadedMesh@(vbuf,ibuf,_,_) -> (writeIORef (meshesRef resources) (Map.insert mKey loadedMesh mkMeshes)) >> dynamicDrawMesh vbuf ibuf v c u i
+    Just (vbuf,ibuf,_,_) -> dynamicDrawMesh vbuf ibuf v c u i
 
+loadMesh :: Mesh -> IO LoadedMesh
+loadMesh (Mesh _ _ vertices colors uvs indices) = do
+    vertexBuffer  <- makeBuffer GL.ArrayBuffer        (map realToFrac (posColorUV vertices colors uvs) :: [GL.GLfloat])
+    indexBuffer   <- makeBuffer GL.ElementArrayBuffer (map fromIntegral indices :: [GL.GLuint])
+    return (vertexBuffer,indexBuffer,length indices,vadPosColorUV)
+loadMesh (DynamicMesh _ _ _ _ _ _) = do
+    vertexBuffer:_ <- GL.genObjectNames 1
+    indexBuffer :_ <- GL.genObjectNames 1
+    return (vertexBuffer,indexBuffer,0,[])
 
-newtype Material = Material {drawMeshWithMaterial :: (Mesh -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ())}
+dynamicDrawMesh :: GL.BufferObject -> GL.BufferObject -> [Vector3] -> [Color] -> [Vector2] -> [Int] -> IO LoadedMesh
+dynamicDrawMesh vBuf iBuf vertices colors uvs indices = do
+    vertexBuffer  <- makeDynamicBuffer vBuf GL.ArrayBuffer        (map realToFrac (posColorUV vertices colors uvs) :: [GL.GLfloat])
+    indexBuffer   <- makeDynamicBuffer iBuf GL.ElementArrayBuffer (map fromIntegral indices :: [GL.GLuint])
+    return (vertexBuffer,indexBuffer,length indices,vadPosColorUV)
 
-instance Show Material where
-    show _ = "Material"
+vadPosColorUV :: [GL.VertexArrayDescriptor GL.GLfloat]
+vadPosColorUV = [vertexVad,colorVad,uvVad]
+    where
+        vertexVad  = GL.VertexArrayDescriptor 3 GL.Float (fromIntegral $ sizeOf (undefined::GL.GLfloat) * 8) offset0
+        colorVad   = GL.VertexArrayDescriptor 3 GL.Float (fromIntegral $ sizeOf (undefined::GL.GLfloat) * 8) (offsetPtr $ sizeOf (undefined :: GL.GLfloat) * 3)
+        uvVad      = GL.VertexArrayDescriptor 2 GL.Float (fromIntegral $ sizeOf (undefined::GL.GLfloat) * 8) (offsetPtr $ sizeOf (undefined :: GL.GLfloat) * 6)
 
+posColorUV :: [Vector3] -> [Color] -> [Vector2] -> [Double]
+posColorUV [] _ _ = []
+posColorUV _ [] _ = []
+posColorUV _ _ [] = []
+posColorUV (Vector3 x y z : vs) (RGB  r g b   : cs) (Vector2 u v : uvs) = x : y : z : r : g : b : u : v : posColorUV vs cs uvs
+posColorUV (Vector3 x y z : vs) (RGBA r g b _ : cs) (Vector2 u v : uvs) = x : y : z : r : g : b : u : v : posColorUV vs cs uvs
 
-data PostRenderingFX = PostRenderingFX String (Texture -> Material) deriving (Show)
+loadNewModel :: Resources -> Maybe Model -> IO (Maybe Model)
+loadNewModel r   (Just (Model me ma)) = do
+    me' <- loadNewMesh r me
+    ma' <- loadNewMat  r ma
+    return . Just $ Model me' ma'
+loadNewModel _ m = return m
 
-instance Show ((Double,Double) -> Material) where
-    show _ = "((Double,Double) -> Material)"
+loadNewMesh :: Resources -> Mesh -> IO Mesh
+loadNewMesh r m@(Mesh        Nothing n vs cs us is) = getMesh r m >>= \lm -> return (Mesh        (Just lm) n vs cs us is)
+loadNewMesh r m@(DynamicMesh Nothing n vs cs us is) = getMesh r m >>= \lm -> return (DynamicMesh (Just lm) n vs cs us is)
+loadNewMesh _ m                                     = return m
 
-data LoadedPostRenderingFX = LoadedPostRenderingFX {
-    postRenderName        :: String,
-    postRenderMaterial    :: (Texture -> Material),
-    postRenderDimensions  :: (Double,Double),
-    postRenderTex         :: GL.GLuint,
-    postRenderRBO         :: GL.GLuint,
-    postRenderFBO         :: GL.GLuint,
-    status                :: GL.GLenum
-    }
-
-data Resources  = Resources {
-    shadersRef            :: IORef (IntMap.IntMap LoadedShader),
-    texturesRef           :: IORef (Map.Map String GL.TextureObject),
-    meshesRef             :: IORef (Map.Map String LoadedMesh),
-    fontsRef              :: IORef (Map.Map String LoadedFont),
-    postRenderRef         :: IORef (Map.Map String LoadedPostRenderingFX)
-    }
-
-instance Show Resources where
-    show _ = "Resources"
-
-mkResources :: IO Resources
-mkResources = do
-    smap <- newIORef IntMap.empty
-    tmap <- newIORef Map.empty
-    mmap <- newIORef Map.empty
-    mapf <- newIORef Map.empty
-    pmap <- newIORef Map.empty
-    return $ Resources smap tmap mmap mapf pmap
-
--}
+loadNewMat :: Resources -> Material -> IO Material
+loadNewMat r (Material Nothing vs fs us pr) = do
+    sh' <- getShader r sh
+    return $ Material (Just sh') vs fs us pr
+    where
+        sh = shader
+            (vs ++ " + " ++ fs) --Replace with UIDs
+            ("modelView" : "proj" : map uniformName us)
+            ["position","in_color","in_uv"]
+            (loadVertexShader   vs)
+            (loadFragmentShader fs)
+loadNewMat _ m = return m

@@ -45,7 +45,9 @@ mkBullet p = Entity b g
           , model    = Just <| Model cube <| vertexColored white }
 
 initBullets :: [Entity Bullet]
-initBullets = [mkBullet <| Vector3 (-2) 0 0, mkBullet <| Vector3 0 0 0, mkBullet <| Vector3 2 0 0]
+-- initBullets = [mkBullet <| Vector3 (-2) 0 0, mkBullet <| Vector3 0 0 0, mkBullet <| Vector3 2 0 0]
+initBullets = concat <| replicate 100 [mkBullet <| Vector3 (-2) 0 0, mkBullet <| Vector3 0 0 0, mkBullet <| Vector3 2 0 0]
+-- ^^^Test case
 
 megaDark :: Signal ()
 megaDark = hero *> bullets *> pure ()
@@ -67,8 +69,8 @@ updateHero (HeroMouse (mx, my)) h@(Entity (Hero state health (px, py)) g)
     | HeroMoving _ <- state = h'
     | otherwise             = h
     where
-        x = floatRem 360   <| px + mx * 80
-        y = clamp (-90) 90 <| py + my * 80
+        x  = floatRem 360   <| px + mx * 80
+        y  = clamp (-90) 90 <| py + my * 80
         h' = Entity (Hero state health (x, y)) g{rot = fromEuler 0 (-x) 0 * fromEuler (-y) 0 0}
 
 updateHero (HeroKeys (x, y)) h@(Entity (Hero state health fpr) g)
@@ -79,7 +81,7 @@ updateHero (HeroKeys (x, y)) h@(Entity (Hero state health fpr) g)
         h' = Entity (Hero (HeroMoving <| Vector3 x 0 (-y)) health fpr) g
 
 updateHero (HeroTick (dt, rt)) h@(Entity (Hero state health fpr) g)
-    | HeroMoving    p <- state         = Entity (Hero state health fpr) <| translate (p * realToFrac dt * 1.25) g
+    | HeroMoving    p <- state         = Entity (Hero state    health fpr) <| translate (p * realToFrac dt * 1.25) g
     | HeroAttacking t <- state, rt > t = Entity (Hero HeroIdle health fpr) g
     | HeroDamaged   t <- state, rt > t = Entity (Hero HeroIdle health fpr) g
     | otherwise                        = h

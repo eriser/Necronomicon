@@ -44,15 +44,16 @@ instance Show Shader where
 -- loadShader shaderType filePath = BS.readFile filePath >>= loadShaderBS filePath shaderType
 
 loadShaderBS :: FilePath -> GL.ShaderType -> BS.ByteString -> IO GL.Shader
-loadShaderBS filePath shaderType src = do
+loadShaderBS _ shaderType src = do
     newShader <- GL.createShader shaderType
     GL.shaderSourceBS newShader GL.$= src
     GL.compileShader  newShader
     printError
-    ok      <- GL.get (GL.compileStatus newShader)
-    infoLog <- GL.get (GL.shaderInfoLog newShader)
-    unless (null infoLog)
-        (mapM_ putStrLn ["Shader info log for '" ++ filePath ++ "':", infoLog, ""])
+    ok <- GL.get (GL.compileStatus newShader)
+    _  <- GL.get (GL.shaderInfoLog newShader)
+    -- infoLog <- GL.get (GL.shaderInfoLog newShader)
+    -- unless (null infoLog)
+        -- (mapM_ putStrLn ["Shader info log for '" ++ filePath ++ "':", infoLog, ""])
     unless ok $ do
         GL.deleteObjectName newShader
         ioError (userError "shader compilation failed")
@@ -63,7 +64,7 @@ loadVertexShader path = VertexShader load
    where
        load = do
            resources <- getDataFileName ""
-           putStrLn $ "loadVertexShader: " ++ path
+        --    putStrLn $ "loadVertexShader: " ++ path
            shaderPath <- BS.readFile $ resources ++ "shaders/" ++ path
            loadShaderBS path GL.VertexShader shaderPath
 
@@ -71,7 +72,7 @@ loadFragmentShader :: FilePath -> FragmentShader
 loadFragmentShader path = FragmentShader load
     where
         load = do
-            putStrLn $ "loadFragmentShader: " ++ path
+            -- putStrLn $ "loadFragmentShader: " ++ path
             resources <- getDataFileName ""
             shaderPath <- BS.readFile $ resources ++ "shaders/" ++ path
             loadShaderBS path GL.FragmentShader shaderPath
@@ -101,7 +102,7 @@ getValueName s = lookupValueName s >>= return . fromMaybe (mkName s)
 
 shader :: String -> [String] -> [String] -> VertexShader -> FragmentShader -> Shader
 shader shaderName uniformNames attributeNames vs fs = Shader (hash shaderName) $ do
-    putStrLn $ "Compiling shader: " ++ shaderName
+    -- putStrLn $ "Compiling shader: " ++ shaderName
 
     program <- GL.createProgram
     vs'     <- unVertexShader   vs

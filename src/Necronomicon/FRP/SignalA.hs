@@ -147,8 +147,9 @@ import           Data.STRef
 import qualified Graphics.UI.GLFW                  as GLFW
 import qualified Data.Vector                       as V
 import qualified Data.Vector.Mutable               as MV
+import qualified Data.Vector.Generic.Mutable       as GMV
 import qualified Data.IntMap                       as IntMap
-import qualified Data.IntSet                        as IntSet
+import qualified Data.IntSet                       as IntSet
 import           Data.Monoid
 import           Control.Applicative
 import           Control.Monad
@@ -342,7 +343,7 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
         run False w scont currentTime resources DynTree.empty eventInbox state
     where
         run quit window s runTime' resources tree eventInbox state
-            | quit      = print "Qutting" >> return ()
+            | quit      = putStrLn "Qutting Necronomicon" >> return ()
             | otherwise = do
                 GLFW.pollEvents
                 q           <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'Escape
@@ -351,12 +352,13 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
                 let delta    = currentTime - runTime'
                 atomically   $ writeTChan eventInbox $ TimeEvent (Time delta) (Time currentTime)
 
-                --Need to redo the resources system. It is....not efficient as is.
                 -- (g, tree')  <- (\g -> update (g, tree)) . flip gchildren_ mkGameObject . MV.toList <~ readIORef (objectRef state)
-                gs   <- filterMap id . V.toList <~ (readIORef (objectRef state) >>= V.freeze)
-                let g = gchildren_ gs mkGameObject
-                renderGraphicsG window resources True g g tree
-                -- return (Signal (prev s') (Change $ fst $ setGameObjects x (children g')) (next s'), tree')
+                -- gs   <- filterMap id . V.toList <~ (readIORef (objectRef state) >>= V.freeze)
+                -- let g = gchildren_ gs mkGameObject
+                -- renderGraphicsG window resources False g g tree
+                gstream <- GMV.mstream  <~ readIORef (objectRef state)
+                cs      <- readIORef (cameraRef state)
+                mapM_ (renderWithCamera window resources gstream) cs
 
                 threadDelay  $ 16667
                 run q window s currentTime resources tree eventInbox state
@@ -374,29 +376,35 @@ processEvents sig ss inbox = forever $ atomically (readTChan inbox) >>= \e -> ca
 
 --Perhaps instead of a vector of maybes it instead a pooling system
 --With a free list and an assigned list
+--Need to set up system to reclaim unused blocks
 necro :: Scene a => Signal a -> Signal a
 necro sig = Signal $ \state -> do
     (scont, s, uids) <- unSignal sig state
-    -- s'               <- writeGS s state
     return (cont scont state, s, uids)
     where
-        setNewUIDS g@GameObject{gid = New} (gs, uid : uids) = (g{gid = UID uid} : gs, uids)
-        setNewUIDS g (gs, uids) = (g : gs, uids)
+        updateObjects r cref oref (gs, uids) g = case g of
+            GameObject{gid = (UID _), model = (Just (Model (Mesh        (Just _) _ _ _ _ _) (Material (Just _) _ _ _ _)))} ->     writeG oref g  >> writeCam (gid g)  (camera g)  >> return (g  : gs, uids)
+            GameObject{gid = (UID _), model = (Just (Model (DynamicMesh (Just _) _ _ _ _ _) (Material (Just _) _ _ _ _)))} ->     writeG oref g  >> writeCam (gid g)  (camera g)  >> return (g  : gs, uids)
+            GameObject{gid = New} -> loadNewModel r (model g) >>= \model' -> let g' = g{model = model', gid = UID (head uids)} in writeG oref g' >> writeCam (gid g') (camera g') >> return (g' : gs, tail uids)
+            _                     -> loadNewModel r (model g) >>= \model' -> let g' = g{model = model'}                        in writeG oref g' >> writeCam (gid g') (camera g') >> return (g' : gs, uids)
+            where
+                writeCam (UID uid) (Just c) = modifyIORef cref (IntMap.insert uid (transMat g, c))
+                writeCam _         _        = return ()
 
-        writeG state g = readIORef (objectRef state) >>= \vec -> do
-            let x | UID uid <- gid g, uid < MV.length vec = MV.unsafeWrite vec uid (Just g) >> writeIORef (objectRef state) vec
+        writeG oref g = readIORef oref >>= \vec -> do
+            let x | UID uid <- gid g, uid < MV.length vec = MV.unsafeWrite vec uid (Just g) >> writeIORef oref vec
                   | UID uid <- gid g                      = do
                       vec' <- MV.unsafeGrow vec (MV.length vec)
                       mapM_ (\i -> MV.unsafeWrite vec' i Nothing) [uid..MV.length vec' - 1]
                       MV.unsafeWrite vec' uid (Just g)
-                      writeIORef (objectRef state) vec'
+                      writeIORef oref vec'
                   | otherwise = print "Error: GameObject without a UID found in necro update" >> return ()
             x
 
+        --maybe a map gameobject or modify, etc to make this faster?
         writeGS s state = do
-            uids           <- readIORef $ uidRef state
-            let (gs, uids') = foldr setNewUIDS ([], uids) $ getGameObjects s []
-            mapM_ (writeG state) gs
+            uids        <- readIORef $ uidRef state
+            (gs, uids') <- foldM (updateObjects (sigResources state) (cameraRef state) (objectRef state)) ([], uids) $ getGameObjects s []
             writeIORef (uidRef state) uids'
             return $ fst $ setGameObjects s gs
 
@@ -408,26 +416,31 @@ necro sig = Signal $ \state -> do
 -- Input
 ----------------------------------
 
+--Need resources structure in here!
 data SignalState = SignalState
-                 { objectRef     :: IORef (MV.IOVector (Maybe GameObject))
+                 { objectRef     :: IORef (MV.IOVector (Maybe GameObject)) --Should this be some kind of hash table instead!?!??!?
                  , uidRef        :: IORef [Int]
+                 , cameraRef     :: IORef (IntMap.IntMap (Matrix4x4, Camera))
                  , runTimeRef    :: IORef Time
                  , deltaTimeRef  :: IORef Time
                  , mousePosRef   :: IORef (Double, Double)
                  , mouseClickRef :: IORef Bool
                  , keyboardRef   :: IORef (IntMap.IntMap Bool)
-                 , dimensionsRef :: IORef (Double, Double) }
+                 , dimensionsRef :: IORef (Double, Double)
+                 , sigResources  :: Resources }
 
 mkSignalState :: (Double, Double) -> IO SignalState
 mkSignalState dims = SignalState
                   <~ (V.thaw (V.fromList (replicate 16 Nothing)) >>= newIORef)
                   ~~ newIORef [0..]
+                  ~~ newIORef IntMap.empty
                   ~~ newIORef 0
                   ~~ newIORef 0
                   ~~ newIORef (0, 0)
                   ~~ newIORef False
                   ~~ newIORef IntMap.empty
                   ~~ newIORef dims
+                  ~~ mkResources
 
 data InputEvent = TimeEvent        Time Time
                 | MouseEvent      (Double, Double)
