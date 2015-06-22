@@ -49,7 +49,7 @@ panSynth :: UGen -> UGen
 panSynth panPos = sin 440 |> gain 0.2 |> pan (lag 0.1 panPos) |> out 0
 
 pinkSynth :: UGen
-pinkSynth = pink |> gain 0.3 |> dup |> out 0
+pinkSynth = pinkNoise |> gain 0.3 |> dup |> out 0
 
 main :: IO ()
 main = runSignal

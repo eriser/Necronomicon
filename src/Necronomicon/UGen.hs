@@ -998,8 +998,8 @@ foreign import ccall "&pink_constructor" pinkConstructor :: CUGenFunc
 foreign import ccall "&pink_deconstructor" pinkDeconstructor :: CUGenFunc
 foreign import ccall "&pink_calc" pinkCalc :: CUGenFunc
 
-pink :: UGen
-pink = UGen [UGenFunc PinkNoise pinkCalc pinkConstructor pinkDeconstructor []]
+pinkNoise :: UGen
+pinkNoise = UGen [UGenFunc PinkNoise pinkCalc pinkConstructor pinkDeconstructor []]
 
 foreign import ccall "&freeverb_constructor" freeverbConstructor :: CUGenFunc
 foreign import ccall "&freeverb_deconstructor" freeverbDeconstructor :: CUGenFunc
