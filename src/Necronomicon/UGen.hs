@@ -34,7 +34,7 @@ data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Env Double 
               | SyncSaw | SyncPulse | SyncOsc | Random Double Double Double | NoiseN | NoiseL | NoiseC | Dust | Dust2 | Impulse | Range | ExpRange
               | LPF | HPF | BPF | Notch | AllPass | PeakEQ | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int
               | Clip | SoftClip | Poly3 | TanHDist | SinDist | Wrap | DelayN Double | DelayL Double | DelayC Double | CombN Double | CombL Double | CombC Double
-              | Negate | Crush | Decimate | FreeVerb | Pluck Double | WhiteNoise | Abs | Signum | Pow | Exp | Log | Cos | ASin | ACos | UMax | UMin
+              | Negate | Crush | Decimate | FreeVerb | Pluck Double | WhiteNoise | PinkNoise | Abs | Signum | Pow | Exp | Log | Cos | ASin | ACos | UMax | UMin
               | ATan | LogBase | Sqrt | Tan | SinH | CosH | TanH | ASinH | ATanH | ACosH | TimeMicros | TimeSecs | USeq | Limiter Double | Pan
               deriving (Show, Eq, Ord)
 
@@ -993,6 +993,13 @@ pluck minFreq freq duration x = optimizeUGenCalcFunc cfuncs $ multiChannelExpand
 foreign import ccall "&white_calc" whiteCalc :: CUGenFunc
 whiteNoise :: UGen
 whiteNoise = UGen [UGenFunc WhiteNoise whiteCalc nullConstructor nullDeconstructor []]
+
+foreign import ccall "&pink_constructor" pinkConstructor :: CUGenFunc
+foreign import ccall "&pink_deconstructor" pinkDeconstructor :: CUGenFunc
+foreign import ccall "&pink_calc" pinkCalc :: CUGenFunc
+
+pink :: UGen
+pink = UGen [UGenFunc PinkNoise pinkCalc pinkConstructor pinkDeconstructor []]
 
 foreign import ccall "&freeverb_constructor" freeverbConstructor :: CUGenFunc
 foreign import ccall "&freeverb_deconstructor" freeverbDeconstructor :: CUGenFunc

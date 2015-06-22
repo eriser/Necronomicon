@@ -1,7 +1,58 @@
 /*
-  Necronomicon
-  Copyright 2014-2015 Chad McKinney and Curtis McKinney
+	Necronomicon
+  	Copyright 2014-2015 Chad McKinney and Curtis McKinney
+
+	To Do:
+
+	break up code into several files
+	optimize all sin and cos usage using LUTs
+	increate LUT size from unsigned char to unsigned short
+	remove calc rate from ugen struct, it's not being used, nor do I predict that it will be
+
+	Various Noise ugens
+		Brown
+		Grey
+		Black
+		Blue
+		Violet
+		clip
+		1/f noise
+		burst noise
+
+	Decay
+	Pitch Shift
+	Freq Shift
+	Compressor/Expander
+	Chorus/Flanger/Phaser
+	Trigger UGens
+	Sample Playback / Buffer UGens
+	Correct Groups implementation
+	Wave Shaper
+	Wave Tables
+	Pitch Detection
+	Zero Crossing
+	YiG Gens
+	Wave Terrain (3D Wave terrain? 1D Wave Terrain? 4D? ND?)
+	basic filters (One pole, two pole, zero, HZPF, integrator)
+	demand style ugens (seq, etc...)
+
+	Granular synthesis
+	Concatenative Synthesis
+	Scanned synthesis
+	Wavelets
+	Fractal UGens
+	Cellular Automata
+	Flocking -- grains?
+	FFT
+	Formant
+	Drum Modelling
+
+	HRTF
+	Ambisonics?
 */
+
+#ifndef NECRONOMICON_H_INCLUDED
+#define NECRONOMICON_H_INCLUDED
 
 #include <stdio.h>
 #include <assert.h>
@@ -19,6 +70,7 @@
 #include <sndfile.h>
 
 #include "Necronomicon.h"
+#include "Necronomicon/Endian.h"
 
 unsigned int next_power_of_two(unsigned int v)
 {
@@ -85,7 +137,23 @@ typedef union
 {
 	unsigned char bytes[4];
 	unsigned int word;
+	float f;
 } four_bytes;
+
+typedef union
+{
+	unsigned char bytes[8];
+	double d;
+	unsigned long ul;
+	struct
+	{
+#if BYTE_ORDER == BIG_ENDIAN
+		unsigned int high, low;
+#else
+		unsigned int low, high;
+#endif
+	} l;
+} eight_bytes;
 
 // FNV1-a hash function
 const unsigned long PRIME = 0x01000193; // 16777619
@@ -4783,7 +4851,32 @@ void syncosc_aaaa_calc(ugen u)
 // Randomness
 //==========================================
 
-#define RAND_RANGE(MIN,MAX) ( ((double)random() / (double) RAND_MAX) * (MAX - MIN) + MIN )
+static inline unsigned int xorshift128()
+{
+	static unsigned int xor_x = 1243598713U;
+	static unsigned int xor_y = 3093459404U;
+	static unsigned int xor_z = 1821928721U;
+	static unsigned int xor_w = 1791912391U;
+
+	unsigned int t = xor_x ^ (xor_x << 11);
+	xor_x = xor_y; xor_y = xor_z; xor_z = xor_w;
+    return xor_w = xor_w ^ (xor_w >> 19) ^ t ^ (t >> 8);
+}
+
+static inline unsigned int trand()
+{
+	static unsigned int s1 = 1243598713U;
+	static unsigned int s2 = 3093459404U;
+	static unsigned int s3 = 1821928721U;
+	// static unsigned int seed = 1791912391U;
+
+	s1 = ((s1 & (unsigned int) - 2)  << 12) ^ (((s1 << 13) ^  s1) >> 19);
+	s2 = ((s2 & (unsigned int) - 8)  <<  4) ^ (((s2 <<  2) ^  s2) >> 25);
+	s3 = ((s3 & (unsigned int) - 16) << 17) ^ (((s3 <<  3) ^  s3) >> 11);
+	return s1 ^ s2 ^ s3;
+}
+
+#define RAND_RANGE(MIN,MAX) ( ((double) random() / (double) RAND_MAX) * (MAX - MIN) + MIN )
 
 typedef struct
 {
@@ -9009,6 +9102,65 @@ void white_calc(ugen u)
 	);
 }
 
+#define DICE_SIZE 16
+#define DICE_MASK 15
+#define DICE_SHIFT 13
+
+typedef struct
+{
+	unsigned int* dice;
+	int total;
+} pink_data;
+
+void pink_constructor(ugen* u)
+{
+	u->data = malloc(sizeof(pink_data));
+	unsigned int* dice = malloc(DICE_SIZE * sizeof(unsigned int));
+	int total = 0;
+
+	unsigned int i;
+	for (i = 0; i < DICE_SIZE; ++i)
+	{
+		unsigned int newrand = trand() >> DICE_SHIFT;
+		total += newrand;
+		dice[i] = newrand;
+	}
+
+	pink_data data = { dice, total };
+	*((pink_data*) u->data) = data;
+}
+
+void pink_deconstructor(ugen* u)
+{
+	free(((pink_data*) u->data)->dice);
+	free(u->data);
+}
+
+// Voss/McCartney algorithm
+// http://www.firstpr.com.au/dsp/pink-noise/
+void pink_calc(ugen u)
+{
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	pink_data* data = (pink_data*) u.data;
+	unsigned int* dice = data->dice;
+	int total = data->total;
+
+	AUDIO_LOOP(
+		unsigned int counter = trand();
+		unsigned int k = __builtin_ctzl(counter) & DICE_MASK;
+		unsigned int newrand = counter >> DICE_SHIFT;
+		unsigned int prevrand = dice[k];
+		dice[k] = newrand;
+		total += (newrand - prevrand);
+		newrand = trand() >> DICE_SHIFT;
+		four_bytes y;
+		y.word = (total + newrand) | 0x40000000;
+		UGEN_OUT(out, y.f - 3.0);
+	);
+
+	data->total = total;
+}
+
 void time_micros_calc(ugen u)
 {
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
@@ -9042,3 +9194,5 @@ float out_bus_rms(int bus)
 
 	return sqrt(squareSum / 512);
 }
+
+#endif // NECRONOMICON_H_INCLUDED

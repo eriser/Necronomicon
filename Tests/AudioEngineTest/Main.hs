@@ -48,6 +48,9 @@ modulatingDelayC = sin 440 |> delayC 1 delayTime |> dup |> gain 0.1 |> out 0
 panSynth :: UGen -> UGen
 panSynth panPos = sin 440 |> gain 0.2 |> pan (lag 0.1 panPos) |> out 0
 
+pinkSynth :: UGen
+pinkSynth = pink |> gain 0.3 |> dup |> out 0
+
 main :: IO ()
 main = runSignal
        <| play (toggle <| isDown keyR) reverbSynth
@@ -62,6 +65,7 @@ main = runSignal
        <> play (toggle <| isDown keyT) lpfSynth (mouseX ~> scale 20 4000)
        <> play (toggle <| isDown keyM) modulatingDelayC
        <> play (toggle <| isDown keyP) panSynth (mouseX ~> scale (-1) 1)
+       <> play (toggle <| isDown keyI) pinkSynth
 
 -- main :: IO ()
 -- main = runSignal <| synthDefs *> tempo (pure 150) *> testGUI <> sections <> hyperTerrainSounds
