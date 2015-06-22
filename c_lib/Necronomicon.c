@@ -9147,7 +9147,7 @@ void pink_calc(ugen u)
 
 	AUDIO_LOOP(
 		unsigned int counter = trand();
-		unsigned int k = __builtin_ctzl(counter) & DICE_MASK;
+		unsigned int k = __builtin_ctz(counter) & DICE_MASK;
 		unsigned int newrand = counter >> DICE_SHIFT;
 		unsigned int prevrand = dice[k];
 		dice[k] = newrand;
