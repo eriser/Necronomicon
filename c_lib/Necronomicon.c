@@ -10,7 +10,6 @@
 	remove calc rate from ugen struct, it's not being used, nor do I predict that it will be
 
 	Various Noise ugens
-		Brown
 		Grey
 		Black
 		Blue
@@ -4866,8 +4865,8 @@ static inline unsigned int xorshift128()
 
 static inline unsigned long xorshift128plus()
 {
-	static unsigned long sx = 1243598713UL;
-    static unsigned long sy = 3093459404UL;
+	static unsigned long sx = 18446744073709551557UL;
+    static unsigned long sy = 12764787846358441471UL;
     unsigned long x = sx;
 	unsigned long const y = sy;
 	sx = y;
@@ -4894,11 +4893,13 @@ static inline unsigned int trand()
 
 const long double RECIP_ULONG_MAX = (long double) 1.0 / (long double) ULONG_MAX;
 const long double TWO_RECIP_ULONG_MAX = (long double) 2.0 / (long double) ULONG_MAX;
+const long double QUARTER_RECIP_ULONG_MAX = (long double) 0.25 / (long double) ULONG_MAX;
 
 #define RAND_RANGE(MIN,MAX) (((double) (((long double) xorshift128plus()) * RECIP_ULONG_MAX)) * (MAX - MIN) + MIN)
 #define RAND_ONE() ((double) (((long double) xorshift128plus()) * RECIP_ULONG_MAX))
 #define RAND_TWO() ((double) (((long double) xorshift128plus()) * TWO_RECIP_ULONG_MAX))
 #define RAND_SIG() (((double) (((long double) xorshift128plus()) * TWO_RECIP_ULONG_MAX)) - 1.0)
+#define RAND_SIG_EIGHTH() (((double) (((long double) xorshift128plus()) * QUARTER_RECIP_ULONG_MAX)) - 0.125)
 
 typedef struct
 {
@@ -9210,14 +9211,16 @@ void brownNoise_calc(ugen u)
 {
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 	brown_data* data = (brown_data*) u.data;
-	double level = data->level;
-	double y;
+	double y = data->level;
 
 	AUDIO_LOOP(
+		y += RAND_SIG_EIGHTH();
+		if (y > 1.0) y = 2.0 - y;
+		else if(y < -1.0) y = -2.0 - y;
 		UGEN_OUT(out, y);
 	);
 
-	data->level = level;
+	data->level = y;
 }
 
 // timeSecs
