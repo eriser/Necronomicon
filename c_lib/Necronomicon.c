@@ -16,8 +16,9 @@
 		Blue
 		Violet
 		clip
-		1/f noise
 		burst noise
+		Diamond square (plasma)
+		Perlin/Simplex
 
 	Decay
 	Pitch Shift
@@ -4863,6 +4864,21 @@ static inline unsigned int xorshift128()
     return xor_w = xor_w ^ (xor_w >> 19) ^ t ^ (t >> 8);
 }
 
+static inline unsigned long xorshift128plus()
+{
+	static unsigned long sx = 1243598713UL;
+    static unsigned long sy = 3093459404UL;
+    unsigned long x = sx;
+	unsigned long const y = sy;
+	sx = y;
+	x ^= x << 23; // a
+	x ^= x >> 17; // b
+	x ^= y ^ (y >> 26); // c
+	sy = x;
+	return x + y;
+}
+
+
 static inline unsigned int trand()
 {
 	static unsigned int s1 = 1243598713U;
@@ -4876,7 +4892,13 @@ static inline unsigned int trand()
 	return s1 ^ s2 ^ s3;
 }
 
-#define RAND_RANGE(MIN,MAX) ( ((double) random() / (double) RAND_MAX) * (MAX - MIN) + MIN )
+const long double RECIP_ULONG_MAX = (long double) 1.0 / (long double) ULONG_MAX;
+const long double TWO_RECIP_ULONG_MAX = (long double) 2.0 / (long double) ULONG_MAX;
+
+#define RAND_RANGE(MIN,MAX) (((double) (((long double) xorshift128plus()) * RECIP_ULONG_MAX)) * (MAX - MIN) + MIN)
+#define RAND_ONE() ((double) (((long double) xorshift128plus()) * RECIP_ULONG_MAX))
+#define RAND_TWO() ((double) (((long double) xorshift128plus()) * TWO_RECIP_ULONG_MAX))
+#define RAND_SIG() (((double) (((long double) xorshift128plus()) * TWO_RECIP_ULONG_MAX)) - 1.0)
 
 typedef struct
 {
@@ -4890,7 +4912,7 @@ typedef struct
 void rand_constructor(ugen* u)
 {
 	rand_t* rand = malloc(sizeof(rand_t));
-	rand->value0 = RAND_RANGE(-1,1);
+	rand->value0 = RAND_SIG();
 	rand->value1 = 0;
 	rand->value2 = 0;
 	rand->value3 = 0;
@@ -4909,7 +4931,7 @@ void rand_range_constructor(ugen* u)
 	double   min   = u->constructor_args[1];
 	double   max   = u->constructor_args[2];
 	double   range = max - min;
-	double   in    = RAND_RANGE(0,1);
+	double   in    = RAND_ONE();
 	double   value = (in * range) + min;
 	double*  out  = (_necronomicon_current_node_underconstruction->ugen_wires + (u->outputs[0] * BLOCK_SIZE));
 
@@ -4934,7 +4956,7 @@ AUDIO_LOOP(																\
 	if (rand.phase + RECIP_SAMPLE_RATE * freq >= 1.0)					\
 	{																	\
 		rand.phase  = fmod(rand.phase + RECIP_SAMPLE_RATE * freq,1.0);	\
-		rand.value0 = RAND_RANGE(-1,1);									\
+		rand.value0 = RAND_SIG();										\
 	}																	\
 	else																\
 	{																	\
@@ -4972,7 +4994,7 @@ AUDIO_LOOP(																\
 	{																	\
 		rand.phase  = fmod(rand.phase + RECIP_SAMPLE_RATE * freq,1.0);	\
 		rand.value1 = rand.value0;										\
-		rand.value0 = RAND_RANGE(-1,1);									\
+		rand.value0 = RAND_SIG();										\
 	}																	\
 	else																\
 	{																	\
@@ -5012,7 +5034,7 @@ AUDIO_LOOP(																						\
 		rand.value3 = rand.value2;																\
 		rand.value2 = rand.value1;																\
 		rand.value1 = rand.value0;																\
-		rand.value0 = RAND_RANGE(-1,1);															\
+		rand.value0 = RAND_SIG();																\
 	}																							\
 	else																						\
 	{																							\
@@ -5332,7 +5354,7 @@ double*  in0 = UGEN_INPUT_BUFFER(u, 0);								\
 double*  out = UGEN_OUTPUT_BUFFER(u, 0);							\
 dust_t  dust = *((dust_t*)u.data);									\
 if (dust.period == -1)												\
-	dust.period = RAND_RANGE(0,2);									\
+	dust.period = RAND_TWO();										\
 double density;														\
 CONTROL_ARGS														\
 AUDIO_LOOP(															\
@@ -5340,8 +5362,8 @@ AUDIO_LOOP(															\
 	if (dust.phase + density * RECIP_SAMPLE_RATE >= dust.period)	\
 	{																\
 		dust.phase  = 0;											\
-		dust.period = RAND_RANGE(0,2);								\
-		UGEN_OUT(out,RAND_RANGE(-1,1));								\
+		dust.period = RAND_TWO();									\
+		UGEN_OUT(out,RAND_SIG());									\
 	}																\
 	else															\
 	{																\
@@ -5372,7 +5394,7 @@ double*  in0 = UGEN_INPUT_BUFFER(u, 0);								\
 double*  out = UGEN_OUTPUT_BUFFER(u, 0);							\
 dust_t  dust = *((dust_t*)u.data);									\
 if (dust.period == -1)												\
-	dust.period = RAND_RANGE(0,2);									\
+	dust.period = RAND_TWO();										\
 double density;														\
 CONTROL_ARGS														\
 AUDIO_LOOP(															\
@@ -5380,8 +5402,8 @@ AUDIO_LOOP(															\
 	if (dust.phase + density * RECIP_SAMPLE_RATE >= dust.period)	\
 	{																\
 		dust.phase  = 0;											\
-		dust.period = RAND_RANGE(0,2);								\
-		UGEN_OUT(out,RAND_RANGE(0,1));								\
+		dust.period = RAND_TWO();									\
+		UGEN_OUT(out,RAND_ONE());									\
 	}																\
 	else															\
 	{																\
@@ -9094,13 +9116,17 @@ void pluck_aaa_calc(ugen u)
     )
 }
 
+// White noise
+
 void white_calc(ugen u)
 {
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 	AUDIO_LOOP(
-		UGEN_OUT(out, RAND_RANGE(-1, 1));
+		UGEN_OUT(out, RAND_SIG());
 	);
 }
+
+// Pink Noise
 
 #define DICE_SIZE 16
 #define DICE_MASK 15
@@ -9160,6 +9186,41 @@ void pink_calc(ugen u)
 
 	data->total = total;
 }
+
+// brown noise
+
+typedef struct
+{
+	double level;
+} brown_data;
+
+void brownNoise_constructor(ugen* u)
+{
+	u->data = malloc(sizeof(brown_data));
+	brown_data data = { 0 };
+	*((brown_data*) u->data) = data;
+}
+
+void brownNoise_deconstructor(ugen* u)
+{
+	free(u->data);
+}
+
+void brownNoise_calc(ugen u)
+{
+	double* out = UGEN_OUTPUT_BUFFER(u, 0);
+	brown_data* data = (brown_data*) u.data;
+	double level = data->level;
+	double y;
+
+	AUDIO_LOOP(
+		UGEN_OUT(out, y);
+	);
+
+	data->level = level;
+}
+
+// timeSecs
 
 void time_micros_calc(ugen u)
 {
