@@ -32,7 +32,7 @@ data UGenChannel = UGenNum Double
 
 data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Env Double Double | Env2 Double Double | Out | AuxIn | Poll | LFSaw | LFPulse | Saw | Pulse
               | SyncSaw | SyncPulse | SyncOsc | Random Double Double Double | NoiseN | NoiseL | NoiseC | Dust | Dust2 | Impulse | Range | ExpRange
-              | LPF | HPF | BPF | Notch | AllPass | PeakEQ | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int
+              | LPF | HPF | BPF | Notch | AllPass | PeakEQ | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int | Simplex
               | Clip | SoftClip | Poly3 | TanHDist | SinDist | Wrap | DelayN Double | DelayL Double | DelayC Double | CombN Double | CombL Double | CombC Double
               | Negate | Crush | Decimate | FreeVerb | Pluck Double | WhiteNoise | PinkNoise | BrownNoise |Abs | Signum | Pow | Exp | Log | Cos | ASin | ACos
               | UMax | UMin | ATan | LogBase | Sqrt | Tan | SinH | CosH | TanH | ASinH | ATanH | ACosH | TimeMicros | TimeSecs | USeq | Limiter Double | Pan
@@ -1007,6 +1007,16 @@ foreign import ccall "&brownNoise_calc" brownNoiseCalc :: CUGenFunc
 
 brownNoise :: UGen
 brownNoise = UGen [UGenFunc BrownNoise brownNoiseCalc brownNoiseConstructor brownNoiseDeconstructor []]
+
+foreign import ccall "&simplex_constructor" simplexConstructor :: CUGenFunc
+foreign import ccall "&simplex_deconstructor" simplexDeconstructor :: CUGenFunc
+foreign import ccall "&simplex_k_calc" simplexKCalc :: CUGenFunc
+foreign import ccall "&simplex_a_calc" simplexACalc :: CUGenFunc
+
+simplex1D :: UGen -> UGen
+simplex1D freq = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen Simplex simplexACalc simplexConstructor simplexDeconstructor [freq]
+    where
+        cfuncs = [simplexKCalc, simplexACalc]
 
 foreign import ccall "&freeverb_constructor" freeverbConstructor :: CUGenFunc
 foreign import ccall "&freeverb_deconstructor" freeverbDeconstructor :: CUGenFunc

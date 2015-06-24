@@ -57,6 +57,8 @@ brownSynth = brownNoise |> gain 0.3 |> dup |> out 0
 whiteSynth :: UGen
 whiteSynth = whiteNoise |> gain 0.3 |> dup |> out 0
 
+simplexSynth :: UGen -> UGen
+simplexSynth freq = simplex1D (lag 0.1 freq) |> exprange 20 20000 |> sin |> gain 0.2 |> dup |> out 0
 
 main :: IO ()
 main = runSignal
@@ -75,6 +77,7 @@ main = runSignal
        <> play (toggle <| isDown keyI) pinkSynth
        <> play (toggle <| isDown keyB) brownSynth
        <> play (toggle <| isDown keyE) whiteSynth
+       <> play (toggle <| isDown keyV) simplexSynth (mouseX ~> scale 0.1 80)
 
 -- main :: IO ()
 -- main = runSignal <| synthDefs *> tempo (pure 150) *> testGUI <> sections <> hyperTerrainSounds
