@@ -201,8 +201,11 @@ instance Binary Material where
 getShader :: Resources -> Shader -> IO LoadedShader
 getShader resources sh = readIORef (shadersRef resources) >>= \shaders ->
     case IntMap.lookup (key sh) shaders of
-        Nothing           -> loadShader sh >>= \loadedShader -> (writeIORef (shadersRef resources) $ IntMap.insert (key sh) loadedShader shaders) >> return loadedShader
         Just loadedShader -> return loadedShader
+        Nothing           -> do
+            loadedShader <- loadShader sh
+            writeIORef (shadersRef resources) $ IntMap.insert (key sh) loadedShader shaders
+            return loadedShader
 
 getMesh :: Resources -> Mesh -> IO LoadedMesh
 getMesh _       (Mesh (Just m) _ _ _ _ _) = return m
@@ -251,15 +254,22 @@ loadNewModel r   (Just (Model me ma)) = do
     return . Just $ Model me' ma'
 loadNewModel _ m = return m
 
+--due lookups in other thread, do compilation in main thread!
 loadNewMesh :: Resources -> Mesh -> IO Mesh
-loadNewMesh r m@(Mesh        Nothing n vs cs us is) = getMesh r m >>= \lm -> return (Mesh        (Just lm) n vs cs us is)
-loadNewMesh r m@(DynamicMesh Nothing n vs cs us is) = getMesh r m >>= \lm -> return (DynamicMesh (Just lm) n vs cs us is)
+loadNewMesh r m@(Mesh        Nothing n vs cs us is) = getMesh' r m >>= \lm -> return (Mesh        lm n vs cs us is)
+loadNewMesh r m@(DynamicMesh Nothing n vs cs us is) = getMesh' r m >>= \lm -> return (DynamicMesh lm n vs cs us is)
 loadNewMesh _ m                                     = return m
+
+getMesh' :: Resources -> Mesh -> IO (Maybe LoadedMesh)
+getMesh' _         (Mesh        (Just m) _ _ _ _ _) = return $ Just m
+getMesh' _         (DynamicMesh (Just m) _ _ _ _ _) = return $ Just m
+getMesh' resources (Mesh        _ mKey _ _ _ _)     = readIORef (meshesRef resources) >>= return . Map.lookup mKey
+getMesh' resources (DynamicMesh _ mKey _ _ _ _)     = readIORef (meshesRef resources) >>= return . Map.lookup mKey
 
 loadNewMat :: Resources -> Material -> IO Material
 loadNewMat r (Material Nothing vs fs us pr) = do
-    sh' <- getShader r sh
-    return $ Material (Just sh') vs fs us pr
+    sh' <- getShader' r sh
+    return $ Material sh' vs fs us pr
     where
         sh = shader
             (vs ++ " + " ++ fs)
@@ -267,4 +277,6 @@ loadNewMat r (Material Nothing vs fs us pr) = do
             ["position", "in_color", "in_uv"]
             (loadVertexShader   vs)
             (loadFragmentShader fs)
+        getShader' resources sha = readIORef (shadersRef resources) >>= return . IntMap.lookup (key sha)
+
 loadNewMat _ m = return m

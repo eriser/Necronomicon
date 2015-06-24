@@ -55,24 +55,18 @@ loadVertexShader :: FilePath -> VertexShader
 loadVertexShader path = VertexShader $ do
     putStrLn $ "loadVertexShader: " ++ path
     resources <- getDataFileName ""
-    shaderPath <- BS.readFile $ resources ++ "shaders/" ++ path
-    loadShaderBS path GL.VertexShader shaderPath
+    src       <- BS.readFile $ resources ++ "shaders/" ++ path
+    loadShaderBS path GL.VertexShader src
 
 loadFragmentShader :: FilePath -> FragmentShader
 loadFragmentShader path = FragmentShader $ do
     putStrLn $ "loadFragmentShader: " ++ path
     resources <- getDataFileName ""
-    shaderPath <- BS.readFile $ resources ++ "shaders/" ++ path
-    loadShaderBS path GL.FragmentShader shaderPath
+    src       <- BS.readFile $ resources ++ "shaders/" ++ path
+    loadShaderBS path GL.FragmentShader src
 
 printError :: IO ()
 printError = GL.get GL.errors >>= mapM_ (hPutStrLn stderr . ("GL: "++) . show)
-
-compileVert :: String -> VertexShader
-compileVert = VertexShader   . loadShaderBS "vert" GL.VertexShader   . C.pack
-
-compileFrag :: String -> FragmentShader
-compileFrag = FragmentShader . loadShaderBS "frag" GL.FragmentShader . C.pack
 
 shader :: String -> [String] -> [String] -> VertexShader -> FragmentShader -> Shader
 shader shaderName uniformNames attributeNames vs fs = Shader (hash shaderName) $ do
@@ -100,6 +94,12 @@ offsetPtr = wordPtrToPtr . fromIntegral
 -- |A zero-offset 'Ptr'.
 offset0 :: Ptr a
 offset0 = offsetPtr 0
+
+compileVert :: String -> VertexShader
+compileVert = VertexShader   . loadShaderBS "vert" GL.VertexShader   . C.pack
+
+compileFrag :: String -> FragmentShader
+compileFrag = FragmentShader . loadShaderBS "frag" GL.FragmentShader . C.pack
 
 vert :: QuasiQuoter
 vert = QuasiQuoter (shaderQuoter "compileVert") (error "This quoter has not been defined") (error "This quoter has not been defined") (error "This quoter has not been defined")
