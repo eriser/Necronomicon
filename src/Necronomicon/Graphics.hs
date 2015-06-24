@@ -26,12 +26,11 @@ import Necronomicon.Graphics.Resources
 import qualified Graphics.UI.GLFW                  as GLFW
 
 initWindow :: (Int, Int) -> Bool -> IO(Maybe GLFW.Window)
-initWindow (width, height) isFullScreen = GLFW.init >>= \initSuccessful -> if initSuccessful then window else return Nothing
+initWindow (width, height) isFullScreen = GLFW.init >>= \initSuccessful -> if initSuccessful then mkWindow else return Nothing
     where
         mkWindow = do
-            if not isFullScreen
-                then GLFW.createWindow width height "Necronomicon" Nothing Nothing
-                else do
-                    fullScreenOnMain <- GLFW.getPrimaryMonitor
-                    GLFW.createWindow width height "Necronomicon" fullScreenOnMain Nothing
-        window   = mkWindow >>= \w -> GLFW.makeContextCurrent w >> return w
+            w <- if isFullScreen
+                then GLFW.getPrimaryMonitor >>= \fullScreenOnMain -> GLFW.createWindow width height "Necronomicon" fullScreenOnMain Nothing
+                else GLFW.createWindow width height "Necronomicon" Nothing Nothing
+            GLFW.makeContextCurrent w
+            return w

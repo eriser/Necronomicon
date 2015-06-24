@@ -8,7 +8,8 @@ module Necronomicon.Utility (hash,
                              showHex,
                              chunksOf,
                              filterMap,
-                             dot2) where
+                             dot2,
+                             foldrM) where
 
 import Data.Bits
 import Data.List (foldl')
@@ -76,6 +77,10 @@ chunksOf n xs =
 filterMap :: (a -> Maybe b) -> [a] -> [b]
 filterMap f xs = foldr collapse [] xs
     where
-        collapse x xs'
-            | Just x' <- f x = x' : xs'
-            | otherwise      = xs'
+        collapse !x !xs' = case f x of
+            Just x' -> x' : xs'
+            Nothing -> xs'
+
+foldrM :: Monad m => (a -> b -> m b) -> b -> [a] -> m b
+foldrM _ d []     = return d
+foldrM f d (x:xs) = (\z -> f x z) =<< foldrM f d xs

@@ -331,7 +331,6 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
         putStrLn "Starting Necronomicon"
 
         currentTime   <- getCurrentTime
-        resources     <- mkResources
         (ww, wh)      <- GLFW.getWindowSize w
         state         <- mkSignalState (fromIntegral ww, fromIntegral wh)
         (scont, _, _) <- unSignal sig state
@@ -340,9 +339,9 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
 
         setInputCallbacks w eventInbox
 
-        run False w scont currentTime resources DynTree.empty eventInbox state
+        run False w scont currentTime DynTree.empty eventInbox state
     where
-        run quit window s runTime' resources tree eventInbox state
+        run quit window s runTime' tree eventInbox state
             | quit      = putStrLn "Qutting Necronomicon" >> return ()
             | otherwise = do
                 GLFW.pollEvents
@@ -355,14 +354,14 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
                 -- (g, tree')  <- (\g -> update (g, tree)) . flip gchildren_ mkGameObject . MV.toList <~ readIORef (objectRef state)
                 -- gs   <- filterMap id . V.toList <~ (readIORef (objectRef state) >>= V.freeze)
                 -- let g = gchildren_ gs mkGameObject
-                -- renderGraphicsG window resources False g g tree
+                -- renderGraphicsG window (sigResources state) False g g tree
                 gstream <- GMV.mstream <~ readIORef (objectRef state)
                 cs      <- readIORef (cameraRef state)
 
-                mapM_ (renderWithCamera window resources gstream) cs
+                mapM_ (renderWithCamera window (sigResources state) gstream) cs
 
                 threadDelay  $ 16667
-                run q window s currentTime resources tree eventInbox state
+                run q window s currentTime tree eventInbox state
 
 processEvents :: Show a => (Int -> IO (Event a)) -> SignalState -> TChan InputEvent -> IO ()
 processEvents sig ss inbox = forever $ atomically (readTChan inbox) >>= \e -> case e of
@@ -383,7 +382,7 @@ necro sig = Signal $ \state -> do
     (scont, s, uids) <- unSignal sig state
     return (cont scont state, s, uids)
     where
-        updateObjects r cref oref (gs, uids) g = case g of
+        updateObjects r cref oref g (gs, uids) = case g of
             GameObject{gid = (UID _), model = (Just (Model (Mesh        (Just _) _ _ _ _ _) (Material (Just _) _ _ _ _)))} ->     writeG oref g  >> writeCam (gid g)  (camera g)  >> return (g  : gs, uids)
             GameObject{gid = (UID _), model = (Just (Model (DynamicMesh (Just _) _ _ _ _ _) (Material (Just _) _ _ _ _)))} ->     writeG oref g  >> writeCam (gid g)  (camera g)  >> return (g  : gs, uids)
             GameObject{gid = New} -> loadNewModel r (model g) >>= \model' -> let g' = g{model = model', gid = UID (head uids)} in writeG oref g' >> writeCam (gid g') (camera g') >> return (g' : gs, tail uids)
@@ -405,9 +404,9 @@ necro sig = Signal $ \state -> do
         --maybe a map gameobject or modify, etc to make this faster?
         writeGS s state = do
             uids        <- readIORef $ uidRef state
-            (gs, uids') <- foldM (updateObjects (sigResources state) (cameraRef state) (objectRef state)) ([], uids) $ getGameObjects s []
+            (gs, uids') <- foldrM (updateObjects (sigResources state) (cameraRef state) (objectRef state)) ([], uids) $ getGameObjects s []
             writeIORef (uidRef state) uids'
-            return $ fst $ setGameObjects s gs
+            return $ fst $ setGameObjects s $ gs
 
         cont scont state eid = scont eid >>= \se -> case se of
             NoChange _ -> return se

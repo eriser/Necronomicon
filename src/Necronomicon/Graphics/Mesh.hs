@@ -125,7 +125,7 @@ tri triSize color = mkMesh (show triSize ++ "~dyntri") vertices colors uvs indic
         indices  = [0,1,2]
 
 loadProgram :: GL.Program -> IO ()
-loadProgram program = GL.currentProgram  GL.$= Just program
+loadProgram program = GL.currentProgram GL.$= Just program
 
 uniformD :: GL.UniformLocation -> Double -> IO ()
 uniformD loc v = GL.uniform loc GL.$= GL.Index1 (realToFrac v :: GL.GLfloat)
@@ -192,7 +192,7 @@ material vs fs us = Material Nothing vs fs us GL.Triangles
 
 drawMeshWithMaterial :: Material -> Mesh -> Matrix4x4 -> Matrix4x4 -> Resources -> IO()
 drawMeshWithMaterial (Material mat vs fs us primMode) m modelView proj resources = do
-    (program, mv : pr : ulocs, attributes)                                    <- s
+    (program, mv : pr : ulocs, attributes)                                    <- sh
     (vertexBuffer, indexBuffer, numIndices, vertexVad : colorVad : uvVad : _) <- getMesh resources m
 
     loadProgram program
@@ -200,15 +200,14 @@ drawMeshWithMaterial (Material mat vs fs us primMode) m modelView proj resources
 
     bindThenDraw primMode mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad, colorVad, uvVad]) numIndices
     where
-        s  = case mat of
+        sh = case mat of
             Just js -> return js
-            _       -> getShader resources sh
-        sh = shader
-             (vs ++ " + " ++ fs)
-             ("modelView" : "proj" : map uniformName us)
-             ["position", "in_color", "in_uv"]
-             (loadVertexShader   vs)
-             (loadFragmentShader fs)
+            _       -> getShader resources $ shader
+                (vs ++ " + " ++ fs)
+                ("modelView" : "proj" : map uniformName us)
+                ["position", "in_color", "in_uv"]
+                (loadVertexShader   vs)
+                (loadFragmentShader fs)
 
 setUniform :: Resources -> GL.UniformLocation -> Uniform -> Int -> IO Int
 setUniform r loc (UniformTexture _ v) t = getTexture r v >>= setTextureUniform loc t >> return (t + 1)
