@@ -34,8 +34,8 @@ data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Env Double 
               | SyncSaw | SyncPulse | SyncOsc | Random Double Double Double | NoiseN | NoiseL | NoiseC | Dust | Dust2 | Impulse | Range | ExpRange
               | LPF | HPF | BPF | Notch | AllPass | PeakEQ | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int
               | Clip | SoftClip | Poly3 | TanHDist | SinDist | Wrap | DelayN Double | DelayL Double | DelayC Double | CombN Double | CombL Double | CombC Double
-              | Negate | Crush | Decimate | FreeVerb | Pluck Double | WhiteNoise | PinkNoise | Abs | Signum | Pow | Exp | Log | Cos | ASin | ACos | UMax | UMin
-              | ATan | LogBase | Sqrt | Tan | SinH | CosH | TanH | ASinH | ATanH | ACosH | TimeMicros | TimeSecs | USeq | Limiter Double | Pan
+              | Negate | Crush | Decimate | FreeVerb | Pluck Double | WhiteNoise | PinkNoise | BrownNoise |Abs | Signum | Pow | Exp | Log | Cos | ASin | ACos
+              | UMax | UMin | ATan | LogBase | Sqrt | Tan | SinH | CosH | TanH | ASinH | ATanH | ACosH | TimeMicros | TimeSecs | USeq | Limiter Double | Pan
               deriving (Show, Eq, Ord)
 
 data UGenRate = ControlRate | AudioRate deriving (Show, Enum, Eq, Ord)
@@ -1001,6 +1001,13 @@ foreign import ccall "&pink_calc" pinkCalc :: CUGenFunc
 pinkNoise :: UGen
 pinkNoise = UGen [UGenFunc PinkNoise pinkCalc pinkConstructor pinkDeconstructor []]
 
+foreign import ccall "&brownNoise_constructor" brownNoiseConstructor :: CUGenFunc
+foreign import ccall "&brownNoise_deconstructor" brownNoiseDeconstructor :: CUGenFunc
+foreign import ccall "&brownNoise_calc" brownNoiseCalc :: CUGenFunc
+
+brownNoise :: UGen
+brownNoise = UGen [UGenFunc BrownNoise brownNoiseCalc brownNoiseConstructor brownNoiseDeconstructor []]
+
 foreign import ccall "&freeverb_constructor" freeverbConstructor :: CUGenFunc
 foreign import ccall "&freeverb_deconstructor" freeverbDeconstructor :: CUGenFunc
 foreign import ccall "&freeverb_kkkk_calc" freeverbKKKKCalc :: CUGenFunc
@@ -1472,7 +1479,7 @@ stopTestSynth synth necroVars = runNecroState (stopSynth synth) necroVars >> ret
 
 
 ------------------------------------------
--- Experimental
+-- UGen
 ------------------------------------------
 
 newtype UGen = UGen { unUGen :: [UGenChannel] } deriving (Show, Eq)
@@ -1514,11 +1521,6 @@ createMultiOutUGenFromChannel :: Int -> UGenChannel -> UGen
 createMultiOutUGenFromChannel numUGenChannels ugenChannelFunc = UGen $ map createChannel [0 .. (numUGenChannels - 1)]
     where
         createChannel channelNumber = MultiOutUGenFunc (MultiOutNumChannels numUGenChannels) (MultiOutChannelNumber channelNumber) ugenChannelFunc
-
-fakepan :: UGen -> UGen -> UGen
-fakepan a (UGen (u1:u2:us)) = (UGen [u1] * a + UGen [u2] * (1 - a)) <> (UGen [u1] * (1 - a) + UGen [u2] * a) <> UGen us
-fakepan a (UGen (u:us))     = (UGen [u] * (1 - a)) <> (UGen [u] * a) <> UGen us
-fakepan _ us                = us
 
 mix :: UGen -> UGen
 mix (UGen us) = sum $ map (\u -> UGen [u]) us
