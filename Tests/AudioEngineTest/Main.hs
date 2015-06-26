@@ -38,7 +38,7 @@ minMaxSynth x = freq |> poll |> sin |> gain 0.3 |> out 0
         freq = constrain 666 1313 $ lag 0.1 x
 
 lpfSynth :: UGen -> UGen
-lpfSynth freq = pulse 80 0.5 |> lpf (lag 0.1 freq) 3 |> gain 0.2 |> dup |> out 0
+lpfSynth freq = pulse 80 0.5 |> lpf (lag 0.1 freq) 3 |> poll |> gain 0.2 |> dup |> out 0
 
 modulatingDelayC :: UGen
 modulatingDelayC = sin 440 |> delayC 1 delayTime |> dup |> gain 0.1 |> out 0

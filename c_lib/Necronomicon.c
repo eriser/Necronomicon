@@ -4,10 +4,13 @@
 
 	To Do:
 
+	use stdint.h types instead of current platform dependant versions
+	zapgremlins in filters to prevent blow ups
 	break up code into several files
 	optimize all sin and cos usage using LUTs
 	increate LUT size from unsigned char to unsigned short
 	remove calc rate from ugen struct, it's not being used, nor do I predict that it will be
+	random seeding?
 
 	Various Noise ugens
 		Gray
@@ -47,6 +50,7 @@
 	Formant
 	Drum Modelling
 
+	abstract away the audio backend to provide support beyond jack.
 	HRTF
 	Ambisonics?
 */
@@ -638,7 +642,7 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 
 unsigned int _block_frame = 0;
 synth_node _necronomicon_current_node_object;
-void process_synth(synth_node* synth)
+static inline void process_synth(synth_node* synth)
 {
 	_necronomicon_current_node_object = *synth;
 	ugen* ugen_graph = _necronomicon_current_node_object.ugen_graph;
@@ -684,7 +688,7 @@ for (; _block_frame < BLOCK_SIZE; ++_block_frame) 	\
 
 void null_deconstructor(ugen* u) {} // Does nothing
 void null_constructor(ugen* u) { u->data = NULL; }
-void try_schedule_current_synth_for_removal(); // Forward declaration
+static inline void try_schedule_current_synth_for_removal(); // Forward declaration
 bool minBLEP_Init(); //Curtis: MinBlep initialization Forward declaration
 
 void initialize_wave_tables()
@@ -1097,7 +1101,7 @@ void doubly_linked_list_free(doubly_linked_list list)
 
 bool necronomicon_running = false;
 
-void clear_necronomicon_buses()
+static inline void clear_necronomicon_buses()
 {
 	memset(_necronomicon_buses, 0, num_audio_buses_bytes);
 }
@@ -1127,7 +1131,7 @@ void print_synth_list()
 	printf("print_synth_list i = %u, num_synths = %u }}}\n", i, num_synths);
 }
 
-void add_synth(synth_node* node)
+static inline void add_synth(synth_node* node)
 {
 	// puts("||| add_synth ||| ");
 	// printf("add_synth -> ");
@@ -1166,7 +1170,7 @@ void add_synth(synth_node* node)
 	}
 }
 
-void remove_synth(synth_node* node)
+static inline void remove_synth(synth_node* node)
 {
 	// puts("||| remove_synth ||| ");
 	// printf("remove_synth -> ");
@@ -1203,7 +1207,7 @@ void remove_synth(synth_node* node)
 }
 
 // Iterate over the scheduled list and add synths if they are ready. Stop as soon as we find a synth that isn't ready.
-void add_scheduled_synths()
+static inline void add_scheduled_synths()
 {
 	scheduled_list_read_index = scheduled_list_read_index & FIFO_SIZE_MASK;
 	scheduled_list_write_index = scheduled_list_write_index & FIFO_SIZE_MASK;
@@ -1226,7 +1230,7 @@ void add_scheduled_synths()
 }
 
 // Iterate over the removal fifo and remove all synths in it.
-void remove_scheduled_synths()
+static inline void remove_scheduled_synths()
 {
 	removal_fifo_read_index = removal_fifo_read_index & REMOVAL_FIFO_SIZE_MASK;
 	removal_fifo_write_index = removal_fifo_write_index & REMOVAL_FIFO_SIZE_MASK;
@@ -1242,7 +1246,7 @@ void remove_scheduled_synths()
 	}
 }
 
-void try_schedule_current_synth_for_removal()
+static inline void try_schedule_current_synth_for_removal()
 {
 	// puts("||| try_schedule_current_synth_for_removal |||");
 	if (_necronomicon_current_node && (removal_fifo_size < REMOVAL_FIFO_SIZE_MASK) && _necronomicon_current_node->alive_status == NODE_ALIVE)
@@ -1257,7 +1261,7 @@ void try_schedule_current_synth_for_removal()
 
 void shutdown_rt_runtime(); // Forward declaration
 
-void handle_rt_message(message msg)
+static inline void handle_rt_message(message msg)
 {
 	// printf("handle_rt_message ");
 	// print_fifo_message(msg);
@@ -1278,7 +1282,7 @@ void handle_rt_message(message msg)
 }
 
 // Copy nodes from the rt_node_fifo into the scheduled_node_list
-void handle_messages_in_rt_fifo()
+static inline void handle_messages_in_rt_fifo()
 {
 	rt_fifo_read_index = rt_fifo_read_index & FIFO_SIZE_MASK;
 	rt_fifo_write_index = rt_fifo_write_index & FIFO_SIZE_MASK;
@@ -1393,7 +1397,6 @@ void send_set_synth_arg(unsigned int id, double argument, unsigned int arg_index
 	if ((synth != NULL) && (synth->alive_status == NODE_SPAWNING || synth->alive_status == NODE_ALIVE))
 	{
 		double* wire_buffer = synth->ugen_wires + (arg_index * BLOCK_SIZE);
-		unsigned j;
 		*wire_buffer = argument;
 	}
 
@@ -5434,6 +5437,16 @@ void dust2_a_calc(ugen u)
 // RBJ Filters, Audio EQ Cookbook
 //===================================
 
+static inline double zapgremlins(double x)
+{
+	double absx = fabs(x);
+	// very small numbers fail the first test, eliminating denormalized numbers
+	//    (zero also fails the first test, but that is OK since it returns zero.)
+	// very large numbers fail the second test, eliminating infinities
+	// Not-a-Numbers fail both tests and are eliminated.
+	return (absx > 1e-63 && absx < 1e63) ? x : 0.0;
+}
+
 typedef struct
 {
 	double x1;
@@ -5518,8 +5531,8 @@ AUDIO_LOOP(															\
 		bi.prevQ = q;												\
 		/* Don't recalc if unnecessary */							\
 		omega  = freq * RECIP_SAMPLE_RATE;							\
-		bi.cs  = TABLE_LOOKUP(omega,cosn_table);					\
-		sn     = TABLE_LOOKUP(omega,sine_table);					\
+		bi.cs  = TABLE_LOOKUP(omega, cosn_table);					\
+		sn     = TABLE_LOOKUP(omega, sine_table);					\
 		snhi   = (1 / (2 * q));										\
 		snhi   = snhi * RECIP_TWO_PI;								\
 		bi.alpha = TABLE_LOOKUP(snhi, sinh_table);					\
@@ -5532,7 +5545,7 @@ AUDIO_LOOP(															\
 	b1    =  1 - cs;												\
 	b2    = (1 - cs) * 0.5;											\
 	a0    =  1 + alpha;												\
-	a1    = -2*cs;													\
+	a1    = -2 * cs;												\
 	a2    =  1 - alpha;												\
 																	\
 	y     = BIQUAD(b0,b1,b2,a0,a1,a2,in,bi.x1,bi.x2,bi.y1,bi.y2);	\
