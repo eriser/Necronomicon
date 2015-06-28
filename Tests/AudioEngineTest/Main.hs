@@ -33,7 +33,7 @@ noLimiterSynth :: UGen -> UGen
 noLimiterSynth preGain = sin 440 |> dup |> gain (lag 0.1 preGain) |> out 0
 
 minMaxSynth :: UGen -> UGen
-minMaxSynth x = freq |> poll |> sin |> gain 0.3 |> out 0
+minMaxSynth x = freq |> sin |> gain 0.3 |> out 0
     where
         freq = constrain 666 1313 $ lag 0.1 x
 

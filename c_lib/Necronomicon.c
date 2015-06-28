@@ -8,7 +8,7 @@
 	zapgremlins in filters to prevent blow ups
 	break up code into several files
 	optimize all sin and cos usage using LUTs
-	increate LUT size from unsigned char to unsigned short
+	increate LUT size from uint8_t to unsigned short
 	remove calc rate from ugen struct, it's not being used, nor do I predict that it will be
 	random seeding?
 
@@ -65,6 +65,8 @@
 #include <string.h>
 #include <math.h>
 #include <signal.h>
+#include <stdint.h>
+
 #ifndef WIN32
 #include <unistd.h>
 #endif
@@ -76,7 +78,7 @@
 #include "Necronomicon.h"
 #include "Necronomicon/Endian.h"
 
-unsigned int next_power_of_two(unsigned int v)
+uint32_t next_power_of_two(uint32_t v)
 {
 	--v;
 	v |= v >> 1;
@@ -105,14 +107,14 @@ const double TWO_PI = M_PI * 2;
 const double RECIP_TWO_PI =  1.0 / (M_PI * 2);
 const double HALF_PI = M_PI * 0.5;
 const double QUARTER_PI = M_PI * 0.25;
-unsigned int DOUBLE_SIZE = sizeof(double);
-unsigned int UINT_SIZE = sizeof(unsigned int);
+uint32_t DOUBLE_SIZE = sizeof(double);
+uint32_t UINT_SIZE = sizeof(uint32_t);
 
 #define TABLE_SIZE 256
 #define TABLE_SIZE_WRAP 255
 double RECIP_TABLE_SIZE = 1.0 / (double) TABLE_SIZE;
-unsigned int HALF_TABLE_SIZE = TABLE_SIZE / 2;
-unsigned int QUATER_TABLE_SIZE = TABLE_SIZE / 4;
+uint32_t HALF_TABLE_SIZE = TABLE_SIZE / 2;
+uint32_t QUATER_TABLE_SIZE = TABLE_SIZE / 4;
 double sine_table[TABLE_SIZE];
 double cosn_table[TABLE_SIZE];
 double sinh_table[TABLE_SIZE];
@@ -122,15 +124,15 @@ double tanh_table[TABLE_SIZE];
 #define PAN_TABLE_SIZE 4096
 #define PAN_TABLE_SIZE_MASK 4095
 double PAN_RECIP_TABLE_SIZE = 1.0 / (double) TABLE_SIZE;
-unsigned int PAN_HALF_TABLE_SIZE = PAN_TABLE_SIZE / 2;
-unsigned int PAN_QUATER_TABLE_SIZE = PAN_TABLE_SIZE / 4;
+uint32_t PAN_HALF_TABLE_SIZE = PAN_TABLE_SIZE / 2;
+uint32_t PAN_QUATER_TABLE_SIZE = PAN_TABLE_SIZE / 4;
 double pan_table[PAN_TABLE_SIZE];
 
 double SAMPLE_RATE = 44100;
 double RECIP_SAMPLE_RATE = 1.0 / 44100.0;
 double TABLE_MUL_RECIP_SAMPLE_RATE = TABLE_SIZE * (1.0 / 44100.0);
 double TWO_PI_TIMES_RECIP_SAMPLE_RATE;
-unsigned int BLOCK_SIZE = 64;
+uint32_t BLOCK_SIZE = 64;
 #define LOG_001 -6.907755278982137
 
 /////////////////////
@@ -139,43 +141,43 @@ unsigned int BLOCK_SIZE = 64;
 
 typedef union
 {
-	unsigned char bytes[4];
-	unsigned int word;
+	uint8_t bytes[4];
+	uint32_t word;
 	float f;
 } four_bytes;
 
 typedef union
 {
-	unsigned char bytes[8];
+	uint8_t bytes[8];
 	double d;
-	unsigned long ul;
+	uint64_t ul;
 	struct
 	{
 #if BYTE_ORDER == BIG_ENDIAN
-		unsigned int high, low;
+		uint32_t high, low;
 #else
-		unsigned int low, high;
+		uint32_t low, high;
 #endif
 	} l;
 } eight_bytes;
 
 // FNV1-a hash function
-const unsigned long PRIME = 0x01000193; // 16777619
-const unsigned long SEED = 0x811C9DC5; // 2166136261
+const uint64_t PRIME = 0x01000193; // 16777619
+const uint64_t SEED = 0x811C9DC5; // 2166136261
 
 #define FNV1A(byte, hash) ((byte ^ hash) * PRIME)
 #define HASH_KEY_PRIV(key) (FNV1A(key.bytes[3], FNV1A(key.bytes[2], FNV1A(key.bytes[1], FNV1A(key.bytes[0], SEED)))))
-#define HASH_KEY(key) ((unsigned int) HASH_KEY_PRIV(((four_bytes) key)))
+#define HASH_KEY(key) ((uint32_t) HASH_KEY_PRIV(((four_bytes) key)))
 
 /////////////////////
 // Global Mutables
 /////////////////////
 
 double* _necronomicon_buses = NULL;
-unsigned int num_audio_buses = 256;
-unsigned int last_audio_bus_index = 255;
-unsigned int num_audio_buses_bytes;
-int num_synths = 0;
+uint32_t num_audio_buses = 256;
+uint32_t last_audio_bus_index = 255;
+uint32_t num_audio_buses_bytes;
+int32_t num_synths = 0;
 FILE* devurandom = NULL;
 
 // Time
@@ -185,10 +187,11 @@ jack_time_t next_cycle_usecs = 0;
 float period_usecs = 0;
 const jack_time_t USECS_PER_SECOND = 1000000;
 double usecs_per_frame = 1000000 / 44100;
+long double recip_usecs_per_frame = ((long double ) 1.0) / ((long double) 44100);
 jack_time_t BLOCK_SIZE_USECS = 0;
 
 float out_bus_buffers[16][512];
-unsigned int  out_bus_buffer_index = 0;
+uint32_t  out_bus_buffer_index = 0;
 
 /////////////////////
 // UGen
@@ -210,14 +213,14 @@ struct ugen
 	void (*deconstructor)(ugen* u);
 	void* data; // ugen defined data structure
 	double* constructor_args; // arguments passed in for use during construction
-	unsigned int* inputs; // indexes to the parent synth's ugen wire buffer
-	unsigned int* outputs; // indexes to the parent synth's ugen wire buffer
+	uint32_t* inputs; // indexes to the parent synth's ugen wire buffer
+	uint32_t* outputs; // indexes to the parent synth's ugen wire buffer
 	CalcRate calc_rate;
-	unsigned int __padding; // Pad struct size to 8 * 8 == 64 bytes
+	uint32_t __padding; // Pad struct size to 8 * 8 == 64 bytes
 };
 
-const unsigned int UGEN_SIZE = sizeof(ugen);
-const unsigned int UGEN_POINTER_SIZE = sizeof(ugen*);
+const uint32_t UGEN_SIZE = sizeof(ugen);
+const uint32_t UGEN_POINTER_SIZE = sizeof(ugen*);
 
 typedef void (*ugen_constructor)(ugen* u);
 typedef void (*ugen_deconstructor)(ugen* u);
@@ -229,11 +232,11 @@ struct ugen_graph_pool_node
 {
 	ugen* ugen_graph;
 	ugen_graph_pool_node* next_ugen_graph_pool_node;
-	unsigned int pool_index;
+	uint32_t pool_index;
 };
 
-const unsigned int UGEN_GRAPH_POOL_NODE_SIZE = sizeof(ugen_graph_pool_node);
-const unsigned int NUM_UGEN_GRAPH_POOLS = 32;
+const uint32_t UGEN_GRAPH_POOL_NODE_SIZE = sizeof(ugen_graph_pool_node);
+const uint32_t NUM_UGEN_GRAPH_POOLS = 32;
 ugen_graph_pool_node** ugen_graph_pools = NULL;
 
 void print_ugen_graph_pool_node(ugen_graph_pool_node* ugen_graph)
@@ -251,10 +254,10 @@ void print_ugen_graph_pool_node(ugen_graph_pool_node* ugen_graph)
 	}
 }
 
-ugen_graph_pool_node* acquire_ugen_graph(unsigned int num_ugens)
+ugen_graph_pool_node* acquire_ugen_graph(uint32_t num_ugens)
 {
-	unsigned int pow_two_num_bytes = next_power_of_two(num_ugens * UGEN_SIZE);
-	unsigned int pool_index = __builtin_ctz(pow_two_num_bytes);
+	uint32_t pow_two_num_bytes = next_power_of_two(num_ugens * UGEN_SIZE);
+	uint32_t pool_index = __builtin_ctz(pow_two_num_bytes);
 	ugen_graph_pool_node* ugen_graph = ugen_graph_pools[pool_index];
 
 	// printf("acquire_ugen_graph(pooled_ugen_graph = %p, num_ugens = %u, pow_two_num_bytes = %u, pool_index = %u)\n", ugen_graph, num_ugens, pow_two_num_bytes, pool_index);
@@ -283,7 +286,7 @@ void release_ugen_graph(ugen_graph_pool_node* ugen_graph)
 	// print_ugen_graph_pool_node(ugen_graph);
 	if (ugen_graph != NULL)
 	{
-		unsigned int pool_index = ugen_graph->pool_index;
+		uint32_t pool_index = ugen_graph->pool_index;
 		ugen_graph->next_ugen_graph_pool_node = ugen_graph_pools[pool_index];
 		ugen_graph_pools[pool_index] = ugen_graph;
 	}
@@ -295,11 +298,11 @@ struct ugen_wires_pool_node
 {
 	double* ugen_wires;
 	ugen_wires_pool_node* next_ugen_wires_pool_node;
-	unsigned int pool_index;
+	uint32_t pool_index;
 };
 
-const unsigned int UGEN_WIRE_POOL_NODE_SIZE = sizeof(ugen_wires_pool_node);
-const unsigned int NUM_UGEN_WIRES_POOLS = 32;
+const uint32_t UGEN_WIRE_POOL_NODE_SIZE = sizeof(ugen_wires_pool_node);
+const uint32_t NUM_UGEN_WIRES_POOLS = 32;
 ugen_wires_pool_node** ugen_wires_pools = NULL;
 
 void print_ugen_wires_pool_node(ugen_wires_pool_node* ugen_wires)
@@ -317,10 +320,10 @@ void print_ugen_wires_pool_node(ugen_wires_pool_node* ugen_wires)
 	}
 }
 
-ugen_wires_pool_node* acquire_ugen_wires(unsigned int num_wires)
+ugen_wires_pool_node* acquire_ugen_wires(uint32_t num_wires)
 {
-	unsigned int pow_two_num_bytes = next_power_of_two(num_wires * BLOCK_SIZE * DOUBLE_SIZE);
-	unsigned int pool_index = __builtin_ctz(pow_two_num_bytes);
+	uint32_t pow_two_num_bytes = next_power_of_two(num_wires * BLOCK_SIZE * DOUBLE_SIZE);
+	uint32_t pool_index = __builtin_ctz(pow_two_num_bytes);
 	ugen_wires_pool_node* ugen_wires = ugen_wires_pools[pool_index];
 
 	// printf("acquire_ugen_wires(pooled_ugen_wires = %p, num_wires = %u, pow_two_num_bytes = %u, pool_index = %u)\n", ugen_wires, num_wires, pow_two_num_bytes, pool_index);
@@ -349,7 +352,7 @@ void release_ugen_wires(ugen_wires_pool_node* ugen_wires)
 	// print_ugen_wires_pool_node(ugen_wires);
 	if (ugen_wires != NULL)
 	{
-		unsigned int pool_index = ugen_wires->pool_index;
+		uint32_t pool_index = ugen_wires->pool_index;
 		ugen_wires->next_ugen_wires_pool_node = ugen_wires_pools[pool_index];
 		ugen_wires_pools[pool_index] = ugen_wires;
 	}
@@ -366,15 +369,15 @@ struct sample_buffer
 {
 	double* samples;
 	sample_buffer* next_sample_buffer;
-	unsigned int pool_index;
-	unsigned int num_samples;
-	unsigned int num_samples_mask; // used with power of 2 sized buffers
+	uint32_t pool_index;
+	uint32_t num_samples;
+	uint32_t num_samples_mask; // used with power of 2 sized buffers
 };
 
-const unsigned int SAMPLE_BUFFER_SIZE = sizeof(sample_buffer);
-const unsigned int SAMPLE_BUFFER_POINTER_SIZE = sizeof(sample_buffer*);
+const uint32_t SAMPLE_BUFFER_SIZE = sizeof(sample_buffer);
+const uint32_t SAMPLE_BUFFER_POINTER_SIZE = sizeof(sample_buffer*);
 
-const unsigned int NUM_SAMPLE_BUFFER_POOLS = 32;
+const uint32_t NUM_SAMPLE_BUFFER_POOLS = 32;
 sample_buffer** sample_buffer_pools;
 
 void print_sample_buffer(sample_buffer* buffer)
@@ -393,10 +396,10 @@ void print_sample_buffer(sample_buffer* buffer)
 }
 
 // Note: this will return a sample buffer with a number of samples equal to the next power of two higher than the requested amount
-sample_buffer* acquire_sample_buffer(unsigned int num_samples)
+sample_buffer* acquire_sample_buffer(uint32_t num_samples)
 {
-	unsigned int pow_two_num_samples = next_power_of_two(num_samples);
-	unsigned int pool_index = __builtin_ctz(pow_two_num_samples);
+	uint32_t pow_two_num_samples = next_power_of_two(num_samples);
+	uint32_t pool_index = __builtin_ctz(pow_two_num_samples);
 	sample_buffer* buffer = sample_buffer_pools[pool_index];
 
 	// printf("acquire_sample_buffer(pooled_buffer = %p, num_samples = %u, pow_two_num_samples = %u, pool_index = %u)\n", buffer, num_samples, pow_two_num_samples, pool_index);
@@ -428,7 +431,7 @@ void release_sample_buffer(sample_buffer* buffer)
 	// print_sample_buffer(buffer);
 	if (buffer != NULL)
 	{
-		unsigned int pool_index = buffer->pool_index;
+		uint32_t pool_index = buffer->pool_index;
 		buffer->next_sample_buffer = sample_buffer_pools[pool_index];
 		sample_buffer_pools[pool_index] = buffer;
 	}
@@ -447,7 +450,7 @@ typedef enum
 	NODE_SCHEDULED_FOR_FREE, // Scheduled for memory free, second and last step in removal of synths
 } node_alive_status;
 
-const char* node_alive_status_strings[] = { "NODE_DEAD", "NODE_SPAWNING", "NODE_ALIVE", "NODE_SCHEDULED_FOR_REMOVAL", "NODE_SCHEDULED_FOR_FREE" };
+const int8_t* node_alive_status_strings[] = { "NODE_DEAD", "NODE_SPAWNING", "NODE_ALIVE", "NODE_SCHEDULED_FOR_REMOVAL", "NODE_SCHEDULED_FOR_FREE" };
 
 struct synth_node;
 typedef struct synth_node synth_node;
@@ -461,30 +464,30 @@ struct synth_node
 	synth_node* previous; // Previous node, used in synth_list for the scheduler
 	synth_node* next; // Next node, used in the synth_list for the scheduler
 	jack_time_t time; // scheduled time, in microseconds
-	unsigned int key; // Node ID, used to look up synths in the synth hash table
-	unsigned int hash; // Cached hash of the node id for the synth hash table
-	unsigned int table_index; // Cached hash table index
-	unsigned int num_ugens;
-	unsigned int num_wires;
+	uint32_t key; // Node ID, used to look up synths in the synth hash table
+	uint32_t hash; // Cached hash of the node id for the synth hash table
+	uint32_t table_index; // Cached hash table index
+	uint32_t num_ugens;
+	uint32_t num_wires;
 	node_alive_status previous_alive_status; // Flag representing whether the previous status of the synth
 	node_alive_status alive_status; // Flag representing the alive status of the synth
 };
 
 synth_node* _necronomicon_current_node = NULL;
 synth_node* _necronomicon_current_node_underconstruction = NULL;
-const unsigned int NODE_SIZE = sizeof(synth_node);
-const unsigned int NODE_POINTER_SIZE = sizeof(synth_node*);
+const uint32_t NODE_SIZE = sizeof(synth_node);
+const uint32_t NODE_POINTER_SIZE = sizeof(synth_node*);
 synth_node* free_synths = NULL;
-int num_free_synths = 0;
-const unsigned int max_free_synths = 128;
+int32_t num_free_synths = 0;
+const uint32_t max_free_synths = 128;
 
 // Synth hash table
-const unsigned int MAX_SYNTHS = 8192;
-const unsigned int HASH_TABLE_SIZE_MASK = 8191;
+const uint32_t MAX_SYNTHS = 8192;
+const uint32_t HASH_TABLE_SIZE_MASK = 8191;
 typedef synth_node** hash_table;
 hash_table synth_table = NULL;
 bool hash_table_remove(hash_table table, synth_node* node);
-synth_node* hash_table_lookup(hash_table table, unsigned int key);
+synth_node* hash_table_lookup(hash_table table, uint32_t key);
 
 void print_node(synth_node* node); // Forward declaration
 void print_node_alive_status(synth_node* node)
@@ -519,8 +522,8 @@ synth_node* malloc_synth()
 void deconstruct_synth(synth_node* synth)
 {
 	ugen* ugen_graph = synth->ugen_graph;
-	unsigned int num_ugens = synth->num_ugens;
-	unsigned int i;
+	uint32_t num_ugens = synth->num_ugens;
+	uint32_t i;
 	for (i = 0; i < num_ugens; ++i)
 	{
 		ugen* graph_node = &ugen_graph[i];
@@ -574,8 +577,8 @@ void free_synth(synth_node* synth)
 
 void free_synth_definition(synth_node* synth_definition)
 {
-	unsigned int i;
-	unsigned int num_ugens = synth_definition->num_ugens;
+	uint32_t i;
+	uint32_t num_ugens = synth_definition->num_ugens;
 	for (i = 0; i < num_ugens; ++i)
 	{
 		ugen* u = &synth_definition->ugen_graph[i];
@@ -590,9 +593,9 @@ void free_synth_definition(synth_node* synth_definition)
 	free(synth_definition);
 }
 
-synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned int num_arguments, unsigned int node_id, jack_time_t time)
+synth_node* new_synth(synth_node* synth_definition, double* arguments, uint32_t num_arguments, uint32_t node_id, jack_time_t time)
 {
-	unsigned int i;
+	uint32_t i;
 
 	synth_node* synth = malloc_synth();
 	synth->previous = NULL;
@@ -608,8 +611,8 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 	_necronomicon_current_node_underconstruction = synth;
 
 	// Wires
-	unsigned int num_wires = synth->num_wires;
-	unsigned int size_wires = num_wires * BLOCK_SIZE * DOUBLE_SIZE;
+	uint32_t num_wires = synth->num_wires;
+	uint32_t size_wires = num_wires * BLOCK_SIZE * DOUBLE_SIZE;
 	synth->ugen_wires_node = acquire_ugen_wires(num_wires);
 	synth->ugen_wires = synth->ugen_wires_node->ugen_wires;
 	memcpy(synth->ugen_wires, synth_definition->ugen_wires, size_wires);
@@ -623,8 +626,8 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
     }
 
 	// UGens
-	unsigned int num_ugens = synth_definition->num_ugens;
-	unsigned int size_ugens = num_ugens * UGEN_SIZE;
+	uint32_t num_ugens = synth_definition->num_ugens;
+	uint32_t size_ugens = num_ugens * UGEN_SIZE;
 	synth->ugen_graph_node = acquire_ugen_graph(num_ugens);
 	synth->ugen_graph = synth->ugen_graph_node->ugen_graph;
 	ugen* ugen_graph = synth->ugen_graph;
@@ -640,21 +643,21 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, unsigned 
 	return synth;
 }
 
-unsigned int _block_frame = 0;
+uint32_t _block_frame = 0;
 synth_node _necronomicon_current_node_object;
 static inline void process_synth(synth_node* synth)
 {
 	_necronomicon_current_node_object = *synth;
 	ugen* ugen_graph = _necronomicon_current_node_object.ugen_graph;
-	unsigned int num_ugens = _necronomicon_current_node_object.num_ugens;
-	unsigned int _start_frame;
+	uint32_t num_ugens = _necronomicon_current_node_object.num_ugens;
+	uint32_t _start_frame;
 
 	if (synth->time > 0) // Initial schedule for synth, begin playing part way through block according to scheduled time
 	{
 		// find the current frame. jack_time_t is platform dependant and sometimes signed or unsigned.
 		// So let's convert to a type larger enough to contain all positive values from a uint_64_t but also supports negatives.
 		long long time_dif = (long long) synth->time - (long long) current_cycle_usecs;
-		_start_frame = time_dif <= 0 ? 0 : ((double) time_dif / usecs_per_frame);
+		_start_frame = time_dif <= 0 ? 0 : ((long double) time_dif * recip_usecs_per_frame); // Convert from microseconds to frames
 		synth->time = 0;
 		// printf("initial start frame: %u\n", _start_frame);
 	}
@@ -664,7 +667,7 @@ static inline void process_synth(synth_node* synth)
 		_start_frame = 0;
 	}
 
-	unsigned int i;
+	uint32_t i;
 	ugen graph_node;
 	for (i = 0; i < num_ugens; ++i)
 	{
@@ -693,7 +696,7 @@ bool minBLEP_Init(); //Curtis: MinBlep initialization Forward declaration
 
 void initialize_wave_tables()
 {
-	unsigned int i;
+	uint32_t i;
 	for (i = 0; i < TABLE_SIZE; ++i)
 	{
 		sine_table[i] =  sin(TWO_PI * (((double) i) / ((double) TABLE_SIZE)));
@@ -717,8 +720,8 @@ void initialize_wave_tables()
 // Scheduler
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-const unsigned int MAX_FIFO_MESSAGES = 2048;
-const unsigned int FIFO_SIZE_MASK = 2047;
+const uint32_t MAX_FIFO_MESSAGES = 2048;
+const uint32_t FIFO_SIZE_MASK = 2047;
 
 /////////////////
 // Message FIFO
@@ -727,8 +730,8 @@ const unsigned int FIFO_SIZE_MASK = 2047;
 typedef union
 {
 	synth_node* node;
-	unsigned int node_id;
-	const char* string;
+	uint32_t node_id;
+	const int8_t* string;
 	double number;
 } message_arg;
 
@@ -743,7 +746,7 @@ typedef enum
 	PRINT_NUMBER
 } message_type;
 
-const char* message_map[] = { "IGNORE", "START_SYNTH", "STOP_SYNTH", "FREE_SYNTH", "SHUTDOWN", "PRINT", "PRINT_NUMBER" };
+const int8_t* message_map[] = { "IGNORE", "START_SYNTH", "STOP_SYNTH", "FREE_SYNTH", "SHUTDOWN", "PRINT", "PRINT_NUMBER" };
 
 typedef struct
 {
@@ -751,7 +754,7 @@ typedef struct
 	message_type type;
 } message;
 
-const unsigned int MESSAGE_SIZE = sizeof(message);
+const uint32_t MESSAGE_SIZE = sizeof(message);
 
 void print_fifo_message(message m)
 {
@@ -762,12 +765,12 @@ void print_fifo_message(message m)
 typedef message* message_fifo;
 
 message_fifo nrt_fifo = NULL;
-unsigned int nrt_fifo_read_index = 0;
-unsigned int nrt_fifo_write_index = 0;
+uint32_t nrt_fifo_read_index = 0;
+uint32_t nrt_fifo_write_index = 0;
 
 message_fifo rt_fifo = NULL;
-unsigned int rt_fifo_read_index = 0;
-unsigned int rt_fifo_write_index = 0;
+uint32_t rt_fifo_read_index = 0;
+uint32_t rt_fifo_write_index = 0;
 
 // Increment fifo_write_index and fifo_read_index after assignment to maintain intended ordering (using a memory barrier): Assignment/Lookup -> Increment
 #define FIFO_PUSH(fifo, write_index, node, size_mask) fifo[write_index & size_mask] = node; __sync_synchronize(); write_index++;
@@ -784,7 +787,7 @@ unsigned int rt_fifo_write_index = 0;
 // Allocate and null initialize a node list to be used as a node_fifo or node_list
 message_fifo new_message_fifo()
 {
-	unsigned int byte_size = MESSAGE_SIZE * MAX_FIFO_MESSAGES;
+	uint32_t byte_size = MESSAGE_SIZE * MAX_FIFO_MESSAGES;
 	message_fifo fifo = (message_fifo) malloc(byte_size);
 	assert(fifo);
 	memset(fifo, 0, byte_size);
@@ -842,8 +845,8 @@ void rt_fifo_free()
 typedef synth_node** node_list;
 
 node_list scheduled_node_list = NULL;
-unsigned int scheduled_list_read_index = 0;
-unsigned int scheduled_list_write_index = 0;
+uint32_t scheduled_list_read_index = 0;
+uint32_t scheduled_list_write_index = 0;
 
 #define SCHEDULED_LIST_PUSH(node) FIFO_PUSH(scheduled_node_list, scheduled_list_write_index, node, FIFO_SIZE_MASK)
 #define SCHEDULED_LIST_POP() FIFO_POP(scheduled_node_list, scheduled_list_read_index, FIFO_SIZE_MASK)
@@ -853,7 +856,7 @@ unsigned int scheduled_list_write_index = 0;
 // Allocate and null initialize a node list to be used as a node_list
 node_list new_node_list()
 {
-	unsigned int byte_size = NODE_POINTER_SIZE * MAX_FIFO_MESSAGES;
+	uint32_t byte_size = NODE_POINTER_SIZE * MAX_FIFO_MESSAGES;
 	node_list list = (node_list) malloc(byte_size);
 	assert(list);
 	memset(list, 0, byte_size);
@@ -888,7 +891,7 @@ void scheduled_list_sort()
 	if (scheduled_list_read_index == scheduled_list_write_index)
 		return;
 
-	unsigned int i, j, k;
+	uint32_t i, j, k;
 	synth_node* x;
 	jack_time_t xTime, yTime;
 
@@ -920,15 +923,15 @@ void scheduled_list_sort()
 
 // List used by ugens to queue for removal during RT runtime
 
-const unsigned int MAX_REMOVAL_IDS = 512; // Max number of ids able to be scheduled for removal *per sample frame*
-const unsigned int REMOVAL_FIFO_SIZE_MASK = 511;
+const uint32_t MAX_REMOVAL_IDS = 512; // Max number of ids able to be scheduled for removal *per sample frame*
+const uint32_t REMOVAL_FIFO_SIZE_MASK = 511;
 
 typedef synth_node** node_fifo;
 
 node_fifo removal_fifo = NULL;
-unsigned int removal_fifo_read_index = 0;
-unsigned int removal_fifo_write_index = 0;
-int removal_fifo_size = 0;
+uint32_t removal_fifo_read_index = 0;
+uint32_t removal_fifo_write_index = 0;
+int32_t removal_fifo_size = 0;
 
 #define REMOVAL_FIFO_PUSH(id) FIFO_PUSH(removal_fifo, removal_fifo_write_index, id, REMOVAL_FIFO_SIZE_MASK)
 #define REMOVAL_FIFO_POP() FIFO_POP(removal_fifo, removal_fifo_read_index, REMOVAL_FIFO_SIZE_MASK)
@@ -936,7 +939,7 @@ int removal_fifo_size = 0;
 // Allocate and null initialize a node list to be used as a node_list
 node_fifo new_removal_fifo()
 {
-	unsigned int byte_size = sizeof(synth_node*) * MAX_REMOVAL_IDS;
+	uint32_t byte_size = sizeof(synth_node*) * MAX_REMOVAL_IDS;
 	node_fifo fifo = (node_fifo) malloc(byte_size);
 	assert(fifo);
 	memset(fifo, 0, byte_size);
@@ -965,7 +968,7 @@ void removal_fifo_free()
 
 hash_table hash_table_new()
 {
-	unsigned int byte_size = NODE_POINTER_SIZE * MAX_SYNTHS;
+	uint32_t byte_size = NODE_POINTER_SIZE * MAX_SYNTHS;
 	hash_table table = (hash_table) malloc(byte_size);
 	assert(table);
 	memset(table, 0, byte_size);
@@ -975,7 +978,7 @@ hash_table hash_table_new()
 
 void hash_table_free(hash_table table)
 {
-	unsigned int i;
+	uint32_t i;
 	for (i = 0; i < MAX_SYNTHS; ++i)
 	{
 		synth_node* node = table[i];
@@ -988,7 +991,7 @@ void hash_table_free(hash_table table)
 
 void hash_table_insert(hash_table table, synth_node* node)
 {
-	unsigned int slot = node->hash & HASH_TABLE_SIZE_MASK;
+	uint32_t slot = node->hash & HASH_TABLE_SIZE_MASK;
 
 	while (table[slot] != NULL)
 		slot = (slot + 1) & HASH_TABLE_SIZE_MASK;
@@ -999,7 +1002,7 @@ void hash_table_insert(hash_table table, synth_node* node)
 
 bool hash_table_remove(hash_table table, synth_node* node)
 {
-	unsigned int index = node->table_index;
+	uint32_t index = node->table_index;
 	synth_node* found_node = table[index];
 	if (found_node == node)
 	{
@@ -1014,11 +1017,11 @@ bool hash_table_remove(hash_table table, synth_node* node)
 	}
 }
 
-synth_node* hash_table_lookup(hash_table table, unsigned int key)
+synth_node* hash_table_lookup(hash_table table, uint32_t key)
 {
-	unsigned int hash = HASH_KEY(key);
-	unsigned int slot = hash & HASH_TABLE_SIZE_MASK;
-	unsigned int i = 0;
+	uint32_t hash = HASH_KEY(key);
+	uint32_t slot = hash & HASH_TABLE_SIZE_MASK;
+	uint32_t i = 0;
 
 	while (i < MAX_SYNTHS)
 	{
@@ -1106,19 +1109,19 @@ static inline void clear_necronomicon_buses()
 	memset(_necronomicon_buses, 0, num_audio_buses_bytes);
 }
 
-int get_running()
+int32_t get_running()
 {
 	return (necronomicon_running == true);
 }
 
-unsigned int get_block_size()
+uint32_t get_block_size()
 {
 	return BLOCK_SIZE;
 }
 
 void print_synth_list()
 {
-	unsigned int i = 0;
+	uint32_t i = 0;
 	puts("{{{print_synth_list");
 	synth_node* current_node = synth_list;
 	while(current_node != NULL)
@@ -1338,7 +1341,7 @@ void handle_messages_in_nrt_fifo()
 	}
 }
 
-void play_synth(synth_node* synth_definition, double* arguments, unsigned int num_arguments, unsigned int node_id, jack_time_t time)
+void play_synth(synth_node* synth_definition, double* arguments, uint32_t num_arguments, uint32_t node_id, jack_time_t time)
 {
 	// puts("||| play_synth ||| ");
 	// printf("(num_synths: %i)\n", num_synths);
@@ -1361,7 +1364,7 @@ void play_synth(synth_node* synth_definition, double* arguments, unsigned int nu
 	}
 }
 
-void stop_synth(unsigned int id)
+void stop_synth(uint32_t id)
 {
 	// puts("||| stop_synth ||| ");
 	synth_node* node = hash_table_lookup(synth_table, id);
@@ -1387,7 +1390,7 @@ void stop_synth(unsigned int id)
 }
 
 // How to handle sample accurate setting? Use FIFO messages?
-void send_set_synth_arg(unsigned int id, double argument, unsigned int arg_index)
+void send_set_synth_arg(uint32_t id, double argument, uint32_t arg_index)
 {
 	// puts("||| set_synth_arg ||| ");
 	synth_node* synth = hash_table_lookup(synth_table, id);
@@ -1407,7 +1410,7 @@ void send_set_synth_arg(unsigned int id, double argument, unsigned int arg_index
 	}
 }
 
-void send_set_synth_args(unsigned int id, double* arguments, unsigned int num_arguments)
+void send_set_synth_args(uint32_t id, double* arguments, uint32_t num_arguments)
 {
 	// puts("||| set_synth_args ||| ");
 	synth_node* synth = hash_table_lookup(synth_table, id);
@@ -1417,7 +1420,7 @@ void send_set_synth_args(unsigned int id, double* arguments, unsigned int num_ar
 	if ((synth != NULL) && (synth->alive_status == NODE_SPAWNING || synth->alive_status == NODE_ALIVE))
 	{
 		double* ugen_wires = synth->ugen_wires;
-		unsigned int i;
+		uint32_t i;
 		for (i = 0; i < num_arguments; ++i)
 		{
 			double* wire_buffer = ugen_wires + (i * BLOCK_SIZE);
@@ -1458,6 +1461,7 @@ void init_rt_thread()
 	RECIP_SAMPLE_RATE = 1.0 / SAMPLE_RATE;
 	TABLE_MUL_RECIP_SAMPLE_RATE = TABLE_SIZE * RECIP_SAMPLE_RATE;
 	usecs_per_frame = USECS_PER_SECOND / SAMPLE_RATE;
+	recip_usecs_per_frame = ((long double ) 1.0) / ((long double) usecs_per_frame);
 	BLOCK_SIZE_USECS = usecs_per_frame * (double) BLOCK_SIZE;
 	TWO_PI_TIMES_RECIP_SAMPLE_RATE = TWO_PI * RECIP_SAMPLE_RATE;
 
@@ -1526,7 +1530,7 @@ void shutdown_rt_thread()
 	removal_fifo_free();
 	free(_necronomicon_buses);
 
-	unsigned int i;
+	uint32_t i;
 	for (i = 0; i < NUM_SAMPLE_BUFFER_POOLS; ++i)
 	{
 		sample_buffer* pooled_buffer = sample_buffer_pools[i];
@@ -1598,7 +1602,7 @@ void shutdown_rt_runtime()
 	puts("Necronomicon audio engine shut down.");
 }
 
-static void signal_handler(int sig)
+static void signal_handler(int32_t sig)
 {
 	shutdown_rt_runtime();
 	fprintf(stderr, "signal received, exiting ...\n");
@@ -1616,7 +1620,7 @@ void jack_shutdown(void *arg)
 }
 
 // Main audio process callback function
-int process(jack_nframes_t nframes, void* arg)
+int32_t process(jack_nframes_t nframes, void* arg)
 {
 	jack_get_cycle_times(client, &current_cycle_frames, &current_cycle_usecs, &next_cycle_usecs, &period_usecs); // Update time variables for the current cycle
 	// Cache the current_cycle_usecs so we can recalculate current_cycle_usecs without rounding errors from iteration
@@ -1660,7 +1664,7 @@ int process(jack_nframes_t nframes, void* arg)
 	float* _out_bus_6 = out_bus_buffers[6];
 	float* _out_bus_7 = out_bus_buffers[7];
 
-	unsigned int i;
+	uint32_t i;
 	for (i = 0; i < nframes; ++i)
     {
 		out0[i] = _necronomicon_buses_out0[i]; // Write the output of buses 0/1 to jack buffers 0/1, which can be routed or sent directly to the main outs
@@ -1683,15 +1687,15 @@ int process(jack_nframes_t nframes, void* arg)
 	return 0;
 }
 
-const char* RESOUCES_PATH;
-void start_rt_runtime(const char* resources_path)
+const int8_t* RESOUCES_PATH;
+void start_rt_runtime(const int8_t* resources_path)
 {
 	puts("Necronomicon audio engine booting");
 	RESOUCES_PATH = resources_path;
 
 	const char** ports;
-	const char* client_name = "Necronomicon";
-	const char* server_name = NULL;
+	const int8_t* client_name = "Necronomicon";
+	const int8_t* server_name = NULL;
 	jack_options_t options = JackNullOption;
 	jack_status_t status;
 
@@ -1793,11 +1797,11 @@ void shutdown_necronomicon()
 
 #define LINEAR_INTERP(A, B, DELTA) (A + DELTA * (B - A))
 
-#define fast_pow(U,BASE,EXPONENT) 								\
-U.d    = BASE;													\
-U.x[1] = (int)(EXPONENT * (U.x[1] - 1072632447) + 1072632447);	\
-U.x[0] = 0;														\
-U.d;															\
+#define fast_pow(U,BASE,EXPONENT) 									\
+U.d    = BASE;														\
+U.x[1] = (int32_t)(EXPONENT * (U.x[1] - 1072632447) + 1072632447);	\
+U.x[0] = 0;															\
+U.d;																\
 
 #define AMP2DB(amp) (log10(amp * 20.0))
 #define DB2AMP(db) (pow(10, db / 20.0))
@@ -1811,7 +1815,7 @@ U.d;															\
 	const double a0     = D - C - A + B;  				\
 	const double a1     = A - B - a0;     				\
 	const double a2     = C - A;          				\
-	a0 * DELTA * delta2 + a1 * delta2 + a2 * DELTA + B; \
+	a0 * DELTA * delta2 + a1 * delta2 + a2 * DELTA + B;	\
 })*/
 
 
@@ -1824,27 +1828,27 @@ U.d;															\
 	((c3 * x + c2) * x + c1) * x + c0;							\
 })
 
-#define BIN_OP_CALC(OP, CONTROL_ARGS, AUDIO_ARGS) \
-double* in0 = UGEN_INPUT_BUFFER(u, 0);            \
-double* in1 = UGEN_INPUT_BUFFER(u, 1);            \
-double* out = UGEN_OUTPUT_BUFFER(u, 0);           \
-double a,b;                                       \
-CONTROL_ARGS                                      \
-AUDIO_LOOP(                                       \
-	AUDIO_ARGS                                    \
-	UGEN_OUT(out, a OP b);                        \
-);                                                \
+#define BIN_OP_CALC(OP, CONTROL_ARGS, AUDIO_ARGS)	\
+double* in0 = UGEN_INPUT_BUFFER(u, 0);            	\
+double* in1 = UGEN_INPUT_BUFFER(u, 1);            	\
+double* out = UGEN_OUTPUT_BUFFER(u, 0);           	\
+double a,b;                                       	\
+CONTROL_ARGS                                      	\
+AUDIO_LOOP(                                       	\
+	AUDIO_ARGS                                    	\
+	UGEN_OUT(out, a OP b);                        	\
+);
 
-#define BIN_FUNC_CALC(FUNC, CONTROL_ARGS, AUDIO_ARGS) \
-double* in0 = UGEN_INPUT_BUFFER(u, 0);          	  \
-double* in1 = UGEN_INPUT_BUFFER(u, 1);                \
-double* out = UGEN_OUTPUT_BUFFER(u, 0);               \
-double a,b;                                           \
-CONTROL_ARGS                                          \
-AUDIO_LOOP(                                           \
-	AUDIO_ARGS                                        \
-	UGEN_OUT(out, FUNC(a, b));                        \
-);                                                    \
+#define BIN_FUNC_CALC(FUNC, CONTROL_ARGS, AUDIO_ARGS)	\
+double* in0 = UGEN_INPUT_BUFFER(u, 0);          	  	\
+double* in1 = UGEN_INPUT_BUFFER(u, 1);                	\
+double* out = UGEN_OUTPUT_BUFFER(u, 0);               	\
+double a,b;                                           	\
+CONTROL_ARGS                                          	\
+AUDIO_LOOP(                                           	\
+	AUDIO_ARGS                                        	\
+	UGEN_OUT(out, FUNC(a, b));                        	\
+);
 
 void add_aa_calc(ugen u)
 {
@@ -1960,19 +1964,19 @@ void mul_kk_calc(ugen u)
 	*out = a * b;
 }
 
-#define DIV_CALC(CONTROL_ARGS, AUDIO_ARGS)        \
-double* in0 = UGEN_INPUT_BUFFER(u, 0);            \
-double* in1 = UGEN_INPUT_BUFFER(u, 1);            \
-double* out = UGEN_OUTPUT_BUFFER(u, 0);           \
-double a,b;                                       \
-CONTROL_ARGS                                      \
-AUDIO_LOOP(                                       \
-	AUDIO_ARGS                                    \
-	if (b == 0) 								  \
-		UGEN_OUT(out, 0);     					  \
-	else 										  \
-		UGEN_OUT(out, a / b);  					  \
-);                                                \
+#define DIV_CALC(CONTROL_ARGS, AUDIO_ARGS)	\
+double* in0 = UGEN_INPUT_BUFFER(u, 0);     	\
+double* in1 = UGEN_INPUT_BUFFER(u, 1);      \
+double* out = UGEN_OUTPUT_BUFFER(u, 0);     \
+double a,b;                                 \
+CONTROL_ARGS                                \
+AUDIO_LOOP(                                 \
+	AUDIO_ARGS                              \
+	if (b == 0) 							\
+		UGEN_OUT(out, 0);     				\
+	else 									\
+		UGEN_OUT(out, a / b);  				\
+);                                          \
 
 void div_aa_calc(ugen u)
 {
@@ -2026,13 +2030,13 @@ void abs_k_calc(ugen u)
 	*out = fabs(in[0]);
 }
 
-#define SIGNUM_CALC() \
-if (value > 0)        \
-	value = 1;        \
-else if (value < 0)   \
-	value = -1;       \
-else                  \
-	value = 0;        \
+#define SIGNUM_CALC()	\
+if (value > 0)        	\
+	value = 1;        	\
+else if (value < 0)   	\
+	value = -1;       	\
+else                  	\
+	value = 0;        	\
 
 void signum_a_calc(ugen u)
 {
@@ -2392,17 +2396,17 @@ void acosh_k_calc(ugen u)
 
 // max
 
-#define UMAX_CALC(CONTROL_ARGS, AUDIO_ARGS) \
-double* in0 = UGEN_INPUT_BUFFER(u, 0);      \
-double* in1 = UGEN_INPUT_BUFFER(u, 1);      \
-double* out = UGEN_OUTPUT_BUFFER(u, 0);     \
-double a;                                   \
-double b;                                   \
-CONTROL_ARGS                                \
-AUDIO_LOOP(                                 \
-    AUDIO_ARGS                              \
+#define UMAX_CALC(CONTROL_ARGS, AUDIO_ARGS)	\
+double* in0 = UGEN_INPUT_BUFFER(u, 0);     	\
+double* in1 = UGEN_INPUT_BUFFER(u, 1);     	\
+double* out = UGEN_OUTPUT_BUFFER(u, 0);    	\
+double a;                                  	\
+double b;                                  	\
+CONTROL_ARGS                               	\
+AUDIO_LOOP(                                	\
+    AUDIO_ARGS                             	\
     UGEN_OUT(out, fmax(a, b));    			\
-);                                          \
+);                                         	\
 
 
 #define UMAX_AK a = *in0;
@@ -2456,9 +2460,9 @@ __attribute__((flatten)) void umax_aa_calc(ugen u)
 
 // min
 
-#define UMIN_CALC(CONTROL_ARGS, AUDIO_ARGS) \
-double* in0 = UGEN_INPUT_BUFFER(u, 0);      \
-double* in1 = UGEN_INPUT_BUFFER(u, 1);      \
+#define UMIN_CALC(CONTROL_ARGS, AUDIO_ARGS)	\
+double* in0 = UGEN_INPUT_BUFFER(u, 0);     	\
+double* in1 = UGEN_INPUT_BUFFER(u, 1);     	\
 double* out = UGEN_OUTPUT_BUFFER(u, 0);     \
 double a;                                   \
 double b;                                   \
@@ -2466,7 +2470,7 @@ CONTROL_ARGS                                \
 AUDIO_LOOP(                                 \
     AUDIO_ARGS                              \
     UGEN_OUT(out, fmin(a, b));    			\
-);                                          \
+);
 
 
 #define UMIN_AK a = *in0;
@@ -2523,7 +2527,7 @@ __attribute__((flatten)) void umin_aa_calc(ugen u)
 void line_constructor(ugen* u)
 {
 	u->data = malloc(UINT_SIZE); // Line time
-	*((unsigned int*) u->data) = 0;
+	*((uint32_t*) u->data) = 0;
 }
 
 void line_deconstructor(ugen* u)
@@ -2534,7 +2538,7 @@ void line_deconstructor(ugen* u)
 #define LINE_CALC(CONTROL_ARGS, AUDIO_ARGS)			\
 double* in0 = UGEN_INPUT_BUFFER(u, 0);				\
 double* out = UGEN_OUTPUT_BUFFER(u, 0);				\
-unsigned int line_time = *((unsigned int*) u.data); \
+uint32_t line_time = *((uint32_t*) u.data); 		\
 double length;										\
 double y;											\
 CONTROL_ARGS										\
@@ -2552,7 +2556,7 @@ AUDIO_LOOP(											\
 	};												\
 	UGEN_OUT(out, y);								\
 );													\
-*((unsigned int*) u.data) = line_time;				\
+*((uint32_t*) u.data) = line_time;
 
 void line_k_calc(ugen u)
 {
@@ -2581,10 +2585,10 @@ typedef struct
 	double nextValue;
 	double currentValue;
 	double nextTotalDuration;
-	int    index;
-	int    numValues;
-	int	   maxIndex;
-	int    numDurations;
+	int32_t index;
+	int32_t numValues;
+	int32_t	maxIndex;
+	int32_t numDurations;
 
 } env_struct;
 
@@ -2615,12 +2619,12 @@ double* in1 = UGEN_INPUT_BUFFER(u, 1); 																			\
 double* out = UGEN_OUTPUT_BUFFER(u, 0); 																		\
 env_struct   data  = *((env_struct*) u.data);																	\
 double x;																										\
-double       curve = UGEN_INPUT_BUFFER(u, 0)[0];																\
-const int maxIndex = data.maxIndex;																				\
+double curve = UGEN_INPUT_BUFFER(u, 0)[0];																		\
+const int32_t maxIndex = data.maxIndex;																			\
 bool scheduled_for_removal = false;																				\
 union {																											\
 	double d;																									\
-	int x[2];																									\
+	int32_t x[2];																								\
 } ud = { 0 };																									\
 CONTROL_ARGS																									\
 AUDIO_LOOP(																										\
@@ -2640,7 +2644,7 @@ AUDIO_LOOP(																										\
 		}																										\
 		else if (data.index < maxIndex)																			\
 		{																										\
-			int dursOffset = 2 + data.numValues;																\
+			int32_t dursOffset = 2 + data.numValues;															\
 			double nextDuration = UGEN_IN(UGEN_INPUT_BUFFER(u, (data.index % data.numValues) + dursOffset));	\
 																												\
 			if (data.nextTotalDuration < 0)																		\
@@ -2690,12 +2694,12 @@ void env_a_calc(ugen u)
 double* in1 = UGEN_INPUT_BUFFER(u, 1);																			\
 double* out = UGEN_OUTPUT_BUFFER(u, 0);																			\
 double x;																										\
-env_struct   data  = *((env_struct*) u.data);																	\
-double       curve = UGEN_INPUT_BUFFER(u, 0)[0];																\
-const int maxIndex = data.maxIndex;																				\
+env_struct data  = *((env_struct*) u.data);																		\
+double curve = UGEN_INPUT_BUFFER(u, 0)[0];																		\
+const int32_t maxIndex = data.maxIndex;																			\
 union {																											\
 	double d;																									\
-	int x[2];																									\
+	int32_t x[2];																								\
 } ud = { 0 };																									\
 CONTROL_ARGS																									\
 AUDIO_LOOP(																										\
@@ -2710,7 +2714,7 @@ AUDIO_LOOP(																										\
 		}																										\
 		else if (data.index < maxIndex)																			\
 		{																										\
-			int dursOffset = 2 + data.numValues;																\
+			int32_t dursOffset = 2 + data.numValues;															\
 			double nextDuration = *UGEN_INPUT_BUFFER(u, (data.index % data.numValues) + dursOffset);			\
 																												\
 			if (data.nextTotalDuration < 0)																		\
@@ -2767,32 +2771,32 @@ void sin_deconstructor(ugen* u)
 	free(u->data);
 }
 
-#define SIN_CALC(CONTROL_ARGS, AUDIO_ARGS)       \
-double* in0 = UGEN_INPUT_BUFFER(u, 0);           \
-double* out = UGEN_OUTPUT_BUFFER(u, 0);			 \
-												 \
-double phase = *((double*) u.data);				 \
-double freq;									 \
-unsigned char index1;							 \
-unsigned char index2;							 \
-double v1; 										 \
-double v2;										 \
-double delta;									 \
-												 \
-CONTROL_ARGS									 \
-												 \
-AUDIO_LOOP(										 \
-	AUDIO_ARGS									 \
-	index1 = phase;								 \
-	index2 = index1 + 1;						 \
-	v1     = sine_table[index1];				 \
-	v2     = sine_table[index2];				 \
-	delta  = phase - ((long) phase);			 \
-	UGEN_OUT(out, LERP(v1,v2,delta));            \
-	phase += TABLE_MUL_RECIP_SAMPLE_RATE * freq; \
-);                                               \
-                                                 \
-*((double*) u.data) = phase;                     \
+#define SIN_CALC(CONTROL_ARGS, AUDIO_ARGS)      	\
+double* in0 = UGEN_INPUT_BUFFER(u, 0);           	\
+double* out = UGEN_OUTPUT_BUFFER(u, 0);			 	\
+												 	\
+double phase = *((double*) u.data);				 	\
+double freq;									 	\
+uint8_t index1;							 			\
+uint8_t index2;							 			\
+double v1; 										 	\
+double v2;										 	\
+double delta;									 	\
+												 	\
+CONTROL_ARGS									 	\
+												 	\
+AUDIO_LOOP(										 	\
+	AUDIO_ARGS									 	\
+	index1 = phase;								 	\
+	index2 = index1 + 1;						 	\
+	v1     = sine_table[index1];				 	\
+	v2     = sine_table[index2];				 	\
+	delta  = phase - ((int64_t) phase);			 	\
+	UGEN_OUT(out, LERP(v1,v2,delta));            	\
+	phase += TABLE_MUL_RECIP_SAMPLE_RATE * freq; 	\
+);                                               	\
+                                                 	\
+*((double*) u.data) = phase;                     	\
 
 #define mmsin_a0  1.0
 #define mmsin_a1 -1.666666666640169148537065260055e-1
@@ -2802,9 +2806,9 @@ AUDIO_LOOP(										 \
 #define mmsin_a5 -2.502845227292692953118686710787e-8
 #define mmsin_a6  1.538730635926417598443354215485e-10
 
-#define MINIMAXSIN(X)																									  \
-x2 = X * X;                                                              												  \
-X * (mmsin_a0 + x2 * (mmsin_a1 + x2 * (mmsin_a2 + x2 * (mmsin_a3 + x2 * (mmsin_a4 + x2 * (mmsin_a5 + x2 * mmsin_a6)))))); \
+#define MINIMAXSIN(X)																									 	\
+x2 = X * X;                                                              												 	\
+X * (mmsin_a0 + x2 * (mmsin_a1 + x2 * (mmsin_a2 + x2 * (mmsin_a3 + x2 * (mmsin_a4 + x2 * (mmsin_a5 + x2 * mmsin_a6))))));	\
 
 void sin_a_calc(ugen u)
 {
@@ -2846,13 +2850,13 @@ void local_out_a_calc(ugen u)
 double* in0 = UGEN_INPUT_BUFFER(u, 0);           		\
 double* in1 = UGEN_INPUT_BUFFER(u, 1);           		\
 double x;                                        		\
-unsigned char bus_index; /* constrains bus range */     \
-unsigned int bus_frame;                          		\
+uint8_t bus_index; /* constrains bus range */    		\
+uint32_t bus_frame;                          			\
 CONTROL_CODE									 		\
 AUDIO_LOOP(										 		\
 	AUDIO_CODE									 		\
-	_necronomicon_buses[bus_frame + _block_frame] += x; \
-);                                               	    \
+	_necronomicon_buses[bus_frame + _block_frame] += x;	\
+);
 
 void out_aa_calc(ugen u)
 {
@@ -2892,16 +2896,16 @@ void out_kk_calc(ugen u)
 	)
 }
 
-#define IN_CALC(CONTROL_CODE, AUDIO_CODE)       				  \
-double* in0 = UGEN_INPUT_BUFFER(u, 0); 							  \
-double* out = UGEN_OUTPUT_BUFFER(u, 0); 						  \
-unsigned char bus_index; /* constrains bus range */     		  \
-unsigned int bus_frame;                          				  \
-CONTROL_CODE									 				  \
-AUDIO_LOOP(										 				  \
-	AUDIO_CODE									 				  \
-	UGEN_OUT(out, _necronomicon_buses[bus_frame + _block_frame]); \
-);                                               	    		  \
+#define IN_CALC(CONTROL_CODE, AUDIO_CODE)       				  	\
+double* in0 = UGEN_INPUT_BUFFER(u, 0); 							  	\
+double* out = UGEN_OUTPUT_BUFFER(u, 0); 						  	\
+uint8_t bus_index; /* constrains bus range */     		  			\
+uint32_t bus_frame;                          				  		\
+CONTROL_CODE									 				  	\
+AUDIO_LOOP(										 				  	\
+	AUDIO_CODE									 				  	\
+	UGEN_OUT(out, _necronomicon_buses[bus_frame + _block_frame]); 	\
+);                                               	    		  	\
 
 void in_a_calc(ugen u)
 {
@@ -2923,15 +2927,15 @@ void in_k_calc(ugen u)
 
 void poll_constructor(ugen* u)
 {
-	unsigned int* count_buffer = (unsigned int*) malloc(sizeof(unsigned int));
+	uint32_t* count_buffer = (uint32_t*) malloc(sizeof(uint32_t));
 	*count_buffer = 0;
 	u->data = count_buffer;
 }
 
 void poll_calc(ugen u)
 {
-	unsigned int* count_buffer = (unsigned int*) u.data;
-	unsigned int count = *count_buffer;
+	uint32_t* count_buffer = (uint32_t*) u.data;
+	uint32_t count = *count_buffer;
 	message msg;
 	msg.arg.number = 0;
 	msg.type = PRINT_NUMBER;
@@ -2960,10 +2964,10 @@ typedef struct
 {
 	sample_buffer* buffer;
 	double max_delay_time;
-	long write_index;
+	int64_t write_index;
 } delay_data;
 
-const unsigned int DELAY_DATA_SIZE = sizeof(delay_data);
+const uint32_t DELAY_DATA_SIZE = sizeof(delay_data);
 
 void delayN_constructor(ugen* u)
 {
@@ -2973,7 +2977,7 @@ void delayN_constructor(ugen* u)
 	*((delay_data*) u->data) = data;
 }
 
-const unsigned int MAX_DELAYL_OFFSET = 1;
+const uint32_t MAX_DELAYL_OFFSET = 1;
 
 void delayL_constructor(ugen* u)
 {
@@ -2983,7 +2987,7 @@ void delayL_constructor(ugen* u)
 	*((delay_data*) u->data) = data;
 }
 
-const unsigned int MAX_DELAYC_OFFSET = 2;
+const uint32_t MAX_DELAYC_OFFSET = 2;
 
 void delayC_constructor(ugen* u)
 {
@@ -2999,29 +3003,29 @@ void delay_deconstructor(ugen* u)
 	free(u->data);
 }
 
-#define INIT_DELAY(u)									  \
-double* in0 = UGEN_INPUT_BUFFER(u, 0);				      \
-double* in1 = UGEN_INPUT_BUFFER(u, 1);				      \
-double* out = UGEN_OUTPUT_BUFFER(u, 0);				      \
-delay_data data = *((delay_data*) u.data);				  \
-sample_buffer buffer = *data.buffer;					  \
-long write_index = data.write_index;					  \
-unsigned int num_samples_mask = buffer.num_samples_mask;  \
-double delay_time;										  \
-double x;												  \
-double y;												  \
+#define INIT_DELAY(u)									  	\
+double* in0 = UGEN_INPUT_BUFFER(u, 0);				      	\
+double* in1 = UGEN_INPUT_BUFFER(u, 1);				      	\
+double* out = UGEN_OUTPUT_BUFFER(u, 0);				      	\
+delay_data data = *((delay_data*) u.data);				  	\
+sample_buffer buffer = *data.buffer;					  	\
+int64_t write_index = data.write_index;					  	\
+uint32_t num_samples_mask = buffer.num_samples_mask;  		\
+double delay_time;										  	\
+double x;												  	\
+double y;												  	\
 
-#define FINISH_DELAY()									  \
-data.write_index = write_index;						      \
-*((delay_data*) u.data) = data;							  \
+#define FINISH_DELAY()									  	\
+data.write_index = write_index;						      	\
+*((delay_data*) u.data) = data;							  	\
 
 #define DELAYN_CALC(CONTROL_ARGS, AUDIO_ARGS)									\
 INIT_DELAY(u);																	\
-long iread_index;																\
+int64_t iread_index;															\
 CONTROL_ARGS																	\
 AUDIO_LOOP(																		\
 	AUDIO_ARGS																	\
-	iread_index = write_index - (long) delay_time;								\
+	iread_index = write_index - (int64_t) delay_time;							\
 	y = iread_index < 0 ? 0 : buffer.samples[iread_index & num_samples_mask];	\
 	buffer.samples[write_index & num_samples_mask] = x;							\
 	++write_index;																\
@@ -3080,9 +3084,9 @@ void delayN_aa_calc(ugen u)
     )
 }
 
-inline double delayL(long write_index, long idelay_time, double delta, unsigned int num_samples_mask, double* samples)
+inline double delayL(int64_t write_index, int64_t idelay_time, double delta, uint32_t num_samples_mask, double* samples)
 {
-	const long iread_index0 = write_index - idelay_time;
+	const int64_t iread_index0 = write_index - idelay_time;
 	double y;
 
 	if (iread_index0 < 0)
@@ -3092,7 +3096,7 @@ inline double delayL(long write_index, long idelay_time, double delta, unsigned 
 
 	else
 	{
-		long iread_index1;
+		int64_t iread_index1;
 		double y0, y1;
 		iread_index1 = iread_index0 - 1;
 		y0 = samples[iread_index0 & num_samples_mask];
@@ -3106,7 +3110,7 @@ inline double delayL(long write_index, long idelay_time, double delta, unsigned 
 #define DELAYL_CALC(CONTROL_ARGS, AUDIO_ARGS)											\
 INIT_DELAY(u);																			\
 double delta;																			\
-long idelay_time;																		\
+int64_t idelay_time;																	\
 CONTROL_ARGS																			\
 AUDIO_LOOP(																				\
 	AUDIO_ARGS																			\
@@ -3171,10 +3175,10 @@ void delayL_aa_calc(ugen u)
     )
 }
 
-inline double delayC(long write_index, long idelay_time, double delta, unsigned int num_samples_mask, double* samples)
+inline double delayC(int64_t write_index, int64_t idelay_time, double delta, uint32_t num_samples_mask, double* samples)
 {
-	const long iread_index1 = write_index - idelay_time;
-	const long iread_index0 = iread_index1 + 1;
+	const int64_t iread_index1 = write_index - idelay_time;
+	const int64_t iread_index0 = iread_index1 + 1;
 	double y;
 
 	if (iread_index0 < 0)
@@ -3184,8 +3188,8 @@ inline double delayC(long write_index, long idelay_time, double delta, unsigned 
 
 	else
 	{
-		const long iread_index2 = iread_index1 - 1;
-		const long iread_index3 = iread_index1 - 2;
+		const int64_t iread_index2 = iread_index1 - 1;
+		const int64_t iread_index3 = iread_index1 - 2;
 		double y0, y1, y2, y3;
 
 		if (iread_index1 < 0)
@@ -3228,7 +3232,7 @@ INIT_DELAY(u);																									\
 double* samples = buffer.samples;																				\
 double delta;																									\
 double read_index;																								\
-long idelay_time;																								\
+int64_t idelay_time;																							\
 CONTROL_ARGS																									\
 AUDIO_LOOP(																										\
 	AUDIO_ARGS																									\
@@ -3310,11 +3314,11 @@ static inline double CALC_FEEDBACK(double delay_time, double decay_time)
 #define COMBN_CALC(CONTROL_ARGS, AUDIO_ARGS)									\
 INIT_DELAY(u);																	\
 INIT_COMB(u);																	\
-long iread_index;																\
+int64_t iread_index;															\
 CONTROL_ARGS																	\
 AUDIO_LOOP(																		\
 	AUDIO_ARGS																	\
-	iread_index = write_index - (long) delay_time;								\
+	iread_index = write_index - (int64_t) delay_time;							\
 	y = iread_index < 0 ? 0 : buffer.samples[iread_index & num_samples_mask];	\
 	feedback = CALC_FEEDBACK(delay_time, decay_time);							\
 	buffer.samples[write_index & num_samples_mask] = x + (feedback * y);		\
@@ -3432,7 +3436,7 @@ void combN_aaa_calc(ugen u)
 INIT_DELAY(u);																			\
 INIT_COMB(u);																			\
 double delta;																			\
-long idelay_time;																		\
+int64_t idelay_time;																	\
 CONTROL_ARGS																			\
 AUDIO_LOOP(																				\
 	AUDIO_ARGS																			\
@@ -3556,7 +3560,7 @@ INIT_DELAY(u);																									\
 INIT_COMB(u);																									\
 double* samples = buffer.samples;																				\
 double delta;																									\
-long idelay_time;																								\
+int64_t idelay_time;																							\
 CONTROL_ARGS																									\
 AUDIO_LOOP(																										\
 	AUDIO_ARGS																									\
@@ -3681,7 +3685,7 @@ void combC_aaa_calc(ugen u)
 
 //// Test FIFO
 
-synth_node* new_test_synth(unsigned int time)
+synth_node* new_test_synth(uint32_t time)
 {
 	ugen test_ugen = { &sin_a_calc, &sin_constructor, &sin_deconstructor, NULL, NULL, NULL };
 	test_ugen.constructor(&test_ugen);
@@ -3730,7 +3734,7 @@ void print_node(synth_node* node)
 void print_list(node_list list)
 {
 	printf("scheduled_list_read_index: %i, scheduled_list_write_index: %i\n", scheduled_list_read_index, scheduled_list_write_index);
-	unsigned int i = scheduled_list_read_index & FIFO_SIZE_MASK;
+	uint32_t i = scheduled_list_read_index & FIFO_SIZE_MASK;
 	scheduled_list_write_index = scheduled_list_write_index & FIFO_SIZE_MASK;
 
 	for (; i != scheduled_list_write_index; i = (i + 1) & FIFO_SIZE_MASK)
@@ -3746,17 +3750,17 @@ void randomize_and_print_list(node_list list)
 	puts("// RANDOMIZE LIST");
 	puts("//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////\n");
 
-	unsigned int i;
+	uint32_t i;
 	for (i = 0; i < 1000; ++i)
 	{
-		unsigned int num_pop = random() / (double) RAND_MAX * 100;
+		uint32_t num_pop = random() / (double) RAND_MAX * 100;
 	    while ((num_pop > 0) && ((scheduled_list_read_index & FIFO_SIZE_MASK) != ((scheduled_list_write_index - 1) & FIFO_SIZE_MASK)))
 		{
 			SCHEDULED_LIST_POP();
 			--num_pop;
 		}
 
-		unsigned int num_push = random() / (double) RAND_MAX * 100;
+		uint32_t num_push = random() / (double) RAND_MAX * 100;
 		while ((num_push > 0) && ((scheduled_list_read_index & FIFO_SIZE_MASK) != (scheduled_list_write_index & FIFO_SIZE_MASK)))
 		{
 			synth_node* node = new_test_synth((random() / (double) RAND_MAX) * 10000.0);
@@ -3791,7 +3795,7 @@ void test_list()
 
 	print_list(scheduled_node_list);
 
-	unsigned int i = 0;
+	uint32_t i = 0;
 	for (; i < 100; ++i)
 	{
 		sort_and_print_list(scheduled_node_list);
@@ -3813,7 +3817,7 @@ void print_hash_table(hash_table table)
 
 	printf("hash_table [");
 
-	unsigned int i;
+	uint32_t i;
 	for (i = 0; i < MAX_SYNTHS; ++i)
 	{
 		// print_node(table[i]);
@@ -3824,12 +3828,12 @@ void print_hash_table(hash_table table)
 	printf("]\n\n");
 }
 
-unsigned int num_values = 5000;
-unsigned int times[5000];
+uint32_t num_values = 5000;
+uint32_t times[5000];
 
 void test_hash_table()
 {
-	unsigned int i = 0;
+	uint32_t i = 0;
 	for (i = 0; i < 1000; ++i)
 	{
 		printf("key: %u, hash: %u, slot %u\n", i, HASH_KEY(i), HASH_KEY(i) & HASH_TABLE_SIZE_MASK);
@@ -3921,12 +3925,12 @@ bool is_odd(synth_node* node)
 	if (node == NULL)
 		return false;
 
-	return (int) node->time % 2 == 1;
+	return (int32_t) node->time % 2 == 1;
 }
 
 void test_doubly_linked_list()
 {
-	int i; // Don't make this unsigned, we'll go infinite!
+	int32_t i; // Don't make this unsigned, we'll go infinite!
 	for (i = 50; i >= 0; --i)
 	{
 		synth_node* node = new_test_synth(i);
@@ -3992,9 +3996,9 @@ void test_doubly_linked_list()
 #define SOFT_CLIP(XIN,AMOUNT) 											\
 ({																		\
 	double X     = XIN * AMOUNT * 0.5; 									\
-	double v1    = atan_table[((unsigned char) (X * TABLE_SIZE))];     	\
-	double v2    = atan_table[((unsigned char) (X * TABLE_SIZE + 1))]; 	\
-	double delta = X - ((long) X);	      								\
+	double v1    = atan_table[((uint8_t) (X * TABLE_SIZE))];     		\
+	double v2    = atan_table[((uint8_t) (X * TABLE_SIZE + 1))]; 		\
+	double delta = X - ((int64_t) X);	      							\
 	v1 + delta * (v2 - v1);			  									\
 })
 // atan(X*AMOUNT)/M_PI)
@@ -4002,9 +4006,9 @@ void test_doubly_linked_list()
 #define TANH_DIST(XIN,AMOUNT) 											\
 ({																		\
 	double X     = XIN * AMOUNT * 0.5; 									\
-	double v1    = tanh_table[((unsigned char) (X * TABLE_SIZE))];     	\
-	double v2    = tanh_table[((unsigned char) (X * TABLE_SIZE + 1))]; 	\
-	double delta = X - ((long) X);	      								\
+	double v1    = tanh_table[((uint8_t) (X * TABLE_SIZE))];     		\
+	double v2    = tanh_table[((uint8_t) (X * TABLE_SIZE + 1))]; 		\
+	double delta = X - ((int64_t) X);	      							\
 	v1 + delta * (v2 - v1);			  									\
 })
 // #define TANH_DIST(X,AMOUNT) (tanh(X*AMOUNT))
@@ -4013,9 +4017,9 @@ void test_doubly_linked_list()
 #define SIN_DIST(XIN,AMOUNT) 											\
 ({																		\
 	double X     = XIN * AMOUNT * 0.5; 									\
-	double v1    = sine_table[((unsigned char) (X * TABLE_SIZE))];     	\
-	double v2    = sine_table[((unsigned char) (X * TABLE_SIZE + 1))]; 	\
-	double delta = X - ((long) X);	      								\
+	double v1    = sine_table[((uint8_t) (X * TABLE_SIZE))];     		\
+	double v2    = sine_table[((uint8_t) (X * TABLE_SIZE + 1))]; 		\
+	double delta = X - ((int64_t) X);	      							\
 	v1 + delta * (v2 - v1);			  									\
 })
 
@@ -4025,15 +4029,15 @@ void test_doubly_linked_list()
 
 #define POLY3_DIST(X,AMOUNT) (1.5 * X - 0.5 * pow(X,3))
 
-#define WRAP(X,AMOUNT)       \
-({                           \
-	double x   = X * AMOUNT; \
-	double ret = x;          \
-	if (x >= 1)              \
-		ret = x - 2;         \
-	else if (x < -1)         \
-		ret = x + 2;         \
-	ret;                     \
+#define WRAP(X,AMOUNT)      	\
+({                          	\
+	double x   = X * AMOUNT;	\
+	double ret = x;          	\
+	if (x >= 1)              	\
+		ret = x - 2;         	\
+	else if (x < -1)         	\
+		ret = x + 2;         	\
+	ret;                     	\
 })
 
 void accumulator_constructor(ugen* u)
@@ -4055,7 +4059,7 @@ double RECIP_CHAR_RANGE = 1.0 / 255.0;
 double* in0 = UGEN_INPUT_BUFFER(u, 0);					\
 double* in1 = UGEN_INPUT_BUFFER(u, 1);					\
 double* out = UGEN_OUTPUT_BUFFER(u, 0);					\
-double phase = *((unsigned int*) u.data);				\
+double phase = *((uint32_t*) u.data);					\
 double freq;											\
 /* double phaseArg; */									\
 double amp1;											\
@@ -4066,9 +4070,9 @@ CONTROL_ARGS											\
 AUDIO_LOOP(												\
 	AUDIO_ARGS											\
 	/* Branchless and table-less saw */					\
-	amp1   = ((double)((char)phase));					\
-	amp2   = ((double)(((char)phase)+1));				\
-	delta  = phase - ((long) phase);					\
+	amp1   = ((double)((int8_t)phase));					\
+	amp2   = ((double)(((int8_t)phase)+1));				\
+	delta  = phase - ((int64_t) phase);					\
 	y      = LERP(amp1,amp2,delta) * RECIP_CHAR_RANGE;	\
 	phase += TABLE_MUL_RECIP_SAMPLE_RATE * freq;		\
 	UGEN_OUT(out, y);									\
@@ -4109,23 +4113,23 @@ void lfsaw_kk_calc(ugen u)
     );
 }
 
-#define LFPULSE_CALC(CONTROL_ARGS, AUDIO_ARGS)					\
-double* in0 = UGEN_INPUT_BUFFER(u, 0);							\
-double* in1 = UGEN_INPUT_BUFFER(u, 1);							\
-double* out = UGEN_OUTPUT_BUFFER(u, 0);							\
-double phase = *((unsigned int*) u.data);						\
-double freq;													\
-/*double phaseArg;*/											\
-double y;														\
-CONTROL_ARGS													\
-AUDIO_LOOP(														\
-	AUDIO_ARGS													\
-	/*Branchless and table-less square*/						\
-	y = 1 | (((char)phase) >> (sizeof(char) * CHAR_BIT - 1));	\
-	phase += TABLE_MUL_RECIP_SAMPLE_RATE * freq;				\
-	UGEN_OUT(out, y);											\
-);																\
-*((double*) u.data) = phase;									\
+#define LFPULSE_CALC(CONTROL_ARGS, AUDIO_ARGS)						\
+double* in0 = UGEN_INPUT_BUFFER(u, 0);								\
+double* in1 = UGEN_INPUT_BUFFER(u, 1);								\
+double* out = UGEN_OUTPUT_BUFFER(u, 0);								\
+double phase = *((uint32_t*) u.data);								\
+double freq;														\
+/*double phaseArg;*/												\
+double y;															\
+CONTROL_ARGS														\
+AUDIO_LOOP(															\
+	AUDIO_ARGS														\
+	/*Branchless and table-less square*/							\
+	y = 1 | (((int8_t)phase) >> (sizeof(int8_t) * CHAR_BIT - 1));	\
+	phase += TABLE_MUL_RECIP_SAMPLE_RATE * freq;					\
+	UGEN_OUT(out, y);												\
+);																	\
+*((double*) u.data) = phase;										\
 
 void lfpulse_aa_calc(ugen u)
 {
@@ -4170,7 +4174,7 @@ void lfpulse_kk_calc(ugen u)
 typedef struct
 {
 	double *lpTable;
-	int     c;
+	int32_t    c;
 } minbleptable_t;
 
 typedef struct
@@ -4179,9 +4183,9 @@ typedef struct
 	double  phase;
 	double  masterPhase;
 	double *buffer;      // circular output buffer
-	int     cBuffer;	 // buffer size
-	int     iBuffer;	 // current buffer position
-	int     nInit;		 // amount of initialized entries
+	int32_t    cBuffer;	 // buffer size
+	int32_t    iBuffer;	 // current buffer position
+	int32_t    nInit;		 // amount of initialized entries
 	double  prevSyncAmp; //For hardsync
 } minblep;
 
@@ -4190,18 +4194,18 @@ minbleptable_t gMinBLEP;
 bool minBLEP_Init()
 {
 	// load table
-	const char* blep_table = "/misc/minblep.mat";
-	char path_to_blep_table[strlen(RESOUCES_PATH) + strlen(blep_table)];
+	const int8_t* blep_table = "/misc/minblep.mat";
+	int8_t path_to_blep_table[strlen(RESOUCES_PATH) + strlen(blep_table)];
 	strcat(path_to_blep_table,RESOUCES_PATH);
 	strcat(path_to_blep_table,blep_table);
 	FILE *fp=fopen(path_to_blep_table,"rb");
-	unsigned int iSize;
+	uint32_t iSize;
 
 	if (!fp) return false;
 
 	fseek(fp,0x134,SEEK_SET);
 
-	fread(&iSize,sizeof(int),1,fp);
+	fread(&iSize,sizeof(int32_t),1,fp);
 	gMinBLEP.c=iSize/sizeof(double);
 
 	gMinBLEP.lpTable=(double*)malloc(iSize);
@@ -4243,11 +4247,11 @@ void minblep_deconstructor(ugen* u)
 // add impulse into buffer
 inline void add_blep(minblep* mb, double offset, double amp)
 {
-	int    i;
+	int32_t   i;
 	double *out       = mb->buffer  + mb->iBuffer;
-	double *in        = gMinBLEP.lpTable + (int) (KTABLE*offset);
+	double *in        = gMinBLEP.lpTable + (int32_t) (KTABLE*offset);
 	double frac       = fmod(KTABLE*offset,1.0);
-	int    cBLEP      = (gMinBLEP.c / KTABLE) - 1;
+	int32_t   cBLEP      = (gMinBLEP.c / KTABLE) - 1;
 	double *bufferEnd = mb->buffer  + mb->cBuffer;
 	double f;
 
@@ -4663,12 +4667,12 @@ AUDIO_LOOP(																				\
 *((minblep*) u.data) = mb;																\
 
 #define SYNCOSC_0K slaveFreq  = in0[0]; freqN = slaveFreq * RECIP_SAMPLE_RATE;
-#define SYNCOSC_1K slaveWave  = (int)in1[0];
+#define SYNCOSC_1K slaveWave  = (int32_t)in1[0];
 #define SYNCOSC_2K pwm        = CLAMP(in2[0],0,1) * 0.5;
 #define SYNCOSC_3K masterFreq = in3[0];
 
 #define SYNCOSC_0A slaveFreq  = UGEN_IN(in0); freqN = slaveFreq * RECIP_SAMPLE_RATE;
-#define SYNCOSC_1A slaveWave  = (int)UGEN_IN(in1);
+#define SYNCOSC_1A slaveWave  = (int32_t)UGEN_IN(in1);
 #define SYNCOSC_2A pwm        = CLAMP(UGEN_IN(in2),0,1) * 0.5;
 #define SYNCOSC_3A masterFreq = UGEN_IN(in3);
 
@@ -4854,24 +4858,24 @@ void syncosc_aaaa_calc(ugen u)
 // Randomness
 //==========================================
 
-static inline unsigned int xorshift128()
+static inline uint32_t xorshift128()
 {
-	static unsigned int xor_x = 1243598713U;
-	static unsigned int xor_y = 3093459404U;
-	static unsigned int xor_z = 1821928721U;
-	static unsigned int xor_w = 1791912391U;
+	static uint32_t xor_x = 1243598713U;
+	static uint32_t xor_y = 3093459404U;
+	static uint32_t xor_z = 1821928721U;
+	static uint32_t xor_w = 1791912391U;
 
-	unsigned int t = xor_x ^ (xor_x << 11);
+	uint32_t t = xor_x ^ (xor_x << 11);
 	xor_x = xor_y; xor_y = xor_z; xor_z = xor_w;
     return xor_w = xor_w ^ (xor_w >> 19) ^ t ^ (t >> 8);
 }
 
-static inline unsigned long xorshift128plus()
+static inline uint64_t xorshift128plus()
 {
-	static unsigned long sx = 18446744073709551557UL;
-    static unsigned long sy = 12764787846358441471UL;
-    unsigned long x = sx;
-	unsigned long const y = sy;
+	static uint64_t sx = 18446744073709551557UL;
+    static uint64_t sy = 12764787846358441471UL;
+    uint64_t x = sx;
+	uint64_t const y = sy;
 	sx = y;
 	x ^= x << 23; // a
 	x ^= x >> 17; // b
@@ -4881,16 +4885,16 @@ static inline unsigned long xorshift128plus()
 }
 
 
-static inline unsigned int trand()
+static inline uint32_t trand()
 {
-	static unsigned int s1 = 1243598713U;
-	static unsigned int s2 = 3093459404U;
-	static unsigned int s3 = 1821928721U;
-	// static unsigned int seed = 1791912391U;
+	static uint32_t s1 = 1243598713U;
+	static uint32_t s2 = 3093459404U;
+	static uint32_t s3 = 1821928721U;
+	// static uint32_t seed = 1791912391U;
 
-	s1 = ((s1 & (unsigned int) - 2)  << 12) ^ (((s1 << 13) ^  s1) >> 19);
-	s2 = ((s2 & (unsigned int) - 8)  <<  4) ^ (((s2 <<  2) ^  s2) >> 25);
-	s3 = ((s3 & (unsigned int) - 16) << 17) ^ (((s3 <<  3) ^  s3) >> 11);
+	s1 = ((s1 & (uint32_t) - 2)  << 12) ^ (((s1 << 13) ^  s1) >> 19);
+	s2 = ((s2 & (uint32_t) - 8)  <<  4) ^ (((s2 <<  2) ^  s2) >> 25);
+	s3 = ((s3 & (uint32_t) - 16) << 17) ^ (((s3 <<  3) ^  s3) >> 11);
 	return s1 ^ s2 ^ s3;
 }
 
@@ -4939,7 +4943,7 @@ void rand_range_constructor(ugen* u)
 	double   value = (in * range) + min;
 	double*  out  = (_necronomicon_current_node_underconstruction->ugen_wires + (u->outputs[0] * BLOCK_SIZE));
 
-	unsigned int i;
+	uint32_t i;
 	for (i = 0; i < BLOCK_SIZE; ++i)
 	{
 		out[i] = value;
@@ -5482,11 +5486,11 @@ void biquad_deconstructor(ugen* u)
 
 #define BIQUAD(B0,B1,B2,A0,A1,A2,X,X1,X2,Y1,Y2) ( (B0/A0)*X + (B1/A0)*X1 + (B2/A0)*X2 - (A1/A0)*Y1 - (A2/A0)*Y2 )
 
-#define TABLE_LOOKUP(VAL,TABLE)               				\
-v1     = TABLE[((unsigned char) (VAL * TABLE_SIZE))];     	\
-v2     = TABLE[((unsigned char) (VAL * TABLE_SIZE + 1))];	\
-delta  = VAL - ((long) VAL);	      						\
-v1 + delta * (v2 - v1);			      						\
+#define TABLE_LOOKUP(VAL,TABLE)               			\
+v1     = TABLE[((uint8_t) (VAL * TABLE_SIZE))];     	\
+v2     = TABLE[((uint8_t) (VAL * TABLE_SIZE + 1))];		\
+delta  = VAL - ((int64_t) VAL);	      					\
+v1 + delta * (v2 - v1);			      					\
 
 #define LPF_CALC(CONTROL_ARGS, AUDIO_ARGS)							\
 double*  in0  = UGEN_INPUT_BUFFER(u, 0);							\
@@ -7354,7 +7358,7 @@ void zeroDelayFilter_deconstructor(ugen* u)
 
 #define ZERO_DELAY(X,G,S)  (X * G + (X * G + S))
 
-inline double zERO_DELAY_ONE_POLE(double X,double G,double* SS,int I)
+inline double zERO_DELAY_ONE_POLE(double X,double G,double* SS,int32_tI)
 {
 	double Y   = X * G + SS[I];
 	double XmY = X - Y;
@@ -7817,11 +7821,11 @@ void wrap_aa_calc(ugen u)
 double*  in0 = UGEN_INPUT_BUFFER(u, 0);						\
 double*  in1 = UGEN_INPUT_BUFFER(u, 1);						\
 double*  out = UGEN_OUTPUT_BUFFER(u, 0);					\
-int max;													\
+int32_t max;												\
 double x;													\
 union {														\
 	double d;												\
-	int x[2];												\
+	int32_t x[2];											\
 } ud = { 0 };												\
 CONTROL_ARGS												\
 AUDIO_LOOP(													\
@@ -8030,7 +8034,7 @@ void freeverb_constructor(ugen* u)
 void freeverb_deconstructor(ugen* u)
 {
 	freeverb_data* freeverb = (freeverb_data*) u->data;
-	int i;
+	int32_t i;
 	for(i=0;i<8;++i)
 	{
 		release_sample_buffer(freeverb->combFilterDelays[i].buffer);
@@ -8044,35 +8048,35 @@ void freeverb_deconstructor(ugen* u)
 const double fixed_gain = 0.015;
 
 // Should the delayed signal in this be x or y or x + y???
-#define COMB_FILTER(X,R,D,N,DATA,ZS,I)                                                                     \
-({                                                                                                         \
-	long           write_index              = DATA[I].write_index;					                       \
-    sample_buffer* buffer                   = DATA[I].buffer;                                              \
-	unsigned int   num_samples_mask         = buffer->num_samples_mask;                                    \
-	double*        samples                  = buffer->samples;                                             \
-	double         damp1                    = D * 0.4;                                  				   \
-	double         damp2                    = 1 - damp1;                                                   \
-	double         feedback                 = R * 0.28 + 0.7;                                              \
-	long           read_index               = write_index - N;                                             \
-	double         y                        = read_index < 0 ? 0 : samples[read_index & num_samples_mask]; \
-	ZS[I]                                   = y * damp2 + ZS[I] * damp1;                                   \
-	samples[write_index & num_samples_mask] = (X * fixed_gain) + ZS[I] * feedback;		                   \
-	DATA[I].write_index                     = write_index + 1;                                             \
-	y;                                                                                                     \
+#define COMB_FILTER(X,R,D,N,DATA,ZS,I)                                                                     	\
+({                                                                                                         	\
+	int64_t        write_index              = DATA[I].write_index;					                       	\
+    sample_buffer* buffer                   = DATA[I].buffer;                                              	\
+	uint32_t   	   num_samples_mask         = buffer->num_samples_mask;                                    	\
+	double*        samples                  = buffer->samples;                                             	\
+	double         damp1                    = D * 0.4;                                  				   	\
+	double         damp2                    = 1 - damp1;                                                   	\
+	double         feedback                 = R * 0.28 + 0.7;                                              	\
+	int64_t        read_index               = write_index - N;                                             	\
+	double         y                        = read_index < 0 ? 0 : samples[read_index & num_samples_mask]; 	\
+	ZS[I]                                   = y * damp2 + ZS[I] * damp1;                                   	\
+	samples[write_index & num_samples_mask] = (X * fixed_gain) + ZS[I] * feedback;		                   	\
+	DATA[I].write_index                     = write_index + 1;                                             	\
+	y;                                                                                                     	\
 })
 
-#define ALLPASS_FEEDBACK(X,F,N,DATA,I)                                                                     \
-({                                                                                                         \
-    long           write_index              = DATA[I].write_index;                     		               \
-    long           read_index               = write_index - N;                                             \
-    sample_buffer* buffer                   = DATA[I].buffer;                                              \
-	double*        samples                  = buffer->samples;                                             \
-    unsigned int   num_samples_mask         = buffer->num_samples_mask;                                    \
-    double         bufout                   = read_index < 0 ? 0 : samples[read_index & num_samples_mask]; \
-	double         y                        = -X + bufout;                                                 \
-    samples[write_index & num_samples_mask] = X + bufout * F;                                              \
-	DATA[I].write_index                     = write_index + 1;                                             \
-	y;                                                                                                     \
+#define ALLPASS_FEEDBACK(X,F,N,DATA,I)                                                                     	\
+({                                                                                                         	\
+    int64_t        write_index              = DATA[I].write_index;                     		               	\
+    int64_t        read_index               = write_index - N;                                             	\
+    sample_buffer* buffer                   = DATA[I].buffer;                                              	\
+	double*        samples                  = buffer->samples;                                             	\
+    uint32_t   	   num_samples_mask         = buffer->num_samples_mask;                                    	\
+    double         bufout                   = read_index < 0 ? 0 : samples[read_index & num_samples_mask];	\
+	double         y                        = -X + bufout;                                                 	\
+    samples[write_index & num_samples_mask] = X + bufout * F;                                              	\
+	DATA[I].write_index                     = write_index + 1;                                             	\
+	y;                                                                                                     	\
 })
 
 
@@ -8339,7 +8343,7 @@ typedef struct
 	sample_buffer* buffer;
 	double lookahead;
 	double envelope_out;
-	long write_index;
+	int64_t write_index;
 } limiter_data;
 
 void limiter_constructor(ugen* u)
@@ -8361,7 +8365,7 @@ void limiter_deconstructor(ugen* u)
 #define LIMITER_LAGRANGE(x0, x1, x) ((x - x0) / (x1 - x0))
 
 __attribute__((always_inline)) static inline double limiterInlineCalc(
-	sample_buffer buffer, double* samples, unsigned int num_samples_mask, limiter_data* data, double lookahead, double attack_gain,
+	sample_buffer buffer, double* samples, uint32_t num_samples_mask, limiter_data* data, double lookahead, double attack_gain,
 	double release_gain, double threshold, double knee_width, double lower_knee_bound, double upper_knee_bound, double x, double envelope_in)
 {
 	//  Envelope follower
@@ -8374,8 +8378,8 @@ __attribute__((always_inline)) static inline double limiterInlineCalc(
 	data->envelope_out = envelope_out;
 
 	// Delay
-	long write_index = data->write_index;
-	const long read_index = write_index - lookahead;
+	int64_t write_index = data->write_index;
+	const int64_t read_index = write_index - lookahead;
 	double y = read_index < 0 ? 0 : samples[read_index & num_samples_mask];
 	samples[write_index & num_samples_mask] = x;
 	data->write_index = write_index + 1;
@@ -8403,8 +8407,8 @@ double* out = UGEN_OUTPUT_BUFFER(u, 0);                                        	
 limiter_data* data = (limiter_data*) u.data;																		\
 sample_buffer buffer = *data->buffer;					  															\
 double* samples = buffer.samples;																					\
-unsigned int num_samples = buffer.num_samples;																		\
-unsigned int num_samples_mask = buffer.num_samples_mask;															\
+uint32_t num_samples = buffer.num_samples;																			\
+uint32_t num_samples_mask = buffer.num_samples_mask;																\
 double lookahead = data->lookahead;																					\
 double attack, attack_gain;                                                                 						\
 double release, release_gain;                                                                						\
@@ -8890,7 +8894,7 @@ double* in1 = UGEN_INPUT_BUFFER(u, 1);      	\
 double* out0 = UGEN_OUTPUT_BUFFER(u, 0);		\
 double* out1 = UGEN_OUTPUT_BUFFER(u, 1);		\
 double x, delta, pos, ampL, ampR;           	\
-unsigned int index1, index2;					\
+uint32_t index1, index2;						\
 double cos1, cos2, cos3, cos4;					\
 CONTROL_ARGS                                	\
 AUDIO_LOOP(                                 	\
@@ -8959,14 +8963,13 @@ void pan_aa_calc(ugen u)
 }
 
 #define E 2.7182818284590452353602874713527
-typedef unsigned int uint;
 
 typedef struct
 {
 	sample_buffer* buffer;
-	uint write_index;
-	uint noiseSamples;
-	uint minFreq;
+	uint32_t write_index;
+	uint32_t noiseSamples;
+	uint32_t minFreq;
 } pluck_data;
 
 void pluck_constructor(ugen* u)
@@ -8990,12 +8993,12 @@ double* in2 = UGEN_INPUT_BUFFER(u, 2);									\
 double* out = UGEN_OUTPUT_BUFFER(u, 0);									\
 pluck_data  data             = *((pluck_data*) u.data);					\
 double*     samples          = data.buffer->samples;					\
-uint        write_index      = data.write_index;						\
-uint        num_samples_mask = data.buffer->num_samples_mask;			\
+uint32_t    write_index      = data.write_index;						\
+uint32_t    num_samples_mask = data.buffer->num_samples_mask;			\
 double      clamped;													\
 double      freq;														\
-uint        n;															\
-uint        index2;														\
+uint32_t    n;															\
+uint32_t    index2;														\
 double      decay;														\
 double      duration;													\
 double      x;															\
@@ -9148,20 +9151,20 @@ void white_calc(ugen u)
 
 typedef struct
 {
-	unsigned int* dice;
-	int total;
+	uint32_t* dice;
+	int32_t total;
 } pink_data;
 
 void pink_constructor(ugen* u)
 {
 	u->data = malloc(sizeof(pink_data));
-	unsigned int* dice = malloc(DICE_SIZE * sizeof(unsigned int));
-	int total = 0;
+	uint32_t* dice = malloc(DICE_SIZE * sizeof(uint32_t));
+	int32_t total = 0;
 
-	unsigned int i;
+	uint32_t i;
 	for (i = 0; i < DICE_SIZE; ++i)
 	{
-		unsigned int newrand = trand() >> DICE_SHIFT;
+		uint32_t newrand = trand() >> DICE_SHIFT;
 		total += newrand;
 		dice[i] = newrand;
 	}
@@ -9182,14 +9185,14 @@ void pink_calc(ugen u)
 {
 	double* out = UGEN_OUTPUT_BUFFER(u, 0);
 	pink_data* data = (pink_data*) u.data;
-	unsigned int* dice = data->dice;
-	int total = data->total;
+	uint32_t* dice = data->dice;
+	int32_t total = data->total;
 
 	AUDIO_LOOP(
-		unsigned int counter = trand();
-		unsigned int k = __builtin_ctz(counter) & DICE_MASK;
-		unsigned int newrand = counter >> DICE_SHIFT;
-		unsigned int prevrand = dice[k];
+		uint32_t counter = trand();
+		uint32_t k = __builtin_ctz(counter) & DICE_MASK;
+		uint32_t newrand = counter >> DICE_SHIFT;
+		uint32_t prevrand = dice[k];
 		dice[k] = newrand;
 		total += (newrand - prevrand);
 		newrand = trand() >> DICE_SHIFT;
@@ -9241,7 +9244,7 @@ void brownNoise_calc(ugen u)
 // Many thanks to Stefan Gustavason for the nice Simplex implementation
 // http://staffwww.itn.liu.se/~stegu/aqsis/aqsis-newnoise/
 
-const unsigned char simplex_noise_perm[] = {
+const uint8_t simplex_noise_perm[] = {
 	151,160,137,91,90,15,131,13,201,95,96,53,194,233,7,225,140,36,103,30,69,
 	142,8,99,37,240,21,10,23,190,6,148,247,120,234,75,0,26,197,62,94,252,219,
 	203,117,35,11,32,57,177,33,88,237,149,56,87,174,20,125,136,171,168,68,175,
@@ -9282,10 +9285,10 @@ void simplex_deconstructor(ugen* u)
 }
 
 
-static inline double simplex_grad1(unsigned char hash, double phase)
+static inline double simplex_grad1(uint8_t hash, double phase)
 {
-	unsigned char h = hash & 15;
-	int grad = 1 + (h & 7);
+	uint8_t h = hash & 15;
+	int32_t grad = 1 + (h & 7);
 	if (h & 8) grad = -grad;
 	return (double) grad * phase;
 }
@@ -9293,8 +9296,8 @@ static inline double simplex_grad1(unsigned char hash, double phase)
 static inline double simplex_inline_calc(double phase_increment, double* phase_data)
 {
 	double x = (*phase_data) + phase_increment;
-	long i0 = x;
-	long i1 = i0 + 1;
+	int64_t i0 = x;
+	int64_t i1 = i0 + 1;
 	double x0 = x - (double) i0;
 	double x1 = x0 - 1.0;
 	double t0 = 1.0 - x0 * x0;
@@ -9363,14 +9366,14 @@ void time_secs_calc(ugen u)
 	);
 }
 
-float out_bus_rms(int bus)
+float out_bus_rms(int32_t bus)
 {
 	if (bus < 0 || bus > 7)
 		return 0.0;
 
 	float   squareSum    = 0;
 	float*  outBusBuffer = out_bus_buffers[bus];
-	uint    i            = 0;
+	uint32_t    i        = 0;
 
 	for(i<512; ++i;)
 	{
