@@ -4,11 +4,12 @@
 
     To Do:
 
+    Fix pluck (it's very broken...)
     zapgremlins in filters to prevent blow ups
     break up code into several files
-    optimize all sin and cos usage using LUTs
     remove calc rate from ugen struct, it's not being used, nor do I predict that it will be
     random seeding?
+    Consider changing the free_synths stack to be a queue with a minimum size.
 
     Various Noise ugens
         Gray
@@ -5488,11 +5489,19 @@ void biquad_deconstructor(ugen* u)
 
 #define BIQUAD(B0,B1,B2,A0,A1,A2,X,X1,X2,Y1,Y2) ( (B0/A0)*X + (B1/A0)*X1 + (B2/A0)*X2 - (A1/A0)*Y1 - (A2/A0)*Y2 )
 
-#define TABLE_LOOKUP(VAL,TABLE)                             \
-v1     = TABLE[((uint16_t) (VAL * TABLE_SIZE))];            \
-v2     = TABLE[((uint16_t) (VAL * TABLE_SIZE + 1))];        \
-delta  = VAL - ((uint16_t) VAL);                            \
-v1 + delta * (v2 - v1);                                     \
+#define TABLE_LOOKUP(VAL, TABLE)                                    \
+({                                                                  \
+    const double v1 = TABLE[((uint16_t) (VAL * TABLE_SIZE))];       \
+    const double v2 = TABLE[((uint16_t) (VAL * TABLE_SIZE + 1))];   \
+    const double delta  = VAL - ((uint16_t) VAL);                   \
+    v1 + delta * (v2 - v1);                                         \
+})
+
+#define TABLE_SIN(x) (TABLE_LOOKUP(x, sine_table))
+#define TABLE_COS(x) (TABLE_LOOKUP(x, cosn_table))
+#define TABLE_SINH(x) (TABLE_LOOKUP(x, sinh_table))
+#define TABLE_ATAN(x) (TABLE_LOOKUP(x, atan_table))
+#define TABLE_TANH(x) (TABLE_LOOKUP(x, tanh_table))
 
 #define LPF_CALC(CONTROL_ARGS, AUDIO_ARGS)                              \
 double*  in0  = UGEN_INPUT_BUFFER(u, 0);                                \
@@ -5518,11 +5527,7 @@ double a1;                                                              \
 double a2;                                                              \
                                                                         \
 double y;                                                               \
-                                                                        \
 double snhi;                                                            \
-double delta;                                                           \
-double v1;                                                              \
-double v2;                                                              \
                                                                         \
 CONTROL_ARGS                                                            \
                                                                         \
@@ -5537,11 +5542,11 @@ AUDIO_LOOP(                                                             \
         bi.prevQ = q;                                                   \
         /* Don't recalc if unnecessary */                               \
         omega  = freq * RECIP_SAMPLE_RATE;                              \
-        bi.cs  = TABLE_LOOKUP(omega, cosn_table);                       \
-        sn     = TABLE_LOOKUP(omega, sine_table);                       \
+        bi.cs  = TABLE_COS(omega);                                      \
+        sn     = TABLE_SIN(omega);                                      \
         snhi   = (1 / (2 * q));                                         \
         snhi   = snhi * RECIP_TWO_PI;                                   \
-        bi.alpha = TABLE_LOOKUP(snhi, sinh_table);                      \
+        bi.alpha = TABLE_SINH(snhi);                                    \
         bi.alpha *= sn;                                                 \
     }                                                                   \
     cs    = bi.cs;                                                      \
@@ -5703,8 +5708,8 @@ AUDIO_LOOP(                                                             \
     AUDIO_ARGS                                                          \
                                                                         \
     omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;                      \
-    cs    = cos(omega);                                                 \
-    sn    = sin(omega);                                                 \
+    cs    = TABLE_COS(omega);                                           \
+    sn    = TABLE_SIN(omega);                                           \
     alpha = sn * sinh(1 / (2 * q));                                     \
                                                                         \
     /* cs    = MINIMAXSIN(omega);                                       \
@@ -5867,8 +5872,8 @@ AUDIO_LOOP(                                                             \
     AUDIO_ARGS                                                          \
                                                                         \
     omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;                      \
-    cs    = cos(omega);                                                 \
-    sn    = sin(omega);                                                 \
+    cs    = TABLE_COS(omega);                                           \
+    sn    = TABLE_SIN(omega);                                           \
     alpha = sn * sinh(1 / (2 * q));                                     \
                                                                         \
     b0    =  alpha;                                                     \
@@ -6026,8 +6031,8 @@ AUDIO_LOOP(                                                             \
     AUDIO_ARGS                                                          \
                                                                         \
     omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;                      \
-    cs    = cos(omega);                                                 \
-    sn    = sin(omega);                                                 \
+    cs    = TABLE_COS(omega);                                           \
+    sn    = TABLE_SIN(omega);                                           \
     alpha = sn * sinh(1 / (2 * q));                                     \
                                                                         \
     b0    =  1;                                                         \
@@ -6297,8 +6302,8 @@ AUDIO_LOOP(                                                             \
     AUDIO_ARGS                                                          \
                                                                         \
     omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;                      \
-    cs    = cos(omega);                                                 \
-    sn    = sin(omega);                                                 \
+    cs    = TABLE_COS(omega);                                           \
+    sn    = TABLE_SIN(omega);                                           \
     alpha = sn * sinh(1 / (2 * q));                                     \
                                                                         \
     b0    =   1 - alpha;                                                \
@@ -6459,8 +6464,8 @@ AUDIO_LOOP(                                                             \
                                                                         \
     a     = pow(10,(gain/40));                                          \
     omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;                      \
-    cs    = cos(omega);                                                 \
-    sn    = sin(omega);                                                 \
+    cs    = TABLE_COS(omega);                                           \
+    sn    = TABLE_SIN(omega);                                           \
     alpha = sn * sinh(1 / (2 * q));                                     \
                                                                         \
     b0    =  1 + alpha*a;                                               \
@@ -6738,8 +6743,8 @@ AUDIO_LOOP(                                                             \
                                                                         \
     a     = pow(10,(gain/40));                                          \
     omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;                      \
-    cs    = cos(omega);                                                 \
-    sn    = sin(omega);                                                 \
+    cs    = TABLE_COS(omega);                                           \
+    sn    = TABLE_SIN(omega);                                           \
     beta  = sqrt( (pow(a,2) + 1) / slope - pow((a-1),2) );              \
                                                                         \
     b0    =    a*( (a+1) - (a-1)*cs + beta*sn );                        \
@@ -7013,8 +7018,8 @@ AUDIO_LOOP(                                                             \
                                                                         \
     a     = pow(10,(gain/40));                                          \
     omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;                      \
-    cs    = cos(omega);                                                 \
-    sn    = sin(omega);                                                 \
+    cs    = TABLE_COS(omega);                                           \
+    sn    = TABLE_SIN(omega);                                           \
     beta  = sqrt( (pow(a,2) + 1) / slope - pow((a-1),2) );              \
                                                                         \
     b0    =    a*( (a+1) + (a-1)*cs + beta*sn );                        \
@@ -8988,47 +8993,47 @@ void pluck_deconstructor(ugen* u)
 }
 
 // Jaffe and Smith "Extensions of the Karplus-Strong Plucked-String* Algorithm"
-#define PLUCK_CALC(CONTROL_ARGS, AUDIO_ARGS)                                \
-double* in0 = UGEN_INPUT_BUFFER(u, 0);                                      \
-double* in1 = UGEN_INPUT_BUFFER(u, 1);                                      \
-double* in2 = UGEN_INPUT_BUFFER(u, 2);                                      \
-double* out = UGEN_OUTPUT_BUFFER(u, 0);                                     \
-pluck_data  data             = *((pluck_data*) u.data);                     \
-double*     samples          = data.buffer->samples;                        \
-uint32_t    write_index      = data.write_index;                            \
-uint32_t    num_samples_mask = data.buffer->num_samples_mask;               \
-double      clamped;                                                        \
-double      freq;                                                           \
-uint32_t    n;                                                              \
-uint32_t    index2;                                                         \
-double      decay;                                                          \
-double      duration;                                                       \
-double      x;                                                              \
-double      y;                                                              \
-CONTROL_ARGS                                                                \
-AUDIO_LOOP(                                                                 \
-    AUDIO_ARGS                                                              \
-    index2 = (write_index + 1) % n;                                         \
-    decay = pow(E, (-(n + 0.5) * 6.908) / duration) / cos(M_PI * freq);     \
-    y = 0;                                                                  \
-                                                                            \
-    if (data.noiseSamples < n)                                              \
-    {                                                                       \
-        y = x;                                                              \
-        data.noiseSamples++;                                                \
-    }                                                                       \
-                                                                            \
-    else                                                                    \
-    {                                                                       \
-        y = decay * (samples[write_index] + samples[index2]) / 2;           \
-    }                                                                       \
-                                                                            \
-    samples[write_index] = y;                                               \
-    write_index = index2;                                                   \
-    UGEN_OUT(out, y);                                                       \
-);                                                                          \
-data.write_index = index2;                                                  \
-*((pluck_data*) u.data) = data;                                             \
+#define PLUCK_CALC(CONTROL_ARGS, AUDIO_ARGS)                                    \
+double* in0 = UGEN_INPUT_BUFFER(u, 0);                                          \
+double* in1 = UGEN_INPUT_BUFFER(u, 1);                                          \
+double* in2 = UGEN_INPUT_BUFFER(u, 2);                                          \
+double* out = UGEN_OUTPUT_BUFFER(u, 0);                                         \
+pluck_data  data             = *((pluck_data*) u.data);                         \
+double*     samples          = data.buffer->samples;                            \
+uint32_t    write_index      = data.write_index;                                \
+uint32_t    num_samples_mask = data.buffer->num_samples_mask;                   \
+double      clamped;                                                            \
+double      freq;                                                               \
+uint32_t    n;                                                                  \
+uint32_t    index2;                                                             \
+double      decay;                                                              \
+double      duration;                                                           \
+double      x;                                                                  \
+double      y;                                                                  \
+CONTROL_ARGS                                                                    \
+AUDIO_LOOP(                                                                     \
+    AUDIO_ARGS                                                                  \
+    index2 = (write_index + 1) % n;                                             \
+    decay = pow(E, (-(n + 0.5) * 6.908) / duration) / TABLE_COS(M_PI * freq);   \
+    y = 0;                                                                      \
+                                                                                \
+    if (data.noiseSamples < n)                                                  \
+    {                                                                           \
+        y = x;                                                                  \
+        data.noiseSamples++;                                                    \
+    }                                                                           \
+                                                                                \
+    else                                                                        \
+    {                                                                           \
+        y = decay * (samples[write_index] + samples[index2]) / 2;               \
+    }                                                                           \
+                                                                                \
+    samples[write_index] = y;                                                   \
+    write_index = index2;                                                       \
+    UGEN_OUT(out, y);                                                           \
+);                                                                              \
+data.write_index = index2;                                                      \
+*((pluck_data*) u.data) = data;                                                 \
 
 #define PLUCK_FREQK clamped = MAX(*in0, data.minFreq); freq = clamped * RECIP_SAMPLE_RATE; n = SAMPLE_RATE / clamped;
 #define PLUCK_FREQA clamped = MAX(UGEN_IN(in0), data.minFreq); freq = clamped * RECIP_SAMPLE_RATE; n = SAMPLE_RATE / clamped;
