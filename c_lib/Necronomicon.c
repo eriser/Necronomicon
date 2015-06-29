@@ -4,11 +4,9 @@
 
     To Do:
 
-    use stdint.h types instead of current platform dependant versions
     zapgremlins in filters to prevent blow ups
     break up code into several files
     optimize all sin and cos usage using LUTs
-    increate LUT size from uint8_t to unsigned short
     remove calc rate from ugen struct, it's not being used, nor do I predict that it will be
     random seeding?
 
@@ -110,8 +108,9 @@ const double QUARTER_PI = M_PI * 0.25;
 uint32_t DOUBLE_SIZE = sizeof(double);
 uint32_t UINT_SIZE = sizeof(uint32_t);
 
-#define TABLE_SIZE 256
-#define TABLE_SIZE_WRAP 255
+#define TABLE_SIZE 65536
+#define TABLE_SIZE_MASK 65535
+#define DOUBLE_TABLE_SIZE 65536.0
 double RECIP_TABLE_SIZE = 1.0 / (double) TABLE_SIZE;
 uint32_t HALF_TABLE_SIZE = TABLE_SIZE / 2;
 uint32_t QUATER_TABLE_SIZE = TABLE_SIZE / 4;
@@ -699,11 +698,11 @@ void initialize_wave_tables()
     uint32_t i;
     for (i = 0; i < TABLE_SIZE; ++i)
     {
-        sine_table[i] =  sin(TWO_PI * (((double) i) / ((double) TABLE_SIZE)));
-        cosn_table[i] =  cos(TWO_PI * (((double) i) / ((double) TABLE_SIZE)));
-        sinh_table[i] = sinh(TWO_PI * (((double) i) / ((double) TABLE_SIZE)));
-        atan_table[i] = atan(TWO_PI * (((double) i) / ((double) TABLE_SIZE)));
-        tanh_table[i] = tanh(TWO_PI * (((double) i) / ((double) TABLE_SIZE)));
+        sine_table[i] =  sin((long double) TWO_PI * (((long double) i) / ((long double) TABLE_SIZE)));
+        cosn_table[i] =  cos((long double) TWO_PI * (((long double) i) / ((long double) TABLE_SIZE)));
+        sinh_table[i] = sinh((long double) TWO_PI * (((long double) i) / ((long double) TABLE_SIZE)));
+        atan_table[i] = atan((long double) TWO_PI * (((long double) i) / ((long double) TABLE_SIZE)));
+        tanh_table[i] = tanh((long double) TWO_PI * (((long double) i) / ((long double) TABLE_SIZE)));
     }
 
     for (i = 0; i < PAN_TABLE_SIZE; ++i)
@@ -1459,7 +1458,7 @@ void init_rt_thread()
 
     SAMPLE_RATE = jack_get_sample_rate(client);
     RECIP_SAMPLE_RATE = 1.0 / SAMPLE_RATE;
-    TABLE_MUL_RECIP_SAMPLE_RATE = TABLE_SIZE * RECIP_SAMPLE_RATE;
+    TABLE_MUL_RECIP_SAMPLE_RATE = (double) TABLE_SIZE / (double) SAMPLE_RATE;
     usecs_per_frame = USECS_PER_SECOND / SAMPLE_RATE;
     recip_usecs_per_frame = ((long double ) 1.0) / ((long double) usecs_per_frame);
     BLOCK_SIZE_USECS = usecs_per_frame * (double) BLOCK_SIZE;
@@ -2771,32 +2770,33 @@ void sin_deconstructor(ugen* u)
     free(u->data);
 }
 
-#define SIN_CALC(CONTROL_ARGS, AUDIO_ARGS)              \
-double* in0 = UGEN_INPUT_BUFFER(u, 0);                  \
-double* out = UGEN_OUTPUT_BUFFER(u, 0);                 \
-                                                        \
-double phase = *((double*) u.data);                     \
-double freq;                                            \
-uint8_t index1;                                         \
-uint8_t index2;                                         \
-double v1;                                              \
-double v2;                                              \
-double delta;                                           \
-                                                        \
-CONTROL_ARGS                                            \
-                                                        \
-AUDIO_LOOP(                                             \
-    AUDIO_ARGS                                          \
-    index1 = phase;                                     \
-    index2 = index1 + 1;                                \
-    v1     = sine_table[index1];                        \
-    v2     = sine_table[index2];                        \
-    delta  = phase - ((int64_t) phase);                 \
-    UGEN_OUT(out, LERP(v1,v2,delta));                   \
-    phase += TABLE_MUL_RECIP_SAMPLE_RATE * freq;        \
-);                                                      \
-                                                        \
-*((double*) u.data) = phase;                            \
+#define SIN_CALC(CONTROL_ARGS, AUDIO_ARGS)                              \
+double* in0 = UGEN_INPUT_BUFFER(u, 0);                                  \
+double* out = UGEN_OUTPUT_BUFFER(u, 0);                                 \
+                                                                        \
+double phase = *((double*) u.data);                                     \
+double freq;                                                            \
+uint16_t index1;                                                        \
+uint16_t index2;                                                        \
+double v1;                                                              \
+double v2;                                                              \
+double delta, phase_increment;                                          \
+                                                                        \
+CONTROL_ARGS                                                            \
+                                                                        \
+AUDIO_LOOP(                                                             \
+    AUDIO_ARGS                                                          \
+    index1 = phase;                                                     \
+    index2 = index1 + 1;                                                \
+    v1     = sine_table[index1];                                        \
+    v2     = sine_table[index2];                                        \
+    delta  = phase - ((int64_t) phase);                                 \
+    UGEN_OUT(out, LERP(v1,v2,delta));                                   \
+    phase += phase_increment;                                           \
+    if (phase > DOUBLE_TABLE_SIZE)                                      \
+        phase = phase - DOUBLE_TABLE_SIZE;                              \
+);                                                                      \
+*((double*) u.data) = phase;
 
 #define mmsin_a0  1.0
 #define mmsin_a1 -1.666666666640169148537065260055e-1
@@ -2810,18 +2810,20 @@ AUDIO_LOOP(                                             \
 x2 = X * X;                                                                                                                 \
 X * (mmsin_a0 + x2 * (mmsin_a1 + x2 * (mmsin_a2 + x2 * (mmsin_a3 + x2 * (mmsin_a4 + x2 * (mmsin_a5 + x2 * mmsin_a6))))));   \
 
+#define SIN_PHASE_INCREMENT phase_increment = TABLE_MUL_RECIP_SAMPLE_RATE * freq;
+
 void sin_a_calc(ugen u)
 {
     SIN_CALC(
         /*no control args*/, // Control Args
-        freq = UGEN_IN(in0); // Audio Args
+        freq = UGEN_IN(in0); SIN_PHASE_INCREMENT // Audio Args
     );
 }
 
 void sin_k_calc(ugen u)
 {
     SIN_CALC(
-        freq = in0[0];,    // Control Args
+        freq = in0[0]; SIN_PHASE_INCREMENT,    // Control Args
         /*no audio args*/ // Audio Args
     );
 }
@@ -3996,8 +3998,8 @@ void test_doubly_linked_list()
 #define SOFT_CLIP(XIN,AMOUNT)                                               \
 ({                                                                          \
     double X     = XIN * AMOUNT * 0.5;                                      \
-    double v1    = atan_table[((uint8_t) (X * TABLE_SIZE))];                \
-    double v2    = atan_table[((uint8_t) (X * TABLE_SIZE + 1))];            \
+    double v1    = atan_table[((uint16_t) (X * TABLE_SIZE))];               \
+    double v2    = atan_table[((uint16_t) (X * TABLE_SIZE + 1))];           \
     double delta = X - ((int64_t) X);                                       \
     v1 + delta * (v2 - v1);                                                 \
 })
@@ -4006,8 +4008,8 @@ void test_doubly_linked_list()
 #define TANH_DIST(XIN,AMOUNT)                                               \
 ({                                                                          \
     double X     = XIN * AMOUNT * 0.5;                                      \
-    double v1    = tanh_table[((uint8_t) (X * TABLE_SIZE))];                \
-    double v2    = tanh_table[((uint8_t) (X * TABLE_SIZE + 1))];            \
+    double v1    = tanh_table[((uint16_t) (X * TABLE_SIZE))];               \
+    double v2    = tanh_table[((uint16_t) (X * TABLE_SIZE + 1))];           \
     double delta = X - ((int64_t) X);                                       \
     v1 + delta * (v2 - v1);                                                 \
 })
@@ -4017,8 +4019,8 @@ void test_doubly_linked_list()
 #define SIN_DIST(XIN,AMOUNT)                                                \
 ({                                                                          \
     double X     = XIN * AMOUNT * 0.5;                                      \
-    double v1    = sine_table[((uint8_t) (X * TABLE_SIZE))];                \
-    double v2    = sine_table[((uint8_t) (X * TABLE_SIZE + 1))];            \
+    double v1    = sine_table[((uint16_t) (X * TABLE_SIZE))];               \
+    double v2    = sine_table[((uint16_t) (X * TABLE_SIZE + 1))];           \
     double delta = X - ((int64_t) X);                                       \
     v1 + delta * (v2 - v1);                                                 \
 })
@@ -5487,9 +5489,9 @@ void biquad_deconstructor(ugen* u)
 #define BIQUAD(B0,B1,B2,A0,A1,A2,X,X1,X2,Y1,Y2) ( (B0/A0)*X + (B1/A0)*X1 + (B2/A0)*X2 - (A1/A0)*Y1 - (A2/A0)*Y2 )
 
 #define TABLE_LOOKUP(VAL,TABLE)                             \
-v1     = TABLE[((uint8_t) (VAL * TABLE_SIZE))];             \
-v2     = TABLE[((uint8_t) (VAL * TABLE_SIZE + 1))];         \
-delta  = VAL - ((int64_t) VAL);                             \
+v1     = TABLE[((uint16_t) (VAL * TABLE_SIZE))];            \
+v2     = TABLE[((uint16_t) (VAL * TABLE_SIZE + 1))];        \
+delta  = VAL - ((uint16_t) VAL);                            \
 v1 + delta * (v2 - v1);                                     \
 
 #define LPF_CALC(CONTROL_ARGS, AUDIO_ARGS)                              \
