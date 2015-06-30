@@ -5,12 +5,21 @@ import Necronomicon.Linear
 import Necronomicon.Graphics.Shader
 import Necronomicon.Graphics.Texture
 import Necronomicon.Graphics.Color
+import Necronomicon.Util.TGA              (loadTextureFromTGA)
+import Control.Monad                      (foldM_)
 import Data.IORef
 import Data.Binary
-import Foreign.Storable                   (sizeOf)
-import qualified Graphics.Rendering.OpenGL as GL
-import qualified Data.IntMap               as IntMap
-import qualified Data.Map                  as Map
+import Foreign.Storable
+import Foreign.Ptr
+import Foreign.C.Types
+import Foreign.Marshal.Alloc
+import Foreign.Marshal.Array
+import Unsafe.Coerce
+import qualified Data.IntMap                   as IntMap
+import qualified Data.Map                      as Map
+import qualified Graphics.Rendering.OpenGL     as GL
+import qualified Graphics.Rendering.OpenGL.Raw as GLRaw
+
 
 --Need To add a resources module that sits on top of model, mkMesh, texture, etc in hierarchy
 data UID             = UID Int | New                                                             deriving (Show, Eq)
@@ -60,18 +69,8 @@ data Resources = Resources
    , texturesRef          :: IORef (Map.Map String GL.TextureObject)
    , meshesRef            :: IORef (Map.Map String LoadedMesh)
    , fontsRef             :: IORef (Map.Map String LoadedFont)
-   , postRenderRef        :: IORef (Map.Map String LoadedPostRenderingFX) }
---
--- data Resources' = Resources'
---    { shaderIxs  :: IORef (MV.IOVector LoadedShader)
---    , textureIxs :: IORef (MV.IOVector GL.TextureObject)
---    , meshIxs    :: IORef (MV.IOVector LoadedMesh)
---    , fontIxs    :: IORef (MV.IOVector LoadedFont)
---    , postIxs    :: IORef (MV.IOVector LoadedPostRenderingFX)
---    , textureRef :: IORef (Map.Map String Int)
---    , meshRef    :: IORef (Map.Map String Int)
---    , fontRef    :: IORef (Map.Map String Int)
---    , postRef    :: IORef (Map.Map String Int) }
+   , postRenderRef        :: IORef (Map.Map String LoadedPostRenderingFX)
+   , matrixUniformPtr     :: Ptr CFloat }
 
 data CharMetric = CharMetric
   { character             :: Char
@@ -93,7 +92,7 @@ data LoadedFont = LoadedFont
   , characterVertexBuffer :: GL.BufferObject
   , characterIndexBuffer  :: GL.BufferObject }   deriving (Show)
 
-type LoadedMesh     = (GL.BufferObject,GL.BufferObject,Int,[GL.VertexArrayDescriptor GL.GLfloat])
+type LoadedMesh = (GL.BufferObject, GL.BufferObject, GL.GLuint, GL.GLuint, GL.GLsizei, GL.VertexArrayDescriptor GL.GLfloat, GL.VertexArrayDescriptor GL.GLfloat, GL.VertexArrayDescriptor GL.GLfloat)
 
 --TODO: We can probably safely divide things into Mesh / LoadedMesh and Material / LoadedMaterial
 
@@ -116,18 +115,7 @@ mkResources = Resources
           <*> newIORef Map.empty
           <*> newIORef Map.empty
           <*> newIORef Map.empty
-
--- mkResources' :: IO Resources'
--- mkResources' = Resources'
---           <$> (newIORef =<< MV.new 0)
---           <*> (newIORef =<< MV.new 0)
---           <*> (newIORef =<< MV.new 0)
---           <*> (newIORef =<< MV.new 0)
---           <*> (newIORef =<< MV.new 0)
---           <*> newIORef Map.empty
---           <*> newIORef Map.empty
---           <*> newIORef Map.empty
---           <*> newIORef Map.empty
+          <*> mallocBytes (sizeOf (undefined :: CFloat) * 16)
 
 ------------------------------
 -- Serialization
@@ -214,27 +202,35 @@ getMesh resources m@(Mesh _ mKey _ _ _ _) = readIORef (meshesRef resources) >>= 
     Just loadedMesh -> return loadedMesh
 getMesh _       (DynamicMesh (Just m) _ _ _ _ _) = return m
 getMesh resources m@(DynamicMesh _ mKey v c u i) = readIORef (meshesRef resources) >>= \mkMeshes -> case Map.lookup mKey mkMeshes of
-    Nothing              -> loadMesh m >>= \loadedMesh@(vbuf,ibuf,_,_) -> (writeIORef (meshesRef resources) (Map.insert mKey loadedMesh mkMeshes)) >> dynamicDrawMesh vbuf ibuf v c u i
-    Just (vbuf,ibuf,_,_) -> dynamicDrawMesh vbuf ibuf v c u i
+    Nothing              -> loadMesh m >>= \loadedMesh@(vbuf,ibuf,_,_,_,_,_,_) -> (writeIORef (meshesRef resources) (Map.insert mKey loadedMesh mkMeshes)) >> dynamicDrawMesh vbuf ibuf v c u i
+    Just (vbuf,ibuf,_,_,_,_,_,_) -> dynamicDrawMesh vbuf ibuf v c u i
 
 loadMesh :: Mesh -> IO LoadedMesh
 loadMesh (Mesh _ _ vertices colors uvs indices) = do
     vertexBuffer  <- makeBuffer GL.ArrayBuffer        (map realToFrac (posColorUV vertices colors uvs) :: [GL.GLfloat])
     indexBuffer   <- makeBuffer GL.ElementArrayBuffer (map fromIntegral indices :: [GL.GLuint])
-    return (vertexBuffer,indexBuffer,length indices,vadPosColorUV)
+
+    let min'       = fromIntegral $ foldr min 999999 indices
+        max'       = fromIntegral $ foldr max 0      indices
+        (p, c, u)  = vadPosColorUV
+    return (vertexBuffer,indexBuffer, min', max', fromIntegral (length indices), p, c, u)
 loadMesh (DynamicMesh _ _ _ _ _ _) = do
     vertexBuffer:_ <- GL.genObjectNames 1
     indexBuffer :_ <- GL.genObjectNames 1
-    return (vertexBuffer,indexBuffer,0,[])
+    let (p, c, u)   = vadPosColorUV
+    return (vertexBuffer,indexBuffer,0,0,0,p, c, u)
 
 dynamicDrawMesh :: GL.BufferObject -> GL.BufferObject -> [Vector3] -> [Color] -> [Vector2] -> [Int] -> IO LoadedMesh
 dynamicDrawMesh vBuf iBuf vertices colors uvs indices = do
     vertexBuffer  <- makeDynamicBuffer vBuf GL.ArrayBuffer        (map realToFrac (posColorUV vertices colors uvs) :: [GL.GLfloat])
     indexBuffer   <- makeDynamicBuffer iBuf GL.ElementArrayBuffer (map fromIntegral indices :: [GL.GLuint])
-    return (vertexBuffer,indexBuffer,length indices,vadPosColorUV)
+    let min'       = fromIntegral $ foldr min 999999 indices
+        max'       = fromIntegral $ foldr max 0      indices
+        (p, c, u)  = vadPosColorUV
+    return (vertexBuffer,indexBuffer,min', max', fromIntegral (length indices), p, c, u)
 
-vadPosColorUV :: [GL.VertexArrayDescriptor GL.GLfloat]
-vadPosColorUV = [vertexVad,colorVad,uvVad]
+vadPosColorUV :: (GL.VertexArrayDescriptor GL.GLfloat, GL.VertexArrayDescriptor GL.GLfloat, GL.VertexArrayDescriptor GL.GLfloat)
+vadPosColorUV = (vertexVad,colorVad,uvVad)
     where
         vertexVad  = GL.VertexArrayDescriptor 3 GL.Float (fromIntegral $ sizeOf (undefined::GL.GLfloat) * 8) offset0
         colorVad   = GL.VertexArrayDescriptor 3 GL.Float (fromIntegral $ sizeOf (undefined::GL.GLfloat) * 8) (offsetPtr $ sizeOf (undefined :: GL.GLfloat) * 3)
@@ -248,16 +244,15 @@ posColorUV (Vector3 x y z : vs) (RGB  r g b   : cs) (Vector2 u v : uvs) = x : y 
 posColorUV (Vector3 x y z : vs) (RGBA r g b _ : cs) (Vector2 u v : uvs) = x : y : z : r : g : b : u : v : posColorUV vs cs uvs
 
 loadNewModel :: Resources -> Maybe Model -> IO (Maybe Model)
-loadNewModel r   (Just (Model me ma)) = do
+loadNewModel r (Just (Model me ma)) = do
     me' <- loadNewMesh r me
     ma' <- loadNewMat  r ma
     return . Just $ Model me' ma'
 loadNewModel _ m = return m
 
---due lookups in other thread, do compilation in main thread!
 loadNewMesh :: Resources -> Mesh -> IO Mesh
-loadNewMesh r m@(Mesh        Nothing n vs cs us is) = getMesh' r m >>= \lm -> return (Mesh        lm n vs cs us is)
-loadNewMesh r m@(DynamicMesh Nothing n vs cs us is) = getMesh' r m >>= \lm -> return (DynamicMesh lm n vs cs us is)
+loadNewMesh r m@(Mesh        Nothing n vs cs us is) = getMesh r m >>= \lm -> return (Mesh        (Just lm) n vs cs us is)
+loadNewMesh r m@(DynamicMesh Nothing n vs cs us is) = getMesh r m >>= \lm -> return (DynamicMesh (Just lm) n vs cs us is)
 loadNewMesh _ m                                     = return m
 
 getMesh' :: Resources -> Mesh -> IO (Maybe LoadedMesh)
@@ -268,15 +263,254 @@ getMesh' resources (DynamicMesh _ mKey _ _ _ _)     = readIORef (meshesRef resou
 
 loadNewMat :: Resources -> Material -> IO Material
 loadNewMat r (Material Nothing vs fs us pr) = do
-    sh' <- getShader' r sh
-    return $ Material sh' vs fs us pr
+    sh' <- getShader r sh
+    return $ Material (Just sh') vs fs us pr
     where
         sh = shader
             (vs ++ " + " ++ fs)
             ("modelView" : "proj" : map uniformName us)
-            ["position", "in_color", "in_uv"]
+            -- ["position", "in_color", "in_uv"]
             (loadVertexShader   vs)
             (loadFragmentShader fs)
-        getShader' resources sha = readIORef (shadersRef resources) >>= return . IntMap.lookup (key sha)
+        -- getShader' resources sha = readIORef (shadersRef resources) >>= return . IntMap.lookup (key sha)
 
 loadNewMat _ m = return m
+
+setUniform :: Resources -> Int -> (GL.UniformLocation, Uniform) -> IO Int
+setUniform _ t (GL.UniformLocation loc, UniformScalar  _ v)                 = GLRaw.glUniform1f loc (realToFrac v) >> return t
+setUniform _ t (GL.UniformLocation loc, UniformVec2    _ (Vector2 x y))     = GLRaw.glUniform2f loc (realToFrac x) (realToFrac y) >> return t
+setUniform _ t (GL.UniformLocation loc, UniformVec3    _ (Vector3 x y z))   = GLRaw.glUniform3f loc (realToFrac x) (realToFrac y) (realToFrac z) >> return t
+setUniform _ t (GL.UniformLocation loc, UniformVec4    _ (Vector4 x y z w)) = GLRaw.glUniform4f loc (realToFrac x) (realToFrac y) (realToFrac z) (realToFrac w) >> return t
+setUniform r t (loc,                    UniformTexture _ v)                 = getTexture r v >>= setTextureUniform loc t >> return (t + 1)
+setUniform _ t _                                                            = return t
+
+getTexture :: Resources -> Texture -> IO GL.TextureObject
+getTexture resources (AudioTexture i) = readIORef (texturesRef resources) >>= \textures -> case Map.lookup ("audio" ++ show i) textures of
+    Nothing      -> loadAudioTexture i >>= \texture -> (writeIORef (texturesRef resources) $ Map.insert ("audio" ++ show i) texture textures) >> setAudioTexture i texture
+    Just texture -> setAudioTexture i texture
+getTexture resources EmptyTexture     = readIORef (texturesRef resources) >>= \textures -> case Map.lookup "empty" textures of
+    Nothing      -> newBoundTexUnit 0 >>= \texture -> (writeIORef (texturesRef resources) $ Map.insert "empty" texture textures) >> return texture
+    Just texture -> return texture
+getTexture resources (TGATexture Nothing path) = readIORef (texturesRef resources) >>= \textures -> case Map.lookup path textures of
+    Nothing      -> loadTextureFromTGA path >>= \texture -> (writeIORef (texturesRef resources) $ Map.insert path texture textures) >> return texture
+    Just texture -> return texture
+getTexture _ (TGATexture (Just tex) _) = return tex
+getTexture _ (LoadedTexture t) = return t
+
+setEmptyTextures :: Texture -> Material -> Material
+setEmptyTextures tex (Material uid vs fs us primMode) = Material uid vs fs (foldr updateTex [] us) primMode
+    where
+        updateTex (UniformTexture t EmptyTexture) us' = UniformTexture t tex : us'
+        updateTex  u                              us' = u : us'
+
+setupAttribute :: GL.AttribLocation -> GL.VertexArrayDescriptor GL.GLfloat -> IO()
+setupAttribute (GL.AttribLocation loc) (GL.VertexArrayDescriptor n _ s p) = do
+    GLRaw.glVertexAttribPointer loc n GLRaw.gl_FLOAT (fromIntegral GLRaw.gl_FALSE) s p
+    GLRaw.glEnableVertexAttribArray loc
+{-# INLINE setupAttribute #-}
+
+drawMeshWithMaterial :: Material -> Mesh -> Matrix4x4 -> Matrix4x4 -> Resources -> IO()
+drawMeshWithMaterial (Material mat _ _ us _) m modelView proj resources = do
+    (program,GL.UniformLocation mv : GL.UniformLocation pr : ulocs, vertexVap, colorVap, uvVap) <- sh
+    (vertexBuffer, indexBuffer, start, end, count, vertexVad, colorVad, uvVad)                  <- getMesh resources m
+
+    GLRaw.glUseProgram $ unsafeCoerce program --Necessary because of the unexposed raw type under the newtype wrapper
+    foldM_ (setUniform resources) 0 $ zip ulocs us
+
+    setMatrixUniform mv modelView (matrixUniformPtr resources)
+    setMatrixUniform pr proj (matrixUniformPtr resources)
+    GLRaw.glBindBuffer GLRaw.gl_ARRAY_BUFFER $ unsafeCoerce vertexBuffer --Necessary because of the unexposed raw type under the newtype wrapper
+
+    setupAttribute vertexVap vertexVad
+    setupAttribute colorVap  colorVad
+    setupAttribute uvVap     uvVad
+
+    GLRaw.glBindBuffer GLRaw.gl_ARRAY_BUFFER $ unsafeCoerce indexBuffer
+    GLRaw.glDrawRangeElements GLRaw.gl_TRIANGLES start end count GLRaw.gl_UNSIGNED_INT offset0
+
+    where
+        sh = case mat of
+            Just js -> return js
+            _       -> error "fuck!"
+            -- getShader resources $ shader
+                -- (vs ++ " + " ++ fs)
+                -- ("modelView" : "proj" : map uniformName us)
+                -- (loadVertexShader   vs)
+                -- (loadFragmentShader fs)
+{-# INLINE drawMeshWithMaterial #-}
+
+
+
+------------------------------
+-- RenderData
+------------------------------
+data RenderData = RenderData {-# UNPACK #-} !GL.GLuint         --Active / Inactive
+                             {-# UNPACK #-} !GL.GLuint         --Vertex Buffer
+                             {-# UNPACK #-} !GL.GLuint         --Index Buffer
+                             {-# UNPACK #-} !GL.GLuint         --Start
+                             {-# UNPACK #-} !GL.GLuint         --End
+                             {-# UNPACK #-} !GLRaw.GLsizei     --Count
+
+                             {-# UNPACK #-} !GLRaw.GLint       --vertexVad
+                             {-# UNPACK #-} !GLRaw.GLsizei
+                             {-# UNPACK #-} !(Ptr GL.GLfloat)
+
+                             {-# UNPACK #-} !GLRaw.GLint       --colorVad
+                             {-# UNPACK #-} !GLRaw.GLsizei
+                             {-# UNPACK #-} !(Ptr GL.GLfloat)
+
+                             {-# UNPACK #-} !GLRaw.GLint       --uvVad
+                             {-# UNPACK #-} !GLRaw.GLsizei
+                             {-# UNPACK #-} !(Ptr GL.GLfloat)
+
+                             {-# UNPACK #-} !GL.GLuint         --shader program
+                             {-# UNPACK #-} !GL.GLuint         --vertex attribute location
+                             {-# UNPACK #-} !GL.GLuint         --color  attribute location
+                             {-# UNPACK #-} !GL.GLuint         --uv     attribute location
+                             !Matrix4x4
+                             [UniformRaw]                      --Uniform values
+                             {-# UNPACK #-} !GLRaw.GLint       --modelView location
+                             {-# UNPACK #-} !GLRaw.GLint       --proj location
+
+data UniformRaw =  UniformTextureRaw {-# UNPACK #-} !GL.GLint {-# UNPACK #-} !GL.GLuint  {-# UNPACK #-} !GL.GLuint
+                 | UniformScalarRaw  {-# UNPACK #-} !GL.GLint {-# UNPACK #-} !GL.GLfloat
+                 | UniformVec2Raw    {-# UNPACK #-} !GL.GLint {-# UNPACK #-} !GL.GLfloat {-# UNPACK #-} !GL.GLfloat
+                 | UniformVec3Raw    {-# UNPACK #-} !GL.GLint {-# UNPACK #-} !GL.GLfloat {-# UNPACK #-} !GL.GLfloat {-# UNPACK #-} !GL.GLfloat
+                 | UniformVec4Raw    {-# UNPACK #-} !GL.GLint {-# UNPACK #-} !GL.GLfloat {-# UNPACK #-} !GL.GLfloat {-# UNPACK #-} !GL.GLfloat {-# UNPACK #-} !GL.GLfloat
+
+nullRenderData :: RenderData
+nullRenderData = RenderData 0 0 0 0 0 0 0 0 nullPtr 0 0 nullPtr 0 0 nullPtr 0 0 0 0 identity4 [] 0 0
+
+instance Storable UniformRaw where
+    sizeOf    _ = 24
+    alignment _ = 8
+
+    {-# INLINE peek #-}
+    peek ptr = peekByteOff ptr 0 >>= \tag -> case (tag :: CInt) of
+        0 -> UniformTextureRaw <$> peekByteOff ptr 4 <*> peekByteOff ptr 8 <*> peekByteOff ptr 12
+        1 -> UniformScalarRaw  <$> peekByteOff ptr 4 <*> peekByteOff ptr 8
+        2 -> UniformVec2Raw    <$> peekByteOff ptr 4 <*> peekByteOff ptr 8 <*> peekByteOff ptr 12
+        3 -> UniformVec3Raw    <$> peekByteOff ptr 4 <*> peekByteOff ptr 8 <*> peekByteOff ptr 12 <*> peekByteOff ptr 16
+        _ -> UniformVec4Raw    <$> peekByteOff ptr 4 <*> peekByteOff ptr 8 <*> peekByteOff ptr 12 <*> peekByteOff ptr 16 <*> peekByteOff ptr 20
+
+    {-# INLINE poke #-}
+    poke ptr (UniformTextureRaw  l t u) = pokeByteOff ptr 0 (0 :: CInt) >> pokeByteOff ptr 4 l >> pokeByteOff ptr 8 t >> pokeByteOff ptr 12 u
+    poke ptr (UniformScalarRaw     l s) = pokeByteOff ptr 0 (1 :: CInt) >> pokeByteOff ptr 4 l >> pokeByteOff ptr 8 s
+    poke ptr (UniformVec2Raw     l x y) = pokeByteOff ptr 0 (2 :: CInt) >> pokeByteOff ptr 4 l >> pokeByteOff ptr 8 x >> pokeByteOff ptr 12 y
+    poke ptr (UniformVec3Raw   l x y z) = pokeByteOff ptr 0 (3 :: CInt) >> pokeByteOff ptr 4 l >> pokeByteOff ptr 8 x >> pokeByteOff ptr 12 y >> pokeByteOff ptr 16 z
+    poke ptr (UniformVec4Raw l x y z w) = pokeByteOff ptr 0 (4 :: CInt) >> pokeByteOff ptr 4 l >> pokeByteOff ptr 8 x >> pokeByteOff ptr 12 y >> pokeByteOff ptr 16 z >> pokeByteOff ptr 20 w
+
+instance Storable RenderData where
+    -- sizeOf    _ = (sizeOf (undefined :: GL.GLuint) * 9) + (sizeOf (undefined :: GLRaw.GLsizei) * 4) + (sizeOf (undefined :: GLRaw.GLint) * 3) + (sizeOf (undefined :: Ptr GL.GLfloat) * 3) + (sizeOf (undefined :: CFloat) * 16)
+    sizeOf    _ = 176
+    alignment _ = 8
+    {-# INLINE peek #-}
+    peek ptr = RenderData
+           <$> peekByteOff ptr 0
+           <*> peekByteOff ptr 4
+           <*> peekByteOff ptr 8
+           <*> peekByteOff ptr 12
+           <*> peekByteOff ptr 16
+           <*> peekByteOff ptr 20
+
+           <*> peekByteOff ptr 24
+           <*> peekByteOff ptr 28
+           <*> peekByteOff ptr 32
+
+           <*> peekByteOff ptr 40
+           <*> peekByteOff ptr 44
+           <*> peekByteOff ptr 48
+
+           <*> peekByteOff ptr 56
+           <*> peekByteOff ptr 60
+           <*> peekByteOff ptr 64
+
+           <*> peekByteOff ptr 72
+           <*> peekByteOff ptr 76
+           <*> peekByteOff ptr 80
+           <*> peekByteOff ptr 84
+
+           <*> mat
+           <*> us
+           <*> peekByteOff ptr 168
+           <*> peekByteOff ptr 172
+        where
+            us = do
+                len  <- peekByteOff ptr 152 :: IO CInt
+                lptr <- peekByteOff ptr 160
+                peekArray (fromIntegral len) lptr
+
+            mat = Matrix4x4
+               <$> fmap realToFrac (peekByteOff ptr 88  :: IO CFloat)
+               <*> fmap realToFrac (peekByteOff ptr 92  :: IO CFloat)
+               <*> fmap realToFrac (peekByteOff ptr 96  :: IO CFloat)
+               <*> fmap realToFrac (peekByteOff ptr 100 :: IO CFloat)
+
+               <*> fmap realToFrac (peekByteOff ptr 104 :: IO CFloat)
+               <*> fmap realToFrac (peekByteOff ptr 108 :: IO CFloat)
+               <*> fmap realToFrac (peekByteOff ptr 112 :: IO CFloat)
+               <*> fmap realToFrac (peekByteOff ptr 116 :: IO CFloat)
+
+               <*> fmap realToFrac (peekByteOff ptr 120 :: IO CFloat)
+               <*> fmap realToFrac (peekByteOff ptr 124 :: IO CFloat)
+               <*> fmap realToFrac (peekByteOff ptr 128 :: IO CFloat)
+               <*> fmap realToFrac (peekByteOff ptr 132 :: IO CFloat)
+
+               <*> fmap realToFrac (peekByteOff ptr 136 :: IO CFloat)
+               <*> fmap realToFrac (peekByteOff ptr 140 :: IO CFloat)
+               <*> fmap realToFrac (peekByteOff ptr 144 :: IO CFloat)
+               <*> fmap realToFrac (peekByteOff ptr 148 :: IO CFloat)
+
+    {-# INLINE poke #-}
+    poke ptr !(RenderData isActive vertexBuffer indexBuffer start end count vertexVadN vertexVadS vertexVadP colorVadN colorVadS colorVadP uvVadN uvVadS uvVadP program vloc cloc uvloc
+               (Matrix4x4 m00 m01 m02 m03 m10 m11 m12 m13 m20 m21 m22 m23 m30 m31 m32 m33) us mvloc projloc) = do
+        pokeByteOff ptr 0  isActive
+        pokeByteOff ptr 4  vertexBuffer
+        pokeByteOff ptr 8  indexBuffer
+        pokeByteOff ptr 12 start
+        pokeByteOff ptr 16 end
+        pokeByteOff ptr 20 count
+
+        pokeByteOff ptr 24 vertexVadN
+        pokeByteOff ptr 28 vertexVadS
+        pokeByteOff ptr 32 vertexVadP
+
+        pokeByteOff ptr 40 colorVadN
+        pokeByteOff ptr 44 colorVadS
+        pokeByteOff ptr 48 colorVadP
+
+        pokeByteOff ptr 56 uvVadN
+        pokeByteOff ptr 60 uvVadS
+        pokeByteOff ptr 64 uvVadP
+
+        pokeByteOff ptr 72 program
+        pokeByteOff ptr 76 vloc
+        pokeByteOff ptr 80 cloc
+        pokeByteOff ptr 84 uvloc
+
+        pokeByteOff ptr 88  (realToFrac m00 :: CFloat)
+        pokeByteOff ptr 92  (realToFrac m01 :: CFloat)
+        pokeByteOff ptr 96  (realToFrac m02 :: CFloat)
+        pokeByteOff ptr 100 (realToFrac m03 :: CFloat)
+
+        pokeByteOff ptr 104 (realToFrac m10 :: CFloat)
+        pokeByteOff ptr 108 (realToFrac m11 :: CFloat)
+        pokeByteOff ptr 112 (realToFrac m12 :: CFloat)
+        pokeByteOff ptr 116 (realToFrac m13 :: CFloat)
+
+        pokeByteOff ptr 120 (realToFrac m20 :: CFloat)
+        pokeByteOff ptr 124 (realToFrac m21 :: CFloat)
+        pokeByteOff ptr 128 (realToFrac m22 :: CFloat)
+        pokeByteOff ptr 132 (realToFrac m23 :: CFloat)
+
+        pokeByteOff ptr 136 (realToFrac m30 :: CFloat)
+        pokeByteOff ptr 140 (realToFrac m31 :: CFloat)
+        pokeByteOff ptr 144 (realToFrac m32 :: CFloat)
+        pokeByteOff ptr 148 (realToFrac m33 :: CFloat)
+
+        let len = length us
+        pokeByteOff ptr 152 (fromIntegral len :: CInt)
+        mallocArray len >>= \lptr -> pokeArray lptr us >> pokeByteOff ptr 160 lptr
+
+        pokeByteOff ptr 168 mvloc
+        pokeByteOff ptr 172 projloc

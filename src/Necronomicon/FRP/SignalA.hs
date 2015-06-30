@@ -95,7 +95,7 @@ module Necronomicon.FRP.SignalA (
     collisionMany,
     foldp,
     folds,
-    foldg,
+    foldn,
     -- combine,
     filterIf,
     filterWhen,
@@ -145,9 +145,11 @@ import           Control.Monad.ST
 import           Control.Monad.ST.Unsafe
 import           Data.STRef
 import qualified Graphics.UI.GLFW                  as GLFW
+-- import qualified Graphics.Rendering.OpenGL.Raw     as GLRaw
 import qualified Data.Vector                       as V
-import qualified Data.Vector.Mutable               as MV
-import qualified Data.Vector.Generic.Mutable       as GMV
+import qualified Data.Vector.Generic.Mutable       as MV
+import qualified Data.Vector.Storable              as SV
+import qualified Data.Vector.Storable.Mutable      as SMV
 import qualified Data.IntMap                       as IntMap
 import qualified Data.IntSet                       as IntSet
 import           Data.Monoid
@@ -158,7 +160,7 @@ import qualified Necronomicon.Physics.DynamicTree  as DynTree
 import           Necronomicon.Graphics
 import           Necronomicon.Linear
 import           Necronomicon.Utility
-import           Necronomicon.Game hiding (runTime, deltaTime)
+import           Necronomicon.Game
 ------------------------------------------------------
 
 ----------------------------------
@@ -326,13 +328,13 @@ instance Monoid a => Monoid (Signal a) where
 
 runSignal :: (Show a) => Signal a -> IO ()
 runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
-    Nothing -> print "Error starting GLFW." >> return ()
-    Just w  -> do
+    Nothing     -> print "Error starting GLFW." >> return ()
+    Just w -> do
         putStrLn "Starting Necronomicon"
 
         currentTime   <- getCurrentTime
         (ww, wh)      <- GLFW.getWindowSize w
-        state         <- mkSignalState (fromIntegral ww, fromIntegral wh)
+        state         <- mkSignalState w (fromIntegral ww, fromIntegral wh)
         (scont, _, _) <- unSignal sig state
         eventInbox    <- atomically $ newTChan
         _             <- forkIO $ processEvents scont state eventInbox
@@ -343,7 +345,7 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
     where
         run quit window s runTime' tree eventInbox state
             | quit      = putStrLn "Qutting Necronomicon" >> return ()
-            | otherwise = do
+            | otherwise = {-# SCC "run_SignalA" #-} do
                 GLFW.pollEvents
                 q           <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'Escape
 
@@ -351,20 +353,25 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
                 let delta    = currentTime - runTime'
                 atomically   $ writeTChan eventInbox $ TimeEvent (Time delta) (Time currentTime)
 
+                atomically (takeTMVar (contextBarrier state)) >>= \c -> case c of
+                    GLContext2 -> print "Switching context to rendering thread." >> GLFW.makeContextCurrent (Just window)
+                    _          -> return ()
+
                 -- (g, tree')  <- (\g -> update (g, tree)) . flip gchildren_ mkGameObject . MV.toList <~ readIORef (objectRef state)
                 -- gs   <- filterMap id . V.toList <~ (readIORef (objectRef state) >>= V.freeze)
                 -- let g = gchildren_ gs mkGameObject
                 -- renderGraphicsG window (sigResources state) False g g tree
-                gstream <- GMV.mstream <~ readIORef (objectRef state)
+                --Use combination of mvar (for locking) and context switching
+                gstream <- MV.mstream <~ readIORef (renderDataRef state)
                 cs      <- readIORef (cameraRef state)
-
-                mapM_ (renderWithCamera window (sigResources state) gstream) cs
+                {-# SCC "mapM__renderWithCameraRaw" #-} mapM_ (renderWithCameraRaw window (sigResources state) gstream) cs
+                atomically $ putTMVar (contextBarrier state) GLContext1
 
                 threadDelay  $ 16667
                 run q window s currentTime tree eventInbox state
 
 processEvents :: Show a => (Int -> IO (Event a)) -> SignalState -> TChan InputEvent -> IO ()
-processEvents sig ss inbox = forever $ atomically (readTChan inbox) >>= \e -> case e of
+processEvents sig ss inbox = forever $ {-# SCC "process" #-} atomically (readTChan inbox) >>= \e -> case e of
     TimeEvent        dt rt -> writeIORef  (deltaTimeRef  ss) dt >> writeIORef (runTimeRef ss) rt >> sig 200 >>= printEvent
     MouseEvent       mp    -> writeIORef  (mousePosRef   ss) mp >> sig 201 >>= printEvent
     MouseButtonEvent mb    -> writeIORef  (mouseClickRef ss) mb >> sig 202 >>= printEvent
@@ -374,64 +381,89 @@ processEvents sig ss inbox = forever $ atomically (readTChan inbox) >>= \e -> ca
         printEvent (Change _) = return () -- print e
         printEvent  _         = return ()
 
---Perhaps instead of a vector of maybes it instead a pooling system
---With a free list and an assigned list
---Need to set up system to reclaim unused blocks
 necro :: Scene a => Signal a -> Signal a
 necro sig = Signal $ \state -> do
     (scont, s, uids) <- unSignal sig state
     return (cont scont state, s, uids)
     where
-        updateObjects r cref oref g (gs, uids) = case g of
-            GameObject{gid = (UID _), model = (Just (Model (Mesh        (Just _) _ _ _ _ _) (Material (Just _) _ _ _ _)))} ->     writeG oref g  >> writeCam (gid g)  (camera g)  >> return (g  : gs, uids)
-            GameObject{gid = (UID _), model = (Just (Model (DynamicMesh (Just _) _ _ _ _ _) (Material (Just _) _ _ _ _)))} ->     writeG oref g  >> writeCam (gid g)  (camera g)  >> return (g  : gs, uids)
-            GameObject{gid = New} -> loadNewModel r (model g) >>= \model' -> let g' = g{model = model', gid = UID (head uids)} in writeG oref g' >> writeCam (gid g') (camera g') >> return (g' : gs, tail uids)
-            _                     -> loadNewModel r (model g) >>= \model' -> let g' = g{model = model'}                        in writeG oref g' >> writeCam (gid g') (camera g') >> return (g' : gs, uids)
-            where
-                writeCam (UID uid) (Just c) = modifyIORef cref (IntMap.insert uid (transMat g, c))
-                writeCam _         _        = return ()
-
-        writeG oref g = readIORef oref >>= \vec -> do
-            let x | UID uid <- gid g, uid < MV.length vec = MV.unsafeWrite vec uid (Just g) >> writeIORef oref vec
-                  | UID uid <- gid g                      = do
-                      vec' <- MV.unsafeGrow vec (MV.length vec)
-                      mapM_ (\i -> MV.unsafeWrite vec' i Nothing) [uid..MV.length vec' - 1]
-                      MV.unsafeWrite vec' uid (Just g)
-                      writeIORef oref vec'
-                  | otherwise = print "Error: GameObject without a UID found in necro update" >> return ()
-            x
-
-        --maybe a map gameobject or modify, etc to make this faster?
-        writeGS s state = do
-            uids        <- readIORef $ uidRef state
-            (gs, uids') <- foldrM (updateObjects (sigResources state) (cameraRef state) (objectRef state)) ([], uids) $ getGameObjects s []
-            writeIORef (uidRef state) uids'
-            return $ fst $ setGameObjects s $ gs
-
         cont scont state eid = scont eid >>= \se -> case se of
             NoChange _ -> return se
-            Change   s -> Change <~ writeGS s state
+            Change   s -> {-# SCC "necro" #-} Change <~ (mapSM (updateEntity state) s)
+
+        updateEntity state g@GameObject{gid = UID uid} = case model g of
+            Just (Model (Mesh (Just _) _ _ _ _ _) (Material (Just _) _ _ _ _)) -> do
+                {-# SCC "writeRenderData" #-} writeRenderData (renderDataRef state) uid g
+                writeCam (cameraRef state) (gid g) (camera g) g
+                return g
+            Just (Model (DynamicMesh (Just _) _ _ _ _ _) (Material (Just _) _ _ _ _)) -> do
+                writeRenderData (renderDataRef state) uid g
+                writeCam (cameraRef state) (gid g) (camera g) g
+                return g
+            _  -> writeCam (cameraRef state) (gid g) (camera g) g >> return g
+        updateEntity state g = do
+            uids <- readIORef (uidRef state)
+            atomically (takeTMVar (contextBarrier state)) >>= \c -> case c of
+                GLContext1 -> print "Switching context to processing thread." >> GLFW.makeContextCurrent (Just $ context state)
+                _          -> return ()
+            model' <- loadNewModel (sigResources state) (model g)
+            atomically $ putTMVar (contextBarrier state) GLContext2
+
+            let (g', uids') = case gid g of
+                    New -> (g{model = model', gid = UID (head uids)}, tail uids)
+                    _   -> (g{model = model'}, uids)
+                (UID uid)   = gid g'
+
+            writeRenderData (renderDataRef state) uid g'
+            writeCam (cameraRef state) (gid g') (camera g') g
+            writeIORef (uidRef state) uids'
+            return g'
+
+        writeCam cref (UID uid) (Just c) g = modifyIORef cref (IntMap.insert uid (transMat g, c))
+        writeCam _    _         _        _ = return ()
+
+        writeRenderData oref uid g = readIORef oref >>= \vec -> do
+            let x | uid < SMV.length vec = do
+                    -- {-# SCC "SMV.unsafeWrite" #-} SMV.unsafeWrite vec uid rd >> {-# SCC "writeIORef_oref" #-} writeIORef oref vec
+                    -- {-# SCC "SMV.unsafeWrite" #-} SMV.unsafeWrite vec uid rd >> {-# SCC "writeIORef_oref" #-} writeIORef oref vec
+                    {-# SCC "SMV.unsafeWith" #-} SMV.unsafeWith vec (setRenderDataPtr g)
+                    {-# SCC "writeIORef_oref" #-} writeIORef oref vec
+                  | otherwise           = do
+                      vec' <- SMV.unsafeGrow vec (SMV.length vec)
+                      mapM_ (\i -> SMV.unsafeWrite vec' i nullRenderData) [uid..SMV.length vec' - 1]
+                    --   SMV.unsafeWrite vec' uid rd
+                      SMV.unsafeWith vec' (setRenderDataPtr g)
+                      writeIORef oref vec'
+            x
+        -- writeRenderData _ _ _ = return ()
 
 ----------------------------------
 -- Input
 ----------------------------------
 
+data GLContext = GLContext1 | GLContext2
+
 --Need resources structure in here!
 data SignalState = SignalState
-                 { objectRef     :: IORef (MV.IOVector (Maybe GameObject)) --Should this be some kind of hash table instead!?!??!?
-                 , uidRef        :: IORef [Int]
-                 , cameraRef     :: IORef (IntMap.IntMap (Matrix4x4, Camera))
-                 , runTimeRef    :: IORef Time
-                 , deltaTimeRef  :: IORef Time
-                 , mousePosRef   :: IORef (Double, Double)
-                 , mouseClickRef :: IORef Bool
-                 , keyboardRef   :: IORef (IntMap.IntMap Bool)
-                 , dimensionsRef :: IORef (Double, Double)
-                 , sigResources  :: Resources }
+                 { contextBarrier :: TMVar GLContext
+                 , context        :: GLFW.Window
+                --  , objectRef      :: IORef (MV.IOVector GameObject) --Should this be some kind of hash table instead!?!??!?
+                 , renderDataRef  :: IORef (SMV.IOVector RenderData)
+                 , uidRef         :: IORef [Int]
+                 , cameraRef      :: IORef (IntMap.IntMap (Matrix4x4, Camera))
+                 , runTimeRef     :: IORef Time
+                 , deltaTimeRef   :: IORef Time
+                 , mousePosRef    :: IORef (Double, Double)
+                 , mouseClickRef  :: IORef Bool
+                 , keyboardRef    :: IORef (IntMap.IntMap Bool)
+                 , dimensionsRef  :: IORef (Double, Double)
+                 , sigResources   :: Resources }
 
-mkSignalState :: (Double, Double) -> IO SignalState
-mkSignalState dims = SignalState
-                  <~ (V.thaw (V.fromList (replicate 16 Nothing)) >>= newIORef)
+mkSignalState :: GLFW.Window -> (Double, Double) -> IO SignalState
+mkSignalState w2 dims = SignalState
+                  <~ atomically (newTMVar GLContext1)
+                  ~~ return w2
+                --   ~~ (V.thaw (V.fromList (replicate 16 mkGameObject)) >>= newIORef)
+                  ~~ (SV.thaw (SV.fromList (replicate 16 nullRenderData)) >>= newIORef)
                   ~~ newIORef [0..]
                   ~~ newIORef IntMap.empty
                   ~~ newIORef 0
@@ -906,8 +938,18 @@ folds f b inputSig = stateSig
     where
         stateSig = delay b $ f inputSig stateSig
 
-foldg :: Scene scene => (input -> scene -> scene) -> scene -> Signal input -> Signal scene
-foldg f scene input = sceneSig
+-- foldns :: (Functor scene, Foldable scene, Traversable scene) => (input -> scene (Entity a) -> scene (Entity a)) -> scene (Entity a) -> Signal input -> Signal (scene (Entity a))
+-- foldns f scene input = sceneSig
+--     where
+--         sceneSig = delay scene $ necro $ f <~ input ~~ sceneSig
+
+-- data SignalCollection a = SignalCollection a
+
+-- foldns :: (input -> Entity a -> Maybe (Entity a)) -> [Entity a] -> Signal input -> SignalCollection (Entity a)
+-- foldns = undefined
+
+foldn :: Scene scene => (input -> scene -> scene) -> scene -> Signal input -> Signal scene
+foldn f scene input = sceneSig
     where
         sceneSig = delay scene $ necro $ f <~ input ~~ sceneSig
 

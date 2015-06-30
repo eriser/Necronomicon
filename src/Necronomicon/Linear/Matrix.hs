@@ -6,10 +6,16 @@ import Prelude
 import Necronomicon.Utility
 import Necronomicon.Linear.Vector
 import Necronomicon.Linear.Quaternion
-import qualified Graphics.Rendering.OpenGL as GL
-import qualified Graphics.Rendering.OpenGL.GL.CoordTrans as GLC
-import Foreign.Ptr (Ptr)
+import Foreign.Ptr
+import Foreign.Storable
+import Foreign.C.Types
 import Data.Binary
+import qualified Graphics.Rendering.OpenGL               as GL
+import qualified Graphics.Rendering.OpenGL.GL.CoordTrans as GLC
+import qualified Graphics.Rendering.OpenGL.Raw           as GLRaw (glUniformMatrix4fv)
+import qualified Data.Vector.Generic                     as G
+import qualified Data.Vector.Generic.Mutable             as MV
+import qualified Data.Vector.Unboxed.Base                as U
 
 -- Matrices - Row Major
 data Matrix2x2 = Matrix2x2 {-# UNPACK #-} !Double
@@ -309,10 +315,25 @@ trsMatrix' !(Vector3 tx ty tz) !r !(Vector3 sx sy sz) = Matrix4x4 a b c tx d e f
         (Matrix3x3 a b c d e f g h i) = r .*. Matrix3x3 sx 0 0 0 sy 0 0 0 sz
 
 -- | Construct a transformation matrix from a translation vector, a rotation quaternion, and a scale vector
+-- trsMatrix :: Vector3 -> Quaternion -> Vector3 -> Matrix4x4
+-- trsMatrix !(Vector3 tx ty tz) !q !(Vector3 sx sy sz) = Matrix4x4 a b c tx d e f ty g h i tz 0 0 0 1
+    -- where
+        -- (Matrix3x3 a b c d e f g h i) = rotFromQuaternion q .*. Matrix3x3 sx 0 0 0 sy 0 0 0 sz
+
 trsMatrix :: Vector3 -> Quaternion -> Vector3 -> Matrix4x4
-trsMatrix !(Vector3 tx ty tz) !q !(Vector3 sx sy sz) = Matrix4x4 a b c tx d e f ty g h i tz 0 0 0 1
+trsMatrix !(Vector3 tx ty tz) !(Quaternion w x y z) !(Vector3 sx sy sz) = Matrix4x4
+    ((1-2*(y2+z2)) * sx) (2*(x*y-z*w)) (2*(x*z+y*w)) tx
+    (2*(x*y+z*w)) ((1-2*(x2+z2)) * sy) (2*(y*z-x*w)) ty
+    (2*(x*z-y*w)) (2*(y*z+x*w)) ((1-2*(x2+y2)) * sz) tz
+    0 0 0 1
     where
-        (Matrix3x3 a b c d e f g h i) = rotFromQuaternion q .*. Matrix3x3 sx 0 0 0 sy 0 0 0 sz
+        x2 = x * x
+        y2 = y * y
+        z2 = z * z
+
+-- (a*a'+b*d'+c*g') (a*b'+b*e'+c*h') (a*c'+b*f'+c*i')
+-- (d*a'+e*d'+f*g') (d*b'+e*e'+f*h') (d*c'+e*f'+f*i')
+-- (g*a'+h*d'+i*g') (g*b'+h*e'+i*h') (g*c'+h*f'+i*i')
 
 orthoMatrix :: Double -> Double -> Double -> Double -> Double -> Double -> Matrix4x4
 orthoMatrix l r b t n f = Matrix4x4
@@ -344,3 +365,133 @@ basis !(Matrix4x4 xx xy xz _ yx yy yz _ zx zy zz _ _ _ _ _) = (Vector3 xx xy xz,
 
 matOrigin :: Matrix4x4 -> Vector3
 matOrigin !(Matrix4x4 _ _ _ x _ _ _ y _ _ _ z _ _ _ _) = Vector3 x y z
+
+setMatrixUniform :: GL.GLint -> Matrix4x4 -> Ptr CFloat -> IO ()
+setMatrixUniform ul (Matrix4x4 m00 m01 m02 m03 m10 m11 m12 m13 m20 m21 m22 m23 m30 m31 m32 m33) ptr = do
+    pokeByteOff ptr 0  (realToFrac m00 :: CFloat)
+    pokeByteOff ptr 4  (realToFrac m01 :: CFloat)
+    pokeByteOff ptr 8  (realToFrac m02 :: CFloat)
+    pokeByteOff ptr 12 (realToFrac m03 :: CFloat)
+    pokeByteOff ptr 16 (realToFrac m10 :: CFloat)
+    pokeByteOff ptr 20 (realToFrac m11 :: CFloat)
+    pokeByteOff ptr 24 (realToFrac m12 :: CFloat)
+    pokeByteOff ptr 28 (realToFrac m13 :: CFloat)
+    pokeByteOff ptr 32 (realToFrac m20 :: CFloat)
+    pokeByteOff ptr 36 (realToFrac m21 :: CFloat)
+    pokeByteOff ptr 40 (realToFrac m22 :: CFloat)
+    pokeByteOff ptr 44 (realToFrac m23 :: CFloat)
+    pokeByteOff ptr 48 (realToFrac m30 :: CFloat)
+    pokeByteOff ptr 52 (realToFrac m31 :: CFloat)
+    pokeByteOff ptr 56 (realToFrac m32 :: CFloat)
+    pokeByteOff ptr 60 (realToFrac m33 :: CFloat)
+    GLRaw.glUniformMatrix4fv ul 1 0 ptr
+
+newtype instance U.MVector s Matrix4x4 = MV_Matrix4x4 (U.MVector s Double)
+newtype instance U.Vector    Matrix4x4 = V_Matrix4x4  (U.Vector    Double)
+
+instance MV.MVector U.MVector Matrix4x4 where
+    {-# INLINE basicLength #-}
+    {-# INLINE basicUnsafeSlice #-}
+    {-# INLINE basicOverlaps #-}
+    {-# INLINE basicUnsafeNew #-}
+    {-# INLINE basicUnsafeReplicate #-}
+    {-# INLINE basicUnsafeRead #-}
+    {-# INLINE basicUnsafeWrite #-}
+    {-# INLINE basicClear #-}
+    {-# INLINE basicSet #-}
+    {-# INLINE basicUnsafeCopy #-}
+    {-# INLINE basicUnsafeGrow #-}
+    basicUnsafeNew n                        = MV_Matrix4x4 <$> MV.basicUnsafeNew (n * 16)
+    basicLength          (MV_Matrix4x4 v)   = MV.basicLength v `div` 16
+    basicUnsafeSlice i n (MV_Matrix4x4 v)   = MV_Matrix4x4 $ MV.basicUnsafeSlice i (n * 16) v
+    basicClear           (MV_Matrix4x4 v)   = MV.basicClear v
+    basicUnsafeGrow      (MV_Matrix4x4 v) n = MV_Matrix4x4 <$> MV.basicUnsafeGrow v (n * 16)
+    basicOverlaps   (MV_Matrix4x4 v1) (MV_Matrix4x4 v2) = MV.basicOverlaps v1 v2
+    basicUnsafeCopy (MV_Matrix4x4 v1) (MV_Matrix4x4 v2) = MV.basicUnsafeCopy v1 v2
+    basicUnsafeMove (MV_Matrix4x4 v1) (MV_Matrix4x4 v2) = MV.basicUnsafeMove v1 v2
+    basicUnsafeRead (MV_Matrix4x4 v) i = let i' = i * 16 in
+        Matrix4x4 <$> MV.basicUnsafeRead v i'
+                  <*> MV.basicUnsafeRead v (i' + 1)
+                  <*> MV.basicUnsafeRead v (i' + 2)
+                  <*> MV.basicUnsafeRead v (i' + 3)
+                  <*> MV.basicUnsafeRead v (i' + 4)
+                  <*> MV.basicUnsafeRead v (i' + 5)
+                  <*> MV.basicUnsafeRead v (i' + 6)
+                  <*> MV.basicUnsafeRead v (i' + 7)
+                  <*> MV.basicUnsafeRead v (i' + 8)
+                  <*> MV.basicUnsafeRead v (i' + 9)
+                  <*> MV.basicUnsafeRead v (i' + 10)
+                  <*> MV.basicUnsafeRead v (i' + 11)
+                  <*> MV.basicUnsafeRead v (i' + 12)
+                  <*> MV.basicUnsafeRead v (i' + 13)
+                  <*> MV.basicUnsafeRead v (i' + 14)
+                  <*> MV.basicUnsafeRead v (i' + 15)
+
+    basicUnsafeWrite (MV_Matrix4x4 v) i (Matrix4x4 m00 m01 m02 m03 m10 m11 m12 m13 m20 m21 m22 m23 m30 m31 m32 m33) = let i' = i * 16 in do
+        MV.basicUnsafeWrite v  i'       m00
+        MV.basicUnsafeWrite v (i' + 1)  m01
+        MV.basicUnsafeWrite v (i' + 2)  m02
+        MV.basicUnsafeWrite v (i' + 3)  m03
+        MV.basicUnsafeWrite v (i' + 4)  m10
+        MV.basicUnsafeWrite v (i' + 5)  m11
+        MV.basicUnsafeWrite v (i' + 6)  m12
+        MV.basicUnsafeWrite v (i' + 7)  m13
+        MV.basicUnsafeWrite v (i' + 8)  m20
+        MV.basicUnsafeWrite v (i' + 9)  m21
+        MV.basicUnsafeWrite v (i' + 10) m22
+        MV.basicUnsafeWrite v (i' + 11) m23
+        MV.basicUnsafeWrite v (i' + 12) m30
+        MV.basicUnsafeWrite v (i' + 13) m31
+        MV.basicUnsafeWrite v (i' + 14) m32
+        MV.basicUnsafeWrite v (i' + 15) m33
+
+    -- basicSet         (MV_Matrix4x4 v) (x :+ y) = MV.basicSet v (x,y)
+    -- basicUnsafeReplicate n (x :+ y)  = MV_Matrix4x4 `liftM` MV.basicUnsafeReplicate n (x,y)
+
+instance G.Vector U.Vector Matrix4x4 where
+  {-# INLINE basicUnsafeFreeze #-}
+  {-# INLINE basicUnsafeThaw #-}
+  {-# INLINE basicLength #-}
+  {-# INLINE basicUnsafeSlice #-}
+  {-# INLINE basicUnsafeIndexM #-}
+  {-# INLINE elemseq #-}
+  basicUnsafeFreeze    (MV_Matrix4x4 v)   = V_Matrix4x4  <$> G.basicUnsafeFreeze v
+  basicUnsafeThaw      (V_Matrix4x4  v)   = MV_Matrix4x4 <$> G.basicUnsafeThaw   v
+  basicLength          (V_Matrix4x4  v)   = G.basicLength v `div` 16
+  basicUnsafeSlice i n (V_Matrix4x4  v)   = V_Matrix4x4 $ G.basicUnsafeSlice i (n * 16) v
+  basicUnsafeIndexM    (V_Matrix4x4  v) i = let i' = i * 16 in
+      Matrix4x4 <$> G.basicUnsafeIndexM v i'
+                <*> G.basicUnsafeIndexM v (i' + 1)
+                <*> G.basicUnsafeIndexM v (i' + 2)
+                <*> G.basicUnsafeIndexM v (i' + 3)
+                <*> G.basicUnsafeIndexM v (i' + 4)
+                <*> G.basicUnsafeIndexM v (i' + 5)
+                <*> G.basicUnsafeIndexM v (i' + 6)
+                <*> G.basicUnsafeIndexM v (i' + 7)
+                <*> G.basicUnsafeIndexM v (i' + 8)
+                <*> G.basicUnsafeIndexM v (i' + 9)
+                <*> G.basicUnsafeIndexM v (i' + 10)
+                <*> G.basicUnsafeIndexM v (i' + 11)
+                <*> G.basicUnsafeIndexM v (i' + 12)
+                <*> G.basicUnsafeIndexM v (i' + 13)
+                <*> G.basicUnsafeIndexM v (i' + 14)
+                <*> G.basicUnsafeIndexM v (i' + 15)
+  elemseq _ (Matrix4x4 m00 m01 m02 m03 m10 m11 m12 m13 m20 m21 m22 m23 m30 m31 m32 m33) z = G.elemseq (undefined :: U.Vector Double) m00
+                                                                                          $ G.elemseq (undefined :: U.Vector Double) m01
+                                                                                          $ G.elemseq (undefined :: U.Vector Double) m02
+                                                                                          $ G.elemseq (undefined :: U.Vector Double) m03
+                                                                                          $ G.elemseq (undefined :: U.Vector Double) m10
+                                                                                          $ G.elemseq (undefined :: U.Vector Double) m11
+                                                                                          $ G.elemseq (undefined :: U.Vector Double) m12
+                                                                                          $ G.elemseq (undefined :: U.Vector Double) m13
+                                                                                          $ G.elemseq (undefined :: U.Vector Double) m20
+                                                                                          $ G.elemseq (undefined :: U.Vector Double) m21
+                                                                                          $ G.elemseq (undefined :: U.Vector Double) m22
+                                                                                          $ G.elemseq (undefined :: U.Vector Double) m23
+                                                                                          $ G.elemseq (undefined :: U.Vector Double) m30
+                                                                                          $ G.elemseq (undefined :: U.Vector Double) m31
+                                                                                          $ G.elemseq (undefined :: U.Vector Double) m32
+                                                                                          $ G.elemseq (undefined :: U.Vector Double) m33 z
+  basicUnsafeCopy (MV_Matrix4x4 mv) (V_Matrix4x4 v) = G.basicUnsafeCopy mv v
+
+instance U.Unbox Matrix4x4
