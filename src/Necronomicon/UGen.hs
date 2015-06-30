@@ -32,7 +32,7 @@ data UGenChannel = UGenNum Double
 
 data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Env Double Double | Env2 Double Double | Out | AuxIn | Poll | LFSaw | LFPulse | Saw | Pulse
               | SyncSaw | SyncPulse | SyncOsc | Random Double Double Double | NoiseN | NoiseL | NoiseC | Dust | Dust2 | Impulse | Range | ExpRange
-              | LPF | HPF | BPF | Notch | AllPass | PeakEQ | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int
+              | LPF | HPF | BPF | Notch | AllPass | PeakEQ | LowShelf | HighShelf | LagCalc | LocalIn Int | LocalOut Int | Arg Int | Simplex
               | Clip | SoftClip | Poly3 | TanHDist | SinDist | Wrap | DelayN Double | DelayL Double | DelayC Double | CombN Double | CombL Double | CombC Double
               | Negate | Crush | Decimate | FreeVerb | Pluck Double | WhiteNoise | PinkNoise | BrownNoise |Abs | Signum | Pow | Exp | Log | Cos | ASin | ACos
               | UMax | UMin | ATan | LogBase | Sqrt | Tan | SinH | CosH | TanH | ASinH | ATanH | ACosH | TimeMicros | TimeSecs | USeq | Limiter Double | Pan
@@ -209,6 +209,7 @@ foreign import ccall "&add_ak_calc" addAKCalc :: CUGenFunc
 foreign import ccall "&add_ka_calc" addKACalc :: CUGenFunc
 foreign import ccall "&add_aa_calc" addAACalc :: CUGenFunc
 add :: UGen -> UGen -> UGen
+add (UGen [UGenNum x]) (UGen [UGenNum y]) = UGen [UGenNum $ x + y]
 add x y = optimizeUGenCalcFunc [addKKCalc, addAKCalc, addKACalc, addAACalc] $ multiChannelExpandUGen Add addAACalc nullConstructor nullDeconstructor [x, y]
 
 foreign import ccall "&minus_kk_calc" minusKKCalc :: CUGenFunc
@@ -216,6 +217,7 @@ foreign import ccall "&minus_ak_calc" minusAKCalc :: CUGenFunc
 foreign import ccall "&minus_ka_calc" minusKACalc :: CUGenFunc
 foreign import ccall "&minus_aa_calc" minusAACalc :: CUGenFunc
 minus :: UGen -> UGen -> UGen
+minus (UGen [UGenNum x]) (UGen [UGenNum y]) = UGen [UGenNum $ x - y]
 minus x y = optimizeUGenCalcFunc [minusKKCalc, minusAKCalc, minusKACalc, minusAACalc] $ multiChannelExpandUGen Minus minusAACalc nullConstructor nullDeconstructor [x, y]
 
 foreign import ccall "&mul_kk_calc" mulKKCalc :: CUGenFunc
@@ -223,6 +225,7 @@ foreign import ccall "&mul_ak_calc" mulAKCalc :: CUGenFunc
 foreign import ccall "&mul_ka_calc" mulKACalc :: CUGenFunc
 foreign import ccall "&mul_aa_calc" mulAACalc :: CUGenFunc
 mul :: UGen -> UGen -> UGen
+mul (UGen [UGenNum x]) (UGen [UGenNum y]) = UGen [UGenNum $ x * y]
 mul x y = optimizeUGenCalcFunc [mulKKCalc, mulAKCalc, mulKACalc, mulAACalc] $ multiChannelExpandUGen Mul mulAACalc nullConstructor nullDeconstructor [x, y]
 
 gain :: UGen -> UGen -> UGen
@@ -233,21 +236,25 @@ foreign import ccall "&div_ak_calc" divAKCalc :: CUGenFunc
 foreign import ccall "&div_ka_calc" divKACalc :: CUGenFunc
 foreign import ccall "&div_aa_calc" divAACalc :: CUGenFunc
 udiv :: UGen -> UGen -> UGen
+udiv (UGen [UGenNum x]) (UGen [UGenNum y]) = UGen [UGenNum $ x / y]
 udiv x y = optimizeUGenCalcFunc [divKKCalc, divAKCalc, divKACalc, divAACalc] $ multiChannelExpandUGen Div divAACalc nullConstructor nullDeconstructor [x, y]
 
 foreign import ccall "&negate_k_calc" negateKCalc :: CUGenFunc
 foreign import ccall "&negate_a_calc" negateACalc :: CUGenFunc
 unegate :: UGen -> UGen
+unegate (UGen [UGenNum x]) = UGen [UGenNum (-x)]
 unegate x = optimizeUGenCalcFunc [negateKCalc, negateACalc] $ multiChannelExpandUGen Negate negateACalc nullConstructor nullDeconstructor [x]
 
 foreign import ccall "&abs_k_calc" absKCalc :: CUGenFunc
 foreign import ccall "&abs_a_calc" absACalc :: CUGenFunc
 uabs :: UGen -> UGen
+uabs (UGen [UGenNum x]) = UGen [UGenNum $ abs x]
 uabs x = optimizeUGenCalcFunc [absKCalc, absACalc] $ multiChannelExpandUGen Abs absACalc nullConstructor nullDeconstructor [x]
 
 foreign import ccall "&signum_k_calc" signumKCalc :: CUGenFunc
 foreign import ccall "&signum_a_calc" signumACalc :: CUGenFunc
 usignum :: UGen -> UGen
+usignum (UGen [UGenNum x]) = UGen [UGenNum $ signum x]
 usignum x = optimizeUGenCalcFunc [signumKCalc, signumACalc] $ multiChannelExpandUGen Signum signumACalc nullConstructor nullDeconstructor [x]
 
 foreign import ccall "&pow_kk_calc" powKKCalc :: CUGenFunc
@@ -255,36 +262,43 @@ foreign import ccall "&pow_ak_calc" powAKCalc :: CUGenFunc
 foreign import ccall "&pow_ka_calc" powKACalc :: CUGenFunc
 foreign import ccall "&pow_aa_calc" powAACalc :: CUGenFunc
 upow :: UGen -> UGen -> UGen
+upow (UGen [UGenNum x]) (UGen [UGenNum y]) = UGen [UGenNum $ x ** y]
 upow x y = optimizeUGenCalcFunc [powKKCalc, powAKCalc, powKACalc, powAACalc] $ multiChannelExpandUGen Pow powAACalc nullConstructor nullDeconstructor [x, y]
 
 foreign import ccall "&exp_k_calc" expKCalc :: CUGenFunc
 foreign import ccall "&exp_a_calc" expACalc :: CUGenFunc
 uexp :: UGen -> UGen
+uexp (UGen [UGenNum x]) = UGen [UGenNum $ exp x]
 uexp x = optimizeUGenCalcFunc [expKCalc, expACalc] $ multiChannelExpandUGen Exp expACalc nullConstructor nullDeconstructor [x]
 
 foreign import ccall "&log_k_calc" logKCalc :: CUGenFunc
 foreign import ccall "&log_a_calc" logACalc :: CUGenFunc
 ulog :: UGen -> UGen
+ulog (UGen [UGenNum x]) = UGen [UGenNum $ log x]
 ulog x = optimizeUGenCalcFunc [logKCalc, logACalc] $ multiChannelExpandUGen Log logACalc nullConstructor nullDeconstructor [x]
 
 foreign import ccall "&cos_k_calc" cosKCalc :: CUGenFunc
 foreign import ccall "&cos_a_calc" cosACalc :: CUGenFunc
 ucos :: UGen -> UGen
+ucos (UGen [UGenNum x]) = UGen [UGenNum $ cos x]
 ucos x = optimizeUGenCalcFunc [cosKCalc, cosACalc] $ multiChannelExpandUGen Cos cosACalc nullConstructor nullDeconstructor [x]
 
 foreign import ccall "&asin_k_calc" asinKCalc :: CUGenFunc
 foreign import ccall "&asin_a_calc" asinACalc :: CUGenFunc
 uasin :: UGen -> UGen
+uasin (UGen [UGenNum x]) = UGen [UGenNum $ asin x]
 uasin x = optimizeUGenCalcFunc [asinKCalc, asinACalc] $ multiChannelExpandUGen ASin asinACalc nullConstructor nullDeconstructor [x]
 
 foreign import ccall "&acos_k_calc" acosKCalc :: CUGenFunc
 foreign import ccall "&acos_a_calc" acosACalc :: CUGenFunc
 uacos :: UGen -> UGen
+uacos (UGen [UGenNum x]) = UGen [UGenNum $ acos x]
 uacos x = optimizeUGenCalcFunc [acosKCalc, acosACalc] $ multiChannelExpandUGen ACos acosACalc nullConstructor nullDeconstructor [x]
 
 foreign import ccall "&atan_k_calc" atanKCalc :: CUGenFunc
 foreign import ccall "&atan_a_calc" atanACalc :: CUGenFunc
 uatan :: UGen -> UGen
+uatan (UGen [UGenNum x]) = UGen [UGenNum $ atan x]
 uatan x = optimizeUGenCalcFunc [atanKCalc, atanACalc] $ multiChannelExpandUGen ATan atanACalc nullConstructor nullDeconstructor [x]
 
 foreign import ccall "&logbase_kk_calc" logBaseKKCalc :: CUGenFunc
@@ -292,46 +306,55 @@ foreign import ccall "&logbase_ak_calc" logBaseAKCalc :: CUGenFunc
 foreign import ccall "&logbase_ka_calc" logBaseKACalc :: CUGenFunc
 foreign import ccall "&logbase_aa_calc" logBaseAACalc :: CUGenFunc
 ulogBase :: UGen -> UGen -> UGen
+ulogBase (UGen [UGenNum x]) (UGen [UGenNum y]) = UGen [UGenNum $ logBase x y]
 ulogBase x y = optimizeUGenCalcFunc [logBaseKKCalc, logBaseAKCalc, logBaseKACalc, logBaseAACalc] $ multiChannelExpandUGen LogBase logBaseAACalc nullConstructor nullDeconstructor [x, y]
 
 foreign import ccall "&sqrt_k_calc" sqrtKCalc :: CUGenFunc
 foreign import ccall "&sqrt_a_calc" sqrtACalc :: CUGenFunc
 usqrt :: UGen -> UGen
+usqrt (UGen [UGenNum x]) = UGen [UGenNum $ sqrt x]
 usqrt x = optimizeUGenCalcFunc [sqrtKCalc, sqrtACalc] $ multiChannelExpandUGen Sqrt sqrtACalc nullConstructor nullDeconstructor [x]
 
 foreign import ccall "&tan_k_calc" tanKCalc :: CUGenFunc
 foreign import ccall "&tan_a_calc" tanACalc :: CUGenFunc
 utan :: UGen -> UGen
+utan (UGen [UGenNum x]) = UGen [UGenNum $ tan x]
 utan x = optimizeUGenCalcFunc [tanKCalc, tanACalc] $ multiChannelExpandUGen Tan tanACalc nullConstructor nullDeconstructor [x]
 
 foreign import ccall "&sinh_k_calc" sinhKCalc :: CUGenFunc
 foreign import ccall "&sinh_a_calc" sinhACalc :: CUGenFunc
 usinh :: UGen -> UGen
+usinh (UGen [UGenNum x]) = UGen [UGenNum $ sinh x]
 usinh x = optimizeUGenCalcFunc [sinhKCalc, sinhACalc] $ multiChannelExpandUGen SinH sinhACalc nullConstructor nullDeconstructor [x]
 
 foreign import ccall "&cosh_k_calc" coshKCalc :: CUGenFunc
 foreign import ccall "&cosh_a_calc" coshACalc :: CUGenFunc
 ucosh :: UGen -> UGen
+ucosh (UGen [UGenNum x]) = UGen [UGenNum $ cosh x]
 ucosh x = optimizeUGenCalcFunc [coshKCalc, coshACalc] $ multiChannelExpandUGen CosH coshACalc nullConstructor nullDeconstructor [x]
 
 foreign import ccall "&tanh_k_calc" tanhKCalc :: CUGenFunc
 foreign import ccall "&tanh_a_calc" tanhACalc :: CUGenFunc
 utanh :: UGen -> UGen
+utanh (UGen [UGenNum x]) = UGen [UGenNum $ tanh x]
 utanh x = optimizeUGenCalcFunc [tanhKCalc, tanhACalc] $ multiChannelExpandUGen TanH tanhACalc nullConstructor nullDeconstructor [x]
 
 foreign import ccall "&asinh_k_calc" asinhKCalc :: CUGenFunc
 foreign import ccall "&asinh_a_calc" asinhACalc :: CUGenFunc
 uasinh :: UGen -> UGen
+uasinh (UGen [UGenNum x]) = UGen [UGenNum $ asinh x]
 uasinh x = optimizeUGenCalcFunc [asinhKCalc, asinhACalc] $ multiChannelExpandUGen ASinH asinhACalc nullConstructor nullDeconstructor [x]
 
 foreign import ccall "&atanh_k_calc" atanhKCalc :: CUGenFunc
 foreign import ccall "&atanh_a_calc" atanhACalc :: CUGenFunc
 uatanh :: UGen -> UGen
+uatanh (UGen [UGenNum x]) = UGen [UGenNum $ atanh x]
 uatanh x = optimizeUGenCalcFunc [atanhKCalc, atanhACalc] $ multiChannelExpandUGen ATanH atanhACalc nullConstructor nullDeconstructor [x]
 
 foreign import ccall "&acosh_k_calc" acoshKCalc :: CUGenFunc
 foreign import ccall "&acosh_a_calc" acoshACalc :: CUGenFunc
 uacosh :: UGen -> UGen
+uacosh (UGen [UGenNum x]) = UGen [UGenNum $ acosh x]
 uacosh x = optimizeUGenCalcFunc [acoshKCalc, acoshACalc] $ multiChannelExpandUGen ACosH acoshACalc nullConstructor nullDeconstructor [x]
 
 foreign import ccall "&umax_kk_calc" umaxKKCalc :: CUGenFunc
@@ -340,6 +363,7 @@ foreign import ccall "&umax_ka_calc" umaxKACalc :: CUGenFunc
 foreign import ccall "&umax_aa_calc" umaxAACalc :: CUGenFunc
 
 umax :: UGen -> UGen -> UGen
+umax (UGen [UGenNum a]) (UGen [UGenNum b]) = UGen [UGenNum $ max a b]
 umax a b = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen UMax umaxAACalc nullConstructor nullDeconstructor [a, b]
     where
         cfuncs = [umaxKKCalc, umaxAKCalc, umaxKACalc, umaxAACalc]
@@ -350,6 +374,7 @@ foreign import ccall "&umin_ka_calc" uminKACalc :: CUGenFunc
 foreign import ccall "&umin_aa_calc" uminAACalc :: CUGenFunc
 
 umin :: UGen -> UGen -> UGen
+umin (UGen [UGenNum a]) (UGen [UGenNum b]) = UGen [UGenNum $ min a b]
 umin a b = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen UMin uminAACalc nullConstructor nullDeconstructor [a, b]
     where
         cfuncs = [uminKKCalc, uminAKCalc, uminKACalc, uminAACalc]
@@ -1007,6 +1032,16 @@ foreign import ccall "&brownNoise_calc" brownNoiseCalc :: CUGenFunc
 
 brownNoise :: UGen
 brownNoise = UGen [UGenFunc BrownNoise brownNoiseCalc brownNoiseConstructor brownNoiseDeconstructor []]
+
+foreign import ccall "&simplex_constructor" simplexConstructor :: CUGenFunc
+foreign import ccall "&simplex_deconstructor" simplexDeconstructor :: CUGenFunc
+foreign import ccall "&simplex_k_calc" simplexKCalc :: CUGenFunc
+foreign import ccall "&simplex_a_calc" simplexACalc :: CUGenFunc
+
+simplex1D :: UGen -> UGen
+simplex1D freq = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen Simplex simplexACalc simplexConstructor simplexDeconstructor [freq]
+    where
+        cfuncs = [simplexKCalc, simplexACalc]
 
 foreign import ccall "&freeverb_constructor" freeverbConstructor :: CUGenFunc
 foreign import ccall "&freeverb_deconstructor" freeverbDeconstructor :: CUGenFunc
