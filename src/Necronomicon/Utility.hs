@@ -9,7 +9,9 @@ module Necronomicon.Utility (hash,
                              chunksOf,
                              filterMap,
                              dot2,
-                             foldrM) where
+                             foldrM,
+                             offsetPtr,
+                             offset0) where
 
 import Data.Bits
 import Data.List (foldl')
@@ -17,6 +19,7 @@ import Graphics.UI.GLFW (getTime)
 import Numeric (showIntAtBase)
 import qualified Numeric as N (showHex)
 import Data.Char (intToDigit)
+import Foreign.Ptr
 
 class Hashable a where
     hash :: a -> Int
@@ -84,3 +87,12 @@ filterMap f xs = foldr collapse [] xs
 foldrM :: Monad m => (a -> b -> m b) -> b -> [a] -> m b
 foldrM _ d []     = return d
 foldrM f d (x:xs) = (\z -> f x z) =<< foldrM f d xs
+
+-- |Produce a 'Ptr' value to be used as an offset of the given number
+-- of bytes.
+offsetPtr :: Int -> Ptr a
+offsetPtr = wordPtrToPtr . fromIntegral
+
+-- |A zero-offset 'Ptr'.
+offset0 :: Ptr a
+offset0 = offsetPtr 0

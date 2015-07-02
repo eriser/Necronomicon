@@ -173,6 +173,74 @@ balance (Node _ l r _)
 balance t = t
 
 {-
+
+-------------------------------------------------------
+-- GameObject - Folding / Mapping
+-------------------------------------------------------
+
+foldChildren :: (GameObject -> a -> a) -> a -> GameObject -> a
+foldChildren f acc g = foldr (\c acc' -> foldChildren f acc' c) (f g acc) (children g)
+
+mapFold :: ((GameObject, a) -> (GameObject, a)) -> (GameObject, a) -> (GameObject, a)
+mapFold f gacc = (  gchildren_ gcs g, acc')
+    where
+        (g,   acc)      = f gacc
+        (gcs, acc')     = foldr mapC ([], acc) (children g)
+        mapC c (cs, cacc) = (c' : cs, cacc')
+            where
+                (c', cacc') = mapFold f (c, cacc)
+
+mapFoldStack :: ((GameObject, a, s) -> (GameObject, a, s)) -> (GameObject, a, s) -> (GameObject, a)
+mapFoldStack f gacc = (gchildren_ gcs g, acc')
+    where
+        (g,   acc, s)     = f gacc
+        (gcs, acc')       = foldr mapC ([], acc) (children g)
+        mapC c (cs, cacc) = (c' : cs, cacc')
+            where
+                (c', cacc') = mapFoldStack f (c, cacc, s)
+
+-------------------------------------------------------
+-- Update
+-------------------------------------------------------
+
+{-
+    update:
+        The main update loop.
+        Transforms the game object tree supplied by the client program-
+        into a new gameObject tree containing collision events and physics simulations.
+-}
+update :: (GameObject, DynamicTree) -> (GameObject, DynamicTree)
+update (g, tree) = (g', bulkUpdate ui)
+    where
+        (g', ui) = mapFoldStack genUpdateInput (g, (([],0), [], tree), identity4)
+
+{-
+    genUpdateInput:
+        Transform the input gameObject into update information for a dynamicTree transformation
+        We've got to get the newly consumed ids to the correct gameobjects....
+-}
+-- the issue is with the matrix multiplication!
+-- Need to figure out how to clip an affine vector4 back to 3D space
+genUpdateInput :: (GameObject, UpdateInput, Matrix4x4) -> (GameObject, UpdateInput, Matrix4x4)
+genUpdateInput (g, (d, il, t), world)
+    | Just col <- collider g = updateFromCollider col
+    | otherwise              = (g, (d, il, t), newWorld)
+    where
+        newWorld             = world .*. transMat g
+        updateFromCollider col
+            | UID uid <- cid = (g'' , (nodeListCons (caabb, uid) d,               il, t), newWorld)
+            | otherwise      = (g',   (nodeListCons (caabb,   i) d, (caabb', i) : il, t{freeList = fl}), newWorld)
+            where
+                g'       = collider_ col' g
+                g''      = collider_ (colliderTransform_ newWorld $ col) g
+                cid      = colliderID  col
+                col'     = colliderTransform_ newWorld $ colliderID_ (UID i) col
+                caabb    = colliderAABB col
+                caabb'   = enlargeAABB  caabb
+                (i : fl) = freeList t
+-}
+
+{-
 (DynamicTree(..),
                                          empty,
                                          createProxy,

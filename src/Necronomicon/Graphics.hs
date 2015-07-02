@@ -9,7 +9,7 @@ module Necronomicon.Graphics (module Necronomicon.Graphics.Camera,
                               module Necronomicon.Graphics.Texture,
                             --   module Necronomicon.Graphics.Model,
                               module Necronomicon.Graphics.Resources,
-                              initWindow) where
+                              module Necronomicon.Graphics.Rendering) where
 
 import Necronomicon.Graphics.SceneObject
 import Necronomicon.Graphics.Camera
@@ -22,15 +22,4 @@ import Necronomicon.Graphics.BufferObject
 import Necronomicon.Graphics.Texture
 -- import Necronomicon.Graphics.Model
 import Necronomicon.Graphics.Resources
-
-import qualified Graphics.UI.GLFW                  as GLFW
-
-initWindow :: (Int, Int) -> Bool -> IO(Maybe GLFW.Window)
-initWindow (width, height) isFullScreen = GLFW.init >>= \initSuccessful -> if initSuccessful then mkWindow else return Nothing
-    where
-        mkWindow = do
-            w <- if isFullScreen
-                then GLFW.getPrimaryMonitor >>= \fullScreenOnMain -> GLFW.createWindow width height "Necronomicon" fullScreenOnMain Nothing
-                else GLFW.createWindow width height "Necronomicon" Nothing Nothing
-            GLFW.makeContextCurrent w
-            return w
+import Necronomicon.Graphics.Rendering

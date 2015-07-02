@@ -92,6 +92,7 @@ library
         Necronomicon.Graphics.Texture
         Necronomicon.Graphics.Model
         Necronomicon.Graphics.Resources
+        Necronomicon.Graphics.Rendering
         Necronomicon.Game
         Necronomicon.Physics
         Necronomicon.Physics.Collider
@@ -222,7 +223,7 @@ executable GenCalcBindings
 executable DynamicTreeTest
     main-is:          Main.hs
     default-language: Haskell2010
-    ghc-options:      -threaded -O3 -Wall -Werror
+    ghc-options:      -threaded -O2 -Wall -Werror -fprof-auto "-with-rtsopts=-N -p -s -h -i0.1"
     hs-source-dirs:   Tests/DynamicTreeTest
     default-extensions: DeriveGeneric
     build-depends:    base             == 4.*,

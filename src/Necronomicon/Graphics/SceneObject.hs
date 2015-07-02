@@ -2,7 +2,6 @@ module Necronomicon.Graphics.SceneObject where
 
 import           Necronomicon.Graphics.Color
 import           Necronomicon.Graphics.Resources
-import           Necronomicon.Graphics.Mesh          (drawMeshWithMaterial, setEmptyTextures)
 import           Necronomicon.Graphics.Text          (renderFont)
 import           Necronomicon.Linear
 

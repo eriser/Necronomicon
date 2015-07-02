@@ -46,19 +46,23 @@ mkBullet p = Entity b g
 
 initBullets :: [Entity Bullet]
 -- initBullets = [mkBullet <| Vector3 (-2) 0 0, mkBullet <| Vector3 0 0 0, mkBullet <| Vector3 2 0 0]
-initBullets = concat <| replicate 100 [mkBullet <| Vector3 (-2) 0 0, mkBullet <| Vector3 0 0 0, mkBullet <| Vector3 2 0 0]
+-- initBullets = concat <| replicate 100 [mkBullet <| Vector3 (-2) 0 0, mkBullet <| Vector3 0 0 0, mkBullet <| Vector3 2 0 0]
 -- initBullets = concat <| replicate 300 [mkBullet <| Vector3 (-2) 0 0, mkBullet <| Vector3 0 0 0, mkBullet <| Vector3 2 0 0]
--- initBullets = concat <| replicate 1000 [mkBullet <| Vector3 (-2) 0 0, mkBullet <| Vector3 0 0 0, mkBullet <| Vector3 2 0 0]
+initBullets = concat <| replicate 1000 [mkBullet <| Vector3 (-2) 0 0, mkBullet <| Vector3 0 0 0, mkBullet <| Vector3 2 0 0]
+-- initBullets = concat <| replicate 3000 [mkBullet <| Vector3 (-2) 0 0, mkBullet <| Vector3 0 0 0, mkBullet <| Vector3 2 0 0]
 -- ^^^Test case
 
 megaDark :: Signal ()
 megaDark = hero *> bullets *> pure ()
     where
-        bullets = foldg updateBullets initBullets <| mergeMany
+        --maybe foldn outputs a special data structure???
+        --maybe a mutable vector internally
+        --exposed as SignalCollection or some such?
+        bullets = foldn updateBullets initBullets <| mergeMany
                 [ BulletTick      <~ tick
                 , BulletCollision <~ timestamp (collisionMany bullets) ]
 
-        hero    = foldg updateHero mkHero <| mergeMany
+        hero    = foldn updateHero mkHero <| mergeMany
                 [ HeroTick        <~ tick
                 , HeroKeys        <~ wasd
                 , HeroMouse       <~ mouseDelta
@@ -102,10 +106,10 @@ updateBullets (BulletTick t)            bs = filterMap (tickBullet t) bs
 updateBullets (BulletCollision (t, cs)) bs = map (bulletCollision t) <| zip cs bs
 
 tickBullet :: (Time, Time) -> Entity Bullet -> Maybe (Entity Bullet)
-tickBullet (dt, rt) b@(Entity (Bullet state) g)
-    | DeathAnimation t <- state, rt > t = Nothing
-    | Flying         d <- state         = Just <| Entity (Bullet state) <| rotate (d * realToFrac dt * 10) g
-    | otherwise                         = Just b
+tickBullet (dt, rt) b@(Entity (Bullet state) g) =
+    case state of
+        Flying         d -> Just <| Entity (Bullet state) <| rotate (d * realToFrac (dt * 10)) g
+        DeathAnimation t -> if rt > t then Nothing else Just b
 
 bulletCollision :: Time -> (Maybe Collision, Entity Bullet) -> Entity Bullet
 bulletCollision t (c, b)

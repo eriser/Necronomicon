@@ -21,7 +21,6 @@ import           Language.Haskell.TH.Syntax
 import           Necronomicon.Utility
 import           Prelude
 import           System.IO                  (hPutStrLn, stderr)
-import           Foreign.Ptr                (Ptr, wordPtrToPtr)
 import           Paths_Necronomicon
 import qualified Data.ByteString            as BS
 import qualified Data.ByteString.Char8      as C
@@ -30,7 +29,7 @@ import qualified Graphics.Rendering.OpenGL  as GL
 newtype VertexShader   = VertexShader   {unVertexShader        :: IO GL.Shader}
 newtype FragmentShader = FragmentShader {unFragmentShader      :: IO GL.Shader}
 data    Shader         = Shader         {key :: Int,loadShader :: IO LoadedShader}
-type    LoadedShader   = (GL.Program,[GL.UniformLocation],[GL.AttribLocation])
+type    LoadedShader   = (GL.Program, [GL.UniformLocation], GL.AttribLocation, GL.AttribLocation, GL.AttribLocation)
 
 instance Show Shader where
     show (Shader k _) = "Shader " ++ show k
@@ -68,8 +67,9 @@ loadFragmentShader path = FragmentShader $ do
 printError :: IO ()
 printError = GL.get GL.errors >>= mapM_ (hPutStrLn stderr . ("GL: "++) . show)
 
-shader :: String -> [String] -> [String] -> VertexShader -> FragmentShader -> Shader
-shader shaderName uniformNames attributeNames vs fs = Shader (hash shaderName) $ do
+-- shader :: String -> [String] -> [String] -> VertexShader -> FragmentShader -> Shader
+shader :: String -> [String] -> VertexShader -> FragmentShader -> Shader
+shader shaderName uniformNames vs fs = Shader (hash shaderName) $ do
     putStrLn $ "Compiling shader: " ++ shaderName
 
     program <- GL.createProgram
@@ -82,18 +82,13 @@ shader shaderName uniformNames attributeNames vs fs = Shader (hash shaderName) $
     GL.linkProgram     program
 
     uniforms   <- mapM (GL.get . GL.uniformLocation program) uniformNames
-    attributes <- mapM (GL.get . GL.attribLocation  program) attributeNames
+    -- attributes <- mapM (GL.get . GL.attribLocation  program) attributeNames
 
-    return (program,uniforms,attributes)
+    pos        <- GL.get $ GL.attribLocation program "position"
+    col        <- GL.get $ GL.attribLocation program "in_color"
+    uvs        <- GL.get $ GL.attribLocation program "in_uv"
 
--- |Produce a 'Ptr' value to be used as an offset of the given number
--- of bytes.
-offsetPtr :: Int -> Ptr a
-offsetPtr = wordPtrToPtr . fromIntegral
-
--- |A zero-offset 'Ptr'.
-offset0 :: Ptr a
-offset0 = offsetPtr 0
+    return (program, uniforms, pos, col, uvs)
 
 compileVert :: String -> VertexShader
 compileVert = VertexShader   . loadShaderBS "vert" GL.VertexShader   . C.pack

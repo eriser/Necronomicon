@@ -2,18 +2,10 @@ module Necronomicon.Graphics.Mesh where
 
 import           Necronomicon.Graphics.Color
 import           Necronomicon.Graphics.Resources
-import           Necronomicon.Graphics.Shader
 import           Necronomicon.Graphics.Texture
 import           Necronomicon.Linear
-import           Necronomicon.Util.TGA              (loadTextureFromTGA)
 
-import           Data.IORef
-import           Control.Monad                      (foldM_)
-
-import qualified Data.Map                           as Map
-import qualified Data.Vector.Storable               as VS (fromList, unsafeWith)
 import qualified Graphics.Rendering.OpenGL          as GL
-import qualified Graphics.Rendering.OpenGL.Raw      as GLRaw (glUniformMatrix4fv)
 {-
 
 0,1,---------1,1
@@ -124,40 +116,6 @@ tri triSize color = mkMesh (show triSize ++ "~dyntri") vertices colors uvs indic
         uvs      = [Vector2 0 0,Vector2 1 0,Vector2 0 1]
         indices  = [0,1,2]
 
-loadProgram :: GL.Program -> IO ()
-loadProgram program = GL.currentProgram GL.$= Just program
-
-uniformD :: GL.UniformLocation -> Double -> IO ()
-uniformD loc v = GL.uniform loc GL.$= GL.Index1 (realToFrac v :: GL.GLfloat)
-
-getTexture :: Resources -> Texture -> IO GL.TextureObject
-getTexture resources (AudioTexture i) = readIORef (texturesRef resources) >>= \textures -> case Map.lookup ("audio" ++ show i) textures of
-    Nothing      -> loadAudioTexture i >>= \texture -> (writeIORef (texturesRef resources) $ Map.insert ("audio" ++ show i) texture textures) >> setAudioTexture i texture
-    Just texture -> setAudioTexture i texture
-getTexture resources EmptyTexture     = readIORef (texturesRef resources) >>= \textures -> case Map.lookup "empty" textures of
-    Nothing      -> newBoundTexUnit 0 >>= \texture -> (writeIORef (texturesRef resources) $ Map.insert "empty" texture textures) >> return texture
-    Just texture -> return texture
-getTexture resources (TGATexture Nothing path) = readIORef (texturesRef resources) >>= \textures -> case Map.lookup path textures of
-    Nothing      -> loadTextureFromTGA path >>= \texture -> (writeIORef (texturesRef resources) $ Map.insert path texture textures) >> return texture
-    Just texture -> return texture
-getTexture _ (TGATexture (Just tex) _) = return tex
-getTexture _ (LoadedTexture t) = return t
-
-setupAttribute :: (GL.AttribLocation,GL.VertexArrayDescriptor GL.GLfloat) -> IO()
-setupAttribute (loc,vad) = do
-    GL.vertexAttribPointer loc  GL.$= (GL.ToFloat, vad)
-    GL.vertexAttribArray   loc  GL.$= GL.Enabled
-
-bindThenDraw :: GL.PrimitiveMode -> GL.UniformLocation -> GL.UniformLocation -> Matrix4x4 -> Matrix4x4 -> GL.BufferObject -> GL.BufferObject -> [(GL.AttribLocation,GL.VertexArrayDescriptor GL.GLfloat)] -> Int -> IO()
-bindThenDraw primitiveMode (GL.UniformLocation mv) (GL.UniformLocation pr) modelView proj vertexBuffer indexBuffer atributesAndVads numIndices = do
-    VS.unsafeWith (VS.fromList . map realToFrac $ mat4ToList modelView) $ \ptr -> GLRaw.glUniformMatrix4fv mv 1 0 ptr
-    VS.unsafeWith (VS.fromList . map realToFrac $ mat4ToList proj     ) $ \ptr -> GLRaw.glUniformMatrix4fv pr 1 0 ptr
-    GL.bindBuffer GL.ArrayBuffer GL.$= Just vertexBuffer
-    mapM_ setupAttribute atributesAndVads
-    GL.bindBuffer GL.ElementArrayBuffer GL.$= Just indexBuffer
-    GL.drawElements primitiveMode (fromIntegral numIndices) GL.UnsignedInt offset0
-    GL.currentProgram GL.$= Nothing
-
 debugDraw :: Color -> Material
 debugDraw (RGBA r g b a) = Material Nothing "colored-vert.glsl" "colored-frag.glsl" [UniformVec4 "baseColor" (Vector4 r g b a)] GL.Lines
 debugDraw (RGB  r g b  ) = Material Nothing "colored-vert.glsl" "colored-frag.glsl" [UniformVec4 "baseColor" (Vector4 r g b 1)] GL.Lines
@@ -181,38 +139,5 @@ blur      tex = material "ambient-vert.glsl" "blur-frag.glsl"      [UniformTextu
 glowFX    :: Material
 glowFX        = material "ambient-vert.glsl" "blur-frag.glsl"      [UniformTexture "tex" EmptyTexture]
 
-setEmptyTextures :: Texture -> Material -> Material
-setEmptyTextures tex (Material uid vs fs us primMode) = Material uid vs fs (foldr updateTex [] us) primMode
-    where
-        updateTex (UniformTexture t EmptyTexture) us' = UniformTexture t tex : us'
-        updateTex  u                              us' = u : us'
-
 material :: String -> String -> [Uniform] -> Material
 material vs fs us = Material Nothing vs fs us GL.Triangles
-
-drawMeshWithMaterial :: Material -> Mesh -> Matrix4x4 -> Matrix4x4 -> Resources -> IO()
-drawMeshWithMaterial (Material mat vs fs us primMode) m modelView proj resources = do
-    (program, mv : pr : ulocs, attributes)                                    <- sh
-    (vertexBuffer, indexBuffer, numIndices, vertexVad : colorVad : uvVad : _) <- getMesh resources m
-
-    loadProgram program
-    foldM_ (\t (uloc, uval) -> setUniform resources uloc uval t) 0 $ zip ulocs us
-
-    bindThenDraw primMode mv pr modelView proj vertexBuffer indexBuffer (zip attributes [vertexVad, colorVad, uvVad]) numIndices
-    where
-        sh = case mat of
-            Just js -> return js
-            _       -> getShader resources $ shader
-                (vs ++ " + " ++ fs)
-                ("modelView" : "proj" : map uniformName us)
-                ["position", "in_color", "in_uv"]
-                (loadVertexShader   vs)
-                (loadFragmentShader fs)
-
-setUniform :: Resources -> GL.UniformLocation -> Uniform -> Int -> IO Int
-setUniform r loc (UniformTexture _ v) t = getTexture r v >>= setTextureUniform loc t >> return (t + 1)
-setUniform _ loc (UniformScalar  _ v) t = GL.uniform loc GL.$= GL.Index1  (realToFrac v :: GL.GLfloat) >> return t
-setUniform _ loc (UniformVec2    _ v) t = GL.uniform loc GL.$= toGLVertex2 v >> return t
-setUniform _ loc (UniformVec3    _ v) t = GL.uniform loc GL.$= toGLVertex3 v >> return t
-setUniform _ loc (UniformVec4    _ v) t = GL.uniform loc GL.$= toGLVertex4 v >> return t
-setUniform _ _ _                      t = return t

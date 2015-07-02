@@ -1,41 +1,26 @@
-{-# LANGUAGE DefaultSignatures #-}
-{-# LANGUAGE FlexibleContexts #-}
-
 module Necronomicon.Game where
-
-import Test.QuickCheck
-import Data.List (sort)
-import Graphics.Rendering.OpenGL.Raw
-import qualified Data.Vector as V
-import qualified Data.Vector.Fusion.Stream.Monadic as S
-import qualified Graphics.Rendering.OpenGL         as GL
-import qualified Graphics.UI.GLFW                  as GLFW
 
 import Necronomicon.Linear
 import Necronomicon.Physics
-import Necronomicon.Physics.DynamicTree
 import Necronomicon.Graphics
-
+import Unsafe.Coerce
 import Data.Binary
-import GHC.Generics
+import Foreign.Storable
+import Foreign.Ptr
+import Foreign.C.Types
+import Foreign.Marshal.Array
 
--------------------------------------------------------
--- TODO: Ideas
--- Clockwork world / minature-golem-esque world?
--------------------------------------------------------
-
-
-
+import qualified Graphics.Rendering.OpenGL as GL
 -------------------------------------------------------
 -- GameObject
 -------------------------------------------------------
 
 -- data Transform  = Transform Vector3 Quaternion Vector3 deriving (Show)
 data GameObject = GameObject {
-    gid      :: UID,
-    pos      :: Vector3,
-    rot      :: Quaternion,
-    gscale   :: Vector3,
+    gid      :: !UID,
+    pos      :: !Vector3,
+    rot      :: !Quaternion,
+    gscale   :: !Vector3,
     collider :: Maybe Collider,
     model    :: Maybe Model,
     camera   :: Maybe Camera,
@@ -71,10 +56,6 @@ collisions g
 gchildren_ :: [GameObject] -> GameObject -> GameObject
 gchildren_ cs (GameObject uid p r s c m cm _) = GameObject uid p r s c m cm cs
 
--------------------------------------------------------
--- GameObject - Getters / Setters
--------------------------------------------------------
-
 rotMat :: GameObject -> Matrix3x3
 rotMat (GameObject _ _ r _ _ _ _ _) = rotFromQuaternion r
 
@@ -94,548 +75,274 @@ removeChild (GameObject u p r s c m cm cs) n
     where
         (cs1, cs2) = splitAt n cs
 
--------------------------------------------------------
--- GameObject - Folding / Mapping
--------------------------------------------------------
-
-foldChildren :: (GameObject -> a -> a) -> a -> GameObject -> a
-foldChildren f acc g = foldr (\c acc' -> foldChildren f acc' c) (f g acc) (children g)
-
-mapFold :: ((GameObject, a) -> (GameObject, a)) -> (GameObject, a) -> (GameObject, a)
-mapFold f gacc = (  gchildren_ gcs g, acc')
+gameObjectToRenderData :: GameObject -> Maybe RenderData
+gameObjectToRenderData !(GameObject _ position rotation scale _ (Just (Model (Mesh (Just loadedMesh) _ _ _ _ _) (Material (Just loadedMaterial) _ _ uns _))) _ _) = Just $
+    {-# SCC "toRenderData_constructor" #-} RenderData 1 (unsafeCoerce vb) (unsafeCoerce ib) start end count vn vs vp cn cs cp uvn uvs uvp (unsafeCoerce program) (unsafeCoerce vloc) (unsafeCoerce cloc) (unsafeCoerce uloc) mat uniforms mv pr
     where
-        (g,   acc)      = f gacc
-        (gcs, acc')     = foldr mapC ([], acc) (children g)
-        mapC c (cs, cacc) = (c' : cs, cacc')
+        (vb, ib, start, end, count, GL.VertexArrayDescriptor vn _ vs vp, GL.VertexArrayDescriptor cn _ cs cp, GL.VertexArrayDescriptor uvn _ uvs uvp) = loadedMesh
+        (program, GL.UniformLocation  mv : GL.UniformLocation  pr : ulocs, vloc, cloc, uloc)  = loadedMaterial
+        mkLoadedUniform (GL.UniformLocation loc, UniformTexture _ (LoadedTexture t)) (us, tu) = (UniformTextureRaw loc (unsafeCoerce t) tu : us, tu + 1)
+        mkLoadedUniform (GL.UniformLocation loc, UniformScalar  _ v)                 (us, tu) = (UniformScalarRaw  loc (realToFrac v) : us, tu)
+        mkLoadedUniform (GL.UniformLocation loc, UniformVec2    _ (Vector2 x y))     (us, tu) = (UniformVec2Raw    loc (realToFrac x) (realToFrac y) : us, tu)
+        mkLoadedUniform (GL.UniformLocation loc, UniformVec3    _ (Vector3 x y z))   (us, tu) = (UniformVec3Raw    loc (realToFrac x) (realToFrac y) (realToFrac z) : us, tu)
+        mkLoadedUniform (GL.UniformLocation loc, UniformVec4    _ (Vector4 x y z w)) (us, tu) = (UniformVec4Raw    loc (realToFrac x) (realToFrac y) (realToFrac z) (realToFrac w) : us, tu)
+        mkLoadedUniform _                                                            (us, tu) = (us, tu)
+        mat                                                                                   = {-# SCC "toRenderData_trsMatrix" #-} trsMatrix position rotation scale
+        uniforms                                                                              = {-# SCC "toRenderData_uniforms" #-} fst $ foldr mkLoadedUniform ([], 0) $ zip ulocs uns
+gameObjectToRenderData _ = Nothing
+
+setRenderDataPtr :: GameObject -> Ptr RenderData -> IO ()
+setRenderDataPtr (GameObject (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !(Vector3 sx sy sz) _ (Just (Model (Mesh (Just loadedMesh) _ _ _ _ _) (Material (Just loadedMaterial) _ _ uns _))) _ _) rdptr = do
+    pokeByteOff ptr 0  (1 :: CFloat)
+    pokeByteOff ptr 4  (unsafeCoerce vb :: GL.GLuint)
+    pokeByteOff ptr 8  (unsafeCoerce ib :: GL.GLuint)
+    pokeByteOff ptr 12 start
+    pokeByteOff ptr 16 end
+    pokeByteOff ptr 20 count
+
+    pokeByteOff ptr 24 vn
+    pokeByteOff ptr 28 vs
+    pokeByteOff ptr 32 vp
+
+    pokeByteOff ptr 40 cn
+    pokeByteOff ptr 44 cs
+    pokeByteOff ptr 48 cp
+
+    pokeByteOff ptr 56 uvn
+    pokeByteOff ptr 60 uvs
+    pokeByteOff ptr 64 uvp
+
+    pokeByteOff ptr 72 (unsafeCoerce program :: GL.GLuint)
+    pokeByteOff ptr 76 (unsafeCoerce vloc    :: GL.GLuint)
+    pokeByteOff ptr 80 (unsafeCoerce cloc    :: GL.GLuint)
+    pokeByteOff ptr 84 (unsafeCoerce uloc    :: GL.GLuint)
+
+    pokeByteOff ptr 88  (realToFrac ((1-2*(y2+z2)) * sx) :: CFloat)
+    pokeByteOff ptr 92  (realToFrac (2*(x*y-z*w)) :: CFloat)
+    pokeByteOff ptr 96  (realToFrac (2*(x*z+y*w)) :: CFloat)
+    pokeByteOff ptr 100 (realToFrac tx :: CFloat)
+
+    pokeByteOff ptr 104 (realToFrac (2*(x*y+z*w)) :: CFloat)
+    pokeByteOff ptr 108 (realToFrac ((1-2*(x2+z2)) * sy) :: CFloat)
+    pokeByteOff ptr 112 (realToFrac (2*(y*z-x*w)) :: CFloat)
+    pokeByteOff ptr 116 (realToFrac ty :: CFloat)
+
+    pokeByteOff ptr 120 (realToFrac (2*(x*z-y*w)) :: CFloat)
+    pokeByteOff ptr 124 (realToFrac (2*(y*z+x*w)) :: CFloat)
+    pokeByteOff ptr 128 (realToFrac ((1-2*(x2+y2)) * sz) :: CFloat)
+    pokeByteOff ptr 132 (realToFrac tz :: CFloat)
+
+    pokeByteOff ptr 136 (0 :: CFloat)
+    pokeByteOff ptr 140 (0 :: CFloat)
+    pokeByteOff ptr 144 (0 :: CFloat)
+    pokeByteOff ptr 148 (1 :: CFloat)
+
+    let len  = length ulocs
+    prevLen <- peekByteOff ptr 152
+    if len == prevLen
+        -- then peekByteOff ptr 160 >>= \lptr -> pokeArray lptr uniforms uns
+        -- else pokeByteOff ptr 152 (fromIntegral len :: CInt) >> mallocArray len >>= \lptr -> pokeArray lptr uniforms >> pokeByteOff ptr 160 lptr
+        then peekByteOff ptr 160 >>= \lptr -> setUniforms lptr 0 ulocs uns
+        else pokeByteOff ptr 152 (fromIntegral len :: CInt) >> (mallocArray len :: IO (Ptr UniformRaw)) >>= \lptr -> setUniforms lptr 0 ulocs uns >> pokeByteOff ptr 160 lptr
+
+    pokeByteOff ptr 168 mv
+    pokeByteOff ptr 172 pr
+    where
+        (vb, ib, start, end, count, GL.VertexArrayDescriptor vn _ vs vp, GL.VertexArrayDescriptor cn _ cs cp, GL.VertexArrayDescriptor uvn _ uvs uvp) = loadedMesh
+        (program, GL.UniformLocation  mv : GL.UniformLocation  pr : ulocs, vloc, cloc, uloc)  = loadedMaterial
+        ptr                                                                                   = rdptr `plusPtr` (uid * sizeOf (undefined :: RenderData))
+        x2 = x * x
+        y2 = y * y
+        z2 = z * z
+
+        -- (Matrix4x4 m00 m01 m02 m03 m10 m11 m12 m13 m20 m21 m22 m23 m30 m31 m32 m33)           = {-# SCC "toRenderData_trsMatrix" #-} trsMatrix position rotation scale
+        -- uniforms                                                                              = {-# SCC "toRenderData_uniforms" #-} fst $ foldr mkLoadedUniform ([], 0) $ zip ulocs uns
+        -- mkLoadedUniform (GL.UniformLocation loc, UniformTexture _ (LoadedTexture t))     (us, tu) = (UniformTextureRaw loc (unsafeCoerce t) tu : us, tu + 1)
+        -- mkLoadedUniform (GL.UniformLocation loc, UniformScalar  _ v)                     (us, tu) = (UniformScalarRaw  loc (realToFrac v) : us, tu)
+        -- mkLoadedUniform (GL.UniformLocation loc, UniformVec2    _ (Vector2 ux uy))       (us, tu) = (UniformVec2Raw    loc (realToFrac ux) (realToFrac uy) : us, tu)
+        -- mkLoadedUniform (GL.UniformLocation loc, UniformVec3    _ (Vector3 ux uy uz))    (us, tu) = (UniformVec3Raw    loc (realToFrac ux) (realToFrac uy) (realToFrac uz) : us, tu)
+        -- mkLoadedUniform (GL.UniformLocation loc, UniformVec4    _ (Vector4 ux uy uz uw)) (us, tu) = (UniformVec4Raw    loc (realToFrac ux) (realToFrac uy) (realToFrac uz) (realToFrac uw) : us, tu)
+        -- mkLoadedUniform _                                                                (us, tu) = (us, tu)
+
+        setUniforms uptr i (GL.UniformLocation l : ls) (uni : us) = case uni of
+            UniformTexture _ (LoadedTexture t)     -> pokeByteOff p 0 (0 :: CInt) >> pokeByteOff p 4 l >> pokeByteOff p 8 (unsafeCoerce t :: CInt) >> pokeByteOff p 12 (0 :: CInt) >> setUniforms uptr (i + 24) ls us
+            UniformScalar  _ v                     -> pokeByteOff p 0 (1 :: CInt) >> pokeByteOff p 4 l >> pokeByteOff p 8 (realToFrac v  :: GL.GLfloat) >> setUniforms uptr (i + 24) ls us
+            UniformVec2    _ (Vector2 ux uy)       -> pokeByteOff p 0 (2 :: CInt) >> pokeByteOff p 4 l >> pokeByteOff p 8 (realToFrac ux :: GL.GLfloat) >> pokeByteOff p 12 (realToFrac uy :: GL.GLfloat) >> setUniforms uptr (i + 24) ls us
+            UniformVec3    _ (Vector3 ux uy uz)    -> pokeByteOff p 0 (3 :: CInt) >> pokeByteOff p 4 l >> pokeByteOff p 8 (realToFrac ux :: GL.GLfloat) >> pokeByteOff p 12 (realToFrac uy :: GL.GLfloat) >> pokeByteOff p 16 (realToFrac uz :: GL.GLfloat) >> setUniforms uptr (i + 24) ls us
+            UniformVec4    _ (Vector4 ux uy uz uw) -> pokeByteOff p 0 (4 :: CInt) >> pokeByteOff p 4 l >> pokeByteOff p 8 (realToFrac ux :: GL.GLfloat) >> pokeByteOff p 12 (realToFrac uy :: GL.GLfloat) >> pokeByteOff p 16 (realToFrac uz :: GL.GLfloat) >> pokeByteOff p 20 (realToFrac uw :: GL.GLfloat) >> setUniforms uptr (i + 24) ls us
+            _                                      -> return ()
             where
-                (c', cacc') = mapFold f (c, cacc)
+                p = uptr `plusPtr` (i :: Int)
+        setUniforms _ _ _ _ = return ()
+        {-# INLINE setUniforms #-}
 
-mapFoldStack :: ((GameObject, a, s) -> (GameObject, a, s)) -> (GameObject, a, s) -> (GameObject, a)
-mapFoldStack f gacc = (gchildren_ gcs g, acc')
-    where
-        (g,   acc, s)     = f gacc
-        (gcs, acc')       = foldr mapC ([], acc) (children g)
-        mapC c (cs, cacc) = (c' : cs, cacc')
-            where
-                (c', cacc') = mapFoldStack f (c, cacc, s)
-
--------------------------------------------------------
--- Update
--------------------------------------------------------
-
-{-
-    update:
-        The main update loop.
-        Transforms the game object tree supplied by the client program-
-        into a new gameObject tree containing collision events and physics simulations.
--}
-update :: (GameObject, DynamicTree) -> (GameObject, DynamicTree)
-update (g, tree) = (g', bulkUpdate ui)
-    where
-        (g', ui) = mapFoldStack genUpdateInput (g, (([],0), [], tree), identity4)
-
-{-
-    genUpdateInput:
-        Transform the input gameObject into update information for a dynamicTree transformation
-        We've got to get the newly consumed ids to the correct gameobjects....
--}
--- the issue is with the matrix multiplication!
--- Need to figure out how to clip an affine vector4 back to 3D space
-genUpdateInput :: (GameObject, UpdateInput, Matrix4x4) -> (GameObject, UpdateInput, Matrix4x4)
-genUpdateInput (g, (d, il, t), world)
-    | Just col <- collider g = updateFromCollider col
-    | otherwise              = (g, (d, il, t), newWorld)
-    where
-        newWorld             = world .*. transMat g
-        updateFromCollider col
-            | UID uid <- cid = (g'' , (nodeListCons (caabb, uid) d,               il, t), newWorld)
-            | otherwise      = (g',   (nodeListCons (caabb,   i) d, (caabb', i) : il, t{freeList = fl}), newWorld)
-            where
-                g'       = collider_ col' g
-                g''      = collider_ (colliderTransform_ newWorld $ col) g
-                cid      = colliderID  col
-                col'     = colliderTransform_ newWorld $ colliderID_ (UID i) col
-                caabb    = colliderAABB col
-                caabb'   = enlargeAABB  caabb
-                (i : fl) = freeList t
-
--------------------------------------------------------
--- Rendering
--------------------------------------------------------
-
-drawGame :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> Bool -> GameObject -> IO ()
-drawGame world view proj resources debug g = do
-    newWorld <- drawG world view proj resources debug  g
-    mapM_ (drawGame newWorld view proj resources debug) (children g)
-
-drawG :: Matrix4x4 -> Matrix4x4 -> Matrix4x4 -> Resources -> Bool -> GameObject -> IO Matrix4x4
-drawG world view proj resources debug g
-    | Just (Model m mat) <- model g    = drawMeshWithMaterial mat m modelView proj resources >> return newWorld
-    | Just (FontRenderer text font mat) <- model g = do
-        (fontTexture, fontMesh) <- renderFont text font resources
-        drawMeshWithMaterial (setEmptyTextures fontTexture mat) fontMesh modelView proj resources >> return newWorld
-    | debug, Just c  <- collider g = debugDrawCollider c           view      proj resources >> return newWorld
-    | otherwise                    = return newWorld
-    where
-        newWorld  = world .*. transMat g
-        modelView = view  .*. newWorld
-
---From Camera.hs
-renderCameraG :: (Int,Int) -> Matrix4x4 -> GameObject -> Resources -> Bool -> GameObject -> DynamicTree -> IO Matrix4x4
-renderCameraG (w,h) view scene resources debug so t = case camera so of
-    Nothing -> return newView
-    Just c  -> do
-        let  ratio         = fromIntegral w / fromIntegral h
-        let (RGBA r g b a) = case _clearColor c of
-                RGB r' g' b' -> RGBA r' g' b' 1.0
-                c'           -> c'
-
-        --If we have anye post-rendering fx let's bind their fbo
-        case _fx c of
-            []   -> return ()
-            fx:_ -> getPostFX resources (fromIntegral w,fromIntegral h) fx >>= \postFX -> glBindFramebuffer gl_FRAMEBUFFER (postRenderFBO postFX)
-
-        GL.depthFunc     GL.$= Just GL.Less
-        GL.blend         GL.$= GL.Enabled
-        GL.blendBuffer 0 GL.$= GL.Enabled
-        GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
-
-        GL.clearColor GL.$= GL.Color4 (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a)
-        GL.clear [GL.ColorBuffer,GL.DepthBuffer]
-
-        GL.viewport GL.$= (GL.Position 0 0, GL.Size (fromIntegral w) (fromIntegral h))
-        GL.loadIdentity
-
-        case _fov c of
-            0 -> drawGame identity4 (invert newView) (orthoMatrix 0 ratio 1 0 (-1) 1) resources debug scene
-            _ -> do
-                let invView = invert newView
-                drawGame identity4 invView (perspMatrix (_fov c) ratio (_near c) (_far c)) resources debug scene
-                if debug then debugDrawDynamicTree t invView (perspMatrix (_fov c) ratio (_near c) (_far c)) resources else return ()
-
-        mapM_ (drawPostRenderFX (RGBA r g b a)) $ _fx c
-
-        return $ newView
-    where
-        newView = view .*. transMat so
-        drawPostRenderFX (RGB r g b) fx = drawPostRenderFX (RGBA r g b 1) fx
-        drawPostRenderFX (RGBA r g b a) fx = do
-            glBindFramebuffer gl_FRAMEBUFFER 0
-            GL.depthFunc     GL.$= Nothing
-            GL.blend         GL.$= GL.Disabled
-            GL.blendBuffer 0 GL.$= GL.Disabled
-
-            GL.clearColor GL.$= GL.Color4 (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a)
-            GL.clear [GL.ColorBuffer,GL.DepthBuffer]
-            postFX <- getPostFX resources (fromIntegral w,fromIntegral h) fx
-            let postFXMat = setEmptyTextures (LoadedTexture $ GL.TextureObject $ postRenderTex postFX) (postRenderMaterial postFX)
-            drawMeshWithMaterial postFXMat (rect 1 1) identity4 (orthoMatrix 0 1 0 1 (-1) 1) resources
-
-            GL.depthFunc     GL.$= Just GL.Less
-            GL.blend         GL.$= GL.Enabled
-            GL.blendBuffer 0 GL.$= GL.Enabled
-            GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
-
-----------------------
--- New Rendering
-----------------------
-cameraPreRender :: (Int, Int) -> Resources -> Camera -> IO ()
-cameraPreRender (w,h) resources c = do
-    let (RGBA r g b a) = case _clearColor c of
-            RGB r' g' b' -> RGBA r' g' b' 1.0
-            c'           -> c'
-
-    --If we have anye post-rendering fx let's bind their fbo
-    case _fx c of
-        []   -> return ()
-        fx:_ -> getPostFX resources (fromIntegral w,fromIntegral h) fx >>= \postFX -> glBindFramebuffer gl_FRAMEBUFFER (postRenderFBO postFX)
-
-    GL.depthFunc     GL.$= Just GL.Less
-    GL.blend         GL.$= GL.Enabled
-    GL.blendBuffer 0 GL.$= GL.Enabled
-    GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
-
-    GL.clearColor GL.$= GL.Color4 (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a)
-    GL.clear [GL.ColorBuffer,GL.DepthBuffer]
-
-    GL.viewport GL.$= (GL.Position 0 0, GL.Size (fromIntegral w) (fromIntegral h))
-    GL.loadIdentity
-
-cameraPostRender :: (Int, Int) -> Resources -> Camera -> IO ()
-cameraPostRender (w,h) resources c = mapM_ drawPostRenderFX $ _fx c
-    where
-        (RGBA r g b a) = case _clearColor c of
-                RGB r' g' b' -> RGBA r' g' b' 1.0
-                c'           -> c'
-        drawPostRenderFX fx = do
-            glBindFramebuffer gl_FRAMEBUFFER 0
-            GL.depthFunc     GL.$= Nothing
-            GL.blend         GL.$= GL.Disabled
-            GL.blendBuffer 0 GL.$= GL.Disabled
-
-            GL.clearColor GL.$= GL.Color4 (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a)
-            GL.clear [GL.ColorBuffer,GL.DepthBuffer]
-            postFX <- getPostFX resources (fromIntegral w,fromIntegral h) fx
-            let postFXMat = setEmptyTextures (LoadedTexture $ GL.TextureObject $ postRenderTex postFX) (postRenderMaterial postFX)
-            drawMeshWithMaterial postFXMat (rect 1 1) identity4 (orthoMatrix 0 1 0 1 (-1) 1) resources
-
-            GL.depthFunc     GL.$= Just GL.Less
-            GL.blend         GL.$= GL.Enabled
-            GL.blendBuffer 0 GL.$= GL.Enabled
-            GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
-
-cameraRender :: (Int, Int) -> Resources -> Camera -> Matrix4x4 -> S.Stream IO (Maybe GameObject) -> IO ()
-cameraRender (w,h) resources c view scene = case _fov c of
-    0 -> S.mapM_ (renderGameObject (invert view) (orthoMatrix 0 ratio 1 0 (-1) 1) resources) scene
-    _ -> S.mapM_ (renderGameObject (invert view) (perspMatrix (_fov c) ratio (_near c) (_far c)) resources) scene
-    where
-        ratio = fromIntegral w / fromIntegral h
-
-renderGameObject :: Matrix4x4 -> Matrix4x4 -> Resources -> (Maybe GameObject) -> IO ()
-renderGameObject _    _    _         Nothing  = return ()
-renderGameObject view proj resources (Just g) = case model g of
-    Just (Model m mat)                -> drawMeshWithMaterial mat m modelView proj resources
-    Just (FontRenderer text font mat) -> do
-        (fontTexture, fontMesh) <- renderFont text font resources
-        drawMeshWithMaterial (setEmptyTextures fontTexture mat) fontMesh modelView proj resources
-    _                                 -> return ()
-    where
-        modelView = view .*. transMat g
-
-renderWithCamera :: GLFW.Window -> Resources -> S.Stream IO (Maybe GameObject) -> (Matrix4x4, Camera) -> IO ()
-renderWithCamera window resources scene (view, c) = do
-    (w,h) <- GLFW.getWindowSize window
-
-    cameraPreRender  (w, h) resources c
-    cameraRender     (w, h) resources c view scene
-    cameraPostRender (w, h) resources c
-
-    GLFW.swapBuffers window
-
-
-----------------------
--- / New Rendering
-----------------------
-
-renderCamerasG :: (Int,Int) -> Matrix4x4 -> GameObject -> Resources -> Bool -> DynamicTree -> GameObject -> IO ()
-renderCamerasG (w,h) view scene resources debug t g = renderCameraG (w,h) view scene resources debug g t >>= \newView -> mapM_ (renderCamerasG (w,h) newView scene resources debug t) (children g)
-
-renderGraphicsG :: GLFW.Window -> Resources -> Bool -> GameObject -> GameObject -> DynamicTree -> IO ()
-renderGraphicsG window resources debug scene _ t = do
-    (w,h) <- GLFW.getWindowSize window
-
-    --render scene
-    renderCamerasG (w,h) identity4 scene resources debug t scene
-
-    --render gui
-    -- drawGame identity4 identity4 (orthoMatrix 0 (fromIntegral w / fromIntegral h) 1 0 (-1) 1) resources False gui
-
-    GLFW.swapBuffers window
-    -- GLFW.pollEvents
-    -- GL.flush
+setRenderDataPtr _ _ = return ()
 
 -------------------------------------------------------
 -- Entity
 -------------------------------------------------------
-
-data World = World {
-    --SignalStyle
-    runTime       :: Double,
-    deltaTime     :: Double,
-    mousePosition :: (Double, Double),
-    moveKeys      :: (Double, Double),
-    mouseIsDown   :: Bool,
-
-    --Event Style
-    mouseClicked    :: Bool,
-    mouseMoved      :: Maybe (Double, Double),
-    moveKeysPressed :: Maybe (Double, Double)
-}
-
-mkWorld :: World
-mkWorld = World 0 0 (0, 0) (0, 0) False False Nothing Nothing
 
 data Entity a = Entity {
     userData   :: a,
     gameObject :: GameObject
 } deriving (Show, Eq)
 
-instance Binary a => Binary (Entity a) where
-    put (Entity a g) = put a >> put g
-    get              = Entity <$> get <*> get
+instance Functor Entity where
+    fmap f (Entity x g) = Entity (f x) g
 
 class Scene a where
-    getGameObjects :: a -> [GameObject] -> [GameObject]
-    setGameObjects :: a -> [GameObject] -> (a, [GameObject])
-    --getCollisions?
-
-    default getGameObjects :: (Generic a, GScene (Rep a)) => a -> [GameObject] -> [GameObject]
-    getGameObjects x gs = getGameObjectsG (from x) gs
-
-    default setGameObjects :: (Generic a, GScene (Rep a)) => a -> [GameObject] -> (a, [GameObject])
-    setGameObjects x gs = (to x', gs') where (x', gs') = setGameObjectsG (from x) gs
+    mapSM :: (GameObject -> IO GameObject) -> a -> IO a
 
 instance Scene (Entity a) where
-    getGameObjects (Entity _ g) gs = g : gs
-    setGameObjects (Entity a g) [] = (Entity a g, [])
-    setGameObjects (Entity a _) gs = (Entity a $ head gs, tail gs)
+    mapSM f (Entity d g) = Entity d <$> f g
 
-instance Scene a => Scene [a] where
-    getGameObjects es gs = foldr (\e gs' -> getGameObjects e gs') gs es
-    setGameObjects es gs = fmap reverse $ foldl foldE ([], gs) es
-        where
-            foldE (es', gs') e = (e' : es', gs'')
-                where
-                    (e', gs'') = setGameObjects e gs'
+instance Scene [Entity a] where
+    mapSM f es = mapM (\(Entity d g) -> {-# SCC "mapSM" #-} Entity d <$> f g) es
 
-instance (Scene a, Scene b) => Scene (a, b) where
-    getGameObjects (e1, e2) gs  = getGameObjects e1 $ getGameObjects e2 gs
-    setGameObjects (e1, e2) gs1 = ((e1', e2'), gs3)
-        where
-            (e1', gs2) = setGameObjects e1 gs1
-            (e2', gs3) = setGameObjects e2 gs2
+-- instance Scene (Entity a) where
 
-instance (Scene a, Scene b, Scene c) => Scene (a, b, c) where
-    getGameObjects (e1, e2, e3) gs  = getGameObjects e1 $ getGameObjects e2 $ getGameObjects e3 gs
-    setGameObjects (e1, e2, e3) gs1 = ((e1', e2', e3'), gs4)
-        where
-            (e1', gs2) = setGameObjects e1 gs1
-            (e2', gs3) = setGameObjects e2 gs2
-            (e3', gs4) = setGameObjects e3 gs3
-
-instance (Scene a, Scene b, Scene c, Scene d) => Scene (a, b, c, d) where
-    getGameObjects (e1, e2, e3, e4) gs  = getGameObjects e1 $ getGameObjects e2 $ getGameObjects e3 $ getGameObjects e4 gs
-    setGameObjects (e1, e2, e3, e4) gs1 = ((e1', e2', e3', e4'), gs5)
-        where
-            (e1', gs2) = setGameObjects e1 gs1
-            (e2', gs3) = setGameObjects e2 gs2
-            (e3', gs4) = setGameObjects e3 gs3
-            (e4', gs5) = setGameObjects e4 gs4
-
-instance (Scene a, Scene b, Scene c, Scene d, Scene e) => Scene (a, b, c, d, e) where
-    getGameObjects (e1, e2, e3, e4, e5) gs  = getGameObjects e1 $ getGameObjects e2 $ getGameObjects e3 $ getGameObjects e4 $ getGameObjects e5 gs
-    setGameObjects (e1, e2, e3, e4, e5) gs1 = ((e1', e2', e3', e4', e5'), gs6)
-        where
-            (e1', gs2) = setGameObjects e1 gs1
-            (e2', gs3) = setGameObjects e2 gs2
-            (e3', gs4) = setGameObjects e3 gs3
-            (e4', gs5) = setGameObjects e4 gs4
-            (e5', gs6) = setGameObjects e5 gs5
-
-instance (Scene a, Scene b, Scene c, Scene d, Scene e, Scene f) => Scene (a, b, c, d, e, f) where
-    getGameObjects (e1, e2, e3, e4, e5, e6) gs  = getGameObjects e1 $ getGameObjects e2 $ getGameObjects e3 $ getGameObjects e4 $ getGameObjects e5 $ getGameObjects e6 gs
-    setGameObjects (e1, e2, e3, e4, e5, e6) gs1 = ((e1', e2', e3', e4', e5', e6'), gs7)
-        where
-            (e1', gs2) = setGameObjects e1 gs1
-            (e2', gs3) = setGameObjects e2 gs2
-            (e3', gs4) = setGameObjects e3 gs3
-            (e4', gs5) = setGameObjects e4 gs4
-            (e5', gs6) = setGameObjects e5 gs5
-            (e6', gs7) = setGameObjects e6 gs6
-
-instance (Scene a, Scene b, Scene c, Scene d, Scene e, Scene f, Scene g) => Scene (a, b, c, d, e, f, g) where
-    getGameObjects (e1, e2, e3, e4, e5, e6, e7) gs  = getGameObjects e1 $ getGameObjects e2 $ getGameObjects e3 $ getGameObjects e4 $ getGameObjects e5 $ getGameObjects e6 $ getGameObjects e7 gs
-    setGameObjects (e1, e2, e3, e4, e5, e6, e7) gs1 = ((e1', e2', e3', e4', e5', e6', e7'), gs8)
-        where
-            (e1', gs2) = setGameObjects e1 gs1
-            (e2', gs3) = setGameObjects e2 gs2
-            (e3', gs4) = setGameObjects e3 gs3
-            (e4', gs5) = setGameObjects e4 gs4
-            (e5', gs6) = setGameObjects e5 gs5
-            (e6', gs7) = setGameObjects e6 gs6
-            (e7', gs8) = setGameObjects e7 gs7
-
-instance (Scene a, Scene b, Scene c, Scene d, Scene e, Scene f, Scene g, Scene h) => Scene (a, b, c, d, e, f, g, h) where
-    getGameObjects (e1, e2, e3, e4, e5, e6, e7, e8) gs  =
-        getGameObjects e1 $
-        getGameObjects e2 $
-        getGameObjects e3 $
-        getGameObjects e4 $
-        getGameObjects e5 $
-        getGameObjects e6 $
-        getGameObjects e7 $
-        getGameObjects e8 gs
-    setGameObjects (e1, e2, e3, e4, e5, e6, e7, e8) gs1 = ((e1', e2', e3', e4', e5', e6', e7', e8'), gs9)
-        where
-            (e1', gs2) = setGameObjects e1 gs1
-            (e2', gs3) = setGameObjects e2 gs2
-            (e3', gs4) = setGameObjects e3 gs3
-            (e4', gs5) = setGameObjects e4 gs4
-            (e5', gs6) = setGameObjects e5 gs5
-            (e6', gs7) = setGameObjects e6 gs6
-            (e7', gs8) = setGameObjects e7 gs7
-            (e8', gs9) = setGameObjects e8 gs8
-
-instance (Scene a, Scene b, Scene c, Scene d, Scene e, Scene f, Scene g, Scene h, Scene i) => Scene (a, b, c, d, e, f, g, h, i) where
-    getGameObjects (e1, e2, e3, e4, e5, e6, e7, e8, e9) gs  =
-        getGameObjects e1 $
-        getGameObjects e2 $
-        getGameObjects e3 $
-        getGameObjects e4 $
-        getGameObjects e5 $
-        getGameObjects e6 $
-        getGameObjects e7 $
-        getGameObjects e8 $
-        getGameObjects e9 gs
-    setGameObjects (e1, e2, e3, e4, e5, e6, e7, e8, e9) gs1 = ((e1', e2', e3', e4', e5', e6', e7', e8', e9'), gs10)
-        where
-            (e1', gs2)  = setGameObjects e1 gs1
-            (e2', gs3)  = setGameObjects e2 gs2
-            (e3', gs4)  = setGameObjects e3 gs3
-            (e4', gs5)  = setGameObjects e4 gs4
-            (e5', gs6)  = setGameObjects e5 gs5
-            (e6', gs7)  = setGameObjects e6 gs6
-            (e7', gs8)  = setGameObjects e7 gs7
-            (e8', gs9)  = setGameObjects e8 gs8
-            (e9', gs10) = setGameObjects e9 gs9
-
-instance (Scene a, Scene b, Scene c, Scene d, Scene e, Scene f, Scene g, Scene h, Scene i, Scene j) => Scene (a, b, c, d, e, f, g, h, i, j) where
-    getGameObjects (e1, e2, e3, e4, e5, e6, e7, e8, e9, e10) gs  =
-        getGameObjects e1 $
-        getGameObjects e2 $
-        getGameObjects e3 $
-        getGameObjects e4 $
-        getGameObjects e5 $
-        getGameObjects e6 $
-        getGameObjects e7 $
-        getGameObjects e8 $
-        getGameObjects e9 $
-        getGameObjects e10 gs
-    setGameObjects (e1, e2, e3, e4, e5, e6, e7, e8, e9, e10) gs1 = ((e1', e2', e3', e4', e5', e6', e7', e8', e9', e10'), gs11)
-        where
-            (e1',  gs2)  = setGameObjects e1  gs1
-            (e2',  gs3)  = setGameObjects e2  gs2
-            (e3',  gs4)  = setGameObjects e3  gs3
-            (e4',  gs5)  = setGameObjects e4  gs4
-            (e5',  gs6)  = setGameObjects e5  gs5
-            (e6',  gs7)  = setGameObjects e6  gs6
-            (e7',  gs8)  = setGameObjects e7  gs7
-            (e8',  gs9)  = setGameObjects e8  gs8
-            (e9',  gs10) = setGameObjects e9  gs9
-            (e10', gs11) = setGameObjects e10 gs10
-
-class GScene f where
-    getGameObjectsG :: f a -> [GameObject] -> [GameObject]
-    setGameObjectsG :: f a -> [GameObject] -> (f a, [GameObject])
-
---Generic Scene Instances
-instance GScene V1 where
-    getGameObjectsG _ gs = gs
-    setGameObjectsG _ gs = (undefined, gs)
-
-instance GScene U1 where
-    getGameObjectsG _ gs = gs
-    setGameObjectsG _ gs = (U1, gs)
-
-instance (GScene f, GScene g) => GScene ((:+:) f g) where
-    getGameObjectsG (L1 x) gs = getGameObjectsG x gs
-    getGameObjectsG (R1 x) gs = getGameObjectsG x gs
-    setGameObjectsG (L1 x) gs = (L1 x', gs') where (x', gs') = setGameObjectsG x gs
-    setGameObjectsG (R1 x) gs = (R1 x', gs') where (x', gs') = setGameObjectsG x gs
-
-instance (GScene f, GScene g) => GScene ((:*:) f g) where
-    getGameObjectsG (x :*: y) gs = getGameObjectsG x $ getGameObjectsG y gs
-    setGameObjectsG (x :*: y) gs = (x' :*: y', gs3)
-        where
-            (x', gs2) = setGameObjectsG x gs
-            (y', gs3) = setGameObjectsG y gs2
-
-instance (Scene c) => GScene (K1 i c) where
-    getGameObjectsG (K1 x) gs = getGameObjects x gs
-    setGameObjectsG (K1 x) gs = (K1 x', gs') where (x', gs') = setGameObjects x gs
-
-instance (GScene f) => GScene (M1 i t f) where
-    getGameObjectsG (M1 x) gs = getGameObjectsG x gs
-    setGameObjectsG (M1 x) gs = (M1 x', gs') where (x', gs') = setGameObjectsG x gs
-
--- state timing convenience functions
-data Timer = Timer { timerStartTime :: Double, timerEndTime :: Double } deriving (Show)
-
-instance Binary Timer where
-    put (Timer s e) = put s >> put e
-    get             = Timer <$> get <*> get
-
-timer :: Double -> World -> Timer
-timer t w = Timer (runTime w) (runTime w + t)
-
-timerReady :: Timer -> World -> Bool
-timerReady (Timer _ endTime) i = runTime i >= endTime
-
--------------------------------------------------------
--- Testing
--------------------------------------------------------
-
-data TreeTest = TestInsert GameObject
-              | TestUpdate Int Vector3
-              | TestRemove Int
-              deriving (Show)
-
-instance Arbitrary TreeTest where
-    arbitrary = choose (0, 2) >>= \which -> case (which :: Int) of
-        0 -> arbitrary >>= return . TestInsert
-        1 -> arbitrary >>= \w -> arbitrary >>= \h -> arbitrary >>= \d -> arbitrary >>= \index -> return (TestUpdate index $ Vector3 w h d)
-        _ -> arbitrary >>= return . TestRemove
-
-instance Arbitrary GameObject where
-    arbitrary = do
-        (w,  h,  d)  <- arbitrary
-        (px, py, pz) <- arbitrary
-        (rx, ry, rz) <- arbitrary
-        (sx, sy, sz) <- arbitrary
-        return $ GameObject New (Vector3 px py pz) (fromEuler rx ry rz) (Vector3 sx sy sz) (Just $ boxCollider w h d) Nothing Nothing []
-
-dynTreeTester :: ((GameObject, DynamicTree) -> Bool) -> [[TreeTest]] -> Bool
-dynTreeTester f uss = fst $ foldr updateTest start uss
-    where
-        start                    = (True, (GameObject New 0 identity 1 Nothing Nothing Nothing [], empty))
-        updateTest us (True,  t) = let res = update (foldr test' t us) in (f res, res)
-        updateTest _  (False, t) = (False, t)
-        test' (TestInsert c)     (g, t) = (gaddChild   c g, t)
-        test' (TestRemove i)     (g, t) = (removeChild g i, t)
-        test' (TestUpdate i tr)  (g, t)
-            | null cs2  = (g, t)
-            | otherwise = (gchildren_ cs' g, t)
-            where
-                cs'        = cs1 ++ (c : tail cs2)
-                (cs1, cs2) = splitAt i $ children g
-                c = GameObject New tr identity 1 (collider (head cs2)) Nothing Nothing (children (head cs2))
-
-validateIDs :: (GameObject, DynamicTree) -> Bool
-validateIDs (g, t) = sort (tids (nodes t) []) == gids && sort nids == gids
-    where
-        -- trace (show t ++ "\n") $
-        tids  Tip           acc = acc
-        tids (Leaf _ uid)   acc = uid : acc
-        tids (Node _ l r _) acc = tids r $ tids l acc
-        (_, nids)               = V.foldl' (\(i, ids) x -> if x == Nothing then (i + 1, ids) else (i + 1, i : ids) ) (0, []) $ nodeData t
-        gid' g' acc             = case collider g' of
-            Just (SphereCollider (UID c) _ _ _) -> c : acc
-            Just (BoxCollider    (UID c) _ _ _) -> c : acc
-            _                                   -> acc
-        gids                    = sort $ foldChildren gid' [] g
-
-dynTreeTest :: IO ()
-dynTreeTest = do
-    putStrLn "----------------------------------------------------------------------------------------"
-    putStrLn "validateIDs test"
-    putStrLn ""
-    quickCheckWith (stdArgs { maxSize = 100, maxSuccess = 100 }) $ dynTreeTester validateIDs
-
-
--------------------------------------------------------
--- Debug drawing
--------------------------------------------------------
-
-debugDrawCollider :: Collider -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ()
-debugDrawCollider (BoxCollider _ t (OBB hs) _) view proj resources = drawMeshWithMaterial (debugDraw green) cubeOutline (view .*. t .*. trsMatrix 0 identity (hs * 2)) proj resources
-debugDrawCollider  _                       _         _    _        = return ()
-
-debugDrawAABB :: Color -> AABB -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ()
-debugDrawAABB c aabb view proj resources = drawMeshWithMaterial (debugDraw c) cubeOutline (view .*. trsMatrix (center aabb) identity (size aabb)) proj resources
-
-debugDrawDynamicTree :: DynamicTree -> Matrix4x4 -> Matrix4x4 -> Resources -> IO ()
-debugDrawDynamicTree tree view proj resources = drawNode (nodes tree)
-    where
-        drawNode (Node aabb l r _) = debugDrawAABB blue   aabb view proj resources >> drawNode l >> drawNode r
-        drawNode (Leaf aabb _)     = debugDrawAABB whiteA aabb view proj resources
-        drawNode  Tip              = return ()
+-- instance Binary a => Binary (Entity a) where
+    -- put (Entity a g) = put a >> put g
+    -- get              = Entity <$> get <*> get
+-- class Scene a where
+--     getGameObjects :: a -> [GameObject] -> [GameObject]
+--     setGameObjects :: a -> [GameObject] -> (a, [GameObject])
+--
+-- instance Scene (Entity a) where
+--     getGameObjects (Entity _ g) gs = g : gs
+--     setGameObjects (Entity a g) [] = (Entity a g, [])
+--     setGameObjects (Entity a _) gs = (Entity a $ head gs, tail gs)
+--
+-- instance Scene a => Scene [a] where
+--     getGameObjects es gs = foldr (\e gs' -> getGameObjects e gs') gs es
+--     setGameObjects es gs = fmap reverse $ foldl foldE ([], gs) es
+--         where
+--             foldE (es', gs') e = (e' : es', gs'')
+--                 where
+--                     (e', gs'') = setGameObjects e gs'
+--
+-- instance (Scene a, Scene b) => Scene (a, b) where
+--     getGameObjects (e1, e2) gs  = getGameObjects e1 $ getGameObjects e2 gs
+--     setGameObjects (e1, e2) gs1 = ((e1', e2'), gs3)
+--         where
+--             (e1', gs2) = setGameObjects e1 gs1
+--             (e2', gs3) = setGameObjects e2 gs2
+--
+-- instance (Scene a, Scene b, Scene c) => Scene (a, b, c) where
+--     getGameObjects (e1, e2, e3) gs  = getGameObjects e1 $ getGameObjects e2 $ getGameObjects e3 gs
+--     setGameObjects (e1, e2, e3) gs1 = ((e1', e2', e3'), gs4)
+--         where
+--             (e1', gs2) = setGameObjects e1 gs1
+--             (e2', gs3) = setGameObjects e2 gs2
+--             (e3', gs4) = setGameObjects e3 gs3
+--
+-- instance (Scene a, Scene b, Scene c, Scene d) => Scene (a, b, c, d) where
+--     getGameObjects (e1, e2, e3, e4) gs  = getGameObjects e1 $ getGameObjects e2 $ getGameObjects e3 $ getGameObjects e4 gs
+--     setGameObjects (e1, e2, e3, e4) gs1 = ((e1', e2', e3', e4'), gs5)
+--         where
+--             (e1', gs2) = setGameObjects e1 gs1
+--             (e2', gs3) = setGameObjects e2 gs2
+--             (e3', gs4) = setGameObjects e3 gs3
+--             (e4', gs5) = setGameObjects e4 gs4
+--
+-- instance (Scene a, Scene b, Scene c, Scene d, Scene e) => Scene (a, b, c, d, e) where
+--     getGameObjects (e1, e2, e3, e4, e5) gs  = getGameObjects e1 $ getGameObjects e2 $ getGameObjects e3 $ getGameObjects e4 $ getGameObjects e5 gs
+--     setGameObjects (e1, e2, e3, e4, e5) gs1 = ((e1', e2', e3', e4', e5'), gs6)
+--         where
+--             (e1', gs2) = setGameObjects e1 gs1
+--             (e2', gs3) = setGameObjects e2 gs2
+--             (e3', gs4) = setGameObjects e3 gs3
+--             (e4', gs5) = setGameObjects e4 gs4
+--             (e5', gs6) = setGameObjects e5 gs5
+--
+-- instance (Scene a, Scene b, Scene c, Scene d, Scene e, Scene f) => Scene (a, b, c, d, e, f) where
+--     getGameObjects (e1, e2, e3, e4, e5, e6) gs  = getGameObjects e1 $ getGameObjects e2 $ getGameObjects e3 $ getGameObjects e4 $ getGameObjects e5 $ getGameObjects e6 gs
+--     setGameObjects (e1, e2, e3, e4, e5, e6) gs1 = ((e1', e2', e3', e4', e5', e6'), gs7)
+--         where
+--             (e1', gs2) = setGameObjects e1 gs1
+--             (e2', gs3) = setGameObjects e2 gs2
+--             (e3', gs4) = setGameObjects e3 gs3
+--             (e4', gs5) = setGameObjects e4 gs4
+--             (e5', gs6) = setGameObjects e5 gs5
+--             (e6', gs7) = setGameObjects e6 gs6
+--
+-- instance (Scene a, Scene b, Scene c, Scene d, Scene e, Scene f, Scene g) => Scene (a, b, c, d, e, f, g) where
+--     getGameObjects (e1, e2, e3, e4, e5, e6, e7) gs  = getGameObjects e1 $ getGameObjects e2 $ getGameObjects e3 $ getGameObjects e4 $ getGameObjects e5 $ getGameObjects e6 $ getGameObjects e7 gs
+--     setGameObjects (e1, e2, e3, e4, e5, e6, e7) gs1 = ((e1', e2', e3', e4', e5', e6', e7'), gs8)
+--         where
+--             (e1', gs2) = setGameObjects e1 gs1
+--             (e2', gs3) = setGameObjects e2 gs2
+--             (e3', gs4) = setGameObjects e3 gs3
+--             (e4', gs5) = setGameObjects e4 gs4
+--             (e5', gs6) = setGameObjects e5 gs5
+--             (e6', gs7) = setGameObjects e6 gs6
+--             (e7', gs8) = setGameObjects e7 gs7
+--
+-- instance (Scene a, Scene b, Scene c, Scene d, Scene e, Scene f, Scene g, Scene h) => Scene (a, b, c, d, e, f, g, h) where
+--     getGameObjects (e1, e2, e3, e4, e5, e6, e7, e8) gs  =
+--         getGameObjects e1 $
+--         getGameObjects e2 $
+--         getGameObjects e3 $
+--         getGameObjects e4 $
+--         getGameObjects e5 $
+--         getGameObjects e6 $
+--         getGameObjects e7 $
+--         getGameObjects e8 gs
+--     setGameObjects (e1, e2, e3, e4, e5, e6, e7, e8) gs1 = ((e1', e2', e3', e4', e5', e6', e7', e8'), gs9)
+--         where
+--             (e1', gs2) = setGameObjects e1 gs1
+--             (e2', gs3) = setGameObjects e2 gs2
+--             (e3', gs4) = setGameObjects e3 gs3
+--             (e4', gs5) = setGameObjects e4 gs4
+--             (e5', gs6) = setGameObjects e5 gs5
+--             (e6', gs7) = setGameObjects e6 gs6
+--             (e7', gs8) = setGameObjects e7 gs7
+--             (e8', gs9) = setGameObjects e8 gs8
+--
+-- instance (Scene a, Scene b, Scene c, Scene d, Scene e, Scene f, Scene g, Scene h, Scene i) => Scene (a, b, c, d, e, f, g, h, i) where
+--     getGameObjects (e1, e2, e3, e4, e5, e6, e7, e8, e9) gs  =
+--         getGameObjects e1 $
+--         getGameObjects e2 $
+--         getGameObjects e3 $
+--         getGameObjects e4 $
+--         getGameObjects e5 $
+--         getGameObjects e6 $
+--         getGameObjects e7 $
+--         getGameObjects e8 $
+--         getGameObjects e9 gs
+--     setGameObjects (e1, e2, e3, e4, e5, e6, e7, e8, e9) gs1 = ((e1', e2', e3', e4', e5', e6', e7', e8', e9'), gs10)
+--         where
+--             (e1', gs2)  = setGameObjects e1 gs1
+--             (e2', gs3)  = setGameObjects e2 gs2
+--             (e3', gs4)  = setGameObjects e3 gs3
+--             (e4', gs5)  = setGameObjects e4 gs4
+--             (e5', gs6)  = setGameObjects e5 gs5
+--             (e6', gs7)  = setGameObjects e6 gs6
+--             (e7', gs8)  = setGameObjects e7 gs7
+--             (e8', gs9)  = setGameObjects e8 gs8
+--             (e9', gs10) = setGameObjects e9 gs9
+--
+-- instance (Scene a, Scene b, Scene c, Scene d, Scene e, Scene f, Scene g, Scene h, Scene i, Scene j) => Scene (a, b, c, d, e, f, g, h, i, j) where
+--     getGameObjects (e1, e2, e3, e4, e5, e6, e7, e8, e9, e10) gs  =
+--         getGameObjects e1 $
+--         getGameObjects e2 $
+--         getGameObjects e3 $
+--         getGameObjects e4 $
+--         getGameObjects e5 $
+--         getGameObjects e6 $
+--         getGameObjects e7 $
+--         getGameObjects e8 $
+--         getGameObjects e9 $
+--         getGameObjects e10 gs
+--     setGameObjects (e1, e2, e3, e4, e5, e6, e7, e8, e9, e10) gs1 = ((e1', e2', e3', e4', e5', e6', e7', e8', e9', e10'), gs11)
+--         where
+--             (e1',  gs2)  = setGameObjects e1  gs1
+--             (e2',  gs3)  = setGameObjects e2  gs2
+--             (e3',  gs4)  = setGameObjects e3  gs3
+--             (e4',  gs5)  = setGameObjects e4  gs4
+--             (e5',  gs6)  = setGameObjects e5  gs5
+--             (e6',  gs7)  = setGameObjects e6  gs6
+--             (e7',  gs8)  = setGameObjects e7  gs7
+--             (e8',  gs9)  = setGameObjects e8  gs8
+--             (e9',  gs10) = setGameObjects e9  gs9
+--             (e10', gs11) = setGameObjects e10 gs10
