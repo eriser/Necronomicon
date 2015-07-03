@@ -4,11 +4,13 @@
 
     To Do:
 
+    Fix pluck (it's very broken...)
+    Fix lfsaw and lfpulse to use correct table size
     zapgremlins in filters to prevent blow ups
     break up code into several files
-    optimize all sin and cos usage using LUTs
     remove calc rate from ugen struct, it's not being used, nor do I predict that it will be
     random seeding?
+    Consider changing the free_synths stack to be a queue with a minimum size.
 
     Various Noise ugens
         Gray
@@ -20,6 +22,9 @@
         burst noise
         Diamond square (plasma)
 
+    better line and xline implementations (with range arguments)
+    Other env ugens like adr, adsr, etc...
+    glitchy oscillators, with table range and maybe phase multiplier? Is this doable with just an osc ugen?
     Decay
     Pitch Shift
     Freq Shift
@@ -259,30 +264,24 @@ ugen_graph_pool_node* acquire_ugen_graph(uint32_t num_ugens)
     uint32_t pool_index = __builtin_ctz(pow_two_num_bytes);
     ugen_graph_pool_node* ugen_graph = ugen_graph_pools[pool_index];
 
-    // printf("acquire_ugen_graph(pooled_ugen_graph = %p, num_ugens = %u, pow_two_num_bytes = %u, pool_index = %u)\n", ugen_graph, num_ugens, pow_two_num_bytes, pool_index);
     if (ugen_graph != NULL)
     {
-        // printf("Reuse UGen Graph :: ");
         ugen_graph_pools[pool_index] = ugen_graph->next_ugen_graph_pool_node;
     }
 
     else
     {
-        // printf("New UGen Graph :: ");
         ugen_graph = malloc(UGEN_GRAPH_POOL_NODE_SIZE);
         ugen_graph->ugen_graph = malloc(pow_two_num_bytes);
         ugen_graph->pool_index = pool_index;
     }
 
     ugen_graph->next_ugen_graph_pool_node = NULL;
-    // print_ugen_graph_pool_node(ugen_graph);
     return ugen_graph;
 }
 
 void release_ugen_graph(ugen_graph_pool_node* ugen_graph)
 {
-    // printf("release_ugen_graph() :: ");
-    // print_ugen_graph_pool_node(ugen_graph);
     if (ugen_graph != NULL)
     {
         uint32_t pool_index = ugen_graph->pool_index;
@@ -325,30 +324,24 @@ ugen_wires_pool_node* acquire_ugen_wires(uint32_t num_wires)
     uint32_t pool_index = __builtin_ctz(pow_two_num_bytes);
     ugen_wires_pool_node* ugen_wires = ugen_wires_pools[pool_index];
 
-    // printf("acquire_ugen_wires(pooled_ugen_wires = %p, num_wires = %u, pow_two_num_bytes = %u, pool_index = %u)\n", ugen_wires, num_wires, pow_two_num_bytes, pool_index);
     if (ugen_wires != NULL)
     {
-        // printf("Reuse Wires :: ");
         ugen_wires_pools[pool_index] = ugen_wires->next_ugen_wires_pool_node;
     }
 
     else
     {
-        // printf("New Wires :: ");
         ugen_wires = malloc(UGEN_WIRE_POOL_NODE_SIZE);
         ugen_wires->ugen_wires = malloc(pow_two_num_bytes);
         ugen_wires->pool_index = pool_index;
     }
 
     ugen_wires->next_ugen_wires_pool_node = NULL;
-    // print_ugen_wires_pool_node(ugen_wires);
     return ugen_wires;
 }
 
 void release_ugen_wires(ugen_wires_pool_node* ugen_wires)
 {
-    // printf("release_ugen_wires() :: ");
-    // print_ugen_wires_pool_node(ugen_wires);
     if (ugen_wires != NULL)
     {
         uint32_t pool_index = ugen_wires->pool_index;
@@ -401,17 +394,14 @@ sample_buffer* acquire_sample_buffer(uint32_t num_samples)
     uint32_t pool_index = __builtin_ctz(pow_two_num_samples);
     sample_buffer* buffer = sample_buffer_pools[pool_index];
 
-    // printf("acquire_sample_buffer(pooled_buffer = %p, num_samples = %u, pow_two_num_samples = %u, pool_index = %u)\n", buffer, num_samples, pow_two_num_samples, pool_index);
     if (buffer != NULL)
     {
-        // printf("Reuse buffer :: ");
         sample_buffer_pools[pool_index] = buffer->next_sample_buffer;
         memset(buffer->samples, 0, pow_two_num_samples * DOUBLE_SIZE);
     }
 
     else
     {
-        // printf("New buffer :: ");
         buffer = malloc(SAMPLE_BUFFER_SIZE);
         buffer->samples = calloc(pow_two_num_samples, DOUBLE_SIZE);
         buffer->pool_index = pool_index;
@@ -420,14 +410,11 @@ sample_buffer* acquire_sample_buffer(uint32_t num_samples)
     }
 
     buffer->next_sample_buffer = NULL;
-    // print_sample_buffer(buffer);
     return buffer;
 }
 
 void release_sample_buffer(sample_buffer* buffer)
 {
-    // printf("release_sample_buffer: ");
-    // print_sample_buffer(buffer);
     if (buffer != NULL)
     {
         uint32_t pool_index = buffer->pool_index;
@@ -539,11 +526,6 @@ void deconstruct_synth(synth_node* synth)
 
 void free_synth(synth_node* synth)
 {
-    // puts("||| free_synth ||| ");
-    // printf("free_synth -> ");
-    // print_node_alive_status(synth);
-    // print_node(synth);
-
     if (synth != NULL)
     {
         bool found = hash_table_remove(synth_table, synth);
@@ -658,7 +640,6 @@ static inline void process_synth(synth_node* synth)
         long long time_dif = (long long) synth->time - (long long) current_cycle_usecs;
         _start_frame = time_dif <= 0 ? 0 : ((long double) time_dif * recip_usecs_per_frame); // Convert from microseconds to frames
         synth->time = 0;
-        // printf("initial start frame: %u\n", _start_frame);
     }
 
     else // Normal playback, full block
@@ -712,7 +693,6 @@ void initialize_wave_tables()
 
     // Needed to initialize minblep table.
     bool minblepInitialized = minBLEP_Init();
-    // devurandom = fopen ("/dev/urandom","r");
 }
 
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
@@ -894,7 +874,6 @@ void scheduled_list_sort()
     synth_node* x;
     jack_time_t xTime, yTime;
 
-    // printf("scheduled_list size: %i\n", scheduled_list_write_index - scheduled_list_read_index);
     for (i = (scheduled_list_read_index + 1) & FIFO_SIZE_MASK; i != scheduled_list_write_index; i = (i + 1) & FIFO_SIZE_MASK)
     {
         x = scheduled_node_list[i];
@@ -1024,8 +1003,6 @@ synth_node* hash_table_lookup(hash_table table, uint32_t key)
 
     while (i < MAX_SYNTHS)
     {
-        // printf("table[%u] = ", slot, table[slot]);
-        // print_node(table[slot]);
         if (table[slot] != NULL)
         {
             if (table[slot]->key == key)
@@ -1135,21 +1112,13 @@ void print_synth_list()
 
 static inline void add_synth(synth_node* node)
 {
-    // puts("||| add_synth ||| ");
-    // printf("add_synth -> ");
-    // print_node_alive_status(node);
-    // print_node(node);
     if (node != NULL)
     {
         node->previous_alive_status = node->alive_status;
         if (node->alive_status == NODE_SPAWNING)
         {
             node->alive_status = NODE_ALIVE;
-            // puts("add_synth print_synth_list before add: ");
-            // print_synth_list();
             synth_list = doubly_linked_list_push(synth_list, node);
-            // puts("add_synth print_synth_list after add: ");
-            // print_synth_list();
         }
         // Scheduled to be freed before add message was handled
         else if (node->alive_status == NODE_SCHEDULED_FOR_REMOVAL)
@@ -1174,19 +1143,11 @@ static inline void add_synth(synth_node* node)
 
 static inline void remove_synth(synth_node* node)
 {
-    // puts("||| remove_synth ||| ");
-    // printf("remove_synth -> ");
-    // print_node_alive_status(node);
-    // print_node(node);
     if ((node != NULL) && (node->alive_status == NODE_SCHEDULED_FOR_REMOVAL))
     {
         if (node->previous_alive_status == NODE_ALIVE)
         {
-            // puts("remove_synth print_synth_list before remove: ");
-            // print_synth_list();
             synth_list = doubly_linked_list_remove(synth_list, node);
-            // puts("remove_synth print_synth_list before remove: ");
-            // print_synth_list();
         }
 
         node->previous_alive_status = node->alive_status;
@@ -1216,14 +1177,11 @@ static inline void add_scheduled_synths()
     jack_time_t lookahead_usecs = current_cycle_usecs + BLOCK_SIZE_USECS;
     while (scheduled_list_read_index != scheduled_list_write_index)
     {
-        // puts("||| add_scheduled_synths scheduled_list_read_index != scheduled_list_write_index |||");
         synth_node* node = SCHEDULED_LIST_PEEK();
 
         if (node != NULL && node->time > lookahead_usecs)
             return;
 
-        // Uncomment to print timing information for synths
-        // printf("add_synth: time: %llu, current_cycle_usecs: %llu, current_cycle_usecs - time: %llu\n", node->time, current_cycle_usecs, current_cycle_usecs - node->time);
         SCHEDULED_LIST_POP(); // Commit pop off the scheduled node list;
         add_synth(node);
         scheduled_list_read_index = scheduled_list_read_index & FIFO_SIZE_MASK;
@@ -1239,7 +1197,6 @@ static inline void remove_scheduled_synths()
 
     while (removal_fifo_read_index != removal_fifo_write_index)
     {
-        // puts("||| remove_scheduled_synths removal_fifo_read_index != removal_fifo_write_index |||");
         synth_node* node = REMOVAL_FIFO_POP();
         --removal_fifo_size;
         remove_synth(node);
@@ -1250,10 +1207,8 @@ static inline void remove_scheduled_synths()
 
 static inline void try_schedule_current_synth_for_removal()
 {
-    // puts("||| try_schedule_current_synth_for_removal |||");
     if (_necronomicon_current_node && (removal_fifo_size < REMOVAL_FIFO_SIZE_MASK) && _necronomicon_current_node->alive_status == NODE_ALIVE)
     {
-        // puts("_necronomicon_current_node && (removal_fifo_size < REMOVAL_FIFO_SIZE_MASK) && _necronomicon_current_node->alive_status == NODE_ALIVE");
         _necronomicon_current_node->previous_alive_status = _necronomicon_current_node->alive_status;
         _necronomicon_current_node->alive_status = NODE_SCHEDULED_FOR_REMOVAL;
         removal_fifo_size = (removal_fifo_size + 1) & REMOVAL_FIFO_SIZE_MASK;
@@ -1265,8 +1220,6 @@ void shutdown_rt_runtime(); // Forward declaration
 
 static inline void handle_rt_message(message msg)
 {
-    // printf("handle_rt_message ");
-    // print_fifo_message(msg);
     switch (msg.type)
     {
     case START_SYNTH:
@@ -1308,8 +1261,6 @@ static inline void handle_messages_in_rt_fifo()
 
 void handle_nrt_message(message msg)
 {
-    // printf("handle_nrt_message ");
-    // print_fifo_message(msg);
     switch (msg.type)
     {
     case FREE_SYNTH:
@@ -1342,15 +1293,11 @@ void handle_messages_in_nrt_fifo()
 
 void play_synth(synth_node* synth_definition, double* arguments, uint32_t num_arguments, uint32_t node_id, jack_time_t time)
 {
-    // puts("||| play_synth ||| ");
-    // printf("(num_synths: %i)\n", num_synths);
     if (num_synths < MAX_SYNTHS)
     {
         synth_node* synth = new_synth(synth_definition, arguments, num_arguments, node_id, time);
         ++num_synths;
         hash_table_insert(synth_table, synth);
-        // printf("play_synth ");
-        // print_node(synth);
         message msg;
         msg.arg.node = synth;
         msg.type = START_SYNTH;
@@ -1365,16 +1312,11 @@ void play_synth(synth_node* synth_definition, double* arguments, uint32_t num_ar
 
 void stop_synth(uint32_t id)
 {
-    // puts("||| stop_synth ||| ");
     synth_node* node = hash_table_lookup(synth_table, id);
     if ((node != NULL) && (node->alive_status == NODE_SPAWNING || node->alive_status == NODE_ALIVE))
     {
-        // printf("stop_synth node id: %u. ", node->key);
-        // print_node_alive_status(node);
-        // print_node(node);
         node->previous_alive_status = node->alive_status;
         node->alive_status = NODE_SCHEDULED_FOR_REMOVAL;
-        // puts("stop_synth DONE ACCESSING NODE MEMEORY");
         message msg;
         msg.arg.node = node;
         msg.type = STOP_SYNTH;
@@ -1391,11 +1333,7 @@ void stop_synth(uint32_t id)
 // How to handle sample accurate setting? Use FIFO messages?
 void send_set_synth_arg(uint32_t id, double argument, uint32_t arg_index)
 {
-    // puts("||| set_synth_arg ||| ");
     synth_node* synth = hash_table_lookup(synth_table, id);
-    // printf("set_synth_arg id: %u ", id);
-    // print_node_alive_status(synth);
-    // print_node(synth);
     if ((synth != NULL) && (synth->alive_status == NODE_SPAWNING || synth->alive_status == NODE_ALIVE))
     {
         double* wire_buffer = synth->ugen_wires + (arg_index * BLOCK_SIZE);
@@ -1411,11 +1349,7 @@ void send_set_synth_arg(uint32_t id, double argument, uint32_t arg_index)
 
 void send_set_synth_args(uint32_t id, double* arguments, uint32_t num_arguments)
 {
-    // puts("||| set_synth_args ||| ");
     synth_node* synth = hash_table_lookup(synth_table, id);
-    // printf("set_synth_args id: %u ", id);
-    // print_node_alive_status(synth);
-    // print_node(synth);
     if ((synth != NULL) && (synth->alive_status == NODE_SPAWNING || synth->alive_status == NODE_ALIVE))
     {
         double* ugen_wires = synth->ugen_wires;
@@ -1479,16 +1413,12 @@ void init_rt_thread()
     ugen_wires_pools = (ugen_wires_pool_node**) calloc(sizeof(ugen_wires_pool_node*), NUM_UGEN_WIRES_POOLS);
 
     initialize_wave_tables();
-    // load_audio_files();
+    // load_audio_files(); To Do: Add this functionality
 
-    // memset(out_bus_buffers, 0, DOUBLE_SIZE * 16 * 512);
     out_bus_buffer_index = 0;
-
     _necronomicon_current_node = NULL;
-
     assert(nrt_fifo == NULL);
     nrt_fifo = new_message_fifo();
-
     necronomicon_running = true;
 }
 
@@ -2540,13 +2470,14 @@ double* out = UGEN_OUTPUT_BUFFER(u, 0);                 \
 uint32_t line_time = *((uint32_t*) u.data);             \
 double length;                                          \
 double y;                                               \
+bool scheduled_for_removal = false;                     \
 CONTROL_ARGS                                            \
 AUDIO_LOOP(                                             \
     AUDIO_ARGS                                          \
     if (line_time >= length)                            \
     {                                                   \
         y = 0;                                          \
-        try_schedule_current_synth_for_removal();       \
+        scheduled_for_removal =  true;                  \
     }                                                   \
     else                                                \
     {                                                   \
@@ -2555,6 +2486,8 @@ AUDIO_LOOP(                                             \
     };                                                  \
     UGEN_OUT(out, y);                                   \
 );                                                      \
+if (scheduled_for_removal)                              \
+    try_schedule_current_synth_for_removal();           \
 *((uint32_t*) u.data) = line_time;
 
 void line_k_calc(ugen u)
@@ -2633,11 +2566,7 @@ AUDIO_LOOP(                                                                     
         data.index = data.index + 1;                                                                                \
         if (data.index >= maxIndex)                                                                                 \
         {                                                                                                           \
-            if (scheduled_for_removal == false)                                                                     \
-            {                                                                                                       \
-                try_schedule_current_synth_for_removal();                                                           \
-                scheduled_for_removal = true;                                                                       \
-            }                                                                                                       \
+            scheduled_for_removal = true;                                                                           \
             UGEN_OUT(out,data.nextValue);                                                                           \
             continue;                                                                                               \
         }                                                                                                           \
@@ -2671,7 +2600,9 @@ AUDIO_LOOP(                                                                     
     UGEN_OUT(out,LERP(data.currentValue, data.nextValue, delta) * x);                                               \
     data.time   += RECIP_SAMPLE_RATE;                                                                               \
 );                                                                                                                  \
-*((env_struct*) u.data) = data;                                                                                     \
+if (scheduled_for_removal == true)                                                                                  \
+    try_schedule_current_synth_for_removal();                                                                       \
+*((env_struct*) u.data) = data;
 
 void env_k_calc(ugen u)
 {
@@ -3984,10 +3915,6 @@ void test_doubly_linked_list()
     doubly_linked_list_free(synth_list);
 }
 
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Curtis: New UGens
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
 #define CLAMP(V,MIN,MAX)                    \
 ({                                          \
     double result = V < MIN ? MIN : V;      \
@@ -4003,7 +3930,6 @@ void test_doubly_linked_list()
     double delta = X - ((int64_t) X);                                       \
     v1 + delta * (v2 - v1);                                                 \
 })
-// atan(X*AMOUNT)/M_PI)
 
 #define TANH_DIST(XIN,AMOUNT)                                               \
 ({                                                                          \
@@ -4013,7 +3939,6 @@ void test_doubly_linked_list()
     double delta = X - ((int64_t) X);                                       \
     v1 + delta * (v2 - v1);                                                 \
 })
-// #define TANH_DIST(X,AMOUNT) (tanh(X*AMOUNT))
 
 
 #define SIN_DIST(XIN,AMOUNT)                                                \
@@ -4024,8 +3949,6 @@ void test_doubly_linked_list()
     double delta = X - ((int64_t) X);                                       \
     v1 + delta * (v2 - v1);                                                 \
 })
-
-// #define SIN_DIST(X,AMOUNT) (sin(X*AMOUNT)/M_PI)
 
 #define HARD_CLIP(X,AMOUNT) (CLAMP(X*AMOUNT,-1.0,1.0))
 
@@ -4055,8 +3978,6 @@ void accumulator_deconstructor(ugen* u)
 
 // LFOs
 
-double RECIP_CHAR_RANGE = 1.0 / 255.0;
-
 #define LFSAW_CALC(CONTROL_ARGS, AUDIO_ARGS)                \
 double* in0 = UGEN_INPUT_BUFFER(u, 0);                      \
 double* in1 = UGEN_INPUT_BUFFER(u, 1);                      \
@@ -4072,10 +3993,10 @@ CONTROL_ARGS                                                \
 AUDIO_LOOP(                                                 \
     AUDIO_ARGS                                              \
     /* Branchless and table-less saw */                     \
-    amp1   = ((double)((int8_t)phase));                     \
-    amp2   = ((double)(((int8_t)phase)+1));                 \
+    amp1   = (int16_t) phase;                               \
+    amp2   = amp1 + 1;                                      \
     delta  = phase - ((int64_t) phase);                     \
-    y      = LERP(amp1,amp2,delta) * RECIP_CHAR_RANGE;      \
+    y      = LERP(amp1,amp2,delta) * RECIP_TABLE_SIZE;      \
     phase += TABLE_MUL_RECIP_SAMPLE_RATE * freq;            \
     UGEN_OUT(out, y);                                       \
 );                                                          \
@@ -5488,11 +5409,19 @@ void biquad_deconstructor(ugen* u)
 
 #define BIQUAD(B0,B1,B2,A0,A1,A2,X,X1,X2,Y1,Y2) ( (B0/A0)*X + (B1/A0)*X1 + (B2/A0)*X2 - (A1/A0)*Y1 - (A2/A0)*Y2 )
 
-#define TABLE_LOOKUP(VAL,TABLE)                             \
-v1     = TABLE[((uint16_t) (VAL * TABLE_SIZE))];            \
-v2     = TABLE[((uint16_t) (VAL * TABLE_SIZE + 1))];        \
-delta  = VAL - ((uint16_t) VAL);                            \
-v1 + delta * (v2 - v1);                                     \
+#define TABLE_LOOKUP(VAL, TABLE)                                    \
+({                                                                  \
+    const double v1 = TABLE[((uint16_t) (VAL * TABLE_SIZE))];       \
+    const double v2 = TABLE[((uint16_t) (VAL * TABLE_SIZE + 1))];   \
+    const double delta  = VAL - ((uint16_t) VAL);                   \
+    v1 + delta * (v2 - v1);                                         \
+})
+
+#define TABLE_SIN(x) (TABLE_LOOKUP(x, sine_table))
+#define TABLE_COS(x) (TABLE_LOOKUP(x, cosn_table))
+#define TABLE_SINH(x) (TABLE_LOOKUP(x, sinh_table))
+#define TABLE_ATAN(x) (TABLE_LOOKUP(x, atan_table))
+#define TABLE_TANH(x) (TABLE_LOOKUP(x, tanh_table))
 
 #define LPF_CALC(CONTROL_ARGS, AUDIO_ARGS)                              \
 double*  in0  = UGEN_INPUT_BUFFER(u, 0);                                \
@@ -5518,11 +5447,7 @@ double a1;                                                              \
 double a2;                                                              \
                                                                         \
 double y;                                                               \
-                                                                        \
 double snhi;                                                            \
-double delta;                                                           \
-double v1;                                                              \
-double v2;                                                              \
                                                                         \
 CONTROL_ARGS                                                            \
                                                                         \
@@ -5537,11 +5462,11 @@ AUDIO_LOOP(                                                             \
         bi.prevQ = q;                                                   \
         /* Don't recalc if unnecessary */                               \
         omega  = freq * RECIP_SAMPLE_RATE;                              \
-        bi.cs  = TABLE_LOOKUP(omega, cosn_table);                       \
-        sn     = TABLE_LOOKUP(omega, sine_table);                       \
+        bi.cs  = TABLE_COS(omega);                                      \
+        sn     = TABLE_SIN(omega);                                      \
         snhi   = (1 / (2 * q));                                         \
         snhi   = snhi * RECIP_TWO_PI;                                   \
-        bi.alpha = TABLE_LOOKUP(snhi, sinh_table);                      \
+        bi.alpha = TABLE_SINH(snhi);                                    \
         bi.alpha *= sn;                                                 \
     }                                                                   \
     cs    = bi.cs;                                                      \
@@ -5703,15 +5628,9 @@ AUDIO_LOOP(                                                             \
     AUDIO_ARGS                                                          \
                                                                         \
     omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;                      \
-    cs    = cos(omega);                                                 \
-    sn    = sin(omega);                                                 \
-    alpha = sn * sinh(1 / (2 * q));                                     \
-                                                                        \
-    /* cs    = MINIMAXSIN(omega);                                       \
-    sn    = MINIMAXSIN(omega);                                          \
-    sinh_i= 2 * q;                                                      \
-    sinh_i= 1 / sinh_i;                                                 \
-    alpha = sn * MINIMAXSIN(sinh_i);*/                                  \
+    cs    = TABLE_COS(omega);                                           \
+    sn    = TABLE_SIN(omega);                                           \
+    alpha = sn * TABLE_SINH(1 / (2 * q));                               \
                                                                         \
     b0    = (1 + cs) * 0.5;                                             \
     b1    = -1 - cs;                                                    \
@@ -5867,8 +5786,8 @@ AUDIO_LOOP(                                                             \
     AUDIO_ARGS                                                          \
                                                                         \
     omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;                      \
-    cs    = cos(omega);                                                 \
-    sn    = sin(omega);                                                 \
+    cs    = TABLE_COS(omega);                                           \
+    sn    = TABLE_SIN(omega);                                           \
     alpha = sn * sinh(1 / (2 * q));                                     \
                                                                         \
     b0    =  alpha;                                                     \
@@ -6026,8 +5945,8 @@ AUDIO_LOOP(                                                             \
     AUDIO_ARGS                                                          \
                                                                         \
     omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;                      \
-    cs    = cos(omega);                                                 \
-    sn    = sin(omega);                                                 \
+    cs    = TABLE_COS(omega);                                           \
+    sn    = TABLE_SIN(omega);                                           \
     alpha = sn * sinh(1 / (2 * q));                                     \
                                                                         \
     b0    =  1;                                                         \
@@ -6297,8 +6216,8 @@ AUDIO_LOOP(                                                             \
     AUDIO_ARGS                                                          \
                                                                         \
     omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;                      \
-    cs    = cos(omega);                                                 \
-    sn    = sin(omega);                                                 \
+    cs    = TABLE_COS(omega);                                           \
+    sn    = TABLE_SIN(omega);                                           \
     alpha = sn * sinh(1 / (2 * q));                                     \
                                                                         \
     b0    =   1 - alpha;                                                \
@@ -6459,8 +6378,8 @@ AUDIO_LOOP(                                                             \
                                                                         \
     a     = pow(10,(gain/40));                                          \
     omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;                      \
-    cs    = cos(omega);                                                 \
-    sn    = sin(omega);                                                 \
+    cs    = TABLE_COS(omega);                                           \
+    sn    = TABLE_SIN(omega);                                           \
     alpha = sn * sinh(1 / (2 * q));                                     \
                                                                         \
     b0    =  1 + alpha*a;                                               \
@@ -6738,8 +6657,8 @@ AUDIO_LOOP(                                                             \
                                                                         \
     a     = pow(10,(gain/40));                                          \
     omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;                      \
-    cs    = cos(omega);                                                 \
-    sn    = sin(omega);                                                 \
+    cs    = TABLE_COS(omega);                                           \
+    sn    = TABLE_SIN(omega);                                           \
     beta  = sqrt( (pow(a,2) + 1) / slope - pow((a-1),2) );              \
                                                                         \
     b0    =    a*( (a+1) - (a-1)*cs + beta*sn );                        \
@@ -7013,8 +6932,8 @@ AUDIO_LOOP(                                                             \
                                                                         \
     a     = pow(10,(gain/40));                                          \
     omega = freq * TWO_PI_TIMES_RECIP_SAMPLE_RATE;                      \
-    cs    = cos(omega);                                                 \
-    sn    = sin(omega);                                                 \
+    cs    = TABLE_COS(omega);                                           \
+    sn    = TABLE_SIN(omega);                                           \
     beta  = sqrt( (pow(a,2) + 1) / slope - pow((a-1),2) );              \
                                                                         \
     b0    =    a*( (a+1) + (a-1)*cs + beta*sn );                        \
@@ -8988,47 +8907,47 @@ void pluck_deconstructor(ugen* u)
 }
 
 // Jaffe and Smith "Extensions of the Karplus-Strong Plucked-String* Algorithm"
-#define PLUCK_CALC(CONTROL_ARGS, AUDIO_ARGS)                                \
-double* in0 = UGEN_INPUT_BUFFER(u, 0);                                      \
-double* in1 = UGEN_INPUT_BUFFER(u, 1);                                      \
-double* in2 = UGEN_INPUT_BUFFER(u, 2);                                      \
-double* out = UGEN_OUTPUT_BUFFER(u, 0);                                     \
-pluck_data  data             = *((pluck_data*) u.data);                     \
-double*     samples          = data.buffer->samples;                        \
-uint32_t    write_index      = data.write_index;                            \
-uint32_t    num_samples_mask = data.buffer->num_samples_mask;               \
-double      clamped;                                                        \
-double      freq;                                                           \
-uint32_t    n;                                                              \
-uint32_t    index2;                                                         \
-double      decay;                                                          \
-double      duration;                                                       \
-double      x;                                                              \
-double      y;                                                              \
-CONTROL_ARGS                                                                \
-AUDIO_LOOP(                                                                 \
-    AUDIO_ARGS                                                              \
-    index2 = (write_index + 1) % n;                                         \
-    decay = pow(E, (-(n + 0.5) * 6.908) / duration) / cos(M_PI * freq);     \
-    y = 0;                                                                  \
-                                                                            \
-    if (data.noiseSamples < n)                                              \
-    {                                                                       \
-        y = x;                                                              \
-        data.noiseSamples++;                                                \
-    }                                                                       \
-                                                                            \
-    else                                                                    \
-    {                                                                       \
-        y = decay * (samples[write_index] + samples[index2]) / 2;           \
-    }                                                                       \
-                                                                            \
-    samples[write_index] = y;                                               \
-    write_index = index2;                                                   \
-    UGEN_OUT(out, y);                                                       \
-);                                                                          \
-data.write_index = index2;                                                  \
-*((pluck_data*) u.data) = data;                                             \
+#define PLUCK_CALC(CONTROL_ARGS, AUDIO_ARGS)                                    \
+double* in0 = UGEN_INPUT_BUFFER(u, 0);                                          \
+double* in1 = UGEN_INPUT_BUFFER(u, 1);                                          \
+double* in2 = UGEN_INPUT_BUFFER(u, 2);                                          \
+double* out = UGEN_OUTPUT_BUFFER(u, 0);                                         \
+pluck_data  data             = *((pluck_data*) u.data);                         \
+double*     samples          = data.buffer->samples;                            \
+uint32_t    write_index      = data.write_index;                                \
+uint32_t    num_samples_mask = data.buffer->num_samples_mask;                   \
+double      clamped;                                                            \
+double      freq;                                                               \
+uint32_t    n;                                                                  \
+uint32_t    index2;                                                             \
+double      decay;                                                              \
+double      duration;                                                           \
+double      x;                                                                  \
+double      y;                                                                  \
+CONTROL_ARGS                                                                    \
+AUDIO_LOOP(                                                                     \
+    AUDIO_ARGS                                                                  \
+    index2 = (write_index + 1) % n;                                             \
+    decay = pow(E, (-(n + 0.5) * 6.908) / duration) / TABLE_COS(M_PI * freq);   \
+    y = 0;                                                                      \
+                                                                                \
+    if (data.noiseSamples < n)                                                  \
+    {                                                                           \
+        y = x;                                                                  \
+        data.noiseSamples++;                                                    \
+    }                                                                           \
+                                                                                \
+    else                                                                        \
+    {                                                                           \
+        y = decay * (samples[write_index] + samples[index2]) / 2;               \
+    }                                                                           \
+                                                                                \
+    samples[write_index] = y;                                                   \
+    write_index = index2;                                                       \
+    UGEN_OUT(out, y);                                                           \
+);                                                                              \
+data.write_index = index2;                                                      \
+*((pluck_data*) u.data) = data;                                                 \
 
 #define PLUCK_FREQK clamped = MAX(*in0, data.minFreq); freq = clamped * RECIP_SAMPLE_RATE; n = SAMPLE_RATE / clamped;
 #define PLUCK_FREQA clamped = MAX(UGEN_IN(in0), data.minFreq); freq = clamped * RECIP_SAMPLE_RATE; n = SAMPLE_RATE / clamped;

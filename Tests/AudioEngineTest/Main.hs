@@ -60,24 +60,34 @@ whiteSynth = whiteNoise |> gain 0.3 |> dup |> out 0
 simplexSynth :: UGen -> UGen
 simplexSynth freq = simplex1D (lag 0.1 freq) |> exprange 20 20000 |> sin |> gain 0.2 |> dup |> out 0
 
+pluckSynth :: UGen -> UGen
+pluckSynth freq =  pluck 20 pfreq (simplex1D 0.1 |> range 0.001 1) (pinkNoise * pulse 0.5 1) |> poll |> gain 0.2 |> dup |> out 0
+    where
+        pfreq = simplex1D (lag 0.1 freq) |> exprange 20 20000
+
+lfsawSynth :: UGen -> UGen
+lfsawSynth freq = lfsaw (lag 0.1 freq) 0 |> exprange 20 20000 |> sin |> gain 0.2 |> dup |> out 0
+
 main :: IO ()
 main = runSignal
-       <| play (toggle <| isDown keyR) reverbSynth
-       <> play (toggle <| isDown keyA) delaySynthN (mouseX ~> scale 20 10000)  mouseY
-       <> play (toggle <| isDown keyW) delaySynthL (mouseX ~> scale 20 10000)  mouseY
+       <| play (toggle <| isDown keyA) reverbSynth
+       <> play (toggle <| isDown keyB) delaySynthN (mouseX ~> scale 20 10000)  mouseY
+       <> play (toggle <| isDown keyC) delaySynthL (mouseX ~> scale 20 10000)  mouseY
        <> play (toggle <| isDown keyD) delaySynthC (mouseX ~> scale 20 10000)  mouseY
-       <> play (toggle <| isDown keyS) combSynthC  (mouseX ~> scale 1 4000) (mouseY ~> scale 0 20)
+       <> play (toggle <| isDown keyE) combSynthC  (mouseX ~> scale 1 4000) (mouseY ~> scale 0 20)
        <> play (toggle <| isDown keyF) feedSynth (mouseX ~> scale 2 20000) (mouseY ~> scale 2 20000)
-       <> play (toggle <| isDown keyL) limiterSynth (mouseX ~> scale 0 4)
-       <> play (toggle <| isDown keyN) noLimiterSynth (mouseX ~> scale 0 4)
-       <> play (toggle <| isDown keyX) minMaxSynth (mouseX ~> scale 20 2000)
-       <> play (toggle <| isDown keyT) lpfSynth (mouseX ~> scale 20 4000)
-       <> play (toggle <| isDown keyM) modulatingDelayC
-       <> play (toggle <| isDown keyP) panSynth (mouseX ~> scale (-1) 1)
-       <> play (toggle <| isDown keyI) pinkSynth
-       <> play (toggle <| isDown keyB) brownSynth
-       <> play (toggle <| isDown keyE) whiteSynth
-       <> play (toggle <| isDown keyV) simplexSynth (mouseX ~> scale 0.1 80)
+       <> play (toggle <| isDown keyG) limiterSynth (mouseX ~> scale 0 4)
+       <> play (toggle <| isDown keyH) noLimiterSynth (mouseX ~> scale 0 4)
+       <> play (toggle <| isDown keyI) minMaxSynth (mouseX ~> scale 20 2000)
+       <> play (toggle <| isDown keyJ) lpfSynth (mouseX ~> scale 20 4000)
+       <> play (toggle <| isDown keyK) modulatingDelayC
+       <> play (toggle <| isDown keyL) panSynth (mouseX ~> scale (-1) 1)
+       <> play (toggle <| isDown keyM) pinkSynth
+       <> play (toggle <| isDown keyN) brownSynth
+       <> play (toggle <| isDown keyO) whiteSynth
+       <> play (toggle <| isDown keyP) simplexSynth (mouseX ~> scale 0.1 80)
+       <> play (toggle <| isDown keyQ) pluckSynth (mouseX ~> scale 0.1 20)
+       <> play (toggle <| isDown keyR) lfsawSynth (mouseX ~> scale 0.1 2000)
 
 -- main :: IO ()
 -- main = runSignal <| synthDefs *> tempo (pure 150) *> testGUI <> sections <> hyperTerrainSounds
