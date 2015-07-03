@@ -93,7 +93,7 @@ gameObjectToRenderData _ = Nothing
 
 setRenderDataPtr :: GameObject -> Ptr RenderData -> IO ()
 setRenderDataPtr (GameObject (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !(Vector3 sx sy sz) _ (Just (Model (Mesh (Just loadedMesh) _ _ _ _ _) (Material (Just loadedMaterial) _ _ uns _))) _ _) rdptr = do
-    pokeByteOff ptr 0  (1 :: CFloat)
+    pokeByteOff ptr 0  (1 :: CInt)
     pokeByteOff ptr 4  (unsafeCoerce vb :: GL.GLuint)
     pokeByteOff ptr 8  (unsafeCoerce ib :: GL.GLuint)
     pokeByteOff ptr 12 start
@@ -138,10 +138,8 @@ setRenderDataPtr (GameObject (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z)
     pokeByteOff ptr 148 (1 :: CFloat)
 
     let len  = length ulocs
-    prevLen <- peekByteOff ptr 152
-    if len == prevLen
-        -- then peekByteOff ptr 160 >>= \lptr -> pokeArray lptr uniforms uns
-        -- else pokeByteOff ptr 152 (fromIntegral len :: CInt) >> mallocArray len >>= \lptr -> pokeArray lptr uniforms >> pokeByteOff ptr 160 lptr
+    prevLen <- peekByteOff ptr 152 :: IO CInt
+    if len == fromIntegral prevLen
         then peekByteOff ptr 160 >>= \lptr -> setUniforms lptr 0 ulocs uns
         else pokeByteOff ptr 152 (fromIntegral len :: CInt) >> (mallocArray len :: IO (Ptr UniformRaw)) >>= \lptr -> setUniforms lptr 0 ulocs uns >> pokeByteOff ptr 160 lptr
 
@@ -155,15 +153,6 @@ setRenderDataPtr (GameObject (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z)
         y2 = y * y
         z2 = z * z
 
-        -- (Matrix4x4 m00 m01 m02 m03 m10 m11 m12 m13 m20 m21 m22 m23 m30 m31 m32 m33)           = {-# SCC "toRenderData_trsMatrix" #-} trsMatrix position rotation scale
-        -- uniforms                                                                              = {-# SCC "toRenderData_uniforms" #-} fst $ foldr mkLoadedUniform ([], 0) $ zip ulocs uns
-        -- mkLoadedUniform (GL.UniformLocation loc, UniformTexture _ (LoadedTexture t))     (us, tu) = (UniformTextureRaw loc (unsafeCoerce t) tu : us, tu + 1)
-        -- mkLoadedUniform (GL.UniformLocation loc, UniformScalar  _ v)                     (us, tu) = (UniformScalarRaw  loc (realToFrac v) : us, tu)
-        -- mkLoadedUniform (GL.UniformLocation loc, UniformVec2    _ (Vector2 ux uy))       (us, tu) = (UniformVec2Raw    loc (realToFrac ux) (realToFrac uy) : us, tu)
-        -- mkLoadedUniform (GL.UniformLocation loc, UniformVec3    _ (Vector3 ux uy uz))    (us, tu) = (UniformVec3Raw    loc (realToFrac ux) (realToFrac uy) (realToFrac uz) : us, tu)
-        -- mkLoadedUniform (GL.UniformLocation loc, UniformVec4    _ (Vector4 ux uy uz uw)) (us, tu) = (UniformVec4Raw    loc (realToFrac ux) (realToFrac uy) (realToFrac uz) (realToFrac uw) : us, tu)
-        -- mkLoadedUniform _                                                                (us, tu) = (us, tu)
-
         setUniforms uptr i (GL.UniformLocation l : ls) (uni : us) = case uni of
             UniformTexture _ (LoadedTexture t)     -> pokeByteOff p 0 (0 :: CInt) >> pokeByteOff p 4 l >> pokeByteOff p 8 (unsafeCoerce t :: CInt) >> pokeByteOff p 12 (0 :: CInt) >> setUniforms uptr (i + 24) ls us
             UniformScalar  _ v                     -> pokeByteOff p 0 (1 :: CInt) >> pokeByteOff p 4 l >> pokeByteOff p 8 (realToFrac v  :: GL.GLfloat) >> setUniforms uptr (i + 24) ls us
@@ -175,8 +164,8 @@ setRenderDataPtr (GameObject (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z)
                 p = uptr `plusPtr` (i :: Int)
         setUniforms _ _ _ _ = return ()
         {-# INLINE setUniforms #-}
-
 setRenderDataPtr _ _ = return ()
+{-# INLINE setRenderDataPtr #-}
 
 -------------------------------------------------------
 -- Entity

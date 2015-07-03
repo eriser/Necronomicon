@@ -49,7 +49,7 @@ initBullets :: [Entity Bullet]
 -- initBullets = concat <| replicate 100 [mkBullet <| Vector3 (-2) 0 0, mkBullet <| Vector3 0 0 0, mkBullet <| Vector3 2 0 0]
 -- initBullets = concat <| replicate 300 [mkBullet <| Vector3 (-2) 0 0, mkBullet <| Vector3 0 0 0, mkBullet <| Vector3 2 0 0]
 initBullets = concat <| replicate 1000 [mkBullet <| Vector3 (-2) 0 0, mkBullet <| Vector3 0 0 0, mkBullet <| Vector3 2 0 0]
--- initBullets = concat <| replicate 3000 [mkBullet <| Vector3 (-2) 0 0, mkBullet <| Vector3 0 0 0, mkBullet <| Vector3 2 0 0]
+-- initBullets = concat <| replicate 3333 [mkBullet <| Vector3 (-2) 0 0, mkBullet <| Vector3 0 0 0, mkBullet <| Vector3 2 0 0]
 -- ^^^Test case
 
 megaDark :: Signal ()

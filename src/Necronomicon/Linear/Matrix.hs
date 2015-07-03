@@ -386,6 +386,25 @@ setMatrixUniform ul (Matrix4x4 m00 m01 m02 m03 m10 m11 m12 m13 m20 m21 m22 m23 m
     pokeByteOff ptr 60 (realToFrac m33 :: CFloat)
     GLRaw.glUniformMatrix4fv ul 1 0 ptr
 
+setMatrixPtr :: Matrix4x4 -> Ptr CFloat -> IO ()
+setMatrixPtr (Matrix4x4 m00 m01 m02 m03 m10 m11 m12 m13 m20 m21 m22 m23 m30 m31 m32 m33) ptr = do
+    pokeByteOff ptr 0  (realToFrac m00 :: CFloat)
+    pokeByteOff ptr 4  (realToFrac m01 :: CFloat)
+    pokeByteOff ptr 8  (realToFrac m02 :: CFloat)
+    pokeByteOff ptr 12 (realToFrac m03 :: CFloat)
+    pokeByteOff ptr 16 (realToFrac m10 :: CFloat)
+    pokeByteOff ptr 20 (realToFrac m11 :: CFloat)
+    pokeByteOff ptr 24 (realToFrac m12 :: CFloat)
+    pokeByteOff ptr 28 (realToFrac m13 :: CFloat)
+    pokeByteOff ptr 32 (realToFrac m20 :: CFloat)
+    pokeByteOff ptr 36 (realToFrac m21 :: CFloat)
+    pokeByteOff ptr 40 (realToFrac m22 :: CFloat)
+    pokeByteOff ptr 44 (realToFrac m23 :: CFloat)
+    pokeByteOff ptr 48 (realToFrac m30 :: CFloat)
+    pokeByteOff ptr 52 (realToFrac m31 :: CFloat)
+    pokeByteOff ptr 56 (realToFrac m32 :: CFloat)
+    pokeByteOff ptr 60 (realToFrac m33 :: CFloat)
+
 newtype instance U.MVector s Matrix4x4 = MV_Matrix4x4 (U.MVector s Double)
 newtype instance U.Vector    Matrix4x4 = V_Matrix4x4  (U.Vector    Double)
 

@@ -314,18 +314,18 @@ drawMeshWithMaterial (Material mat _ _ us _) m modelView proj resources = do
     (program,GL.UniformLocation mv : GL.UniformLocation pr : ulocs, vertexVap, colorVap, uvVap) <- sh
     (vertexBuffer, indexBuffer, start, end, count, vertexVad, colorVad, uvVad)                  <- getMesh resources m
 
-    GLRaw.glUseProgram $ unsafeCoerce program --Necessary because of the unexposed raw type under the newtype wrapper
+    GLRaw.glUseProgram $ unsafeCoerce program
     foldM_ (setUniform resources) 0 $ zip ulocs us
 
     setMatrixUniform mv modelView (matrixUniformPtr resources)
     setMatrixUniform pr proj (matrixUniformPtr resources)
-    GLRaw.glBindBuffer GLRaw.gl_ARRAY_BUFFER $ unsafeCoerce vertexBuffer --Necessary because of the unexposed raw type under the newtype wrapper
+    GLRaw.glBindBuffer GLRaw.gl_ARRAY_BUFFER $ unsafeCoerce vertexBuffer
 
     setupAttribute vertexVap vertexVad
     setupAttribute colorVap  colorVad
     setupAttribute uvVap     uvVad
 
-    GLRaw.glBindBuffer GLRaw.gl_ARRAY_BUFFER $ unsafeCoerce indexBuffer
+    GLRaw.glBindBuffer GLRaw.gl_ELEMENT_ARRAY_BUFFER $ unsafeCoerce indexBuffer
     GLRaw.glDrawRangeElements GLRaw.gl_TRIANGLES start end count GLRaw.gl_UNSIGNED_INT offset0
 
     where
