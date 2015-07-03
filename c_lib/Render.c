@@ -118,7 +118,8 @@ void draw_render_data( render_data_t* render_data, GLuint length
     uniform_t* uniforms;
     render_data_t rd;
     uniform_t uniform;
-    int render_num = 0;
+    GLint prev_index_buffer = 0;
+
     for(i = 0; i < length; i++)
     {
         if(!render_data->is_active)
@@ -126,8 +127,6 @@ void draw_render_data( render_data_t* render_data, GLuint length
             render_data++;
             continue;
         }
-
-        render_num++;
 
         rd = *render_data;
         glUseProgram(rd.shader_program);
@@ -182,18 +181,22 @@ void draw_render_data( render_data_t* render_data, GLuint length
         glUniformMatrix4fv(rd.model_View_location, 1, 0, model_view_ptr);
         glUniformMatrix4fv(rd.proj_location, 1, 0, proj_ptr);
 
-        glBindBuffer(GL_ARRAY_BUFFER, rd.vertex_buffer);
+        if(rd.index_buffer != prev_index_buffer)
+        {
+            glBindBuffer(GL_ARRAY_BUFFER, rd.vertex_buffer);
 
-        glVertexAttribPointer(rd.vertex_attribute_location, rd.vertex_vad_n, GL_FLOAT, GL_FALSE, rd.vertex_vad_s, rd.vertex_vad_p);
-        glEnableVertexAttribArray(rd.vertex_attribute_location);
+            glVertexAttribPointer(rd.vertex_attribute_location, rd.vertex_vad_n, GL_FLOAT, GL_FALSE, rd.vertex_vad_s, rd.vertex_vad_p);
+            glEnableVertexAttribArray(rd.vertex_attribute_location);
 
-        glVertexAttribPointer(rd.color_attribute_location, rd.color_vad_n, GL_FLOAT, GL_FALSE, rd.color_vad_s, rd.color_vad_p);
-        glEnableVertexAttribArray(rd.color_attribute_location);
+            glVertexAttribPointer(rd.color_attribute_location, rd.color_vad_n, GL_FLOAT, GL_FALSE, rd.color_vad_s, rd.color_vad_p);
+            glEnableVertexAttribArray(rd.color_attribute_location);
 
-        glVertexAttribPointer(rd.uv_attribute_location, rd.uv_vad_n, GL_FLOAT, GL_FALSE, rd.uv_vad_s, rd.uv_vad_p);
-        glEnableVertexAttribArray(rd.uv_attribute_location);
+            glVertexAttribPointer(rd.uv_attribute_location, rd.uv_vad_n, GL_FLOAT, GL_FALSE, rd.uv_vad_s, rd.uv_vad_p);
+            glEnableVertexAttribArray(rd.uv_attribute_location);
 
-        glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, rd.index_buffer);
+            glBindBuffer(GL_ELEMENT_ARRAY_BUFFER, rd.index_buffer);
+            prev_index_buffer = rd.index_buffer;
+        }
         glDrawRangeElements(GL_TRIANGLES, rd.start, rd.end, rd.count, GL_UNSIGNED_INT, 0);
         render_data++;
     }
