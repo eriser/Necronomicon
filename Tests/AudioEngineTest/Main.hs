@@ -66,7 +66,10 @@ pluckSynth freq =  pluck 20 pfreq (simplex1D 0.1 |> range 0.001 1) (pinkNoise * 
         pfreq = simplex1D (lag 0.1 freq) |> exprange 20 20000
 
 lfsawSynth :: UGen -> UGen
-lfsawSynth freq = lfsaw (lag 0.1 freq) 0 |> exprange 20 20000 |> sin |> gain 0.2 |> dup |> out 0
+lfsawSynth freq = (lfsaw (lag 0.1 freq) 0) * 2 - 1 |> exprange 20 20000 |> sin |> gain 0.2 |> dup |> out 0
+
+lfpulseSynth :: UGen -> UGen
+lfpulseSynth freq = (lfpulse (lag 0.1 freq) 0) * 440 + 440 |> sin |> gain 0.2 |> dup |> out 0
 
 main :: IO ()
 main = runSignal
@@ -88,6 +91,7 @@ main = runSignal
        <> play (toggle <| isDown keyP) simplexSynth (mouseX ~> scale 0.1 80)
        <> play (toggle <| isDown keyQ) pluckSynth (mouseX ~> scale 0.1 20)
        <> play (toggle <| isDown keyR) lfsawSynth (mouseX ~> scale 0.1 2000)
+       <> play (toggle <| isDown keyS) lfpulseSynth (mouseX ~> scale 0.1 2000)
 
 -- main :: IO ()
 -- main = runSignal <| synthDefs *> tempo (pure 150) *> testGUI <> sections <> hyperTerrainSounds

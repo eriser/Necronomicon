@@ -5,7 +5,6 @@
     To Do:
 
     Fix pluck (it's very broken...)
-    Fix lfsaw and lfpulse to use correct table size
     zapgremlins in filters to prevent blow ups
     break up code into several files
     remove calc rate from ugen struct, it's not being used, nor do I predict that it will be
@@ -42,6 +41,8 @@
     basic filters (One pole, two pole, zero, HZPF, integrator)
     demand style ugens (seq, etc...)
 
+    Fix small block size, may require a more optimized clear_necronomicon_buses()
+    MIDI support
     Granular synthesis
     Concatenative Synthesis
     Scanned synthesis
@@ -81,7 +82,7 @@
 #include "Necronomicon.h"
 #include "Necronomicon/Endian.h"
 
-uint32_t next_power_of_two(uint32_t v)
+static inline uint32_t next_power_of_two(uint32_t v)
 {
     --v;
     v |= v >> 1;
@@ -3982,7 +3983,7 @@ void accumulator_deconstructor(ugen* u)
 double* in0 = UGEN_INPUT_BUFFER(u, 0);                      \
 double* in1 = UGEN_INPUT_BUFFER(u, 1);                      \
 double* out = UGEN_OUTPUT_BUFFER(u, 0);                     \
-double phase = *((uint32_t*) u.data);                       \
+double phase = *((double*) u.data);                         \
 double freq;                                                \
 /* double phaseArg; */                                      \
 double amp1;                                                \
@@ -3993,10 +3994,10 @@ CONTROL_ARGS                                                \
 AUDIO_LOOP(                                                 \
     AUDIO_ARGS                                              \
     /* Branchless and table-less saw */                     \
-    amp1   = (int16_t) phase;                               \
+    amp1   = (uint16_t) phase;                              \
     amp2   = amp1 + 1;                                      \
     delta  = phase - ((int64_t) phase);                     \
-    y      = LERP(amp1,amp2,delta) * RECIP_TABLE_SIZE;      \
+    y      = LERP(amp1, amp2, delta) * RECIP_TABLE_SIZE;    \
     phase += TABLE_MUL_RECIP_SAMPLE_RATE * freq;            \
     UGEN_OUT(out, y);                                       \
 );                                                          \
@@ -4036,11 +4037,15 @@ void lfsaw_kk_calc(ugen u)
     );
 }
 
+#define SIXTEEN_BITS 16
+#define MASK_OFFSET 1
+const int16_t lfpulse_phase_shift = sizeof(int16_t) * SIXTEEN_BITS - MASK_OFFSET;
+
 #define LFPULSE_CALC(CONTROL_ARGS, AUDIO_ARGS)                          \
 double* in0 = UGEN_INPUT_BUFFER(u, 0);                                  \
 double* in1 = UGEN_INPUT_BUFFER(u, 1);                                  \
 double* out = UGEN_OUTPUT_BUFFER(u, 0);                                 \
-double phase = *((uint32_t*) u.data);                                   \
+double phase = *((double*) u.data);                                     \
 double freq;                                                            \
 /*double phaseArg;*/                                                    \
 double y;                                                               \
@@ -4048,9 +4053,10 @@ CONTROL_ARGS                                                            \
 AUDIO_LOOP(                                                             \
     AUDIO_ARGS                                                          \
     /*Branchless and table-less square*/                                \
-    y = 1 | (((int8_t)phase) >> (sizeof(int8_t) * CHAR_BIT - 1));       \
+    y = 1 | (((int16_t) phase) >> lfpulse_phase_shift);                 \
     phase += TABLE_MUL_RECIP_SAMPLE_RATE * freq;                        \
-    UGEN_OUT(out, y);                                                   \
+    /* y * 0.5 + 0.5 to make range 0 to 1 */                            \
+    UGEN_OUT(out, y * 0.5 + 0.5);                                       \
 );                                                                      \
 *((double*) u.data) = phase;                                            \
 
