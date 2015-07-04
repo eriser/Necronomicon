@@ -10,9 +10,10 @@ import Foreign.Ptr
 import Foreign.C.Types
 import Graphics.Rendering.OpenGL.Raw
 import Data.Bits
--- import qualified Graphics.Rendering.OpenGL         as GL
 import qualified Graphics.UI.GLFW                  as GLFW
-import qualified Data.Vector.Fusion.Stream.Monadic as S
+import qualified Data.Vector.Storable.Mutable as SMV
+
+foreign import ccall unsafe "init_c_opengl" initCOpenGL ::  IO ()
 
 initWindow :: (Int, Int) -> Bool -> IO (Maybe GLFW.Window)
 initWindow (width, height) isFullScreen = GLFW.init >>= \initSuccessful -> if initSuccessful then mkWindow else return Nothing
@@ -22,6 +23,7 @@ initWindow (width, height) isFullScreen = GLFW.init >>= \initSuccessful -> if in
                 then GLFW.getPrimaryMonitor >>= \fullScreenOnMain -> GLFW.createWindow width height "Necronomicon" fullScreenOnMain Nothing
                 else GLFW.createWindow width height "Necronomicon" Nothing Nothing
             GLFW.makeContextCurrent w
+            initCOpenGL
             return w
 
 setUniformRaw :: UniformRaw -> IO ()
@@ -60,7 +62,16 @@ drawRenderData !mptr !view !proj !(RenderData _ vertexBuffer indexBuffer start e
     {-# SCC "glBindBuffer" #-} glBindBuffer gl_ARRAY_BUFFER indexBuffer
     {-# SCC "glDrawRangeElements" #-} glDrawRangeElements gl_TRIANGLES start end count gl_UNSIGNED_INT offset0
 
-renderWithCameraRaw :: GLFW.Window -> Resources -> S.Stream IO RenderData -> (Matrix4x4, Camera) -> IO ()
+foreign import ccall unsafe "draw_render_data" drawRenderDataC ::
+    Ptr RenderData ->
+    GLuint ->
+    CFloat -> CFloat -> CFloat -> CFloat ->
+    CFloat -> CFloat -> CFloat -> CFloat ->
+    CFloat -> CFloat -> CFloat -> CFloat ->
+    CFloat -> CFloat -> CFloat -> CFloat ->
+    Ptr CFloat -> IO ()
+
+renderWithCameraRaw :: GLFW.Window -> Resources -> SMV.IOVector RenderData -> (Matrix4x4, Camera) -> IO ()
 renderWithCameraRaw window resources scene (view, c) = do
     (w,h) <- GLFW.getWindowSize window
 
@@ -69,9 +80,11 @@ renderWithCameraRaw window resources scene (view, c) = do
             c'           -> c'
         ratio = fromIntegral w / fromIntegral h
         mptr  = matrixUniformPtr resources
-        iview = invert view
-        pproj = perspMatrix (_fov c) ratio (_near c) (_far c)
+        iview@(Matrix4x4 v00 v01 v02 v03 v10 v11 v12 v13 v20 v21 v22 v23 v30 v31 v32 v33) = invert view
+        persp = perspMatrix (_fov c) ratio (_near c) (_far c)
         oproj = orthoMatrix 0 ratio 1 0 (-1) 1
+
+    setMatrixPtr persp mptr
 
     --If we have anye post-rendering fx let's bind their fbo
     case _fx c of
@@ -91,13 +104,22 @@ renderWithCameraRaw window resources scene (view, c) = do
     glLoadIdentity
 
     case _fov c of
-        0 -> S.mapM_ (drawRenderData mptr iview oproj) scene
-        _ -> {-# SCC "cameraRender_mapM_" #-} S.mapM_ (drawRenderData mptr iview pproj) scene
+        -- 0 -> S.mapM_ (drawRenderData mptr iview oproj) scene
+        -- _ -> {-# SCC "cameraRender_mapM_" #-} S.mapM_ (drawRenderData mptr iview pproj) scene
+        0 -> {-# SCC "cameraRender_mapM_" #-} drawFor scene mptr iview oproj
+        -- _ -> {-# SCC "cameraRender_mapM_" #-} drawFor scene mptr iview pproj
+        _ -> {-# SCC "drawRenderDataC" #-} SMV.unsafeWith scene $ \ptr -> drawRenderDataC ptr (fromIntegral $ SMV.length scene) (realToFrac v00) (realToFrac v01) (realToFrac v02) (realToFrac v03) (realToFrac v10) (realToFrac v11) (realToFrac v12) (realToFrac v13) (realToFrac v20) (realToFrac v21) (realToFrac v22) (realToFrac v23) (realToFrac v30) (realToFrac v31) (realToFrac v32) (realToFrac v33) mptr
 
     -- mapM_ drawPostRenderFX $ _fx c
 
     GLFW.swapBuffers window
-    -- where
+    where
+        drawFor gs mptr iview pproj = go 0
+            where
+                go i
+                    | i >= SMV.length gs = return ()
+                    | otherwise          = SMV.unsafeRead gs i >>= drawRenderData mptr iview pproj >> go (i + 1)
+
         -- drawPostRenderFX fx = do
             -- glBindFramebuffer gl_FRAMEBUFFER 0
             -- GL.depthFunc     GL.$= Nothing

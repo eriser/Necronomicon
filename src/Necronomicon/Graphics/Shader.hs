@@ -42,7 +42,7 @@ loadShaderBS filePath shaderType src = do
     printError
     ok      <- GL.get (GL.compileStatus newShader)
     infoLog <- GL.get (GL.shaderInfoLog newShader)
-    unless (null infoLog) $ do
+    unless (null infoLog || infoLog == "\n") $ do
         putStrLn $ "Shader info log for " ++ filePath ++ ":"
         putStrLn infoLog
     unless ok $ do
@@ -52,14 +52,14 @@ loadShaderBS filePath shaderType src = do
 
 loadVertexShader :: FilePath -> VertexShader
 loadVertexShader path = VertexShader $ do
-    putStrLn $ "loadVertexShader: " ++ path
+    -- putStrLn $ "loadVertexShader: " ++ path
     resources <- getDataFileName ""
     src       <- BS.readFile $ resources ++ "shaders/" ++ path
     loadShaderBS path GL.VertexShader src
 
 loadFragmentShader :: FilePath -> FragmentShader
 loadFragmentShader path = FragmentShader $ do
-    putStrLn $ "loadFragmentShader: " ++ path
+    -- putStrLn $ "loadFragmentShader: " ++ path
     resources <- getDataFileName ""
     src       <- BS.readFile $ resources ++ "shaders/" ++ path
     loadShaderBS path GL.FragmentShader src
@@ -70,7 +70,7 @@ printError = GL.get GL.errors >>= mapM_ (hPutStrLn stderr . ("GL: "++) . show)
 -- shader :: String -> [String] -> [String] -> VertexShader -> FragmentShader -> Shader
 shader :: String -> [String] -> VertexShader -> FragmentShader -> Shader
 shader shaderName uniformNames vs fs = Shader (hash shaderName) $ do
-    putStrLn $ "Compiling shader: " ++ shaderName
+    -- putStrLn $ "Compiling shader: " ++ shaderName
 
     program <- GL.createProgram
     vs'     <- unVertexShader   vs

@@ -17,7 +17,7 @@ import           Graphics.Rendering.FreeType.Internal.GlyphSlot
 import           Graphics.Rendering.FreeType.Internal.Library
 import           Graphics.Rendering.FreeType.Internal.PrimitiveTypes
 import           Graphics.Rendering.OpenGL                           hiding (bitmap)
-import           Graphics.Rendering.OpenGL.Raw.Core31                (gl_TEXTURE_2D,glTexParameteri,gl_RED)
+import           Graphics.Rendering.OpenGL.Raw                       (gl_TEXTURE_2D,glTexParameteri,gl_RED)
 import           Graphics.Rendering.OpenGL.Raw.EXT.TextureSwizzle    (gl_TEXTURE_SWIZZLE_G_EXT,gl_TEXTURE_SWIZZLE_B_EXT,gl_TEXTURE_SWIZZLE_A_EXT)
 
 import qualified Data.Map                                            as Map

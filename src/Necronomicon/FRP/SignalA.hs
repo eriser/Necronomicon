@@ -147,7 +147,7 @@ import           Data.STRef
 import qualified Graphics.UI.GLFW                  as GLFW
 -- import qualified Graphics.Rendering.OpenGL.Raw     as GLRaw
 import qualified Data.Vector                       as V
-import qualified Data.Vector.Generic.Mutable       as MV
+-- import qualified Data.Vector.Generic.Mutable       as MV
 import qualified Data.Vector.Storable              as SV
 import qualified Data.Vector.Storable.Mutable      as SMV
 import qualified Data.IntMap                       as IntMap
@@ -214,16 +214,14 @@ instance Functor Signal where
         (xcont, x, uids) <- xsig state
         let fx            = f x
         ref              <- newIORef fx
-        return (cont xcont uids ref, fx, uids)
+        return (cont xcont ref, fx, uids)
         where
-            cont xcont uids ref eid
-                | not $ IntSet.member eid uids = readIORef ref >>= return . NoChange
-                | otherwise                    = xcont eid >>= \xe -> case xe of
-                    NoChange _ -> readIORef ref >>= return . NoChange
-                    Change   x -> do
-                        let fx = f x
-                        writeIORef ref fx
-                        return $ Change fx
+            cont xcont ref eid = xcont eid >>= \xe -> case xe of
+                NoChange _ -> readIORef ref >>= return . NoChange
+                Change   x -> do
+                    let fx = f x
+                    writeIORef ref fx
+                    return $ Change fx
 
 instance Applicative Signal where
     pure                x = Pure x
@@ -354,7 +352,7 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
                 atomically   $ writeTChan eventInbox $ TimeEvent (Time delta) (Time currentTime)
 
                 atomically (takeTMVar (contextBarrier state)) >>= \c -> case c of
-                    GLContext2 -> print "Switching context to rendering thread." >> GLFW.makeContextCurrent (Just window)
+                    GLContext2 -> putStrLn "Switching context to rendering thread." >> GLFW.makeContextCurrent (Just window)
                     _          -> return ()
 
                 -- (g, tree')  <- (\g -> update (g, tree)) . flip gchildren_ mkGameObject . MV.toList <~ readIORef (objectRef state)
@@ -362,9 +360,10 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
                 -- let g = gchildren_ gs mkGameObject
                 -- renderGraphicsG window (sigResources state) False g g tree
                 --Use combination of mvar (for locking) and context switching
-                gstream <- MV.mstream <~ readIORef (renderDataRef state)
+                -- gstream <- MV.mstream <~ readIORef (renderDataRef state)
+                gs <- readIORef (renderDataRef state)
                 cs      <- readIORef (cameraRef state)
-                {-# SCC "mapM__renderWithCameraRaw" #-} mapM_ (renderWithCameraRaw window (sigResources state) gstream) cs
+                {-# SCC "mapM__renderWithCameraRaw" #-} mapM_ (renderWithCameraRaw window (sigResources state) gs) cs
                 atomically $ putTMVar (contextBarrier state) GLContext1
 
                 threadDelay  $ 16667
@@ -403,7 +402,7 @@ necro sig = Signal $ \state -> do
         updateEntity state g = do
             uids <- readIORef (uidRef state)
             atomically (takeTMVar (contextBarrier state)) >>= \c -> case c of
-                GLContext1 -> print "Switching context to processing thread." >> GLFW.makeContextCurrent (Just $ context state)
+                GLContext1 -> putStrLn "Switching context to processing thread." >> GLFW.makeContextCurrent (Just $ context state)
                 _          -> return ()
             model' <- loadNewModel (sigResources state) (model g)
             atomically $ putTMVar (contextBarrier state) GLContext2
@@ -423,18 +422,14 @@ necro sig = Signal $ \state -> do
 
         writeRenderData oref uid g = readIORef oref >>= \vec -> do
             let x | uid < SMV.length vec = do
-                    -- {-# SCC "SMV.unsafeWrite" #-} SMV.unsafeWrite vec uid rd >> {-# SCC "writeIORef_oref" #-} writeIORef oref vec
-                    -- {-# SCC "SMV.unsafeWrite" #-} SMV.unsafeWrite vec uid rd >> {-# SCC "writeIORef_oref" #-} writeIORef oref vec
                     {-# SCC "SMV.unsafeWith" #-} SMV.unsafeWith vec (setRenderDataPtr g)
                     {-# SCC "writeIORef_oref" #-} writeIORef oref vec
                   | otherwise           = do
                       vec' <- SMV.unsafeGrow vec (SMV.length vec)
                       mapM_ (\i -> SMV.unsafeWrite vec' i nullRenderData) [uid..SMV.length vec' - 1]
-                    --   SMV.unsafeWrite vec' uid rd
                       SMV.unsafeWith vec' (setRenderDataPtr g)
                       writeIORef oref vec'
             x
-        -- writeRenderData _ _ _ = return ()
 
 ----------------------------------
 -- Input
@@ -890,7 +885,7 @@ delay initx sig = runST $ do
     return $ Signal $ \state -> unsafeSTToIO (readSTRef sync) >>= \sx -> case sx of
         --Maybe just add every possible event id to delays?
         --It's not really ALL events, so much as all events the signal should already respond to.
-        Just  _ -> return (const $ unsafeSTToIO (readSTRef ref), initx, IntSet.fromList [0..210])
+        Just  _ -> return (const $ unsafeSTToIO (readSTRef ref), initx, IntSet.empty)
         Nothing -> do
             unsafeSTToIO (writeSTRef sync $ Just ())
             (scont, _, uids) <- unSignal sig state
@@ -1027,14 +1022,15 @@ sampleOn asig bsig = Signal $ \state -> do
     ref              <- newIORef b
     sref             <- newIORef b
     let uids          = IntSet.union aids bids
-    return (cont aCont bCont ref sref aids bids, b, uids)
+    return (cont aCont bCont ref sref , b, uids)
     where
-        cont acont bcont ref sref aids bids eid
-            | IntSet.member eid bids = bcont eid >>= \eb -> writeIORef sref (unEvent eb) >> readIORef ref >>= return . NoChange
-            | IntSet.member eid aids = acont eid >>= \ea -> case ea of
-                NoChange _ -> readIORef ref  >>= return . NoChange
+        cont acont bcont ref sref eid = do
+            bcont eid >>= \eb -> case eb of
+                Change b -> writeIORef sref b
+                _        -> return ()
+            acont eid >>= \ea -> case ea of
                 Change   _ -> readIORef sref >>= \b -> writeIORef ref b >> return (Change b)
-            | otherwise              = readIORef ref >>= return . NoChange
+                NoChange _ -> readIORef ref  >>= return . NoChange
 
 count :: Signal a -> Signal Int
 count signal = Signal $ \state -> do
