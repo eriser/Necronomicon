@@ -11,72 +11,131 @@ import Foreign.C.Types
 import Foreign.Marshal.Array
 
 import qualified Graphics.Rendering.OpenGL as GL
+
 -------------------------------------------------------
--- GameObject
+-- Entity
 -------------------------------------------------------
 
--- data Transform  = Transform Vector3 Quaternion Vector3 deriving (Show)
-data GameObject = GameObject {
-    gid      :: !UID,
+data Entity a = Entity {
+    edata    :: a,
+    euid     :: !UID,
     pos      :: !Vector3,
     rot      :: !Quaternion,
-    gscale   :: !Vector3,
+    escale   :: !Vector3,
     collider :: Maybe Collider,
     model    :: Maybe Model,
     camera   :: Maybe Camera,
-    children :: [GameObject]
-} deriving (Show, Eq)
+    children :: [Entity a]
+}
 
-instance Binary GameObject where
-    put (GameObject uid p r s c m cam cs) = put uid >> put p >> put r >> put s >> put c >> put m >> put cam >> put cs
-    get                                   = GameObject <$> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get
+instance Show a => Show (Entity a) where
+    show (Entity d uid p r s c m ca cs) =
+        "Entity{ " ++
+        "edata = " ++ show d ++
+        ", eid = " ++ show uid ++
+        ", pos = " ++ show p ++
+        ", rot = " ++ show r ++
+        ", escale = " ++ show s ++
+        ", collider = " ++ show c ++
+        ", model = " ++ show m ++
+        ", camera = " ++ show ca ++
+        ", children = " ++ show cs ++
+        "}"
+
+instance Functor Entity where
+    fmap f (Entity d uid p r s c m ca cs) = Entity (f d) uid p r s c m ca (map (fmap f) cs)
+
+instance Foldable Entity where
+    foldr f b Entity{ edata = a } = f a b
+
+instance Traversable Entity where
+    sequenceA (Entity d uid p r s c m ca cs) = e' <$> d <*> sequenceA (map sequenceA cs)
+        where
+            e' d' cs' = Entity d' uid p r s c m ca cs'
+
+class Entities s a where
+    type EntityType s a :: *
+    mapEntities :: (Entity (EntityType s a) -> IO (Entity (EntityType s a))) -> s a -> IO (s a)
+
+instance Entities Entity a where
+    type EntityType Entity a = a
+    mapEntities f e = f e
+    {-# INLINE mapEntities #-}
+
+instance Entities [] (Entity a) where
+    type EntityType [] (Entity a) = a
+    mapEntities f es = mapM f es
+    {-# INLINE mapEntities #-}
+
+instance Binary a => Binary (Entity a) where
+    put (Entity ed uid p r s c m cam cs) = put ed >> put uid >> put p >> put r >> put s >> put c >> put m >> put cam >> put cs
+    get                                  = Entity <$> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get
 
 -------------------------------------------------------
--- GameObject API
+-- API
 -------------------------------------------------------
 
-mkGameObject :: GameObject
-mkGameObject = GameObject New 0 identity 1 Nothing Nothing Nothing []
+mkEntity :: a -> Entity a
+mkEntity ed = Entity ed New 0 identity 1 Nothing Nothing Nothing []
 
-rotate :: Vector3 -> GameObject -> GameObject
-rotate (Vector3 x y z) g = g{rot = rot g * fromEuler x y z}
-
-move :: Vector3 -> GameObject -> GameObject
-move dir g = g{pos = pos g + dir}
-
-translate :: Vector3 -> GameObject -> GameObject
--- translate dir g = g{pos = pos g + transformVector (rot g) dir}
-translate dir g = g{pos = pos g + (dir .*. rotFromQuaternion (rot g))}
-
-collisions :: GameObject -> [Collision]
-collisions g
-    | Just c <- collider g = colliderCollisions c
-    | otherwise            = []
-
-gchildren_ :: [GameObject] -> GameObject -> GameObject
-gchildren_ cs (GameObject uid p r s c m cm _) = GameObject uid p r s c m cm cs
-
-rotMat :: GameObject -> Matrix3x3
-rotMat (GameObject _ _ r _ _ _ _ _) = rotFromQuaternion r
-
-transMat :: GameObject -> Matrix4x4
-transMat (GameObject _ p r s _ _ _ _) = trsMatrix p r s
-
-collider_ :: Collider -> GameObject -> GameObject
-collider_ c (GameObject u p r s _ m cm cs) = GameObject u p r s (Just c) m cm cs
-
-gaddChild :: GameObject -> GameObject -> GameObject
-gaddChild g (GameObject u p r s c m cm cs) = GameObject u p r s c m cm (g : cs)
-
-removeChild :: GameObject -> Int -> GameObject
-removeChild (GameObject u p r s c m cm cs) n
-    | null cs2  = GameObject u p r s c m cm cs
-    | otherwise = GameObject u p r s c m cm $ cs1 ++ tail cs2
+--CM: Hand inlining and unboxing this to reduce allocations
+rotate :: Vector3 -> Entity a -> Entity a
+rotate (Vector3 x y z) e@Entity{rot = Quaternion w1 x1 y1 z1} =
+    {-# SCC "rotate" #-} e{rot = {-# SCC "rotate_Quaternion" #-} Quaternion w (w1 * x2 + w2 * x1 + (y1*z2-z1*y2)) (w1 * y2 + w2 * y1 + (z1*x2-x1*z2)) (w1 * z2 + w2 * z1 + (x1*y2-y1*x2))}
     where
-        (cs1, cs2) = splitAt n cs
+        p = degToRad x
+        h = degToRad y
+        b = degToRad z
+        xRotation = p * 0.5
+        yRotation = h * 0.5
+        zRotation = b * 0.5
+        cx = cos xRotation
+        cy = cos yRotation
+        cz = cos zRotation
+        sx = sin xRotation
+        sy = sin yRotation
+        sz = sin zRotation
+        w2 = cx*cy*cz - sx*sy*sz
+        x2 = sx*cy*cz + cx*sy*sz
+        y2 = cx*sy*cz - sx*cy*sz
+        z2 = cx*cy*sz + sx*sy*cz
+        w  = w1 * w2 - (x1 * x2 + y1 * y2 + z1 * z2)
 
-gameObjectToRenderData :: GameObject -> Maybe RenderData
-gameObjectToRenderData !(GameObject _ position rotation scale _ (Just (Model (Mesh (Just loadedMesh) _ _ _ _ _) (Material (Just loadedMaterial) _ _ uns _))) _ _) = Just $
+move :: Vector3 -> Entity a -> Entity a
+move d e@Entity{pos = p} = e{pos = p + d}
+
+translate :: Vector3 -> Entity a -> Entity a
+translate dir e@Entity{pos = p, rot = r} = e{pos = p + (dir .*. rotFromQuaternion r)}
+
+-- collisions :: Entity a -> [Collision]
+-- collisions g
+    -- | Just c <- collider g = colliderCollisions c
+    -- | otherwise            = []
+
+echildren_ :: [Entity a] -> Entity a -> Entity a
+echildren_ cs (Entity d uid p r s c m cm _) = Entity d uid p r s c m cm cs
+
+rotMat :: Entity a -> Matrix3x3
+rotMat Entity{rot = r} = rotFromQuaternion r
+
+transMat :: Entity a -> Matrix4x4
+transMat Entity{pos = p, rot = r, escale = s} = trsMatrix p r s
+
+collider_ :: Collider -> Entity a -> Entity a
+collider_ c e = e{collider = Just c}
+
+gaddChild :: Entity a -> Entity a -> Entity a
+gaddChild g e@Entity{children = cs} = e{children = g : cs }
+
+-- removeChild :: Entity a -> Int -> Entity
+-- removeChild (Entity u p r s c m cm cs) n
+    -- | null cs2  = Entity u p r s c m cm cs
+    -- | otherwise = Entity u p r s c m cm $ cs1 ++ tail cs2
+    -- where
+        -- (cs1, cs2) = splitAt n cs
+
+entityToRenderData :: Entity a -> Maybe RenderData
+entityToRenderData !(Entity _ _ position rotation scale _ (Just (Model (Mesh (Just loadedMesh) _ _ _ _ _) (Material (Just loadedMaterial) _ _ uns _))) _ _) = Just $
     {-# SCC "toRenderData_constructor" #-} RenderData 1 (unsafeCoerce vb) (unsafeCoerce ib) start end count vn vs vp cn cs cp uvn uvs uvp (unsafeCoerce program) (unsafeCoerce vloc) (unsafeCoerce cloc) (unsafeCoerce uloc) mat uniforms mv pr
     where
         (vb, ib, start, end, count, GL.VertexArrayDescriptor vn _ vs vp, GL.VertexArrayDescriptor cn _ cs cp, GL.VertexArrayDescriptor uvn _ uvs uvp) = loadedMesh
@@ -89,10 +148,10 @@ gameObjectToRenderData !(GameObject _ position rotation scale _ (Just (Model (Me
         mkLoadedUniform _                                                            (us, tu) = (us, tu)
         mat                                                                                   = {-# SCC "toRenderData_trsMatrix" #-} trsMatrix position rotation scale
         uniforms                                                                              = {-# SCC "toRenderData_uniforms" #-} fst $ foldr mkLoadedUniform ([], 0) $ zip ulocs uns
-gameObjectToRenderData _ = Nothing
+entityToRenderData _ = Nothing
 
-setRenderDataPtr :: GameObject -> Ptr RenderData -> IO ()
-setRenderDataPtr (GameObject (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !(Vector3 sx sy sz) _ (Just (Model (Mesh (Just loadedMesh) _ _ _ _ _) (Material (Just loadedMaterial) _ _ uns _))) _ _) rdptr = do
+setRenderDataPtr :: Entity a -> Ptr RenderData -> IO ()
+setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !(Vector3 sx sy sz) _ (Just (Model (Mesh (Just loadedMesh) _ _ _ _ _) (Material (Just loadedMaterial) _ _ uns _))) _ _) rdptr = {-# SCC "setRenderDataPtr_do" #-} do
     pokeByteOff ptr 0  (1 :: CInt)
     pokeByteOff ptr 4  (unsafeCoerce vb :: GL.GLuint)
     pokeByteOff ptr 8  (unsafeCoerce ib :: GL.GLuint)
@@ -163,175 +222,5 @@ setRenderDataPtr (GameObject (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z)
             where
                 p = uptr `plusPtr` (i :: Int)
         setUniforms _ _ _ _ = return ()
-        {-# INLINE setUniforms #-}
 setRenderDataPtr _ _ = return ()
 {-# INLINE setRenderDataPtr #-}
-
--------------------------------------------------------
--- Entity
--------------------------------------------------------
-
-data Entity a = Entity {
-    userData   :: a,
-    gameObject :: GameObject
-} deriving (Show, Eq)
-
-instance Functor Entity where
-    fmap f (Entity x g) = Entity (f x) g
-
-class Scene a where
-    mapSM :: (GameObject -> IO GameObject) -> a -> IO a
-
-instance Scene (Entity a) where
-    mapSM f (Entity d g) = Entity d <$> f g
-
-instance Scene [Entity a] where
-    mapSM f es = mapM (\(Entity d g) -> {-# SCC "mapSM" #-} Entity d <$> f g) es
-
--- instance Scene (Entity a) where
-
--- instance Binary a => Binary (Entity a) where
-    -- put (Entity a g) = put a >> put g
-    -- get              = Entity <$> get <*> get
--- class Scene a where
---     getGameObjects :: a -> [GameObject] -> [GameObject]
---     setGameObjects :: a -> [GameObject] -> (a, [GameObject])
---
--- instance Scene (Entity a) where
---     getGameObjects (Entity _ g) gs = g : gs
---     setGameObjects (Entity a g) [] = (Entity a g, [])
---     setGameObjects (Entity a _) gs = (Entity a $ head gs, tail gs)
---
--- instance Scene a => Scene [a] where
---     getGameObjects es gs = foldr (\e gs' -> getGameObjects e gs') gs es
---     setGameObjects es gs = fmap reverse $ foldl foldE ([], gs) es
---         where
---             foldE (es', gs') e = (e' : es', gs'')
---                 where
---                     (e', gs'') = setGameObjects e gs'
---
--- instance (Scene a, Scene b) => Scene (a, b) where
---     getGameObjects (e1, e2) gs  = getGameObjects e1 $ getGameObjects e2 gs
---     setGameObjects (e1, e2) gs1 = ((e1', e2'), gs3)
---         where
---             (e1', gs2) = setGameObjects e1 gs1
---             (e2', gs3) = setGameObjects e2 gs2
---
--- instance (Scene a, Scene b, Scene c) => Scene (a, b, c) where
---     getGameObjects (e1, e2, e3) gs  = getGameObjects e1 $ getGameObjects e2 $ getGameObjects e3 gs
---     setGameObjects (e1, e2, e3) gs1 = ((e1', e2', e3'), gs4)
---         where
---             (e1', gs2) = setGameObjects e1 gs1
---             (e2', gs3) = setGameObjects e2 gs2
---             (e3', gs4) = setGameObjects e3 gs3
---
--- instance (Scene a, Scene b, Scene c, Scene d) => Scene (a, b, c, d) where
---     getGameObjects (e1, e2, e3, e4) gs  = getGameObjects e1 $ getGameObjects e2 $ getGameObjects e3 $ getGameObjects e4 gs
---     setGameObjects (e1, e2, e3, e4) gs1 = ((e1', e2', e3', e4'), gs5)
---         where
---             (e1', gs2) = setGameObjects e1 gs1
---             (e2', gs3) = setGameObjects e2 gs2
---             (e3', gs4) = setGameObjects e3 gs3
---             (e4', gs5) = setGameObjects e4 gs4
---
--- instance (Scene a, Scene b, Scene c, Scene d, Scene e) => Scene (a, b, c, d, e) where
---     getGameObjects (e1, e2, e3, e4, e5) gs  = getGameObjects e1 $ getGameObjects e2 $ getGameObjects e3 $ getGameObjects e4 $ getGameObjects e5 gs
---     setGameObjects (e1, e2, e3, e4, e5) gs1 = ((e1', e2', e3', e4', e5'), gs6)
---         where
---             (e1', gs2) = setGameObjects e1 gs1
---             (e2', gs3) = setGameObjects e2 gs2
---             (e3', gs4) = setGameObjects e3 gs3
---             (e4', gs5) = setGameObjects e4 gs4
---             (e5', gs6) = setGameObjects e5 gs5
---
--- instance (Scene a, Scene b, Scene c, Scene d, Scene e, Scene f) => Scene (a, b, c, d, e, f) where
---     getGameObjects (e1, e2, e3, e4, e5, e6) gs  = getGameObjects e1 $ getGameObjects e2 $ getGameObjects e3 $ getGameObjects e4 $ getGameObjects e5 $ getGameObjects e6 gs
---     setGameObjects (e1, e2, e3, e4, e5, e6) gs1 = ((e1', e2', e3', e4', e5', e6'), gs7)
---         where
---             (e1', gs2) = setGameObjects e1 gs1
---             (e2', gs3) = setGameObjects e2 gs2
---             (e3', gs4) = setGameObjects e3 gs3
---             (e4', gs5) = setGameObjects e4 gs4
---             (e5', gs6) = setGameObjects e5 gs5
---             (e6', gs7) = setGameObjects e6 gs6
---
--- instance (Scene a, Scene b, Scene c, Scene d, Scene e, Scene f, Scene g) => Scene (a, b, c, d, e, f, g) where
---     getGameObjects (e1, e2, e3, e4, e5, e6, e7) gs  = getGameObjects e1 $ getGameObjects e2 $ getGameObjects e3 $ getGameObjects e4 $ getGameObjects e5 $ getGameObjects e6 $ getGameObjects e7 gs
---     setGameObjects (e1, e2, e3, e4, e5, e6, e7) gs1 = ((e1', e2', e3', e4', e5', e6', e7'), gs8)
---         where
---             (e1', gs2) = setGameObjects e1 gs1
---             (e2', gs3) = setGameObjects e2 gs2
---             (e3', gs4) = setGameObjects e3 gs3
---             (e4', gs5) = setGameObjects e4 gs4
---             (e5', gs6) = setGameObjects e5 gs5
---             (e6', gs7) = setGameObjects e6 gs6
---             (e7', gs8) = setGameObjects e7 gs7
---
--- instance (Scene a, Scene b, Scene c, Scene d, Scene e, Scene f, Scene g, Scene h) => Scene (a, b, c, d, e, f, g, h) where
---     getGameObjects (e1, e2, e3, e4, e5, e6, e7, e8) gs  =
---         getGameObjects e1 $
---         getGameObjects e2 $
---         getGameObjects e3 $
---         getGameObjects e4 $
---         getGameObjects e5 $
---         getGameObjects e6 $
---         getGameObjects e7 $
---         getGameObjects e8 gs
---     setGameObjects (e1, e2, e3, e4, e5, e6, e7, e8) gs1 = ((e1', e2', e3', e4', e5', e6', e7', e8'), gs9)
---         where
---             (e1', gs2) = setGameObjects e1 gs1
---             (e2', gs3) = setGameObjects e2 gs2
---             (e3', gs4) = setGameObjects e3 gs3
---             (e4', gs5) = setGameObjects e4 gs4
---             (e5', gs6) = setGameObjects e5 gs5
---             (e6', gs7) = setGameObjects e6 gs6
---             (e7', gs8) = setGameObjects e7 gs7
---             (e8', gs9) = setGameObjects e8 gs8
---
--- instance (Scene a, Scene b, Scene c, Scene d, Scene e, Scene f, Scene g, Scene h, Scene i) => Scene (a, b, c, d, e, f, g, h, i) where
---     getGameObjects (e1, e2, e3, e4, e5, e6, e7, e8, e9) gs  =
---         getGameObjects e1 $
---         getGameObjects e2 $
---         getGameObjects e3 $
---         getGameObjects e4 $
---         getGameObjects e5 $
---         getGameObjects e6 $
---         getGameObjects e7 $
---         getGameObjects e8 $
---         getGameObjects e9 gs
---     setGameObjects (e1, e2, e3, e4, e5, e6, e7, e8, e9) gs1 = ((e1', e2', e3', e4', e5', e6', e7', e8', e9'), gs10)
---         where
---             (e1', gs2)  = setGameObjects e1 gs1
---             (e2', gs3)  = setGameObjects e2 gs2
---             (e3', gs4)  = setGameObjects e3 gs3
---             (e4', gs5)  = setGameObjects e4 gs4
---             (e5', gs6)  = setGameObjects e5 gs5
---             (e6', gs7)  = setGameObjects e6 gs6
---             (e7', gs8)  = setGameObjects e7 gs7
---             (e8', gs9)  = setGameObjects e8 gs8
---             (e9', gs10) = setGameObjects e9 gs9
---
--- instance (Scene a, Scene b, Scene c, Scene d, Scene e, Scene f, Scene g, Scene h, Scene i, Scene j) => Scene (a, b, c, d, e, f, g, h, i, j) where
---     getGameObjects (e1, e2, e3, e4, e5, e6, e7, e8, e9, e10) gs  =
---         getGameObjects e1 $
---         getGameObjects e2 $
---         getGameObjects e3 $
---         getGameObjects e4 $
---         getGameObjects e5 $
---         getGameObjects e6 $
---         getGameObjects e7 $
---         getGameObjects e8 $
---         getGameObjects e9 $
---         getGameObjects e10 gs
---     setGameObjects (e1, e2, e3, e4, e5, e6, e7, e8, e9, e10) gs1 = ((e1', e2', e3', e4', e5', e6', e7', e8', e9', e10'), gs11)
---         where
---             (e1',  gs2)  = setGameObjects e1  gs1
---             (e2',  gs3)  = setGameObjects e2  gs2
---             (e3',  gs4)  = setGameObjects e3  gs3
---             (e4',  gs5)  = setGameObjects e4  gs4
---             (e5',  gs6)  = setGameObjects e5  gs5
---             (e6',  gs7)  = setGameObjects e6  gs6
---             (e7',  gs8)  = setGameObjects e7  gs7
---             (e8',  gs9)  = setGameObjects e8  gs8
---             (e9',  gs10) = setGameObjects e9  gs9
---             (e10', gs11) = setGameObjects e10 gs10

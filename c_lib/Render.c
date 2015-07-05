@@ -119,6 +119,7 @@ void draw_render_data( render_data_t* render_data, GLuint length
     render_data_t rd;
     uniform_t uniform;
     GLint prev_index_buffer = 0;
+    GLuint prev_program = 0;
 
     for(i = 0; i < length; i++)
     {
@@ -129,7 +130,12 @@ void draw_render_data( render_data_t* render_data, GLuint length
         }
 
         rd = *render_data;
-        glUseProgram(rd.shader_program);
+        if(rd.shader_program != prev_program)
+        {
+            glUseProgram(rd.shader_program);
+            prev_program = rd.shader_program;
+        }
+
         uniforms = rd.uniforms;
 
         for(u = 0; u < rd.uniform_length; u++)

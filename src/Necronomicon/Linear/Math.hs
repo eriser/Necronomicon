@@ -23,12 +23,15 @@ log2 = log 2
 --Generic Math functions
 radToDeg :: Double -> Double
 radToDeg r = (r * 360) / twoPi
+{-# INLINE radToDeg #-}
 
 degToRad :: Double -> Double
 degToRad = (* 0.0174532925)
+{-# INLINE degToRad #-}
 
 linearInterpolation :: Double -> Double -> Double -> Double
 linearInterpolation from to delta = (1-delta) * from + delta * to;
+{-# INLINE linearInterpolation #-}
 
 toGLDouble :: Double -> GL.GLdouble
 toGLDouble = realToFrac
@@ -47,6 +50,8 @@ nearZero v = v < epsilon
 
 clamp :: Ord a => a -> a -> a -> a
 clamp mn mx x = min mx (max x mn)
+{-# INLINE clamp #-}
 
 floatRem :: RealFrac a => a -> a -> a
 floatRem y x = x - (y * (fromIntegral (truncate (x/y) :: Int)))
+{-# INLINE floatRem #-}

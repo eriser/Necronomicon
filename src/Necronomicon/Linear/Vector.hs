@@ -174,7 +174,8 @@ instance LinearMath Vector3 Double where
     type Return Vector3 Double    = Vector3
     (.+.) v1 v2    = apply (+) v1 v2
     (.-.) v1 v2    = apply (-) v1 v2
-    (.*.) v1 v2    = apply (*) v1 v2
+    (.*.) (Vector3 xx yy zz) v2 = Vector3 (xx * v2) (yy * v2) (zz * v2)
+    {-# INLINE (.*.) #-}
     (./.) v1 v2    = apply (/) v1 v2
     apply f (Vector3 xx yy zz) x = Vector3 (f xx x) (f yy x) (f zz x)
 

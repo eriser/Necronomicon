@@ -8,6 +8,7 @@ module Necronomicon.Utility (hash,
                              showHex,
                              chunksOf,
                              filterMap,
+                             filterMap',
                              dot2,
                              foldrM,
                              offsetPtr,
@@ -78,11 +79,19 @@ chunksOf n xs =
     in   ys : chunksOf n zs
 
 filterMap :: (a -> Maybe b) -> [a] -> [b]
-filterMap f xs = foldr collapse [] xs
+filterMap f xs = {-# SCC "filterMap" #-} foldr collapse [] xs
     where
-        collapse !x !xs' = case f x of
+        collapse x xs' = case f x of
             Just x' -> x' : xs'
             Nothing -> xs'
+
+filterMap' :: (a -> Maybe b) -> [a] -> [b]
+filterMap' f xs = {-# SCC "filterMap" #-} go xs []
+    where
+        go []        xs' = xs'
+        go (x : mxs) xs' = case f x of
+            Just x' -> go mxs (x' : xs')
+            Nothing -> go mxs xs'
 
 foldrM :: Monad m => (a -> b -> m b) -> b -> [a] -> m b
 foldrM _ d []     = return d
