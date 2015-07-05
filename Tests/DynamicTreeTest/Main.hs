@@ -1,5 +1,4 @@
 import Necronomicon.FRP.SignalA
--- import qualified Necronomicon.EntityVector as EV
 import GHC.Generics
 import Data.Binary
 
