@@ -6,7 +6,6 @@
 
     zapgremlins in filters to prevent blow ups
     break up code into several files
-    remove calc rate from ugen struct, it's not being used, nor do I predict that it will be
     random seeding?
     Consider changing the free_synths stack to be a queue with a minimum size.
 
@@ -31,7 +30,7 @@
     Compressor/Expander
     Chorus/Flanger/Phaser
     Trigger UGens
-    Sample Playback / Buffer UGens
+    Sample Playback / Record / Buffer UGens
     Correct Groups implementation
     Wave Shaper
     Wave Tables

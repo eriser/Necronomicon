@@ -1473,29 +1473,29 @@ compileUGenWithConstructorArgs (MultiOutUGenFunc (MultiOutNumChannels numUGenCha
     let genKey n = show (MultiOutUGenFunc (MultiOutNumChannels numUGenChannels) (MultiOutChannelNumber n) ugenChannelFunc)
     wires <- mapM (\_ -> nextWireIndex) channelNumbers
     wireBufs <- liftIO $ newArray wires
-    let mkCUGen (UGenFunc _ calc cons decn _) = (CUGen calc cons decn nullPtr conArgs inputs wireBufs (fromEnum AudioRate) 0)
+    let mkCUGen u@(UGenFunc _ calc cons decn _) = (CUGen calc cons decn nullPtr conArgs inputs wireBufs (fromEnum $ ugenRate u) 0)
         mkCUGen _ = (CUGen nullFunPtr nullFunPtr nullFunPtr nullPtr conArgs inputs wireBufs (fromEnum AudioRate) 0)  -- should never be reached
     ugenGraph <- getGraph
     setGraph ((mkCUGen ugenChannelFunc) : ugenGraph) -- work back to front to use cons over ++, reversed at the very end in runCompileSynthDef
     -- compiles and caches every channel of the MultiOutUGenFunc all at once
     mapM_ (\(wire, wireChannelNumber) -> getTable >>= \outputTable -> setTable (M.insert (genKey wireChannelNumber) wire outputTable)) $ zip wires channelNumbers
     return $ wires !! channelNumber
-compileUGenWithConstructorArgs (UGenFunc _ calc cons decn _) conArgs args key = do
+compileUGenWithConstructorArgs u@(UGenFunc _ calc cons decn _) conArgs args key = do
     inputs <- liftIO (newArray args)
     wire <- nextWireIndex
     wireBuf <- liftIO $ new wire
-    addUGen key (CUGen calc cons decn nullPtr conArgs inputs wireBuf (fromEnum AudioRate) 0) wire
+    addUGen key (CUGen calc cons decn nullPtr conArgs inputs wireBuf (fromEnum $ ugenRate u) 0) wire
     return wire
 
 compileUGen :: UGenChannel -> [CUInt] -> String -> Compiled CUInt
 compileUGen (UGenFunc (LocalIn feedBus) _ _ _ _) _ _ = do
     wire <- getOrAddCompiledFeedWire feedBus
     return wire
-compileUGen (UGenFunc (LocalOut feedBus) calc cons decn _) args key = do
+compileUGen u@(UGenFunc (LocalOut feedBus) calc cons decn _) args key = do
     inputs <- liftIO (newArray args)
     wire <- getOrAddCompiledFeedWire feedBus
     wireBuf <- liftIO $ new wire
-    addUGen key (CUGen calc cons decn nullPtr nullPtr inputs wireBuf (fromEnum AudioRate) 0) wire
+    addUGen key (CUGen calc cons decn nullPtr nullPtr inputs wireBuf (fromEnum $ ugenRate u) 0) wire
     return wire
 compileUGen (UGenNum d) _ key = do
     wire <- nextWireIndex
