@@ -3,7 +3,7 @@ module Necronomicon.Linear.GeoPrimitive where
 import Necronomicon.Linear.Math
 import Necronomicon.Linear.Matrix
 import Necronomicon.Linear.Vector
-import Test.QuickCheck
+-- import Test.QuickCheck
 import Data.Binary
 
 ---------------------------------------
@@ -33,15 +33,15 @@ instance Binary Sphere where
     put (Sphere c r) = put c >> put r
     get              = Sphere <$> get <*> get
 
-instance Arbitrary AABB where
-    arbitrary = do
-        mnx <- choose ((-10000), 10000)
-        mny <- choose ((-10000), 10000)
-        mnz <- choose ((-10000), 10000)
-        mxx <- choose ((-10000), 10000)
-        mxy <- choose ((-10000), 10000)
-        mxz <- choose ((-10000), 10000)
-        return $ AABB (Vector3 mnx mny mnz) (Vector3 mxx mxy mxz)
+-- instance Arbitrary AABB where
+--     arbitrary = do
+--         mnx <- choose ((-10000), 10000)
+--         mny <- choose ((-10000), 10000)
+--         mnz <- choose ((-10000), 10000)
+--         mxx <- choose ((-10000), 10000)
+--         mxy <- choose ((-10000), 10000)
+--         mxz <- choose ((-10000), 10000)
+--         return $ AABB (Vector3 mnx mny mnz) (Vector3 mxx mxy mxz)
 
 instance GeoPrimitive AABB where
     maximalPoint (AABB (Vector3 mnx mny mnz) (Vector3 mxx mxy mxz)) _ (Vector3 dx dy dz) = Vector3 ax ay az
