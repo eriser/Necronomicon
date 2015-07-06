@@ -8822,7 +8822,6 @@ double* out0 = UGEN_OUTPUT_BUFFER(u, 0);            \
 double* out1 = UGEN_OUTPUT_BUFFER(u, 1);            \
 double x, delta, pos, ampL, ampR;                   \
 uint32_t index1, index2;                            \
-double cos1, cos2, cos3, cos4;                      \
 CONTROL_ARGS                                        \
 AUDIO_LOOP(                                         \
     AUDIO_ARGS                                      \
@@ -8832,7 +8831,7 @@ AUDIO_LOOP(                                         \
 
 /* range is assumed to be -1 to 1 */
 #define PAN_CALC_LR_AMPS                            \
-pos = (pos + 1) * (double) PAN_HALF_TABLE_SIZE;     \
+pos = (pos + 1) * (double) PAN_QUATER_TABLE_SIZE;   \
 index1 = pos;                                       \
 index2 = pos + PAN_HALF_TABLE_SIZE;                 \
 ampL = pan_table[index1 & PAN_TABLE_SIZE_MASK];     \
