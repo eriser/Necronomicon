@@ -138,6 +138,7 @@ class LinearMath a b where
     (./.)              :: a -> b -> Return a b
     apply              :: (Double -> Double -> Double) -> a -> b -> Return a b
 
+--TODO: Do hand implementations for all these math operations, and add inline pragmas
 instance LinearMath Double Vector2 where
     type Return Double Vector2    = Vector2
     (.+.) v1 v2    = apply (+) v1 v2

@@ -230,9 +230,7 @@ executable DynamicTreeTest
     default-extensions: DeriveGeneric
     build-depends:    base             == 4.*,
                       Necronomicon,
-                      QuickCheck,
-                      binary,
-                      bytestring
+                      binary
 
 executable GenerativeTest
     main-is:          Main.hs

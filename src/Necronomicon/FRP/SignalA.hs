@@ -96,7 +96,6 @@ module Necronomicon.FRP.SignalA (
     foldp,
     folds,
     foldn,
-    foldns,
     -- combine,
     filterIf,
     filterWhen,
@@ -140,29 +139,25 @@ import Necronomicon.Physics
 ------------------------------------------------------
 import           Control.Concurrent
 import           Control.Concurrent.STM
--- import           Data.Binary
 import           Data.IORef
 import           Control.Monad.ST
 import           Control.Monad.ST.Unsafe
 import           Data.STRef
+import           Data.Monoid
+import           Control.Applicative
+import           Control.Monad
 import qualified Graphics.UI.GLFW                  as GLFW
--- import qualified Graphics.Rendering.OpenGL.Raw     as GLRaw
 import qualified Data.Vector                       as V
--- import qualified Data.Vector.Mutable               as MV
 import qualified Data.Vector.Storable              as SV
 import qualified Data.Vector.Storable.Mutable      as SMV
 import qualified Data.IntMap                       as IntMap
 import qualified Data.IntSet                       as IntSet
-import           Data.Monoid
-import           Control.Applicative
-import           Control.Monad
 
-import qualified Necronomicon.EntityVector         as EV
-import qualified Necronomicon.Physics.DynamicTree  as DynTree
 import           Necronomicon.Graphics
 import           Necronomicon.Linear
 import           Necronomicon.Utility
 import           Necronomicon.Game
+import qualified Necronomicon.Physics.DynamicTree  as DynTree
 ------------------------------------------------------
 
 ----------------------------------
@@ -974,9 +969,7 @@ folds f b inputSig = stateSig
     where
         stateSig = delay b $ f inputSig stateSig
 
-foldns :: (input -> EV.EntityVector a -> EV.EntityVector a) -> [Entity a] -> Signal input -> Signal (EV.EntityVector a)
-foldns = undefined
-
+--Look into possible mult-threading here???
 foldn :: Entities entities a => (input -> entities a -> entities a) -> entities a -> Signal input -> Signal (entities a)
 foldn f scene input = sceneSig
     where
