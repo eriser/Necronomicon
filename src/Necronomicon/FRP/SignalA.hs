@@ -4,6 +4,8 @@ module Necronomicon.FRP.SignalA (
     (<~),
     (~~),
     (~>),
+    audioTexture,
+    play,
     Time,
     tick,
     delay,
@@ -146,6 +148,7 @@ import           Data.STRef
 import           Data.Monoid
 import           Control.Applicative
 import           Control.Monad
+import           Control.Monad.Trans               (liftIO)
 import qualified Graphics.UI.GLFW                  as GLFW
 import qualified Data.Vector                       as V
 import qualified Data.Vector.Storable              as SV
@@ -157,6 +160,9 @@ import           Necronomicon.Graphics
 import           Necronomicon.Linear
 import           Necronomicon.Utility
 import           Necronomicon.Game
+-- import           Necronomicon.Patterns             (Pattern (..))
+-- import           Necronomicon.Runtime
+-- import           Necronomicon.UGen
 import qualified Necronomicon.Physics.DynamicTree  as DynTree
 ------------------------------------------------------
 
@@ -436,6 +442,7 @@ data SignalState = SignalState
                  , context        :: GLFW.Window
                  , renderDataRef  :: IORef (SMV.IOVector RenderData)
                  , uidRef         :: IORef [Int]
+                 , sidRef         :: IORef [Int]
                  , cameraRef      :: IORef (IntMap.IntMap (Matrix4x4, Camera))
                  , runTimeRef     :: IORef Time
                  , deltaTimeRef   :: IORef Time
@@ -443,22 +450,31 @@ data SignalState = SignalState
                  , mouseClickRef  :: IORef Bool
                  , keyboardRef    :: IORef (IntMap.IntMap Bool)
                  , dimensionsRef  :: IORef (Double, Double)
+                 , necroVars      :: NecroVars
                  , sigResources   :: Resources }
 
 mkSignalState :: GLFW.Window -> (Double, Double) -> IO SignalState
 mkSignalState w2 dims = SignalState
-                  <~ atomically (newTMVar GLContext1)
-                  ~~ return w2
-                  ~~ (SV.thaw (SV.fromList (replicate 16 nullRenderData)) >>= newIORef)
-                  ~~ newIORef [0..]
-                  ~~ newIORef IntMap.empty
-                  ~~ newIORef 0
-                  ~~ newIORef 0
-                  ~~ newIORef (0, 0)
-                  ~~ newIORef False
-                  ~~ newIORef IntMap.empty
-                  ~~ newIORef dims
-                  ~~ mkResources
+                     <~ atomically (newTMVar GLContext1)
+                     ~~ return w2
+                     ~~ (SV.thaw (SV.fromList (replicate 16 nullRenderData)) >>= newIORef)
+                     ~~ newIORef [0..]
+                     ~~ newIORef [0..]
+                     ~~ newIORef IntMap.empty
+                     ~~ newIORef 0
+                     ~~ newIORef 0
+                     ~~ newIORef (0, 0)
+                     ~~ newIORef False
+                     ~~ newIORef IntMap.empty
+                     ~~ newIORef dims
+                     ~~ mkNecroVars
+                     ~~ mkResources
+
+nextStateID :: SignalState -> IO Int
+nextStateID state = do
+    (sid : sids) <- readIORef (sidRef state)
+    writeIORef (sidRef state) sids
+    return sid
 
 data InputEvent = TimeEvent        Time Time
                 | MouseEvent      (Double, Double)
@@ -1091,3 +1107,101 @@ sigPrint sig = Signal $ \state -> do
         cont scont eid = scont eid >>= \se -> case se of
             NoChange _ -> return $ NoChange ()
             Change   s -> print s >> return (Change ())
+
+
+---------------------------------------------
+-- Sound
+---------------------------------------------
+
+--consider dynamic texture constructor similar to dynamic mkMesh?
+audioTexture :: Int -> Signal Texture
+audioTexture index
+    | index < 8 = Signal $ \_ -> return (\eid -> if eid == 200 then return $ Change $ AudioTexture index else return $ NoChange $ AudioTexture index, AudioTexture index, IntSet.singleton 200)
+    | otherwise = pure EmptyTexture
+
+--Need to network this shit
+playSynth' :: UGenType a => Signal Bool -> a -> [Signal Double] -> Signal ()
+playSynth' playSig u argSigs = Signal $ \state -> do
+    (pCont,  _, pids) <- unSignal playSig state
+    (aConts, _, aids) <- unzip3 <~ mapM (\a -> unSignal a state) argSigs
+    synthRef  <- newIORef Nothing
+    synthName <- nextStateID state ~> \uid -> "~p" ++ show uid
+    _         <- runNecroState (compileSynthDef synthName u) (necroVars state)
+    putStrLn $ "Compiling synthDef: " ++ synthName
+
+    return (cont pCont aConts synthRef synthName (necroVars state), (), foldr IntSet.union pids aids)
+    where
+        cont pCont aConts synthRef synthName sNecroVars eid = pCont eid >>= \p -> case p of
+            Change   p'  -> mapM (\f -> unEvent <~ f eid) aConts >>= \args -> runNecroState (playStopSynth args p' synthRef synthName) sNecroVars >>= \(e,_) -> return e
+            NoChange _   -> readIORef synthRef >>= \s -> case s of
+                Nothing  -> return $ NoChange ()
+                Just  s' -> foldM (\i f -> updateArg i f s' sNecroVars eid >> return (i+1)) 0 aConts >> return (NoChange ())
+
+        updateArg index aCont synth sNecroVars eid = aCont eid >>= \a -> case a of
+            NoChange _ -> return ()
+            Change   v -> runNecroState (setSynthArg synth index (toRational v)) sNecroVars >> return ()
+
+        playStopSynth args shouldPlay synthRef synthName = liftIO (readIORef synthRef) >>= \ms -> case (ms,shouldPlay) of
+            (Nothing   ,True )  -> playSynth synthName (map toRational args) >>= \s -> liftIO (writeIORef synthRef $ Just s) >> return (Change ())
+            (Just synth,False)  -> stopSynth synth                           >>        liftIO (writeIORef synthRef  Nothing) >> return (Change ())
+            _                   -> return $ NoChange ()
+
+--Maybe this can be done recursively without type families?
+class Play a where
+    type PlayRet a :: *
+    play :: Signal Bool -> a -> PlayRet a
+
+instance Play UGen where
+    type PlayRet UGen =
+        Signal ()
+    play playSig synth = playSynth' playSig synth []
+
+instance Play (UGen -> UGen) where
+    type PlayRet (UGen -> UGen) =
+        Signal Double -> Signal ()
+    play playSig synth x = playSynth' playSig synth [x]
+
+instance Play (UGen -> UGen -> UGen) where
+    type PlayRet (UGen -> UGen -> UGen) =
+        Signal Double -> Signal Double -> Signal ()
+    play playSig synth x y = playSynth' playSig synth [x,y]
+
+instance Play (UGen -> UGen -> UGen -> UGen) where
+    type PlayRet (UGen -> UGen -> UGen -> UGen) =
+        Signal Double -> Signal Double -> Signal Double -> Signal ()
+    play playSig synth x y z = playSynth' playSig synth [x,y,z]
+
+instance Play (UGen -> UGen -> UGen -> UGen -> UGen) where
+    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    play playSig synth x y z w = playSynth' playSig synth [x,y,z,w]
+
+instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
+    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    play playSig synth x y z w p = playSynth' playSig synth [x,y,z,w,p]
+
+instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
+    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    play playSig synth x y z w p q = playSynth' playSig synth [x,y,z,w,p,q]
+
+instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
+    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    play playSig synth x y z w p q s = playSynth' playSig synth [x,y,z,w,p,q,s]
+
+instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
+    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    play playSig synth x y z w p q s t = playSynth' playSig synth [x,y,z,w,p,q,s,t]
+
+instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
+    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    play playSig synth x y z w p q s t u = playSynth' playSig synth [x,y,z,w,p,q,s,t,u]
+
+instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
+    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    play playSig synth x y z w p q s t u v = playSynth' playSig synth [x,y,z,w,p,q,s,t,u,v]
