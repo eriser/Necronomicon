@@ -4,7 +4,6 @@
 
     To Do:
 
-    Fix pluck (it's very broken...)
     zapgremlins in filters to prevent blow ups
     break up code into several files
     remove calc rate from ugen struct, it's not being used, nor do I predict that it will be
@@ -21,6 +20,8 @@
         burst noise
         Diamond square (plasma)
 
+    bit twiddling ugens (support for Data.Bits type class)
+    beat based ugens (bseq, blace, brand, etc...)
     better line and xline implementations (with range arguments)
     Other env ugens like adr, adsr, etc...
     glitchy oscillators, with table range and maybe phase multiplier? Is this doable with just an osc ugen?
@@ -36,10 +37,10 @@
     Wave Tables
     Pitch Detection
     Zero Crossing
-    YiG Gens
+    Yig Gens
     Wave Terrain (3D Wave terrain? 1D Wave Terrain? 4D? ND?)
     basic filters (One pole, two pole, zero, HZPF, integrator)
-    demand style ugens (seq, etc...)
+    demand style ugens (dseq, drand, etc...)
 
     Fix small block size, may require a more optimized clear_necronomicon_buses()
     MIDI support
@@ -117,7 +118,7 @@ uint32_t UINT_SIZE = sizeof(uint32_t);
 #define TABLE_SIZE 65536
 #define TABLE_SIZE_MASK 65535
 #define DOUBLE_TABLE_SIZE 65536.0
-double RECIP_TABLE_SIZE = 1.0 / (double) TABLE_SIZE;
+double RECIP_TABLE_SIZE = 1.0 / DOUBLE_TABLE_SIZE;
 uint32_t HALF_TABLE_SIZE = TABLE_SIZE / 2;
 uint32_t QUATER_TABLE_SIZE = TABLE_SIZE / 4;
 double sine_table[TABLE_SIZE];
@@ -128,7 +129,8 @@ double tanh_table[TABLE_SIZE];
 
 #define PAN_TABLE_SIZE 4096
 #define PAN_TABLE_SIZE_MASK 4095
-double PAN_RECIP_TABLE_SIZE = 1.0 / (double) TABLE_SIZE;
+#define DOUBLE_PAN_TABLE_SIZE 4096.0
+double PAN_RECIP_TABLE_SIZE = 1.0 / DOUBLE_PAN_TABLE_SIZE;
 uint32_t PAN_HALF_TABLE_SIZE = PAN_TABLE_SIZE / 2;
 uint32_t PAN_QUATER_TABLE_SIZE = PAN_TABLE_SIZE / 4;
 double pan_table[PAN_TABLE_SIZE];
@@ -638,7 +640,7 @@ static inline void process_synth(synth_node* synth)
     {
         // find the current frame. jack_time_t is platform dependant and sometimes signed or unsigned.
         // So let's convert to a type larger enough to contain all positive values from a uint_64_t but also supports negatives.
-        long long time_dif = (long long) synth->time - (long long) current_cycle_usecs;
+        __int128_t time_dif = (__int128_t) synth->time - (__int128_t) current_cycle_usecs;
         _start_frame = time_dif <= 0 ? 0 : ((long double) time_dif * recip_usecs_per_frame); // Convert from microseconds to frames
         synth->time = 0;
     }
@@ -1722,8 +1724,8 @@ void shutdown_necronomicon()
 // UGens
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-#define MAX( a, b ) ( ( a > b) ? a : b )
-#define MIN( a, b ) ( ( a < b) ? a : b )
+#define MAX(a, b) ((a > b) ? a : b)
+#define MIN(a, b) ((a < b) ? a : b)
 
 #define LINEAR_INTERP(A, B, DELTA) (A + DELTA * (B - A))
 
