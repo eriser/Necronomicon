@@ -6,7 +6,6 @@
 
     zapgremlins in filters to prevent blow ups
     break up code into several files
-    random seeding?
     Consider changing the free_synths stack to be a queue with a minimum size.
 
     Various Noise ugens
@@ -40,6 +39,7 @@
     Wave Terrain (3D Wave terrain? 1D Wave Terrain? 4D? ND?)
     basic filters (One pole, two pole, zero, HZPF, integrator)
     demand style ugens (dseq, drand, etc...)
+    random seeding
 
     Fix small block size, may require a more optimized clear_necronomicon_buses()
     MIDI support
@@ -992,7 +992,7 @@ bool hash_table_remove(hash_table table, synth_node* node)
 
     else
     {
-        printf("hash_table_remove: found_node %p != node %p", found_node, node);
+        printf("hash_table_remove: found_node %p != node %p\n", found_node, node);
         return false;
     }
 }
@@ -1010,7 +1010,7 @@ synth_node* hash_table_lookup(hash_table table, uint32_t key)
             if (table[slot]->key == key)
                 return table[slot];
             else
-                printf("Found synth node in hash_table_lookup, but not the one we're after. Looking up node ID %u but found %u.", key, table[slot]->key);
+                printf("Found synth node in hash_table_lookup, but not the one we're after. Looking up node ID %u but found %u.\n", key, table[slot]->key);
         }
 
         ++i;
@@ -1327,7 +1327,7 @@ void stop_synth(uint32_t id)
 
     else
     {
-        printf("stopSynth: Node ID %u not found. ", id);
+        printf("stopSynth: Node ID %u not found.\n", id);
         print_node_alive_status(node);
     }
 }
@@ -1344,7 +1344,7 @@ void send_set_synth_arg(uint32_t id, double argument, uint32_t arg_index)
 
     else
     {
-        printf("setSynthArg: Node ID %u not found. ", id);
+        printf("setSynthArg: Node ID %u not found.\n", id);
         print_node_alive_status(synth);
     }
 }
@@ -1365,7 +1365,7 @@ void send_set_synth_args(uint32_t id, double* arguments, uint32_t num_arguments)
 
     else
     {
-        printf("setSynthArgs: Node ID %u not found. ", id);
+        printf("setSynthArgs: Node ID %u not found.\n", id);
         print_node_alive_status(synth);
     }
 }
@@ -1684,7 +1684,7 @@ void start_rt_runtime(const int8_t* resources_path)
 
     if (jack_activate(client))
     {
-        fprintf(stderr, "cannot activate client");
+        fprintf(stderr, "cannot activate client\n");
         exit (1);
     }
 
@@ -3663,7 +3663,7 @@ void print_node(synth_node* node)
                node->previous_alive_status,
                node->alive_status);
     else
-        printf("NULL");
+        printf("NULL\n");
 }
 
 void print_list(node_list list)
@@ -3722,6 +3722,8 @@ void sort_and_print_list(node_list list)
 void test_list()
 {
     scheduled_node_list = new_node_list();
+    synth_table = hash_table_new();
+
     while (scheduled_list_write_index < (MAX_FIFO_MESSAGES * 0.75))
     {
         synth_node* node = new_test_synth((random() / (double) RAND_MAX) * 10000.0);
@@ -3740,6 +3742,8 @@ void test_list()
     sort_and_print_list(scheduled_node_list);
     puts("scheduled_list_free()");
     scheduled_list_free();
+    hash_table_free(synth_table);
+    synth_table = NULL;
 }
 
 //// Test Hash Table
@@ -3774,7 +3778,7 @@ void test_hash_table()
         printf("key: %u, hash: %u, slot %u\n", i, HASH_KEY(i), HASH_KEY(i) & HASH_TABLE_SIZE_MASK);
     }
 
-    hash_table table = hash_table_new();
+    synth_table = hash_table_new();
 
     for (i = 0; i < num_values; ++i)
     {
@@ -3783,16 +3787,16 @@ void test_hash_table()
         node->key = i;
         node->hash = HASH_KEY(i);
         node->table_index = i;
-        hash_table_insert(table, node);
-        assert(node == hash_table_lookup(table, i));
+        hash_table_insert(synth_table, node);
+        assert(node == hash_table_lookup(synth_table, i));
     }
 
-    print_hash_table(table);
+    print_hash_table(synth_table);
     puts("Asserting table values...\n\n");
 
     for (i = 0; i < num_values; ++i)
     {
-        synth_node* node = hash_table_lookup(table, i);
+        synth_node* node = hash_table_lookup(synth_table, i);
         assert(node);
         assert(node->time == times[i]);
         assert(node->key == i);
@@ -3803,9 +3807,9 @@ void test_hash_table()
 
     for (i = 0; i < num_values; ++i)
     {
-        synth_node* node = hash_table_lookup(table, i);
+        synth_node* node = hash_table_lookup(synth_table, i);
         assert(node);
-        hash_table_remove(table, node);
+        hash_table_remove(synth_table, node);
         free_synth(node);
     }
 
@@ -3813,12 +3817,12 @@ void test_hash_table()
 
     for (i = 0; i < MAX_SYNTHS; ++i)
     {
-        assert(hash_table_lookup(table, i) == NULL);
+        assert(hash_table_lookup(synth_table, i) == NULL);
     }
 
-    print_hash_table(table);
+    print_hash_table(synth_table);
     puts("Freeing table...\n\n");
-    hash_table_free(table);
+    hash_table_free(synth_table);
 }
 
 //// Test Doubly Linked List
