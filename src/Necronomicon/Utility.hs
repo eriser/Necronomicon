@@ -54,7 +54,7 @@ getCurrentTime = getTime >>= \currentTime -> case currentTime of
     Just t  -> return t
 
 linlin :: (Floating a,Fractional a) => a -> a -> a -> a -> a -> a
-linlin imin imax omin omax input = ((input - imin) * outRange / inRange) + imin
+linlin imin imax omin omax input = ((input - imin) * outRange / inRange) + omin
     where
         inRange  = imax - imin
         outRange = omax - omin

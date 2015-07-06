@@ -665,7 +665,7 @@ static inline void process_synth(synth_node* synth)
 for (; _block_frame < BLOCK_SIZE; ++_block_frame)   \
 {                                                   \
     func                                            \
-}                                                   \
+}
 
 #define UGEN_IN(wire_frame_buffer) wire_frame_buffer[_block_frame]
 #define UGEN_OUT(wire_frame_buffer, out_value) wire_frame_buffer[_block_frame] = out_value
@@ -3231,10 +3231,10 @@ void delayC_aa_calc(ugen u)
     )
 }
 
-#define INIT_COMB(u)                   \
-double decay_time;                       \
-double feedback;                       \
-double* in2 = UGEN_INPUT_BUFFER(u, 2); \
+#define INIT_COMB(u)                    \
+double decay_time;                      \
+double feedback;                        \
+double* in2 = UGEN_INPUT_BUFFER(u, 2);
 
 static inline double CALC_FEEDBACK(double delay_time, double decay_time)
 {
@@ -8894,15 +8894,18 @@ void pan_aa_calc(ugen u)
 typedef struct
 {
     sample_buffer* buffer;
-    uint32_t write_index;
-    uint32_t noiseSamples;
-    uint32_t minFreq;
+    double minFreq;
+    double last_sample;
+    double prev_trig;
+    int64_t trig_samples;
+    uint64_t write_index;
 } pluck_data;
 
 void pluck_constructor(ugen* u)
 {
     u->data = malloc(sizeof(pluck_data));
-    pluck_data data = { acquire_sample_buffer(SAMPLE_RATE / u->constructor_args[0]),0,0,u->constructor_args[0]};
+    const double min_freq = fmax(0.001, u->constructor_args[0]);
+    pluck_data data = { acquire_sample_buffer(SAMPLE_RATE / min_freq), min_freq, 0.0, 0.0, 0L, 0 };
     *((pluck_data*) u->data) = data;
 }
 
@@ -8912,151 +8915,517 @@ void pluck_deconstructor(ugen* u)
     free(u->data);
 }
 
-// Jaffe and Smith "Extensions of the Karplus-Strong Plucked-String* Algorithm"
-#define PLUCK_CALC(CONTROL_ARGS, AUDIO_ARGS)                                    \
-double* in0 = UGEN_INPUT_BUFFER(u, 0);                                          \
-double* in1 = UGEN_INPUT_BUFFER(u, 1);                                          \
-double* in2 = UGEN_INPUT_BUFFER(u, 2);                                          \
-double* out = UGEN_OUTPUT_BUFFER(u, 0);                                         \
-pluck_data  data             = *((pluck_data*) u.data);                         \
-double*     samples          = data.buffer->samples;                            \
-uint32_t    write_index      = data.write_index;                                \
-uint32_t    num_samples_mask = data.buffer->num_samples_mask;                   \
-double      clamped;                                                            \
-double      freq;                                                               \
-uint32_t    n;                                                                  \
-uint32_t    index2;                                                             \
-double      decay;                                                              \
-double      duration;                                                           \
-double      x;                                                                  \
-double      y;                                                                  \
-CONTROL_ARGS                                                                    \
-AUDIO_LOOP(                                                                     \
-    AUDIO_ARGS                                                                  \
-    index2 = (write_index + 1) % n;                                             \
-    decay = pow(E, (-(n + 0.5) * 6.908) / duration) / TABLE_COS(M_PI * freq);   \
-    y = 0;                                                                      \
-                                                                                \
-    if (data.noiseSamples < n)                                                  \
-    {                                                                           \
-        y = x;                                                                  \
-        data.noiseSamples++;                                                    \
-    }                                                                           \
-                                                                                \
-    else                                                                        \
-    {                                                                           \
-        y = decay * (samples[write_index] + samples[index2]) / 2;               \
-    }                                                                           \
-                                                                                \
-    samples[write_index] = y;                                                   \
-    write_index = index2;                                                       \
-    UGEN_OUT(out, y);                                                           \
-);                                                                              \
-data.write_index = index2;                                                      \
-*((pluck_data*) u.data) = data;                                                 \
+static inline double pluck_inline_calc(pluck_data* data, sample_buffer buffer, double delay, double decay, double coeff, double min_fabs_coeff, double input, double trig)
+{
+    const uint64_t write_index = data->write_index;
+    const int64_t idelay_time = delay;
+    const double delta = delay - (double) idelay_time;
 
-#define PLUCK_FREQK clamped = MAX(*in0, data.minFreq); freq = clamped * RECIP_SAMPLE_RATE; n = SAMPLE_RATE / clamped;
-#define PLUCK_FREQA clamped = MAX(UGEN_IN(in0), data.minFreq); freq = clamped * RECIP_SAMPLE_RATE; n = SAMPLE_RATE / clamped;
-#define PLUCK_DURATIONK duration = (*in1) * SAMPLE_RATE;
-#define PLUCK_DURATIONA duration = UGEN_IN(in1) * SAMPLE_RATE;
-#define PLUCK_XK x = *in2;
-#define PLUCK_XA x = UGEN_IN(in2);
+    if (data->prev_trig <= 0.0 && trig > 0.0)
+        data->trig_samples = delay + 0.5;
+
+    double x;
+    if (data->trig_samples > 0)
+    {
+        x = input;
+        data->trig_samples--;
+    }
+
+    else
+    {
+        x = 0.0;
+    }
+
+    const double feedback = CALC_FEEDBACK(delay, decay);
+    double y = delayC(write_index, idelay_time, delta, buffer.num_samples_mask, buffer.samples);
+    y = (min_fabs_coeff * y) + (coeff * data->last_sample);
+    buffer.samples[write_index & buffer.num_samples_mask] = x + (feedback * y);
+    data->write_index++;
+    data->prev_trig = trig;
+    data->last_sample = y;
+    return y;
+}
+
+#define PLUCK_CALC(CONTROL_ARGS, AUDIO_ARGS)                                                            \
+pluck_data* data = ((pluck_data*) u.data);                                                              \
+sample_buffer buffer = *data->buffer;                                                                   \
+double* in0 = UGEN_INPUT_BUFFER(u, 0);                                                                  \
+double* in1 = UGEN_INPUT_BUFFER(u, 1);                                                                  \
+double* in2 = UGEN_INPUT_BUFFER(u, 2);                                                                  \
+double* in3 = UGEN_INPUT_BUFFER(u, 3);                                                                  \
+double* in4 = UGEN_INPUT_BUFFER(u, 4);                                                                  \
+double* out = UGEN_OUTPUT_BUFFER(u, 0);                                                                 \
+double clamped, delay;                                                                                  \
+double decay;                                                                                           \
+double coeff, min_fabs_coeff;                                                                           \
+double input;                                                                                           \
+double trig;                                                                                            \
+CONTROL_ARGS                                                                                            \
+AUDIO_LOOP(                                                                                             \
+    AUDIO_ARGS                                                                                          \
+    UGEN_OUT(out, pluck_inline_calc(data, buffer, delay, decay, coeff, min_fabs_coeff, input, trig));   \
+);
+
+#define PLUCK_DELAY delay = (1.0 / clamped) * SAMPLE_RATE;
+#define PLUCK_FREQK clamped = fmax(*in0, data->minFreq); PLUCK_DELAY
+#define PLUCK_FREQA clamped = fmax(UGEN_IN(in0), data->minFreq); PLUCK_DELAY
+#define PLUCK_DECAYK decay = (*in1) * SAMPLE_RATE;
+#define PLUCK_DECAYA decay = UGEN_IN(in1) * SAMPLE_RATE;
+#define PLUCK_MIN_FABS_COEFF min_fabs_coeff = 1 - fabs(coeff);
+#define PLUCK_COEFFK coeff = fmax(-0.9999, fmin(0.9999, *in2)); PLUCK_MIN_FABS_COEFF
+#define PLUCK_COEFFA coeff = fmax(-0.9999, fmin(0.9999, UGEN_IN(in2))); PLUCK_MIN_FABS_COEFF
+#define PLUCK_INPUTK input = *in3;
+#define PLUCK_INPUTA input = UGEN_IN(in3);
+#define PLUCK_TRIGK trig = *in4;
+#define PLUCK_TRIGA trig = UGEN_IN(in4);
 
 // 0
-void pluck_kkk_calc(ugen u)
+void pluck_kkkkk_calc(ugen u)
 {
     PLUCK_CALC(
         // Control Arguments
         PLUCK_FREQK           /* 0 */
-        PLUCK_DURATIONK       /* 1 */
-        PLUCK_XK              /* 2 */,
+        PLUCK_DECAYK          /* 1 */
+        PLUCK_COEFFK          /* 2 */
+        PLUCK_INPUTK          /* 3 */
+        PLUCK_TRIGK           /* 4 */,
         // Audio Arguments
         /* no audio args */
     )
 }
 
 // 1
-void pluck_akk_calc(ugen u)
+void pluck_akkkk_calc(ugen u)
 {
     PLUCK_CALC(
         // Control Arguments
-        PLUCK_DURATIONK       /* 1 */
-        PLUCK_XK              /* 2 */,
+        PLUCK_DECAYK          /* 1 */
+        PLUCK_COEFFK          /* 2 */
+        PLUCK_INPUTK          /* 3 */
+        PLUCK_TRIGK           /* 4 */,
         // Audio Arguments
         PLUCK_FREQA           /* 0 */
     )
 }
 
 // 2
-void pluck_kak_calc(ugen u)
+void pluck_kakkk_calc(ugen u)
 {
     PLUCK_CALC(
         // Control Arguments
         PLUCK_FREQK           /* 0 */
-        PLUCK_XK              /* 2 */,
+        PLUCK_COEFFK          /* 2 */
+        PLUCK_INPUTK          /* 3 */
+        PLUCK_TRIGK           /* 4 */,
         // Audio Arguments
-        PLUCK_DURATIONA       /* 1 */
+        PLUCK_DECAYA          /* 1 */
     )
 }
 
 // 3
-void pluck_aak_calc(ugen u)
+void pluck_aakkk_calc(ugen u)
 {
     PLUCK_CALC(
         // Control Arguments
-        PLUCK_XK              /* 2 */,
+        PLUCK_COEFFK          /* 2 */
+        PLUCK_INPUTK          /* 3 */
+        PLUCK_TRIGK           /* 4 */,
         // Audio Arguments
         PLUCK_FREQA           /* 0 */
-        PLUCK_DURATIONA       /* 1 */
+        PLUCK_DECAYA          /* 1 */
     )
 }
 
 // 4
-void pluck_kka_calc(ugen u)
+void pluck_kkakk_calc(ugen u)
 {
     PLUCK_CALC(
         // Control Arguments
         PLUCK_FREQK           /* 0 */
-        PLUCK_DURATIONK       /* 1 */,
+        PLUCK_DECAYK          /* 1 */
+        PLUCK_INPUTK          /* 3 */
+        PLUCK_TRIGK           /* 4 */,
         // Audio Arguments
-        PLUCK_XA              /* 2 */
+        PLUCK_COEFFA          /* 2 */
     )
 }
 
 // 5
-void pluck_aka_calc(ugen u)
+void pluck_akakk_calc(ugen u)
 {
     PLUCK_CALC(
         // Control Arguments
-        PLUCK_DURATIONK       /* 1 */,
+        PLUCK_DECAYK          /* 1 */
+        PLUCK_INPUTK          /* 3 */
+        PLUCK_TRIGK           /* 4 */,
         // Audio Arguments
         PLUCK_FREQA           /* 0 */
-        PLUCK_XA              /* 2 */
+        PLUCK_COEFFA          /* 2 */
     )
 }
 
 // 6
-void pluck_kaa_calc(ugen u)
+void pluck_kaakk_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_FREQK           /* 0 */
+        PLUCK_INPUTK          /* 3 */
+        PLUCK_TRIGK           /* 4 */,
+        // Audio Arguments
+        PLUCK_DECAYA          /* 1 */
+        PLUCK_COEFFA          /* 2 */
+    )
+}
+
+// 7
+void pluck_aaakk_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_INPUTK          /* 3 */
+        PLUCK_TRIGK           /* 4 */,
+        // Audio Arguments
+        PLUCK_FREQA           /* 0 */
+        PLUCK_DECAYA          /* 1 */
+        PLUCK_COEFFA          /* 2 */
+    )
+}
+
+// 8
+void pluck_kkkak_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_FREQK           /* 0 */
+        PLUCK_DECAYK          /* 1 */
+        PLUCK_COEFFK          /* 2 */
+        PLUCK_TRIGK           /* 4 */,
+        // Audio Arguments
+        PLUCK_INPUTA          /* 3 */
+    )
+}
+
+// 9
+void pluck_akkak_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_DECAYK          /* 1 */
+        PLUCK_COEFFK          /* 2 */
+        PLUCK_TRIGK           /* 4 */,
+        // Audio Arguments
+        PLUCK_FREQA           /* 0 */
+        PLUCK_INPUTA          /* 3 */
+    )
+}
+
+// 10
+void pluck_kakak_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_FREQK           /* 0 */
+        PLUCK_COEFFK          /* 2 */
+        PLUCK_TRIGK           /* 4 */,
+        // Audio Arguments
+        PLUCK_DECAYA          /* 1 */
+        PLUCK_INPUTA          /* 3 */
+    )
+}
+
+// 11
+void pluck_aakak_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_COEFFK          /* 2 */
+        PLUCK_TRIGK           /* 4 */,
+        // Audio Arguments
+        PLUCK_FREQA           /* 0 */
+        PLUCK_DECAYA          /* 1 */
+        PLUCK_INPUTA          /* 3 */
+    )
+}
+
+// 12
+void pluck_kkaak_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_FREQK           /* 0 */
+        PLUCK_DECAYK          /* 1 */
+        PLUCK_TRIGK           /* 4 */,
+        // Audio Arguments
+        PLUCK_COEFFA          /* 2 */
+        PLUCK_INPUTA          /* 3 */
+    )
+}
+
+// 13
+void pluck_akaak_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_DECAYK          /* 1 */
+        PLUCK_TRIGK           /* 4 */,
+        // Audio Arguments
+        PLUCK_FREQA           /* 0 */
+        PLUCK_COEFFA          /* 2 */
+        PLUCK_INPUTA          /* 3 */
+    )
+}
+
+// 14
+void pluck_kaaak_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_FREQK           /* 0 */
+        PLUCK_TRIGK           /* 4 */,
+        // Audio Arguments
+        PLUCK_DECAYA          /* 1 */
+        PLUCK_COEFFA          /* 2 */
+        PLUCK_INPUTA          /* 3 */
+    )
+}
+
+// 15
+void pluck_aaaak_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_TRIGK           /* 4 */,
+        // Audio Arguments
+        PLUCK_FREQA           /* 0 */
+        PLUCK_DECAYA          /* 1 */
+        PLUCK_COEFFA          /* 2 */
+        PLUCK_INPUTA          /* 3 */
+    )
+}
+
+// 16
+void pluck_kkkka_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_FREQK           /* 0 */
+        PLUCK_DECAYK          /* 1 */
+        PLUCK_COEFFK          /* 2 */
+        PLUCK_INPUTK          /* 3 */,
+        // Audio Arguments
+        PLUCK_TRIGA           /* 4 */
+    )
+}
+
+// 17
+void pluck_akkka_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_DECAYK          /* 1 */
+        PLUCK_COEFFK          /* 2 */
+        PLUCK_INPUTK          /* 3 */,
+        // Audio Arguments
+        PLUCK_FREQA           /* 0 */
+        PLUCK_TRIGA           /* 4 */
+    )
+}
+
+// 18
+void pluck_kakka_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_FREQK           /* 0 */
+        PLUCK_COEFFK          /* 2 */
+        PLUCK_INPUTK          /* 3 */,
+        // Audio Arguments
+        PLUCK_DECAYA          /* 1 */
+        PLUCK_TRIGA           /* 4 */
+    )
+}
+
+// 19
+void pluck_aakka_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_COEFFK          /* 2 */
+        PLUCK_INPUTK          /* 3 */,
+        // Audio Arguments
+        PLUCK_FREQA           /* 0 */
+        PLUCK_DECAYA          /* 1 */
+        PLUCK_TRIGA           /* 4 */
+    )
+}
+
+// 20
+void pluck_kkaka_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_FREQK           /* 0 */
+        PLUCK_DECAYK          /* 1 */
+        PLUCK_INPUTK          /* 3 */,
+        // Audio Arguments
+        PLUCK_COEFFA          /* 2 */
+        PLUCK_TRIGA           /* 4 */
+    )
+}
+
+// 21
+void pluck_akaka_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_DECAYK          /* 1 */
+        PLUCK_INPUTK          /* 3 */,
+        // Audio Arguments
+        PLUCK_FREQA           /* 0 */
+        PLUCK_COEFFA          /* 2 */
+        PLUCK_TRIGA           /* 4 */
+    )
+}
+
+// 22
+void pluck_kaaka_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_FREQK           /* 0 */
+        PLUCK_INPUTK          /* 3 */,
+        // Audio Arguments
+        PLUCK_DECAYA          /* 1 */
+        PLUCK_COEFFA          /* 2 */
+        PLUCK_TRIGA           /* 4 */
+    )
+}
+
+// 23
+void pluck_aaaka_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_INPUTK          /* 3 */,
+        // Audio Arguments
+        PLUCK_FREQA           /* 0 */
+        PLUCK_DECAYA          /* 1 */
+        PLUCK_COEFFA          /* 2 */
+        PLUCK_TRIGA           /* 4 */
+    )
+}
+
+// 24
+void pluck_kkkaa_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_FREQK           /* 0 */
+        PLUCK_DECAYK          /* 1 */
+        PLUCK_COEFFK          /* 2 */,
+        // Audio Arguments
+        PLUCK_INPUTA          /* 3 */
+        PLUCK_TRIGA           /* 4 */
+    )
+}
+
+// 25
+void pluck_akkaa_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_DECAYK          /* 1 */
+        PLUCK_COEFFK          /* 2 */,
+        // Audio Arguments
+        PLUCK_FREQA           /* 0 */
+        PLUCK_INPUTA          /* 3 */
+        PLUCK_TRIGA           /* 4 */
+    )
+}
+
+// 26
+void pluck_kakaa_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_FREQK           /* 0 */
+        PLUCK_COEFFK          /* 2 */,
+        // Audio Arguments
+        PLUCK_DECAYA          /* 1 */
+        PLUCK_INPUTA          /* 3 */
+        PLUCK_TRIGA           /* 4 */
+    )
+}
+
+// 27
+void pluck_aakaa_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_COEFFK          /* 2 */,
+        // Audio Arguments
+        PLUCK_FREQA           /* 0 */
+        PLUCK_DECAYA          /* 1 */
+        PLUCK_INPUTA          /* 3 */
+        PLUCK_TRIGA           /* 4 */
+    )
+}
+
+// 28
+void pluck_kkaaa_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_FREQK           /* 0 */
+        PLUCK_DECAYK          /* 1 */,
+        // Audio Arguments
+        PLUCK_COEFFA          /* 2 */
+        PLUCK_INPUTA          /* 3 */
+        PLUCK_TRIGA           /* 4 */
+    )
+}
+
+// 29
+void pluck_akaaa_calc(ugen u)
+{
+    PLUCK_CALC(
+        // Control Arguments
+        PLUCK_DECAYK          /* 1 */,
+        // Audio Arguments
+        PLUCK_FREQA           /* 0 */
+        PLUCK_COEFFA          /* 2 */
+        PLUCK_INPUTA          /* 3 */
+        PLUCK_TRIGA           /* 4 */
+    )
+}
+
+// 30
+void pluck_kaaaa_calc(ugen u)
 {
     PLUCK_CALC(
         // Control Arguments
         PLUCK_FREQK           /* 0 */,
         // Audio Arguments
-        PLUCK_DURATIONA       /* 1 */
-        PLUCK_XA              /* 2 */
+        PLUCK_DECAYA          /* 1 */
+        PLUCK_COEFFA          /* 2 */
+        PLUCK_INPUTA          /* 3 */
+        PLUCK_TRIGA           /* 4 */
     )
 }
 
-// 7
-void pluck_aaa_calc(ugen u)
+// 31
+void pluck_aaaaa_calc(ugen u)
 {
     PLUCK_CALC(
         // Control Arguments
         /* no control args */,
         // Audio Arguments
         PLUCK_FREQA           /* 0 */
-        PLUCK_DURATIONA       /* 1 */
-        PLUCK_XA              /* 2 */
+        PLUCK_DECAYA          /* 1 */
+        PLUCK_COEFFA          /* 2 */
+        PLUCK_INPUTA          /* 3 */
+        PLUCK_TRIGA           /* 4 */
     )
 }
 

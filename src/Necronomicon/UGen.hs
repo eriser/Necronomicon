@@ -1001,19 +1001,53 @@ combC maxDelayTime delayTime decayTime input = optimizeUGenCalcFunc cfuncs $ mul
 
 foreign import ccall "&pluck_constructor" pluckConstructor :: CUGenFunc
 foreign import ccall "&pluck_deconstructor" pluckDeconstructor :: CUGenFunc
-foreign import ccall "&pluck_kkk_calc" pluckKKKCalc :: CUGenFunc
-foreign import ccall "&pluck_akk_calc" pluckAKKCalc :: CUGenFunc
-foreign import ccall "&pluck_kak_calc" pluckKAKCalc :: CUGenFunc
-foreign import ccall "&pluck_aak_calc" pluckAAKCalc :: CUGenFunc
-foreign import ccall "&pluck_kka_calc" pluckKKACalc :: CUGenFunc
-foreign import ccall "&pluck_aka_calc" pluckAKACalc :: CUGenFunc
-foreign import ccall "&pluck_kaa_calc" pluckKAACalc :: CUGenFunc
-foreign import ccall "&pluck_aaa_calc" pluckAAACalc :: CUGenFunc
+foreign import ccall "&pluck_kkkkk_calc" pluckKKKKKCalc :: CUGenFunc
+foreign import ccall "&pluck_akkkk_calc" pluckAKKKKCalc :: CUGenFunc
+foreign import ccall "&pluck_kakkk_calc" pluckKAKKKCalc :: CUGenFunc
+foreign import ccall "&pluck_aakkk_calc" pluckAAKKKCalc :: CUGenFunc
+foreign import ccall "&pluck_kkakk_calc" pluckKKAKKCalc :: CUGenFunc
+foreign import ccall "&pluck_akakk_calc" pluckAKAKKCalc :: CUGenFunc
+foreign import ccall "&pluck_kaakk_calc" pluckKAAKKCalc :: CUGenFunc
+foreign import ccall "&pluck_aaakk_calc" pluckAAAKKCalc :: CUGenFunc
+foreign import ccall "&pluck_kkkak_calc" pluckKKKAKCalc :: CUGenFunc
+foreign import ccall "&pluck_akkak_calc" pluckAKKAKCalc :: CUGenFunc
+foreign import ccall "&pluck_kakak_calc" pluckKAKAKCalc :: CUGenFunc
+foreign import ccall "&pluck_aakak_calc" pluckAAKAKCalc :: CUGenFunc
+foreign import ccall "&pluck_kkaak_calc" pluckKKAAKCalc :: CUGenFunc
+foreign import ccall "&pluck_akaak_calc" pluckAKAAKCalc :: CUGenFunc
+foreign import ccall "&pluck_kaaak_calc" pluckKAAAKCalc :: CUGenFunc
+foreign import ccall "&pluck_aaaak_calc" pluckAAAAKCalc :: CUGenFunc
+foreign import ccall "&pluck_kkkka_calc" pluckKKKKACalc :: CUGenFunc
+foreign import ccall "&pluck_akkka_calc" pluckAKKKACalc :: CUGenFunc
+foreign import ccall "&pluck_kakka_calc" pluckKAKKACalc :: CUGenFunc
+foreign import ccall "&pluck_aakka_calc" pluckAAKKACalc :: CUGenFunc
+foreign import ccall "&pluck_kkaka_calc" pluckKKAKACalc :: CUGenFunc
+foreign import ccall "&pluck_akaka_calc" pluckAKAKACalc :: CUGenFunc
+foreign import ccall "&pluck_kaaka_calc" pluckKAAKACalc :: CUGenFunc
+foreign import ccall "&pluck_aaaka_calc" pluckAAAKACalc :: CUGenFunc
+foreign import ccall "&pluck_kkkaa_calc" pluckKKKAACalc :: CUGenFunc
+foreign import ccall "&pluck_akkaa_calc" pluckAKKAACalc :: CUGenFunc
+foreign import ccall "&pluck_kakaa_calc" pluckKAKAACalc :: CUGenFunc
+foreign import ccall "&pluck_aakaa_calc" pluckAAKAACalc :: CUGenFunc
+foreign import ccall "&pluck_kkaaa_calc" pluckKKAAACalc :: CUGenFunc
+foreign import ccall "&pluck_akaaa_calc" pluckAKAAACalc :: CUGenFunc
+foreign import ccall "&pluck_kaaaa_calc" pluckKAAAACalc :: CUGenFunc
+foreign import ccall "&pluck_aaaaa_calc" pluckAAAAACalc :: CUGenFunc
 
-pluck :: Double -> UGen -> UGen -> UGen -> UGen
-pluck minFreq freq duration x = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen (Pluck minFreq) pluckAAACalc pluckConstructor pluckDeconstructor [freq, duration, x]
+pluck :: Double -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen
+pluck minFreq freq decay coeff input trig = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen (Pluck minFreq) pluckAAAAACalc pluckConstructor pluckDeconstructor args
     where
-        cfuncs = [pluckKKKCalc, pluckAKKCalc, pluckKAKCalc, pluckAAKCalc, pluckKKACalc, pluckAKACalc, pluckKAACalc, pluckAAACalc]
+        args = [freq, decay, coeff, input, trig]
+        cfuncs = [
+                pluckKKKKKCalc, pluckAKKKKCalc, pluckKAKKKCalc, pluckAAKKKCalc,
+                pluckKKAKKCalc, pluckAKAKKCalc, pluckKAAKKCalc, pluckAAAKKCalc,
+                pluckKKKAKCalc, pluckAKKAKCalc, pluckKAKAKCalc, pluckAAKAKCalc,
+                pluckKKAAKCalc, pluckAKAAKCalc, pluckKAAAKCalc, pluckAAAAKCalc,
+                pluckKKKKACalc, pluckAKKKACalc, pluckKAKKACalc, pluckAAKKACalc,
+                pluckKKAKACalc, pluckAKAKACalc, pluckKAAKACalc, pluckAAAKACalc,
+                pluckKKKAACalc, pluckAKKAACalc, pluckKAKAACalc, pluckAAKAACalc,
+                pluckKKAAACalc, pluckAKAAACalc, pluckKAAAACalc, pluckAAAAACalc
+            ]
 
 foreign import ccall "&white_calc" whiteCalc :: CUGenFunc
 whiteNoise :: UGen
