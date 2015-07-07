@@ -250,17 +250,23 @@ instance Applicative Signal where
     Pure   _ *> Signal g = Signal g
     Signal f *> Pure   g = Signal $ \state -> do
         (fcont, _, fids) <- f state
-        return (cont fcont, g, fids)
+        fchan             <- atomically newTChan
+        _                 <- forkIO $ contf fcont fids fchan
+        return (contg fchan, g, fids)
         where
-            cont fcont eid = fcont eid >> return (NoChange g)
+            contf fcont fids fchan = forever $ atomically (readTChan fchan) >>= \eid -> when (IntSet.member eid fids) (fcont eid >> return ())
+            contg fchan eid        = atomically (writeTChan fchan eid) >> return (NoChange g)
     Signal f *> Signal g = Signal $ \state -> do
         (fcont,  _, fids) <- f state
         (gcont, g', gids) <- g state
         ref               <- newIORef (NoChange g')
-        return (cont fcont gcont fids gids ref, g', IntSet.union fids gids)
+        fchan             <- atomically newTChan
+        _                 <- forkIO $ contf fcont fids fchan
+        return (contg gcont gids fchan ref, g', IntSet.union fids gids)
         where
-            cont fcont gcont fids gids ref eid = do
-                when (IntSet.member eid fids) (fcont eid >> return ())
+            contf fcont fids fchan         = forever $ atomically (readTChan fchan) >>= \eid -> when (IntSet.member eid fids) (fcont eid >> return ())
+            contg gcont gids fchan ref eid = do
+                atomically $ writeTChan fchan eid
                 if IntSet.member eid gids
                     then gcont eid >>= \ge -> writeIORef ref (NoChange $ unEvent ge) >> return ge
                     else readIORef ref
@@ -356,14 +362,13 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
                 let delta    = currentTime - runTime'
                 atomically   $ writeTChan eventInbox $ TimeEvent (delta) (currentTime)
 
-                atomically (takeTMVar (contextBarrier state)) >>= \c -> case c of
-                    GLContext2 -> putStrLn "Switching context to rendering thread." >> GLFW.makeContextCurrent (Just window)
-                    _          -> return ()
+                mtid <- myThreadId
+                atomically (takeTMVar (contextBarrier state)) >>= \(GLContext tid) -> when (tid /= mtid) (GLFW.makeContextCurrent (Just window))
 
                 gs <- readIORef (renderDataRef state)
                 cs <- readIORef (cameraRef state)
                 {-# SCC "mapM__renderWithCameraRaw" #-} mapM_ (renderWithCameraRaw window (sigResources state) gs) cs
-                atomically $ putTMVar (contextBarrier state) GLContext1
+                atomically $ putTMVar (contextBarrier state) $ GLContext mtid
 
                 threadDelay  $ 16667
                 run q window s currentTime tree eventInbox state
@@ -402,21 +407,20 @@ necro sig = Signal $ \state -> do
                 return g
             _  -> writeCam (cameraRef state) (euid g) (camera g) g >> return g
         updateEntity state g = do
-            uids <- readIORef (uidRef state)
-            atomically (takeTMVar (contextBarrier state)) >>= \c -> case c of
-                GLContext1 -> putStrLn "Switching context to processing thread." >> GLFW.makeContextCurrent (Just $ context state)
-                _          -> return ()
+            mtid <- myThreadId
+            atomically (takeTMVar (contextBarrier state)) >>= \(GLContext tid) -> when (tid /= mtid) (GLFW.makeContextCurrent (Just $ context state))
             model' <- loadNewModel (sigResources state) (model g)
-            atomically $ putTMVar (contextBarrier state) GLContext2
+            atomically $ putTMVar (contextBarrier state) $ GLContext mtid
 
-            let (g', uids') = case euid g of
-                    New -> (g{model = model', euid = UID (head uids)}, tail uids)
-                    _   -> (g{model = model'}, uids)
-                (UID uid)   = euid g'
+            g' <- case euid g of
+                UID _ -> return g{model = model'}
+                New   -> do
+                    uid <- atomically $ readTVar (uidRef state) >>= \(uid : uids) -> writeTVar (uidRef state) uids >> return uid
+                    return g{model = model', euid = UID uid}
 
+            let (UID uid) = euid g'
             writeRenderData (renderDataRef state) uid g'
             writeCam (cameraRef state) (euid g') (camera g') g
-            writeIORef (uidRef state) uids'
             return g'
 
         writeCam cref (UID uid) (Just c) g = modifyIORef cref (IntMap.insert uid (transMat g, c))
@@ -435,13 +439,13 @@ necro sig = Signal $ \state -> do
 -- Input
 ----------------------------------
 
-data GLContext = GLContext1 | GLContext2
+data GLContext = GLContext ThreadId
 
 data SignalState = SignalState
                  { contextBarrier :: TMVar GLContext
                  , context        :: GLFW.Window
                  , renderDataRef  :: IORef (SMV.IOVector RenderData)
-                 , uidRef         :: IORef [Int]
+                 , uidRef         :: TVar  [Int]
                  , sidRef         :: IORef [Int]
                  , cameraRef      :: IORef (IntMap.IntMap (Matrix4x4, Camera))
                  , runTimeRef     :: IORef Time
@@ -455,10 +459,10 @@ data SignalState = SignalState
 
 mkSignalState :: GLFW.Window -> (Double, Double) -> IO SignalState
 mkSignalState w2 dims = SignalState
-                     <~ atomically (newTMVar GLContext1)
+                     <~ (myThreadId >>= \mtid -> atomically (newTMVar $ GLContext mtid))
                      ~~ return w2
                      ~~ (SV.thaw (SV.fromList (replicate 16 nullRenderData)) >>= newIORef)
-                     ~~ newIORef [0..]
+                     ~~ atomically (newTVar  [0..])
                      ~~ newIORef [0..]
                      ~~ newIORef IntMap.empty
                      ~~ newIORef 0
@@ -1148,60 +1152,60 @@ playSynth' playSig u argSigs = Signal $ \state -> do
 
 --Maybe this can be done recursively without type families?
 class Play a where
-    type PlayRet a :: *
-    play :: Signal Bool -> a -> PlayRet a
+    type PlayArgs a :: *
+    play :: Signal Bool -> a -> PlayArgs a
 
 instance Play UGen where
-    type PlayRet UGen =
+    type PlayArgs UGen =
         Signal ()
     play playSig synth = playSynth' playSig synth []
 
 instance Play (UGen -> UGen) where
-    type PlayRet (UGen -> UGen) =
+    type PlayArgs (UGen -> UGen) =
         Signal Double -> Signal ()
     play playSig synth x = playSynth' playSig synth [x]
 
 instance Play (UGen -> UGen -> UGen) where
-    type PlayRet (UGen -> UGen -> UGen) =
+    type PlayArgs (UGen -> UGen -> UGen) =
         Signal Double -> Signal Double -> Signal ()
     play playSig synth x y = playSynth' playSig synth [x,y]
 
 instance Play (UGen -> UGen -> UGen -> UGen) where
-    type PlayRet (UGen -> UGen -> UGen -> UGen) =
+    type PlayArgs (UGen -> UGen -> UGen -> UGen) =
         Signal Double -> Signal Double -> Signal Double -> Signal ()
     play playSig synth x y z = playSynth' playSig synth [x,y,z]
 
 instance Play (UGen -> UGen -> UGen -> UGen -> UGen) where
-    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen) =
+    type PlayArgs (UGen -> UGen -> UGen -> UGen -> UGen) =
         Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
     play playSig synth x y z w = playSynth' playSig synth [x,y,z,w]
 
 instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
-    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen) =
+    type PlayArgs (UGen -> UGen -> UGen -> UGen -> UGen -> UGen) =
         Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
     play playSig synth x y z w p = playSynth' playSig synth [x,y,z,w,p]
 
 instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
-    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) =
+    type PlayArgs (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) =
         Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
     play playSig synth x y z w p q = playSynth' playSig synth [x,y,z,w,p,q]
 
 instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
-    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) =
+    type PlayArgs (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) =
         Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
     play playSig synth x y z w p q s = playSynth' playSig synth [x,y,z,w,p,q,s]
 
 instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
-    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) =
+    type PlayArgs (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) =
         Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
     play playSig synth x y z w p q s t = playSynth' playSig synth [x,y,z,w,p,q,s,t]
 
 instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
-    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) =
+    type PlayArgs (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) =
         Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
     play playSig synth x y z w p q s t u = playSynth' playSig synth [x,y,z,w,p,q,s,t,u]
 
 instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) where
-    type PlayRet (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) =
+    type PlayArgs (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) =
         Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
     play playSig synth x y z w p q s t u v = playSynth' playSig synth [x,y,z,w,p,q,s,t,u,v]
