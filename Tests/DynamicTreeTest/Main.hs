@@ -1,6 +1,7 @@
 import Necronomicon.FRP.SignalA
 import GHC.Generics
 import Data.Binary
+import Data.Foldable (traverse_)
 
 main :: IO ()
 main = runSignal megaDark
@@ -33,23 +34,29 @@ mkBullet p = ( mkEntity <| Bullet <| Flying <| Vector3 1 1 1 )
              , collider = Just <| boxCollider 1 1 1
              , model    = Just <| Model cube <| vertexColored white }
 
-initBullets :: [Entity Bullet]
-initBullets = [mkBullet <| Vector3 (-2) 0 0, mkBullet <| Vector3 0 0 0, mkBullet <| Vector3 2 0 0]
--- initBullets = concat <| replicate 100 [mkBullet <| Vector3 (-2) 0 0, mkBullet <| Vector3 0 0 0, mkBullet <| Vector3 2 0 0]
-
-megaDark :: Signal ()
-megaDark = hero *> bullets *> pure ()
+initBullets :: Double -> [Entity Bullet]
+-- initBullets = [mkBullet <| Vector3 (-2) 0 0, mkBullet <| Vector3 0 0 0, mkBullet <| Vector3 2 0 0]
+initBullets o = foldr fb [] <| map ((*1) . fromIntegral) ([(-150) .. 150] :: [Int])
     where
-        bullets = foldn updateBullets initBullets <| mergeMany
-                [ BulletTick      <~ tick
-                , BulletCollision <~ timestamp (collisionMany bullets) ]
+        fb y acc = mkBullet (Vector3 0 y 0 + Vector3 offset 0 0) :  acc
+        offset   = o - 18
 
-        hero    = foldn updateHero mkHero <| mergeMany
-                [ HeroTick        <~ tick
-                , HeroKeys        <~ wasd
-                , HeroMouse       <~ mouseDelta
-                , HeroClick       <~ sampleOn mouseClick runTime
-                , HeroCollision   <~ timestamp (collision hero) ]
+--This is around 3000 spinning objects
+megaDark :: Signal ()
+megaDark = hero *> traverse_ bullets [4, 8, 12, 16, 20, 24, 28, 32, 36] *> pure ()
+    where
+        bullets offset = b
+            where
+                b = foldn updateBullets (initBullets offset) <| mergeMany
+                  [ BulletTick      <~ tick
+                  , BulletCollision <~ timestamp (collisionMany b) ]
+
+        hero = foldn updateHero mkHero <| mergeMany
+             [ HeroTick        <~ tick
+             , HeroKeys        <~ wasd
+             , HeroMouse       <~ mouseDelta
+             , HeroClick       <~ sampleOn mouseClick runTime
+             , HeroCollision   <~ timestamp (collision hero) ]
 
 updateHero :: HeroInput -> Entity Hero -> Entity Hero
 updateHero (HeroMouse (mx, my)) h@Entity{ edata = Hero state health (px, py)}
