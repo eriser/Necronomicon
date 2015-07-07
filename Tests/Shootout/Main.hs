@@ -260,7 +260,7 @@ whiteNoiseSynth :: UGen
 whiteNoiseSynth = 0 -- testTwoArgs (\a b -> delayC 1 a b)
 
 pluckSynth :: UGen
-pluckSynth = testTwoArgs (\a b -> pluck 100 a b whiteNoise)
+pluckSynth = testTwoArgs (\a b -> pluck 20 a b 0.9 pinkNoise (impulse 3 0))
 
 freeverbSynth :: UGen
 freeverbSynth = testTwoArgs (\a b -> freeverb a 1 1 b)

@@ -16,20 +16,54 @@ funcNameToCalcDefineName funcName = (foldr (\s acc -> (map toUpper s) ++ "_" ++ 
         wordList = filter ((>0) . length) $ (\(wrd, acc) -> wrd : acc) $ foldr splitCamelCase ("", [] :: [String]) funcName
         splitCamelCase char (wrd, acc) = if isUpper char then ("", (char : wrd) : acc) else (char : wrd, acc)
 
+ugenNameToConstructorName :: String -> String
+ugenNameToConstructorName ugenName = ugenName ++ "_constructor"
+
+ugenNameToDeconstructorName :: String -> String
+ugenNameToDeconstructorName ugenName = ugenName ++ "_deconstructor"
+
+ugenNameToDataName :: String -> String
+ugenNameToDataName ugenName = ugenName ++ "_data"
+
+generateUGenDataStruct :: String -> String
+generateUGenDataStruct ugenName = "typedef struct\n{\n    double accumulator; // example data\n} " ++ ugenNameToDataName ugenName ++ ";"
+
+generateUGenConstructor :: String -> String -> String
+generateUGenConstructor ugenName dataStructName = "void " ++ ugenNameToConstructorName ugenName ++ "(ugen* u)\n{\n" ++ constructorContents ++ "}"
+    where
+        constructorContents = lineOne ++ lineTwo ++ lineThree
+        lineOne   = "    u->data = malloc(sizeof(" ++ dataStructName ++ "));\n"
+        lineTwo   = "    " ++ dataStructName ++ " data = { 0 };\n"
+        lineThree = "    ((" ++ dataStructName ++ "*) u->data) = data;\n"
+
+generateUGenDeconstructor :: String -> String
+generateUGenDeconstructor ugenName = "void " ++ ugenNameToDeconstructorName ugenName ++ "(ugen* u)\n{\n    free(u->data);\n}"
+
+generateUGenStructors :: String -> String
+generateUGenStructors ugenName = dataStructString ++ "\n\n" ++ constructorString ++ "\n\n" ++ deconstructorString ++ "\n\n"
+    where
+        dataStructName = ugenNameToDataName ugenName
+        dataStructString = generateUGenDataStruct ugenName
+        constructorString = generateUGenConstructor ugenName dataStructName
+        deconstructorString = generateUGenDeconstructor ugenName
+
 generateCalcDefine :: String -> String -> [String] -> String
 generateCalcDefine funcName defineName args = inlineFunc ++ foldr (++) "" macroLinesWithEndings
     where
         lengthArgs = length args
         inlineFuncName = funcName ++ "_inline_calc"
-        inlineFuncArgs = foldl (\a b -> a ++ (if null a then "" else ", ") ++ b) "" $ map (\s -> "double " ++ s) args
+        inlineFuncArgs = foldl (\a b -> a ++ (if null a then "" else ", ") ++ b) "" $ (dataName ++ "* data") : map (\s -> "double " ++ s) args
         inlineFunc = "static inline double " ++ inlineFuncName ++ "(" ++ inlineFuncArgs ++ ")\n{\n    double y = 0; // CALC CODE HERE\n    return y;\n}\n\n"
         calcDefineLine = "#define " ++ defineName ++ "(CONTROL_ARGS, AUDIO_ARGS)"
+        dataName = ugenNameToDataName funcName
+        ugenData = "(" ++ dataName ++ "*) u.data"
+        dataDeclaration = dataName ++ "* data = " ++ ugenData ++ ";"
         inputs = map argIndexToInputString ([0 .. (max 0 (lengthArgs -1 ))] :: [Int])
         outputs = ["double* out = UGEN_OUTPUT_BUFFER(u, 0);"]
         argIndexToInputString index = "double* in" ++ show index ++ " = UGEN_INPUT_BUFFER(u, " ++ show index ++ ");"
         argLines = map (\arg -> "double " ++ arg ++ ";") args
-        audioLoopFuncCall = "    UGEN_OUT(out, " ++ inlineFuncName ++ "(" ++ foldl (\a b -> a ++ (if null a then "" else ", ") ++ b) "" args ++ "));"
-        macroLines = calcDefineLine : inputs ++ outputs ++ argLines ++ ["CONTROL_ARGS", "AUDIO_LOOP(", "    AUDIO_ARGS", audioLoopFuncCall, ");"]
+        audioLoopFuncCall = "    UGEN_OUT(out, " ++ inlineFuncName ++ "(" ++ foldl (\a b -> a ++ (if null a then "" else ", ") ++ b) "" ("data" : args) ++ "));"
+        macroLines = calcDefineLine : dataDeclaration : inputs ++ outputs ++ argLines ++ ["CONTROL_ARGS", "AUDIO_LOOP(", "    AUDIO_ARGS", audioLoopFuncCall, ");"]
         longestLength = foldr (\s acc -> max (length s) acc) 0 macroLines
         macroLinesWithEndings = map (\line -> line ++ replicate (max 0 (longestLength - length line)) ' ' ++ " \\\n") macroLines
 
@@ -58,7 +92,7 @@ calcFuncBindings name numArgs = map (funcDataToBinding) cfuncData
         funcDataToBinding (CalcFuncBindingData fname fbind _) = "foreign import ccall \"&" ++ fname ++ "\" " ++ fbind ++ " :: CUGenFunc"
 
 generateCCode :: String -> [String] -> String
-generateCCode name args = (generateCalcDefine name calcDefineName args) ++ "\n\n" ++ argDefines ++ "\n\n" ++ cfuncs
+generateCCode name args = generateUGenStructors name ++ (generateCalcDefine name calcDefineName args) ++ "\n\n" ++ argDefines ++ "\n\n" ++ cfuncs
     where
         numArgs = length args
         cfuncData = calcFuncBindingData name numArgs
@@ -103,11 +137,16 @@ generateHaskellCode name args = cbindings ++ "\n" ++ typeSignature ++ "\n" ++ fu
         capitalizeFirst (c:cs) = toUpper c : cs
         funcCode = (join " " (name : args)) ++ " = " ++ optimizeString ++ multiChannelString
         optimizeString = "optimizeUGenCalcFunc cfuncs $ "
-        multiChannelString = "multiChannelExpandUGen " ++ (capitalizeFirst name) ++ " " ++ (last haskellNames) ++ " " ++ name ++ "Constructor " ++ name ++ "Deconstructor " ++ argsListString
+        ugenConstructorBindingName = name ++ "Constructor"
+        ugenDeconstructorBindingName = name ++ "Deconstructor"
+        multiChannelString = "multiChannelExpandUGen " ++ (capitalizeFirst name) ++ " " ++ (last haskellNames) ++
+                             " " ++ ugenConstructorBindingName ++ " " ++ ugenDeconstructorBindingName ++ " " ++ argsListString
         whereCode = "\n    where\n        cfuncs = " ++ haskellNamesListString
         numArgs = length args
+        constructorBinding = "foreign import ccall \"&" ++ ugenNameToConstructorName name ++ "\" " ++ ugenConstructorBindingName ++ " :: CUGenFunc"
+        deconstructorBinding = "foreign import ccall \"&" ++ ugenNameToDeconstructorName name ++ "\" " ++ ugenDeconstructorBindingName ++ " :: CUGenFunc"
         cbindingData = calcFuncBindingData name numArgs
-        cbindings = foldl (\acc b -> acc ++ b ++ "\n") "" $ calcFuncBindings name numArgs
+        cbindings = constructorBinding ++ "\n" ++ deconstructorBinding ++ "\n" ++ (foldl (\acc b -> acc ++ b ++ "\n") "" $ calcFuncBindings name numArgs)
         haskellNames = map (\(CalcFuncBindingData _ hname _) -> hname) cbindingData
         haskellNamesListString = "[" ++ join ", " haskellNames ++ "]"
         argsListString = "[" ++ join ", " args ++ "]"

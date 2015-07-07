@@ -353,7 +353,7 @@ whiteNoiseSynth :: UGen -> UGen -> UGen
 whiteNoiseSynth _ _ = whiteNoise
 
 pluckSynth :: UGen -> UGen -> UGen
-pluckSynth a b = pluck 100 a b whiteNoise
+pluckSynth a b = pluck 20 a b 0.9 pinkNoise (impulse 3 0)
 
 freeverbSynth :: UGen -> UGen -> UGen
 freeverbSynth a b = freeverb a 1 1 b

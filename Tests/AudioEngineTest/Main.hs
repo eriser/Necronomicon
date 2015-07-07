@@ -60,10 +60,8 @@ whiteSynth = whiteNoise |> gain 0.3 |> dup |> out 0
 simplexSynth :: UGen -> UGen
 simplexSynth freq = simplex1D (lag 0.1 freq) |> exprange 20 20000 |> sin |> gain 0.2 |> dup |> out 0
 
-pluckSynth :: UGen -> UGen
-pluckSynth freq =  pluck 20 pfreq (simplex1D 0.1 |> range 0.001 1) (pinkNoise * pulse 0.5 1) |> poll |> gain 0.2 |> dup |> out 0
-    where
-        pfreq = simplex1D (lag 0.1 freq) |> exprange 20 20000
+pluckSynth :: UGen -> UGen -> UGen
+pluckSynth freq coeff = impulse 6 0 |> pluck 20 (lag 0.1 freq) 1 (lag 0.1 coeff) pinkNoise |> gain 0.4 |> dup |> out 0
 
 lfsawSynth :: UGen -> UGen
 lfsawSynth freq = (lfsaw (lag 0.1 freq) 0) * 2 - 1 |> exprange 20 20000 |> sin |> gain 0.2 |> dup |> out 0
@@ -84,12 +82,12 @@ main = runSignal
        <> play (toggle <| isDown keyI) minMaxSynth (mouseX ~> scale 20 2000)
        <> play (toggle <| isDown keyJ) lpfSynth (mouseX ~> scale 20 4000)
        <> play (toggle <| isDown keyK) modulatingDelayC
-       <> play (toggle <| isDown keyL) panSynth (mouseX ~> scale (-1) 1)
+       <> play (toggle <| isDown keyL) panSynth (mouseX ~> linlin 0 1 (-1) 1)
        <> play (toggle <| isDown keyM) pinkSynth
        <> play (toggle <| isDown keyN) brownSynth
        <> play (toggle <| isDown keyO) whiteSynth
        <> play (toggle <| isDown keyP) simplexSynth (mouseX ~> scale 0.1 80)
-       <> play (toggle <| isDown keyQ) pluckSynth (mouseX ~> scale 0.1 20)
+       <> play (toggle <| isDown keyQ) pluckSynth (mouseX ~> scale 20 2000) (mouseY ~> linlin 0 1 (-1) 1)
        <> play (toggle <| isDown keyR) lfsawSynth (mouseX ~> scale 0.1 2000)
        <> play (toggle <| isDown keyS) lfpulseSynth (mouseX ~> scale 0.1 2000)
 
