@@ -1,6 +1,6 @@
 /*
     Necronomicon
-      Copyright 2014-2015 Chad McKinney and Curtis McKinney
+    Copyright 2014-2015 Chad McKinney and Curtis McKinney
 
     To Do:
 

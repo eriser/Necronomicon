@@ -1,6 +1,6 @@
 /*
-  Necronomicon - Deterministic Audio Engine
-  Copyright 2014 - Chad McKinney and Curtis McKinney
+    Necronomicon
+    Copyright 2014-2015 Chad McKinney and Curtis McKinney
 */
 
 #ifndef NECRONOMICON_UGEN_UTIL_H_INCLUDED

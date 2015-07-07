@@ -1,3 +1,8 @@
+/*
+    Necronomicon
+    Copyright 2014-2015 Chad McKinney and Curtis McKinney
+*/
+
 #ifndef NECRONOMICON_ENDIAN_H_INCLUDED
 #define NECRONOMICON_ENDIAN_H_INCLUDED
 

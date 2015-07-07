@@ -1,5 +1,5 @@
 {-
-    Necronomicon - Deterministic Audio Engine
+    Necronomicon
     Copyright 2014-2015 Chad McKinney and Curtis McKinney
 -}
 

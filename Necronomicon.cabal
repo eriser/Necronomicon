@@ -1,6 +1,6 @@
 Name:                   Necronomicon
 Version:                0.0
-Description:            Deterministic Audio Engine
+Description:            Haskell and C based audio and graphics engine
 License:                GPL
 License-file:           LICENSE
 Author:                 Chad McKinney and Curtis McKinney
