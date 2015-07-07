@@ -64,4 +64,16 @@ U.d;                                                                \
     ret;                            \
 })
 
+#define ROUND(f) ((float)((f > 0.0) ? floor(f + 0.5) : ceil(f - 0.5)))
+
+static inline double zapgremlins(double x)
+{
+    double absx = fabs(x);
+    // very small numbers fail the first test, eliminating denormalized numbers
+    //    (zero also fails the first test, but that is OK since it returns zero.)
+    // very large numbers fail the second test, eliminating infinities
+    // Not-a-Numbers fail both tests and are eliminated.
+    return (absx > 1e-63 && absx < 1e63) ? x : 0.0;
+}
+
 #endif // NECRONOMICON_UGEN_UTIL_H_INCLUDED

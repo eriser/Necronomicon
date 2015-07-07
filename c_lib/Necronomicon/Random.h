@@ -48,9 +48,9 @@ static inline uint32_t trand()
     return s1 ^ s2 ^ s3;
 }
 
-const long double RECIP_ULONG_MAX = (long double) 1.0 / (long double) ULONG_MAX;
-const long double TWO_RECIP_ULONG_MAX = (long double) 2.0 / (long double) ULONG_MAX;
-const long double QUARTER_RECIP_ULONG_MAX = (long double) 0.25 / (long double) ULONG_MAX;
+const long double RECIP_ULONG_MAX = (long double) 1.0 / (long double) UINT64_MAX;
+const long double TWO_RECIP_ULONG_MAX = (long double) 2.0 / (long double) UINT64_MAX;
+const long double QUARTER_RECIP_ULONG_MAX = (long double) 0.25 / (long double) UINT64_MAX;
 
 #define RAND_RANGE(MIN,MAX) (((double) (((long double) xorshift128plus()) * RECIP_ULONG_MAX)) * (MAX - MIN) + MIN)
 #define RAND_ONE() ((double) (((long double) xorshift128plus()) * RECIP_ULONG_MAX))

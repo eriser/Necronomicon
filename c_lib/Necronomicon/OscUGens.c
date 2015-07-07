@@ -5,6 +5,8 @@
 
 #include <stdlib.h>
 #include <math.h>
+#include <string.h>
+#include <stdio.h>
 
 #include "../Necronomicon.h"
 #include "UGenUtil.h"

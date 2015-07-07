@@ -359,3 +359,59 @@ void lfpulse_kk_calc(ugen u)
         /* no audio args */
     );
 }
+
+// impulse
+
+#define IMPULSE_CALC(CONTROL_ARGS, AUDIO_ARGS)      \
+double*  in0  = UGEN_INPUT_BUFFER(u, 0);            \
+/* double*  in1  = UGEN_INPUT_BUFFER(u, 1); */      \
+double*  out  = UGEN_OUTPUT_BUFFER(u, 0);           \
+double  phase = (*(double*)u.data);                 \
+double freq;                                        \
+/* Offset is unused at the moment... */             \
+/* double offset; */                                \
+CONTROL_ARGS                                        \
+AUDIO_LOOP(                                         \
+    AUDIO_ARGS                                      \
+    phase += freq * RECIP_SAMPLE_RATE;              \
+    if (phase >= 1)                                 \
+        UGEN_OUT(out,1);                            \
+    else                                            \
+        UGEN_OUT(out,0);                            \
+    phase = fmod(phase,1);                          \
+);                                                  \
+(*(double*)u.data) = phase;                         \
+
+void impulse_aa_calc(ugen u)
+{
+    IMPULSE_CALC(
+        /* no control args */,
+        freq = UGEN_IN(in0); // Audio args
+        /* offset = UGEN_IN(in1); */
+    );
+}
+
+void impulse_ak_calc(ugen u)
+{
+    IMPULSE_CALC(
+        /*offset = in1[0];*/, // Control arg
+        freq = UGEN_IN(in0); // Audio arg
+    );
+}
+
+void impulse_ka_calc(ugen u)
+{
+    IMPULSE_CALC(
+        freq = in0[0];, // Control arg
+        /*offset = UGEN_IN(in1);*/ // Audio arg
+    );
+}
+
+void impulse_kk_calc(ugen u)
+{
+    IMPULSE_CALC(
+        freq = in0[0]; // Control args
+        /*offset = in1[0]*/,
+        /* no audio args */
+    );
+}

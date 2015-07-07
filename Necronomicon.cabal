@@ -44,7 +44,12 @@ library
         c_lib/Necronomicon/OscUGens.c,
         c_lib/Necronomicon/IOUGens.c,
         c_lib/Necronomicon/DistortionUGens.c,
-        c_lib/Necronomicon/NoiseUGens.c
+        c_lib/Necronomicon/NoiseUGens.c,
+        c_lib/Necronomicon/RangeUGens.c,
+        c_lib/Necronomicon/FilterUGens.c,
+        c_lib/Necronomicon/DynamicsUGens.c,
+        c_lib/Necronomicon/PanUGens.c,
+        c_lib/Necronomicon/TimeUGens.c
     ghc-options:        -threaded -O2 -Wall -Werror
     default-extensions: FlexibleInstances MultiParamTypeClasses ForeignFunctionInterface QuasiQuotes TemplateHaskell TypeFamilies BangPatterns RankNTypes GeneralizedNewtypeDeriving
 
