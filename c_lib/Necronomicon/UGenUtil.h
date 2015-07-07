@@ -53,4 +53,15 @@ U.d;                                                                \
     result;                                 \
 })
 
+#define WRAP(X,AMOUNT)              \
+({                                  \
+    double x   = X * AMOUNT;        \
+    double ret = x;                 \
+    if (x >= 1)                     \
+        ret = x - 2;                \
+    else if (x < -1)                \
+        ret = x + 2;                \
+    ret;                            \
+})
+
 #endif // NECRONOMICON_UGEN_UTIL_H_INCLUDED
