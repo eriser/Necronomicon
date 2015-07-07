@@ -34,7 +34,11 @@ library
         Extra-Libraries: jack, sndfile, GLEW
     Include-Dirs: 		c_lib
     Install-Includes:	Necronomicon.h
-    C-Sources:    		c_lib/Necronomicon.c, c_lib/Render.c
+    C-Sources:
+        c_lib/Necronomicon.c,
+        c_lib/Necronomicon/Render.c,
+        c_lib/Necronomicon/DelayUGens.c,
+        c_lib/Necronomicon/ReverbUGens.c
     ghc-options:        -threaded -O2 -Wall -Werror
     default-extensions: FlexibleInstances MultiParamTypeClasses ForeignFunctionInterface QuasiQuotes TemplateHaskell TypeFamilies BangPatterns RankNTypes GeneralizedNewtypeDeriving
 
