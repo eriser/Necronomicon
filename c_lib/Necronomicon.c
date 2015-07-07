@@ -59,9 +59,6 @@
     Ambisonics?
 */
 
-#ifndef NECRONOMICON_H_INCLUDED
-#define NECRONOMICON_H_INCLUDED
-
 #include <stdio.h>
 #include <assert.h>
 #include <errno.h>
@@ -101,7 +98,8 @@ static inline uint32_t next_power_of_two(uint32_t v)
 // Constants
 /////////////////////
 
-typedef enum { false, true } bool;
+const uint32_t DOUBLE_SIZE = sizeof(double);
+const uint32_t UINT_SIZE = sizeof(uint32_t);
 
 #ifndef M_PI
 #define M_PI 3.1415926535897932384626433832795028841971693993751058209749445923078164062L
@@ -111,8 +109,6 @@ const double TWO_PI = M_PI * 2;
 const double RECIP_TWO_PI =  1.0 / (M_PI * 2);
 const double HALF_PI = M_PI * 0.5;
 const double QUARTER_PI = M_PI * 0.25;
-uint32_t DOUBLE_SIZE = sizeof(double);
-uint32_t UINT_SIZE = sizeof(uint32_t);
 
 #define TABLE_SIZE 65536
 #define TABLE_SIZE_MASK 65535
@@ -142,40 +138,6 @@ uint32_t BLOCK_SIZE = 64;
 #define LOG_001 -6.907755278982137
 
 /////////////////////
-// Hashing
-/////////////////////
-
-typedef union
-{
-    uint8_t bytes[4];
-    uint32_t word;
-    float f;
-} four_bytes;
-
-typedef union
-{
-    uint8_t bytes[8];
-    double d;
-    uint64_t ul;
-    struct
-    {
-#if BYTE_ORDER == BIG_ENDIAN
-        uint32_t high, low;
-#else
-        uint32_t low, high;
-#endif
-    } l;
-} eight_bytes;
-
-// FNV1-a hash function
-const uint64_t PRIME = 0x01000193; // 16777619
-const uint64_t SEED = 0x811C9DC5; // 2166136261
-
-#define FNV1A(byte, hash) ((byte ^ hash) * PRIME)
-#define HASH_KEY_PRIV(key) (FNV1A(key.bytes[3], FNV1A(key.bytes[2], FNV1A(key.bytes[1], FNV1A(key.bytes[0], SEED)))))
-#define HASH_KEY(key) ((uint32_t) HASH_KEY_PRIV(((four_bytes) key)))
-
-/////////////////////
 // Global Mutables
 /////////////////////
 
@@ -203,47 +165,10 @@ uint32_t  out_bus_buffer_index = 0;
 // UGen
 /////////////////////
 
-typedef enum
-{
-    ControlRate = 0,
-    AudioRate = 1,
-} CalcRate;
-
-struct ugen;
-typedef struct ugen ugen;
-
-struct ugen
-{
-    void (*calc)(ugen u);
-    void (*constructor)(ugen* u);
-    void (*deconstructor)(ugen* u);
-    void* data; // ugen defined data structure
-    double* constructor_args; // arguments passed in for use during construction
-    uint32_t* inputs; // indexes to the parent synth's ugen wire buffer
-    uint32_t* outputs; // indexes to the parent synth's ugen wire buffer
-    CalcRate calc_rate;
-    uint32_t __padding; // Pad struct size to 8 * 8 == 64 bytes
-};
-
 const uint32_t UGEN_SIZE = sizeof(ugen);
 const uint32_t UGEN_POINTER_SIZE = sizeof(ugen*);
-
-typedef void (*ugen_constructor)(ugen* u);
-typedef void (*ugen_deconstructor)(ugen* u);
-typedef void (*calc_func)(ugen* u);
-
-struct ugen_graph_pool_node;
-typedef struct ugen_graph_pool_node ugen_graph_pool_node;
-struct ugen_graph_pool_node
-{
-    ugen* ugen_graph;
-    ugen_graph_pool_node* next_ugen_graph_pool_node;
-    uint32_t pool_index;
-};
-
 const uint32_t UGEN_GRAPH_POOL_NODE_SIZE = sizeof(ugen_graph_pool_node);
-const uint32_t NUM_UGEN_GRAPH_POOLS = 32;
-ugen_graph_pool_node** ugen_graph_pools = NULL;
+const uint32_t UGEN_WIRE_POOL_NODE_SIZE = sizeof(ugen_wires_pool_node);
 
 void print_ugen_graph_pool_node(ugen_graph_pool_node* ugen_graph)
 {
@@ -292,16 +217,9 @@ void release_ugen_graph(ugen_graph_pool_node* ugen_graph)
     }
 }
 
-struct ugen_wires_pool_node;
-typedef struct ugen_wires_pool_node ugen_wires_pool_node;
-struct ugen_wires_pool_node
-{
-    double* ugen_wires;
-    ugen_wires_pool_node* next_ugen_wires_pool_node;
-    uint32_t pool_index;
-};
+const uint32_t NUM_UGEN_GRAPH_POOLS = 32;
+ugen_graph_pool_node** ugen_graph_pools = NULL;
 
-const uint32_t UGEN_WIRE_POOL_NODE_SIZE = sizeof(ugen_wires_pool_node);
 const uint32_t NUM_UGEN_WIRES_POOLS = 32;
 ugen_wires_pool_node** ugen_wires_pools = NULL;
 
@@ -429,55 +347,22 @@ void release_sample_buffer(sample_buffer* buffer)
 // SynthDef/Synth Node
 ////////////////////////
 
-typedef enum
-{
-    NODE_DEAD, // Node is not playing
-    NODE_SPAWNING, // Scheduled for playing
-    NODE_ALIVE, // Actively playing
-    NODE_SCHEDULED_FOR_REMOVAL, // Scheduled for removal from removal_fifo, first step in removal of synths
-    NODE_SCHEDULED_FOR_FREE, // Scheduled for memory free, second and last step in removal of synths
-} node_alive_status;
+const uint32_t NODE_SIZE = sizeof(synth_node);
+const uint32_t NODE_POINTER_SIZE = sizeof(synth_node*);
+const uint32_t MAX_SYNTHS = 8192;
+const uint32_t HASH_TABLE_SIZE_MASK = 8191;
 
 const int8_t* node_alive_status_strings[] = { "NODE_DEAD", "NODE_SPAWNING", "NODE_ALIVE", "NODE_SCHEDULED_FOR_REMOVAL", "NODE_SCHEDULED_FOR_FREE" };
 
-struct synth_node;
-typedef struct synth_node synth_node;
-
-struct synth_node
-{
-    ugen* ugen_graph; // UGen Graph
-    ugen_graph_pool_node* ugen_graph_node; // ugen graph pool node, used to release the ugen graph memory during deconstruction
-    double* ugen_wires; // UGen output wire buffers
-    ugen_wires_pool_node* ugen_wires_node; // ugen wires pool node, used to release the ugen wire memory during reconstruction
-    synth_node* previous; // Previous node, used in synth_list for the scheduler
-    synth_node* next; // Next node, used in the synth_list for the scheduler
-    jack_time_t time; // scheduled time, in microseconds
-    uint32_t key; // Node ID, used to look up synths in the synth hash table
-    uint32_t hash; // Cached hash of the node id for the synth hash table
-    uint32_t table_index; // Cached hash table index
-    uint32_t num_ugens;
-    uint32_t num_wires;
-    node_alive_status previous_alive_status; // Flag representing whether the previous status of the synth
-    node_alive_status alive_status; // Flag representing the alive status of the synth
-};
-
 synth_node* _necronomicon_current_node = NULL;
 synth_node* _necronomicon_current_node_underconstruction = NULL;
-const uint32_t NODE_SIZE = sizeof(synth_node);
-const uint32_t NODE_POINTER_SIZE = sizeof(synth_node*);
 synth_node* free_synths = NULL;
 int32_t num_free_synths = 0;
 const uint32_t max_free_synths = 128;
 
 // Synth hash table
-const uint32_t MAX_SYNTHS = 8192;
-const uint32_t HASH_TABLE_SIZE_MASK = 8191;
-typedef synth_node** hash_table;
 hash_table synth_table = NULL;
-bool hash_table_remove(hash_table table, synth_node* node);
-synth_node* hash_table_lookup(hash_table table, uint32_t key);
 
-void print_node(synth_node* node); // Forward declaration
 void print_node_alive_status(synth_node* node)
 {
     if (node != NULL)
@@ -701,9 +586,6 @@ void initialize_wave_tables()
 // Scheduler
 ////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
 
-const uint32_t MAX_FIFO_MESSAGES = 2048;
-const uint32_t FIFO_SIZE_MASK = 2047;
-
 /////////////////
 // Message FIFO
 /////////////////
@@ -742,6 +624,9 @@ void print_fifo_message(message m)
     puts(message_map[m.type]);
 };
 
+const uint32_t MAX_FIFO_MESSAGES = 2048;
+const uint32_t FIFO_SIZE_MASK = 2047;
+
 // Lock Free FIFO Queue (Ring Buffer)
 typedef message* message_fifo;
 
@@ -752,18 +637,6 @@ uint32_t nrt_fifo_write_index = 0;
 message_fifo rt_fifo = NULL;
 uint32_t rt_fifo_read_index = 0;
 uint32_t rt_fifo_write_index = 0;
-
-// Increment fifo_write_index and fifo_read_index after assignment to maintain intended ordering (using a memory barrier): Assignment/Lookup -> Increment
-#define FIFO_PUSH(fifo, write_index, node, size_mask) fifo[write_index & size_mask] = node; __sync_synchronize(); write_index++;
-#define FIFO_POP(fifo, read_index, size_mask) fifo[read_index & size_mask]; __sync_synchronize(); read_index++;
-
-// Non-realtime thread FIFO push/pop
-#define NRT_FIFO_PUSH(node) FIFO_PUSH(nrt_fifo, nrt_fifo_write_index, node, FIFO_SIZE_MASK)
-#define NRT_FIFO_POP() FIFO_POP(nrt_fifo, nrt_fifo_read_index, FIFO_SIZE_MASK)
-
-// Realtime thread FIFO push/pop
-#define RT_FIFO_PUSH(node) FIFO_PUSH(rt_fifo, rt_fifo_write_index, node, FIFO_SIZE_MASK)
-#define RT_FIFO_POP() FIFO_POP(rt_fifo, rt_fifo_read_index, FIFO_SIZE_MASK)
 
 // Allocate and null initialize a node list to be used as a node_fifo or node_list
 message_fifo new_message_fifo()
@@ -822,17 +695,9 @@ void rt_fifo_free()
 // Scheduled Node List
 ///////////////////////
 
-// An ordered list of ugen nodes
-typedef synth_node** node_list;
-
 node_list scheduled_node_list = NULL;
 uint32_t scheduled_list_read_index = 0;
 uint32_t scheduled_list_write_index = 0;
-
-#define SCHEDULED_LIST_PUSH(node) FIFO_PUSH(scheduled_node_list, scheduled_list_write_index, node, FIFO_SIZE_MASK)
-#define SCHEDULED_LIST_POP() FIFO_POP(scheduled_node_list, scheduled_list_read_index, FIFO_SIZE_MASK)
-#define SCHEDULED_LIST_PEEK() (scheduled_node_list[scheduled_list_read_index & FIFO_SIZE_MASK])
-#define SCHEDULED_LIST_PEEK_TIME() ((scheduled_node_list[scheduled_list_read_index & FIFO_SIZE_MASK])->time)
 
 // Allocate and null initialize a node list to be used as a node_list
 node_list new_node_list()
@@ -906,8 +771,6 @@ void scheduled_list_sort()
 const uint32_t MAX_REMOVAL_IDS = 512; // Max number of ids able to be scheduled for removal *per sample frame*
 const uint32_t REMOVAL_FIFO_SIZE_MASK = 511;
 
-typedef synth_node** node_fifo;
-
 node_fifo removal_fifo = NULL;
 uint32_t removal_fifo_read_index = 0;
 uint32_t removal_fifo_write_index = 0;
@@ -945,6 +808,9 @@ void removal_fifo_free()
 
 // Fixed memory hash table using open Addressing with linear probing
 // This is not thread safe.
+
+const uint64_t PRIME = 0x01000193; // 16777619
+const uint64_t SEED = 0x811C9DC5; // 2166136261
 
 hash_table hash_table_new()
 {
@@ -1024,7 +890,6 @@ synth_node* hash_table_lookup(hash_table table, uint32_t key)
 // Doubly Linked List
 ///////////////////////////
 
-typedef synth_node* doubly_linked_list;
 doubly_linked_list synth_list = NULL;
 
 // Pushes nodes to the front of the list, returning the new list head
@@ -1095,6 +960,30 @@ int32_t get_running()
 uint32_t get_block_size()
 {
     return BLOCK_SIZE;
+}
+
+void print_node(synth_node* node)
+{
+    if (node != NULL)
+        printf("synth_node %p { ugen_graph: %p, ugen_graph_node: %p, ugen_wires: %p, ugen_wires_node: %p, previous: %p, next: %p, time: %llu, "
+               "key %u, hash: %u, table_index: %u, num_ugens: %u, num_wires: %u, previous_alive_status: %u, alive_status %u }\n",
+               node,
+               node->ugen_graph,
+               node->ugen_graph_node,
+               node->ugen_wires,
+               node->ugen_wires_node,
+               node->previous,
+               node->next,
+               node->time,
+               node->key,
+               node->hash,
+               node->table_index,
+               node->num_ugens,
+               node->num_wires,
+               node->previous_alive_status,
+               node->alive_status);
+    else
+        printf("NULL\n");
 }
 
 void print_synth_list()
@@ -3612,313 +3501,6 @@ void combC_aaa_calc(ugen u)
         COMBC_FEEDBACKA       /* 1 */
         COMBC_XA              /* 2 */
     )
-}
-
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-// Tests
-////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
-
-//// Test FIFO
-
-synth_node* new_test_synth(uint32_t time)
-{
-    ugen test_ugen = { &sin_a_calc, &sin_constructor, &sin_deconstructor, NULL, NULL, NULL };
-    test_ugen.constructor(&test_ugen);
-
-    synth_node* test_synth = malloc(NODE_SIZE);
-    test_synth->ugen_graph = malloc(UGEN_SIZE);
-    test_synth->ugen_wires = malloc(DOUBLE_SIZE);
-    test_synth->previous = NULL;
-    test_synth->next = NULL;
-    test_synth->key = 0;
-    test_synth->hash = 0;
-    test_synth->table_index = 0;
-    test_synth->num_ugens = 1;
-    test_synth->num_wires = 1;
-    test_synth->time = time;
-
-    test_synth->ugen_graph[0] = test_ugen;
-    test_synth->ugen_wires[0] = 0;
-    return test_synth;
-}
-
-void print_node(synth_node* node)
-{
-    if (node != NULL)
-        printf("synth_node %p { ugen_graph: %p, ugen_graph_node: %p, ugen_wires: %p, ugen_wires_node: %p, previous: %p, next: %p, time: %llu, "
-               "key %u, hash: %u, table_index: %u, num_ugens: %u, num_wires: %u, previous_alive_status: %u, alive_status %u }\n",
-               node,
-               node->ugen_graph,
-               node->ugen_graph_node,
-               node->ugen_wires,
-               node->ugen_wires_node,
-               node->previous,
-               node->next,
-               node->time,
-               node->key,
-               node->hash,
-               node->table_index,
-               node->num_ugens,
-               node->num_wires,
-               node->previous_alive_status,
-               node->alive_status);
-    else
-        printf("NULL\n");
-}
-
-void print_list(node_list list)
-{
-    printf("scheduled_list_read_index: %i, scheduled_list_write_index: %i\n", scheduled_list_read_index, scheduled_list_write_index);
-    uint32_t i = scheduled_list_read_index & FIFO_SIZE_MASK;
-    scheduled_list_write_index = scheduled_list_write_index & FIFO_SIZE_MASK;
-
-    for (; i != scheduled_list_write_index; i = (i + 1) & FIFO_SIZE_MASK)
-    {
-        print_node(list[i]);
-        printf("\n");
-    }
-}
-
-void randomize_and_print_list(node_list list)
-{
-    puts("\n//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////");
-    puts("// RANDOMIZE LIST");
-    puts("//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////\n");
-
-    uint32_t i;
-    for (i = 0; i < 1000; ++i)
-    {
-        uint32_t num_pop = random() / (double) RAND_MAX * 100;
-        while ((num_pop > 0) && ((scheduled_list_read_index & FIFO_SIZE_MASK) != ((scheduled_list_write_index - 1) & FIFO_SIZE_MASK)))
-        {
-            SCHEDULED_LIST_POP();
-            --num_pop;
-        }
-
-        uint32_t num_push = random() / (double) RAND_MAX * 100;
-        while ((num_push > 0) && ((scheduled_list_read_index & FIFO_SIZE_MASK) != (scheduled_list_write_index & FIFO_SIZE_MASK)))
-        {
-            synth_node* node = new_test_synth((random() / (double) RAND_MAX) * 10000.0);
-            SCHEDULED_LIST_PUSH(node);
-            --num_push;
-        }
-    }
-
-    scheduled_list_read_index = scheduled_list_read_index & FIFO_SIZE_MASK;
-    scheduled_list_write_index = scheduled_list_write_index & FIFO_SIZE_MASK;
-    print_list(list);
-}
-
-void sort_and_print_list(node_list list)
-{
-    puts("\n//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////");
-    puts("// SORT LIST");
-    puts("//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////\n");
-
-    scheduled_list_sort();
-    print_list(list);
-}
-
-void test_list()
-{
-    scheduled_node_list = new_node_list();
-    synth_table = hash_table_new();
-
-    while (scheduled_list_write_index < (MAX_FIFO_MESSAGES * 0.75))
-    {
-        synth_node* node = new_test_synth((random() / (double) RAND_MAX) * 10000.0);
-        SCHEDULED_LIST_PUSH(node);
-    }
-
-    print_list(scheduled_node_list);
-
-    uint32_t i = 0;
-    for (; i < 100; ++i)
-    {
-        sort_and_print_list(scheduled_node_list);
-        randomize_and_print_list(scheduled_node_list);
-    }
-
-    sort_and_print_list(scheduled_node_list);
-    puts("scheduled_list_free()");
-    scheduled_list_free();
-    hash_table_free(synth_table);
-    synth_table = NULL;
-}
-
-//// Test Hash Table
-
-void print_hash_table(hash_table table)
-{
-    puts("\n\n//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////");
-    puts("// Hash Table");
-    puts("//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////\n");
-
-    printf("hash_table [");
-
-    uint32_t i;
-    for (i = 0; i < MAX_SYNTHS; ++i)
-    {
-        // print_node(table[i]);
-        if (i < (MAX_SYNTHS - 1))
-            printf(", ");
-    }
-
-    printf("]\n\n");
-}
-
-uint32_t num_values = 5000;
-uint32_t times[5000];
-
-void test_hash_table()
-{
-    uint32_t i = 0;
-    for (i = 0; i < 1000; ++i)
-    {
-        printf("key: %u, hash: %u, slot %u\n", i, HASH_KEY(i), HASH_KEY(i) & HASH_TABLE_SIZE_MASK);
-    }
-
-    synth_table = hash_table_new();
-
-    for (i = 0; i < num_values; ++i)
-    {
-        times[i] = (random() / (double) RAND_MAX) * 10000.0;
-        synth_node* node = new_test_synth(times[i]);
-        node->key = i;
-        node->hash = HASH_KEY(i);
-        node->table_index = i;
-        hash_table_insert(synth_table, node);
-        assert(node == hash_table_lookup(synth_table, i));
-    }
-
-    print_hash_table(synth_table);
-    puts("Asserting table values...\n\n");
-
-    for (i = 0; i < num_values; ++i)
-    {
-        synth_node* node = hash_table_lookup(synth_table, i);
-        assert(node);
-        assert(node->time == times[i]);
-        assert(node->key == i);
-        assert(node->hash == HASH_KEY(i));
-    }
-
-    puts("Removing table values...\n\n");
-
-    for (i = 0; i < num_values; ++i)
-    {
-        synth_node* node = hash_table_lookup(synth_table, i);
-        assert(node);
-        hash_table_remove(synth_table, node);
-        free_synth(node);
-    }
-
-    puts("Asserting NULL values...\n\n");
-
-    for (i = 0; i < MAX_SYNTHS; ++i)
-    {
-        assert(hash_table_lookup(synth_table, i) == NULL);
-    }
-
-    print_hash_table(synth_table);
-    puts("Freeing table...\n\n");
-    hash_table_free(synth_table);
-}
-
-//// Test Doubly Linked List
-
-void doubly_linked_list_print(doubly_linked_list list)
-{
-    synth_node* node = list;
-    while (node)
-    {
-        print_node(node);
-        node = node->next;
-    }
-}
-
-typedef bool node_filter_func(synth_node* node);
-doubly_linked_list doubly_linked_list_filter(doubly_linked_list list, node_filter_func func)
-{
-    synth_node* node = list;
-    while (node)
-    {
-        synth_node* next = node->next;
-
-        if (!func(node))
-        {
-            puts("\nFiltered out node:");
-            print_node(node);
-            list = doubly_linked_list_remove(list, node);
-            free_synth(node);
-        }
-
-        node = next;
-    }
-
-    return list;
-}
-
-bool is_odd(synth_node* node)
-{
-    if (node == NULL)
-        return false;
-
-    return (int32_t) node->time % 2 == 1;
-}
-
-void test_doubly_linked_list()
-{
-    int32_t i; // Don't make this unsigned, we'll go infinite!
-    for (i = 50; i >= 0; --i)
-    {
-        synth_node* node = new_test_synth(i);
-        synth_list = doubly_linked_list_push(synth_list, node);
-    }
-
-    puts("\n\n//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////");
-    puts("// LIST");
-    puts("//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////\n");
-
-    doubly_linked_list_print(synth_list);
-
-    synth_node* node = synth_list;
-    while (node)
-    {
-        synth_node* next = node->next;
-
-        if (next)
-        {
-            printf("(next: %llu) - (node: %llu) = %llu\n", next->time, node->time, next->time - node->time);
-            assert((next->time - node->time) == 1);
-        }
-
-        node = next;
-    }
-
-    synth_list = doubly_linked_list_filter(synth_list, is_odd);
-
-    puts("\n\n//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////");
-    puts("// LIST");
-    puts("//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////\n");
-
-    doubly_linked_list_print(synth_list);
-
-    node = synth_list;
-    while (node)
-    {
-        synth_node* next = node->next;
-
-        if (next)
-        {
-            printf("(next: %llu) - (node: %llu) = %llu\n", next->time, node->time, next->time - node->time);
-            assert((next->time - node->time) == 2);
-        }
-
-        node = next;
-    }
-
-    doubly_linked_list_free(synth_list);
 }
 
 #define CLAMP(V,MIN,MAX)                    \
@@ -9682,5 +9264,3 @@ float out_bus_rms(int32_t bus)
 
     return sqrt(squareSum / 512);
 }
-
-#endif // NECRONOMICON_H_INCLUDED

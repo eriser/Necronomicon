@@ -171,10 +171,13 @@ executable UGenTest
         vector
 
 executable CTest
-    main-is:          Main.hs
-    default-language: Haskell2010
-    ghc-options:      -threaded -Wall -Werror -debug
-    hs-source-dirs:   Tests/CTest
+    main-is:            Main.hs
+    default-language:   Haskell2010
+    ghc-options:        -threaded -Wall -Werror -debug
+    hs-source-dirs:     Tests/CTest
+    Include-Dirs: 		c_lib
+    Install-Includes:	Necronomicon.h
+    C-Sources:          Tests/CTest/CTest.c
     default-extensions:
     build-depends:
         base             == 4.*,
