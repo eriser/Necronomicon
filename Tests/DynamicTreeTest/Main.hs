@@ -36,14 +36,11 @@ mkBullet p = ( mkEntity <| Bullet <| Flying <| Vector3 1 1 1 )
 
 initBullets :: Double -> [Entity Bullet]
 -- initBullets = [mkBullet <| Vector3 (-2) 0 0, mkBullet <| Vector3 0 0 0, mkBullet <| Vector3 2 0 0]
-initBullets o = foldr fb [] <| map ((*1) . fromIntegral) ([(-150) .. 150] :: [Int])
-    where
-        fb y acc = mkBullet (Vector3 0 y 0 + Vector3 offset 0 0) :  acc
-        offset   = o - 18
+initBullets offset = foldr (\y acc -> mkBullet (Vector3 0 y 0 + Vector3 offset 0 0) :  acc) [] <| map (*1) [-50..50]
 
 --This is around 3000 spinning objects
 megaDark :: Signal ()
-megaDark = hero *> traverse_ bullets [4, 8, 12, 16, 20, 24, 28, 32, 36] *> pure ()
+megaDark = hero *> traverse_ bullets [-200, -196..200]
     where
         bullets offset = b
             where

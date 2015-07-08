@@ -250,23 +250,23 @@ instance Applicative Signal where
     Pure   _ *> Signal g = Signal g
     Signal f *> Pure   g = Signal $ \state -> do
         (fcont, _, fids) <- f state
-        fchan             <- atomically newTChan
+        fchan             <- atomically $ newTBQueue 10
         _                 <- forkIO $ contf fcont fids fchan
         return (contg fchan, g, fids)
         where
-            contf fcont fids fchan = forever $ atomically (readTChan fchan) >>= \eid -> when (IntSet.member eid fids) (fcont eid >> return ())
-            contg fchan eid        = atomically (writeTChan fchan eid) >> return (NoChange g)
+            contf fcont fids fchan = forever $ atomically (readTBQueue fchan) >>= \eid -> when (IntSet.member eid fids) (fcont eid >> return ())
+            contg fchan eid        = atomically (writeTBQueue fchan eid `orElse` return ()) >> return (NoChange g)
     Signal f *> Signal g = Signal $ \state -> do
         (fcont,  _, fids) <- f state
         (gcont, g', gids) <- g state
         ref               <- newIORef (NoChange g')
-        fchan             <- atomically newTChan
+        fchan             <- atomically $ newTBQueue 10
         _                 <- forkIO $ contf fcont fids fchan
         return (contg gcont gids fchan ref, g', IntSet.union fids gids)
         where
-            contf fcont fids fchan         = forever $ atomically (readTChan fchan) >>= \eid -> when (IntSet.member eid fids) (fcont eid >> return ())
+            contf fcont fids fchan         = forever $ atomically (readTBQueue fchan) >>= \eid -> when (IntSet.member eid fids) (fcont eid >> return ())
             contg gcont gids fchan ref eid = do
-                atomically $ writeTChan fchan eid
+                atomically $ writeTBQueue fchan eid `orElse` return ()
                 if IntSet.member eid gids
                     then gcont eid >>= \ge -> writeIORef ref (NoChange $ unEvent ge) >> return ge
                     else readIORef ref
@@ -370,7 +370,7 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
                 {-# SCC "mapM__renderWithCameraRaw" #-} mapM_ (renderWithCameraRaw window (sigResources state) gs) cs
                 atomically $ putTMVar (contextBarrier state) $ GLContext mtid
 
-                threadDelay  $ 16667
+                threadDelay 16667
                 run q window s currentTime tree eventInbox state
 
 processEvents :: Show a => (Int -> IO (Event a)) -> SignalState -> TChan InputEvent -> IO ()
