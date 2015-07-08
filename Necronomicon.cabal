@@ -1,6 +1,6 @@
 Name:                   Necronomicon
 Version:                0.0
-Description:            Deterministic Audio Engine
+Description:            Haskell and C based audio and graphics engine
 License:                GPL
 License-file:           LICENSE
 Author:                 Chad McKinney and Curtis McKinney
@@ -34,7 +34,22 @@ library
         Extra-Libraries: jack, sndfile, GLEW
     Include-Dirs: 		c_lib
     Install-Includes:	Necronomicon.h
-    C-Sources:    		c_lib/Necronomicon.c, c_lib/Render.c
+    C-Sources:
+        c_lib/Necronomicon.c,
+        c_lib/Necronomicon/Render.c,
+        c_lib/Necronomicon/DelayUGens.c,
+        c_lib/Necronomicon/ReverbUGens.c,
+        c_lib/Necronomicon/OperatorUGens.c,
+        c_lib/Necronomicon/LFUGens.c,
+        c_lib/Necronomicon/OscUGens.c,
+        c_lib/Necronomicon/IOUGens.c,
+        c_lib/Necronomicon/DistortionUGens.c,
+        c_lib/Necronomicon/NoiseUGens.c,
+        c_lib/Necronomicon/RangeUGens.c,
+        c_lib/Necronomicon/FilterUGens.c,
+        c_lib/Necronomicon/DynamicsUGens.c,
+        c_lib/Necronomicon/PanUGens.c,
+        c_lib/Necronomicon/TimeUGens.c
     ghc-options:        -threaded -O2 -Wall -Werror
     default-extensions: FlexibleInstances MultiParamTypeClasses ForeignFunctionInterface QuasiQuotes TemplateHaskell TypeFamilies BangPatterns RankNTypes GeneralizedNewtypeDeriving
 

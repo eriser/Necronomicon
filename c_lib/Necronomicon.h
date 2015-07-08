@@ -1,7 +1,7 @@
 /*
-  Necronomicon - Deterministic Audio Engine
-  Copyright 2014 - Chad McKinney and Curtis McKinney
- */
+    Necronomicon
+    Copyright 2014-2015 Chad McKinney and Curtis McKinney
+*/
 
 #ifndef NECRONOMICON_H_INCLUDED
 #define NECRONOMICON_H_INCLUDED
@@ -11,7 +11,73 @@
 
 #include "Necronomicon/Endian.h"
 
+/////////////////////
+// Constants
+/////////////////////
+
+extern const uint32_t DOUBLE_SIZE;
+extern const uint32_t UINT_SIZE;
+
+#ifndef M_PI
+#define M_PI 3.1415926535897932384626433832795028841971693993751058209749445923078164062L
+#endif
+
+#define LOG_001 -6.907755278982137
+
+extern const double TWO_PI;
+extern const double RECIP_TWO_PI;
+extern const double HALF_PI;
+extern const double QUARTER_PI;
+
+#define TABLE_SIZE 65536
+#define TABLE_SIZE_MASK 65535
+#define DOUBLE_TABLE_SIZE 65536.0
+extern double RECIP_TABLE_SIZE;
+extern uint32_t HALF_TABLE_SIZE;
+extern uint32_t QUATER_TABLE_SIZE;
+extern double sine_table[TABLE_SIZE];
+extern double cosn_table[TABLE_SIZE];
+extern double sinh_table[TABLE_SIZE];
+extern double atan_table[TABLE_SIZE];
+extern double tanh_table[TABLE_SIZE];
+
+#define PAN_TABLE_SIZE 4096
+#define PAN_TABLE_SIZE_MASK 4095
+#define DOUBLE_PAN_TABLE_SIZE 4096.0
+extern double PAN_RECIP_TABLE_SIZE;
+extern uint32_t PAN_HALF_TABLE_SIZE;
+extern uint32_t PAN_QUATER_TABLE_SIZE;
+extern double pan_table[PAN_TABLE_SIZE];
+
+extern double SAMPLE_RATE;
+extern double RECIP_SAMPLE_RATE;
+extern double TABLE_MUL_RECIP_SAMPLE_RATE;
+extern double TWO_PI_TIMES_RECIP_SAMPLE_RATE;
+extern uint32_t BLOCK_SIZE;
+
 typedef enum { false, true } bool;
+
+/////////////////////
+// Global Mutables
+/////////////////////
+
+extern double* _necronomicon_buses;
+extern uint32_t num_audio_buses;
+extern uint32_t last_audio_bus_index;
+extern uint32_t num_audio_buses_bytes;
+extern int32_t num_synths;
+
+extern jack_nframes_t current_cycle_frames;
+extern jack_time_t current_cycle_usecs;
+extern jack_time_t next_cycle_usecs;
+extern float period_usecs;
+extern const jack_time_t USECS_PER_SECOND;
+extern double usecs_per_frame;
+extern long double recip_usecs_per_frame;
+extern jack_time_t BLOCK_SIZE_USECS;
+
+extern float out_bus_buffers[16][512];
+extern uint32_t  out_bus_buffer_index;
 
 /////////////////////
 // UGen
@@ -108,19 +174,76 @@ extern const uint32_t NODE_SIZE;
 extern const uint32_t NODE_POINTER_SIZE;
 extern const uint32_t MAX_SYNTHS;
 extern const uint32_t HASH_TABLE_SIZE_MASK;
+extern synth_node* _necronomicon_current_node; // pointer to current node being processed in the audio loop
+extern synth_node* _necronomicon_current_node_underconstruction; // pointer to node being constructed in the NRT thread
 
 void free_synth(synth_node* synth);
+
+/////////////////////
+// Sample Buffer
+/////////////////////
+
+struct sample_buffer;
+typedef struct sample_buffer sample_buffer;
+
+struct sample_buffer
+{
+    double* samples;
+    sample_buffer* next_sample_buffer;
+    uint32_t pool_index;
+    uint32_t num_samples;
+    uint32_t num_samples_mask; // used with power of 2 sized buffers
+};
+
+extern const uint32_t SAMPLE_BUFFER_SIZE;
+extern const uint32_t SAMPLE_BUFFER_POINTER_SIZE;
+
+sample_buffer* acquire_sample_buffer(uint32_t num_samples);
+void release_sample_buffer(sample_buffer* buffer);
 
 /////////////////
 // Message FIFO
 /////////////////
 
+typedef union
+{
+    synth_node* node;
+    uint32_t node_id;
+    const int8_t* string;
+    double number;
+} message_arg;
+
+typedef enum
+{
+    IGNORE,
+    START_SYNTH,
+    STOP_SYNTH,
+    FREE_SYNTH, // Free synth memory
+    SHUTDOWN,
+    PRINT,
+    PRINT_NUMBER
+} message_type;
+
+extern const int8_t* message_map[];
+
+typedef struct
+{
+    message_arg arg;
+    message_type type;
+} message;
+
+extern const uint32_t MESSAGE_SIZE;
 extern const uint32_t MAX_FIFO_MESSAGES;
 extern const uint32_t FIFO_SIZE_MASK;
 
+// Lock Free FIFO Queue (Ring Buffer)
+typedef message* message_fifo;
+
+extern message_fifo nrt_fifo;
 extern uint32_t nrt_fifo_read_index;
 extern uint32_t nrt_fifo_write_index;
 
+extern message_fifo rt_fifo;
 extern uint32_t rt_fifo_read_index;
 extern uint32_t rt_fifo_write_index;
 
@@ -165,6 +288,25 @@ extern uint32_t scheduled_list_write_index;
 extern const uint32_t MAX_REMOVAL_IDS; // Max number of ids able to be scheduled for removal *per sample frame*
 extern const uint32_t REMOVAL_FIFO_SIZE_MASK;
 typedef synth_node** node_fifo;
+
+extern node_fifo removal_fifo;
+extern uint32_t removal_fifo_read_index;
+extern uint32_t removal_fifo_write_index;
+extern int32_t removal_fifo_size;
+
+#define REMOVAL_FIFO_PUSH(id) FIFO_PUSH(removal_fifo, removal_fifo_write_index, id, REMOVAL_FIFO_SIZE_MASK)
+#define REMOVAL_FIFO_POP() FIFO_POP(removal_fifo, removal_fifo_read_index, REMOVAL_FIFO_SIZE_MASK)
+
+inline void try_schedule_current_synth_for_removal()
+{
+    if (_necronomicon_current_node && (removal_fifo_size < REMOVAL_FIFO_SIZE_MASK) && _necronomicon_current_node->alive_status == NODE_ALIVE)
+    {
+        _necronomicon_current_node->previous_alive_status = _necronomicon_current_node->alive_status;
+        _necronomicon_current_node->alive_status = NODE_SCHEDULED_FOR_REMOVAL;
+        removal_fifo_size = (removal_fifo_size + 1) & REMOVAL_FIFO_SIZE_MASK;
+        REMOVAL_FIFO_PUSH(_necronomicon_current_node);
+    }
+}
 
 ///////////////////////////
 // Hash Table
@@ -228,20 +370,37 @@ void doubly_linked_list_free(doubly_linked_list list);
 // Misc
 ///////////////////////////
 
-// default type sizes
+// Helper functions and defines
 
-extern const uint32_t DOUBLE_SIZE;
-extern const uint32_t UINT_SIZE;
+extern uint32_t _block_frame; // Current block frame number
+extern synth_node _necronomicon_current_node_object; // Current node being processed
 
-// Helper functions
+#define UGEN_INPUT_BUFFER(ugen, index) (_necronomicon_current_node_object.ugen_wires + (ugen.inputs[index] * BLOCK_SIZE))
+#define UGEN_OUTPUT_BUFFER(ugen, index) (_necronomicon_current_node_object.ugen_wires + (ugen.outputs[index] * BLOCK_SIZE))
+
+#define AUDIO_LOOP(func)                            \
+for (; _block_frame < BLOCK_SIZE; ++_block_frame)   \
+{                                                   \
+    func                                            \
+}
+
+#define UGEN_IN(wire_frame_buffer) wire_frame_buffer[_block_frame]
+#define UGEN_OUT(wire_frame_buffer, out_value) wire_frame_buffer[_block_frame] = out_value
+
+void null_deconstructor(ugen* u); // Does nothing
+void null_constructor(ugen* u);
 
 void print_node(synth_node* node);
 void print_synth_list();
 
-// Forward declared ugen functions, used during testing, as well as norma ugen usage
+extern const int8_t* RESOUCES_PATH;
+
+// Forward declared ugen functions
 
 void sin_constructor(ugen* u);
 void sin_deconstructor(ugen* u);
 void sin_a_calc(ugen u);
+
+bool minBLEP_Init();
 
 #endif // NECRONOMICON_H_INCLUDED
