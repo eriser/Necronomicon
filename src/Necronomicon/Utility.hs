@@ -79,14 +79,14 @@ chunksOf n xs =
     in   ys : chunksOf n zs
 
 filterMap :: (a -> Maybe b) -> [a] -> [b]
-filterMap f xs = {-# SCC "filterMap" #-} foldr collapse [] xs
+filterMap f xs = foldr collapse [] xs
     where
         collapse x xs' = case f x of
             Just x' -> x' : xs'
             Nothing -> xs'
 
 filterMap' :: (a -> Maybe b) -> [a] -> [b]
-filterMap' f xs = {-# SCC "filterMap" #-} go xs []
+filterMap' f xs = go xs []
     where
         go []        xs' = xs'
         go (x : mxs) xs' = case f x of

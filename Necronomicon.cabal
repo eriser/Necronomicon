@@ -61,7 +61,6 @@ library
         Necronomicon.Util.PriorityQueue
         Necronomicon.Physics.DynamicTree
         Necronomicon.FRP.SignalA
-        Necronomicon.EntityVector
 
     other-modules:
         Necronomicon.Language.Layout

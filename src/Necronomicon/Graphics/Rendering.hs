@@ -5,12 +5,11 @@ import Necronomicon.Graphics.Resources
 import Necronomicon.Graphics.Color
 import Necronomicon.Graphics.Camera
 import Necronomicon.Linear
--- import Necronomicon.Utility
 import Foreign.Ptr
 import Foreign.C.Types
 import Graphics.Rendering.OpenGL.Raw
 import Data.Bits
-import qualified Graphics.UI.GLFW                  as GLFW
+import qualified Graphics.UI.GLFW             as GLFW
 import qualified Data.Vector.Storable.Mutable as SMV
 
 foreign import ccall safe "init_c_opengl" initCOpenGL ::  IO ()
@@ -25,42 +24,6 @@ initWindow (width, height) isFullScreen = GLFW.init >>= \initSuccessful -> if in
             GLFW.makeContextCurrent w
             initCOpenGL
             return w
---
--- setUniformRaw :: UniformRaw -> IO ()
--- setUniformRaw !(UniformScalarRaw  loc x)       = glUniform1f loc x
--- setUniformRaw !(UniformVec2Raw    loc x y)     = glUniform2f loc x y
--- setUniformRaw !(UniformVec3Raw    loc x y z)   = glUniform3f loc x y z
--- setUniformRaw !(UniformVec4Raw    loc x y z w) = glUniform4f loc x y z w
--- setUniformRaw !(UniformTextureRaw loc t u)     = do
---     glActiveTexture u
---     glBindTexture gl_TEXTURE_2D t
---     glUniform1i loc (fromIntegral t)
--- {-# INLINE setUniformRaw #-}
---
--- setAttributeRaw :: CUInt -> GLint -> GLsizei -> Ptr CFloat -> IO()
--- setAttributeRaw !loc !n !s !p = do
---     glVertexAttribPointer loc n gl_FLOAT (fromIntegral gl_FALSE) s p
---     glEnableVertexAttribArray loc
--- {-# INLINE setAttributeRaw #-}
---
--- drawRenderData :: Ptr CFloat -> Matrix4x4 -> Matrix4x4 -> RenderData-> IO()
--- drawRenderData _ _ _ (RenderData 0 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _) = {-# SCC "inactive" #-} return ()
--- drawRenderData !mptr !view !proj !(RenderData _ vertexBuffer indexBuffer start end count vertexVadN vertexVadS vertexVadP colorVadN colorVadS colorVadP uvVadN uvVadS uvVadP program vloc cloc uvloc model us mv pr) = do
---     let !modelView = {-# SCC "modelView" #-} view .*. model
---
---     {-# SCC "glUseProgram" #-} glUseProgram program
---     {-# SCC "mapM_setUniformRaw" #-} mapM_ setUniformRaw us
---
---     {-# SCC "setModelView" #-} setMatrixUniform mv modelView mptr
---     {-# SCC "setProj" #-} setMatrixUniform pr proj mptr
---     {-# SCC "glBindBuffer" #-} glBindBuffer gl_ARRAY_BUFFER vertexBuffer
---
---     {-# SCC "setVertexAtt" #-} setAttributeRaw vloc  vertexVadN vertexVadS vertexVadP
---     {-# SCC "setColorAtt" #-} setAttributeRaw cloc  colorVadN  colorVadS  colorVadP
---     {-# SCC "setUVAtt" #-} setAttributeRaw uvloc uvVadN     uvVadS     uvVadP
---
---     {-# SCC "glBindBuffer" #-} glBindBuffer gl_ARRAY_BUFFER indexBuffer
---     {-# SCC "glDrawRangeElements" #-} glDrawRangeElements gl_TRIANGLES start end count gl_UNSIGNED_INT offset0
 
 foreign import ccall safe "draw_render_data" drawRenderDataC ::
     Ptr RenderData ->
@@ -102,8 +65,8 @@ renderWithCameraRaw window resources scene (view, c) = do
     glLoadIdentity
 
     case _fov c of
-        0 -> {-# SCC "drawRenderDataC_ortho" #-} setMatrixPtr oproj mptr >> (SMV.unsafeWith scene $ \ptr -> drawRenderDataC ptr (fromIntegral $ SMV.length scene) (realToFrac v00) (realToFrac v01) (realToFrac v02) (realToFrac v03) (realToFrac v10) (realToFrac v11) (realToFrac v12) (realToFrac v13) (realToFrac v20) (realToFrac v21) (realToFrac v22) (realToFrac v23) (realToFrac v30) (realToFrac v31) (realToFrac v32) (realToFrac v33) mptr)
-        _ -> {-# SCC "SMV_unsafeWith_scene" #-} setMatrixPtr persp mptr >> (SMV.unsafeWith scene $ \ptr -> {-# SCC "drawRenderDataC" #-} drawRenderDataC ptr (fromIntegral $ SMV.length scene) (realToFrac v00) (realToFrac v01) (realToFrac v02) (realToFrac v03) (realToFrac v10) (realToFrac v11) (realToFrac v12) (realToFrac v13) (realToFrac v20) (realToFrac v21) (realToFrac v22) (realToFrac v23) (realToFrac v30) (realToFrac v31) (realToFrac v32) (realToFrac v33) mptr)
+        0 -> setMatrixPtr oproj mptr >> (SMV.unsafeWith scene $ \ptr -> drawRenderDataC ptr (fromIntegral $ SMV.length scene) (realToFrac v00) (realToFrac v01) (realToFrac v02) (realToFrac v03) (realToFrac v10) (realToFrac v11) (realToFrac v12) (realToFrac v13) (realToFrac v20) (realToFrac v21) (realToFrac v22) (realToFrac v23) (realToFrac v30) (realToFrac v31) (realToFrac v32) (realToFrac v33) mptr)
+        _ -> setMatrixPtr persp mptr >> (SMV.unsafeWith scene $ \ptr -> drawRenderDataC ptr (fromIntegral $ SMV.length scene) (realToFrac v00) (realToFrac v01) (realToFrac v02) (realToFrac v03) (realToFrac v10) (realToFrac v11) (realToFrac v12) (realToFrac v13) (realToFrac v20) (realToFrac v21) (realToFrac v22) (realToFrac v23) (realToFrac v30) (realToFrac v31) (realToFrac v32) (realToFrac v33) mptr)
 
     -- mapM_ drawPostRenderFX $ _fx c
 
@@ -119,7 +82,7 @@ renderWithCameraRaw window resources scene (view, c) = do
             -- GL.clear [GL.ColorBuffer,GL.DepthBuffer]
             -- postFX <- getPostFX resources (fromIntegral w,fromIntegral h) fx
             -- let postFXMat = setEmptyTextures (LoadedTexture $ GL.TextureObject $ postRenderTex postFX) (postRenderMaterial postFX)
-            -- {-# SCC "drawMeshWithMaterial" #-} drawMeshWithMaterial postFXMat (rect 1 1) identity4 (orthoMatrix 0 1 0 1 (-1) 1) resources
+            -- drawMeshWithMaterial postFXMat (rect 1 1) identity4 (orthoMatrix 0 1 0 1 (-1) 1) resources
 
             -- GL.depthFunc     GL.$= Just GL.Less
             -- GL.blend         GL.$= GL.Enabled

@@ -354,7 +354,7 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
     where
         run quit window s runTime' tree eventInbox state
             | quit      = putStrLn "Qutting Necronomicon" >> return ()
-            | otherwise = {-# SCC "run_SignalA" #-} do
+            | otherwise = do
                 GLFW.pollEvents
                 q           <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'Escape
 
@@ -367,14 +367,14 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
 
                 gs <- readIORef (renderDataRef state)
                 cs <- readIORef (cameraRef state)
-                {-# SCC "mapM__renderWithCameraRaw" #-} mapM_ (renderWithCameraRaw window (sigResources state) gs) cs
+                mapM_ (renderWithCameraRaw window (sigResources state) gs) cs
                 atomically $ putTMVar (contextBarrier state) $ GLContext mtid
 
                 threadDelay 16667
                 run q window s currentTime tree eventInbox state
 
 processEvents :: Show a => (Int -> IO (Event a)) -> SignalState -> TChan InputEvent -> IO ()
-processEvents sig ss inbox = forever $ {-# SCC "process" #-} atomically (readTChan inbox) >>= \e -> case e of
+processEvents sig ss inbox = forever $ atomically (readTChan inbox) >>= \e -> case e of
     TimeEvent        dt rt -> writeIORef  (deltaTimeRef  ss) dt >> writeIORef (runTimeRef ss) rt >> sig 200 >>= printEvent
     MouseEvent       mp    -> writeIORef  (mousePosRef   ss) mp >> sig 201 >>= printEvent
     MouseButtonEvent mb    -> writeIORef  (mouseClickRef ss) mb >> sig 202 >>= printEvent
@@ -394,11 +394,11 @@ necro sig = Signal $ \state -> do
     where
         cont scont state eid = scont eid >>= \se -> case se of
             NoChange _ -> return se
-            Change   s -> {-# SCC "mapEntities" #-} Change <~ (mapEntities (updateEntity state) s)
+            Change   s -> Change <~ mapEntities (updateEntity state) s
 
         updateEntity state g@Entity{euid = UID uid} = case model g of
             Just (Model (Mesh (Just _) _ _ _ _ _) (Material (Just _) _ _ _ _)) -> do
-                {-# SCC "writeRenderData" #-} writeRenderData (renderDataRef state) uid g
+                writeRenderData (renderDataRef state) uid g
                 writeCam (cameraRef state) (euid g) (camera g) g
                 return g
             Just (Model (DynamicMesh (Just _) _ _ _ _ _) (Material (Just _) _ _ _ _)) -> do
@@ -427,12 +427,12 @@ necro sig = Signal $ \state -> do
         writeCam _    _         _        _ = return ()
 
         writeRenderData oref uid g = readIORef oref >>= \vec -> do
-            let x | uid < SMV.length vec = {-# SCC "SMV.unsafeWith" #-} SMV.unsafeWith vec (setRenderDataPtr g)
+            let x | uid < SMV.length vec = SMV.unsafeWith vec (setRenderDataPtr g)
                   | otherwise           = do
                       vec' <- SMV.unsafeGrow vec (SMV.length vec)
                       mapM_ (\i -> SMV.unsafeWrite vec' i nullRenderData) [uid..SMV.length vec' - 1]
                       SMV.unsafeWith vec' (setRenderDataPtr g)
-                      {-# SCC "writeIORef_oref" #-} writeIORef oref vec'
+                      writeIORef oref vec'
             x
 
 ----------------------------------
@@ -798,11 +798,6 @@ collisionMany :: Entities entities a => Signal (entities a) -> Signal [Maybe Col
 collisionMany _ = Signal $ \_ -> return (cont, [], IntSet.empty)
     where
         cont _ = return $ NoChange []
-
--- collisionMany :: Signal (EV.EntityVector a) -> Signal [Maybe Collision]
--- collisionMany _ = Signal $ \_ -> return (cont, [], IntSet.empty)
---     where
---         cont _ = return $ NoChange []
 
 -----------------------------------------------------------------
 -- Time

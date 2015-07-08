@@ -81,25 +81,22 @@ mkEntity ed = Entity ed New 0 identity 1 Nothing Nothing Nothing []
 --CM: Hand inlining and unboxing this to reduce allocations
 rotate :: Vector3 -> Entity a -> Entity a
 rotate (Vector3 x y z) e@Entity{rot = Quaternion w1 x1 y1 z1} =
-    {-# SCC "rotate" #-} e{rot = {-# SCC "rotate_Quaternion" #-} Quaternion w (w1 * x2 + w2 * x1 + (y1*z2-z1*y2)) (w1 * y2 + w2 * y1 + (z1*x2-x1*z2)) (w1 * z2 + w2 * z1 + (x1*y2-y1*x2))}
+    e{rot = Quaternion w (w1 * x2 + w2 * x1 + (y1*z2-z1*y2)) (w1 * y2 + w2 * y1 + (z1*x2-x1*z2)) (w1 * z2 + w2 * z1 + (x1*y2-y1*x2))}
     where
-        p = degToRad x
-        h = degToRad y
-        b = degToRad z
-        xRotation = p * 0.5
-        yRotation = h * 0.5
-        zRotation = b * 0.5
-        cx = cos xRotation
-        cy = cos yRotation
-        cz = cos zRotation
-        sx = sin xRotation
-        sy = sin yRotation
-        sz = sin zRotation
-        w2 = cx*cy*cz - sx*sy*sz
-        x2 = sx*cy*cz + cx*sy*sz
-        y2 = cx*sy*cz - sx*cy*sz
-        z2 = cx*cy*sz + sx*sy*cz
-        w  = w1 * w2 - (x1 * x2 + y1 * y2 + z1 * z2)
+        xRot = degToRad x * 0.5
+        yRot = degToRad y * 0.5
+        zRot = degToRad z * 0.5
+        cx   = cos xRot
+        cy   = cos yRot
+        cz   = cos zRot
+        sx   = sin xRot
+        sy   = sin yRot
+        sz   = sin zRot
+        w2   = cx*cy*cz - sx*sy*sz
+        x2   = sx*cy*cz + cx*sy*sz
+        y2   = cx*sy*cz - sx*cy*sz
+        z2   = cx*cy*sz + sx*sy*cz
+        w    = w1 * w2 - (x1 * x2 + y1 * y2 + z1 * z2)
 
 move :: Vector3 -> Entity a -> Entity a
 move d e@Entity{pos = p} = e{pos = p + d}
@@ -127,16 +124,9 @@ collider_ c e = e{collider = Just c}
 gaddChild :: Entity a -> Entity a -> Entity a
 gaddChild g e@Entity{children = cs} = e{children = g : cs }
 
--- removeChild :: Entity a -> Int -> Entity
--- removeChild (Entity u p r s c m cm cs) n
-    -- | null cs2  = Entity u p r s c m cm cs
-    -- | otherwise = Entity u p r s c m cm $ cs1 ++ tail cs2
-    -- where
-        -- (cs1, cs2) = splitAt n cs
-
 entityToRenderData :: Entity a -> Maybe RenderData
 entityToRenderData !(Entity _ _ position rotation scale _ (Just (Model (Mesh (Just loadedMesh) _ _ _ _ _) (Material (Just loadedMaterial) _ _ uns _))) _ _) = Just $
-    {-# SCC "toRenderData_constructor" #-} RenderData 1 (unsafeCoerce vb) (unsafeCoerce ib) start end count vn vs vp cn cs cp uvn uvs uvp (unsafeCoerce program) (unsafeCoerce vloc) (unsafeCoerce cloc) (unsafeCoerce uloc) mat uniforms mv pr
+    RenderData 1 (unsafeCoerce vb) (unsafeCoerce ib) start end count vn vs vp cn cs cp uvn uvs uvp (unsafeCoerce program) (unsafeCoerce vloc) (unsafeCoerce cloc) (unsafeCoerce uloc) mat uniforms mv pr
     where
         (vb, ib, start, end, count, GL.VertexArrayDescriptor vn _ vs vp, GL.VertexArrayDescriptor cn _ cs cp, GL.VertexArrayDescriptor uvn _ uvs uvp) = loadedMesh
         (program, GL.UniformLocation  mv : GL.UniformLocation  pr : ulocs, vloc, cloc, uloc)  = loadedMaterial
@@ -146,12 +136,12 @@ entityToRenderData !(Entity _ _ position rotation scale _ (Just (Model (Mesh (Ju
         mkLoadedUniform (GL.UniformLocation loc, UniformVec3    _ (Vector3 x y z))   (us, tu) = (UniformVec3Raw    loc (realToFrac x) (realToFrac y) (realToFrac z) : us, tu)
         mkLoadedUniform (GL.UniformLocation loc, UniformVec4    _ (Vector4 x y z w)) (us, tu) = (UniformVec4Raw    loc (realToFrac x) (realToFrac y) (realToFrac z) (realToFrac w) : us, tu)
         mkLoadedUniform _                                                            (us, tu) = (us, tu)
-        mat                                                                                   = {-# SCC "toRenderData_trsMatrix" #-} trsMatrix position rotation scale
-        uniforms                                                                              = {-# SCC "toRenderData_uniforms" #-} fst $ foldr mkLoadedUniform ([], 0) $ zip ulocs uns
+        mat                                                                                   = trsMatrix position rotation scale
+        uniforms                                                                              = fst $ foldr mkLoadedUniform ([], 0) $ zip ulocs uns
 entityToRenderData _ = Nothing
 
 setRenderDataPtr :: Entity a -> Ptr RenderData -> IO ()
-setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !(Vector3 sx sy sz) _ (Just (Model (Mesh (Just loadedMesh) _ _ _ _ _) (Material (Just loadedMaterial) _ _ uns _))) _ _) rdptr = {-# SCC "setRenderDataPtr_do" #-} do
+setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !(Vector3 sx sy sz) _ (Just (Model (Mesh (Just loadedMesh) _ _ _ _ _) (Material (Just loadedMaterial) _ _ uns _))) _ _) rdptr = do
     pokeByteOff ptr 0  (1 :: CInt)
     pokeByteOff ptr 4  (unsafeCoerce vb :: GL.GLuint)
     pokeByteOff ptr 8  (unsafeCoerce ib :: GL.GLuint)
