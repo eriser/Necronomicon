@@ -6,6 +6,10 @@ module Necronomicon.FRP.SignalA (
     (~>),
     audioTexture,
     play,
+    playSynthPattern,
+    playBeatPattern,
+    tempo,
+    synthDef,
     Time,
     tick,
     delay,
@@ -1040,8 +1044,8 @@ filterWhen sPred xsig = Signal $ \state -> do
     return (cont pcont xcont ref, x, IntSet.union pids xids)
     where
         cont pcont xcont ref eid = do
-            pValue <- unEvent <~ pcont eid
-            if pValue then readIORef ref >>= return . NoChange else xcont eid >>= \xe -> case xe of
+            p <- unEvent <~ pcont eid
+            if p then readIORef ref >>= return . NoChange else xcont eid >>= \xe -> case xe of
                 NoChange _  -> return xe
                 Change   x' -> writeIORef ref x' >> return xe
 
@@ -1118,23 +1122,39 @@ audioTexture index
     | index < 8 = Signal $ \_ -> return (\eid -> if eid == 200 then return $ Change $ AudioTexture index else return $ NoChange $ AudioTexture index, AudioTexture index, IntSet.singleton 200)
     | otherwise = pure EmptyTexture
 
+tempo :: Signal Rational -> Signal Rational
+tempo tempoSignal = Signal $ \state -> do
+    (tcont, t, tids) <- unSignal tempoSignal state
+    _                <- runNecroState (setTempo t) (necroVars state)
+    return (processSignal tcont (necroVars state), t, tids)
+    where
+        processSignal tcont sNecroVars eid = tcont eid >>= \t -> case t of
+            NoChange t' -> return $ NoChange t'
+            Change   t' -> runNecroState (setTempo t') sNecroVars >> return (Change t')
+
+synthDef :: UGenType a => String -> a -> Signal ()
+synthDef name synth = Signal $ \state -> do
+    _ <- runNecroState (compileSynthDef name synth) (necroVars state)
+    print $ "Compiling synthDef: " ++ name
+    return (\_ -> return $ NoChange (), (), IntSet.empty)
+
 --Need to network this shit
 playSynth' :: UGenType a => Signal Bool -> a -> [Signal Double] -> Signal ()
 playSynth' playSig u argSigs = Signal $ \state -> do
-    (pCont,  _, pids) <- unSignal playSig state
-    (aConts, _, aids) <- unzip3 <~ mapM (\a -> unSignal a state) argSigs
+    (pcont,  _, pids) <- unSignal playSig state
+    (aconts, _, aids) <- unzip3 <~ mapM (\a -> unSignal a state) argSigs
     synthRef  <- newIORef Nothing
     synthName <- nextStateID state ~> \uid -> "~p" ++ show uid
     _         <- runNecroState (compileSynthDef synthName u) (necroVars state)
     putStrLn $ "Compiling synthDef: " ++ synthName
 
-    return (cont pCont aConts synthRef synthName (necroVars state), (), foldr IntSet.union pids aids)
+    return (cont pcont aconts synthRef synthName (necroVars state), (), foldr IntSet.union pids aids)
     where
-        cont pCont aConts synthRef synthName sNecroVars eid = pCont eid >>= \p -> case p of
-            Change   p'  -> mapM (\f -> unEvent <~ f eid) aConts >>= \args -> runNecroState (playStopSynth args p' synthRef synthName) sNecroVars >>= \(e,_) -> return e
+        cont pcont aconts synthRef synthName sNecroVars eid = pcont eid >>= \p -> case p of
+            Change   p'  -> mapM (\f -> unEvent <~ f eid) aconts >>= \args -> runNecroState (playStopSynth args p' synthRef synthName) sNecroVars >>= \(e,_) -> return e
             NoChange _   -> readIORef synthRef >>= \s -> case s of
                 Nothing  -> return $ NoChange ()
-                Just  s' -> foldM (\i f -> updateArg i f s' sNecroVars eid >> return (i+1)) 0 aConts >> return (NoChange ())
+                Just  s' -> foldM (\i f -> updateArg i f s' sNecroVars eid >> return (i+1)) 0 aconts >> return (NoChange ())
 
         updateArg index aCont synth sNecroVars eid = aCont eid >>= \a -> case a of
             NoChange _ -> return ()
@@ -1145,7 +1165,6 @@ playSynth' playSig u argSigs = Signal $ \state -> do
             (Just synth,False)  -> stopSynth synth                           >>        liftIO (writeIORef synthRef  Nothing) >> return (Change ())
             _                   -> return $ NoChange ()
 
---Maybe this can be done recursively without type families?
 class Play a where
     type PlayArgs a :: *
     play :: Signal Bool -> a -> PlayArgs a
@@ -1204,3 +1223,189 @@ instance Play (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> U
     type PlayArgs (UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen -> UGen) =
         Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
     play playSig synth x y z w p q s t u v = playSynth' playSig synth [x,y,z,w,p,q,s,t,u,v]
+
+
+playSynthPattern' :: Signal Bool -> (UGen -> UGen) -> PFunc Rational -> [Signal Double] -> Signal ()
+playSynthPattern' playSig u pattern argSigs = Signal $ \state -> do
+
+    (pcont,  p,  pids) <- unSignal playSig state
+    (aconts, as, aids) <- unzip3 <~ mapM (\a -> unSignal a state) argSigs
+    pid                <- nextStateID state
+
+    let synthName = "~p" ++ show pid
+    _            <- runNecroState (compileSynthDef synthName u) (necroVars state)
+
+    let pFunc     = return (\val t -> playSynthAtJackTime synthName [val] t >> return ())
+        pDef      = pstreamWithArgs ("sigPat" ++ show pid) pFunc pattern (map (PVal . toRational) as)
+        uids      = foldr IntSet.union pids aids
+
+    _            <- if p then runNecroState (runPDef pDef) (necroVars state) >> return () else return ()
+    playingRef   <- newIORef p
+
+    return (processSignal playingRef pDef pcont aconts (necroVars state) uids, (), uids)
+    where
+        processSignal playingRef pDef pcont aconts sNecroVars uids eid
+            | not $ IntSet.member eid uids = return $ NoChange ()
+            | otherwise = do
+                p         <- pcont eid
+                isPlaying <- readIORef playingRef
+                playChange <- case (p,isPlaying) of
+                    (Change True , False) -> runNecroState (runPDef pDef) sNecroVars >> writeIORef playingRef True  >> return (Change ())
+                    (Change False, True)  -> runNecroState (pstop   pDef) sNecroVars >> writeIORef playingRef False >> return (Change ())
+                    _                     -> return $ NoChange ()
+                readIORef playingRef >>= \isPlaying' -> case isPlaying' of
+                    False -> return ()
+                    True  -> foldM (\i f -> updateArg i f pDef sNecroVars eid >> return (i+1)) 0 aconts >> return ()
+                return playChange
+
+        updateArg index aCont sPattern sNecroVars eid = aCont eid >>= \a -> case a of
+            NoChange _ -> return ()
+            Change val -> runNecroState (setPDefArg sPattern index $ PVal $ toRational val) sNecroVars >> return ()
+
+class PlaySynthPattern a where
+    type SynthPatternArgs  a :: *
+    playSynthPattern   :: Signal Bool -> (UGen -> UGen) -> a -> SynthPatternArgs a
+
+instance PlaySynthPattern (Pattern (Pattern Rational, Rational)) where
+    type SynthPatternArgs  (Pattern (Pattern Rational, Rational)) = Signal ()
+    playSynthPattern playSig synth p = playSynthPattern' playSig synth (PFunc0 p) []
+
+instance PlaySynthPattern (PRational -> Pattern (Pattern Rational, Rational)) where
+    type SynthPatternArgs  (PRational -> Pattern (Pattern Rational, Rational)) = Signal Double -> Signal ()
+    playSynthPattern playSig synth p x = playSynthPattern' playSig synth (PFunc1 p) [x]
+
+instance PlaySynthPattern (PRational -> PRational -> Pattern (Pattern Rational, Rational)) where
+    type SynthPatternArgs  (PRational -> PRational -> Pattern (Pattern Rational, Rational)) = Signal Double -> Signal Double -> Signal ()
+    playSynthPattern playSig synth p x y = playSynthPattern' playSig synth (PFunc2 p) [x,y]
+
+instance PlaySynthPattern (PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) where
+    type SynthPatternArgs  (PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) = Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playSynthPattern playSig synth p x y z = playSynthPattern' playSig synth (PFunc3 p) [x,y,z]
+
+instance PlaySynthPattern (PRational -> PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) where
+    type SynthPatternArgs (PRational -> PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playSynthPattern  playSig synth p a b c d = playSynthPattern' playSig synth (PFunc4 p) [a, b, c ,d]
+
+instance PlaySynthPattern (PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) where
+    type SynthPatternArgs (PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playSynthPattern  playSig synth p a b c d e = playSynthPattern' playSig synth (PFunc5 p) [a, b, c, d, e]
+
+instance PlaySynthPattern (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) where
+    type SynthPatternArgs (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playSynthPattern  playSig synth p a b c d e f = playSynthPattern' playSig synth (PFunc6 p) [a, b, c, d, e, f]
+
+instance PlaySynthPattern (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) where
+    type SynthPatternArgs (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playSynthPattern  playSig synth p a b c d e f g = playSynthPattern' playSig synth (PFunc7 p) [a, b, c, d, e, f, g]
+
+instance PlaySynthPattern (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) where
+    type SynthPatternArgs (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playSynthPattern  playSig synth p a b c d e f g h = playSynthPattern' playSig synth (PFunc8 p) [a, b, c, d, e, f, g, h]
+
+instance PlaySynthPattern (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) where
+    type SynthPatternArgs (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playSynthPattern  playSig synth p a b c d e f g h i  = playSynthPattern' playSig synth (PFunc9 p) [a, b, c, d, e, f, g, h, i]
+
+instance PlaySynthPattern (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) where
+    type SynthPatternArgs (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern Rational, Rational)) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playSynthPattern  playSig synth p a b c d e f g h i j = playSynthPattern' playSig synth (PFunc10 p) [a, b, c, d, e, f, g, h, i, j]
+
+
+playBeatPattern' :: Signal Bool -> PFunc (String, UGen) -> [Signal Double] -> Signal ()
+playBeatPattern' playSig pattern argSigs = Signal $ \state -> do
+
+    (pcont,  p, pids) <- unSignal playSig state
+    (aconts, a, aids) <- unzip3 <~ mapM (\a -> unSignal a state) argSigs
+    pid               <- nextStateID state
+    let pFunc          = return (\synth t -> playSynthAtJackTimeAndMaybeCompile synth [] t >> return ())
+        pDef           = pstreamWithArgs ("sigPat" ++ show pid) pFunc pattern (map (PVal . toRational) a)
+        uids           = foldr IntSet.union pids aids
+
+    maybePattern      <- if p then runNecroState (runPDef pDef) (necroVars state) >>= \(pat,_) -> return (Just pat) else return Nothing
+    patternRef        <- newIORef maybePattern
+
+    return (processSignal patternRef pDef pcont aconts (necroVars state) uids, (), uids)
+    where
+        processSignal patternRef pDef pcont aconts sNecroVars uids eid
+            | not $ IntSet.member eid uids = return $ NoChange ()
+            | otherwise = do
+                p   <- pcont eid
+                pat <- readIORef patternRef
+                playChange <- case (p,pat) of
+                    (Change True ,Nothing) -> runNecroState (runPDef pDef) sNecroVars >>= \(pat',_) -> writeIORef patternRef (Just pat') >> return (Change ())
+                    (Change False,Just  _) -> runNecroState (pstop   pDef) sNecroVars >>               writeIORef patternRef Nothing     >> return (Change ())
+                    _                      -> return $ NoChange ()
+                readIORef patternRef >>= \pat' -> case pat' of
+                    Nothing -> return ()
+                    Just pat'' -> foldM (\i f -> updateArg i f pat'' sNecroVars eid >> return (i+1)) 0 aconts >> return ()
+                return playChange
+
+        updateArg index aCont sPattern sNecroVars eid = aCont eid >>= \a -> case a of
+            NoChange _ -> return ()
+            Change val -> runNecroState (setPDefArg sPattern index $ PVal $ toRational val) sNecroVars >> return ()
+
+class PlayBeatPattern a where
+    type BeatPatternArgs a :: *
+    playBeatPattern    :: Signal Bool -> a -> BeatPatternArgs a
+
+instance PlayBeatPattern (Pattern (Pattern (String, UGen), Rational)) where
+    type BeatPatternArgs (Pattern (Pattern (String, UGen), Rational)) =
+        Signal ()
+    playBeatPattern  playSig p = playBeatPattern'  playSig (PFunc0 p) []
+
+instance PlayBeatPattern (PRational -> Pattern (Pattern (String, UGen), Rational)) where
+    type BeatPatternArgs (PRational -> Pattern (Pattern (String, UGen), Rational)) =
+        Signal Double -> Signal ()
+    playBeatPattern  playSig p a = playBeatPattern' playSig (PFunc1 p) [a]
+
+instance PlayBeatPattern (PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) where
+    type BeatPatternArgs (PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) =
+        Signal Double -> Signal Double -> Signal ()
+    playBeatPattern  playSig p a b = playBeatPattern' playSig (PFunc2 p) [a, b]
+
+instance PlayBeatPattern (PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) where
+    type BeatPatternArgs (PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) =
+        Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playBeatPattern  playSig p a b c = playBeatPattern' playSig (PFunc3 p) [a, b, c]
+
+instance PlayBeatPattern (PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) where
+    type BeatPatternArgs (PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playBeatPattern  playSig p a b c d = playBeatPattern' playSig (PFunc4 p) [a, b, c ,d]
+
+instance PlayBeatPattern (PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) where
+    type BeatPatternArgs (PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playBeatPattern  playSig p a b c d e = playBeatPattern' playSig (PFunc5 p) [a, b, c, d, e]
+
+instance PlayBeatPattern (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) where
+    type BeatPatternArgs (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playBeatPattern  playSig p a b c d e f = playBeatPattern' playSig (PFunc6 p) [a, b, c, d, e, f]
+
+instance PlayBeatPattern (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) where
+    type BeatPatternArgs (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playBeatPattern  playSig p a b c d e f g = playBeatPattern' playSig (PFunc7 p) [a, b, c, d, e, f, g]
+
+instance PlayBeatPattern (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) where
+    type BeatPatternArgs (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playBeatPattern  playSig p a b c d e f g h = playBeatPattern' playSig (PFunc8 p) [a, b, c, d, e, f, g, h]
+
+instance PlayBeatPattern (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) where
+    type BeatPatternArgs (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playBeatPattern  playSig p a b c d e f g h i  = playBeatPattern' playSig (PFunc9 p) [a, b, c, d, e, f, g, h, i]
+
+instance PlayBeatPattern (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) where
+    type BeatPatternArgs (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) =
+        Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
+    playBeatPattern  playSig p a b c d e f g h i j = playBeatPattern' playSig (PFunc10 p) [a, b, c, d, e, f, g, h, i, j]

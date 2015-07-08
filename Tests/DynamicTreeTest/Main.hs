@@ -41,18 +41,18 @@ initBullets offset = foldr (\y acc -> mkBullet (Vector3 0 y 0 + Vector3 offset 0
 megaDark :: Signal ()
 megaDark = hero *> traverse_ bullets [-200, -196..200]
     where
+        hero = foldn updateHero mkHero <| mergeMany
+             [ HeroTick      <~ tick
+             , HeroKeys      <~ wasd
+             , HeroMouse     <~ mouseDelta
+             , HeroClick     <~ sampleOn mouseClick runTime
+             , HeroCollision <~ timestamp (collision hero) ]
+
         bullets offset = b
             where
                 b = foldn updateBullets (initBullets offset) <| mergeMany
                   [ BulletTick      <~ tick
                   , BulletCollision <~ timestamp (collisionMany b) ]
-
-        hero = foldn updateHero mkHero <| mergeMany
-             [ HeroTick        <~ tick
-             , HeroKeys        <~ wasd
-             , HeroMouse       <~ mouseDelta
-             , HeroClick       <~ sampleOn mouseClick runTime
-             , HeroCollision   <~ timestamp (collision hero) ]
 
 updateHero :: HeroInput -> Entity Hero -> Entity Hero
 updateHero (HeroMouse (mx, my)) h@Entity{ edata = Hero state health (px, py)}
