@@ -35,10 +35,9 @@ mkBullet p = ( mkEntity <| Bullet <| Flying <| Vector3 1 1 1 )
              , model    = Just <| Model cube <| vertexColored white }
 
 initBullets :: Double -> [Entity Bullet]
--- initBullets = [mkBullet <| Vector3 (-2) 0 0, mkBullet <| Vector3 0 0 0, mkBullet <| Vector3 2 0 0]
 initBullets offset = foldr (\y acc -> mkBullet (Vector3 0 y 0 + Vector3 offset 0 0) :  acc) [] <| map (*1) [-50..50]
 
---This is around 3000 spinning objects
+--This is around 10,000 spinning cubes
 megaDark :: Signal ()
 megaDark = hero *> traverse_ bullets [-200, -196..200]
     where
