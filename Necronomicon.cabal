@@ -51,7 +51,7 @@ library
         c_lib/Necronomicon/PanUGens.c,
         c_lib/Necronomicon/TimeUGens.c
     ghc-options:        -threaded -O2 -Wall -Werror
-    default-extensions: FlexibleInstances MultiParamTypeClasses ForeignFunctionInterface QuasiQuotes TemplateHaskell TypeFamilies BangPatterns RankNTypes GeneralizedNewtypeDeriving
+    default-extensions: FlexibleInstances MultiParamTypeClasses ForeignFunctionInterface TypeFamilies BangPatterns GeneralizedNewtypeDeriving
 
     exposed-modules:
         Necronomicon

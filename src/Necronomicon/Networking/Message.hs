@@ -215,37 +215,37 @@ instance Networkable (Bool,Bool) where
     fromNetVal (NetTupBool n) = Just n
     fromNetVal _              = Nothing
 
-instance Networkable [Int] where
+instance Networkable ([] Int) where
     toNetVal                  = NetIntList
     fromNetVal (NetIntList n) = Just n
     fromNetVal _              = Nothing
 
-instance Networkable [Double] where
+instance Networkable ([] Double) where
     toNetVal                     = NetDoubleList
     fromNetVal (NetDoubleList n) = Just n
     fromNetVal _                 = Nothing
 
-instance Networkable [Bool] where
+instance Networkable ([] Bool) where
     toNetVal                   = NetBoolList
     fromNetVal (NetBoolList n) = Just n
     fromNetVal _               = Nothing
 
-instance Networkable [C.ByteString] where
+instance Networkable ([] C.ByteString) where
     toNetVal                     = NetStringList
     fromNetVal (NetStringList n) = Just n
     fromNetVal _                 = Nothing
 
-instance Networkable [Vector2] where
+instance Networkable ([] Vector2) where
     toNetVal                   = NetVec2List
     fromNetVal (NetVec2List n) = Just n
     fromNetVal _               = Nothing
 
-instance Networkable [Vector3] where
+instance Networkable ([] Vector3) where
     toNetVal                   = NetVec3List
     fromNetVal (NetVec3List n) = Just n
     fromNetVal _               = Nothing
 
-instance Networkable [Vector4] where
+instance Networkable ([] Vector4) where
     toNetVal                   = NetVec4List
     fromNetVal (NetVec4List n) = Just n
     fromNetVal _               = Nothing

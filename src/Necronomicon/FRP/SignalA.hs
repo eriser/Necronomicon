@@ -90,8 +90,8 @@ module Necronomicon.FRP.SignalA (
     runTime,
     collision,
     timestamp,
-    -- every,
-    -- fps,
+    every,
+    fps,
     millisecond,
     second,
     minute,
@@ -100,9 +100,7 @@ module Necronomicon.FRP.SignalA (
     mergeMany,
     collisionMany,
     foldp,
-    folds,
     foldn,
-    -- combine,
     filterIf,
     filterWhen,
     filterRepeats,
@@ -110,6 +108,9 @@ module Necronomicon.FRP.SignalA (
     switch,
     count,
     sigPrint,
+    toggle,
+    whiteNoiseS,
+    lagSig,
     fmap2,
     fmap3,
     fmap4,
@@ -142,6 +143,26 @@ import Necronomicon.Runtime
 import Necronomicon.Noise
 import Necronomicon.Physics
 
+
+--TODO:
+--Port all of the old signals functionality to the new signals system
+--Look into revamping Texture data structure and texture loading
+--Revive Fonts and text
+--Revive GUI
+--Revive post-rendering FX
+--Revamp and Revive networking (Replace NetMessage type class usage with simple Binary type class)
+--Look into new networking schemes that make "virtual world" navigation possible
+--Reorganize some files and split Signals module into separate smaller modules
+
+--If there's extra time TODO:
+--Replace and remove dependencies: mtl, Haskel OpengGL, perhaps Haskell OpenGLRaw
+--Replace and remove extraenous extensions
+
+--Looking Forward TODO:
+--Revamp and finish collision detection
+--Look into a deferred / Physically based rendering system
+--REPL and hot swapping
+
 ------------------------------------------------------
 import           Control.Concurrent
 import           Control.Concurrent.STM
@@ -153,6 +174,7 @@ import           Data.Monoid
 import           Control.Applicative
 import           Control.Monad
 import           Control.Monad.Trans               (liftIO)
+import           System.Random
 import qualified Graphics.UI.GLFW                  as GLFW
 import qualified Data.Vector                       as V
 import qualified Data.Vector.Storable              as SV
@@ -817,90 +839,68 @@ second           = 1
 minute           = 60
 hour             = 3600
 
+every :: Time -> Signal Time
+every time = Signal $ \state -> do
+    let dtref = deltaTimeRef state
+        rtref = runTimeRef   state
+    ref      <- newIORef 0
+    accref   <- newIORef 0
+    return (cont dtref rtref accref ref, 0, IntSet.singleton 200)
+    where
+        cont dtref rtref accref ref eid
+            | eid /= 200  = NoChange <~ readIORef ref
+            | otherwise   = do
+                acc      <- readIORef accref
+                dt       <- readIORef dtref
+                rt       <- readIORef rtref
+                let acc'  = acc + dt
+                if acc'  >= time
+                    then writeIORef accref (acc' - time) >> return (Change rt)
+                    else writeIORef accref acc' >> (NoChange <~ readIORef ref)
 
--- lagSig :: (Fractional a,Eq a,Ord a) => Double -> Signal a -> Signal a
--- lagSig lagTime sig = Signal $ \state -> do
---     sCont     <- unSignal sig state
---     sValue    <- unEvent <~ sCont updateZero
---     ref       <- newIORef (sValue,sValue,1)
---     return $ processSignal sCont sValue ref
---     where
---         processSignal sCont _ ref update = sCont update >>= \s -> case s of
---             Change v -> do
---                 (start,end,acc) <- readIORef ref
---                 let _           = min (acc + (updateDelta update) * lagTime) 1
---                 let value'      = start * (fromRational . toRational $ 1 - acc) + end * (fromRational $ toRational acc)
---                 writeIORef ref (value',v,0)
---                 return $ Change value'
---             NoChange _ -> do
---                 (start,end,acc) <- readIORef ref
---                 if acc >= 1
---                     then return (NoChange end)
---                     else do
---                         let acc'         = min (acc + (updateDelta update) * lagTime) 1
---                         let value'       = start * (fromRational . toRational $ 1 - acc) + end * (fromRational $ toRational acc)
---                         writeIORef ref (start,end,acc')
---                         return $ Change value'
+fps :: Time -> Signal Time
+fps rtime = Signal $ \state -> do
+    let dtref = deltaTimeRef state
+    ref      <- newIORef 0
+    accref   <- newIORef 0
+    return (cont dtref accref ref, 0, IntSet.singleton 200)
+    where
+        time = 1 / rtime
+        cont dtref accref ref eid
+            | eid /= 200 = NoChange <~ readIORef ref
+            | otherwise  = do
+                acc     <- readIORef accref
+                dt      <- readIORef dtref
+                let acc' = acc + dt
+                if acc' >= time
+                    then writeIORef accref (acc' - time) >> return (Change acc')
+                    else writeIORef accref acc'          >> (NoChange <~ readIORef ref)
 
+lagSig :: (Real a, Fractional a) => Double -> Signal a -> Signal a
+lagSig lagTime sig = Signal $ \state -> do
+    (scont, s, sids) <- unSignal sig state
+    ref              <- newIORef (realToFrac s, realToFrac s, 1)
+    return (cont scont ref (deltaTimeRef state), s, sids)
+    where
+        cont scont ref dtref eid = do
+            s <- scont eid
+            case s of
+                Change v -> readIORef ref >>= \(start, _, _) -> writeIORef ref (start, realToFrac v, 0)
+                NoChange _ -> return ()
 
--- every :: Time -> Signal Time
--- every time = Signal $ \state -> do
---     let dtref = deltaTimeRef state
---         rtref = runTimeRef   state
---     ref      <- newIORef 0
---     accref   <- newIORef 0
---     return (cont dtref rtref accref ref, 0)
---     where
---         cont dtref rtref accref ref = readIORef dtref >>= \edt -> case eventHead edt of
---             NoChange _ -> NoChange <~ readIORef ref
---             Change  dt -> do
---                 acc  <- readIORef accref
---                 rt   <- unEvent . eventHead <~ readIORef rtref
---                 let acc' = acc + dt
---                 if acc' >= time
---                     then writeIORef accref (acc' - time) >> return (Change rt)
---                     else writeIORef accref acc' >> (NoChange <~ readIORef ref)
---
--- fps :: Time -> Signal Time
--- fps rtime = Signal $ \state -> do
---     let dtref = deltaTimeRef state
---     ref      <- newIORef 0
---     accref   <- newIORef 0
---     return (cont dtref accref ref, 0)
---     where
---         time = 1 / rtime
---         cont dtref accref ref = readIORef dtref >>= \edt -> case eventHead edt of
---             NoChange _ -> NoChange <~ readIORef ref
---             Change  dt -> do
---                 acc  <- readIORef accref
---                 let acc' = acc + dt
---                 if acc' >= time
---                     then writeIORef accref (acc' - time) >> return (Change acc')
---                     else writeIORef accref acc' >> (NoChange <~ readIORef ref)
-
--- lagSig :: (Fractional a,Eq a,Ord a) => Double -> Signal a -> Signal a
--- lagSig lagTime sig = Signal $ \state -> do
---     sCont     <- unSignal sig state
---     sValue    <- unEvent <~ sCont updateZero
---     ref       <- newIORef (sValue,sValue,1)
---     return $ processSignal sCont sValue ref
---     where
---         processSignal sCont _ ref update = sCont update >>= \s -> case s of
---             Change v -> do
---                 (start,end,acc) <- readIORef ref
---                 let _           = min (acc + (updateDelta update) * lagTime) 1
---                 let value'      = start * (fromRational . toRational $ 1 - acc) + end * (fromRational $ toRational acc)
---                 writeIORef ref (value',v,0)
---                 return $ Change value'
---             NoChange _ -> do
---                 (start,end,acc) <- readIORef ref
---                 if acc >= 1
---                     then return (NoChange end)
---                     else do
---                         let acc'         = min (acc + (updateDelta update) * lagTime) 1
---                         let value'       = start * (fromRational . toRational $ 1 - acc) + end * (fromRational $ toRational acc)
---                         writeIORef ref (start,end,acc')
---                         return $ Change value'
+            if eid /= 200
+                then do
+                    (start, end, acc) <- readIORef ref
+                    let value'         = start * (1 - acc) + end * acc
+                    return $ Change $ realToFrac value'
+                else do
+                    (start, end, acc) <- readIORef ref
+                    if acc >= 1 then return (NoChange $ realToFrac end) else do
+                        dt        <- readIORef dtref
+                        let acc'   = min (acc + dt * lagTime) 1
+                        let value' = start * (1 - acc) + end * acc
+                        writeIORef ref (start, end, acc')
+                        return $ Change $ realToFrac value'
 
 ----------------------------------
 -- Combinators
@@ -981,47 +981,11 @@ foldp f b sig = Signal $ \state -> do
                 writeIORef ref nextV
                 return $ Change nextV
 
-
---This requires delay hackery, but satisfies all goals.
-folds :: (Signal input -> Signal state -> Signal state) -> state -> Signal input -> Signal state
-folds f b inputSig = stateSig
-    where
-        stateSig = delay b $ f inputSig stateSig
-
 --Look into possible mult-threading here???
 foldn :: Entities entities a => (input -> entities a -> entities a) -> entities a -> Signal input -> Signal (entities a)
 foldn f scene input = sceneSig
     where
         sceneSig = delay scene $ necro $ f <~ input ~~ sceneSig
-
---This method doesn't need a hack, but doesn't provide external delaying, only internal :\
--- folds :: (Signal input -> Signal state -> Signal state) -> state -> Signal input -> Signal state
--- folds f b asig = Signal $ \state -> do
---     ref              <- newIORef b
---     (_, _, uids)     <- unSignal (f asig (pure b)) state
---     let sig           = f asig $ refReader ref uids
---     (scont, s, _)    <- unSignal sig state
---     return (cont scont ref uids, s, uids)
---     where
---         cont scont ref uids eid
---             | not $ IntSet.member eid uids = readIORef ref >>= return . NoChange
---             | otherwise                    = do
---                 prev <- readIORef ref
---                 s    <- unEvent <~ scont eid
---                 writeIORef ref s
---                 return $ Change prev
--- refReader :: IORef a -> IntSet.IntSet -> Signal a
--- refReader ref uids = Signal $ \_ -> readIORef ref >>= \x -> return (\_ -> readIORef ref >>= return . Change, x, uids)
-
--- combine :: [Signal a] -> Signal [a]
--- combine signals = Signal $ \state -> do
---     (continuations, vs, uids) <- unzip3 <~ mapM (\s -> fmap fst $ unSignal s state) signals
---     return (cont continuations, vs, uids)
---     where
---         cont continuations = do
---             events <- sequence continuations
---             let events' = foldr (\e acc -> if hasChanged e then unEvent e : acc else acc) [] events
---             return $ Change events'
 
 filterIf :: (a -> Bool) -> a -> Signal a -> Signal a
 filterIf preds inits signal = Signal $ \state ->do
@@ -1061,6 +1025,7 @@ filterRepeats signal = Signal $ \state -> do
                 then return $ NoChange v
                 else writeIORef ref v >> return (Change v)
 
+--TODO: double check this and look at efficiency
 sampleOn :: Signal a -> Signal b -> Signal b
 sampleOn asig bsig = Signal $ \state -> do
     (aCont, _, aids) <- unSignal asig state
@@ -1111,6 +1076,20 @@ sigPrint sig = Signal $ \state -> do
             NoChange _ -> return $ NoChange ()
             Change   s -> print s >> return (Change ())
 
+toggle :: Signal Bool -> Signal Bool
+toggle boolSignal = Signal $ \state -> do
+    (bcont, b, bids) <- unSignal boolSignal state
+    boolRef          <- newIORef b
+    return (cont boolRef bcont, b, bids)
+    where
+        cont boolRef bcont eid = bcont eid >>= \b -> case b of
+            Change True -> readIORef boolRef >>= \prevBool -> writeIORef boolRef (not prevBool) >> return (Change (not prevBool))
+            _           -> readIORef boolRef >>= return . NoChange
+
+whiteNoiseS :: Signal Double
+whiteNoiseS = Signal $ \_ -> do
+    w <- randomRIO (0,1)
+    return (\_ -> Change <~ randomRIO (0,1), w, IntSet.fromList [0..211])
 
 ---------------------------------------------
 -- Sound
