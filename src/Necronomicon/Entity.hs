@@ -107,9 +107,6 @@ rotate (Vector3 x y z) e@Entity{rot = Quaternion w1 x1 y1 z1} =
         z2   = cx*cy*sz + sx*sy*cz
         w    = w1 * w2 - (x1 * x2 + y1 * y2 + z1 * z2)
 
-move :: Vector3 -> Entity a -> Entity a
-move d e@Entity{pos = p} = e{pos = p + d}
-
 translate :: Vector3 -> Entity a -> Entity a
 translate dir e@Entity{pos = p, rot = r} = e{pos = p + (dir .*. rotFromQuaternion r)}
 

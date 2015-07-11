@@ -134,7 +134,8 @@ library
         OpenGLRaw        >= 2.0,
         mtl              >= 2.1.3.0,
         freetype2        >= 0.1.1,
-        binary           >= 0.7.0
+        binary           >= 0.7.0,
+        hashtables       >= 1.2.0
 
 executable PatternTest
     main-is:          Main.hs
