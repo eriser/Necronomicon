@@ -15,7 +15,6 @@ import Foreign.C.Types
 import Foreign.Marshal.Alloc
 import Foreign.Marshal.Array
 import Unsafe.Coerce
-import qualified Data.IntMap.Strict            as IntMap
 import qualified Data.Map.Strict               as Map
 import qualified Graphics.Rendering.OpenGL     as GL
 import qualified Graphics.Rendering.OpenGL.Raw as GLRaw
@@ -65,7 +64,7 @@ postRenderFX mat = PostRenderingFX Nothing (vs ++ "+" ++ fs) mat'
 ------------------------------
 
 data Resources = Resources
-   { shadersRef           :: IORef (IntMap.IntMap  LoadedShader)
+   { shadersRef           :: IORef (Map.Map String LoadedShader)
    , texturesRef          :: IORef (Map.Map String GL.TextureObject)
    , meshesRef            :: IORef (Map.Map String LoadedMesh)
    , fontsRef             :: IORef (Map.Map String LoadedFont)
@@ -110,7 +109,7 @@ instance Show Resources where
 
 mkResources :: IO Resources
 mkResources = Resources
-          <$> newIORef IntMap.empty
+          <$> newIORef Map.empty
           <*> newIORef Map.empty
           <*> newIORef Map.empty
           <*> newIORef Map.empty
@@ -188,11 +187,11 @@ instance Binary Material where
 
 getShader :: Resources -> Shader -> IO LoadedShader
 getShader resources sh = readIORef (shadersRef resources) >>= \shaders ->
-    case IntMap.lookup (key sh) shaders of
+    case Map.lookup (key sh) shaders of
         Just loadedShader -> return loadedShader
         Nothing           -> do
             loadedShader <- loadShader sh
-            writeIORef (shadersRef resources) $ IntMap.insert (key sh) loadedShader shaders
+            writeIORef (shadersRef resources) $ Map.insert (key sh) loadedShader shaders
             return loadedShader
 
 getMesh :: Resources -> Mesh -> IO LoadedMesh

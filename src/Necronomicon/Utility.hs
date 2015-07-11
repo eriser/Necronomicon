@@ -1,5 +1,4 @@
-module Necronomicon.Utility (hash,
-                             (|>),
+module Necronomicon.Utility ((|>),
                              (<|),
                              scale,
                              linlin,
@@ -14,27 +13,11 @@ module Necronomicon.Utility (hash,
                              offsetPtr,
                              offset0) where
 
-import Data.Bits
-import Data.List (foldl')
 import Graphics.UI.GLFW (getTime)
 import Numeric (showIntAtBase)
 import qualified Numeric as N (showHex)
 import Data.Char (intToDigit)
 import Foreign.Ptr
-
-class Hashable a where
-    hash :: a -> Int
-
-combine :: Int -> Int -> Int
-combine h1 h2 =  (h1 + h1 `shiftL` 5) `xor` h2
-
-hashAndCombine :: Hashable h => Int -> h -> Int
-hashAndCombine acc h = acc `combine` hash h
-
-instance Hashable ()   where hash _ = 0
-instance Hashable Bool where hash x = if x then 1 else 0
-instance Hashable Char where hash = fromEnum
-instance Hashable a => Hashable [a] where hash = foldl' hashAndCombine 0
 
 (|>) :: a -> (a -> b) -> b
 b |> a = a b

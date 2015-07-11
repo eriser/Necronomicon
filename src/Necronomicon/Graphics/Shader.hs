@@ -26,9 +26,9 @@ import qualified Data.ByteString            as BS
 import qualified Data.ByteString.Char8      as C
 import qualified Graphics.Rendering.OpenGL  as GL
 
-newtype VertexShader   = VertexShader   {unVertexShader        :: IO GL.Shader}
-newtype FragmentShader = FragmentShader {unFragmentShader      :: IO GL.Shader}
-data    Shader         = Shader         {key :: Int,loadShader :: IO LoadedShader}
+newtype VertexShader   = VertexShader   {unVertexShader            :: IO GL.Shader}
+newtype FragmentShader = FragmentShader {unFragmentShader          :: IO GL.Shader}
+data    Shader         = Shader         {key :: String, loadShader :: IO LoadedShader}
 type    LoadedShader   = (GL.Program, [GL.UniformLocation], GL.AttribLocation, GL.AttribLocation, GL.AttribLocation)
 
 instance Show Shader where
@@ -69,7 +69,7 @@ printError = GL.get GL.errors >>= mapM_ (hPutStrLn stderr . ("GL: "++) . show)
 
 -- shader :: String -> [String] -> [String] -> VertexShader -> FragmentShader -> Shader
 shader :: String -> [String] -> VertexShader -> FragmentShader -> Shader
-shader shaderName uniformNames vs fs = Shader (hash shaderName) $ do
+shader shaderName uniformNames vs fs = Shader shaderName $ do
     -- putStrLn $ "Compiling shader: " ++ shaderName
 
     program <- GL.createProgram
