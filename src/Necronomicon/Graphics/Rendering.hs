@@ -1,6 +1,5 @@
 module Necronomicon.Graphics.Rendering (initWindow, renderWithCameraRaw) where
 
-import Necronomicon.Graphics.SceneObject (Camera(..))
 import Necronomicon.Graphics.Resources
 import Necronomicon.Graphics.Color
 import Necronomicon.Graphics.Camera

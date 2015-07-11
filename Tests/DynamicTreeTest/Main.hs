@@ -1,4 +1,4 @@
-import Necronomicon.FRP.SignalA
+import Necronomicon
 import GHC.Generics
 import Data.Binary
 import Data.Foldable (traverse_)
@@ -23,10 +23,11 @@ instance Binary PhysM
 
 mkHero :: Entity Hero
 mkHero = ( mkEntity <| Hero HeroIdle 100 (180, 0) )
-         { pos      = Vector3 0 0 (-6)
-         , rot      = fromEuler 0 180 0
-         , collider = Just <| boxCollider 1 1 1
-         , camera   = Just <| Camera 30 0.1 1000 black [] }
+         { pos        = Vector3 0 0 (-6)
+         , rot        = fromEuler 0 180 0
+         , collider   = Just <| boxCollider 1 1 1
+         , camera     = Just <| Camera 30 0.1 1000 black []
+         , netOptions = [NetworkPosition, NetworkRotation] }
 
 mkBullet :: Vector3 -> Entity Bullet
 mkBullet p = ( mkEntity <| Bullet <| Flying <| Vector3 1 1 1 )

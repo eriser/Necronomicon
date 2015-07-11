@@ -15,8 +15,8 @@ import Foreign.C.Types
 import Foreign.Marshal.Alloc
 import Foreign.Marshal.Array
 import Unsafe.Coerce
-import qualified Data.IntMap                   as IntMap
-import qualified Data.Map                      as Map
+import qualified Data.IntMap.Strict            as IntMap
+import qualified Data.Map.Strict               as Map
 import qualified Graphics.Rendering.OpenGL     as GL
 import qualified Graphics.Rendering.OpenGL.Raw as GLRaw
 
@@ -273,7 +273,7 @@ loadNewMat r (Material Nothing vs fs us pr) = do
             (loadVertexShader   vs)
             (loadFragmentShader fs)
         -- getShader' resources sha = readIORef (shadersRef resources) >>= return . IntMap.lookup (key sha)
-
+--TODO: Implement font loading
 loadNewMat _ m = return m
 
 setUniform :: Resources -> Int -> (GL.UniformLocation, Uniform) -> IO Int

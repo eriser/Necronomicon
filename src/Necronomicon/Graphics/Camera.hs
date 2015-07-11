@@ -1,99 +1,52 @@
 module Necronomicon.Graphics.Camera where
 
 ----------------------------------------------------------
-import qualified Graphics.Rendering.OpenGL         as GL
 import           Graphics.Rendering.OpenGL.Raw
-import qualified Graphics.UI.GLFW                  as GLFW
 import           Necronomicon.Graphics.Color
-import           Necronomicon.Graphics.Mesh
 import           Necronomicon.Graphics.Resources
-import           Necronomicon.Graphics.SceneObject
-import           Necronomicon.Graphics.Texture
-import           Necronomicon.Linear
 import           Foreign
 import           Data.IORef
 import qualified Data.Map                          as Map
+import           Data.Binary
 ----------------------------------------------------------
 
-orthoCamera :: Vector3 -> Quaternion -> Color -> [PostRenderingFX] -> SceneObject
-orthoCamera pos r clearColor fx = CameraObject pos r 1 c []
-    where
-        c = Camera 0 0 0 clearColor fx
+--Camera
+data Camera = Camera {
+    _fov        :: Double,
+    _near       :: Double,
+    _far        :: Double,
+    _clearColor :: Color,
+    _fx         :: [PostRenderingFX]
+    } deriving (Show, Eq)
 
-perspCamera :: Vector3 -> Quaternion -> Double -> Double -> Double -> Color -> [PostRenderingFX] -> SceneObject
-perspCamera pos r fov near far clearColor fx = CameraObject pos r 1 c []
-    where
-        c = Camera (fov/2) near far clearColor fx
+instance Binary Camera where
+    put (Camera fov n far c fx) = put fov >> put n >> put far >> put c >> put fx
+    get                         = Camera <$> get <*> get <*> get <*> get <*> get
 
-renderCamera :: (Int,Int) -> Matrix4x4 -> SceneObject -> Resources -> SceneObject -> IO Matrix4x4
-renderCamera (w,h) view scene resources so = case _camera so of
-    Nothing -> return newView
-    Just c  -> do
-        let  ratio    = fromIntegral w / fromIntegral h
-        let (RGBA r g b a) = case _clearColor c of
-                RGB r' g' b' -> RGBA r' g' b' 1.0
-                c'           -> c'
+fov_ :: Double -> Camera -> Camera
+fov_ v r = r{_fov=v}
 
-        --If we have anye post-rendering fx let's bind their fbo
-        case _fx c of
-            []   -> return ()
-            fx:_ -> getPostFX resources (fromIntegral w,fromIntegral h) fx >>= \postFX -> glBindFramebuffer gl_FRAMEBUFFER (postRenderFBO postFX)
+near_ :: Double -> Camera -> Camera
+near_ v r = r{_near=v}
 
-        GL.depthFunc     GL.$= Just GL.Less
-        GL.blend         GL.$= GL.Enabled
-        GL.blendBuffer 0 GL.$= GL.Enabled
-        GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
+far_ :: Double -> Camera -> Camera
+far_ v r = r{_far=v}
 
-        GL.clearColor GL.$= GL.Color4 (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a)
-        GL.clear [GL.ColorBuffer,GL.DepthBuffer]
+clearColor_ :: Color -> Camera -> Camera
+clearColor_ v r = r{_clearColor=v}
 
-        GL.viewport GL.$= (GL.Position 0 0, GL.Size (fromIntegral w) (fromIntegral h))
-        GL.loadIdentity
+_fov_ :: (Double -> Double) -> Camera -> Camera
+_fov_ f r = r{_fov=f (_fov r)}
 
-        case _fov c of
-            0 -> drawScene identity4 (invert newView) (orthoMatrix 0 ratio 1 0 (-1) 1) resources scene
-            _ -> drawScene identity4 (invert newView) (perspMatrix (_fov c) ratio (_near c) (_far c))      resources scene
+_near_ :: (Double -> Double) -> Camera -> Camera
+_near_ f r = r{_near=f (_near r)}
 
-        mapM_ (drawPostRenderFX (RGBA r g b a)) $ _fx c
+_far_ :: (Double -> Double) -> Camera -> Camera
+_far_ f r = r{_far=f (_far r)}
 
-        return $ newView
-    where
-        newView = view .*. (trsMatrix (_position so) (_rotation so) 1)
-        drawPostRenderFX (RGB r g b) fx = drawPostRenderFX (RGBA r g b 1) fx
-        drawPostRenderFX (RGBA r g b a) fx = do
-            glBindFramebuffer gl_FRAMEBUFFER 0
-            GL.depthFunc     GL.$= Nothing
-            GL.blend         GL.$= GL.Disabled
-            GL.blendBuffer 0 GL.$= GL.Disabled
+_clearColor_ :: (Color -> Color) -> Camera -> Camera
+_clearColor_ f r = r{_clearColor=f (_clearColor r)}
 
-            GL.clearColor GL.$= GL.Color4 (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a)
-            GL.clear [GL.ColorBuffer,GL.DepthBuffer]
-            postFX <- getPostFX resources (fromIntegral w,fromIntegral h) fx
-            let postFXMat = setEmptyTextures (LoadedTexture $ GL.TextureObject $ postRenderTex postFX) (postRenderMaterial postFX)
-            -- mdraw (rect 1 1) identity4 (orthoMatrix 0 1 0 1 (-1) 1) resources
-            drawMeshWithMaterial postFXMat (rect 1 1) identity4 (orthoMatrix 0 1 0 1 (-1) 1) resources
-
-            GL.depthFunc     GL.$= Just GL.Less
-            GL.blend         GL.$= GL.Enabled
-            GL.blendBuffer 0 GL.$= GL.Enabled
-            GL.blendFunc     GL.$= (GL.SrcAlpha,GL.OneMinusSrcAlpha)
-
-renderCameras :: (Int,Int) -> Matrix4x4 -> SceneObject -> Resources -> SceneObject -> IO ()
-renderCameras (w,h) view scene resources g = renderCamera (w,h) view scene resources g >>= \newView -> mapM_ (renderCameras (w,h) newView scene resources) (_children g)
-
-renderGraphics :: GLFW.Window -> Resources -> SceneObject -> SceneObject -> IO ()
-renderGraphics window resources scene gui = do
-    (w,h) <- GLFW.getWindowSize window
-
-    --render scene
-    renderCameras (w,h) identity4 scene resources scene
-
-    --render gui
-    drawScene identity4 identity4 (orthoMatrix 0 (fromIntegral w / fromIntegral h) 1 0 (-1) 1) resources gui
-
-    GLFW.swapBuffers window
-    GLFW.pollEvents
-    -- GL.flush
 
 ---------------------------------------
 -- Full screen Post-Rendering Effects

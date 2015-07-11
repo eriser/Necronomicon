@@ -1,3 +1,9 @@
+main :: IO ()
+main = print "test"
+
+{-
+
+
 module Main where
 
 import Necronomicon
@@ -93,3 +99,4 @@ main = runSignal
 
 -- main :: IO ()
 -- main = runSignal <| synthDefs *> tempo (pure 150) *> testGUI <> sections <> hyperTerrainSounds
+-}

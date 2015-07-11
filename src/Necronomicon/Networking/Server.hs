@@ -9,38 +9,37 @@ import Control.Concurrent.STM
 import Network.Socket hiding (send,recv,recvFrom,sendTo)
 import Control.Exception
 import Control.Monad (forever)
-import qualified Data.Map as Map
-import qualified Data.IntMap as IntMap
+import qualified Data.Map.Strict as Map
+import qualified Data.IntMap     as IntMap
 import Data.Binary (encode,decode)
 
 -- import Necronomicon.Networking.User
 import Necronomicon.Networking.Message
+import Necronomicon.Networking.Types
 import Necronomicon.Utility
 
 ------------------------------
 --Server data
 -----------------------------
 
-data User = User {
-    userSocket    :: Socket,
-    userAddress   :: SockAddr,
-    userStopVar   :: TMVar (),
-    userName      :: C.ByteString,
-    userId        :: Int,
-    userAliveTime :: Double
-    }
+data User = User
+    { userSocket    :: Socket
+    , userAddress   :: SockAddr
+    , userStopVar   :: TMVar ()
+    , userName      :: C.ByteString
+    , userId        :: Int
+    , userAliveTime :: Double }
 
 instance Show User where
     show (User s a _ n i t) = "(User " ++ show s ++ " " ++ show a ++ " (TMVar ()) " ++ show n ++ " " ++ show i ++ " " ++ show t ++ ")"
 
-data Server = Server {
-    serverUsers           :: TVar  (Map.Map SockAddr User),
-    serverNetSignals      :: TVar  (IntMap.IntMap NetValue),
-    serverInBox           :: TChan (SockAddr,B.ByteString),
-    serverOutBox          :: TChan (User,B.ByteString),
-    serverBroadcastOutBox :: TChan (Maybe SockAddr,B.ByteString),
-    serverUserIdCounter   :: TVar Int
-   }
+data Server = Server
+    { serverUsers           :: TVar  (Map.Map SockAddr User)
+    , serverNetSignals      :: TVar  (IntMap.IntMap B.ByteString)
+    , serverInBox           :: TChan (SockAddr,B.ByteString)
+    , serverOutBox          :: TChan (User,B.ByteString)
+    , serverBroadcastOutBox :: TChan (Maybe SockAddr,B.ByteString)
+    , serverUserIdCounter   :: TVar Int }
 
 serverPort :: String
 serverPort = "31337"
@@ -94,8 +93,8 @@ synchronize server = forever $ do
     putStrLn  ""
 
     -- figure out the issue with sending multiple messages in a row
-    broadcast (Nothing,encode $ SyncNetSignals netSignals) server
-    broadcast (Nothing,encode $ UserList $ Prelude.map (\(_,u) -> userName u) (Map.toList users)) server
+    broadcast (Nothing, encode $ SyncNetSignals netSignals) server
+    broadcast (Nothing, encode $ UserList $ Prelude.map (\(_,u) -> userName u) (Map.toList users)) server
 
     currentTime <- getCurrentTime
     let users' = Map.filter (\u -> (currentTime - userAliveTime u < 6)) users
@@ -175,7 +174,8 @@ parseMessage m (Login n) user server = do
     sendUserList server
     users <- atomically $ readTVar $ serverUsers server
     _  <- atomically $ readTVar $ serverNetSignals server
-    sendMessage user m server
+    -- sendMessage user m server
+    broadcast (Nothing, m) server
     print $ "User logged in: " ++ show (userName user')
     print $ users
 
@@ -200,7 +200,7 @@ parseMessage m (AddNetSignal uid netVal) _ server = do
         then putStrLn $ "Already contains netSignal " ++ show uid
         else do
             atomically $ writeTVar (serverNetSignals server) (IntMap.insert uid netVal sigs)
-            broadcast (Nothing,m) server
+            broadcast (Nothing, m) server
             putStrLn $ "Received NetSignal: " ++ show (uid,netVal)
             putStrLn ""
 
@@ -212,7 +212,7 @@ parseMessage m (RemoveNetSignal uid) _ server = do
         putStrLn $  "Removing NetSignal: " ++ show uid
         putStrLn ""
 
-parseMessage m (SetNetSignal uid netVal) user server = do
+parseMessage m (UpdateNetSignal uid netVal) user server = do
     atomically $ readTVar (serverNetSignals server) >>= \sigs -> writeTVar (serverNetSignals server) (IntMap.insert uid netVal sigs)
     broadcast (Just $ userAddress user,m) server
 
@@ -235,7 +235,7 @@ flushCommand =  C.pack "necro flush"
 flush :: Server -> IO()
 flush server = do
     atomically $ writeTVar (serverNetSignals server) IntMap.empty
-    broadcast  (Nothing,encode $ SyncNetSignals IntMap.empty) server
+    broadcast  (Nothing, encode $ SyncNetSignals IntMap.empty) server
 
 {- TO DO: Remove these???????????????????????????????????
 addUser :: User -> Server -> IO()
@@ -248,7 +248,7 @@ removeUser user server = atomically $ readTVar (serverUsers server) >>= \users -
 sendUserList :: Server -> IO ()
 sendUserList server = do
     users <- atomically $ readTVar $ serverUsers server
-    broadcast (Nothing,encode $ UserList $ Prelude.map (\(_,u) -> userName u) (Map.toList users)) server
+    broadcast (Nothing, encode $ UserList $ Prelude.map (\(_,u) -> userName u) (Map.toList users)) server
 
 broadcast :: (Maybe SockAddr,B.ByteString) -> Server -> IO ()
 broadcast nmessage server = atomically $ writeTChan (serverBroadcastOutBox server) nmessage

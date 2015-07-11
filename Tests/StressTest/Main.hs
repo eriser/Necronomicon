@@ -1,17 +1,13 @@
+main :: IO ()
+main = print "test"
+
+{-
+
 import Necronomicon
 import Data.Fixed (mod')
 
 main :: IO ()
 main = runSignal <| testGUI <> (sections <> stressSounds)
-
-{-
-synthDefs :: Signal ()
-synthDefs = synthDef "triOsc"    triOsc
-         *> synthDef "triOsc32"  triOsc32
-         *> synthDef "triOscEnv" triOscEnv
-        --  *> synthDef "b"         bSynth
-        --  *> synthDef "p"         pSynth
--}
 
 ticker :: Signal Double
 ticker = fps 30
@@ -162,6 +158,7 @@ testGUI = gui [chatBox,netBox,ubox]
                           (Size    0.4 0.75)
                           (Font   "OCRA.ttf" 24)
                           (vertexColored (RGBA 1 1 1 0.1))
+-}
 
 {-
 testSound :: Signal ()

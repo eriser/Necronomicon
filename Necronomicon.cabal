@@ -16,7 +16,7 @@ data-files:
     samples/*.wav
 
 Flag pkgConfig
-  description: Use pkg-config tool for check version and presence of jack
+  description: Use pkg-config tool for check version and presence of c libraries
   default:     True
 
 library
@@ -51,7 +51,7 @@ library
         c_lib/Necronomicon/PanUGens.c,
         c_lib/Necronomicon/TimeUGens.c
     ghc-options:        -threaded -O2 -Wall -Werror
-    default-extensions: FlexibleInstances MultiParamTypeClasses ForeignFunctionInterface TypeFamilies BangPatterns GeneralizedNewtypeDeriving
+    default-extensions: FlexibleInstances MultiParamTypeClasses ForeignFunctionInterface TypeFamilies BangPatterns
 
     exposed-modules:
         Necronomicon
@@ -60,7 +60,6 @@ library
         Necronomicon.Util,
         Necronomicon.Util.PriorityQueue
         Necronomicon.Physics.DynamicTree
-        Necronomicon.FRP.SignalA
 
     other-modules:
         Necronomicon.Language.Layout
@@ -71,11 +70,19 @@ library
         Necronomicon.Networking.Client
         Necronomicon.Networking.Server
         Necronomicon.Networking.Message
+        Necronomicon.Networking.Types
         Necronomicon.Patterns
         Necronomicon.FRP
         Necronomicon.FRP.Signal
-        Necronomicon.FRP.Event
+        Necronomicon.FRP.Types
         Necronomicon.FRP.GUI
+        Necronomicon.FRP.Audio
+        Necronomicon.FRP.Combinators
+        Necronomicon.FRP.Time
+        Necronomicon.FRP.Input
+        Necronomicon.FRP.Runtime
+        Necronomicon.FRP.Networking
+        Necronomicon.FRP.State
         Necronomicon.Linear
         Necronomicon.Linear.Plane
         Necronomicon.Linear.Sphere
@@ -102,13 +109,12 @@ library
         Necronomicon.Graphics.HalfEdge
         Necronomicon.Graphics.Shader
         Necronomicon.Graphics.Color
-        Necronomicon.Graphics.SceneObject
         Necronomicon.Graphics.Text
         Necronomicon.Graphics.Texture
         Necronomicon.Graphics.Model
         Necronomicon.Graphics.Resources
         Necronomicon.Graphics.Rendering
-        Necronomicon.Game
+        Necronomicon.Entity
         Necronomicon.Physics
         Necronomicon.Physics.Collider
         Necronomicon.Physics.GJK

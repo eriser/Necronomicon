@@ -2,7 +2,7 @@ module Necronomicon.Linear.Matrix where
 
 import Prelude
 
--- import Necronomicon.Game.Utilities
+-- import Necronomicon.Entity.Utilities
 import Necronomicon.Utility
 import Necronomicon.Linear.Vector
 import Necronomicon.Linear.Quaternion

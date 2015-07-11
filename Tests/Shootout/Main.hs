@@ -1,3 +1,8 @@
+main :: IO ()
+main = print "test"
+
+{-
+
 import Necronomicon
 import qualified Data.Vector as V
 
@@ -343,7 +348,7 @@ hyperMelodyPattern = playSynthPattern (toggle <| combo [alt,isDown keyF]) hyperM
                       3 _ _ _ _ _ _ _ _ _ _ _
                       4 _ _ _ _ _ _ _ _ _ _ _
                 |]
-
+-}
 {-
 hyperMelodyPattern :: Signal ()
 hyperMelodyPattern = playSynthPattern (toggle <| combo [alt,isDown keyF]) hyperMelody (pmap ((*1) . d2f slendro) <| ploop [sec1])

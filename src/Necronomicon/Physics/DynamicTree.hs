@@ -226,7 +226,7 @@ genUpdateInput (g, (d, il, t), world)
     | Just col <- collider g = updateFromCollider col
     | otherwise              = (g, (d, il, t), newWorld)
     where
-        newWorld             = world .*. transMat g
+        newWorld             = world .*. entityTransform g
         updateFromCollider col
             | UID uid <- cid = (g'' , (nodeListCons (caabb, uid) d,               il, t), newWorld)
             | otherwise      = (g',   (nodeListCons (caabb,   i) d, (caabb', i) : il, t{freeList = fl}), newWorld)

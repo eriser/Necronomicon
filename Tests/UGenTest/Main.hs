@@ -1,3 +1,7 @@
+main :: IO ()
+main = print "test"
+
+{-
 import Necronomicon
 import qualified Data.Vector as V
 
@@ -408,3 +412,5 @@ atanHSynth a _ = atanh a
 
 acosHSynth :: UGen -> UGen -> UGen
 acosHSynth a _ = acosh a
+
+-}

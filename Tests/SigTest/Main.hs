@@ -1,3 +1,7 @@
+main :: IO ()
+main = print "test"
+
+{-
 import Necronomicon
 import Data.Fixed (mod')
 -- import Data.List (zip4)
@@ -836,3 +840,4 @@ terraNovaPattern = fxSynth trinisphere
             ]
         fxSynth name = play (toggle <| combo [alt,isDown keyC]) name
         timeVaultBeat = [lich| bb [_ bb] bs _ _ [_ bb] bs _ |]
+-}

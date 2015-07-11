@@ -1,4 +1,4 @@
-module Necronomicon.Game where
+module Necronomicon.Entity where
 
 import Necronomicon.Linear
 import Necronomicon.Physics
@@ -16,20 +16,22 @@ import qualified Graphics.Rendering.OpenGL as GL
 -- Entity
 -------------------------------------------------------
 
-data Entity a = Entity {
-    edata    :: a,
-    euid     :: !UID,
-    pos      :: !Vector3,
-    rot      :: !Quaternion,
-    escale   :: !Vector3,
-    collider :: Maybe Collider,
-    model    :: Maybe Model,
-    camera   :: Maybe Camera,
-    children :: [Entity a]
-}
+data Entity a = Entity
+    { edata      :: a
+    , euid       :: !UID
+    , pos        :: !Vector3
+    , rot        :: !Quaternion
+    , escale     :: !Vector3
+    , collider   :: Maybe Collider
+    , model      :: Maybe Model
+    , camera     :: Maybe Camera
+    , netOptions :: [NetworkOptions]
+    , children   :: [Entity ()] }
+
+data NetworkOptions = NetworkData | NetworkPosition | NetworkRotation | NetworkScale | NetworkCollider | NetworkModel deriving (Show, Eq, Enum)
 
 instance Show a => Show (Entity a) where
-    show (Entity d uid p r s c m ca cs) =
+    show (Entity d uid p r s c m ca n cs) =
         "Entity{ " ++
         "edata = " ++ show d ++
         ", eid = " ++ show uid ++
@@ -39,45 +41,52 @@ instance Show a => Show (Entity a) where
         ", collider = " ++ show c ++
         ", model = " ++ show m ++
         ", camera = " ++ show ca ++
+        ", netOptions = " ++ show n ++
         ", children = " ++ show cs ++
         "}"
 
 instance Functor Entity where
-    fmap f (Entity d uid p r s c m ca cs) = Entity (f d) uid p r s c m ca (map (fmap f) cs)
+    fmap f (Entity d uid p r s c m ca n cs) = Entity (f d) uid p r s c m ca n cs
 
 instance Foldable Entity where
-    foldr f b Entity{ edata = a } = f a b
+    foldMap f (Entity d _ _ _ _ _ _ _ _ _)= f d
 
 instance Traversable Entity where
-    sequenceA (Entity d uid p r s c m ca cs) = e' <$> d <*> sequenceA (map sequenceA cs)
-        where
-            e' d' cs' = Entity d' uid p r s c m ca cs'
+    traverse f (Entity d uid p r s c m ca n cs) = (\d' -> Entity d' uid p r s c m ca n cs) <$> f d
 
-class Entities s a where
-    type EntityType s a :: *
-    mapEntities :: (Entity (EntityType s a) -> IO (Entity (EntityType s a))) -> s a -> IO (s a)
+class (Foldable entities, Traversable entities, Binary a) => Entities entities a where
+    type EntityType entities a :: *
+    mapEntities  :: (Entity (EntityType entities a) -> IO (Entity (EntityType entities a))) -> entities a -> IO (entities a)
 
-instance Entities Entity a where
+instance Binary a => Entities Entity a where
     type EntityType Entity a = a
     mapEntities f e = f e
     {-# INLINE mapEntities #-}
 
-instance Entities [] (Entity a) where
+instance Binary a => Entities [] (Entity a) where
     type EntityType [] (Entity a) = a
     mapEntities f es = mapM f es
     {-# INLINE mapEntities #-}
 
 instance Binary a => Binary (Entity a) where
-    put (Entity ed uid p r s c m cam cs) = put ed >> put uid >> put p >> put r >> put s >> put c >> put m >> put cam >> put cs
-    get                                  = Entity <$> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get
+    put (Entity ed uid p r s c m cam n cs) = put ed >> put uid >> put p >> put r >> put s >> put c >> put m >> put cam >> put n >> put cs
+    get                                    = Entity <$> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get
+
+instance Binary NetworkOptions where
+    put = put . fromEnum
+    get = toEnum <$> get
 
 -------------------------------------------------------
 -- API
 -------------------------------------------------------
 
 mkEntity :: a -> Entity a
-mkEntity ed = Entity ed New 0 identity 1 Nothing Nothing Nothing []
+mkEntity d = Entity d New 0 identity 1 Nothing Nothing Nothing [] []
 
+-- mkNetworkOptions :: NetworkOptions
+-- mkNetworkOptions = NetworkOptions False False False False False False False False
+
+--I think all of these should probably change, and relate to the rot quaternion, not the actual fucking entity
 --CM: Hand inlining and unboxing this to reduce allocations
 rotate :: Vector3 -> Entity a -> Entity a
 rotate (Vector3 x y z) e@Entity{rot = Quaternion w1 x1 y1 z1} =
@@ -104,28 +113,11 @@ move d e@Entity{pos = p} = e{pos = p + d}
 translate :: Vector3 -> Entity a -> Entity a
 translate dir e@Entity{pos = p, rot = r} = e{pos = p + (dir .*. rotFromQuaternion r)}
 
--- collisions :: Entity a -> [Collision]
--- collisions g
-    -- | Just c <- collider g = colliderCollisions c
-    -- | otherwise            = []
-
-echildren_ :: [Entity a] -> Entity a -> Entity a
-echildren_ cs (Entity d uid p r s c m cm _) = Entity d uid p r s c m cm cs
-
-rotMat :: Entity a -> Matrix3x3
-rotMat Entity{rot = r} = rotFromQuaternion r
-
-transMat :: Entity a -> Matrix4x4
-transMat Entity{pos = p, rot = r, escale = s} = trsMatrix p r s
-
-collider_ :: Collider -> Entity a -> Entity a
-collider_ c e = e{collider = Just c}
-
-gaddChild :: Entity a -> Entity a -> Entity a
-gaddChild g e@Entity{children = cs} = e{children = g : cs }
+entityTransform :: Entity a -> Matrix4x4
+entityTransform Entity{pos = p, rot = r, escale = s} = trsMatrix p r s
 
 entityToRenderData :: Entity a -> Maybe RenderData
-entityToRenderData !(Entity _ _ position rotation scale _ (Just (Model (Mesh (Just loadedMesh) _ _ _ _ _) (Material (Just loadedMaterial) _ _ uns _))) _ _) = Just $
+entityToRenderData !(Entity _ _ position rotation scale _ (Just (Model (Mesh (Just loadedMesh) _ _ _ _ _) (Material (Just loadedMaterial) _ _ uns _))) _ _ _) = Just $
     RenderData 1 (unsafeCoerce vb) (unsafeCoerce ib) start end count vn vs vp cn cs cp uvn uvs uvp (unsafeCoerce program) (unsafeCoerce vloc) (unsafeCoerce cloc) (unsafeCoerce uloc) mat uniforms mv pr
     where
         (vb, ib, start, end, count, GL.VertexArrayDescriptor vn _ vs vp, GL.VertexArrayDescriptor cn _ cs cp, GL.VertexArrayDescriptor uvn _ uvs uvp) = loadedMesh
@@ -141,7 +133,7 @@ entityToRenderData !(Entity _ _ position rotation scale _ (Just (Model (Mesh (Ju
 entityToRenderData _ = Nothing
 
 setRenderDataPtr :: Entity a -> Ptr RenderData -> IO ()
-setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !(Vector3 sx sy sz) _ (Just (Model (Mesh (Just loadedMesh) _ _ _ _ _) (Material (Just loadedMaterial) _ _ uns _))) _ _) rdptr = do
+setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !(Vector3 sx sy sz) _ (Just (Model (Mesh (Just loadedMesh) _ _ _ _ _) (Material (Just loadedMaterial) _ _ uns _))) _ _ _) rdptr = do
     pokeByteOff ptr 0  (1 :: CInt)
     pokeByteOff ptr 4  (unsafeCoerce vb :: GL.GLuint)
     pokeByteOff ptr 8  (unsafeCoerce ib :: GL.GLuint)
