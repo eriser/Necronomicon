@@ -94,8 +94,13 @@ updateBullets (BulletCollision (t, cs)) = map (bulletCollision t) . zip cs
 tickBullet :: (Time, Time) -> Entity Bullet -> Maybe (Entity Bullet)
 tickBullet (dt, rt) b@Entity{ edata = Bullet state } =
     case state of
-        Flying         d -> Just <| rotate (d .*. (dt * 10)) b
         DeathAnimation t -> if rt > t then Nothing else Just b
+        Flying         d -> fromUID $ euid b
+            where
+                fromUID New       = Just <| rotate (d .*. (dt * 10)) b
+                fromUID (UID uid) = if rt > fromIntegral uid * 0.1
+                    then Nothing
+                    else Just <| rotate (d .*. (dt * 10)) b
 
 bulletCollision :: Time -> (Maybe Collision, Entity Bullet) -> Entity Bullet
 bulletCollision t (c, b)

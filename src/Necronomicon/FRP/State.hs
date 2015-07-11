@@ -17,6 +17,9 @@ import           Control.Monad.ST
 import           Control.Monad.ST.Unsafe
 import           Data.STRef
 import           Data.IORef
+import           Foreign.Storable
+import           Foreign.C.Types
+import           Foreign.Marshal.Array
 
 import qualified Data.Vector.Storable.Mutable      as SMV
 import qualified Graphics.UI.GLFW                  as GLFW
@@ -78,9 +81,16 @@ updateNursery uid gen e n = Hash.lookup n uid >>= \me' -> case me' of
     Nothing         -> Hash.insert n uid (gen, e,  e)
     Just (_, _, e') -> Hash.insert n uid (gen, e', e)
 
-cullNursery :: Int -> Nursery a -> IO ()
-cullNursery gen nursery = Hash.foldM collectGarbage [] nursery >>= mapM_ (Hash.delete nursery)  
+cullNursery :: Int -> SMV.IOVector RenderData -> TVar [Int] -> Nursery a -> IO ()
+cullNursery gen renderData uidsRef nursery = Hash.foldM collectGarbage [] nursery >>= mapM_ removeGarbage
     where
+        removeGarbage k = do
+            SMV.unsafeWith renderData $ \ptr -> pokeByteOff (ptr `advancePtr` k) 0 (0 :: CInt)
+            Hash.delete nursery k
+            atomically $ readTVar uidsRef >>= \uids -> writeTVar uidsRef (k : uids)
+            -- uids <- atomically $ readTVar uidsRef
+            -- putStrLn $ "Deleting uid: " ++ show k
+            -- putStrLn $ "uids: " ++ show (take 10 uids)
         collectGarbage gs (k, (gen', _, _))
             | gen /= gen' = return $ k : gs
             | otherwise   = return gs
@@ -100,10 +110,10 @@ foldn f scene input = sceneSig
                 cont scont state genCounter nursery eid = scont eid >>= \se -> case se of
                     NoChange _ -> return se
                     Change   s -> do
-                        gen     <- readIORef genCounter
-                        writeIORef genCounter (gen + 1)
-                        es      <- mapEntities (updateEntity state gen nursery) s
-                        cullNursery gen nursery
+                        gen        <- readIORef genCounter >>= \gen -> writeIORef genCounter (gen + 1) >> return gen
+                        es         <- mapEntities (updateEntity state gen nursery) s
+                        renderData <- readIORef (renderDataRef state)
+                        cullNursery gen renderData (uidRef state) nursery
                         return $ Change es
 
 updateEntity :: SignalState -> Int -> Nursery a -> Entity a -> IO (Entity a)
