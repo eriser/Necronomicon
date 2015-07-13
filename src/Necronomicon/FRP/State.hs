@@ -1,3 +1,4 @@
+{-# LANGUAGE FlexibleContexts #-}
 module Necronomicon.FRP.State
     ( foldp
     , foldn
@@ -6,6 +7,8 @@ module Necronomicon.FRP.State
 
 import           Necronomicon.FRP.Types
 import           Necronomicon.FRP.Signal
+import           Necronomicon.FRP.Networking
+import           Necronomicon.FRP.Runtime
 import           Necronomicon.Linear
 import           Necronomicon.Entity
 import           Necronomicon.Graphics
@@ -20,12 +23,14 @@ import           Data.IORef
 import           Foreign.Storable
 import           Foreign.C.Types
 import           Foreign.Marshal.Array
+import           Data.Binary                       (Binary)
 
 import qualified Data.Vector.Storable.Mutable      as SMV
 import qualified Graphics.UI.GLFW                  as GLFW
 import qualified Data.IntSet                       as IntSet
 import qualified Data.HashTable.IO                 as Hash
 import qualified Data.IntMap.Strict                as IntMap
+-- import qualified Data.ByteString.Lazy              as B
 
 ----------------------------------
 -- State
@@ -68,35 +73,8 @@ delay initx sig = runST $ do
                     writeIORef fref s
                     return prev
 
--- type Nursery a = IORef (IntMap.IntMap (Int, Entity a, Entity a))
--- alterNursery :: Int -> Int -> Entity a -> Nursery a -> IO ()
--- alterNursery uid gen e nref = readIORef nref >>= \nursery -> writeIORef nref (IntMap.alter nalter uid nursery)
-    -- where
-        -- nalter Nothing           = Just (gen, e,  e)
-        -- nalter (Just (_, _, e')) = Just (gen, e', e)
-
-type Nursery a = Hash.CuckooHashTable Int (Int, Entity a, Entity a)
-updateNursery :: Int -> Int -> Entity a -> Nursery a -> IO ()
-updateNursery uid gen e n = Hash.lookup n uid >>= \me' -> case me' of
-    Nothing         -> Hash.insert n uid (gen, e,  e)
-    Just (_, _, e') -> Hash.insert n uid (gen, e', e)
-
-cullNursery :: Int -> SMV.IOVector RenderData -> TVar [Int] -> Nursery a -> IO ()
-cullNursery gen renderData uidsRef nursery = Hash.foldM collectGarbage [] nursery >>= mapM_ removeGarbage
-    where
-        removeGarbage k = do
-            SMV.unsafeWith renderData $ \ptr -> pokeByteOff (ptr `advancePtr` k) 0 (0 :: CInt)
-            Hash.delete nursery k
-            atomically $ readTVar uidsRef >>= \uids -> writeTVar uidsRef (k : uids)
-            -- uids <- atomically $ readTVar uidsRef
-            -- putStrLn $ "Deleting uid: " ++ show k
-            -- putStrLn $ "uids: " ++ show (take 10 uids)
-        collectGarbage gs (k, (gen', _, _))
-            | gen /= gen' = return $ k : gs
-            | otherwise   = return gs
-
-
-foldn :: (Entities entities a) => (input -> entities a -> entities a) -> entities a -> Signal input -> Signal (entities a)
+--Maybe replace with injective type families when that becomes a thing
+foldn :: (Binary (EntityType entities), Eq (EntityType entities), Entities entities) => (input -> entities -> entities) -> entities -> Signal input -> Signal entities
 foldn f scene input = sceneSig
     where
         sceneSig  = delay scene $ necro $ f <~ input ~~ sceneSig
@@ -104,32 +82,32 @@ foldn f scene input = sceneSig
             (scont, s, uids) <- unSignal sig state
             genCounter       <- newIORef 0
             nursery          <- Hash.new
-            return (cont scont state genCounter nursery, s, uids)
+            newEntRef        <- newIORef []
+            nid              <- nextStateID state
+            return (cont scont state genCounter nursery newEntRef nid, s, uids)
             where
                 --Insert in here checks for networking eid and perform network updates, etc
-                cont scont state genCounter nursery eid = scont eid >>= \se -> case se of
+                cont scont state genCounter nursery newEntRef nid eid = scont eid >>= \se -> case se of
                     NoChange _ -> return se
                     Change   s -> do
                         gen        <- readIORef genCounter >>= \gen -> writeIORef genCounter (gen + 1) >> return gen
-                        es         <- mapEntities (updateEntity state gen nursery) s
-                        renderData <- readIORef (renderDataRef state)
-                        cullNursery gen renderData (uidRef state) nursery
+                        es         <- mapEntities (updateEntity state gen nursery newEntRef) s
+                        removeAndNetworkEntities state gen nursery newEntRef nid
                         return $ Change es
 
-updateEntity :: SignalState -> Int -> Nursery a -> Entity a -> IO (Entity a)
-
---Update existing Entities
-updateEntity state gen nursery e@Entity{euid = UID uid} = do
+updateEntity :: SignalState -> Int -> Nursery a -> IORef [Entity a] -> Entity a -> IO (Entity a)
+updateEntity state gen nursery _ e@Entity{euid = UID uid} = do
+    --Update existing Entities
     case model e of
         Just (Model (Mesh        (Just _) _ _ _ _ _) (Material (Just _) _ _ _ _)) -> writeRenderData (renderDataRef state) uid e
         Just (Model (DynamicMesh (Just _) _ _ _ _ _) (Material (Just _) _ _ _ _)) -> writeRenderData (renderDataRef state) uid e
         _                                                                         -> return ()
     writeCam (cameraRef state) (euid e) (camera e) e
-    updateNursery uid gen e nursery
+    insertNursery uid gen e nursery
     return e
 
---Add new Entity
-updateEntity state gen nursery e = do
+updateEntity state gen nursery newEntRef e = do
+    --Add new Entity
     mtid   <- myThreadId
     atomically (takeTMVar (contextBarrier state)) >>= \(GLContext tid) -> when (tid /= mtid) (GLFW.makeContextCurrent (Just $ context state))
     model' <- loadNewModel (sigResources state) (model e)
@@ -139,13 +117,47 @@ updateEntity state gen nursery e = do
         UID _ -> return e{model = model'}
         New   -> do
             uid <- atomically $ readTVar (uidRef state) >>= \(uid : uids) -> writeTVar (uidRef state) uids >> return uid
-            return e{model = model', euid = UID uid}
+            let e' = e{model = model', euid = UID uid}
+            modifyIORef' newEntRef $ \es -> e' : es
+            return e'
 
     let (UID uid) = euid e'
     writeRenderData (renderDataRef state) uid e'
     writeCam (cameraRef state) (euid e') (camera e') e
-    updateNursery uid gen e nursery
+    insertNursery uid gen e nursery
     return e'
+
+-- type Nursery a = IORef (IntMap.IntMap (Int, Entity a, Entity a))
+-- alterNursery :: Int -> Int -> Entity a -> Nursery a -> IO ()
+-- alterNursery uid gen e nref = readIORef nref >>= \nursery -> writeIORef nref (IntMap.alter nalter uid nursery)
+    -- where
+        -- nalter Nothing           = Just (gen, e,  e)
+        -- nalter (Just (_, _, e')) = Just (gen, e', e)
+
+type Nursery a = Hash.CuckooHashTable Int (Int, Entity a, Entity a)
+insertNursery :: Int -> Int -> Entity a -> Nursery a -> IO ()
+insertNursery uid gen e n = Hash.lookup n uid >>= \me' -> case me' of
+    Nothing         -> Hash.insert n uid (gen, e,  e)
+    Just (_, _, e') -> Hash.insert n uid (gen, e', e)
+
+removeAndNetworkEntities :: (Binary a, Eq a) => SignalState -> Int -> Nursery a -> IORef [Entity a] -> Int -> IO ()
+removeAndNetworkEntities state gen nursery newEntRef nid = do
+    (cs, gs) <- Hash.foldM collectGarbage ([], []) nursery
+    es       <- readIORef newEntRef
+    sendNetworkEntityMessage (signalClient state) es cs gs nid
+    mapM_ removeGarbage gs
+    writeIORef newEntRef []
+    where
+        removeGarbage k = do
+            renderData <- readIORef (renderDataRef state)
+            SMV.unsafeWith renderData $ \ptr -> pokeByteOff (ptr `advancePtr` k) 0 (0 :: CInt)
+            Hash.delete nursery k
+            atomically $ readTVar (uidRef state) >>= \uids -> writeTVar (uidRef state) (k : uids)
+            --Delete openGL resources? Use weak pointers and finalizers?
+
+        collectGarbage (cs, gs) (k, (gen', p, c)) = do
+            let gs' = if gen /= gen' then k : gs else gs
+            return (collectNetworkEntityUpdates p c cs, gs')
 
 writeCam :: IORef (IntMap.IntMap (Matrix4x4, Camera)) -> UID -> Maybe Camera -> Entity a -> IO ()
 writeCam cref (UID uid) (Just c) e = modifyIORef cref (IntMap.insert uid (entityTransform e, c))

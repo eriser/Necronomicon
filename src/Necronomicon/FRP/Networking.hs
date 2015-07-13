@@ -1,9 +1,13 @@
 module Necronomicon.FRP.Networking
     ( userJoin
     , userLeave
-    , userJoinLeave
+    , userLog
     , chatMessage
     , networkStatus
+    , NetEntityMessage(..)
+    , NetEntityUpdate(..)
+    , sendNetworkEntityMessage
+    , collectNetworkEntityUpdates
     ) where
 
 import           Necronomicon.FRP.Types
@@ -14,15 +18,56 @@ import           Necronomicon.Entity
 import           Necronomicon.Linear
 import           Necronomicon.Graphics
 import           Necronomicon.Networking.Types
+import           Necronomicon.Networking.Client
 
+import           Control.Concurrent.STM
 import           Data.IORef
-import qualified Data.IntSet as IntSet
--- import           Data.Binary
-
+import           Data.Binary
+import           Control.Monad
+import qualified Data.IntSet          as IntSet
 
 ---------------------------------------------
 -- Networking
 ---------------------------------------------
+{-
+There are challenges with networking the FRP signal system as is.
+
+While it is quite simple to wholesale network a signal value (using the netSignal combinator),
+networking mututally mutable dynamic collections is a much more difficult problem.
+
+The strength of the system as is is that the end-user is free from having to worry about
+many of the normal aspects of programming an interactive application (such as a Game).
+
+The end-user need not allocate or free resources, make explicit draw calls, multi-thread logic,
+and (now) network state.
+
+However this presents a bit of an issue. The previous system developed to handle this, OSCthulhu,
+was quite imperative, It relied on the user explicitly requesting that the server add or remove
+entities from the system, without manually instantiating them first.
+
+In our current FRP system the end-user is simply handed a collection of entities,
+and they do whatever they please with it, including adding, deleting, or mutating entities.
+
+So the question is, how does one network multiple users simultaneousuly directly editing a collection?
+
+In OSCthulhu unique identifiers were handed down by the server. This insures that all entities
+are uniquely identifiable. We are not able to rely on that since players in this system directly
+instantiate entities on their own.
+
+However, the current system already has a UID allocation and deallocation system for entities that is
+used for many things (allocating resources, passing signal information, etc).
+
+These UIDs can't be shared wholesale, since they are used immediately by each user and cannot be effectively synchronized.
+However, we may perhaps take advantage of this in a different way.
+
+While UIDs are not unique over the network, it is guarantedd that UIDs are unique for each user in the system.
+Therefore, it should be possible to use a kind of translation system akin to NAT to translate UIDs from other users
+into a UID that the current system understands. This would provide a mechanism for users to propagate information to
+eachother without needing the direct intervention of an outside arbiter.
+
+Eliminating the arbiter here begs the question of whether the arbiter is necessary at all in this new scheme. Currently an open question.
+-}
+
 
 --Need to add:
 -- | AddNetEntities  Int
@@ -34,25 +79,57 @@ import qualified Data.IntSet as IntSet
 --UpdateEntityCollection Int [(Int, ByteString)] [(Int, ByteString)] Int
 --Bytestring coming in is of form: [(Int, [NetEntityMessage])], which we then translate to V.Vector (Int, [NetEntityMessage])
 --Then we mapM the entities through and check for updates and update accordingly.
+--Maybe a kind of Nat remapping scheme?
+
 --What about adding and removing?
-data NetEntityMessage a = AddEntity            (Entity a)
-                        | UpdateEntityData     a
-                        | UpdateEntityPosition Vector3
-                        | UpdateEntityRotation Quaternion
-                        | UpdateEntityScale    Vector3
-                        | UpdateEntityModel    Model
-                        | UpdateEntityCollider Collider
-                        | RemoveEntity
-                        deriving (Show)
+data NetEntityUpdate a = UpdateEntityData     Int a
+                       | UpdateEntityPosition Int Vector3
+                       | UpdateEntityRotation Int Quaternion
+                       | UpdateEntityScale    Int Vector3
+                       | UpdateEntityModel    Int (Maybe Model)
+                       | UpdateEntityCollider Int (Maybe Collider)
+                       deriving (Show)
 
---Rethink networking with dynamic collections in mind...
---Rethink how to approach sync messages
+instance Binary a => Binary (NetEntityUpdate a) where
+    put (UpdateEntityData     uid x) = put (0 :: Word8) >> put uid >> put x
+    put (UpdateEntityPosition uid x) = put (1 :: Word8) >> put uid >> put x
+    put (UpdateEntityRotation uid x) = put (2 :: Word8) >> put uid >> put x
+    put (UpdateEntityScale    uid x) = put (3 :: Word8) >> put uid >> put x
+    put (UpdateEntityModel    uid x) = put (4 :: Word8) >> put uid >> put x
+    put (UpdateEntityCollider uid x) = put (5 :: Word8) >> put uid >> put x
 
--- getCommandArgName :: IO String
--- getCommandArgName = getArgs >>= return . go
---     where
---         go (name : _ : []) = name
---         go  _              = "INCORRECT_COMMAND_ARGS"
+    get = (get :: Get Word8) >>= \t -> case t of
+        0 -> UpdateEntityData     <$> get <*> get
+        1 -> UpdateEntityPosition <$> get <*> get
+        2 -> UpdateEntityRotation <$> get <*> get
+        3 -> UpdateEntityScale    <$> get <*> get
+        4 -> UpdateEntityModel    <$> get <*> get
+        _ -> UpdateEntityCollider <$> get <*> get
+
+
+data NetEntityMessage a = NetEntityMessage [Entity a] [NetEntityUpdate a] [Int]
+
+instance Binary a => Binary (NetEntityMessage a) where
+    put (NetEntityMessage es us ds) = put es >> put us >> put ds
+    get                             = NetEntityMessage <$> get <*> get <*> get
+
+sendNetworkEntityMessage :: (Binary a, Eq a) => Client -> [Entity a] -> [NetEntityUpdate a] -> [Int] -> Int -> IO ()
+sendNetworkEntityMessage client es cs gs nid = when (not (null cs && null gs && null es)) $
+    atomically (readTVar (clientRunStatus client)) >>= \cstatus -> case cstatus of
+        Running -> sendUpdateNetSignal client (nid, msg)
+        _       -> return ()
+    where
+        msg = encode $ NetEntityMessage es cs gs
+
+collectNetworkEntityUpdates :: Eq a => Entity a -> Entity a -> [NetEntityUpdate a] -> [NetEntityUpdate a]
+collectNetworkEntityUpdates prev curr us = foldr addUpdate us $ netOptions curr
+    where
+        addUpdate NetworkData     us' = if edata    prev /= edata    curr then UpdateEntityData     (unUID $ euid curr) (edata    curr) : us' else us'
+        addUpdate NetworkPosition us' = if pos      prev /= pos      curr then UpdateEntityPosition (unUID $ euid curr) (pos      curr) : us' else us'
+        addUpdate NetworkRotation us' = if rot      prev /= rot      curr then UpdateEntityRotation (unUID $ euid curr) (rot      curr) : us' else us'
+        addUpdate NetworkScale    us' = if escale   prev /= escale   curr then UpdateEntityScale    (unUID $ euid curr) (escale   curr) : us' else us'
+        addUpdate NetworkModel    us' = if model    prev /= model    curr then UpdateEntityModel    (unUID $ euid curr) (model    curr) : us' else us'
+        addUpdate NetworkCollider us' = if collider prev /= collider curr then UpdateEntityCollider (unUID $ euid curr) (collider curr) : us' else us'
 
 userJoin :: Signal String
 userJoin = Signal $ \state -> do
@@ -78,8 +155,11 @@ userLeave = Signal $ \state -> do
             then readIORef ref >>= return . NoChange
             else writeIORef ref u >> return (Change u)
 
-userJoinLeave :: Signal (String, Bool)
-userJoinLeave = inputSignal 204 netUserLoginRef
+-- userJoinLeave :: Signal (String, Bool)
+-- userJoinLeave = inputSignal 204 netUserLoginRef
+
+userLog :: Signal (String, Bool)
+userLog = inputSignal 204 netUserLoginRef
 
 -- users :: Signal [String]
 
@@ -88,6 +168,7 @@ chatMessage = inputSignal 206 netChatRef
 
 networkStatus :: Signal NetStatus
 networkStatus = inputSignal 205 netStatusRef
+
 
 -- users :: Signal [String]
 -- users = input userListSignal
@@ -118,3 +199,9 @@ networkStatus = inputSignal 205 netStatusRef
 --                     Change   v -> readIORef ref >>= \prev -> if v /= prev
 --                         then sendUpdateNetSignal client (netid,toNetVal v) >> writeIORef ref v >> return (Change v)
 --                         else return $ Change v
+
+-- getCommandArgName :: IO String
+-- getCommandArgName = getArgs >>= return . go
+--     where
+--         go (name : _ : []) = name
+--         go  _              = "INCORRECT_COMMAND_ARGS"

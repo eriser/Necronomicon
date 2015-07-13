@@ -33,7 +33,8 @@ mkBullet :: Vector3 -> Entity Bullet
 mkBullet p = ( mkEntity <| Bullet <| Flying <| Vector3 1 1 1 )
              { pos      = p
              , collider = Just <| boxCollider 1 1 1
-             , model    = Just <| Model cube <| vertexColored white }
+             , model    = Just <| Model cube <| vertexColored white
+             , netOptions = [NetworkPosition, NetworkRotation] }
 
 initBullets :: Double -> [Entity Bullet]
 initBullets offset = foldr (\y acc -> mkBullet (Vector3 0 y 0 + Vector3 offset 0 0) :  acc) [] <| map (*1) [-50..50]

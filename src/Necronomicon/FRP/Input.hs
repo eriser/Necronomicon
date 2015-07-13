@@ -374,7 +374,7 @@ collision _ = Signal $ \_ -> return (cont, Collision 0, IntSet.empty)
     where
         cont _ = return $ NoChange $ Collision 0
 
-collisionMany :: Entities entities a => Signal (entities a) -> Signal [Maybe Collision]
+collisionMany :: Entities entities => Signal entities -> Signal [Maybe Collision]
 collisionMany _ = Signal $ \_ -> return (cont, [], IntSet.empty)
     where
         cont _ = return $ NoChange []

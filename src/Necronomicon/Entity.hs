@@ -48,23 +48,22 @@ instance Show a => Show (Entity a) where
 instance Functor Entity where
     fmap f (Entity d uid p r s c m ca n cs) = Entity (f d) uid p r s c m ca n cs
 
-instance Foldable Entity where
-    foldMap f (Entity d _ _ _ _ _ _ _ _ _)= f d
+-- instance Foldable Entity where
+    -- foldMap f (Entity d _ _ _ _ _ _ _ _ _)= f d
+-- instance Traversable Entity where
+    -- traverse f (Entity d uid p r s c m ca n cs) = (\d' -> Entity d' uid p r s c m ca n cs) <$> f d
 
-instance Traversable Entity where
-    traverse f (Entity d uid p r s c m ca n cs) = (\d' -> Entity d' uid p r s c m ca n cs) <$> f d
+class (Binary entities) => Entities entities where
+    type EntityType entities :: *
+    mapEntities  :: (Entity (EntityType entities) -> IO (Entity (EntityType entities))) -> entities -> IO entities
 
-class (Foldable entities, Traversable entities, Binary a) => Entities entities a where
-    type EntityType entities a :: *
-    mapEntities  :: (Entity (EntityType entities a) -> IO (Entity (EntityType entities a))) -> entities a -> IO (entities a)
-
-instance Binary a => Entities Entity a where
-    type EntityType Entity a = a
+instance Binary a => Entities (Entity a) where
+    type EntityType (Entity a) = a
     mapEntities f e = f e
     {-# INLINE mapEntities #-}
 
-instance Binary a => Entities [] (Entity a) where
-    type EntityType [] (Entity a) = a
+instance Binary a => Entities [Entity a] where
+    type EntityType [Entity a] = a
     mapEntities f es = mapM f es
     {-# INLINE mapEntities #-}
 

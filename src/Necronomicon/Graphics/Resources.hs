@@ -59,6 +59,10 @@ postRenderFX mat = PostRenderingFX Nothing (vs ++ "+" ++ fs) mat'
     where
         mat'@(Material _ vs fs _ _) = mat EmptyTexture
 
+unUID :: UID -> Int
+unUID (UID uid) = uid
+unUID _         = error "Attempted to unUID a New UID"
+
 ------------------------------
 -- Loaded Resources
 ------------------------------
