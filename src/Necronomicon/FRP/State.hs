@@ -111,9 +111,9 @@ delay initx sig = runST $ do
                         -- let (NetEntityMessage ns _ gs) = decode msg :: Binary a => NetEntityMessage (Item (t (Entity a)))
                         -- return $ Change $ F.foldr (netUpdateEntity (IntSet.fromList gs)) (fromList ns) es
 
-class NecroFoldable t where
-    type NecroElem t :: *
-    foldn :: (Binary (NecroElem t), Eq (NecroElem t)) => (input -> t -> t) -> t -> Signal input -> Signal t 
+class NecroFoldable entities where
+    type NecroElem entities  :: *
+    foldn :: (Binary (NecroElem entities), Eq (NecroElem entities)) => (input -> entities -> entities) -> entities -> Signal input -> Signal entities 
 
 instance NecroFoldable (Entity a) where
     type NecroElem (Entity a) = a
