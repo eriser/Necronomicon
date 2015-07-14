@@ -111,12 +111,10 @@ delay initx sig = runST $ do
                         -- let (NetEntityMessage ns _ gs) = decode msg :: Binary a => NetEntityMessage (Item (t (Entity a)))
                         -- return $ Change $ F.foldr (netUpdateEntity (IntSet.fromList gs)) (fromList ns) es
 
-class NecroFoldable entities where
-    type NecroElem entities  :: *
-    foldn :: (Binary (NecroElem entities), Eq (NecroElem entities)) => (input -> entities -> entities) -> entities -> Signal input -> Signal entities 
+class (Binary entities) => NecroFoldable entities where
+    foldn :: (input -> entities -> entities) -> entities -> Signal input -> Signal entities
 
-instance NecroFoldable (Entity a) where
-    type NecroElem (Entity a) = a
+instance (Binary a, Eq a) => NecroFoldable (Entity a) where
     foldn f scene input = sceneSig
         where
             sceneSig  = delay scene $ necro $ f <~ input ~~ sceneSig
@@ -146,14 +144,13 @@ instance NecroFoldable (Entity a) where
                             --Add time stamp to avoid out of order updates (still need out of order adds and deletes)
                             es            <- readIORef ref
                             (userID, msg) <- readIORef (netSignalRef state)
-                            let (NetEntityMessage _ cs _) = decode msg :: Binary a => NetEntityMessage (NecroElem (Entity a))
-                            return $ Change $ foldr (netUpdateEntity userID uidt) es cs 
+                            let (NetEntityMessage _ cs _) = decode msg :: Binary a => NetEntityMessage a
+                            return $ Change $ foldr (netUpdateEntity userID uidt) es cs
 
                     netUpdateEntity :: Int -> Hash.CuckooHashTable Int Int -> NetEntityUpdate a -> Entity a -> Entity a
                     netUpdateEntity = undefined
 
-instance NecroFoldable [Entity a] where
-    type NecroElem [Entity a] = a
+instance (Binary a, Eq a) => NecroFoldable [Entity a] where
     foldn f scene input = sceneSig
         where
             sceneSig  = delay scene $ necro $ f <~ input ~~ sceneSig
