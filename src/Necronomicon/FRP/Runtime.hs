@@ -75,7 +75,7 @@ processEvents sig ss inbox = forever $ atomically (readTChan inbox) >>= \e -> ca
     NetUserEvent    u b    -> writeIORef  (netUserLoginRef ss) (u, b) >> sig 204 >>= printEvent
     NetStatusEvent  s      -> writeIORef  (netStatusRef    ss) s      >> sig 205 >>= printEvent
     NetChatEvent    u m    -> writeIORef  (netChatRef      ss) (u, m) >> sig 206 >>= printEvent
-    NetSignalEvent  u n    -> writeIORef  (netSignalRef    ss) n      >> sig u   >>= printEvent
+    NetSignalEvent  u i m  -> writeIORef  (netSignalRef    ss) (i, m) >> sig u   >>= printEvent
     where
         printEvent (Change _) = return () -- print e
         printEvent  _         = return ()

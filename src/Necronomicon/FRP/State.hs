@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+
 module Necronomicon.FRP.State
     ( foldp
     , foldn
@@ -12,6 +13,7 @@ import           Necronomicon.FRP.Runtime
 import           Necronomicon.Linear
 import           Necronomicon.Entity
 import           Necronomicon.Graphics
+import           Necronomicon.Utility
 
 import           Control.Concurrent
 import           Control.Concurrent.STM
@@ -23,7 +25,7 @@ import           Data.IORef
 import           Foreign.Storable
 import           Foreign.C.Types
 import           Foreign.Marshal.Array
-import           Data.Binary                       (Binary)
+import           Data.Binary                       (Binary, decode)
 
 import qualified Data.Vector.Storable.Mutable      as SMV
 import qualified Graphics.UI.GLFW                  as GLFW
@@ -31,6 +33,7 @@ import qualified Data.IntSet                       as IntSet
 import qualified Data.HashTable.IO                 as Hash
 import qualified Data.IntMap.Strict                as IntMap
 -- import qualified Data.ByteString.Lazy              as B
+--import qualified Data.Foldable                     as F
 
 ----------------------------------
 -- State
@@ -74,26 +77,120 @@ delay initx sig = runST $ do
                     return prev
 
 --Maybe replace with injective type families when that becomes a thing
-foldn :: (Binary (EntityType entities), Eq (EntityType entities), Entities entities) => (input -> entities -> entities) -> entities -> Signal input -> Signal entities
-foldn f scene input = sceneSig
-    where
-        sceneSig  = delay scene $ necro $ f <~ input ~~ sceneSig
-        necro sig = Signal $ \state -> do
-            (scont, s, uids) <- unSignal sig state
-            genCounter       <- newIORef 0
-            nursery          <- Hash.new
-            newEntRef        <- newIORef []
-            nid              <- nextStateID state
-            return (cont scont state genCounter nursery newEntRef nid, s, uids)
-            where
-                --Insert in here checks for networking eid and perform network updates, etc
-                cont scont state genCounter nursery newEntRef nid eid = scont eid >>= \se -> case se of
-                    NoChange _ -> return se
-                    Change   s -> do
-                        gen        <- readIORef genCounter >>= \gen -> writeIORef genCounter (gen + 1) >> return gen
-                        es         <- mapEntities (updateEntity state gen nursery newEntRef) s
-                        removeAndNetworkEntities state gen nursery newEntRef nid
-                        return $ Change es
+-- foldn :: (Binary (EntityType entities), Eq (EntityType entities), Entities entities) => (input -> entities -> entities) -> entities -> Signal input -> Signal entities
+-- foldn :: (Foldable t, Traversable t, IsList (t (Entity a)), Monoid (t (Entity a)), Binary (t (Entity a)), Binary a, Eq a) => (input -> t (Entity a) -> t (Entity a)) -> t (Entity a) -> Signal input -> Signal (t (Entity a))
+-- foldn f scene input = sceneSig
+    -- where
+        -- sceneSig  = delay scene $ necro $ f <~ input ~~ sceneSig
+        -- necro sig = Signal $ \state -> do
+            -- (scont, s, uids) <- unSignal sig state
+            -- genCounter       <- newIORef 0
+            -- nursery          <- Hash.new
+            -- uidt             <- Hash.new :: IO (Hash.CuckooHashTable Int Int)
+            -- newEntRef        <- newIORef []
+            -- nid              <- nextStateID state
+            -- ref              <- newIORef s
+            -- return (cont scont state genCounter nursery newEntRef nid uidt ref, s, uids)
+            -- where
+                -- Insert in here checks for networking eid and perform network updates, etc
+                -- cont scont state genCounter nursery newEntRef nid uidt ref eid
+                    -- | eid /= nid  = scont eid >>= \se -> case se of
+                        -- NoChange _ -> return se
+                        -- Change   s -> do
+                            -- Regular update
+                            -- gen        <- readIORef genCounter >>= \gen -> writeIORef genCounter (gen + 1) >> return gen
+                            -- es         <- mapM (updateEntity state gen nursery newEntRef) s
+                            -- removeAndNetworkEntities state gen nursery newEntRef nid
+                            -- writeIORef ref es
+                            -- return $ Change es
+                    -- | otherwise = do
+                        -- Network update
+                        --Add time stamp to avoid out of order updates (still need out of order adds and deletes)
+                        -- es            <- readIORef ref
+                        -- (userID, msg) <- readIORef (netSignalRef state)
+                        -- let (NetEntityMessage ns _ gs) = decode msg :: Binary a => NetEntityMessage (Item (t (Entity a)))
+                        -- return $ Change $ F.foldr (netUpdateEntity (IntSet.fromList gs)) (fromList ns) es
+
+class NecroFoldable t where
+    type NecroElem t :: *
+    foldn :: (Binary (NecroElem t), Eq (NecroElem t)) => (input -> t -> t) -> t -> Signal input -> Signal t 
+
+instance NecroFoldable (Entity a) where
+    type NecroElem (Entity a) = a
+    foldn f scene input = sceneSig
+        where
+            sceneSig  = delay scene $ necro $ f <~ input ~~ sceneSig
+            necro sig = Signal $ \state -> do
+                (scont, s, uids) <- unSignal sig state
+                genCounter       <- newIORef 0
+                nursery          <- Hash.new :: IO (Nursery a)
+                uidt             <- Hash.new :: IO (Hash.CuckooHashTable Int Int)
+                newEntRef        <- newIORef []
+                nid              <- nextStateID state
+                ref              <- newIORef s
+                return (cont scont state genCounter nursery newEntRef nid uidt ref, s, uids)
+                where
+                    --Insert in here checks for networking eid and perform network updates, etc
+                    cont scont state genCounter nursery newEntRef nid uidt ref eid
+                        | eid /= nid  = scont eid >>= \se -> case se of
+                            NoChange _ -> return se
+                            Change   s -> do
+                                --Regular update
+                                gen        <- readIORef genCounter >>= \gen -> writeIORef genCounter (gen + 1) >> return gen
+                                es         <- updateEntity state gen nursery newEntRef s
+                                removeAndNetworkEntities state gen nursery newEntRef nid
+                                writeIORef ref es
+                                return $ Change es
+                        | otherwise = do
+                            --Network update
+                            --Add time stamp to avoid out of order updates (still need out of order adds and deletes)
+                            es            <- readIORef ref
+                            (userID, msg) <- readIORef (netSignalRef state)
+                            let (NetEntityMessage _ cs _) = decode msg :: Binary a => NetEntityMessage (NecroElem (Entity a))
+                            return $ Change $ foldr (netUpdateEntity userID uidt) es cs 
+
+                    netUpdateEntity :: Int -> Hash.CuckooHashTable Int Int -> NetEntityUpdate a -> Entity a -> Entity a
+                    netUpdateEntity = undefined
+
+instance NecroFoldable [Entity a] where
+    type NecroElem [Entity a] = a
+    foldn f scene input = sceneSig
+        where
+            sceneSig  = delay scene $ necro $ f <~ input ~~ sceneSig
+            necro sig = Signal $ \state -> do
+                (scont, s, uids) <- unSignal sig state
+                genCounter       <- newIORef 0
+                nursery          <- Hash.new :: IO (Nursery a)
+                uidt             <- Hash.new :: IO (Hash.CuckooHashTable Int Int)
+                newEntRef        <- newIORef []
+                nid              <- nextStateID state
+                ref              <- newIORef s
+                return (cont scont state genCounter nursery newEntRef nid uidt ref, s, uids)
+                where
+                    --Insert in here checks for networking eid and perform network updates, etc
+                    cont scont state genCounter nursery newEntRef nid uidt ref eid
+                        | eid /= nid  = scont eid >>= \se -> case se of
+                            NoChange _ -> return se
+                            Change   s -> do
+                                --Regular update
+                                gen        <- readIORef genCounter >>= \gen -> writeIORef genCounter (gen + 1) >> return gen
+                                es         <- mapM (updateEntity state gen nursery newEntRef) s
+                                removeAndNetworkEntities state gen nursery newEntRef nid
+                                writeIORef ref es
+                                return $ Change es
+                        | otherwise = do
+                            --Network update
+                            --Add time stamp to avoid out of order updates (still need out of order adds and deletes)
+                            es            <- readIORef ref
+                            (userID, msg) <- readIORef (netSignalRef state)
+                            let (NetEntityMessage ns _ gs) = decode msg
+                            return $ Change $ ns ++ filterMap (netUpdateEntity (IntSet.fromList gs) uidt userID) es
+
+                    netUpdateEntity = undefined
+
+
+--instance NecroFoldable IntMap.IntMap where
+
 
 updateEntity :: SignalState -> Int -> Nursery a -> IORef [Entity a] -> Entity a -> IO (Entity a)
 updateEntity state gen nursery _ e@Entity{euid = UID uid} = do
@@ -139,6 +236,10 @@ insertNursery :: Int -> Int -> Entity a -> Nursery a -> IO ()
 insertNursery uid gen e n = Hash.lookup n uid >>= \me' -> case me' of
     Nothing         -> Hash.insert n uid (gen, e,  e)
     Just (_, _, e') -> Hash.insert n uid (gen, e', e)
+
+-- type UIDTranslator = Hash.CuckooHashTable Int Int
+
+
 
 removeAndNetworkEntities :: (Binary a, Eq a) => SignalState -> Int -> Nursery a -> IORef [Entity a] -> Int -> IO ()
 removeAndNetworkEntities state gen nursery newEntRef nid = do

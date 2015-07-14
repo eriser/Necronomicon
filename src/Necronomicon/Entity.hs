@@ -9,7 +9,6 @@ import Foreign.Storable
 import Foreign.Ptr
 import Foreign.C.Types
 import Foreign.Marshal.Array
-
 import qualified Graphics.Rendering.OpenGL as GL
 
 -------------------------------------------------------
@@ -53,19 +52,33 @@ instance Functor Entity where
 -- instance Traversable Entity where
     -- traverse f (Entity d uid p r s c m ca n cs) = (\d' -> Entity d' uid p r s c m ca n cs) <$> f d
 
-class (Binary entities) => Entities entities where
-    type EntityType entities :: *
-    mapEntities  :: (Entity (EntityType entities) -> IO (Entity (EntityType entities))) -> entities -> IO entities
+-- class (Binary entities) => Entities entities where
+    -- type EntityType entities :: *
+    -- mapEntitiesM :: Monad m => (Entity (EntityType entities) -> m (Entity (EntityType entities))) -> entities -> m entities
+    -- mapEntities  :: (Entity (EntityType entities) -> Entity (EntityType entities)) -> entities -> entities
+    -- addEntities  :: [Entity (EntityType entities)] -> entities -> entities
+    -- removeEntities :: IntSet.IntSet -> entities -> entities
 
-instance Binary a => Entities (Entity a) where
-    type EntityType (Entity a) = a
-    mapEntities f e = f e
-    {-# INLINE mapEntities #-}
+-- instance Binary a => Entities (Entity a) where
+    -- type EntityType (Entity a) = a
+    -- mapEntitiesM f e = f e
+    -- mapEntities  f e = f e
+    -- addEntities []      e = e
+    -- addEntities (e : _) _ = e
+    -- removeEntities _ = id
+    -- {-# INLINE mapEntities #-}
 
-instance Binary a => Entities [Entity a] where
-    type EntityType [Entity a] = a
-    mapEntities f es = mapM f es
-    {-# INLINE mapEntities #-}
+-- instance Binary a => Entities [Entity a] where
+    -- type EntityType [Entity a] = a
+    -- mapEntitiesM f es = mapM f es
+    -- mapEntities  f es = map  f es
+    -- {-# INLINE mapEntities #-}
+    -- addEntities ns es = ns ++ es
+    -- removeEntities gs es = foldr maybeRemove [] es
+        -- where
+            -- maybeRemove e es' = case euid e of
+                -- UID uid -> if IntSet.member uid gs then es' else e : es'
+                -- _       -> e : es'
 
 instance Binary a => Binary (Entity a) where
     put (Entity ed uid p r s c m cam n cs) = put ed >> put uid >> put p >> put r >> put s >> put c >> put m >> put cam >> put n >> put cs

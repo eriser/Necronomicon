@@ -254,6 +254,7 @@ executable DynamicTreeTest
     default-extensions: DeriveGeneric
     build-depends:    base             == 4.*,
                       Necronomicon,
+                      containers,
                       binary
 
 executable GenerativeTest

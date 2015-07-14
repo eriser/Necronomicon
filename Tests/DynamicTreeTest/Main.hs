@@ -2,15 +2,16 @@ import Necronomicon
 import GHC.Generics
 import Data.Binary
 import Data.Foldable (traverse_)
+import qualified Data.Map as Map
 
 main :: IO ()
 main = runSignal megaDark
 
 type Health      = Double
-data HeroInput   = HeroKeys (Double, Double) | HeroMouse (Double, Double) | HeroTick (Time, Time) | HeroClick Time | HeroCollision (Time, Collision)
+data HeroInput   = HeroKeys (Double, Double) | HeroMouse (Double, Double) | HeroTick (Time, Time) | HeroClick Time | HeroCollision (Time, Map.Map UID Collision)
 data HeroState   = HeroIdle | HeroMoving Vector3 | HeroAttacking Time | HeroDamaged Time deriving (Show, Eq, Generic)
 data Hero        = Hero HeroState Health (Double, Double) deriving (Show, Eq, Generic)
-data BulletInput = BulletCollision (Time, [Maybe Collision]) | BulletTick (Time, Time)
+data BulletInput = BulletCollision (Time, Map.Map UID Collision) | BulletTick (Time, Time)
 data BulletState = Flying Vector3 | DeathAnimation Time deriving (Show, Eq, Generic)
 data Bullet      = Bullet BulletState deriving (Show, Eq, Generic)
 data PhysM       = EnemyWeapon | HeroWeapon | Player | Neutral deriving (Enum, Show, Eq, Generic)
@@ -48,13 +49,13 @@ megaDark = hero *> traverse_ bullets [-200, -196..200]
              , HeroKeys      <~ wasd
              , HeroMouse     <~ mouseDelta
              , HeroClick     <~ sampleOn mouseClick runTime
-             , HeroCollision <~ timestamp (collision hero) ]
+             , HeroCollision <~ timestamp collision ]
 
         bullets offset = b
             where
                 b = foldn updateBullets (initBullets offset) <| mergeMany
                   [ BulletTick      <~ tick
-                  , BulletCollision <~ timestamp (collisionMany b) ]
+                  , BulletCollision <~ timestamp collision ]
 
 updateHero :: HeroInput -> Entity Hero -> Entity Hero
 updateHero (HeroMouse (mx, my)) h@Entity{ edata = Hero state health (px, py)}
@@ -84,13 +85,14 @@ updateHero (HeroClick t) h@Entity{ edata = Hero state health fpr }
     | HeroDamaged _ <- state = h
     | otherwise              = h{ edata = Hero (HeroAttacking <| t + 3) health fpr }
 
-updateHero (HeroCollision (t, c)) h@Entity{ edata = Hero _ health fpr }
-    | EnemyWeapon <- tag c = h{ edata = Hero (HeroDamaged <| t + 3) (health - 10) fpr }
-    | otherwise            = h
+updateHero _ h = h
+--updateHero (HeroCollision (t, c)) h@Entity{ edata = Hero _ health fpr }
+--    | EnemyWeapon <- tag c = h{ edata = Hero (HeroDamaged <| t + 3) (health - 10) fpr }
+--    | otherwise            = h
 
 updateBullets :: BulletInput -> [Entity Bullet] -> [Entity Bullet]
 updateBullets (BulletTick t)            = filterMap' (tickBullet t)
-updateBullets (BulletCollision (t, cs)) = map (bulletCollision t) . zip cs
+updateBullets (BulletCollision (t, cs)) = map (bulletCollision t cs)
 
 tickBullet :: (Time, Time) -> Entity Bullet -> Maybe (Entity Bullet)
 tickBullet (dt, rt) b@Entity{ edata = Bullet state } =
@@ -103,10 +105,11 @@ tickBullet (dt, rt) b@Entity{ edata = Bullet state } =
                     then Nothing
                     else Just <| rotate (d .*. (dt * 10)) b
 
-bulletCollision :: Time -> (Maybe Collision, Entity Bullet) -> Entity Bullet
-bulletCollision t (c, b)
-    | Nothing          <- mtag = b
-    | Just EnemyWeapon <- mtag = b
-    | otherwise                = b{ edata = Bullet <| DeathAnimation <| t + 1 }
-    where
-        mtag = fmap tag c
+bulletCollision :: Time -> Map.Map UID Collision -> Entity Bullet -> Entity Bullet
+bulletCollision _ _ b = b
+--bulletCollision t (c, b)
+--    | Nothing          <- mtag = b
+--    | Just EnemyWeapon <- mtag = b
+--    | otherwise                = b{ edata = Bullet <| DeathAnimation <| t + 1 }
+--    where
+--        mtag = fmap tag c

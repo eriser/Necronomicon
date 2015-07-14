@@ -196,7 +196,7 @@ parseMessage (Logout u) _ sigstate = do
     -- putStrLn $ "Adding NetSignal: " ++ show (uid,netVal)
 
 parseMessage (UpdateNetSignal uid netval) _ sigstate = do
-    atomically $ writeTChan (signalsInbox sigstate) $ NetSignalEvent uid netval
+    atomically $ writeTChan (signalsInbox sigstate) $ NetSignalEvent uid 0 netval --Need to assign user ids!
     -- need new system for this
     -- sendToGlobalDispatch globalDispatch uid $ netValToDyn netVal
     -- atomically $ readTVar (netSignals client) >>= \sigs -> writeTVar (netSignals client) (IntMap.insert uid (Change netVal) sigs)
