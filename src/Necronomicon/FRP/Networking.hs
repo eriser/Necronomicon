@@ -82,38 +82,38 @@ Eliminating the arbiter here begs the question of whether the arbiter is necessa
 --Maybe a kind of Nat remapping scheme?
 
 --What about adding and removing?
-data NetEntityUpdate a = UpdateEntityData     Int a
-                       | UpdateEntityPosition Int Vector3
-                       | UpdateEntityRotation Int Quaternion
-                       | UpdateEntityScale    Int Vector3
-                       | UpdateEntityModel    Int (Maybe Model)
-                       | UpdateEntityCollider Int (Maybe Collider)
+data NetEntityUpdate a = UpdateEntityData     a
+                       | UpdateEntityPosition Vector3
+                       | UpdateEntityRotation Quaternion
+                       | UpdateEntityScale    Vector3
+                       | UpdateEntityModel    (Maybe Model)
+                       | UpdateEntityCollider (Maybe Collider)
                        deriving (Show)
 
 instance Binary a => Binary (NetEntityUpdate a) where
-    put (UpdateEntityData     uid x) = put (0 :: Word8) >> put uid >> put x
-    put (UpdateEntityPosition uid x) = put (1 :: Word8) >> put uid >> put x
-    put (UpdateEntityRotation uid x) = put (2 :: Word8) >> put uid >> put x
-    put (UpdateEntityScale    uid x) = put (3 :: Word8) >> put uid >> put x
-    put (UpdateEntityModel    uid x) = put (4 :: Word8) >> put uid >> put x
-    put (UpdateEntityCollider uid x) = put (5 :: Word8) >> put uid >> put x
+    put (UpdateEntityData     x) = put (0 :: Word8) >> put x
+    put (UpdateEntityPosition x) = put (1 :: Word8) >> put x
+    put (UpdateEntityRotation x) = put (2 :: Word8) >> put x
+    put (UpdateEntityScale    x) = put (3 :: Word8) >> put x
+    put (UpdateEntityModel    x) = put (4 :: Word8) >> put x
+    put (UpdateEntityCollider x) = put (5 :: Word8) >> put x
 
     get = (get :: Get Word8) >>= \t -> case t of
-        0 -> UpdateEntityData     <$> get <*> get
-        1 -> UpdateEntityPosition <$> get <*> get
-        2 -> UpdateEntityRotation <$> get <*> get
-        3 -> UpdateEntityScale    <$> get <*> get
-        4 -> UpdateEntityModel    <$> get <*> get
-        _ -> UpdateEntityCollider <$> get <*> get
+        0 -> UpdateEntityData     <$> get
+        1 -> UpdateEntityPosition <$> get
+        2 -> UpdateEntityRotation <$> get
+        3 -> UpdateEntityScale    <$> get
+        4 -> UpdateEntityModel    <$> get
+        _ -> UpdateEntityCollider <$> get
 
 
-data NetEntityMessage a = NetEntityMessage [Entity a] [NetEntityUpdate a] [Int]
+data NetEntityMessage a = NetEntityMessage [Entity a] [((Int, Int), [NetEntityUpdate a])] [((Int, Int), ())]
 
 instance Binary a => Binary (NetEntityMessage a) where
     put (NetEntityMessage es us ds) = put es >> put us >> put ds
     get                             = NetEntityMessage <$> get <*> get <*> get
 
-sendNetworkEntityMessage :: (Binary a, Eq a) => Client -> [Entity a] -> [NetEntityUpdate a] -> [Int] -> Int -> IO ()
+sendNetworkEntityMessage :: (Binary a, Eq a) => Client -> [Entity a] -> [((Int, Int), [NetEntityUpdate a])] -> [((Int, Int), ())] -> Int -> IO ()
 sendNetworkEntityMessage client es cs gs nid = when (not (null cs && null gs && null es)) $
     atomically (readTVar (clientRunStatus client)) >>= \cstatus -> case cstatus of
         Running -> sendUpdateNetSignal client (nid, msg)
@@ -121,15 +121,16 @@ sendNetworkEntityMessage client es cs gs nid = when (not (null cs && null gs && 
     where
         msg = encode $ NetEntityMessage es cs gs
 
-collectNetworkEntityUpdates :: Eq a => Entity a -> Entity a -> [NetEntityUpdate a] -> [NetEntityUpdate a]
-collectNetworkEntityUpdates prev curr us = foldr addUpdate us $ netOptions curr
+collectNetworkEntityUpdates :: Eq a => Entity a -> Entity a -> [((Int, Int), [NetEntityUpdate a])] -> [((Int, Int), [NetEntityUpdate a])]
+collectNetworkEntityUpdates prev curr us = if not (null us) then ((netOwner curr, unUID $ euid curr), us'') : us else us
     where
-        addUpdate NetworkData     us' = if edata    prev /= edata    curr then UpdateEntityData     (unUID $ euid curr) (edata    curr) : us' else us'
-        addUpdate NetworkPosition us' = if pos      prev /= pos      curr then UpdateEntityPosition (unUID $ euid curr) (pos      curr) : us' else us'
-        addUpdate NetworkRotation us' = if rot      prev /= rot      curr then UpdateEntityRotation (unUID $ euid curr) (rot      curr) : us' else us'
-        addUpdate NetworkScale    us' = if escale   prev /= escale   curr then UpdateEntityScale    (unUID $ euid curr) (escale   curr) : us' else us'
-        addUpdate NetworkModel    us' = if model    prev /= model    curr then UpdateEntityModel    (unUID $ euid curr) (model    curr) : us' else us'
-        addUpdate NetworkCollider us' = if collider prev /= collider curr then UpdateEntityCollider (unUID $ euid curr) (collider curr) : us' else us'
+        us'' = foldr addUpdate [] $ netOptions curr
+        addUpdate NetworkData     us' = if edata    prev /= edata    curr then UpdateEntityData     (edata    curr) : us' else us'
+        addUpdate NetworkPosition us' = if pos      prev /= pos      curr then UpdateEntityPosition (pos      curr) : us' else us'
+        addUpdate NetworkRotation us' = if rot      prev /= rot      curr then UpdateEntityRotation (rot      curr) : us' else us'
+        addUpdate NetworkScale    us' = if escale   prev /= escale   curr then UpdateEntityScale    (escale   curr) : us' else us'
+        addUpdate NetworkModel    us' = if model    prev /= model    curr then UpdateEntityModel    (model    curr) : us' else us'
+        addUpdate NetworkCollider us' = if collider prev /= collider curr then UpdateEntityCollider (collider curr) : us' else us'
 
 userJoin :: Signal String
 userJoin = Signal $ \state -> do

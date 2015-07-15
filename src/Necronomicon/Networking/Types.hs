@@ -30,6 +30,7 @@ data NetStatus = Inactive
 
 data Client = Client
     { clientUserName    :: String
+    , clientID          :: Int
     , clientUsers       :: TVar [String]
     , clientNetSignals  :: TVar (IntMap.IntMap B.ByteString)
     , clientOutBox      :: TChan NetMessage
@@ -45,7 +46,7 @@ mkClient name = do
     inBox       <- atomically $ newTChan
     runStatus   <- atomically $ newTVar Inactive
     aliveTime   <- atomically $ newTVar 0
-    return $ Client name users netSignals outBox inBox runStatus aliveTime
+    return $ Client name 0 users netSignals outBox inBox runStatus aliveTime
 
 instance Binary NetMessage where
     put (Chat              n m) = put (0 ::Word8) >> put n   >> put m
