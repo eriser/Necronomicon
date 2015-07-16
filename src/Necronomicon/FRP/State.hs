@@ -152,15 +152,15 @@ instance (Binary a, Eq a) => NecroFoldable [Entity a] where
                             es            <- readIORef ref
                             (_, msg)      <- readIORef (netSignalRef state)
                             let (NetEntityMessage ns csl gsl) = decode msg
-                            cs            <- Hash.fromList csl
-                            gs            <- Hash.fromList gsl
+                            cs            <- Hash.fromList csl --compute list length from originator's side
+                            gs            <- Hash.fromList $ map (\n -> (netid n, ())) ns ++ gsl
                             es'           <- filterMapM' (netUpdateEntity cs gs) es
                             return $ Change $ ns ++ es'
 
                     netUpdateEntity :: Hash.CuckooHashTable (Int, Int) [NetEntityUpdate a] -> Hash.CuckooHashTable (Int, Int) () -> Entity a -> IO (Maybe (Entity a))
-                    netUpdateEntity cs gs e = Hash.lookup gs (netOwner e, unUID $ euid e) >>= \g -> case g of
+                    netUpdateEntity cs gs e = Hash.lookup gs (netid e) >>= \g -> case g of
                         Just _  -> return Nothing
-                        Nothing -> Hash.lookup cs (netOwner e, unUID $ euid e) >>= \mcs -> case mcs of
+                        Nothing -> Hash.lookup cs (netid e) >>= \mcs -> case mcs of
                             Nothing  -> return $ Just e
                             Just cs' -> return $ Just $ foldr netUpdate e cs'
                         where
@@ -194,7 +194,7 @@ updateEntity state gen nursery newEntRef e = do
         UID _ -> return e{model = model'}
         New   -> do
             uid <- atomically $ readTVar (uidRef state) >>= \(uid : uids) -> writeTVar (uidRef state) uids >> return uid
-            let e' = e{model = model', euid = UID uid, netOwner = clientID (signalClient state)}
+            let e' = e{model = model', euid = UID uid, netid = (clientID (signalClient state), uid)}
             modifyIORef' newEntRef $ \es -> e' : es
             return e'
 
@@ -221,11 +221,11 @@ removeAndNetworkEntities :: (Binary a, Eq a) => SignalState -> Int -> Nursery a 
 removeAndNetworkEntities state gen nursery newEntRef nid = do
     (cs, gs) <- Hash.foldM collectGarbage ([], []) nursery
     es       <- readIORef newEntRef
-    sendNetworkEntityMessage (signalClient state) es cs gs nid
+    sendNetworkEntityMessage (signalClient state) es cs (map fst gs) nid
     mapM_ removeGarbage gs
     writeIORef newEntRef []
     where
-        removeGarbage ((_, k), _) = do
+        removeGarbage (_, k) = do
             renderData <- readIORef (renderDataRef state)
             SMV.unsafeWith renderData $ \ptr -> pokeByteOff (ptr `advancePtr` k) 0 (0 :: CInt)
             Hash.delete nursery k
@@ -233,7 +233,7 @@ removeAndNetworkEntities state gen nursery newEntRef nid = do
             --Delete openGL resources? Use weak pointers and finalizers?
 
         collectGarbage (cs, gs) (k, (gen', p, c)) = do
-            let gs' = if gen /= gen' then ((netOwner c, k), ()) : gs else gs
+            let gs' = if gen /= gen' then ((netid c, ()), k) : gs else gs
             return (collectNetworkEntityUpdates p c cs, gs')
 
 writeCam :: IORef (IntMap.IntMap (Matrix4x4, Camera)) -> UID -> Maybe Camera -> Entity a -> IO ()

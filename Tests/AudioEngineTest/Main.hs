@@ -1,9 +1,3 @@
-main :: IO ()
-main = print "test"
-
-{-
-
-
 module Main where
 
 import Necronomicon
@@ -76,27 +70,26 @@ lfpulseSynth :: UGen -> UGen
 lfpulseSynth freq = (lfpulse (lag 0.1 freq) 0) * 440 + 440 |> sin |> gain 0.2 |> dup |> out 0
 
 main :: IO ()
-main = runSignal
-       <| play (toggle <| isDown keyA) reverbSynth
-       <> play (toggle <| isDown keyB) delaySynthN (mouseX ~> scale 20 10000)  mouseY
-       <> play (toggle <| isDown keyC) delaySynthL (mouseX ~> scale 20 10000)  mouseY
-       <> play (toggle <| isDown keyD) delaySynthC (mouseX ~> scale 20 10000)  mouseY
-       <> play (toggle <| isDown keyE) combSynthC  (mouseX ~> scale 1 4000) (mouseY ~> scale 0 20)
-       <> play (toggle <| isDown keyF) feedSynth (mouseX ~> scale 2 20000) (mouseY ~> scale 2 20000)
-       <> play (toggle <| isDown keyG) limiterSynth (mouseX ~> scale 0 4)
-       <> play (toggle <| isDown keyH) noLimiterSynth (mouseX ~> scale 0 4)
-       <> play (toggle <| isDown keyI) minMaxSynth (mouseX ~> scale 20 2000)
-       <> play (toggle <| isDown keyJ) lpfSynth (mouseX ~> scale 20 4000)
-       <> play (toggle <| isDown keyK) modulatingDelayC
-       <> play (toggle <| isDown keyL) panSynth (mouseX ~> linlin 0 1 (-1) 1)
-       <> play (toggle <| isDown keyM) pinkSynth
-       <> play (toggle <| isDown keyN) brownSynth
-       <> play (toggle <| isDown keyO) whiteSynth
-       <> play (toggle <| isDown keyP) simplexSynth (mouseX ~> scale 0.1 80)
-       <> play (toggle <| isDown keyQ) pluckSynth (mouseX ~> scale 20 2000) (mouseY ~> linlin 0 1 (-1) 1)
-       <> play (toggle <| isDown keyR) lfsawSynth (mouseX ~> scale 0.1 2000)
-       <> play (toggle <| isDown keyS) lfpulseSynth (mouseX ~> scale 0.1 2000)
+main = runSignal soundsig
 
--- main :: IO ()
--- main = runSignal <| synthDefs *> tempo (pure 150) *> testGUI <> sections <> hyperTerrainSounds
--}
+soundsig :: Signal ()
+soundsig = play (toggle <| isDown keyA) reverbSynth
+        *> play (toggle <| isDown keyB) delaySynthN (mouseX ~> scale 20 10000)  mouseY
+        *> play (toggle <| isDown keyC) delaySynthL (mouseX ~> scale 20 10000)  mouseY
+        *> play (toggle <| isDown keyD) delaySynthC (mouseX ~> scale 20 10000)  mouseY
+        *> play (toggle <| isDown keyE) combSynthC  (mouseX ~> scale 1 4000) (mouseY ~> scale 0 20)
+        *> play (toggle <| isDown keyF) feedSynth (mouseX ~> scale 2 20000) (mouseY ~> scale 2 20000)
+        *> play (toggle <| isDown keyG) limiterSynth (mouseX ~> scale 0 4)
+        *> play (toggle <| isDown keyH) noLimiterSynth (mouseX ~> scale 0 4)
+        *> play (toggle <| isDown keyI) minMaxSynth (mouseX ~> scale 20 2000)
+        *> play (toggle <| isDown keyJ) lpfSynth (mouseX ~> scale 20 4000)
+        *> play (toggle <| isDown keyK) modulatingDelayC
+        *> play (toggle <| isDown keyL) panSynth (mouseX ~> linlin 0 1 (-1) 1)
+        *> play (toggle <| isDown keyM) pinkSynth
+        *> play (toggle <| isDown keyN) brownSynth
+        *> play (toggle <| isDown keyO) whiteSynth
+        *> play (toggle <| isDown keyP) simplexSynth (mouseX ~> scale 0.1 80)
+        *> play (toggle <| isDown keyQ) pluckSynth (mouseX ~> scale 20 2000) (mouseY ~> linlin 0 1 (-1) 1)
+        *> play (toggle <| isDown keyR) lfsawSynth (mouseX ~> scale 0.1 2000)
+        *> play (toggle <| isDown keyS) lfpulseSynth (mouseX ~> scale 0.1 2000)
+

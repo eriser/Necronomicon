@@ -25,13 +25,13 @@ data Entity a = Entity
     , model      :: Maybe Model
     , camera     :: Maybe Camera
     , netOptions :: [NetworkOptions]
-    , netOwner   :: Int
+    , netid      :: (Int, Int)
     , children   :: [Entity ()] }
 
 data NetworkOptions = NetworkData | NetworkPosition | NetworkRotation | NetworkScale | NetworkCollider | NetworkModel deriving (Show, Eq, Enum)
 
 instance Show a => Show (Entity a) where
-    show (Entity d uid p r s c m ca n o cs) =
+    show (Entity d uid p r s c m ca n ni cs) =
         "Entity{ " ++
         "edata = " ++ show d ++
         ", eid = " ++ show uid ++
@@ -42,7 +42,7 @@ instance Show a => Show (Entity a) where
         ", model = " ++ show m ++
         ", camera = " ++ show ca ++
         ", netOptions = " ++ show n ++
-        ", netOwner = " ++ show o ++
+        ", netid = " ++ show ni ++
         ", children = " ++ show cs ++
         "}"
 
@@ -83,7 +83,7 @@ instance Functor Entity where
                 -- _       -> e : es'
 
 instance Binary a => Binary (Entity a) where
-    put (Entity ed uid p r s c m cam n o cs) = put ed >> put uid >> put p >> put r >> put s >> put c >> put m >> put cam >> put n >> put o >> put cs
+    put (Entity ed uid p r s c m cam n ni cs) = put ed >> put uid >> put p >> put r >> put s >> put c >> put m >> put cam >> put n >> put ni >> put cs
     get                                      = Entity <$> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get
 
 instance Binary NetworkOptions where
@@ -95,7 +95,7 @@ instance Binary NetworkOptions where
 -------------------------------------------------------
 
 mkEntity :: a -> Entity a
-mkEntity d = Entity d New 0 identity 1 Nothing Nothing Nothing [] 0 []
+mkEntity d = Entity d New 0 identity 1 Nothing Nothing Nothing [] (-1, -1) []
 
 -- mkNetworkOptions :: NetworkOptions
 -- mkNetworkOptions = NetworkOptions False False False False False False False False
