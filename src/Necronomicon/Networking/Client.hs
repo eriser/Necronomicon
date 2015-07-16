@@ -259,5 +259,5 @@ sendUpdateNetSignal client (uid, v) = atomically $ writeTChan (clientOutBox clie
 -- sendAddNetSignal client (uid, netVal) = atomically $ writeTChan (clientOutBox client) $ AddNetSignal uid netVal
     -- atomically (readTVar (clientNetSignals client) >>= \sig -> writeTVar (clientNetSignals client) (IntMap.insert uid (NoChange netVal) sig))
 
-startNetworking :: SignalState -> String -> String  -> Client -> IO ()
+startNetworking :: SignalState -> String -> String -> Client -> IO ()
 startNetworking sigstate name serverAddr client = startClient name serverAddr sigstate client

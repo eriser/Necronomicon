@@ -2,6 +2,8 @@ module Necronomicon.Networking.Types where
 
 import Control.Concurrent.STM
 import Data.Binary
+import System.Random
+import Data.Bits (xor)
 import qualified Data.IntMap           as IntMap
 import qualified Data.ByteString.Lazy  as B
 import qualified Data.ByteString.Char8 as C
@@ -41,12 +43,14 @@ data Client = Client
 mkClient :: String -> IO Client
 mkClient name = do
     users       <- atomically $ newTVar []
+    cid         <- (randomIO :: IO Int) >>= \i -> return (foldl (\h c -> 33*h `xor` fromEnum c) 5381 $ name ++ show i)
+    putStrLn $ "Client id: " ++ show cid
     netSignals  <- atomically $ newTVar IntMap.empty
     outBox      <- atomically $ newTChan
     inBox       <- atomically $ newTChan
     runStatus   <- atomically $ newTVar Inactive
     aliveTime   <- atomically $ newTVar 0
-    return $ Client name 0 users netSignals outBox inBox runStatus aliveTime
+    return $ Client name cid  users netSignals outBox inBox runStatus aliveTime
 
 instance Binary NetMessage where
     put (Chat              n m) = put (0 ::Word8) >> put n   >> put m
