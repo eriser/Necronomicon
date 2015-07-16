@@ -201,8 +201,8 @@ networkStatus = inputSignal 205 netStatusRef
 --                         then sendUpdateNetSignal client (netid,toNetVal v) >> writeIORef ref v >> return (Change v)
 --                         else return $ Change v
 
--- getCommandArgName :: IO String
--- getCommandArgName = getArgs >>= return . go
---     where
---         go (name : _ : []) = name
+--getNetArgs :: IO (Maybe (String, String))
+--getNetArgs = getArgs >>= return . go
+--    where
+--         go (name : serverAddress : []) = name
 --         go  _              = "INCORRECT_COMMAND_ARGS"
