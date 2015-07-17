@@ -11,7 +11,7 @@ import Control.Exception
 import qualified Data.ByteString.Lazy  as B
 
 lengthOfMessageLength :: Int64
-lengthOfMessageLength = 2
+lengthOfMessageLength = 4
 
 decodeTransLength :: B.ByteString -> Maybe Int64
 decodeTransLength bs = if B.length bs == lengthOfMessageLength || B.length bs == 0

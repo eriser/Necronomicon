@@ -179,14 +179,17 @@ parseMessage :: NetMessage -> Client -> SignalState -> IO ()
         -- userStringList = map C.unpack ul
 
 parseMessage Alive client _ = do
+    putStrLn "Server is alive."
     currentTime  <- getCurrentTime
     atomically $ writeTVar (clientAliveTime client) currentTime
 
 parseMessage (Login u) _ sigstate = do
+    putStrLn $ "User: " ++ show u ++ " logged in."
     atomically $ writeTChan (signalsInbox sigstate) $ NetUserEvent (C.unpack u) True
     putStrLn $ "User logged in: " ++ C.unpack u
 
 parseMessage (Logout u) _ sigstate = do
+    putStrLn $ "User: " ++ show u ++ " logged out."
     atomically $ writeTChan (signalsInbox sigstate) $ NetUserEvent (C.unpack u) False
     putStrLn $  "User logged out: " ++ C.unpack u
 
@@ -196,6 +199,7 @@ parseMessage (Logout u) _ sigstate = do
     -- putStrLn $ "Adding NetSignal: " ++ show (uid,netVal)
 
 parseMessage (UpdateNetSignal uid netval) _ sigstate = do
+    putStrLn $ "Updating net signal " ++ show uid
     atomically $ writeTChan (signalsInbox sigstate) $ NetSignalEvent uid 0 netval --Need to assign user ids!
     -- need new system for this
     -- sendToGlobalDispatch globalDispatch uid $ netValToDyn netVal
@@ -221,8 +225,8 @@ parseMessage (UpdateNetSignal uid netval) _ sigstate = do
                 -- else return ()
 
 parseMessage (Chat name msg) _ sigstate = atomically $ writeTChan (signalsInbox sigstate) $ NetChatEvent (C.unpack name) (C.unpack msg)
-parseMessage EmptyMessage        _ _ = putStrLn "Empty message received!?"
-parseMessage (RemoveNetSignal _) _ _ = putStrLn "Really no reason to remove net signals now is there?"
+--parseMessage EmptyMessage        _ _ = putStrLn "Empty message received!?"
+--parseMessage (RemoveNetSignal _) _ _ = putStrLn "Really no reason to remove net signals now is there?"
 parseMessage _                   _ _ = putStrLn "Didn't recognize that message!?"
 
 ------------------------------
