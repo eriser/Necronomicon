@@ -6,18 +6,18 @@ import System.Random
 import Data.Bits (xor)
 import qualified Data.IntMap           as IntMap
 import qualified Data.ByteString.Lazy  as B
-import qualified Data.ByteString.Char8 as C
+-- import qualified Data.ByteString.Char8 as C
 
 --We don't really need either add or remove!
-data NetMessage = Chat            C.ByteString C.ByteString
-                | AddNetSignal    Int B.ByteString
-                | RemoveNetSignal Int
+data NetMessage = Chat            String String
+                -- | AddNetSignal    Int String
+                -- | RemoveNetSignal Int
                 | UpdateNetSignal Int B.ByteString
                 | Alive
-                | UserList        [C.ByteString]
-                | Login            C.ByteString
-                | Logout           C.ByteString
-                | SyncNetSignals  (IntMap.IntMap B.ByteString)
+                | UserList        [String]
+                | Login            String
+                | Logout           String
+                -- | SyncNetSignals  (IntMap.IntMap B.ByteString)
                 | EmptyMessage
                 deriving (Show)
 
@@ -54,24 +54,24 @@ mkClient name = do
 
 instance Binary NetMessage where
     put (Chat              n m) = put (0 ::Word8) >> put n   >> put m
-    put (AddNetSignal    uid s) = put (1 ::Word8) >> put uid >> put s
-    put (RemoveNetSignal uid  ) = put (2 ::Word8) >> put uid
+    -- put (AddNetSignal    uid s) = put (1 ::Word8) >> put uid >> put s
+    -- put (RemoveNetSignal uid  ) = put (2 ::Word8) >> put uid
     put (UpdateNetSignal uid s) = put (3 ::Word8) >> put uid >> put s
     put  Alive                  = put (4 ::Word8)
     put (UserList           ul) = put (5 ::Word8) >> put ul
     put (Login               n) = put (6 ::Word8) >> put n
     put (Logout              n) = put (7 ::Word8) >> put n
-    put (SyncNetSignals     ss) = put (8 ::Word8) >> put ss
+    -- put (SyncNetSignals     ss) = put (8 ::Word8) >> put ss
     put (EmptyMessage)          = return ()
 
     get = (get ::Get Word8) >>= \ t -> case t of
         0 -> Chat            <$> get <*> get
-        1 -> AddNetSignal    <$> get <*> get
-        2 -> RemoveNetSignal <$> get
+        -- 1 -> AddNetSignal    <$> get <*> get
+        -- 2 -> RemoveNetSignal <$> get
         3 -> UpdateNetSignal <$> get <*> get
         4 -> return Alive
         5 -> UserList        <$> get
         6 -> Login           <$> get
         7 -> Logout          <$> get
-        8 -> SyncNetSignals  <$> get
+        -- 8 -> SyncNetSignals  <$> get
         _ -> return EmptyMessage

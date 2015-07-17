@@ -6,7 +6,7 @@ import Network.Socket                  hiding (send,recv,recvFrom,sendTo)
 import Data.Binary                            (encode,decode)
 import Data.Int                               (Int64)
 import Control.Monad                          (when)
-import Data.Word                              (Word16)
+import Data.Word                              (Word32)
 import Control.Exception
 import qualified Data.ByteString.Lazy  as B
 
@@ -15,13 +15,13 @@ lengthOfMessageLength = 4
 
 decodeTransLength :: B.ByteString -> Maybe Int64
 decodeTransLength bs = if B.length bs == lengthOfMessageLength || B.length bs == 0
-    then Just $ fromIntegral (decode bs :: Word16)
+    then Just $ fromIntegral (decode bs :: Word32)
     else Nothing
 
 sendWithLength :: Socket -> B.ByteString -> IO()
 sendWithLength nsocket msg = Control.Exception.catch trySend onFailure
     where
-        messageLength  = fromIntegral $ B.length msg :: Word16
+        messageLength  = fromIntegral $ B.length msg :: Word32
         trySend = do
             sendAll nsocket $ encode messageLength
             bytes <- send nsocket msg

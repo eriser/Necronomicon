@@ -2,7 +2,7 @@ module Necronomicon.Networking.Server (startServer,serverPort,clientPort) where
 
 import Prelude
 import qualified Data.ByteString.Lazy  as B
-import qualified Data.ByteString.Char8 as C
+-- import qualified Data.ByteString.Char8 as C
 
 import Control.Concurrent (forkIO,threadDelay)
 import Control.Concurrent.STM
@@ -25,7 +25,7 @@ data User = User
     { userSocket    :: Socket
     , userAddress   :: SockAddr
     , userStopVar   :: TMVar ()
-    , userName      :: C.ByteString
+    , userName      :: String
     , userId        :: Int
     , userAliveTime :: Double }
 
@@ -135,7 +135,7 @@ acceptLoop server nsocket = forever $ do
             atomically $ do
                 users'  <- readTVar $ serverUsers server
                 uid     <- (readTVar $ serverUserIdCounter server) >>= return . (+1)
-                writeTVar (serverUsers server) (Map.insert newUserAddress (User newUserSocket newUserAddress stopVar (C.pack "saproling") uid t) users')
+                writeTVar (serverUsers server) (Map.insert newUserAddress (User newUserSocket newUserAddress stopVar "saproling" uid t) users')
                 writeTVar (serverUserIdCounter server) uid
             _ <- forkIO $ userListen newUserSocket newUserAddress stopVar server
             return ()

@@ -195,7 +195,7 @@ updateEntity state gen nursery newEntRef e = do
         New   -> do
             uid <- atomically $ readTVar (uidRef state) >>= \(uid : uids) -> writeTVar (uidRef state) uids >> return uid
             let e' = e{model = model', euid = UID uid, netid = (clientID (signalClient state), uid)}
-            modifyIORef' newEntRef $ \es -> e' : es
+            when (not $ null $ netOptions e') $ modifyIORef' newEntRef $ \es -> e' : es
             return e'
 
     let (UID uid) = euid e'
@@ -231,7 +231,7 @@ removeAndNetworkEntities state gen nursery newEntRef nid = do
             Hash.delete nursery k
             atomically $ readTVar (uidRef state) >>= \uids -> writeTVar (uidRef state) (k : uids)
             --Delete openGL resources? Use weak pointers and finalizers?
-
+--TODO: Need separate lists for delete and network remove message!
         collectGarbage (cs, gs) (k, (gen', p, c)) = do
             let gs' = if gen /= gen' then ((netid c, ()), k) : gs else gs
             return (collectNetworkEntityUpdates p c cs, gs')

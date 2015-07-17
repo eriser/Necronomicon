@@ -11,7 +11,7 @@ import Control.Exception
 import Control.Concurrent                     (forkIO,threadDelay)
 import Data.Binary                            (encode,decode)
 import Network.Socket                  hiding (send,recv,recvFrom,sendTo)
-import qualified Data.ByteString.Char8 as C   (unpack,pack)
+-- import qualified Data.ByteString.Char8 as C   (unpack,pack)
 import qualified Data.ByteString.Lazy  as B
 
 --fix lazy chat and chat in general
@@ -60,9 +60,9 @@ startup client serverIPAddress sigstate = do
 
 sendLoginMessage :: Client -> IO ()
 sendLoginMessage client = do
-    putStrLn "Logging in..."
+    putStrLn $ "Logging in as " ++ show (clientUserName client) 
     threadDelay 1000000
-    atomically $ writeTChan (clientOutBox client) $ Login (C.pack $ clientUserName client)
+    atomically $ writeTChan (clientOutBox client) $ Login $ clientUserName client
 
 connectionLoop :: Client -> Socket -> SockAddr -> IO ()
 connectionLoop client nsocket serverAddr = Control.Exception.catch tryConnect onFailure
@@ -151,7 +151,7 @@ statusLoop client sock serverIPAddress sigstate status = do
             putStrLn "Quitting..."
             atomically $ writeTVar  (clientRunStatus client) Quitting
             putStrLn "Sending quit message to server..."
-            Control.Exception.catch (sendWithLength sock $ encode $ Logout (C.pack $ clientUserName client)) printError
+            Control.Exception.catch (sendWithLength sock $ encode $ Logout (clientUserName client)) printError
             putStrLn "Closing socket..."
             close sock
             putStrLn "Done quitting..."
@@ -185,13 +185,13 @@ parseMessage Alive client _ = do
 
 parseMessage (Login u) _ sigstate = do
     putStrLn $ "User: " ++ show u ++ " logged in."
-    atomically $ writeTChan (signalsInbox sigstate) $ NetUserEvent (C.unpack u) True
-    putStrLn $ "User logged in: " ++ C.unpack u
+    atomically $ writeTChan (signalsInbox sigstate) $ NetUserEvent u True
+    putStrLn $ "User logged in: " ++ u
 
 parseMessage (Logout u) _ sigstate = do
     putStrLn $ "User: " ++ show u ++ " logged out."
-    atomically $ writeTChan (signalsInbox sigstate) $ NetUserEvent (C.unpack u) False
-    putStrLn $  "User logged out: " ++ C.unpack u
+    atomically $ writeTChan (signalsInbox sigstate) $ NetUserEvent u False
+    putStrLn $  "User logged out: " ++ u
 
 -- parseMessage (AddNetSignal uid netVal) _ sigstate = do
     -- atomically (readTVar (netSignals client) >>= \sig -> writeTVar (netSignals client) (IntMap.insert uid (Change netVal) sig))
@@ -224,7 +224,7 @@ parseMessage (UpdateNetSignal uid netval) _ sigstate = do
                 -- then return () -- sendToGlobalDispatch globalDispatch uid $ netValToDyn netVal
                 -- else return ()
 
-parseMessage (Chat name msg) _ sigstate = atomically $ writeTChan (signalsInbox sigstate) $ NetChatEvent (C.unpack name) (C.unpack msg)
+parseMessage (Chat name msg) _ sigstate = atomically $ writeTChan (signalsInbox sigstate) $ NetChatEvent name msg
 --parseMessage EmptyMessage        _ _ = putStrLn "Empty message received!?"
 --parseMessage (RemoveNetSignal _) _ _ = putStrLn "Really no reason to remove net signals now is there?"
 parseMessage _                   _ _ = putStrLn "Didn't recognize that message!?"
@@ -253,7 +253,7 @@ printError e = print e
 -----------------------------
 
 sendChatMessage :: String -> Client -> IO ()
-sendChatMessage chat client = atomically $ writeTChan (clientOutBox client) $ Chat (C.pack $ clientUserName client) (C.pack chat)
+sendChatMessage chat client = atomically $ writeTChan (clientOutBox client) $ Chat (clientUserName client) chat
 
 sendUpdateNetSignal :: Client -> (Int, B.ByteString) -> IO ()
 sendUpdateNetSignal client (uid, v) = atomically $ writeTChan (clientOutBox client) $ UpdateNetSignal uid v
