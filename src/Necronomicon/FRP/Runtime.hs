@@ -98,10 +98,14 @@ nextStateID state = do
 
 setInputCallbacks :: GLFW.Window -> TChan InputEvent -> IO ()
 setInputCallbacks w eventInbox = do
-    GLFW.setCursorPosCallback   w $ Just $ \_ x y     -> atomically $ writeTChan eventInbox $ MouseEvent (x, y)
-    GLFW.setMouseButtonCallback w $ Just $ \_ _ s _   -> atomically $ writeTChan eventInbox $ MouseButtonEvent (s == GLFW.MouseButtonState'Pressed)
     GLFW.setKeyCallback         w $ Just $ \_ k _ p _ -> if p == GLFW.KeyState'Repeating then return () else atomically $ writeTChan eventInbox $ KeyEvent k (p /= GLFW.KeyState'Released)
     GLFW.setWindowSizeCallback  w $ Just $ \_ x y     -> atomically $ writeTChan eventInbox $ DimensionsEvent (fromIntegral x, fromIntegral y)
+    GLFW.setMouseButtonCallback w $ Just $ \_ _ s _   -> atomically $ writeTChan eventInbox $ MouseButtonEvent (s == GLFW.MouseButtonState'Pressed)
+    GLFW.setCursorPosCallback   w $ Just $ \_ x y     -> do
+        (ww, wh) <- GLFW.getWindowSize w
+        let x' = x / fromIntegral ww
+        let y' = y / fromIntegral wh
+        atomically $ writeTChan eventInbox $ MouseEvent (x', y')
 
 inputSignal :: Show a => Int -> (SignalState -> IORef a) -> Signal a
 inputSignal uid getter = Signal $ \state -> do
@@ -112,4 +116,7 @@ inputSignal uid getter = Signal $ \state -> do
     where
         cont ref iref eid
             | eid /= uid = readIORef ref  >>= return . NoChange
-            | otherwise  = readIORef iref >>= return . Change 
+            | otherwise  = do
+                i <- readIORef iref 
+                -- print i 
+                return $ Change i
