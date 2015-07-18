@@ -6,8 +6,8 @@
 #include <stdlib.h>
 #include <math.h>
 
-#include "../Necronomicon.h"
-#include "UGenUtil.h"
+#include "../AudioRuntime.h"
+#include "Util.h"
 
 #define BIN_OP_CALC(OP, CONTROL_ARGS, AUDIO_ARGS)   \
 double* in0 = UGEN_INPUT_BUFFER(u, 0);              \

@@ -7,7 +7,7 @@
 #define NECRONOMICON_HASH_TABLE_H_INCLUDED
 
 #include "../Endian.h"
-#include "../UGenUtil.h"
+#include "../Util.h"
 
 // Fast and generic fixed memory hash table using open addressing with linear probing
 // insertion and removal never alter the internal hash table size because the size is fixed.

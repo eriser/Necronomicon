@@ -6,8 +6,8 @@
 #include <stdlib.h>
 #include <math.h>
 
-#include "../Necronomicon.h"
-#include "UGenUtil.h"
+#include "../AudioRuntime.h"
+#include "Util.h"
 
 #define RANGE_CALC(CONTROL_ARGS, AUDIO_ARGS)        \
 double* in0  = UGEN_INPUT_BUFFER(u, 0);             \

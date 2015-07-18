@@ -8,8 +8,8 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "../Necronomicon.h"
-#include "UGenUtil.h"
+#include "../AudioRuntime.h"
+#include "Util.h"
 
 void accumulator_constructor(ugen* u)
 {

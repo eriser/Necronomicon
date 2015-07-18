@@ -6,9 +6,9 @@
 #include <math.h>
 #include <stdlib.h>
 
-#include "../Necronomicon.h"
+#include "../AudioRuntime.h"
 #include "DelayUGens.h"
-#include "UGenUtil.h"
+#include "Util.h"
 
 typedef struct
 {

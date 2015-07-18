@@ -32,25 +32,25 @@ library
         -- use extra-libraries, if pkg-config fails
         --   http://hackage.haskell.org/trac/hackage/ticket/170
         Extra-Libraries: jack, sndfile, GLEW
-    Include-Dirs: 		c_lib, c_lib/Necronomicon, c_lib/Necronomicon/Containers
+    Include-Dirs: 		c_lib, c_lib/Necronomicon, c_lib/Necronomicon/Containers, c_lib/Necronomicon/UGens
     Install-Includes:	Necronomicon.h
     C-Sources:
-        c_lib/Necronomicon.c,
-        c_lib/Necronomicon/BufferUGens.c,
-        c_lib/Necronomicon/Render.c,
-        c_lib/Necronomicon/DelayUGens.c,
-        c_lib/Necronomicon/ReverbUGens.c,
-        c_lib/Necronomicon/OperatorUGens.c,
-        c_lib/Necronomicon/LFUGens.c,
-        c_lib/Necronomicon/OscUGens.c,
-        c_lib/Necronomicon/IOUGens.c,
-        c_lib/Necronomicon/DistortionUGens.c,
-        c_lib/Necronomicon/NoiseUGens.c,
-        c_lib/Necronomicon/RangeUGens.c,
-        c_lib/Necronomicon/FilterUGens.c,
-        c_lib/Necronomicon/DynamicsUGens.c,
-        c_lib/Necronomicon/PanUGens.c,
-        c_lib/Necronomicon/TimeUGens.c,
+        c_lib/Necronomicon/AudioRuntime.c,
+        c_lib/Necronomicon/GraphicsRuntime.c,
+        c_lib/Necronomicon/UGens/BufferUGens.c,
+        c_lib/Necronomicon/UGens/DelayUGens.c,
+        c_lib/Necronomicon/UGens/ReverbUGens.c,
+        c_lib/Necronomicon/UGens/OperatorUGens.c,
+        c_lib/Necronomicon/UGens/LFUGens.c,
+        c_lib/Necronomicon/UGens/OscUGens.c,
+        c_lib/Necronomicon/UGens/IOUGens.c,
+        c_lib/Necronomicon/UGens/DistortionUGens.c,
+        c_lib/Necronomicon/UGens/NoiseUGens.c,
+        c_lib/Necronomicon/UGens/RangeUGens.c,
+        c_lib/Necronomicon/UGens/FilterUGens.c,
+        c_lib/Necronomicon/UGens/DynamicsUGens.c,
+        c_lib/Necronomicon/UGens/PanUGens.c,
+        c_lib/Necronomicon/UGens/TimeUGens.c,
         c_lib/Necronomicon/Containers/HashTable.c
     ghc-options:        -threaded -O2 -Wall -Werror
     default-extensions: FlexibleInstances MultiParamTypeClasses ForeignFunctionInterface TypeFamilies BangPatterns
@@ -199,7 +199,7 @@ executable CTest
     ghc-options:        -threaded -Wall -Werror -debug
     hs-source-dirs:     Tests/CTest
     Include-Dirs: 		c_lib
-    Install-Includes:	Necronomicon.h
+    Install-Includes:	AudioRuntime.h
     C-Sources:          Tests/CTest/CTest.c
     default-extensions:
     build-depends:

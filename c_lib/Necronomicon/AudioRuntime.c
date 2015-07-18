@@ -75,9 +75,9 @@
 #include <limits.h>
 #include <sndfile.h>
 
-#include "Necronomicon.h"
+#include "AudioRuntime.h"
 #include "Necronomicon/Endian.h"
-#include "Necronomicon/UGenUtil.h"
+#include "Necronomicon/Util.h"
 
 /////////////////////
 // Constants

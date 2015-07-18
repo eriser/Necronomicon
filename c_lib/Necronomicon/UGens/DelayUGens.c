@@ -6,9 +6,9 @@
 #include <math.h>
 #include <stdlib.h>
 
-#include "../Necronomicon.h"
+#include "../AudioRuntime.h"
 #include "DelayUGens.h"
-#include "UGenUtil.h"
+#include "Util.h"
 
 const uint32_t DELAY_DATA_SIZE = sizeof(delay_data);
 

@@ -6,8 +6,8 @@
 #include <stdlib.h>
 #include <math.h>
 
-#include "../Necronomicon.h"
-#include "UGenUtil.h"
+#include "../AudioRuntime.h"
+#include "Util.h"
 #include "Random.h"
 
 typedef struct

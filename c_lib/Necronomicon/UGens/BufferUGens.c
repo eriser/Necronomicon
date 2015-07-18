@@ -9,9 +9,9 @@
 #include <stdio.h>
 #include <sndfile.h>
 
-#include "../Necronomicon.h"
+#include "../AudioRuntime.h"
 #include "Containers/HashTable.h"
-#include "UGenUtil.h"
+#include "Util.h"
 
 // Use haskell threads to do actual loading
 // Spawn a thread that reads the sound file into a raw double*
