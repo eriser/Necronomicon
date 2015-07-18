@@ -10,7 +10,7 @@ import Network.Socket hiding (send,recv,recvFrom,sendTo)
 import Control.Exception
 import Control.Monad (forever)
 import qualified Data.Map.Strict as Map
-import Data.Binary 
+import Data.Binary
 import Data.Binary.Get
 -- import Necronomicon.Networking.User
 import Necronomicon.Networking.Message
@@ -85,7 +85,8 @@ keepAlive server = forever $ do
     users <- atomically $ readTVar $ serverUsers server
     print users
 
-    broadcast (Nothing, encode $ UserList $ Prelude.map (\(_,u) -> userName u) (Map.toList users)) server
+    -- broadcast (Nothing, encode $ UserList $ Prelude.map (\(_,u) -> userName u) (Map.toList users)) server
+    broadcast (Nothing, encode Alive) server
 
     currentTime <- getCurrentTime
     let users' = Map.filter (\u -> (currentTime - userAliveTime u < 6)) users
@@ -174,7 +175,7 @@ messageProcessor server _ = forever $ do
     users         <- atomically $ readTVar  $ serverUsers server
     case Map.lookup sa users of
         Nothing -> print ("Can't find a user with this ip address: " ++ show sa)
-        Just  u -> if runGet ((get :: Get Word8) >>= return . (/=3)) nmessage 
+        Just  u -> if runGet ((get :: Get Word8) >>= return . (/=3)) nmessage
             then parseMessage nmessage (decode nmessage) u server
             else broadcast (Just $ userAddress u, nmessage) server
 ------------------------------
@@ -226,10 +227,10 @@ parseMessage m Alive user server = do
 --         putStrLn $  "Removing NetSignal: " ++ show uid
 --         putStrLn ""
 
-parseMessage m (UpdateNetSignal uid _) user server = do
-    putStrLn $ "Updating net signal: " ++ show uid
-    -- atomically $ readTVar (serverNetSignals server) >>= \sigs -> writeTVar (serverNetSignals server) (IntMap.insert uid netVal sigs)
-    broadcast (Just $ userAddress user,m) server
+-- parseMessage m (UpdateNetSignal uid _) user server = do
+--     putStrLn $ "Updating net signal: " ++ show uid
+--     -- atomically $ readTVar (serverNetSignals server) >>= \sigs -> writeTVar (serverNetSignals server) (IntMap.insert uid netVal sigs)
+--     broadcast (Just $ userAddress user,m) server
 
 parseMessage m (Chat name msg) _ server = do
     putStrLn ("Chat - " ++ show name ++ ": " ++ show msg)

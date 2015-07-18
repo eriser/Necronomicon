@@ -116,7 +116,7 @@ instance Binary a => Binary (NetEntityMessage a) where
 sendNetworkEntityMessage :: (Binary a, Eq a) => Client -> [Entity a] -> [((Int, Int), [NetEntityUpdate a])] -> [((Int, Int), ())] -> Int -> IO ()
 sendNetworkEntityMessage client es cs gs nid = when (not (null cs && null gs && null es)) $
     atomically (readTVar (clientRunStatus client)) >>= \cstatus -> case cstatus of
-        Running -> sendUpdateNetSignal client $ encode $ NetEntityMessage nid es cs gs 
+        Running -> sendUpdateNetSignal client $ encode $ NetEntityMessage nid es cs gs
         _       -> return ()
 
 collectNetworkEntityUpdates :: Eq a => Entity a -> Entity a -> [((Int, Int), [NetEntityUpdate a])] -> [((Int, Int), [NetEntityUpdate a])]

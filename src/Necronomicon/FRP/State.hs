@@ -107,11 +107,16 @@ instance (Binary a, Eq a) => NecroFoldable (Entity a) where
                             --Network update
                             --Add time stamp to avoid out of order updates (still need out of order adds and deletes)
                             e            <- readIORef ref
+                            gen          <- readIORef genCounter
                             msg          <- readIORef (netSignalRef state)
                             let (NetEntityMessage _ ns cs _) = decode msg
-                            case ns of
-                                e' : _ -> return . Change . foldr netUpdateEntity e' . concat $ map snd cs
-                                _      -> return . Change . foldr netUpdateEntity e  . concat $ map snd cs
+                                e'                           = case ns of
+                                    e'' : _ -> foldr netUpdateEntity e'' . concat $ map snd cs
+                                    _       -> foldr netUpdateEntity e   . concat $ map snd cs
+                            case euid e of
+                                UID uid -> insertNursery uid gen e nursery
+                                New     -> return ()
+                            return $ Change e'
 
                     netUpdateEntity c e = case c of
                         UpdateEntityData     x -> e{edata    = x}
@@ -149,11 +154,13 @@ instance (Binary a, Eq a) => NecroFoldable [Entity a] where
                             --Network update
                             --Add time stamp to avoid out of order updates (still need out of order adds and deletes)
                             es            <- readIORef ref
+                            gen           <- readIORef genCounter
                             msg           <- readIORef (netSignalRef state)
                             let (NetEntityMessage _ ns csl gsl) = decode msg
                             cs            <- Hash.fromList csl --compute list length from originator's side
                             gs            <- Hash.fromList $ map (\n -> (netid n, ())) ns ++ gsl
                             es'           <- filterMapM' (netUpdateEntity cs gs) es
+                            mapM_ (netInsertNursery gen nursery) es'
                             return $ Change $ ns ++ es'
 
                     netUpdateEntity :: Hash.CuckooHashTable (Int, Int) [NetEntityUpdate a] -> Hash.CuckooHashTable (Int, Int) () -> Entity a -> IO (Maybe (Entity a))
@@ -170,6 +177,9 @@ instance (Binary a, Eq a) => NecroFoldable [Entity a] where
                                 UpdateEntityScale    x -> e'{escale   = x}
                                 UpdateEntityModel    x -> e'{model    = x}
                                 UpdateEntityCollider x -> e'{collider = x}
+                    netInsertNursery gen nursery e = case euid e of
+                        UID uid -> insertNursery uid gen e nursery
+                        _       -> return ()
 
 updateEntity :: SignalState -> Int -> Nursery a -> IORef [Entity a] -> Entity a -> IO (Entity a)
 updateEntity state gen nursery _ e@Entity{euid = UID uid} = do
@@ -218,22 +228,23 @@ insertNursery uid gen e n = Hash.lookup n uid >>= \me' -> case me' of
 
 removeAndNetworkEntities :: (Binary a, Eq a) => SignalState -> Int -> Nursery a -> IORef [Entity a] -> Int -> IO ()
 removeAndNetworkEntities state gen nursery newEntRef nid = do
-    (cs, gs) <- Hash.foldM collectGarbage ([], []) nursery
-    es       <- readIORef newEntRef
-    sendNetworkEntityMessage (signalClient state) es cs (map fst gs) nid
+    (cs, ngs, gs) <- Hash.foldM collectGarbage ([], [], []) nursery
+    es            <- readIORef newEntRef
+    sendNetworkEntityMessage (signalClient state) es cs ngs nid
     mapM_ removeGarbage gs
     writeIORef newEntRef []
     where
-        removeGarbage (_, k) = do
+        removeGarbage k = do
             renderData <- readIORef (renderDataRef state)
             SMV.unsafeWith renderData $ \ptr -> pokeByteOff (ptr `advancePtr` k) 0 (0 :: CInt)
             Hash.delete nursery k
             atomically $ readTVar (uidRef state) >>= \uids -> writeTVar (uidRef state) (k : uids)
             --Delete openGL resources? Use weak pointers and finalizers?
---TODO: Need separate lists for delete and network remove message!
-        collectGarbage (cs, gs) (k, (gen', p, c)) = do
-            let gs' = if gen /= gen' then ((netid c, ()), k) : gs else gs
-            return (collectNetworkEntityUpdates p c cs, gs')
+        collectGarbage (cs, ngs, gs) (k, (gen', p, c)) = do
+            let (ngs', gs') = if gen /= gen'
+                    then (if not . null $ netOptions c then (netid c, ()) : ngs else ngs, k : gs)
+                    else (ngs, gs)
+            return (collectNetworkEntityUpdates p c cs, ngs', gs')
 
 writeCam :: IORef (IntMap.IntMap (Matrix4x4, Camera)) -> UID -> Maybe Camera -> Entity a -> IO ()
 writeCam cref (UID uid) (Just c) e = modifyIORef cref (IntMap.insert uid (entityTransform e, c))

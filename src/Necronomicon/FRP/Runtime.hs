@@ -51,8 +51,8 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
         run False w scont currentTime DynTree.empty eventInbox state
     where
         run quit window s runTime' tree eventInbox state
-            -- | quit      = quitClient (necroNetClient signalState) >> runNecroState shutdownNecronomicon (necroVars signalState) >> print "Qutting"
-            | quit      = runNecroState shutdownNecronomicon (necroVars state) >> putStrLn "Qutting Necronomicon"
+            | quit      = quitClient (signalClient state) >> runNecroState shutdownNecronomicon (necroVars state) >> putStrLn "Quitting Necronomicon"
+            -- | quit      = runNecroState shutdownNecronomicon (necroVars state) >> putStrLn "Qutting Necronomicon"
             | otherwise = do
                 GLFW.pollEvents
                 q           <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'Escape
