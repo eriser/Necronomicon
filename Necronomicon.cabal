@@ -32,10 +32,11 @@ library
         -- use extra-libraries, if pkg-config fails
         --   http://hackage.haskell.org/trac/hackage/ticket/170
         Extra-Libraries: jack, sndfile, GLEW
-    Include-Dirs: 		c_lib
+    Include-Dirs: 		c_lib, c_lib/Necronomicon, c_lib/Necronomicon/Containers
     Install-Includes:	Necronomicon.h
     C-Sources:
         c_lib/Necronomicon.c,
+        c_lib/Necronomicon/BufferUGens.c,
         c_lib/Necronomicon/Render.c,
         c_lib/Necronomicon/DelayUGens.c,
         c_lib/Necronomicon/ReverbUGens.c,
@@ -49,7 +50,8 @@ library
         c_lib/Necronomicon/FilterUGens.c,
         c_lib/Necronomicon/DynamicsUGens.c,
         c_lib/Necronomicon/PanUGens.c,
-        c_lib/Necronomicon/TimeUGens.c
+        c_lib/Necronomicon/TimeUGens.c,
+        c_lib/Necronomicon/Containers/HashTable.c
     ghc-options:        -threaded -O2 -Wall -Werror
     default-extensions: FlexibleInstances MultiParamTypeClasses ForeignFunctionInterface TypeFamilies BangPatterns
 

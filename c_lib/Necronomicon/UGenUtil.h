@@ -6,6 +6,8 @@
 #ifndef NECRONOMICON_UGEN_UTIL_H_INCLUDED
 #define NECRONOMICON_UGEN_UTIL_H_INCLUDED
 
+#include <math.h>
+
 #define LERP(A,B,D) (A+D*(B-A))
 #define likely(x)   __builtin_expect((x),1)
 #define unlikely(x) __builtin_expect((x),0)
@@ -75,5 +77,18 @@ static inline double zapgremlins(double x)
     // Not-a-Numbers fail both tests and are eliminated.
     return (absx > 1e-63 && absx < 1e63) ? x : 0.0;
 }
+
+static inline uint32_t next_power_of_two(uint32_t v)
+{
+    --v;
+    v |= v >> 1;
+    v |= v >> 2;
+    v |= v >> 4;
+    v |= v >> 8;
+    v |= v >> 16;
+    return ++v;
+}
+
+typedef enum { false, true } bool;
 
 #endif // NECRONOMICON_UGEN_UTIL_H_INCLUDED

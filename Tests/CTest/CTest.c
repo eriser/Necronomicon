@@ -92,7 +92,7 @@ void sort_and_print_list(node_list list)
 void test_list()
 {
     scheduled_node_list = new_node_list();
-    synth_table = hash_table_new();
+    synth_table = synth_hash_table_new();
 
     while (scheduled_list_write_index < (MAX_FIFO_MESSAGES * 0.75))
     {
@@ -112,13 +112,13 @@ void test_list()
     sort_and_print_list(scheduled_node_list);
     puts("scheduled_list_free()");
     scheduled_list_free();
-    hash_table_free(synth_table);
+    synth_hash_table_free(synth_table);
     synth_table = NULL;
 }
 
 //// Test Hash Table
 
-void print_hash_table(hash_table table)
+void print_hash_table(synth_hash_table table)
 {
     puts("\n\n//////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////");
     puts("// Hash Table");
@@ -145,10 +145,10 @@ void test_hash_table()
     uint32_t i = 0;
     for (i = 0; i < 1000; ++i)
     {
-        printf("key: %u, hash: %u, slot %u\n", i, HASH_KEY(i), HASH_KEY(i) & HASH_TABLE_SIZE_MASK);
+        printf("key: %u, hash: %u, slot %u\n", i, HASH_KEY(i), HASH_KEY(i) & SYNTH_HASH_TABLE_SIZE_MASK);
     }
 
-    synth_table = hash_table_new();
+    synth_table = synth_hash_table_new();
 
     for (i = 0; i < num_values; ++i)
     {
@@ -157,8 +157,8 @@ void test_hash_table()
         node->key = i;
         node->hash = HASH_KEY(i);
         node->table_index = i;
-        hash_table_insert(synth_table, node);
-        assert(node == hash_table_lookup(synth_table, i));
+        synth_hash_table_insert(synth_table, node);
+        assert(node == synth_hash_table_lookup(synth_table, i));
     }
 
     print_hash_table(synth_table);
@@ -166,7 +166,7 @@ void test_hash_table()
 
     for (i = 0; i < num_values; ++i)
     {
-        synth_node* node = hash_table_lookup(synth_table, i);
+        synth_node* node = synth_hash_table_lookup(synth_table, i);
         assert(node);
         assert(node->time == times[i]);
         assert(node->key == i);
@@ -177,9 +177,9 @@ void test_hash_table()
 
     for (i = 0; i < num_values; ++i)
     {
-        synth_node* node = hash_table_lookup(synth_table, i);
+        synth_node* node = synth_hash_table_lookup(synth_table, i);
         assert(node);
-        hash_table_remove(synth_table, node);
+        synth_hash_table_remove(synth_table, node);
         free_synth(node);
     }
 
@@ -187,12 +187,12 @@ void test_hash_table()
 
     for (i = 0; i < MAX_SYNTHS; ++i)
     {
-        assert(hash_table_lookup(synth_table, i) == NULL);
+        assert(synth_hash_table_lookup(synth_table, i) == NULL);
     }
 
     print_hash_table(synth_table);
     puts("Freeing table...\n\n");
-    hash_table_free(synth_table);
+    synth_hash_table_free(synth_table);
 }
 
 //// Test Doubly Linked List

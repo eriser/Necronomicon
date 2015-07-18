@@ -79,17 +79,6 @@
 #include "Necronomicon/Endian.h"
 #include "Necronomicon/UGenUtil.h"
 
-static inline uint32_t next_power_of_two(uint32_t v)
-{
-    --v;
-    v |= v >> 1;
-    v |= v >> 2;
-    v |= v >> 4;
-    v |= v >> 8;
-    v |= v >> 16;
-    return ++v;
-}
-
 /////////////////////
 // Constants
 /////////////////////
@@ -323,7 +312,7 @@ void release_sample_buffer(sample_buffer* buffer)
 const uint32_t NODE_SIZE = sizeof(synth_node);
 const uint32_t NODE_POINTER_SIZE = sizeof(synth_node*);
 const uint32_t MAX_SYNTHS = 8192;
-const uint32_t HASH_TABLE_SIZE_MASK = 8191;
+const uint32_t SYNTH_HASH_TABLE_SIZE_MASK = 8191;
 
 const int8_t* node_alive_status_strings[] = { "NODE_DEAD", "NODE_SPAWNING", "NODE_ALIVE", "NODE_SCHEDULED_FOR_REMOVAL", "NODE_SCHEDULED_FOR_FREE" };
 
@@ -334,7 +323,7 @@ int32_t num_free_synths = 0;
 const uint32_t max_free_synths = 128;
 
 // Synth hash table
-hash_table synth_table = NULL;
+synth_hash_table synth_table = NULL;
 
 void print_node_alive_status(synth_node* node)
 {
@@ -388,7 +377,7 @@ void free_synth(synth_node* synth)
 {
     if (synth != NULL)
     {
-        bool found = hash_table_remove(synth_table, synth);
+        bool found = synth_hash_table_remove(synth_table, synth);
         --num_synths;
 
         if (found == true && synth->alive_status == NODE_SCHEDULED_FOR_FREE)
@@ -738,20 +727,14 @@ void removal_fifo_free()
 // Fixed memory hash table using open Addressing with linear probing
 // This is not thread safe.
 
-const uint64_t PRIME = 0x01000193; // 16777619
-const uint64_t SEED = 0x811C9DC5; // 2166136261
-
-hash_table hash_table_new()
+synth_hash_table synth_hash_table_new()
 {
-    uint32_t byte_size = NODE_POINTER_SIZE * MAX_SYNTHS;
-    hash_table table = (hash_table) malloc(byte_size);
+    synth_hash_table table = (synth_hash_table) calloc(MAX_SYNTHS, NODE_POINTER_SIZE);
     assert(table);
-    memset(table, 0, byte_size);
-
     return table;
 }
 
-void hash_table_free(hash_table table)
+void synth_hash_table_free(synth_hash_table table)
 {
     uint32_t i;
     for (i = 0; i < MAX_SYNTHS; ++i)
@@ -764,18 +747,18 @@ void hash_table_free(hash_table table)
     free(table);
 }
 
-void hash_table_insert(hash_table table, synth_node* node)
+void synth_hash_table_insert(synth_hash_table table, synth_node* node)
 {
-    uint32_t slot = node->hash & HASH_TABLE_SIZE_MASK;
+    uint32_t slot = node->hash & SYNTH_HASH_TABLE_SIZE_MASK;
 
     while (table[slot] != NULL)
-        slot = (slot + 1) & HASH_TABLE_SIZE_MASK;
+        slot = (slot + 1) & SYNTH_HASH_TABLE_SIZE_MASK;
 
     table[slot] = node;
     node->table_index = slot;
 }
 
-bool hash_table_remove(hash_table table, synth_node* node)
+bool synth_hash_table_remove(synth_hash_table table, synth_node* node)
 {
     uint32_t index = node->table_index;
     synth_node* found_node = table[index];
@@ -787,15 +770,15 @@ bool hash_table_remove(hash_table table, synth_node* node)
 
     else
     {
-        printf("hash_table_remove: found_node %p != node %p\n", found_node, node);
+        printf("synth_hash_table_remove: found_node %p != node %p\n", found_node, node);
         return false;
     }
 }
 
-synth_node* hash_table_lookup(hash_table table, uint32_t key)
+synth_node* synth_hash_table_lookup(synth_hash_table table, uint32_t key)
 {
     uint32_t hash = HASH_KEY(key);
-    uint32_t slot = hash & HASH_TABLE_SIZE_MASK;
+    uint32_t slot = hash & SYNTH_HASH_TABLE_SIZE_MASK;
     uint32_t i = 0;
 
     while (i < MAX_SYNTHS)
@@ -805,11 +788,11 @@ synth_node* hash_table_lookup(hash_table table, uint32_t key)
             if (table[slot]->key == key)
                 return table[slot];
             else
-                printf("Found synth node in hash_table_lookup, but not the one we're after. Looking up node ID %u but found %u.\n", key, table[slot]->key);
+                printf("Found synth node in synth_hash_table_lookup, but not the one we're after. Looking up node ID %u but found %u.\n", key, table[slot]->key);
         }
 
         ++i;
-        slot = (slot + 1) & HASH_TABLE_SIZE_MASK;
+        slot = (slot + 1) & SYNTH_HASH_TABLE_SIZE_MASK;
     }
 
     return NULL;
@@ -1106,7 +1089,7 @@ void play_synth(synth_node* synth_definition, double* arguments, uint32_t num_ar
     {
         synth_node* synth = new_synth(synth_definition, arguments, num_arguments, node_id, time);
         ++num_synths;
-        hash_table_insert(synth_table, synth);
+        synth_hash_table_insert(synth_table, synth);
         message msg;
         msg.arg.node = synth;
         msg.type = START_SYNTH;
@@ -1121,7 +1104,7 @@ void play_synth(synth_node* synth_definition, double* arguments, uint32_t num_ar
 
 void stop_synth(uint32_t id)
 {
-    synth_node* node = hash_table_lookup(synth_table, id);
+    synth_node* node = synth_hash_table_lookup(synth_table, id);
     if ((node != NULL) && (node->alive_status == NODE_SPAWNING || node->alive_status == NODE_ALIVE))
     {
         node->previous_alive_status = node->alive_status;
@@ -1142,7 +1125,7 @@ void stop_synth(uint32_t id)
 // How to handle sample accurate setting? Use FIFO messages?
 void send_set_synth_arg(uint32_t id, double argument, uint32_t arg_index)
 {
-    synth_node* synth = hash_table_lookup(synth_table, id);
+    synth_node* synth = synth_hash_table_lookup(synth_table, id);
     if ((synth != NULL) && (synth->alive_status == NODE_SPAWNING || synth->alive_status == NODE_ALIVE))
     {
         double* wire_buffer = synth->ugen_wires + (arg_index * BLOCK_SIZE);
@@ -1158,7 +1141,7 @@ void send_set_synth_arg(uint32_t id, double argument, uint32_t arg_index)
 
 void send_set_synth_args(uint32_t id, double* arguments, uint32_t num_arguments)
 {
-    synth_node* synth = hash_table_lookup(synth_table, id);
+    synth_node* synth = synth_hash_table_lookup(synth_table, id);
     if ((synth != NULL) && (synth->alive_status == NODE_SPAWNING || synth->alive_status == NODE_ALIVE))
     {
         double* ugen_wires = synth->ugen_wires;
@@ -1207,7 +1190,7 @@ void init_rt_thread()
     BLOCK_SIZE_USECS = usecs_per_frame * (double) BLOCK_SIZE;
     TWO_PI_TIMES_RECIP_SAMPLE_RATE = TWO_PI * RECIP_SAMPLE_RATE;
 
-    synth_table = hash_table_new();
+    synth_table = synth_hash_table_new();
     rt_fifo = new_message_fifo();
     scheduled_node_list = new_node_list();
     removal_fifo = new_removal_fifo();
@@ -1261,7 +1244,7 @@ void shutdown_rt_thread()
     assert(ugen_graph_pools != NULL);
     assert(ugen_wires_pools != NULL);
 
-    hash_table_free(synth_table);
+    synth_hash_table_free(synth_table);
     rt_fifo_free();
     scheduled_list_free();
     doubly_linked_list_free(synth_list);

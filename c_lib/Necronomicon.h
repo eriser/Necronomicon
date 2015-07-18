@@ -9,7 +9,7 @@
 #include <stdint.h>
 #include <jack/jack.h>
 
-#include "Necronomicon/Endian.h"
+#include "Containers/HashTable.h"
 
 /////////////////////
 // Constants
@@ -54,8 +54,6 @@ extern double RECIP_SAMPLE_RATE;
 extern double TABLE_MUL_RECIP_SAMPLE_RATE;
 extern double TWO_PI_TIMES_RECIP_SAMPLE_RATE;
 extern uint32_t BLOCK_SIZE;
-
-typedef enum { false, true } bool;
 
 /////////////////////
 // Global Mutables
@@ -173,7 +171,7 @@ struct synth_node
 extern const uint32_t NODE_SIZE;
 extern const uint32_t NODE_POINTER_SIZE;
 extern const uint32_t MAX_SYNTHS;
-extern const uint32_t HASH_TABLE_SIZE_MASK;
+extern const uint32_t SYNTH_HASH_TABLE_SIZE_MASK;
 extern synth_node* _necronomicon_current_node; // pointer to current node being processed in the audio loop
 extern synth_node* _necronomicon_current_node_underconstruction; // pointer to node being constructed in the NRT thread
 
@@ -309,51 +307,20 @@ inline void try_schedule_current_synth_for_removal()
 }
 
 ///////////////////////////
-// Hash Table
+// Synth Hash Table
 ///////////////////////////
-
-typedef union
-{
-    uint8_t bytes[4];
-    uint32_t word;
-    float f;
-} four_bytes;
-
-typedef union
-{
-    uint8_t bytes[8];
-    double d;
-    uint64_t ul;
-    struct
-    {
-#if BYTE_ORDER == BIG_ENDIAN
-        uint32_t high, low;
-#else
-        uint32_t low, high;
-#endif
-    } l;
-} eight_bytes;
-
-// FNV1-a hash function
-extern const uint64_t PRIME;
-extern const uint64_t SEED;
-
-#define FNV1A(byte, hash) ((byte ^ hash) * PRIME)
-#define HASH_KEY_PRIV(key) (FNV1A(key.bytes[3], FNV1A(key.bytes[2], FNV1A(key.bytes[1], FNV1A(key.bytes[0], SEED)))))
-#define HASH_KEY(key) ((uint32_t) HASH_KEY_PRIV(((four_bytes) key)))
 
 // Fixed memory hash table using open Addressing with linear probing
 // This is not thread safe.
-typedef synth_node** hash_table;
 
-// Synth hash table
-extern hash_table synth_table;
+typedef synth_node** synth_hash_table;
+extern synth_hash_table synth_table;
 
-hash_table hash_table_new();
-void hash_table_free(hash_table table);
-void hash_table_insert(hash_table table, synth_node* node);
-bool hash_table_remove(hash_table table, synth_node* node);
-synth_node* hash_table_lookup(hash_table table, uint32_t key);
+synth_hash_table synth_hash_table_new();
+void synth_hash_table_free(synth_hash_table table);
+void synth_hash_table_insert(synth_hash_table table, synth_node* node);
+bool synth_hash_table_remove(synth_hash_table table, synth_node* node);
+synth_node* synth_hash_table_lookup(synth_hash_table table, uint32_t key);
 
 ///////////////////////////
 // Doubly Linked List
