@@ -107,19 +107,17 @@ instance Binary a => Binary (NetEntityUpdate a) where
         _ -> UpdateEntityCollider <$> get
 
 
-data NetEntityMessage a = NetEntityMessage [Entity a] [((Int, Int), [NetEntityUpdate a])] [((Int, Int), ())]
+data NetEntityMessage a = NetEntityMessage Int [Entity a] [((Int, Int), [NetEntityUpdate a])] [((Int, Int), ())]
 
 instance Binary a => Binary (NetEntityMessage a) where
-    put (NetEntityMessage es us ds) = put es >> put us >> put ds
-    get                             = NetEntityMessage <$> get <*> get <*> get
+    put (NetEntityMessage nid es us ds) = put (3 :: Word8) >> put nid >> put es >> put us >> put ds
+    get                                 = (get :: Get Word8) >> (NetEntityMessage <$> get <*> get <*> get <*> get)
 
 sendNetworkEntityMessage :: (Binary a, Eq a) => Client -> [Entity a] -> [((Int, Int), [NetEntityUpdate a])] -> [((Int, Int), ())] -> Int -> IO ()
 sendNetworkEntityMessage client es cs gs nid = when (not (null cs && null gs && null es)) $
     atomically (readTVar (clientRunStatus client)) >>= \cstatus -> case cstatus of
-        Running -> sendUpdateNetSignal client (nid, msg)
+        Running -> sendUpdateNetSignal client $ encode $ NetEntityMessage nid es cs gs 
         _       -> return ()
-    where
-        msg = encode $ NetEntityMessage es cs gs
 
 collectNetworkEntityUpdates :: Eq a => Entity a -> Entity a -> [((Int, Int), [NetEntityUpdate a])] -> [((Int, Int), [NetEntityUpdate a])]
 collectNetworkEntityUpdates prev curr us = if not (null us) then (netid curr, us'') : us else us

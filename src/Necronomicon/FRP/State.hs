@@ -108,8 +108,8 @@ instance (Binary a, Eq a) => NecroFoldable (Entity a) where
                             --Network update
                             --Add time stamp to avoid out of order updates (still need out of order adds and deletes)
                             e            <- readIORef ref
-                            (_, msg)     <- readIORef (netSignalRef state)
-                            let (NetEntityMessage ns cs _) = decode msg
+                            msg          <- readIORef (netSignalRef state)
+                            let (NetEntityMessage _ ns cs _) = decode msg
                             case ns of
                                 e' : _ -> return . Change . foldr netUpdateEntity e' . concat $ map snd cs
                                 _      -> return . Change . foldr netUpdateEntity e  . concat $ map snd cs
@@ -150,8 +150,8 @@ instance (Binary a, Eq a) => NecroFoldable [Entity a] where
                             --Network update
                             --Add time stamp to avoid out of order updates (still need out of order adds and deletes)
                             es            <- readIORef ref
-                            (_, msg)      <- readIORef (netSignalRef state)
-                            let (NetEntityMessage ns csl gsl) = decode msg
+                            msg           <- readIORef (netSignalRef state)
+                            let (NetEntityMessage _ ns csl gsl) = decode msg
                             cs            <- Hash.fromList csl --compute list length from originator's side
                             gs            <- Hash.fromList $ map (\n -> (netid n, ())) ns ++ gsl
                             es'           <- filterMapM' (netUpdateEntity cs gs) es

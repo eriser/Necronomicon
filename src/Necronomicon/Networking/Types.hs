@@ -36,7 +36,7 @@ data Client = Client
     , clientUsers       :: TVar [String]
     , clientNetSignals  :: TVar (IntMap.IntMap B.ByteString)
     , clientOutBox      :: TChan NetMessage
-    , clientInBox       :: TChan NetMessage
+    , clientInBox       :: TChan B.ByteString
     , clientRunStatus   :: TVar  NetStatus
     , clientAliveTime   :: TVar  Double }
 

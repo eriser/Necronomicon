@@ -9,7 +9,8 @@ import Necronomicon.FRP.Types
 import Control.Concurrent.STM
 import Control.Exception
 import Control.Concurrent                     (forkIO,threadDelay)
-import Data.Binary                            (encode,decode)
+import Data.Binary                            
+import Data.Binary.Get 
 import Network.Socket                  hiding (send,recv,recvFrom,sendTo)
 -- import qualified Data.ByteString.Char8 as C   (unpack,pack)
 import qualified Data.ByteString.Lazy  as B
@@ -80,8 +81,9 @@ connectionLoop client nsocket serverAddr = Control.Exception.catch tryConnect on
 
 sender :: Client -> Socket -> IO()
 sender client sock = executeIfConnected client (readTChan $ clientOutBox client) >>= \maybeMessage -> case maybeMessage of
-    Nothing  -> putStrLn "Shutting down sender"
-    Just msg -> Control.Exception.catch (sendWithLength sock $ encode msg) printError >> sender client sock
+    Nothing                      -> putStrLn "Shutting down sender"
+    Just (UpdateNetSignal _ msg) -> Control.Exception.catch (sendWithLength sock msg) printError >> sender client sock
+    Just msg                     -> Control.Exception.catch (sendWithLength sock $ encode msg) printError >> sender client sock
 
 --put into disconnect mode if too much time has passed
 aliveLoop :: Client -> Socket -> IO ()
@@ -111,7 +113,7 @@ listener client sock = receiveWithLength sock >>= \maybeMsg -> case maybeMsg of
     IncorrectLength -> putStrLn "Message is incorrect length! Ignoring..." >> shutdownClient -- listener client sock
     Receive     msg -> if B.null msg
         then shutdownClient
-        else atomically (writeTChan (clientInBox client) (decode msg)) >> listener client sock
+        else atomically (writeTChan (clientInBox client) msg) >> listener client sock
     where
         shutdownClient = do
             putStrLn "Shutting down listener"
@@ -120,8 +122,14 @@ listener client sock = receiveWithLength sock >>= \maybeMsg -> case maybeMsg of
 
 messageProcessor :: Client -> SignalState -> IO ()
 messageProcessor client sigstate = executeIfConnected client (readTChan $ clientInBox client) >>= \maybeMessage -> case maybeMessage of
-    Just m  -> parseMessage m client sigstate >> messageProcessor client sigstate
     Nothing -> putStrLn "Shutting down messageProcessor"
+    Just m  -> case runGet isSignalUpdate m of
+        Nothing  -> parseMessage (decode m) client sigstate >> messageProcessor client sigstate
+        Just nid -> atomically (writeTChan (signalsInbox sigstate) $ NetSignalEvent nid m) >> messageProcessor client sigstate
+    where
+        isSignalUpdate = (get :: Get Word8) >>= \t -> if t == 3
+            then Just <$> (get :: Get Int)
+            else return Nothing
 
 ------------------------------
 --Quitting And Restarting
@@ -200,7 +208,7 @@ parseMessage (Logout u) _ sigstate = do
 
 parseMessage (UpdateNetSignal uid netval) _ sigstate = do
     putStrLn $ "Updating net signal " ++ show uid
-    atomically $ writeTChan (signalsInbox sigstate) $ NetSignalEvent uid 0 netval --Need to assign user ids!
+    atomically $ writeTChan (signalsInbox sigstate) $ NetSignalEvent uid netval --Need to assign user ids!
     -- need new system for this
     -- sendToGlobalDispatch globalDispatch uid $ netValToDyn netVal
     -- atomically $ readTVar (netSignals client) >>= \sigs -> writeTVar (netSignals client) (IntMap.insert uid (Change netVal) sigs)
@@ -255,8 +263,8 @@ printError e = print e
 sendChatMessage :: String -> Client -> IO ()
 sendChatMessage chat client = atomically $ writeTChan (clientOutBox client) $ Chat (clientUserName client) chat
 
-sendUpdateNetSignal :: Client -> (Int, B.ByteString) -> IO ()
-sendUpdateNetSignal client (uid, v) = atomically $ writeTChan (clientOutBox client) $ UpdateNetSignal uid v
+sendUpdateNetSignal :: Client -> B.ByteString -> IO ()
+sendUpdateNetSignal client v = atomically $ writeTChan (clientOutBox client) $ UpdateNetSignal 0 v
     -- atomically $ readTVar (netSignals client) >>= writeTVar (netSignals client) . IntMap.insert uid v
 
 -- sendAddNetSignal :: Client -> (Int, B.ByteString) -> IO ()

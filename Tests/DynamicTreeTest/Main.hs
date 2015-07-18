@@ -28,8 +28,7 @@ mkHero = ( mkEntity <| Hero HeroIdle 100 (180, 0) )
          , rot        = fromEuler 0 180 0
          , collider   = Just <| boxCollider 1 1 1
          , camera     = Just <| Camera 30 0.1 1000 black []
-         -- , netOptions = [NetworkPosition, NetworkRotation] }
-         }
+         , netOptions = [NetworkPosition, NetworkRotation] }
 
 mkBullet :: Vector3 -> Entity Bullet
 mkBullet p = ( mkEntity <| Bullet <| Flying <| Vector3 1 1 1 )
