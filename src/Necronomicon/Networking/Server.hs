@@ -10,8 +10,8 @@ import Network.Socket hiding (send,recv,recvFrom,sendTo)
 import Control.Exception
 import Control.Monad (forever)
 import qualified Data.Map.Strict as Map
-import Data.Binary (encode,decode)
-
+import Data.Binary 
+import Data.Binary.Get
 -- import Necronomicon.Networking.User
 import Necronomicon.Networking.Message
 import Necronomicon.Networking.Types
@@ -174,8 +174,9 @@ messageProcessor server _ = forever $ do
     users         <- atomically $ readTVar  $ serverUsers server
     case Map.lookup sa users of
         Nothing -> print ("Can't find a user with this ip address: " ++ show sa)
-        Just  u -> parseMessage nmessage (decode nmessage) u server
-
+        Just  u -> if runGet ((get :: Get Word8) >>= return . (/=3)) nmessage 
+            then parseMessage nmessage (decode nmessage) u server
+            else broadcast (Just $ userAddress u, nmessage) server
 ------------------------------
 --Parse Messages
 ------------------------------

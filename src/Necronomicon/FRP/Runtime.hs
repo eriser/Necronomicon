@@ -98,7 +98,6 @@ nextStateID state = do
 
 setInputCallbacks :: GLFW.Window -> TChan InputEvent -> IO ()
 setInputCallbacks w eventInbox = do
-    GLFW.setCursorInputMode     w GLFW.CursorInputMode'Disabled
     GLFW.setCursorPosCallback   w $ Just $ \_ x y     -> atomically $ writeTChan eventInbox $ MouseEvent (x, y)
     GLFW.setMouseButtonCallback w $ Just $ \_ _ s _   -> atomically $ writeTChan eventInbox $ MouseButtonEvent (s == GLFW.MouseButtonState'Pressed)
     GLFW.setKeyCallback         w $ Just $ \_ k _ p _ -> if p == GLFW.KeyState'Repeating then return () else atomically $ writeTChan eventInbox $ KeyEvent k (p /= GLFW.KeyState'Released)
