@@ -4,16 +4,19 @@ import           Necronomicon.FRP.Types
 import           Necronomicon.FRP.Signal
 import           Necronomicon.Runtime
 import           Necronomicon.Utility
+import           Necronomicon.Networking.Client
 import qualified Necronomicon.Physics.DynamicTree  as DynTree
 
 import           Necronomicon.Graphics
 import           Control.Concurrent
 import           Control.Concurrent.STM
 import           Control.Monad
+import           System.Environment (getArgs)
 import           Data.IORef
 import qualified Data.IntSet                       as IntSet
 import qualified Data.IntMap                       as IntMap
 import qualified Graphics.UI.GLFW                  as GLFW
+
 
 ----------------------------------
 -- Runtime
@@ -28,15 +31,22 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
         currentTime   <- getCurrentTime
         (ww, wh)      <- GLFW.getWindowSize w
         eventInbox    <- atomically newTChan
-        state         <- mkSignalState w (fromIntegral ww, fromIntegral wh) eventInbox "noob"
+        args          <- getArgs >>= \args -> case args of
+            [] -> return Nothing
+            as -> return $ Just as
+        state         <- mkSignalState w (fromIntegral ww, fromIntegral wh) eventInbox $ maybe "noob" id $ fmap head args
         (scont, _, _) <- unSignal sig state
-        _             <- forkIO $ processEvents scont state eventInbox
-
         _             <- runNecroState startNecronomicon (necroVars state)
         _             <- runNecroState (waitForRunningStatus NecroRunning) (necroVars state)
         _             <- runNecroState (setTempo 150) (necroVars state)
 
         setInputCallbacks w eventInbox
+        threadDelay 500000
+        _             <- forkIO $ processEvents scont state eventInbox
+        threadDelay 500000
+        case args of
+            Just [n, a] -> startNetworking state n a $ signalClient state
+            _           -> print "Incorrect arguments given for networking (name address). Networking is disabled"
 
         run False w scont currentTime DynTree.empty eventInbox state
     where
@@ -75,7 +85,7 @@ processEvents sig ss inbox = forever $ atomically (readTChan inbox) >>= \e -> ca
     NetUserEvent    u b    -> writeIORef  (netUserLoginRef ss) (u, b) >> sig 204 >>= printEvent
     NetStatusEvent  s      -> writeIORef  (netStatusRef    ss) s      >> sig 205 >>= printEvent
     NetChatEvent    u m    -> writeIORef  (netChatRef      ss) (u, m) >> sig 206 >>= printEvent
-    NetSignalEvent  u n    -> writeIORef  (netSignalRef    ss) n      >> sig u   >>= printEvent
+    NetSignalEvent  u i m  -> writeIORef  (netSignalRef    ss) (i, m) >> sig u   >>= printEvent
     where
         printEvent (Change _) = return () -- print e
         printEvent  _         = return ()

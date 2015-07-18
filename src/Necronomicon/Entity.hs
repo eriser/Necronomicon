@@ -9,7 +9,6 @@ import Foreign.Storable
 import Foreign.Ptr
 import Foreign.C.Types
 import Foreign.Marshal.Array
-
 import qualified Graphics.Rendering.OpenGL as GL
 
 -------------------------------------------------------
@@ -26,12 +25,13 @@ data Entity a = Entity
     , model      :: Maybe Model
     , camera     :: Maybe Camera
     , netOptions :: [NetworkOptions]
+    , netid      :: (Int, Int)
     , children   :: [Entity ()] }
 
 data NetworkOptions = NetworkData | NetworkPosition | NetworkRotation | NetworkScale | NetworkCollider | NetworkModel deriving (Show, Eq, Enum)
 
 instance Show a => Show (Entity a) where
-    show (Entity d uid p r s c m ca n cs) =
+    show (Entity d uid p r s c m ca n ni cs) =
         "Entity{ " ++
         "edata = " ++ show d ++
         ", eid = " ++ show uid ++
@@ -42,34 +42,49 @@ instance Show a => Show (Entity a) where
         ", model = " ++ show m ++
         ", camera = " ++ show ca ++
         ", netOptions = " ++ show n ++
+        ", netid = " ++ show ni ++
         ", children = " ++ show cs ++
         "}"
 
 instance Functor Entity where
-    fmap f (Entity d uid p r s c m ca n cs) = Entity (f d) uid p r s c m ca n cs
+    fmap f (Entity d uid p r s c m ca n o cs) = Entity (f d) uid p r s c m ca n o cs
 
 -- instance Foldable Entity where
     -- foldMap f (Entity d _ _ _ _ _ _ _ _ _)= f d
 -- instance Traversable Entity where
     -- traverse f (Entity d uid p r s c m ca n cs) = (\d' -> Entity d' uid p r s c m ca n cs) <$> f d
 
-class (Binary entities) => Entities entities where
-    type EntityType entities :: *
-    mapEntities  :: (Entity (EntityType entities) -> IO (Entity (EntityType entities))) -> entities -> IO entities
+-- class (Binary entities) => Entities entities where
+    -- type EntityType entities :: *
+    -- mapEntitiesM :: Monad m => (Entity (EntityType entities) -> m (Entity (EntityType entities))) -> entities -> m entities
+    -- mapEntities  :: (Entity (EntityType entities) -> Entity (EntityType entities)) -> entities -> entities
+    -- addEntities  :: [Entity (EntityType entities)] -> entities -> entities
+    -- removeEntities :: IntSet.IntSet -> entities -> entities
 
-instance Binary a => Entities (Entity a) where
-    type EntityType (Entity a) = a
-    mapEntities f e = f e
-    {-# INLINE mapEntities #-}
+-- instance Binary a => Entities (Entity a) where
+    -- type EntityType (Entity a) = a
+    -- mapEntitiesM f e = f e
+    -- mapEntities  f e = f e
+    -- addEntities []      e = e
+    -- addEntities (e : _) _ = e
+    -- removeEntities _ = id
+    -- {-# INLINE mapEntities #-}
 
-instance Binary a => Entities [Entity a] where
-    type EntityType [Entity a] = a
-    mapEntities f es = mapM f es
-    {-# INLINE mapEntities #-}
+-- instance Binary a => Entities [Entity a] where
+    -- type EntityType [Entity a] = a
+    -- mapEntitiesM f es = mapM f es
+    -- mapEntities  f es = map  f es
+    -- {-# INLINE mapEntities #-}
+    -- addEntities ns es = ns ++ es
+    -- removeEntities gs es = foldr maybeRemove [] es
+        -- where
+            -- maybeRemove e es' = case euid e of
+                -- UID uid -> if IntSet.member uid gs then es' else e : es'
+                -- _       -> e : es'
 
 instance Binary a => Binary (Entity a) where
-    put (Entity ed uid p r s c m cam n cs) = put ed >> put uid >> put p >> put r >> put s >> put c >> put m >> put cam >> put n >> put cs
-    get                                    = Entity <$> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get
+    put (Entity ed uid p r s c m cam n ni cs) = put ed >> put uid >> put p >> put r >> put s >> put c >> put m >> put cam >> put n >> put ni >> put cs
+    get                                      = Entity <$> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get
 
 instance Binary NetworkOptions where
     put = put . fromEnum
@@ -80,7 +95,7 @@ instance Binary NetworkOptions where
 -------------------------------------------------------
 
 mkEntity :: a -> Entity a
-mkEntity d = Entity d New 0 identity 1 Nothing Nothing Nothing [] []
+mkEntity d = Entity d New 0 identity 1 Nothing Nothing Nothing [] (-1, -1) []
 
 -- mkNetworkOptions :: NetworkOptions
 -- mkNetworkOptions = NetworkOptions False False False False False False False False
@@ -113,7 +128,7 @@ entityTransform :: Entity a -> Matrix4x4
 entityTransform Entity{pos = p, rot = r, escale = s} = trsMatrix p r s
 
 entityToRenderData :: Entity a -> Maybe RenderData
-entityToRenderData !(Entity _ _ position rotation scale _ (Just (Model (Mesh (Just loadedMesh) _ _ _ _ _) (Material (Just loadedMaterial) _ _ uns _))) _ _ _) = Just $
+entityToRenderData !(Entity _ _ position rotation scale _ (Just (Model (Mesh (Just loadedMesh) _ _ _ _ _) (Material (Just loadedMaterial) _ _ uns _))) _ _ _ _) = Just $
     RenderData 1 (unsafeCoerce vb) (unsafeCoerce ib) start end count vn vs vp cn cs cp uvn uvs uvp (unsafeCoerce program) (unsafeCoerce vloc) (unsafeCoerce cloc) (unsafeCoerce uloc) mat uniforms mv pr
     where
         (vb, ib, start, end, count, GL.VertexArrayDescriptor vn _ vs vp, GL.VertexArrayDescriptor cn _ cs cp, GL.VertexArrayDescriptor uvn _ uvs uvp) = loadedMesh
@@ -129,7 +144,7 @@ entityToRenderData !(Entity _ _ position rotation scale _ (Just (Model (Mesh (Ju
 entityToRenderData _ = Nothing
 
 setRenderDataPtr :: Entity a -> Ptr RenderData -> IO ()
-setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !(Vector3 sx sy sz) _ (Just (Model (Mesh (Just loadedMesh) _ _ _ _ _) (Material (Just loadedMaterial) _ _ uns _))) _ _ _) rdptr = do
+setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !(Vector3 sx sy sz) _ (Just (Model (Mesh (Just loadedMesh) _ _ _ _ _) (Material (Just loadedMaterial) _ _ uns _))) _ _ _ _) rdptr = do
     pokeByteOff ptr 0  (1 :: CInt)
     pokeByteOff ptr 4  (unsafeCoerce vb :: GL.GLuint)
     pokeByteOff ptr 8  (unsafeCoerce ib :: GL.GLuint)

@@ -72,18 +72,21 @@ module Necronomicon.FRP.Input
     , wasd
     , keyboard
     , collision
-    , collisionMany
+--    , collisionMany
     ) where
 
 import           Necronomicon.FRP.Types
 import           Necronomicon.FRP.Signal
 import           Necronomicon.Physics
-import           Necronomicon.Entity
+--import           Necronomicon.Entity
 import           Necronomicon.FRP.Runtime
+--import           Necronomicon.FRP.State
+import           Necronomicon.Graphics.Resources (UID(..))
 
 import           Data.IORef
 import qualified Data.IntSet                  as IntSet
 import qualified Data.IntMap                  as IntMap
+import qualified Data.Map                     as Map
 import qualified Graphics.UI.GLFW             as GLFW
 
 ----------------------------------
@@ -369,12 +372,12 @@ keys = Signal $ \state -> do
                 else readIORef  ref   >>= return . NoChange
 
 --Collision and delay are motivating examples of events with multiple uids associated...maybe?
-collision :: Signal (Entity a) -> Signal Collision
-collision _ = Signal $ \_ -> return (cont, Collision 0, IntSet.empty)
+collision :: Signal (Map.Map UID Collision)
+collision = Signal $ \_ -> return (cont, Map.empty, IntSet.empty)
     where
-        cont _ = return $ NoChange $ Collision 0
+        cont _ = return $ NoChange $ Map.empty
 
-collisionMany :: Entities entities => Signal entities -> Signal [Maybe Collision]
-collisionMany _ = Signal $ \_ -> return (cont, [], IntSet.empty)
-    where
-        cont _ = return $ NoChange []
+--collisionMany :: (NecroFoldable t, Binary a, Eq a) => Signal (t (Entity a)) -> Signal [Maybe Collision]
+--collisionMany _ = Signal $ \_ -> return (cont, [], IntSet.empty)
+--    where
+--        cont _ = return $ NoChange []

@@ -8,6 +8,7 @@ module Necronomicon.Utility ((|>),
                              chunksOf,
                              filterMap,
                              filterMap',
+                             filterMapM',
                              dot2,
                              foldrM,
                              offsetPtr,
@@ -75,6 +76,15 @@ filterMap' f xs = go xs []
         go (x : mxs) xs' = case f x of
             Just x' -> go mxs (x' : xs')
             Nothing -> go mxs xs'
+
+filterMapM' :: (a -> IO (Maybe b)) -> [a] -> IO [b]
+filterMapM' f xs = go xs []
+    where
+        go []        xs' = return xs'
+        go (x : mxs) xs' = f x >>= \mx -> case mx of
+            Just x' -> go mxs (x' : xs')
+            Nothing -> go mxs xs'
+
 
 foldrM :: Monad m => (a -> b -> m b) -> b -> [a] -> m b
 foldrM _ d []     = return d

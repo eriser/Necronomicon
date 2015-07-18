@@ -2,7 +2,7 @@ module Necronomicon.Networking.Server (startServer,serverPort,clientPort) where
 
 import Prelude
 import qualified Data.ByteString.Lazy  as B
-import qualified Data.ByteString.Char8 as C
+-- import qualified Data.ByteString.Char8 as C
 
 import Control.Concurrent (forkIO,threadDelay)
 import Control.Concurrent.STM
@@ -10,7 +10,6 @@ import Network.Socket hiding (send,recv,recvFrom,sendTo)
 import Control.Exception
 import Control.Monad (forever)
 import qualified Data.Map.Strict as Map
-import qualified Data.IntMap     as IntMap
 import Data.Binary (encode,decode)
 
 -- import Necronomicon.Networking.User
@@ -26,7 +25,7 @@ data User = User
     { userSocket    :: Socket
     , userAddress   :: SockAddr
     , userStopVar   :: TMVar ()
-    , userName      :: C.ByteString
+    , userName      :: String
     , userId        :: Int
     , userAliveTime :: Double }
 
@@ -35,7 +34,6 @@ instance Show User where
 
 data Server = Server
     { serverUsers           :: TVar  (Map.Map SockAddr User)
-    , serverNetSignals      :: TVar  (IntMap.IntMap B.ByteString)
     , serverInBox           :: TChan (SockAddr,B.ByteString)
     , serverOutBox          :: TChan (User,B.ByteString)
     , serverBroadcastOutBox :: TChan (Maybe SockAddr,B.ByteString)
@@ -54,12 +52,11 @@ clientPort = "31338"
 newServer :: IO Server
 newServer = do
     users           <- atomically $ newTVar Map.empty
-    netSignals      <- atomically $ newTVar IntMap.empty
     inBox           <- atomically $ newTChan
     outBox          <- atomically $ newTChan
     broadcastOutBox <- atomically $ newTChan
     userIdCounter   <- atomically $ newTVar 0
-    return $ Server users netSignals inBox outBox broadcastOutBox userIdCounter
+    return $ Server users inBox outBox broadcastOutBox userIdCounter
 
 startServer :: IO()
 startServer = print "Starting a server." >> (withSocketsDo $ bracket getSocket sClose $ handler)
@@ -67,8 +64,8 @@ startServer = print "Starting a server." >> (withSocketsDo $ bracket getSocket s
         hints = Just $ defaultHints {addrFlags = [AI_PASSIVE],addrSocketType = Stream}
 
         getSocket = do
-            (serveraddr:_) <- getAddrInfo hints Nothing (Just serverPort)
-            sock           <- socket AF_INET Stream defaultProtocol
+            (serveraddr : _) <- getAddrInfo hints Nothing (Just serverPort)
+            sock             <- socket AF_INET Stream defaultProtocol
 
             setSocketOption sock ReuseAddr   1
             bindSocket sock (addrAddress serveraddr)
@@ -77,23 +74,17 @@ startServer = print "Starting a server." >> (withSocketsDo $ bracket getSocket s
 
         handler sock = do
             server <- newServer
-            _ <- forkIO $ sendBroadcastMessages    server sock
-            _ <- forkIO $ sendUserMessage          server sock
-            _ <- forkIO $ messageProcessor         server sock
-            _ <- forkIO $ synchronize              server
-            acceptLoop                        server sock
+            _      <- forkIO $ sendBroadcastMessages server sock
+            _      <- forkIO $ sendUserMessage       server sock
+            _      <- forkIO $ messageProcessor      server sock
+            _      <- forkIO $ keepAlive             server
+            acceptLoop                               server sock
 
-synchronize :: Server -> IO()
-synchronize server = forever $ do
-    netSignals  <- atomically $ readTVar $ serverNetSignals server
-    users       <- atomically $ readTVar $ serverUsers server
-    print     netSignals
-    putStrLn  ""
-    print     users
-    putStrLn  ""
+keepAlive :: Server -> IO ()
+keepAlive server = forever $ do
+    users <- atomically $ readTVar $ serverUsers server
+    print users
 
-    -- figure out the issue with sending multiple messages in a row
-    broadcast (Nothing, encode $ SyncNetSignals netSignals) server
     broadcast (Nothing, encode $ UserList $ Prelude.map (\(_,u) -> userName u) (Map.toList users)) server
 
     currentTime <- getCurrentTime
@@ -105,6 +96,29 @@ synchronize server = forever $ do
         sendRemoveMessage currentTime (_,user) = if currentTime - userAliveTime user >= 6
             then atomically $ putTMVar (userStopVar user) ()
             else return ()
+
+-- synchronize :: Server -> IO()
+-- synchronize server = forever $ do
+--     netSignals  <- atomically $ readTVar $ serverNetSignals server
+--     users       <- atomically $ readTVar $ serverUsers server
+--     print     netSignals
+--     putStrLn  ""
+--     print     users
+--     putStrLn  ""
+
+    -- -- figure out the issue with sending multiple messages in a row
+    -- broadcast (Nothing, encode $ SyncNetSignals netSignals) server
+    -- broadcast (Nothing, encode $ UserList $ Prelude.map (\(_,u) -> userName u) (Map.toList users)) server
+
+    -- currentTime <- getCurrentTime
+    -- let users' = Map.filter (\u -> (currentTime - userAliveTime u < 6)) users
+    -- atomically $ writeTVar (serverUsers server) users'
+    -- mapM_ (sendRemoveMessage currentTime) $ Map.toList users'
+    -- threadDelay 5000000
+    -- where
+    --     sendRemoveMessage currentTime (_,user) = if currentTime - userAliveTime user >= 6
+    --         then atomically $ putTMVar (userStopVar user) ()
+    --         else return ()
 
 acceptLoop :: Server -> Socket -> IO()
 acceptLoop server nsocket = forever $ do
@@ -121,7 +135,7 @@ acceptLoop server nsocket = forever $ do
             atomically $ do
                 users'  <- readTVar $ serverUsers server
                 uid     <- (readTVar $ serverUserIdCounter server) >>= return . (+1)
-                writeTVar (serverUsers server) (Map.insert newUserAddress (User newUserSocket newUserAddress stopVar (C.pack "saproling") uid t) users')
+                writeTVar (serverUsers server) (Map.insert newUserAddress (User newUserSocket newUserAddress stopVar "saproling" uid t) users')
                 writeTVar (serverUserIdCounter server) uid
             _ <- forkIO $ userListen newUserSocket newUserAddress stopVar server
             return ()
@@ -167,75 +181,76 @@ messageProcessor server _ = forever $ do
 ------------------------------
 parseMessage :: B.ByteString -> NetMessage -> User -> Server -> IO()
 parseMessage m (Login n) user server = do
+    putStrLn $ show (userName user) ++ " logged in."
     t <- getCurrentTime
     let user' = User (userSocket user) (userAddress user) (userStopVar user) n (userId user) t
     atomically $ readTVar (serverUsers server) >>= \users -> writeTVar (serverUsers server) (Map.insert (userAddress user) user' users)
-    sendMessage user m server
-    sendUserList server
     users <- atomically $ readTVar $ serverUsers server
-    _  <- atomically $ readTVar $ serverNetSignals server
-    -- sendMessage user m server
     broadcast (Nothing, m) server
     print $ "User logged in: " ++ show (userName user')
     print $ users
 
-parseMessage _ (Logout _) user server = do
+parseMessage m (Logout _) user server = do
+    putStrLn $ show (userName user) ++ " logged out."
     close      $ userSocket user
     atomically $ putTMVar (userStopVar user) ()
     atomically $ readTVar (serverUsers server) >>= \users -> writeTVar (serverUsers server) (Map.delete (userAddress user) users)
-    sendUserList server
     users <- atomically $ readTVar $ serverUsers server
+    broadcast (Nothing, m) server
     print $ "User logged out: " ++ show (userName user)
     print $ users
 
 parseMessage m Alive user server = do
+    putStrLn $ show (userName user) ++ " is alive."
     t <- getCurrentTime
     sendMessage user m server
     let user' = User (userSocket user) (userAddress user) (userStopVar user) (userName user) (userId user) t
     atomically $ readTVar (serverUsers server) >>= \users -> writeTVar (serverUsers server) (Map.insert (userAddress user) user' users)
 
-parseMessage m (AddNetSignal uid netVal) _ server = do
-    sigs <- atomically $ readTVar (serverNetSignals server)
-    if IntMap.member uid sigs
-        then putStrLn $ "Already contains netSignal " ++ show uid
-        else do
-            atomically $ writeTVar (serverNetSignals server) (IntMap.insert uid netVal sigs)
-            broadcast (Nothing, m) server
-            putStrLn $ "Received NetSignal: " ++ show (uid,netVal)
-            putStrLn ""
+-- parseMessage m (AddNetSignal uid netVal) _ server = do
+--     sigs <- atomically $ readTVar (serverNetSignals server)
+--     if IntMap.member uid sigs
+--         then putStrLn $ "Already contains netSignal " ++ show uid
+--         else do
+--             atomically $ writeTVar (serverNetSignals server) (IntMap.insert uid netVal sigs)
+--             broadcast (Nothing, m) server
+--             putStrLn $ "Received NetSignal: " ++ show (uid,netVal)
+--             putStrLn ""
 
-parseMessage m (RemoveNetSignal uid) _ server = do
-    sigs <- atomically $ readTVar $ serverNetSignals server
-    if not $ IntMap.member (fromIntegral uid) sigs then return () else do
-        atomically $ readTVar (serverNetSignals server) >>= \sigs' -> writeTVar (serverNetSignals server) (IntMap.delete (fromIntegral uid) sigs')
-        broadcast (Nothing,m) server
-        putStrLn $  "Removing NetSignal: " ++ show uid
-        putStrLn ""
+-- parseMessage m (RemoveNetSignal uid) _ server = do
+--     sigs <- atomically $ readTVar $ serverNetSignals server
+--     if not $ IntMap.member (fromIntegral uid) sigs then return () else do
+--         atomically $ readTVar (serverNetSignals server) >>= \sigs' -> writeTVar (serverNetSignals server) (IntMap.delete (fromIntegral uid) sigs')
+--         broadcast (Nothing,m) server
+--         putStrLn $  "Removing NetSignal: " ++ show uid
+--         putStrLn ""
 
-parseMessage m (UpdateNetSignal uid netVal) user server = do
-    atomically $ readTVar (serverNetSignals server) >>= \sigs -> writeTVar (serverNetSignals server) (IntMap.insert uid netVal sigs)
+parseMessage m (UpdateNetSignal uid _) user server = do
+    putStrLn $ "Updating net signal: " ++ show uid
+    -- atomically $ readTVar (serverNetSignals server) >>= \sigs -> writeTVar (serverNetSignals server) (IntMap.insert uid netVal sigs)
     broadcast (Just $ userAddress user,m) server
 
 parseMessage m (Chat name msg) _ server = do
     putStrLn ("Chat - " ++ show name ++ ": " ++ show msg)
     broadcast (Nothing,m) server
-    if msg == flushCommand then flush server else return ()
+    -- if msg == flushCommand then flush server else return ()
 
-parseMessage _ EmptyMessage       _ _ = putStrLn "Empty message received."
-parseMessage _ (SyncNetSignals _) _ _ = putStrLn "The Server should not be receiving SyncNetSignal messages!"
-parseMessage _ (UserList _) _ _       = putStrLn "(UserList _) message not handled by parseMessage."
+-- parseMessage _ EmptyMessage       _ _ = putStrLn "Empty message received."
+-- parseMessage _ (SyncNetSignals _) _ _ = putStrLn "The Server should not be receiving SyncNetSignal messages!"
+-- parseMessage _ (UserList _) _ _       = putStrLn "(UserList _) message not handled by parseMessage."
+parseMessage _ _ _ _                  = putStrLn "Received unused message protocol"
 
 ------------------------------
 --Server Functions
 ------------------------------
 
-flushCommand :: C.ByteString
-flushCommand =  C.pack "necro flush"
+-- flushCommand :: C.ByteString
+-- flushCommand =  C.pack "necro flush"
 
-flush :: Server -> IO()
-flush server = do
-    atomically $ writeTVar (serverNetSignals server) IntMap.empty
-    broadcast  (Nothing, encode $ SyncNetSignals IntMap.empty) server
+-- flush :: Server -> IO()
+-- flush server = do
+--     atomically $ writeTVar (serverNetSignals server) IntMap.empty
+--     broadcast  (Nothing, encode $ SyncNetSignals IntMap.empty) server
 
 {- TO DO: Remove these???????????????????????????????????
 addUser :: User -> Server -> IO()
@@ -245,10 +260,10 @@ removeUser :: User -> Server -> IO()
 removeUser user server = atomically $ readTVar (serverUsers server) >>= \users -> writeTVar (serverUsers server) (Map.delete (userAddress user) users)
 -}
 
-sendUserList :: Server -> IO ()
-sendUserList server = do
-    users <- atomically $ readTVar $ serverUsers server
-    broadcast (Nothing, encode $ UserList $ Prelude.map (\(_,u) -> userName u) (Map.toList users)) server
+-- sendUserList :: Server -> IO ()
+-- sendUserList server = do
+--     users <- atomically $ readTVar $ serverUsers server
+--     broadcast (Nothing, encode $ UserList $ Prelude.map (\(_,u) -> userName u) (Map.toList users)) server
 
 broadcast :: (Maybe SockAddr,B.ByteString) -> Server -> IO ()
 broadcast nmessage server = atomically $ writeTChan (serverBroadcastOutBox server) nmessage

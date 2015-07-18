@@ -1,4 +1,5 @@
 {-# LANGUAGE FlexibleContexts #-}
+
 module Necronomicon.FRP.State
     ( foldp
     , foldn
@@ -12,6 +13,8 @@ import           Necronomicon.FRP.Runtime
 import           Necronomicon.Linear
 import           Necronomicon.Entity
 import           Necronomicon.Graphics
+import           Necronomicon.Utility
+import           Necronomicon.Networking.Types
 
 import           Control.Concurrent
 import           Control.Concurrent.STM
@@ -23,7 +26,7 @@ import           Data.IORef
 import           Foreign.Storable
 import           Foreign.C.Types
 import           Foreign.Marshal.Array
-import           Data.Binary                       (Binary)
+import           Data.Binary                       (Binary, decode)
 
 import qualified Data.Vector.Storable.Mutable      as SMV
 import qualified Graphics.UI.GLFW                  as GLFW
@@ -31,6 +34,7 @@ import qualified Data.IntSet                       as IntSet
 import qualified Data.HashTable.IO                 as Hash
 import qualified Data.IntMap.Strict                as IntMap
 -- import qualified Data.ByteString.Lazy              as B
+--import qualified Data.Foldable                     as F
 
 ----------------------------------
 -- State
@@ -73,27 +77,100 @@ delay initx sig = runST $ do
                     writeIORef fref s
                     return prev
 
---Maybe replace with injective type families when that becomes a thing
-foldn :: (Binary (EntityType entities), Eq (EntityType entities), Entities entities) => (input -> entities -> entities) -> entities -> Signal input -> Signal entities
-foldn f scene input = sceneSig
-    where
-        sceneSig  = delay scene $ necro $ f <~ input ~~ sceneSig
-        necro sig = Signal $ \state -> do
-            (scont, s, uids) <- unSignal sig state
-            genCounter       <- newIORef 0
-            nursery          <- Hash.new
-            newEntRef        <- newIORef []
-            nid              <- nextStateID state
-            return (cont scont state genCounter nursery newEntRef nid, s, uids)
-            where
-                --Insert in here checks for networking eid and perform network updates, etc
-                cont scont state genCounter nursery newEntRef nid eid = scont eid >>= \se -> case se of
-                    NoChange _ -> return se
-                    Change   s -> do
-                        gen        <- readIORef genCounter >>= \gen -> writeIORef genCounter (gen + 1) >> return gen
-                        es         <- mapEntities (updateEntity state gen nursery newEntRef) s
-                        removeAndNetworkEntities state gen nursery newEntRef nid
-                        return $ Change es
+class NecroFoldable entities where
+    foldn :: (input -> entities -> entities) -> entities -> Signal input -> Signal entities
+
+instance (Binary a, Eq a) => NecroFoldable (Entity a) where
+    foldn f scene input = sceneSig
+        where
+            sceneSig  = delay scene $ necro $ f <~ input ~~ sceneSig
+            necro sig = Signal $ \state -> do
+                (scont, s, uids) <- unSignal sig state
+                genCounter       <- newIORef 0
+                nursery          <- Hash.new :: IO (Nursery a)
+                newEntRef        <- newIORef []
+                nid              <- nextStateID state
+                ref              <- newIORef s
+                return (cont scont state genCounter nursery newEntRef nid ref, s, uids)
+                where
+                    --Insert in here checks for networking eid and perform network updates, etc
+                    cont scont state genCounter nursery newEntRef nid ref eid
+                        | eid /= nid  = scont eid >>= \se -> case se of
+                            NoChange _ -> return se
+                            Change   s -> do
+                                --Regular update
+                                gen        <- readIORef genCounter >>= \gen -> writeIORef genCounter (gen + 1) >> return gen
+                                es         <- updateEntity state gen nursery newEntRef s
+                                removeAndNetworkEntities state gen nursery newEntRef nid
+                                writeIORef ref es
+                                return $ Change es
+                        | otherwise = do
+                            --Network update
+                            --Add time stamp to avoid out of order updates (still need out of order adds and deletes)
+                            e            <- readIORef ref
+                            (_, msg)     <- readIORef (netSignalRef state)
+                            let (NetEntityMessage ns cs _) = decode msg
+                            case ns of
+                                e' : _ -> return . Change . foldr netUpdateEntity e' . concat $ map snd cs
+                                _      -> return . Change . foldr netUpdateEntity e  . concat $ map snd cs
+
+                    netUpdateEntity c e = case c of
+                        UpdateEntityData     x -> e{edata    = x}
+                        UpdateEntityPosition x -> e{pos      = x}
+                        UpdateEntityRotation x -> e{rot      = x}
+                        UpdateEntityScale    x -> e{escale   = x}
+                        UpdateEntityModel    x -> e{model    = x}
+                        UpdateEntityCollider x -> e{collider = x}
+
+instance (Binary a, Eq a) => NecroFoldable [Entity a] where
+    foldn f scene input = sceneSig
+        where
+            sceneSig  = delay scene $ necro $ f <~ input ~~ sceneSig
+            necro sig = Signal $ \state -> do
+                (scont, s, uids) <- unSignal sig state
+                genCounter       <- newIORef 0
+                nursery          <- Hash.new :: IO (Nursery a)
+                newEntRef        <- newIORef []
+                nid              <- nextStateID state
+                ref              <- newIORef s
+                return (cont scont state genCounter nursery newEntRef nid ref, s, uids)
+                where
+                    --Insert in here checks for networking eid and perform network updates, etc
+                    cont scont state genCounter nursery newEntRef nid ref eid
+                        | eid /= nid  = scont eid >>= \se -> case se of
+                            NoChange _ -> return se
+                            Change   s -> do
+                                --Regular update
+                                gen        <- readIORef genCounter >>= \gen -> writeIORef genCounter (gen + 1) >> return gen
+                                es         <- mapM (updateEntity state gen nursery newEntRef) s
+                                removeAndNetworkEntities state gen nursery newEntRef nid
+                                writeIORef ref es
+                                return $ Change es
+                        | otherwise = do
+                            --Network update
+                            --Add time stamp to avoid out of order updates (still need out of order adds and deletes)
+                            es            <- readIORef ref
+                            (_, msg)      <- readIORef (netSignalRef state)
+                            let (NetEntityMessage ns csl gsl) = decode msg
+                            cs            <- Hash.fromList csl --compute list length from originator's side
+                            gs            <- Hash.fromList $ map (\n -> (netid n, ())) ns ++ gsl
+                            es'           <- filterMapM' (netUpdateEntity cs gs) es
+                            return $ Change $ ns ++ es'
+
+                    netUpdateEntity :: Hash.CuckooHashTable (Int, Int) [NetEntityUpdate a] -> Hash.CuckooHashTable (Int, Int) () -> Entity a -> IO (Maybe (Entity a))
+                    netUpdateEntity cs gs e = Hash.lookup gs (netid e) >>= \g -> case g of
+                        Just _  -> return Nothing
+                        Nothing -> Hash.lookup cs (netid e) >>= \mcs -> case mcs of
+                            Nothing  -> return $ Just e
+                            Just cs' -> return $ Just $ foldr netUpdate e cs'
+                        where
+                            netUpdate c e' = case c of
+                                UpdateEntityData     x -> e'{edata    = x}
+                                UpdateEntityPosition x -> e'{pos      = x}
+                                UpdateEntityRotation x -> e'{rot      = x}
+                                UpdateEntityScale    x -> e'{escale   = x}
+                                UpdateEntityModel    x -> e'{model    = x}
+                                UpdateEntityCollider x -> e'{collider = x}
 
 updateEntity :: SignalState -> Int -> Nursery a -> IORef [Entity a] -> Entity a -> IO (Entity a)
 updateEntity state gen nursery _ e@Entity{euid = UID uid} = do
@@ -117,8 +194,8 @@ updateEntity state gen nursery newEntRef e = do
         UID _ -> return e{model = model'}
         New   -> do
             uid <- atomically $ readTVar (uidRef state) >>= \(uid : uids) -> writeTVar (uidRef state) uids >> return uid
-            let e' = e{model = model', euid = UID uid}
-            modifyIORef' newEntRef $ \es -> e' : es
+            let e' = e{model = model', euid = UID uid, netid = (clientID (signalClient state), uid)}
+            when (not $ null $ netOptions e') $ modifyIORef' newEntRef $ \es -> e' : es
             return e'
 
     let (UID uid) = euid e'
@@ -144,19 +221,19 @@ removeAndNetworkEntities :: (Binary a, Eq a) => SignalState -> Int -> Nursery a 
 removeAndNetworkEntities state gen nursery newEntRef nid = do
     (cs, gs) <- Hash.foldM collectGarbage ([], []) nursery
     es       <- readIORef newEntRef
-    sendNetworkEntityMessage (signalClient state) es cs gs nid
+    sendNetworkEntityMessage (signalClient state) es cs (map fst gs) nid
     mapM_ removeGarbage gs
     writeIORef newEntRef []
     where
-        removeGarbage k = do
+        removeGarbage (_, k) = do
             renderData <- readIORef (renderDataRef state)
             SMV.unsafeWith renderData $ \ptr -> pokeByteOff (ptr `advancePtr` k) 0 (0 :: CInt)
             Hash.delete nursery k
             atomically $ readTVar (uidRef state) >>= \uids -> writeTVar (uidRef state) (k : uids)
             --Delete openGL resources? Use weak pointers and finalizers?
-
+--TODO: Need separate lists for delete and network remove message!
         collectGarbage (cs, gs) (k, (gen', p, c)) = do
-            let gs' = if gen /= gen' then k : gs else gs
+            let gs' = if gen /= gen' then ((netid c, ()), k) : gs else gs
             return (collectNetworkEntityUpdates p c cs, gs')
 
 writeCam :: IORef (IntMap.IntMap (Matrix4x4, Camera)) -> UID -> Maybe Camera -> Entity a -> IO ()

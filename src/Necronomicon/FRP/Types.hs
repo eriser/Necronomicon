@@ -42,7 +42,7 @@ data InputEvent = TimeEvent        Time Time
                 --Network Events
                 | NetUserEvent     String Bool
                 | NetStatusEvent   NetStatus
-                | NetSignalEvent   Int B.ByteString
+                | NetSignalEvent   Int Int B.ByteString --Need user ID
                 | NetChatEvent     String String
 
 data SignalState = SignalState
@@ -65,7 +65,7 @@ data SignalState = SignalState
                  , netUserLoginRef :: IORef (String, Bool)
                  , netStatusRef    :: IORef NetStatus
                  , netChatRef      :: IORef (String, String)
-                 , netSignalRef    :: IORef B.ByteString
+                 , netSignalRef    :: IORef (Int, B.ByteString)
 
                  , signalClient   :: Client
                  , necroVars      :: NecroVars
@@ -90,7 +90,7 @@ mkSignalState w2 dims inbox userName = SignalState
                            ~~ newIORef ("", False)
                            ~~ newIORef Connecting
                            ~~ newIORef ("", "")
-                           ~~ newIORef B.empty
+                           ~~ newIORef (0, B.empty)
                            ~~ mkClient userName
                            ~~ mkNecroVars
                            ~~ mkResources
