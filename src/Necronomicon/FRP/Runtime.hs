@@ -117,6 +117,6 @@ inputSignal uid getter = Signal $ \state -> do
         cont ref iref eid
             | eid /= uid = readIORef ref  >>= return . NoChange
             | otherwise  = do
-                i <- readIORef iref 
-                -- print i 
+                i <- readIORef iref
+                -- print i
                 return $ Change i
