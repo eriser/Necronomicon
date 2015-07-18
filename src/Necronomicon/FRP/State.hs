@@ -106,6 +106,7 @@ instance (Binary a, Eq a) => NecroFoldable (Entity a) where
                         | otherwise = do
                             --Network update
                             --Add time stamp to avoid out of order updates (still need out of order adds and deletes)
+                            --TODO: Do we need to update graphics and other shit?
                             e            <- readIORef ref
                             gen          <- readIORef genCounter
                             msg          <- readIORef (netSignalRef state)

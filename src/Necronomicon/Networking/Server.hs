@@ -254,14 +254,6 @@ parseMessage _ _ _ _                  = putStrLn "Received unused message protoc
 --     atomically $ writeTVar (serverNetSignals server) IntMap.empty
 --     broadcast  (Nothing, encode $ SyncNetSignals IntMap.empty) server
 
-{- TO DO: Remove these???????????????????????????????????
-addUser :: User -> Server -> IO()
-addUser user server = atomically $ readTVar (serverUsers server) >>= \users -> writeTVar (serverUsers server) (Map.insert (userAddress user) user users)
-
-removeUser :: User -> Server -> IO()
-removeUser user server = atomically $ readTVar (serverUsers server) >>= \users -> writeTVar (serverUsers server) (Map.delete (userAddress user) users)
--}
-
 -- sendUserList :: Server -> IO ()
 -- sendUserList server = do
 --     users <- atomically $ readTVar $ serverUsers server

@@ -96,7 +96,6 @@ import qualified Graphics.UI.GLFW             as GLFW
 mousePos :: Signal (Double, Double)
 mousePos = inputSignal 201 mousePosRef
 
---TODO: Fix mouseDelta scale issue
 mouseDelta :: Signal (Double, Double)
 mouseDelta = Signal $ \state -> do
     GLFW.setCursorInputMode     (context state) GLFW.CursorInputMode'Disabled
