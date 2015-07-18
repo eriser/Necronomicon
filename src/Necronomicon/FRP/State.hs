@@ -33,8 +33,6 @@ import qualified Graphics.UI.GLFW                  as GLFW
 import qualified Data.IntSet                       as IntSet
 import qualified Data.HashTable.IO                 as Hash
 import qualified Data.IntMap.Strict                as IntMap
--- import qualified Data.ByteString.Lazy              as B
---import qualified Data.Foldable                     as F
 
 ----------------------------------
 -- State
@@ -80,6 +78,7 @@ delay initx sig = runST $ do
 class NecroFoldable entities where
     foldn :: (input -> entities -> entities) -> entities -> Signal input -> Signal entities
 
+--Need to solve network hamster wheel by updating entities hash
 instance (Binary a, Eq a) => NecroFoldable (Entity a) where
     foldn f scene input = sceneSig
         where

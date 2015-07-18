@@ -49,8 +49,8 @@ data SignalState = SignalState
                  { contextBarrier :: TMVar GLContext
                  , context        :: GLFW.Window
                  , renderDataRef  :: IORef (SMV.IOVector RenderData)
-                 , uidRef         :: TVar  [Int]
-                 , sidRef         :: IORef [Int]
+                 , uidRef         :: TVar [Int]
+                 , sidRef         :: TVar [Int]
                  , cameraRef      :: IORef (IntMap.IntMap (Matrix4x4, Camera))
 
                  --Input Event Refs
@@ -78,7 +78,7 @@ mkSignalState w2 dims inbox userName = SignalState
                            ~~ return w2
                            ~~ (SV.thaw (SV.fromList (replicate 16 nullRenderData)) >>= newIORef)
                            ~~ atomically (newTVar [0..])
-                           ~~ newIORef [300..]
+                           ~~ atomically (newTVar [300..])
                            ~~ newIORef IntMap.empty
                            ~~ newIORef 0
                            ~~ newIORef 0

@@ -35,10 +35,10 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
             [] -> return Nothing
             as -> return $ Just as
         state         <- mkSignalState w (fromIntegral ww, fromIntegral wh) eventInbox $ maybe "noob" id $ fmap head args
-        (scont, _, _) <- unSignal sig state
+        _             <- runNecroState (setTempo 150) (necroVars state)
         _             <- runNecroState startNecronomicon (necroVars state)
         _             <- runNecroState (waitForRunningStatus NecroRunning) (necroVars state)
-        _             <- runNecroState (setTempo 150) (necroVars state)
+        (scont, _, _) <- unSignal sig state
 
         setInputCallbacks w eventInbox
         threadDelay 500000
@@ -92,8 +92,8 @@ processEvents sig ss inbox = forever $ atomically (readTChan inbox) >>= \e -> ca
 
 nextStateID :: SignalState -> IO Int
 nextStateID state = do
-    (sid : sids) <- readIORef (sidRef state)
-    writeIORef (sidRef state) sids
+    (sid : sids) <- atomically $ readTVar (sidRef state)
+    atomically $ writeTVar (sidRef state) sids
     return sid
 
 setInputCallbacks :: GLFW.Window -> TChan InputEvent -> IO ()
@@ -103,7 +103,7 @@ setInputCallbacks w eventInbox = do
     GLFW.setKeyCallback         w $ Just $ \_ k _ p _ -> if p == GLFW.KeyState'Repeating then return () else atomically $ writeTChan eventInbox $ KeyEvent k (p /= GLFW.KeyState'Released)
     GLFW.setWindowSizeCallback  w $ Just $ \_ x y     -> atomically $ writeTChan eventInbox $ DimensionsEvent (fromIntegral x, fromIntegral y)
 
-inputSignal :: Int -> (SignalState -> IORef a) -> Signal a
+inputSignal :: Show a => Int -> (SignalState -> IORef a) -> Signal a
 inputSignal uid getter = Signal $ \state -> do
     let iref = getter state
     x       <- readIORef iref
@@ -112,4 +112,4 @@ inputSignal uid getter = Signal $ \state -> do
     where
         cont ref iref eid
             | eid /= uid = readIORef ref  >>= return . NoChange
-            | otherwise  = readIORef iref >>= return . Change
+            | otherwise  = readIORef iref >>= return . Change 

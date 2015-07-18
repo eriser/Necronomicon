@@ -353,18 +353,18 @@ keyboard :: Signal [Key]
 keyboard = Signal $ \state -> do
     let ref = keyboardRef state
     ks     <- readIORef ref
-    return (cont ref, ksList ks, IntSet.fromList [0..150])
+    return (cont ref, ksList ks, IntSet.fromList [0..200])
     where
         ksList = map (toEnum . fst) . filter snd . IntMap.toList
         cont ref eid
-            | eid > 150 = readIORef ref >>= return . NoChange . ksList
+            | eid > 200 = readIORef ref >>= return . NoChange . ksList
             | otherwise = readIORef ref >>= return . Change   . ksList
 
 keys :: Signal Key
 keys = Signal $ \state -> do
     let kref = lastKeyPress state
     ref     <- newIORef keyW
-    return (cont kref ref, keyW, IntSet.fromList [0..150])
+    return (cont kref ref, keyW, IntSet.fromList [0..200])
     where
         cont kref ref eid
             | eid > 150 = readIORef ref >>= return . NoChange
