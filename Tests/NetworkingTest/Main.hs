@@ -44,26 +44,24 @@ updatePlayers :: PlayerInput -> Entity Player -> Entity Player
 updatePlayers = updatePlayer
 
 updatePlayer :: PlayerInput -> Entity Player -> Entity Player
-updatePlayer (PlayerMouse (mx, my)) p@Entity{ edata = Player state (px, py)}
-    | PlayerIdle     <- state = p'
-    | PlayerMoving _ <- state = p'
-    | otherwise               = p
+updatePlayer (PlayerMouse (mx, my)) p@Entity{ edata = Player state (px, py)} = case state of
+    PlayerIdle     -> p'
+    PlayerMoving _ -> p'
     where
         x  = floatRem 360   <| px + mx * 80
         y  = clamp (-90) 90 <| py + my * 80
         p' = p{ edata = Player state (x, y),
                 rot   = fromEuler 0 (-x) 0 * fromEuler (-y) 0 0 }
 
-updatePlayer (PlayerKeys (x, y)) p@Entity{ edata = Player state fpr }
-    | PlayerIdle     <- state = p'
-    | PlayerMoving _ <- state = p'
-    | otherwise               = p
+updatePlayer (PlayerKeys (x, y)) p@Entity{ edata = Player state fpr } = case state of
+    PlayerIdle     -> p'
+    PlayerMoving _ -> p'
     where
         p' = p{ edata = Player (PlayerMoving <| Vector3 x 0 (-y)) fpr }
 
-updatePlayer (PlayerTick (dt, _)) p@Entity{ edata = Player state fpr }
-    | PlayerMoving    d <- state         = translate (d * realToFrac dt * 1.25) p{ edata = Player state fpr }
-    | otherwise                          = p
+updatePlayer (PlayerTick (dt, _)) p@Entity{ edata = Player state fpr } = case state of
+    PlayerMoving    d -> translate (d * realToFrac dt * 1.25) p{ edata = Player state fpr }
+    _                 -> p
 
 updateTerminals :: TerminalInput -> [Entity Terminal] -> [Entity Terminal]
 updateTerminals (TerminalTick t) = map (tickTerminal t)
