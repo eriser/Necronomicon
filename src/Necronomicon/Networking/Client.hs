@@ -63,7 +63,7 @@ sendLoginMessage :: Client -> IO ()
 sendLoginMessage client = do
     putStrLn $ "Logging in as " ++ show (clientUserName client)
     threadDelay 1000000
-    atomically $ writeTChan (clientOutBox client) $ encode $ Login $ clientUserName client
+    atomically $ writeTChan (clientOutBox client) $ encode $ Login (clientID client) (clientUserName client)
 
 connectionLoop :: Client -> Socket -> SockAddr -> IO ()
 connectionLoop client nsocket serverAddr = Control.Exception.catch tryConnect onFailure
@@ -159,7 +159,7 @@ statusLoop client sock serverIPAddress sigstate status = do
             putStrLn "Quitting..."
             atomically $ writeTVar  (clientRunStatus client) Quitting
             putStrLn "Sending quit message to server..."
-            Control.Exception.catch (sendWithLength sock $ encode $ Logout (clientUserName client)) printError
+            Control.Exception.catch (sendWithLength sock $ encode $ Logout (clientID client) (clientUserName client)) printError
             putStrLn "Closing socket..."
             close sock
             putStrLn "Done quitting..."
@@ -191,14 +191,14 @@ parseMessage Alive client _ = do
     currentTime  <- getCurrentTime
     atomically $ writeTVar (clientAliveTime client) currentTime
 
-parseMessage (Login u) _ sigstate = do
+parseMessage (Login uid u) _ sigstate = do
     putStrLn $ "User: " ++ show u ++ " logged in."
-    atomically $ writeTChan (signalsInbox sigstate) $ NetUserEvent u True
+    atomically $ writeTChan (signalsInbox sigstate) $ NetUserEvent uid u True
     putStrLn $ "User logged in: " ++ u
 
-parseMessage (Logout u) _ sigstate = do
+parseMessage (Logout uid u) _ sigstate = do
     putStrLn $ "User: " ++ show u ++ " logged out."
-    atomically $ writeTChan (signalsInbox sigstate) $ NetUserEvent u False
+    atomically $ writeTChan (signalsInbox sigstate) $ NetUserEvent uid u False
     putStrLn $  "User logged out: " ++ u
 
 -- parseMessage (AddNetSignal uid netVal) _ sigstate = do

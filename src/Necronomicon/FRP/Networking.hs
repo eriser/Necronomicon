@@ -1,6 +1,7 @@
 module Necronomicon.FRP.Networking
     ( userJoin
     , userLeave
+    , userID
     , userLog
     , chatMessage
     , networkStatus
@@ -69,19 +70,6 @@ Eliminating the arbiter here begs the question of whether the arbiter is necessa
 -}
 
 
---Need to add:
--- | AddNetEntities  Int
--- | UpdateEntities  Int B.ByteString
---Can we in fact just use the same machinery, but in a completely different way?!
-
---Add New Entity, Update Current Entity, Delete Entity
---AddEntityCollection Int
---UpdateEntityCollection Int [(Int, ByteString)] [(Int, ByteString)] Int
---Bytestring coming in is of form: [(Int, [NetEntityMessage])], which we then translate to V.Vector (Int, [NetEntityMessage])
---Then we mapM the entities through and check for updates and update accordingly.
---Maybe a kind of Nat remapping scheme?
-
---What about adding and removing?
 data NetEntityUpdate a = UpdateEntityData     a
                        | UpdateEntityPosition Vector3
                        | UpdateEntityRotation Quaternion
@@ -108,7 +96,6 @@ instance Binary a => Binary (NetEntityUpdate a) where
 
 
 data NetEntityMessage a   = NetEntityMessage Int [Entity a]      [((Int, Int), [NetEntityUpdate a])] [((Int, Int), ())]
--- data NetEntityMessage k a = NetEntityMessage Int [(k, Entity a)] [(k, [NetEntityUpdate a])]          [(k, ())]
 
 instance Binary a => Binary (NetEntityMessage a) where
     put (NetEntityMessage nid es us ds) = put (3 :: Word8) >> put nid >> put es >> put us >> put ds
@@ -130,36 +117,38 @@ collectNetworkEntityUpdates prev curr us = if not (null us'') then (netid curr, 
         addUpdate NetworkModel    us' = if model    prev /= model    curr then UpdateEntityModel    (model    curr) : us' else us'
         addUpdate NetworkCollider us' = if collider prev /= collider curr then UpdateEntityCollider (collider curr) : us' else us'
 
-userJoin :: Signal String
+userJoin :: Signal (Int, String)
 userJoin = Signal $ \state -> do
     let uref = netUserLoginRef state
-    ref     <- newIORef ""
-    return (cont uref ref, "", IntSet.singleton 204)
+    ref     <- newIORef (0, "")
+    return (cont uref ref, (0, ""), IntSet.singleton 204)
     where
     cont uref ref eid = if eid /= 204
         then readIORef ref >>= return . NoChange
-        else readIORef uref >>= \(u, b) -> if not b
+        else readIORef uref >>= \(i, u, b) -> if not b
             then readIORef ref >>= return . NoChange
-            else writeIORef ref u >> return (Change u)
+            else writeIORef ref (i, u) >> return (Change (i, u))
 
-userLeave :: Signal String
+userLeave :: Signal (Int, String)
 userLeave = Signal $ \state -> do
     let uref = netUserLoginRef state
-    ref     <- newIORef ""
-    return (cont uref ref, "", IntSet.singleton 204)
+    ref     <- newIORef (0, "")
+    return (cont uref ref, (0, ""), IntSet.singleton 204)
     where
     cont uref ref eid = if eid /= 204
         then readIORef ref >>= return . NoChange
-        else readIORef uref >>= \(u, b) -> if b
+        else readIORef uref >>= \(i, u, b) -> if b
             then readIORef ref >>= return . NoChange
-            else writeIORef ref u >> return (Change u)
+            else writeIORef ref (i, u) >> return (Change (i, u))
 
 -- userJoinLeave :: Signal (String, Bool)
 -- userJoinLeave = inputSignal 204 netUserLoginRef
 
-userLog :: Signal (String, Bool)
+userLog :: Signal (Int, String, Bool)
 userLog = inputSignal 204 netUserLoginRef
 
+userID :: Signal Int
+userID = Signal $ \state -> let cid = clientID $ signalClient state in return (\_ -> return $ NoChange cid, cid, IntSet.empty)
 -- users :: Signal [String]
 
 chatMessage :: Signal (String, String)
@@ -167,7 +156,6 @@ chatMessage = inputSignal 206 netChatRef
 
 networkStatus :: Signal NetStatus
 networkStatus = inputSignal 205 netStatusRef
-
 
 -- users :: Signal [String]
 -- users = input userListSignal

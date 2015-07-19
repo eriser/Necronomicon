@@ -16,8 +16,8 @@ data NetMessage = Chat            String String
                 | UpdateNetSignal
                 | Alive
                 -- | UserList        [String]
-                | Login            String
-                | Logout           String
+                | Login            Int String
+                | Logout           Int String
                 -- | SyncNetSignals  (IntMap.IntMap B.ByteString)
                 -- | EmptyMessage
                 deriving (Show)
@@ -60,8 +60,8 @@ instance Binary NetMessage where
     put (UpdateNetSignal      ) = put (3 ::Word8)
     put  Alive                  = put (4 ::Word8)
     -- put (UserList           ul) = put (5 ::Word8) >> put ul
-    put (Login               n) = put (6 ::Word8) >> put n
-    put (Logout              n) = put (7 ::Word8) >> put n
+    put (Login           uid n) = put (6 ::Word8) >> put uid >> put n
+    put (Logout          uid n) = put (7 ::Word8) >> put uid >> put n
     -- put (SyncNetSignals     ss) = put (8 ::Word8) >> put ss
     -- put (EmptyMessage)          = return ()
 
@@ -72,7 +72,7 @@ instance Binary NetMessage where
         3 -> return UpdateNetSignal
         4 -> return Alive
         -- 5 -> UserList        <$> get
-        6 -> Login           <$> get
-        _ -> Logout          <$> get
+        6 -> Login           <$> get <*> get
+        _ -> Logout          <$> get <*> get
         -- 8 -> SyncNetSignals  <$> get
         -- _ -> return EmptyMessage

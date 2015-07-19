@@ -40,7 +40,7 @@ data InputEvent = TimeEvent        Time Time
                 | DimensionsEvent (Double, Double)
 
                 --Network Events
-                | NetUserEvent     String Bool
+                | NetUserEvent     Int String Bool
                 | NetStatusEvent   NetStatus
                 | NetSignalEvent   Int B.ByteString --Need user ID
                 | NetChatEvent     String String
@@ -62,7 +62,7 @@ data SignalState = SignalState
                  , lastKeyPress   :: IORef (Key, Bool)
                  , dimensionsRef  :: IORef (Double, Double)
                  --Network Input Event refs
-                 , netUserLoginRef :: IORef (String, Bool)
+                 , netUserLoginRef :: IORef (Int, String, Bool)
                  , netStatusRef    :: IORef NetStatus
                  , netChatRef      :: IORef (String, String)
                  , netSignalRef    :: IORef B.ByteString
@@ -87,7 +87,7 @@ mkSignalState w2 dims inbox userName = SignalState
                            ~~ newIORef IntMap.empty
                            ~~ newIORef (GLFW.Key'W, False)
                            ~~ newIORef dims
-                           ~~ newIORef ("", False)
+                           ~~ newIORef (0, "", False)
                            ~~ newIORef Connecting
                            ~~ newIORef ("", "")
                            ~~ newIORef B.empty

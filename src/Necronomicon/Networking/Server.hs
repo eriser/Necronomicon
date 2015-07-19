@@ -182,7 +182,7 @@ messageProcessor server _ = forever $ do
 --Parse Messages
 ------------------------------
 parseMessage :: B.ByteString -> NetMessage -> User -> Server -> IO()
-parseMessage m (Login n) user server = do
+parseMessage m (Login _ n) user server = do
     putStrLn $ show (userName user) ++ " logged in."
     t <- getCurrentTime
     let user' = User (userSocket user) (userAddress user) (userStopVar user) n (userId user) t
@@ -192,7 +192,7 @@ parseMessage m (Login n) user server = do
     print $ "User logged in: " ++ show (userName user')
     print $ users
 
-parseMessage m (Logout _) user server = do
+parseMessage m (Logout _ _) user server = do
     putStrLn $ show (userName user) ++ " logged out."
     close      $ userSocket user
     atomically $ putTMVar (userStopVar user) ()

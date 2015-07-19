@@ -43,11 +43,11 @@ runSignal sig = initWindow (920, 540) False >>= \mw -> case mw of
         setInputCallbacks w eventInbox
         threadDelay 500000
         _             <- forkIO $ processEvents scont state eventInbox
-        threadDelay 500000
         case args of
             Just [n, a] -> startNetworking state n a $ signalClient state
             _           -> print "Incorrect arguments given for networking (name address). Networking is disabled"
 
+        threadDelay 500000
         run False w scont currentTime DynTree.empty eventInbox state
     where
         run quit window s runTime' tree eventInbox state
@@ -82,10 +82,10 @@ processEvents sig ss inbox = forever $ atomically (readTChan inbox) >>= \e -> ca
         modifyIORef (keyboardRef  ss) (\ks -> IntMap.insert (fromEnum k) b ks)
         writeIORef  (lastKeyPress ss) (k, b)
         sig (fromEnum k) >>= printEvent
-    NetUserEvent    u b    -> writeIORef  (netUserLoginRef ss) (u, b) >> sig 204 >>= printEvent
-    NetStatusEvent  s      -> writeIORef  (netStatusRef    ss) s      >> sig 205 >>= printEvent
-    NetChatEvent    u m    -> writeIORef  (netChatRef      ss) (u, m) >> sig 206 >>= printEvent
-    NetSignalEvent  u m    -> writeIORef  (netSignalRef    ss)      m >> sig u   >>= printEvent
+    NetUserEvent    i u b  -> writeIORef  (netUserLoginRef ss) (i, u, b) >> sig 204 >>= printEvent
+    NetStatusEvent  s      -> writeIORef  (netStatusRef    ss) s         >> sig 205 >>= printEvent
+    NetChatEvent    u m    -> writeIORef  (netChatRef      ss) (u, m)    >> sig 206 >>= printEvent
+    NetSignalEvent  u m    -> writeIORef  (netSignalRef    ss) m         >> sig u   >>= printEvent
     where
         printEvent (Change _) = return () -- print e
         printEvent  _         = return ()
