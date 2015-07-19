@@ -10,10 +10,10 @@ data Player        = Player PlayerState (Double, Double) deriving (Show, Eq, Gen
 data PlayerState   = PlayerIdle
                    | PlayerMoving Vector3
                    deriving (Show, Eq, Generic)
-data PlayerInput   = PlayerKeys  (Double, Double)    Int
-                   | PlayerMouse (Double, Double)    Int
-                   | PlayerTick  (Time, Time)        Int
-                   | PlayerLog   (Int, String, Bool) Int
+data PlayerInput   = PlayerKeys  (Double, Double) Int
+                   | PlayerMouse (Double, Double) Int
+                   | PlayerTick  (Time, Time)     Int
+                   | PlayerLog   (Int, String)    Int
                    deriving (Show, Eq, Generic)
 
 data Terminal      = Terminal (Double, Double, Double) deriving (Show, Eq, Generic)
@@ -32,13 +32,13 @@ mkPlayer = ( mkEntity  <| Player PlayerIdle (180, 0) )
            , rot        = fromEuler 0 180 0
            , camera     = Just <| Camera 30 0.1 1000 black []
            , netOptions = [NetworkPosition, NetworkRotation] }
-   
+
 mkTerminal :: Vector3 -> Entity Terminal
 mkTerminal p = ( mkEntity  <| Terminal (0, 0, 0))
                { pos        = p
                , model      = Just <| Model cube <| vertexColored white
                , netOptions = [NetworkPosition] }
-   
+
 section1 :: Signal ()
 section1 = players *> terminals *> pure ()
     where
@@ -46,19 +46,16 @@ section1 = players *> terminals *> pure ()
                 [ PlayerTick  <~ tick       ~~ userID
                 , PlayerKeys  <~ wasd       ~~ userID
                 , PlayerMouse <~ mouseDelta ~~ userID
-                , PlayerLog   <~ userLog    ~~ userID ]
-           
+                , PlayerLog   <~ userJoin   ~~ userID ]
+
         terminals = foldn updateTerminals [mkTerminal 0] <| mergeMany
                   [ TerminalTick <~ tick ]
 
 updatePlayers :: PlayerInput -> IntMap.IntMap (Entity Player) -> IntMap.IntMap (Entity Player)
-updatePlayers (PlayerTick          t uid) ps = IntMap.adjust (tickPlayer t)        uid ps
-updatePlayers (PlayerKeys          k uid) ps = IntMap.adjust (playerKeysUpdate k)  uid ps
-updatePlayers (PlayerMouse         m uid) ps = IntMap.adjust (playerMouseUpdate m) uid ps
-updatePlayers (PlayerLog (pid, _, i) uid) ps
-    | pid == uid && i = IntMap.insert uid mkPlayer ps 
-    | pid == uid      = IntMap.delete uid ps
-    | otherwise       = ps
+updatePlayers (PlayerTick       t uid) ps = IntMap.adjust (tickPlayer t)        uid ps
+updatePlayers (PlayerKeys       k uid) ps = IntMap.adjust (playerKeysUpdate k)  uid ps
+updatePlayers (PlayerMouse      m uid) ps = IntMap.adjust (playerMouseUpdate m) uid ps
+updatePlayers (PlayerLog (pid, _) uid) ps = if pid == uid then IntMap.insert uid mkPlayer ps else ps
 
 playerMouseUpdate :: (Double, Double) -> Entity Player -> Entity Player
 playerMouseUpdate (mx, my) p@Entity{ edata = Player state (px, py)} = case state of
