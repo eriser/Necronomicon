@@ -26,13 +26,14 @@ import           Data.IORef
 import           Foreign.Storable
 import           Foreign.C.Types
 import           Foreign.Marshal.Array
-import           Data.Binary                       (Binary, decode)
+import           Data.Binary                       (Binary, decode, encode)
 
 import qualified Data.Vector.Storable.Mutable      as SMV
 import qualified Graphics.UI.GLFW                  as GLFW
 import qualified Data.IntSet                       as IntSet
 import qualified Data.HashTable.IO                 as Hash
 import qualified Data.IntMap.Strict                as IntMap
+-- import qualified Data.Map.Strict                   as Map
 
 ----------------------------------
 -- State
@@ -95,7 +96,7 @@ instance (Binary a, Eq a) => NecroFoldable (Entity a) where
                             NoChange _ -> return se
                             Change   s -> do
                                 --Regular update
-                                es <- updateEntity state 0 nursery newEntRef s
+                                es <- updateEntity state 0 nursery newEntRef Nothing s
                                 removeAndNetworkEntities state 0 nursery newEntRef nid
                                 writeIORef ref es
                                 return $ Change es
@@ -141,7 +142,7 @@ instance (Binary a, Eq a) => NecroFoldable [Entity a] where
                             Change   s -> do
                                 --Regular update
                                 gen        <- readIORef genCounter >>= \gen -> writeIORef genCounter (gen + 1) >> return gen
-                                es         <- mapM (updateEntity state gen nursery newEntRef) s
+                                es         <- mapM (updateEntity state gen nursery newEntRef Nothing) s
                                 removeAndNetworkEntities state gen nursery newEntRef nid
                                 writeIORef ref es
                                 return $ Change es
@@ -158,7 +159,10 @@ instance (Binary a, Eq a) => NecroFoldable [Entity a] where
                             ns'           <- mapM (addNewNetEntities state gen nursery newEntRef) ns 
                             return $ Change $ ns' ++ es'
                     
-                    addNewNetEntities state gen nursery newEntRef e = updateEntity state gen nursery newEntRef e{euid = New} >>= \e' -> writeIORef newEntRef [] >> return e' 
+                    addNewNetEntities state gen nursery newEntRef e = do
+                        e' <- updateEntity state gen nursery newEntRef (Just . snd $ netid e) e{euid = New} 
+                        writeIORef newEntRef [] 
+                        return e'
 
                     netUpdateEntity :: Int -> Nursery a -> Hash.CuckooHashTable (Int, Int) [NetEntityUpdate a] -> Hash.CuckooHashTable (Int, Int) () -> Entity a -> IO (Maybe (Entity a))
                     netUpdateEntity gen nursery cs gs e = Hash.lookup gs (netid e) >>= \g -> case g of
@@ -178,8 +182,62 @@ instance (Binary a, Eq a) => NecroFoldable [Entity a] where
                                 UID uid -> insertNursery uid gen e' nursery
                                 _       -> return ()
 
-updateEntity :: SignalState -> Int -> Nursery a -> IORef [Entity a] -> Entity a -> IO (Entity a)
-updateEntity state gen nursery _ e@Entity{euid = UID uid} = do
+instance (Binary a, Eq a) => NecroFoldable (IntMap.IntMap (Entity a)) where
+    foldn f scene input = sceneSig
+        where
+            sceneSig  = delay scene $ necro $ f <~ input ~~ sceneSig
+            necro sig = Signal $ \state -> do
+                (scont, s, uids) <- unSignal sig state
+                genCounter       <- newIORef 0
+                nursery          <- Hash.new :: IO (Nursery a)
+                newEntRef        <- newIORef []
+                nid              <- nextStateID state
+                ref              <- newIORef s
+                return (cont scont state genCounter nursery newEntRef nid ref, s, IntSet.insert nid uids)
+                where
+                    cont scont state genCounter nursery newEntRef nid ref eid
+                        | eid /= nid  = scont eid >>= \se -> case se of
+                            NoChange _ -> return se
+                            Change   s -> do
+                                --Regular update
+                                gen        <- readIORef genCounter >>= \gen -> writeIORef genCounter (gen + 1) >> return gen
+                                es         <- IntMap.traverseWithKey (\k a -> updateEntity state gen nursery newEntRef (Just k) a) s
+                                removeAndNetworkEntities state gen nursery newEntRef nid
+                                writeIORef ref es
+                                return $ Change es
+                        | otherwise = do
+                            --Network update
+                            putStrLn "Net update in foldn (Map k (Entity a))"
+                            es            <- readIORef ref
+                            gen           <- readIORef genCounter
+                            msg           <- readIORef (netSignalRef state)
+                            let (NetEntityMessage _ ns csl gsl) = decode msg
+                                es'                             = foldr (\((_, k), cs) m -> IntMap.adjust (netUpdate cs) k m) (foldr (\((_, k),_) m -> IntMap.delete k m) es gsl) csl
+                            mapM_ (netInsertNursery gen nursery) es'
+                            ns'           <- IntMap.fromList <~ mapM (addNewNetEntities state gen nursery newEntRef) ns 
+                            return $ Change $ IntMap.union ns' es'
+                    
+                    addNewNetEntities state gen nursery newEntRef e = do
+                        e' <- updateEntity state gen nursery newEntRef (Just . snd $ netid e) e{euid = New} 
+                        writeIORef newEntRef [] 
+                        return (snd $ netid e, e')
+
+                    netUpdate cs e = foldr go e cs
+                        where
+                           go c e' = case c of
+                               UpdateEntityData     x -> e'{edata    = x}
+                               UpdateEntityPosition x -> e'{pos      = x}
+                               UpdateEntityRotation x -> e'{rot      = x}
+                               UpdateEntityScale    x -> e'{escale   = x}
+                               UpdateEntityModel    x -> e'{model    = x}
+                               UpdateEntityCollider x -> e'{collider = x}
+ 
+                    netInsertNursery gen nursery e' = case euid e' of
+                        UID uid -> insertNursery uid gen e' nursery
+                        _       -> return ()
+                   
+updateEntity :: SignalState -> Int -> Nursery a -> IORef [Entity a] -> Maybe Int -> Entity a -> IO (Entity a)
+updateEntity state gen nursery _ _ e@Entity{euid = UID uid} = do
     --Update existing Entities
     case model e of
         Just (Model (Mesh        (Just _) _ _ _ _ _) (Material (Just _) _ _ _ _)) -> writeRenderData (renderDataRef state) uid e
@@ -189,7 +247,7 @@ updateEntity state gen nursery _ e@Entity{euid = UID uid} = do
     insertNursery uid gen e nursery
     return e
 
-updateEntity state gen nursery newEntRef e = do
+updateEntity state gen nursery newEntRef maybeKey e = do
     --Add new Entity
     mtid   <- myThreadId
     atomically (takeTMVar (contextBarrier state)) >>= \(GLContext tid) -> when (tid /= mtid) (GLFW.makeContextCurrent (Just $ context state))
@@ -200,7 +258,10 @@ updateEntity state gen nursery newEntRef e = do
         UID _ -> return e{model = model'}
         New   -> do
             uid <- atomically $ readTVar (uidRef state) >>= \(uid : uids) -> writeTVar (uidRef state) uids >> return uid
-            let e' = e{model = model', euid = UID uid, netid = (clientID (signalClient state), uid)}
+            let netKey = case maybeKey of
+                    Nothing -> uid
+                    Just k -> k
+                e'  = e{model = model', euid = UID uid, netid = (clientID (signalClient state), netKey)}
             when (not $ null $ netOptions e') $ modifyIORef' newEntRef $ \es -> e' : es
             return e'
 
@@ -210,17 +271,11 @@ updateEntity state gen nursery newEntRef e = do
     insertNursery uid gen e nursery
     return e'
 
-type Nursery a = Hash.CuckooHashTable Int (Int, Entity a, Entity a)
-insertNursery :: Int -> Int -> Entity a -> Nursery a -> IO ()
-insertNursery uid gen e n = Hash.lookup n uid >>= \me' -> case me' of
-    Nothing         -> Hash.insert n uid (gen, e,  e)
-    Just (_, _, e') -> Hash.insert n uid (gen, e', e)
-
 removeAndNetworkEntities :: (Binary a, Eq a) => SignalState -> Int -> Nursery a -> IORef [Entity a] -> Int -> IO ()
 removeAndNetworkEntities state gen nursery newEntRef nid = do
     (cs, ngs, gs) <- Hash.foldM collectGarbage ([], [], []) nursery
     es            <- readIORef newEntRef
-    sendNetworkEntityMessage (signalClient state) es cs ngs nid
+    when (not (null cs && null gs && null es)) $ sendNetworkEntityMessage (signalClient state) $ encode $ NetEntityMessage nid es cs ngs
     mapM_ removeGarbage gs
     writeIORef newEntRef []
     where
@@ -235,6 +290,12 @@ removeAndNetworkEntities state gen nursery newEntRef nid = do
                     then (if not . null $ netOptions c then (netid c, ()) : ngs else ngs, k : gs)
                     else (ngs, gs)
             return (collectNetworkEntityUpdates p c cs, ngs', gs')
+
+type Nursery a = Hash.CuckooHashTable Int (Int, Entity a, Entity a)
+insertNursery :: Int -> Int -> Entity a -> Nursery a -> IO ()
+insertNursery uid gen e n = Hash.lookup n uid >>= \me' -> case me' of
+    Nothing         -> Hash.insert n uid (gen, e,  e)
+    Just (_, _, e') -> Hash.insert n uid (gen, e', e)
 
 writeCam :: IORef (IntMap.IntMap (Matrix4x4, Camera)) -> UID -> Maybe Camera -> Entity a -> IO ()
 writeCam cref (UID uid) (Just c) e = modifyIORef cref (IntMap.insert uid (entityTransform e, c))

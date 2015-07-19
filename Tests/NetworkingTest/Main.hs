@@ -33,12 +33,12 @@ section1 :: Signal ()
 section1 = players *> terminals *> pure ()
     where
         players = foldn updatePlayers mkPlayer <| mergeMany
-                [ PlayerTick      <~ tick
-                , PlayerKeys      <~ wasd
-                , PlayerMouse     <~ mouseDelta ]
+                [ PlayerTick  <~ tick
+                , PlayerKeys  <~ wasd
+                , PlayerMouse <~ mouseDelta ]
            
         terminals = foldn updateTerminals [mkTerminal 0] <| mergeMany
-                  [ TerminalTick      <~ tick ]
+                  [ TerminalTick <~ tick ]
 
 updatePlayers :: PlayerInput -> Entity Player -> Entity Player
 updatePlayers = updatePlayer
