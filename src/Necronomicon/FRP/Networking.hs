@@ -120,7 +120,7 @@ sendNetworkEntityMessage client es cs gs nid = when (not (null cs && null gs && 
         _       -> return ()
 
 collectNetworkEntityUpdates :: Eq a => Entity a -> Entity a -> [((Int, Int), [NetEntityUpdate a])] -> [((Int, Int), [NetEntityUpdate a])]
-collectNetworkEntityUpdates prev curr us = if not (null us) then (netid curr, us'') : us else us
+collectNetworkEntityUpdates prev curr us = if not (null us'') then (netid curr, us'') : us else us
     where
         us'' = foldr addUpdate [] $ netOptions curr
         addUpdate NetworkData     us' = if edata    prev /= edata    curr then UpdateEntityData     (edata    curr) : us' else us'

@@ -78,45 +78,40 @@ delay initx sig = runST $ do
 class NecroFoldable entities where
     foldn :: (input -> entities -> entities) -> entities -> Signal input -> Signal entities
 
---Need to solve network hamster wheel by updating entities hash
 instance (Binary a, Eq a) => NecroFoldable (Entity a) where
     foldn f scene input = sceneSig
         where
             sceneSig  = delay scene $ necro $ f <~ input ~~ sceneSig
             necro sig = Signal $ \state -> do
                 (scont, s, uids) <- unSignal sig state
-                genCounter       <- newIORef 0
                 nursery          <- Hash.new :: IO (Nursery a)
                 newEntRef        <- newIORef []
                 nid              <- nextStateID state
                 ref              <- newIORef s
-                return (cont scont state genCounter nursery newEntRef nid ref, s, uids)
+                return (cont scont state nursery newEntRef nid ref, s, IntSet.insert nid uids)
                 where
-                    --Insert in here checks for networking eid and perform network updates, etc
-                    cont scont state genCounter nursery newEntRef nid ref eid
+                    cont scont state nursery newEntRef nid ref eid
                         | eid /= nid  = scont eid >>= \se -> case se of
                             NoChange _ -> return se
                             Change   s -> do
                                 --Regular update
-                                gen        <- readIORef genCounter >>= \gen -> writeIORef genCounter (gen + 1) >> return gen
-                                es         <- updateEntity state gen nursery newEntRef s
-                                removeAndNetworkEntities state gen nursery newEntRef nid
+                                es <- updateEntity state 0 nursery newEntRef s
+                                removeAndNetworkEntities state 0 nursery newEntRef nid
                                 writeIORef ref es
                                 return $ Change es
                         | otherwise = do
                             --Network update
                             --Add time stamp to avoid out of order updates (still need out of order adds and deletes)
                             --TODO: Do we need to update graphics and other shit?
+                            -- putStrLn "Net update in foldn (Entity a)"
                             e            <- readIORef ref
-                            gen          <- readIORef genCounter
                             msg          <- readIORef (netSignalRef state)
-                            let (NetEntityMessage _ ns cs _) = decode msg
-                                e'                           = case ns of
-                                    e'' : _ -> foldr netUpdateEntity e'' . concat $ map snd cs
-                                    _       -> foldr netUpdateEntity e   . concat $ map snd cs
-                            case euid e of
-                                UID uid -> insertNursery uid gen e nursery
+                            let (NetEntityMessage _ _ cs _) = decode msg
+                                e'                          = foldr netUpdateEntity e . concat $ map snd cs
+                            case euid e' of
+                                UID uid -> insertNursery uid 0 e' nursery
                                 New     -> return ()
+                            writeIORef ref e'
                             return $ Change e'
 
                     netUpdateEntity c e = case c of
@@ -138,9 +133,8 @@ instance (Binary a, Eq a) => NecroFoldable [Entity a] where
                 newEntRef        <- newIORef []
                 nid              <- nextStateID state
                 ref              <- newIORef s
-                return (cont scont state genCounter nursery newEntRef nid ref, s, uids)
+                return (cont scont state genCounter nursery newEntRef nid ref, s, IntSet.insert nid uids)
                 where
-                    --Insert in here checks for networking eid and perform network updates, etc
                     cont scont state genCounter nursery newEntRef nid ref eid
                         | eid /= nid  = scont eid >>= \se -> case se of
                             NoChange _ -> return se
@@ -153,23 +147,25 @@ instance (Binary a, Eq a) => NecroFoldable [Entity a] where
                                 return $ Change es
                         | otherwise = do
                             --Network update
-                            --Add time stamp to avoid out of order updates (still need out of order adds and deletes)
+                            putStrLn "Net update in foldn [Entity a]"
                             es            <- readIORef ref
                             gen           <- readIORef genCounter
                             msg           <- readIORef (netSignalRef state)
                             let (NetEntityMessage _ ns csl gsl) = decode msg
-                            cs            <- Hash.fromList csl --compute list length from originator's side
+                            cs            <- Hash.fromList csl
                             gs            <- Hash.fromList $ map (\n -> (netid n, ())) ns ++ gsl
-                            es'           <- filterMapM' (netUpdateEntity cs gs) es
-                            mapM_ (netInsertNursery gen nursery) es'
-                            return $ Change $ ns ++ es'
+                            es'           <- filterMapM' (netUpdateEntity gen nursery cs gs) es
+                            ns'           <- mapM (addNewNetEntities state gen nursery newEntRef) ns 
+                            return $ Change $ ns' ++ es'
+                    
+                    addNewNetEntities state gen nursery newEntRef e = updateEntity state gen nursery newEntRef e{euid = New} >>= \e' -> writeIORef newEntRef [] >> return e' 
 
-                    netUpdateEntity :: Hash.CuckooHashTable (Int, Int) [NetEntityUpdate a] -> Hash.CuckooHashTable (Int, Int) () -> Entity a -> IO (Maybe (Entity a))
-                    netUpdateEntity cs gs e = Hash.lookup gs (netid e) >>= \g -> case g of
+                    netUpdateEntity :: Int -> Nursery a -> Hash.CuckooHashTable (Int, Int) [NetEntityUpdate a] -> Hash.CuckooHashTable (Int, Int) () -> Entity a -> IO (Maybe (Entity a))
+                    netUpdateEntity gen nursery cs gs e = Hash.lookup gs (netid e) >>= \g -> case g of
                         Just _  -> return Nothing
                         Nothing -> Hash.lookup cs (netid e) >>= \mcs -> case mcs of
-                            Nothing  -> return $ Just e
-                            Just cs' -> return $ Just $ foldr netUpdate e cs'
+                            Nothing  -> netInsertNursery e >> return (Just e)
+                            Just cs' -> netInsertNursery e >> return (Just $ foldr netUpdate e cs')
                         where
                             netUpdate c e' = case c of
                                 UpdateEntityData     x -> e'{edata    = x}
@@ -178,9 +174,9 @@ instance (Binary a, Eq a) => NecroFoldable [Entity a] where
                                 UpdateEntityScale    x -> e'{escale   = x}
                                 UpdateEntityModel    x -> e'{model    = x}
                                 UpdateEntityCollider x -> e'{collider = x}
-                    netInsertNursery gen nursery e = case euid e of
-                        UID uid -> insertNursery uid gen e nursery
-                        _       -> return ()
+                            netInsertNursery e' = case euid e' of
+                                UID uid -> insertNursery uid gen e' nursery
+                                _       -> return ()
 
 updateEntity :: SignalState -> Int -> Nursery a -> IORef [Entity a] -> Entity a -> IO (Entity a)
 updateEntity state gen nursery _ e@Entity{euid = UID uid} = do
@@ -213,13 +209,6 @@ updateEntity state gen nursery newEntRef e = do
     writeCam (cameraRef state) (euid e') (camera e') e
     insertNursery uid gen e nursery
     return e'
-
--- type Nursery a = IORef (IntMap.IntMap (Int, Entity a, Entity a))
--- alterNursery :: Int -> Int -> Entity a -> Nursery a -> IO ()
--- alterNursery uid gen e nref = readIORef nref >>= \nursery -> writeIORef nref (IntMap.alter nalter uid nursery)
-    -- where
-        -- nalter Nothing           = Just (gen, e,  e)
-        -- nalter (Just (_, _, e')) = Just (gen, e', e)
 
 type Nursery a = Hash.CuckooHashTable Int (Int, Entity a, Entity a)
 insertNursery :: Int -> Int -> Entity a -> Nursery a -> IO ()
