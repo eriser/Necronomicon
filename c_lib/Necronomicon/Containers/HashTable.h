@@ -8,11 +8,12 @@
 
 #include "../Endian.h"
 #include "../Util.h"
+#include <stdio.h>
 
 // Fast and generic fixed memory hash table using open addressing with linear probing
 // insertion and removal never alter the internal hash table size because the size is fixed.
 // This is not thread safe.
-// Only works with uint32_t and const char* keys
+// Only works with uint32_t and char* keys
 // Open addressing causes a sharp decrease in performance as the load approaches the interal size limit
 // use a max size that is reasonably larger than your predicted load requirement
 // note: the max size will be increased to the next power of two
@@ -55,8 +56,8 @@ static inline uint32_t hash_string(const char* string)
     char c = string[i];
     while (c)
     {
-        hash = FNV1A(string[i], hash);
-        i++;
+        hash = FNV1A(c, hash);
+        c = string[++i];
     }
 
     return hash;
@@ -73,7 +74,7 @@ typedef struct
     void* item;
     hash_table_key_t key_type;
     uint32_t uint_key;
-    const char* string_key;
+    char* string_key;
     uint32_t hash;
 } hash_table_node;
 
@@ -100,6 +101,7 @@ bool hash_table_insert_string_key(hash_table htable, void* item, const char* key
 // Will remove the item from the table, but will not free the item itself.
 // Use free on the item itself after you have called remove if you want to release their memory.
 bool hash_table_remove_uint_key(hash_table htable, void* item, uint32_t key); // returns true if the item was found or false if not found in the table
+// This expects a null terminated string. A copy of the key will be made internally and will be managed in the hash table.
 bool hash_table_remove_string_key(hash_table htable, void* item, const char* key); // returns true if the item was found or false if not found in the table
 
 void* hash_table_lookup_uint_key(hash_table htable, uint32_t key); // will return null if the item was not found in the table

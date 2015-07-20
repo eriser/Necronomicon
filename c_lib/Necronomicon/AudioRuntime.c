@@ -259,8 +259,8 @@ void print_sample_buffer(sample_buffer* buffer)
     if (buffer != NULL)
     {
         printf(
-            "sample_buffer %p { samples = %p, next_sample_buffer = %p, pool_index = %u, num_samples = %u, num_samples_mask = %u }\n",
-            buffer, buffer->samples, buffer->next_sample_buffer, buffer->pool_index, buffer->num_samples, buffer->num_samples_mask);
+            "sample_buffer %p { samples = %p, next_sample_buffer = %p, pool_index = %u, num_samples = %u, num_samples_mask = %u, num_channels: %u }\n",
+            buffer, buffer->samples, buffer->next_sample_buffer, buffer->pool_index, buffer->num_samples, buffer->num_samples_mask, buffer->num_channels);
     }
 
     else
@@ -289,6 +289,7 @@ sample_buffer* acquire_sample_buffer(uint32_t num_samples)
         buffer->pool_index = pool_index;
         buffer->num_samples = pow_two_num_samples;
         buffer->num_samples_mask = pow_two_num_samples - 1;
+        buffer->num_channels = 1;
     }
 
     buffer->next_sample_buffer = NULL;
@@ -302,6 +303,108 @@ void release_sample_buffer(sample_buffer* buffer)
         uint32_t pool_index = buffer->pool_index;
         buffer->next_sample_buffer = sample_buffer_pools[pool_index];
         sample_buffer_pools[pool_index] = buffer;
+    }
+}
+
+///////////////////////////
+// Sample Registry
+///////////////////////////
+
+const int32_t SAMPLE_HASH_TABLE_SIZE = 2048;
+
+hash_table sample_hash_table;
+
+void create_sample_hash_table()
+{
+    sample_hash_table = hash_table_new(SAMPLE_HASH_TABLE_SIZE);
+}
+
+void free_sample_buffer(void* void_sample_buffer)
+{
+    if (void_sample_buffer != NULL)
+    {
+        sample_buffer* buffer = (sample_buffer*) void_sample_buffer;
+        if (buffer->samples != NULL)
+            free(buffer->samples);
+
+        free(buffer);
+    }
+}
+
+void free_sample_hash_table()
+{
+    hash_table_free_with_callback(sample_hash_table, free_sample_buffer);
+}
+
+// expects a null terminated string
+void register_sample_buffer(const char* file_path, sample_buffer* buffer)
+{
+    hash_table_insert_string_key(sample_hash_table, (void*) buffer, file_path);
+}
+
+sample_buffer* retrieve_sample_buffer(const char* file_path)
+{
+    sample_buffer* buffer = hash_table_lookup_string_key(sample_hash_table, file_path);
+    return buffer;
+}
+
+void print_sfinfo(SF_INFO sfinfo)
+{
+    printf("SF_INFO { frames: %u, samplerate: %i, channels: %i, format: %i, sections: %i, seekable: %i }\n",
+        sfinfo.frames,
+        sfinfo.samplerate,
+        sfinfo.channels,
+        sfinfo.format,
+        sfinfo.sections,
+        sfinfo.seekable
+    );
+}
+
+sample_buffer* load_sample_into_buffer(const char* file_path)
+{
+    const int one_buffer = 1;
+    sample_buffer* buffer = calloc(one_buffer, SAMPLE_BUFFER_SIZE);
+
+    SF_INFO sfinfo;
+    memset(&sfinfo, 0, sizeof(sfinfo)); // zero initialize
+
+    SNDFILE* sndfile = sf_open(file_path, SFM_READ, &sfinfo);
+    if (sndfile)
+    {
+        printf("loaded sound file %s\n", file_path);
+        const sf_count_t items = sfinfo.frames * (sf_count_t) sfinfo.channels;
+        buffer->samples = calloc(items, DOUBLE_SIZE);
+        buffer->next_sample_buffer = NULL;
+        buffer->pool_index = 0;
+        buffer->num_samples = items;
+        buffer->num_samples_mask = 0;
+        buffer->num_channels = sfinfo.channels;
+
+        sf_read_double(sndfile, buffer->samples, items);
+        if (sf_close(sndfile) != 0)
+            printf("Error closing sound file %s\n", file_path);
+    }
+
+    else
+    {
+        printf("Error opening sound file %s\n", file_path);
+    }
+
+    return buffer;
+}
+
+void load_and_register_sample(const char* file_path)
+{
+    sample_buffer* buffer = load_sample_into_buffer(file_path);
+    register_sample_buffer(file_path, buffer);
+}
+
+void load_and_register_samples(const char** file_paths, uint32_t num_files)
+{
+    uint32_t i;
+    for(i = 0; i < num_files; ++i)
+    {
+        load_and_register_sample(file_paths[i]);
     }
 }
 
@@ -1205,7 +1308,7 @@ void init_rt_thread()
     ugen_wires_pools = (ugen_wires_pool_node**) calloc(sizeof(ugen_wires_pool_node*), NUM_UGEN_WIRES_POOLS);
 
     initialize_wave_tables();
-    // load_audio_files(); To Do: Add this functionality
+    create_sample_hash_table();
 
     out_bus_buffer_index = 0;
     _necronomicon_current_node = NULL;
@@ -1308,6 +1411,7 @@ void shutdown_rt_thread()
     synth_list = NULL;
     removal_fifo = NULL;
     _necronomicon_buses = NULL;
+    free_sample_hash_table();
     necronomicon_running = false;
 }
 

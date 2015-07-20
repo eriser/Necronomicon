@@ -22,7 +22,8 @@ typedef struct
 void limiter_constructor(ugen* u)
 {
     u->data = (limiter_data*) malloc(sizeof(limiter_data));
-    double lookahead = fmax(1, u->constructor_args[0] * SAMPLE_RATE);
+    double lookahead_seconds = *((double*) u->constructor_args);
+    double lookahead = fmax(1, lookahead_seconds * SAMPLE_RATE);
     limiter_data data = { acquire_sample_buffer(lookahead * 2), lookahead, 0, 0 };
     *((limiter_data*) u->data) = data;
 }

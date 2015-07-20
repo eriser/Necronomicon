@@ -73,7 +73,8 @@ data Resources = Resources
    , meshesRef            :: IORef (Map.Map String LoadedMesh)
    , fontsRef             :: IORef (Map.Map String LoadedFont)
    , postRenderRef        :: IORef (Map.Map String LoadedPostRenderingFX)
-   , matrixUniformPtr     :: Ptr CFloat }
+   , matrixUniformPtr     :: Ptr CFloat
+   , audioSamplesRef      :: IORef [String] }
 
 data CharMetric = CharMetric
   { character             :: Char
@@ -119,6 +120,7 @@ mkResources = Resources
           <*> newIORef Map.empty
           <*> newIORef Map.empty
           <*> mallocBytes (sizeOf (undefined :: CFloat) * 16)
+          <*> newIORef []
 
 ------------------------------
 -- Serialization

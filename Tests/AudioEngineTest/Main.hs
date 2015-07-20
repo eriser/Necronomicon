@@ -69,11 +69,22 @@ lfsawSynth freq = (lfsaw (lag 0.1 freq) 0) * 2 - 1 |> exprange 20 20000 |> sin |
 lfpulseSynth :: UGen -> UGen
 lfpulseSynth freq = (lfpulse (lag 0.1 freq) 0) * 440 + 440 |> sin |> gain 0.2 |> dup |> out 0
 
+slendroFilePath :: FilePath
+slendroFilePath = "samples/Slendro1.wav"
+
+-- HOW TO DEAL WITH MULTIPLE CHANNELS???????????????????????????????????????????
+-- Multichannel expansion?
+-- num channels argument?
+
+slendroSampleSynth :: UGen -> UGen
+slendroSampleSynth rate = playSample slendroFilePath rate |> out 0
+
 main :: IO ()
 main = runSignal soundsig
 
 soundsig :: Signal ()
-soundsig = play (toggle <| isDown keyA) reverbSynth
+soundsig = loadSample slendroFilePath
+        *> play (toggle <| isDown keyA) reverbSynth
         *> play (toggle <| isDown keyB) delaySynthN (mouseX ~> scale 20 10000)  mouseY
         *> play (toggle <| isDown keyC) delaySynthL (mouseX ~> scale 20 10000)  mouseY
         *> play (toggle <| isDown keyD) delaySynthC (mouseX ~> scale 20 10000)  mouseY
@@ -92,4 +103,4 @@ soundsig = play (toggle <| isDown keyA) reverbSynth
         *> play (toggle <| isDown keyQ) pluckSynth (mouseX ~> scale 20 2000) (mouseY ~> linlin 0 1 (-1) 1)
         *> play (toggle <| isDown keyR) lfsawSynth (mouseX ~> scale 0.1 2000)
         *> play (toggle <| isDown keyS) lfpulseSynth (mouseX ~> scale 0.1 2000)
-
+        *> play (toggle <| isDown keyT) slendroSampleSynth (mouseX ~> scale 0.0001 2)

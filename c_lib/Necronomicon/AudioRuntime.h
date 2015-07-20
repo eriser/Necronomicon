@@ -96,7 +96,7 @@ struct ugen
     void (*constructor)(ugen* u);
     void (*deconstructor)(ugen* u);
     void* data; // ugen defined data structure
-    double* constructor_args; // arguments passed in for use during construction
+    void* constructor_args; // arguments passed in for use during construction
     uint32_t* inputs; // indexes to the parent synth's ugen wire buffer
     uint32_t* outputs; // indexes to the parent synth's ugen wire buffer
     CalcRate calc_rate;
@@ -191,6 +191,7 @@ struct sample_buffer
     uint32_t pool_index;
     uint32_t num_samples;
     uint32_t num_samples_mask; // used with power of 2 sized buffers
+    uint32_t num_channels;
 };
 
 extern const uint32_t SAMPLE_BUFFER_SIZE;
@@ -198,6 +199,7 @@ extern const uint32_t SAMPLE_BUFFER_POINTER_SIZE;
 
 sample_buffer* acquire_sample_buffer(uint32_t num_samples);
 void release_sample_buffer(sample_buffer* buffer);
+void print_sample_buffer(sample_buffer* buffer);
 
 /////////////////
 // Message FIFO
@@ -332,6 +334,14 @@ extern doubly_linked_list synth_list;
 doubly_linked_list doubly_linked_list_push(doubly_linked_list list, synth_node* node);
 doubly_linked_list doubly_linked_list_remove(doubly_linked_list list, synth_node* node);
 void doubly_linked_list_free(doubly_linked_list list);
+
+///////////////////////////
+// Sample Registry
+///////////////////////////
+
+sample_buffer* retrieve_sample_buffer(const char* file_path);
+void load_and_register_sample(const char* file_path);
+void load_and_register_samples(const char** file_paths, uint32_t num_files);
 
 ///////////////////////////
 // Misc

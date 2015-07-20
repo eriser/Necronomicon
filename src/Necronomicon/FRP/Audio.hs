@@ -5,6 +5,8 @@ module Necronomicon.FRP.Audio
     , playBeatPattern
     , tempo
     , synthDef
+    , loadSample
+    , loadSamples
     ) where
 
 ---------------------------------------------
@@ -48,6 +50,15 @@ synthDef name synth = Signal $ \state -> do
     _ <- runNecroState (compileSynthDef name synth) (necroVars state)
     print $ "Compiling synthDef: " ++ name
     return (\_ -> return $ NoChange (), (), IntSet.empty)
+
+sigNecro :: Necronomicon a -> Signal a
+sigNecro f = Signal $ \state -> runNecroState f (necroVars state) >>= \(a, _) -> return (\_ -> return $ NoChange a, a, IntSet.empty)
+
+loadSample :: FilePath -> Signal ()
+loadSample resourceFilePath = sigNecro $ sendloadSample resourceFilePath
+
+loadSamples :: [FilePath] -> Signal ()
+loadSamples resourceFilePaths = sigNecro $ sendloadSamples resourceFilePaths
 
 ---------------------------------------------
 -- play

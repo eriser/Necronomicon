@@ -78,9 +78,9 @@ void env_constructor(ugen* u)
     env_struct* data        = malloc(sizeof(env_struct));
     data->time              = 0;
     data->index             = -1;
-    data->numValues         = u->constructor_args[0];
+    data->numValues         = ((double*) u->constructor_args)[0];
     data->maxIndex          = fmax(0, data->numValues - 1);
-    data->numDurations      = u->constructor_args[1];
+    data->numDurations      = ((double*) u->constructor_args)[1];
     data->curTotalDuration  = -1;
     data->nextTotalDuration = -1;
     data->recipDuration     = 1;

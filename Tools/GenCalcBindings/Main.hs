@@ -34,7 +34,7 @@ generateUGenConstructor ugenName dataStructName = "void " ++ ugenNameToConstruct
         constructorContents = lineOne ++ lineTwo ++ lineThree
         lineOne   = "    u->data = malloc(sizeof(" ++ dataStructName ++ "));\n"
         lineTwo   = "    " ++ dataStructName ++ " data = { 0 };\n"
-        lineThree = "    ((" ++ dataStructName ++ "*) u->data) = data;\n"
+        lineThree = "    *((" ++ dataStructName ++ "*) u->data) = data;\n"
 
 generateUGenDeconstructor :: String -> String
 generateUGenDeconstructor ugenName = "void " ++ ugenNameToDeconstructorName ugenName ++ "(ugen* u)\n{\n    free(u->data);\n}"

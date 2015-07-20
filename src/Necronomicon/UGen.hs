@@ -9,6 +9,7 @@ import Foreign.C
 import Control.Monad.State.Lazy
 import Necronomicon.Runtime
 import Necronomicon.Utility
+import Paths_Necronomicon
 import qualified Data.Map as M
 import qualified Data.Set as S
 import Control.Arrow
@@ -36,6 +37,7 @@ data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Env Double 
               | Clip | SoftClip | Poly3 | TanHDist | SinDist | Wrap | DelayN Double | DelayL Double | DelayC Double | CombN Double | CombL Double | CombC Double
               | Negate | Crush | Decimate | FreeVerb | Pluck Double | WhiteNoise | PinkNoise | BrownNoise |Abs | Signum | Pow | Exp | Log | Cos | ASin | ACos
               | UMax | UMin | ATan | LogBase | Sqrt | Tan | SinH | CosH | TanH | ASinH | ATanH | ACosH | TimeMicros | TimeSecs | USeq | Limiter Double | Pan
+              | PlaySample FilePath
               deriving (Show, Eq, Ord)
 
 data UGenRate = ControlRate | AudioRate deriving (Show, Enum, Eq, Ord)
@@ -1196,6 +1198,18 @@ foreign import ccall "&time_secs_calc" timeSecsCalc :: CUGenFunc
 timeSecs :: UGen
 timeSecs = UGen [UGenFunc TimeSecs timeSecsCalc nullConstructor nullDeconstructor []]
 
+foreign import ccall "&playSample_constructor" playSampleConstructor :: CUGenFunc
+foreign import ccall "&playSample_deconstructor" playSampleDeconstructor :: CUGenFunc
+foreign import ccall "&playSample_k_calc" playSampleKCalc :: CUGenFunc
+foreign import ccall "&playSample_a_calc" playSampleACalc :: CUGenFunc
+
+playSample :: FilePath -> UGen -> UGen
+playSample resourceFilePath rate = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen (PlaySample resourceFilePath) playSampleACalc playSampleConstructor playSampleDeconstructor [rate]
+    where
+        cfuncs = [playSampleKCalc, playSampleACalc]
+
+-- oneShotSample
+
 ----------------------------------------------------
 -- loopSynth :: UGen -> UGen -> UGen
 -- loopSynth freq freq2 = feedback feed |> gain 0.3 >>> out 0
@@ -1465,7 +1479,7 @@ compileUGenArgs (UGenFunc _ _ _ _ inputs) = mapM (compileUGenGraphBranch) inputs
 compileUGenArgs (MultiOutUGenFunc _ _ ugenChannelFunc) = compileUGenArgs ugenChannelFunc
 compileUGenArgs (UGenNum _) = return []
 
-compileUGenWithConstructorArgs :: UGenChannel -> Ptr CDouble -> [CUInt] -> String -> Compiled CUInt
+compileUGenWithConstructorArgs :: UGenChannel -> Ptr () -> [CUInt] -> String -> Compiled CUInt
 compileUGenWithConstructorArgs num@(UGenNum _) _ args key = compileUGen num args key -- This should not be used, but definition here to satisy warning
 compileUGenWithConstructorArgs (MultiOutUGenFunc (MultiOutNumChannels numUGenChannels) (MultiOutChannelNumber channelNumber) ugenChannelFunc) conArgs args _ = do
     inputs <- liftIO (newArray args)
@@ -1503,27 +1517,31 @@ compileUGen (UGenNum d) _ key = do
     return wire
 compileUGen (UGenFunc USeq _ _ _ _) args _ = return $ last args -- Return the last argument of USeq as the output of that ugen
 compileUGen ugen@(UGenFunc (DelayN maxDelayTime) _ _ _ _) args key = liftIO (new $ CDouble maxDelayTime) >>= \maxDelayTimePtr ->
-    compileUGenWithConstructorArgs ugen maxDelayTimePtr args key
+    compileUGenWithConstructorArgs ugen (castPtr maxDelayTimePtr) args key
 compileUGen ugen@(UGenFunc (DelayL maxDelayTime) _ _ _ _) args key = liftIO (new $ CDouble maxDelayTime) >>= \maxDelayTimePtr ->
-    compileUGenWithConstructorArgs ugen maxDelayTimePtr args key
+    compileUGenWithConstructorArgs ugen (castPtr maxDelayTimePtr) args key
 compileUGen ugen@(UGenFunc (DelayC maxDelayTime) _ _ _ _) args key = liftIO (new $ CDouble maxDelayTime) >>= \maxDelayTimePtr ->
-    compileUGenWithConstructorArgs ugen maxDelayTimePtr args key
+    compileUGenWithConstructorArgs ugen (castPtr maxDelayTimePtr) args key
 compileUGen ugen@(UGenFunc (CombN maxDelayTime) _ _ _ _) args key = liftIO (new $ CDouble maxDelayTime) >>= \maxDelayTimePtr ->
-    compileUGenWithConstructorArgs ugen maxDelayTimePtr args key
+    compileUGenWithConstructorArgs ugen (castPtr maxDelayTimePtr) args key
 compileUGen ugen@(UGenFunc (CombL maxDelayTime) _ _ _ _) args key = liftIO (new $ CDouble maxDelayTime) >>= \maxDelayTimePtr ->
-    compileUGenWithConstructorArgs ugen maxDelayTimePtr args key
+    compileUGenWithConstructorArgs ugen (castPtr maxDelayTimePtr) args key
 compileUGen ugen@(UGenFunc (CombC maxDelayTime) _ _ _ _) args key = liftIO (new $ CDouble maxDelayTime) >>= \maxDelayTimePtr ->
-    compileUGenWithConstructorArgs ugen maxDelayTimePtr args key
+    compileUGenWithConstructorArgs ugen (castPtr maxDelayTimePtr) args key
 compileUGen ugen@(UGenFunc (Pluck minFreq) _ _ _ _) args key = liftIO (new $ CDouble minFreq) >>= \minFreqPtr ->
-    compileUGenWithConstructorArgs ugen minFreqPtr args key
+    compileUGenWithConstructorArgs ugen (castPtr minFreqPtr) args key
 compileUGen ugen@(UGenFunc (Env numValues numDurations) _ _ _ _) args key = liftIO (newArray [CDouble numValues,CDouble numDurations]) >>= \numDurationsPtr ->
-    compileUGenWithConstructorArgs ugen numDurationsPtr args key
+    compileUGenWithConstructorArgs ugen (castPtr numDurationsPtr) args key
 compileUGen ugen@(UGenFunc (Env2 numValues numDurations) _ _ _ _) args key = liftIO (newArray [CDouble numValues,CDouble numDurations]) >>= \numDurationsPtr ->
-    compileUGenWithConstructorArgs ugen numDurationsPtr args key
+    compileUGenWithConstructorArgs ugen (castPtr numDurationsPtr) args key
 compileUGen ugen@(UGenFunc (Random seed rmin rmax) _ _ _ _) args key = liftIO (newArray [CDouble seed,CDouble rmin,CDouble rmax]) >>= \randValuesPtr ->
-    compileUGenWithConstructorArgs ugen randValuesPtr args key
+    compileUGenWithConstructorArgs ugen (castPtr randValuesPtr) args key
 compileUGen ugen@(UGenFunc (Limiter lookahead) _ _ _ _) args key = liftIO (new $ CDouble lookahead) >>= \lookaheadPtr ->
-    compileUGenWithConstructorArgs ugen lookaheadPtr args key
+    compileUGenWithConstructorArgs ugen (castPtr lookaheadPtr) args key
+compileUGen ugen@(UGenFunc (PlaySample resourceFilePath) _ _ _ _) args key = do
+    fullFilePath <- liftIO $ getDataFileName resourceFilePath
+    cFilePath <- liftIO $ newCString fullFilePath
+    compileUGenWithConstructorArgs ugen (castPtr cFilePath) args key
 compileUGen ugen args key = compileUGenWithConstructorArgs ugen nullPtr args key
 
 

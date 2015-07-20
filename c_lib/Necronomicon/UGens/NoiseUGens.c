@@ -37,9 +37,10 @@ void rand_deconstructor(ugen* u)
 
 void rand_range_constructor(ugen* u)
 {
-    double   seed  = u->constructor_args[0];
-    double   min   = u->constructor_args[1];
-    double   max   = u->constructor_args[2];
+    double* args   = (double*) u->constructor_args;
+    double   seed  = args[0];
+    double   min   = args[1];
+    double   max   = args[2];
     double   range = max - min;
     double   in    = RAND_ONE();
     double   value = (in * range) + min;

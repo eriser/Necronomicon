@@ -33,6 +33,8 @@ data RuntimeMessage = StartSynth SynthDef [CDouble] NodeID JackTime
                     | SetSynthArgs Synth [CDouble]
                     | StopSynth NodeID
                     | CollectSynthDef SynthDef
+                    | LoadSample FilePath
+                    | LoadSamples [FilePath]
                     | ShutdownNrt
                     deriving (Show)
 
@@ -349,6 +351,13 @@ processMessages messages =  mapM_ (processMessage) messages
             SetSynthArgs synth args -> processSetSynthArgs synth args
             StopSynth nodeID -> liftIO $ stopSynthInRtRuntime nodeID
             CollectSynthDef synthDef -> trace ("CollectSynthDef: " ++ show synthDef) $ addSynthDef synthDef
+            LoadSample filePath -> liftIO $ withCString filePath prloadAndRegisterSample
+            LoadSamples filePaths -> do
+                filePathsPtrs <- mapM (liftIO . newCString) filePaths :: Necronomicon [CString]
+                filePathsArrayPtr <- liftIO $ newArray filePathsPtrs :: Necronomicon (Ptr CString)
+                liftIO $ prloadAndRegisterSamples filePathsArrayPtr $ fromIntegral $ length filePaths
+                liftIO $ free filePathsArrayPtr
+                mapM_ (liftIO . free) filePathsPtrs
             ShutdownNrt -> necronomiconEndSequence
 
 startNrtRuntime :: Necronomicon ()
@@ -432,7 +441,9 @@ pmessageStopPattern :: String -> Necronomicon ()
 pmessageStopPattern name = getPatternQueue >>= \(pqueue, pdict) -> setPatternQueue (pqueue, M.delete name pdict)
 
 printNoArgMessage :: String -> Necronomicon ()
-printNoArgMessage name = nPrint ("Failed setting argument for pattern " ++ name ++ ". You cannot set the argument of a pattern with no arguments.")
+printNoArgMessage name = nPrint msg
+    where
+        msg = "Failed setting argument for pattern " ++ name ++ ". You cannot set the argument of a pattern with no arguments."
 
 printSetPatternNotFound :: String -> Necronomicon ()
 printSetPatternNotFound name = nPrint ("Failed setting argument for pattern " ++ name ++ ". Pattern not found.")
@@ -557,6 +568,12 @@ addSynthDef :: SynthDef -> Necronomicon ()
 addSynthDef synthDef@(SynthDef name _ _) = getSynthDefsTVar >>= \synthDefsTVar ->
     nAtomically (readTVar synthDefsTVar >>= \synthDefs -> writeTVar synthDefsTVar (M.insert name synthDef synthDefs))
 
+sendloadSample :: FilePath -> Necronomicon ()
+sendloadSample resourceFilePath = liftIO (getDataFileName resourceFilePath) >>= \fullFilePath -> sendMessage $ LoadSample fullFilePath
+
+sendloadSamples :: [FilePath] -> Necronomicon ()
+sendloadSamples resourceFilePaths = mapM (liftIO . getDataFileName) resourceFilePaths >>= \fullFilePaths -> sendMessage $ LoadSamples fullFilePaths
+
 necronomiconEndSequence :: Necronomicon ()
 necronomiconEndSequence = do
     setRunning NecroQuitting
@@ -601,17 +618,17 @@ type CUGenConstructor = FunPtr (Ptr CUGen -> ())
 type CUGenDeconstructor = FunPtr (Ptr CUGen -> ())
 type CUGenCalcRate = Int
 type CUGenPadding = Int
-data CUGen = CUGen CUGenFunc CUGenConstructor CUGenDeconstructor (Ptr ()) (Ptr CDouble) (Ptr CUInt) (Ptr CUInt) CUGenCalcRate CUGenPadding deriving (Show)
+data CUGen = CUGen CUGenFunc CUGenConstructor CUGenDeconstructor (Ptr ()) (Ptr ()) (Ptr CUInt) (Ptr CUInt) CUGenCalcRate CUGenPadding deriving (Show)
 
 instance Storable CUGen where
     sizeOf _ = sizeOf (undefined :: CDouble) * 8
     alignment _ = alignment (undefined :: CDouble)
     peek ptr = do
         calc  <- peekByteOff ptr 0  :: IO CUGenFunc
-        cons  <- peekByteOff ptr 8  :: IO CUGenFunc
-        decon <- peekByteOff ptr 16 :: IO CUGenFunc
+        cons  <- peekByteOff ptr 8  :: IO CUGenConstructor
+        decon <- peekByteOff ptr 16 :: IO CUGenDeconstructor
         dataS <- peekByteOff ptr 24 :: IO (Ptr ())
-        cArgs <- peekByteOff ptr 32 :: IO (Ptr CDouble)
+        cArgs <- peekByteOff ptr 32 :: IO (Ptr ())
         inpts <- peekByteOff ptr 40 :: IO (Ptr CUInt)
         outs  <- peekByteOff ptr 48 :: IO (Ptr CUInt)
         crate <- peekByteOff ptr 56 :: IO Int
@@ -667,7 +684,7 @@ instance Storable CSynthDef where
     poke ptr (CSynthDef ugenGrph grphPlNd wireBufs wirsPlNd prevNode nextNode sampTime nodeKey nodeHash tableInd numUGens numWires prAlvSts aliveSts) = do
         pokeByteOff ptr 0  ugenGrph
         pokeByteOff ptr 8  grphPlNd
-        pokeByteOff ptr 16  wireBufs
+        pokeByteOff ptr 16 wireBufs
         pokeByteOff ptr 24 wirsPlNd
         pokeByteOff ptr 32 prevNode
         pokeByteOff ptr 40 nextNode
@@ -682,6 +699,34 @@ instance Storable CSynthDef where
 
 type CSynth = CSynthDef -- A running C Synth is structurally identical to a C SynthDef
 
+data CSampleBuffer = CSampleBuffer {
+    csampleBufferSamples :: Ptr CDouble,
+    csampleBufferNextSampleBuffer :: Ptr CSampleBuffer,
+    csampleBufferPoolIndex :: CUInt,
+    csampleBufferNumSamples :: CUInt,
+    csampleBufferNumSamplesMask :: CUInt,
+    csampleBufferNumChannels :: CUInt
+} deriving (Show)
+
+instance Storable CSampleBuffer where
+    sizeOf _ = sizeOf (undefined :: CDouble) * 4
+    alignment _ = alignment (undefined :: CDouble)
+    peek ptr = do
+        samples <- peekByteOff ptr 0  :: IO (Ptr CDouble)
+        nextBuf <- peekByteOff ptr 8  :: IO (Ptr CSampleBuffer)
+        poolInd <- peekByteOff ptr 16 :: IO CUInt
+        numSmps <- peekByteOff ptr 20 :: IO CUInt
+        smpsMsk <- peekByteOff ptr 24 :: IO CUInt
+        numChan <- peekByteOff ptr 28 :: IO CUInt
+        return (CSampleBuffer samples nextBuf poolInd numSmps smpsMsk numChan)
+    poke ptr (CSampleBuffer samples nextBuf poolInd numSmps smpsMsk numChan) = do
+        pokeByteOff ptr 0  samples
+        pokeByteOff ptr 8  nextBuf
+        pokeByteOff ptr 16 poolInd
+        pokeByteOff ptr 20 numSmps
+        pokeByteOff ptr 24 smpsMsk
+        pokeByteOff ptr 28 numChan
+
 foreign import ccall "start_rt_runtime" startRtRuntime :: CString -> IO ()
 foreign import ccall "handle_messages_in_nrt_fifo" handleNrtMessages :: IO ()
 foreign import ccall "shutdown_necronomicon" shutdownNecronomiconCRuntime :: IO ()
@@ -693,6 +738,9 @@ foreign import ccall "get_running" getRtRunning :: IO Int
 foreign import ccall "free_synth_definition" freeCSynthDef :: Ptr CSynthDef -> IO ()
 foreign import ccall "jack_get_time" getJackTime :: IO JackTime
 foreign import ccall "get_block_size" getJackBlockSize :: IO CUInt
+foreign import ccall "load_and_register_sample" prloadAndRegisterSample :: CString -> IO ()
+foreign import ccall "load_and_register_samples" prloadAndRegisterSamples :: Ptr CString -> CInt -> IO ()
+foreign import ccall "retrieve_sample_buffer" prRetrieveSampleBuffer :: CString -> IO (Ptr CSampleBuffer)
 
 nPrint :: (Show a) => a -> Necronomicon ()
 nPrint = liftIO . print

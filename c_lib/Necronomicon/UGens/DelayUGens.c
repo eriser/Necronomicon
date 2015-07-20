@@ -15,7 +15,8 @@ const uint32_t DELAY_DATA_SIZE = sizeof(delay_data);
 void delayN_constructor(ugen* u)
 {
     u->data = malloc(DELAY_DATA_SIZE);
-    double max_delay_time = fmax(1, u->constructor_args[0] * SAMPLE_RATE);
+    double max_delay_seconds = *((double*) u->constructor_args);
+    double max_delay_time = fmax(1, max_delay_seconds * SAMPLE_RATE);
     delay_data data = { acquire_sample_buffer(max_delay_time), max_delay_time, 0 };
     *((delay_data*) u->data) = data;
 }
@@ -25,7 +26,8 @@ const uint32_t MAX_DELAYL_OFFSET = 1;
 void delayL_constructor(ugen* u)
 {
     u->data = malloc(DELAY_DATA_SIZE);
-    double max_delay_time = fmax(2, u->constructor_args[0] * SAMPLE_RATE);
+    double max_delay_seconds = *((double*) u->constructor_args);
+    double max_delay_time = fmax(2, max_delay_seconds * SAMPLE_RATE);
     delay_data data = { acquire_sample_buffer(max_delay_time + MAX_DELAYL_OFFSET), fmax(0, max_delay_time), 0 };
     *((delay_data*) u->data) = data;
 }
@@ -35,7 +37,8 @@ const uint32_t MAX_DELAYC_OFFSET = 2;
 void delayC_constructor(ugen* u)
 {
     u->data = malloc(DELAY_DATA_SIZE);
-    double max_delay_time = fmax(3, u->constructor_args[0] * SAMPLE_RATE);
+    double max_delay_seconds = *((double*) u->constructor_args);
+    double max_delay_time = fmax(3, max_delay_seconds * SAMPLE_RATE);
     delay_data data = { acquire_sample_buffer(max_delay_time + MAX_DELAYC_OFFSET), fmax(0, max_delay_time), 0 };
     *((delay_data*) u->data) = data;
 }
@@ -735,7 +738,7 @@ typedef struct
 void pluck_constructor(ugen* u)
 {
     u->data = malloc(sizeof(pluck_data));
-    const double min_freq = fmax(0.001, u->constructor_args[0]);
+    const double min_freq = fmax(0.001, *((double*) u->constructor_args));
     pluck_data data = { acquire_sample_buffer(SAMPLE_RATE / min_freq), min_freq, 0.0, 0.0, 0L, 0 };
     *((pluck_data*) u->data) = data;
 }
