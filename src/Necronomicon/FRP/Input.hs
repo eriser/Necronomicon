@@ -99,18 +99,16 @@ mousePos = inputSignal 201 mousePosRef
 mouseDelta :: Signal (Double, Double)
 mouseDelta = Signal $ \state -> do
     GLFW.setCursorInputMode     (context state) GLFW.CursorInputMode'Disabled
-    let dimref = dimensionsRef state
-        mref   = mousePosRef   state
+    let mref   = mousePosRef   state
     ref       <- newIORef ((0, 0), (0, 0))
-    return (cont ref dimref mref, (0, 0), IntSet.singleton 201)
+    return (cont ref mref, (0, 0), IntSet.singleton 201)
     where
-        cont ref dimref mref eid
+        cont ref mref eid
             | eid /= 201 = readIORef ref >>= return . NoChange . snd
             | otherwise  =  do
                 (mx, my) <- readIORef mref
-                (ww, wh) <- readIORef dimref
                 (px, py) <- fst <~ readIORef ref
-                let delta = ((mx - px) / ww, (my - py) / wh)
+                let delta = ((mx - px), (my - py))
                 writeIORef ref ((mx, my), delta)
                 return $ Change delta
 

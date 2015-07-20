@@ -10,7 +10,7 @@ import Network.Socket hiding (send,recv,recvFrom,sendTo)
 import Control.Exception
 import Control.Monad (forever)
 import qualified Data.Map.Strict as Map
-import Data.Binary 
+import Data.Binary
 import Data.Binary.Get
 -- import Necronomicon.Networking.User
 import Necronomicon.Networking.Message
@@ -85,7 +85,8 @@ keepAlive server = forever $ do
     users <- atomically $ readTVar $ serverUsers server
     print users
 
-    broadcast (Nothing, encode $ UserList $ Prelude.map (\(_,u) -> userName u) (Map.toList users)) server
+    -- broadcast (Nothing, encode $ UserList $ Prelude.map (\(_,u) -> userName u) (Map.toList users)) server
+    broadcast (Nothing, encode Alive) server
 
     currentTime <- getCurrentTime
     let users' = Map.filter (\u -> (currentTime - userAliveTime u < 6)) users
@@ -174,14 +175,14 @@ messageProcessor server _ = forever $ do
     users         <- atomically $ readTVar  $ serverUsers server
     case Map.lookup sa users of
         Nothing -> print ("Can't find a user with this ip address: " ++ show sa)
-        Just  u -> if runGet ((get :: Get Word8) >>= return . (/=3)) nmessage 
+        Just  u -> if runGet ((get :: Get Word8) >>= return . (/=3)) nmessage
             then parseMessage nmessage (decode nmessage) u server
             else broadcast (Just $ userAddress u, nmessage) server
 ------------------------------
 --Parse Messages
 ------------------------------
 parseMessage :: B.ByteString -> NetMessage -> User -> Server -> IO()
-parseMessage m (Login n) user server = do
+parseMessage m (Login _ n) user server = do
     putStrLn $ show (userName user) ++ " logged in."
     t <- getCurrentTime
     let user' = User (userSocket user) (userAddress user) (userStopVar user) n (userId user) t
@@ -191,7 +192,7 @@ parseMessage m (Login n) user server = do
     print $ "User logged in: " ++ show (userName user')
     print $ users
 
-parseMessage m (Logout _) user server = do
+parseMessage m (Logout _ _) user server = do
     putStrLn $ show (userName user) ++ " logged out."
     close      $ userSocket user
     atomically $ putTMVar (userStopVar user) ()
@@ -226,10 +227,10 @@ parseMessage m Alive user server = do
 --         putStrLn $  "Removing NetSignal: " ++ show uid
 --         putStrLn ""
 
-parseMessage m (UpdateNetSignal uid _) user server = do
-    putStrLn $ "Updating net signal: " ++ show uid
-    -- atomically $ readTVar (serverNetSignals server) >>= \sigs -> writeTVar (serverNetSignals server) (IntMap.insert uid netVal sigs)
-    broadcast (Just $ userAddress user,m) server
+-- parseMessage m (UpdateNetSignal uid _) user server = do
+--     putStrLn $ "Updating net signal: " ++ show uid
+--     -- atomically $ readTVar (serverNetSignals server) >>= \sigs -> writeTVar (serverNetSignals server) (IntMap.insert uid netVal sigs)
+--     broadcast (Just $ userAddress user,m) server
 
 parseMessage m (Chat name msg) _ server = do
     putStrLn ("Chat - " ++ show name ++ ": " ++ show msg)
@@ -252,14 +253,6 @@ parseMessage _ _ _ _                  = putStrLn "Received unused message protoc
 -- flush server = do
 --     atomically $ writeTVar (serverNetSignals server) IntMap.empty
 --     broadcast  (Nothing, encode $ SyncNetSignals IntMap.empty) server
-
-{- TO DO: Remove these???????????????????????????????????
-addUser :: User -> Server -> IO()
-addUser user server = atomically $ readTVar (serverUsers server) >>= \users -> writeTVar (serverUsers server) (Map.insert (userAddress user) user users)
-
-removeUser :: User -> Server -> IO()
-removeUser user server = atomically $ readTVar (serverUsers server) >>= \users -> writeTVar (serverUsers server) (Map.delete (userAddress user) users)
--}
 
 -- sendUserList :: Server -> IO ()
 -- sendUserList server = do

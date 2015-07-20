@@ -17,7 +17,7 @@ initWindow :: (Int, Int) -> Bool -> IO (Maybe GLFW.Window)
 initWindow (width, height) isFullScreen = GLFW.init >>= \initSuccessful -> if initSuccessful then mkWindow else return Nothing
     where
         mkWindow = do
-            w <- if isFullScreen
+            w <- if isFullScreen || (width == 1920 && height == 1080)
                 then GLFW.getPrimaryMonitor >>= \fullScreenOnMain -> GLFW.createWindow width height "Necronomicon" fullScreenOnMain Nothing
                 else GLFW.createWindow width height "Necronomicon" Nothing Nothing
             GLFW.makeContextCurrent w

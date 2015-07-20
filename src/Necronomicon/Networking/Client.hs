@@ -9,8 +9,8 @@ import Necronomicon.FRP.Types
 import Control.Concurrent.STM
 import Control.Exception
 import Control.Concurrent                     (forkIO,threadDelay)
-import Data.Binary                            
-import Data.Binary.Get 
+import Data.Binary
+import Data.Binary.Get
 import Network.Socket                  hiding (send,recv,recvFrom,sendTo)
 -- import qualified Data.ByteString.Char8 as C   (unpack,pack)
 import qualified Data.ByteString.Lazy  as B
@@ -61,9 +61,9 @@ startup client serverIPAddress sigstate = do
 
 sendLoginMessage :: Client -> IO ()
 sendLoginMessage client = do
-    putStrLn $ "Logging in as " ++ show (clientUserName client) 
+    putStrLn $ "Logging in as " ++ show (clientUserName client)
     threadDelay 1000000
-    atomically $ writeTChan (clientOutBox client) $ Login $ clientUserName client
+    atomically $ writeTChan (clientOutBox client) $ encode $ Login (clientID client) (clientUserName client)
 
 connectionLoop :: Client -> Socket -> SockAddr -> IO ()
 connectionLoop client nsocket serverAddr = Control.Exception.catch tryConnect onFailure
@@ -82,8 +82,8 @@ connectionLoop client nsocket serverAddr = Control.Exception.catch tryConnect on
 sender :: Client -> Socket -> IO()
 sender client sock = executeIfConnected client (readTChan $ clientOutBox client) >>= \maybeMessage -> case maybeMessage of
     Nothing                      -> putStrLn "Shutting down sender"
-    Just (UpdateNetSignal _ msg) -> Control.Exception.catch (sendWithLength sock msg) printError >> sender client sock
-    Just msg                     -> Control.Exception.catch (sendWithLength sock $ encode msg) printError >> sender client sock
+    -- Just (UpdateNetSignal _ msg) -> Control.Exception.catch (sendWithLength sock msg) printError >> sender client sock
+    Just msg                     -> Control.Exception.catch (sendWithLength sock msg) printError >> sender client sock
 
 --put into disconnect mode if too much time has passed
 aliveLoop :: Client -> Socket -> IO ()
@@ -101,7 +101,7 @@ aliveLoop client sock = getCurrentTime >>= \t -> executeIfConnected client (send
                 atomically $ writeTVar (clientRunStatus client) Disconnected
                 sClose sock
     where
-        sendAliveMessage _ = writeTChan (clientOutBox client) Alive
+        sendAliveMessage _ = writeTChan (clientOutBox client) $ encode Alive
 
 --Should this shutdown or keep up the loop???
 --Need alive loop to handle weird in between states
@@ -159,7 +159,7 @@ statusLoop client sock serverIPAddress sigstate status = do
             putStrLn "Quitting..."
             atomically $ writeTVar  (clientRunStatus client) Quitting
             putStrLn "Sending quit message to server..."
-            Control.Exception.catch (sendWithLength sock $ encode $ Logout (clientUserName client)) printError
+            Control.Exception.catch (sendWithLength sock $ encode $ Logout (clientID client) (clientUserName client)) printError
             putStrLn "Closing socket..."
             close sock
             putStrLn "Done quitting..."
@@ -191,14 +191,14 @@ parseMessage Alive client _ = do
     currentTime  <- getCurrentTime
     atomically $ writeTVar (clientAliveTime client) currentTime
 
-parseMessage (Login u) _ sigstate = do
+parseMessage (Login uid u) _ sigstate = do
     putStrLn $ "User: " ++ show u ++ " logged in."
-    atomically $ writeTChan (signalsInbox sigstate) $ NetUserEvent u True
+    atomically $ writeTChan (signalsInbox sigstate) $ NetUserEvent uid u True
     putStrLn $ "User logged in: " ++ u
 
-parseMessage (Logout u) _ sigstate = do
+parseMessage (Logout uid u) _ sigstate = do
     putStrLn $ "User: " ++ show u ++ " logged out."
-    atomically $ writeTChan (signalsInbox sigstate) $ NetUserEvent u False
+    atomically $ writeTChan (signalsInbox sigstate) $ NetUserEvent uid u False
     putStrLn $  "User logged out: " ++ u
 
 -- parseMessage (AddNetSignal uid netVal) _ sigstate = do
@@ -206,14 +206,14 @@ parseMessage (Logout u) _ sigstate = do
     -- atomically $ readTVar (netSignalsBuffer sigstate) >>= writeTVar (netSignalsBuffer sigstate) . ((uid,netVal) :)
     -- putStrLn $ "Adding NetSignal: " ++ show (uid,netVal)
 
-parseMessage (UpdateNetSignal uid netval) _ sigstate = do
-    putStrLn $ "Updating net signal " ++ show uid
-    atomically $ writeTChan (signalsInbox sigstate) $ NetSignalEvent uid netval --Need to assign user ids!
-    -- need new system for this
-    -- sendToGlobalDispatch globalDispatch uid $ netValToDyn netVal
-    -- atomically $ readTVar (netSignals client) >>= \sigs -> writeTVar (netSignals client) (IntMap.insert uid (Change netVal) sigs)
-    -- atomically $ readTVar (netSignalsBuffer sigstate) >>= writeTVar (netSignalsBuffer sigstate) . ((uid,netVal) :)
-    -- putStrLn $ "Setting NetSignal : " ++ show (uid,netVal)
+-- parseMessage (UpdateNetSignal uid netval) _ sigstate = do
+--     putStrLn $ "Updating net signal " ++ show uid
+--     atomically $ writeTChan (signalsInbox sigstate) $ NetSignalEvent uid netval --Need to assign user ids!
+--     -- need new system for this
+--     -- sendToGlobalDispatch globalDispatch uid $ netValToDyn netVal
+--     -- atomically $ readTVar (netSignals client) >>= \sigs -> writeTVar (netSignals client) (IntMap.insert uid (Change netVal) sigs)
+--     -- atomically $ readTVar (netSignalsBuffer sigstate) >>= writeTVar (netSignalsBuffer sigstate) . ((uid,netVal) :)
+--     -- putStrLn $ "Setting NetSignal : " ++ show (uid,netVal)
 
 --Is sync necessary if we are using TCP?
 --Is this even necessary
@@ -261,10 +261,10 @@ printError e = print e
 -----------------------------
 
 sendChatMessage :: String -> Client -> IO ()
-sendChatMessage chat client = atomically $ writeTChan (clientOutBox client) $ Chat (clientUserName client) chat
+sendChatMessage chat client = atomically $ writeTChan (clientOutBox client) $ encode $ Chat (clientUserName client) chat
 
 sendUpdateNetSignal :: Client -> B.ByteString -> IO ()
-sendUpdateNetSignal client v = atomically $ writeTChan (clientOutBox client) $ UpdateNetSignal 0 v
+sendUpdateNetSignal client v = atomically $ writeTChan (clientOutBox client) v
     -- atomically $ readTVar (netSignals client) >>= writeTVar (netSignals client) . IntMap.insert uid v
 
 -- sendAddNetSignal :: Client -> (Int, B.ByteString) -> IO ()

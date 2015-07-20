@@ -23,7 +23,7 @@ import qualified Graphics.UI.GLFW                  as GLFW
 ----------------------------------
 
 runSignal :: (Show a) => Signal a -> IO ()
-runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
+runSignal sig = initWindow (920, 540) False >>= \mw -> case mw of
     Nothing     -> print "Error starting GLFW." >> return ()
     Just w -> do
         putStrLn "Starting Necronomicon"
@@ -43,16 +43,16 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
         setInputCallbacks w eventInbox
         threadDelay 500000
         _             <- forkIO $ processEvents scont state eventInbox
-        threadDelay 500000
         case args of
             Just [n, a] -> startNetworking state n a $ signalClient state
             _           -> print "Incorrect arguments given for networking (name address). Networking is disabled"
 
+        threadDelay 500000
         run False w scont currentTime DynTree.empty eventInbox state
     where
         run quit window s runTime' tree eventInbox state
-            -- | quit      = quitClient (necroNetClient signalState) >> runNecroState shutdownNecronomicon (necroVars signalState) >> print "Qutting"
-            | quit      = runNecroState shutdownNecronomicon (necroVars state) >> putStrLn "Qutting Necronomicon"
+            | quit      = quitClient (signalClient state) >> runNecroState shutdownNecronomicon (necroVars state) >> putStrLn "Quitting Necronomicon"
+            -- | quit      = runNecroState shutdownNecronomicon (necroVars state) >> putStrLn "Qutting Necronomicon"
             | otherwise = do
                 GLFW.pollEvents
                 q           <- (== GLFW.KeyState'Pressed) <$> GLFW.getKey window GLFW.Key'Escape
@@ -65,7 +65,7 @@ runSignal sig = initWindow (800, 600) False >>= \mw -> case mw of
                 atomically (takeTMVar (contextBarrier state)) >>= \(GLContext tid) -> when (tid /= mtid) (GLFW.makeContextCurrent (Just window))
 
                 gs <- readIORef (renderDataRef state)
-                cs <- readIORef (cameraRef state)
+                cs <- atomically $ readTVar (cameraRef state)
                 mapM_ (renderWithCameraRaw window (sigResources state) gs) cs
                 atomically $ putTMVar (contextBarrier state) $ GLContext mtid
 
@@ -82,10 +82,10 @@ processEvents sig ss inbox = forever $ atomically (readTChan inbox) >>= \e -> ca
         modifyIORef (keyboardRef  ss) (\ks -> IntMap.insert (fromEnum k) b ks)
         writeIORef  (lastKeyPress ss) (k, b)
         sig (fromEnum k) >>= printEvent
-    NetUserEvent    u b    -> writeIORef  (netUserLoginRef ss) (u, b) >> sig 204 >>= printEvent
-    NetStatusEvent  s      -> writeIORef  (netStatusRef    ss) s      >> sig 205 >>= printEvent
-    NetChatEvent    u m    -> writeIORef  (netChatRef      ss) (u, m) >> sig 206 >>= printEvent
-    NetSignalEvent  u m    -> writeIORef  (netSignalRef    ss)      m >> sig u   >>= printEvent
+    NetUserEvent    i u b  -> writeIORef  (netUserLoginRef ss) (i, u, b) >> sig 204 >>= printEvent
+    NetStatusEvent  s      -> writeIORef  (netStatusRef    ss) s         >> sig 205 >>= printEvent
+    NetChatEvent    u m    -> writeIORef  (netChatRef      ss) (u, m)    >> sig 206 >>= printEvent
+    NetSignalEvent  u m    -> writeIORef  (netSignalRef    ss) m         >> sig u   >>= printEvent
     where
         printEvent (Change _) = return () -- print e
         printEvent  _         = return ()
@@ -117,6 +117,6 @@ inputSignal uid getter = Signal $ \state -> do
         cont ref iref eid
             | eid /= uid = readIORef ref  >>= return . NoChange
             | otherwise  = do
-                i <- readIORef iref 
-                -- print i 
+                i <- readIORef iref
+                -- print i
                 return $ Change i
