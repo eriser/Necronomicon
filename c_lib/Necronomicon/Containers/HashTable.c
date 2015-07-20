@@ -43,6 +43,9 @@ void hash_table_free(hash_table htable, bool free_items_in_table)
             if (free_items_in_table == true)
                 free(node->item);
 
+            if (node->key_type == string_key_type)
+                free(node->string_key);
+
             free(node);
         }
     }
@@ -62,6 +65,10 @@ void hash_table_free_with_callback(hash_table htable, free_item_callback free_ca
         if (node != NULL)
         {
             free_callback(node->item);
+
+            if (node->key_type == string_key_type)
+                free(node->string_key);
+
             free(node);
         }
     }
@@ -97,22 +104,42 @@ bool hash_table_insert_uint_key(hash_table htable, void* item, uint32_t key)
     uint32_t hash = HASH_KEY(key);
     uint32_t slot = hash & size_mask;
     uint32_t i;
+    hash_table_node* node_ptr = NULL;
+    bool update_current_node = false;
     bool is_insertion_successful = false;
 
     for (i = 0; i < size; ++i)
     {
-        if (table[slot] == NULL)
+        node_ptr = table[slot];
+        if (node_ptr == NULL)
+        {
             break;
+        }
+
+        else if (node_ptr->uint_key == key)
+        {
+            update_current_node = true;
+            break;
+        }
 
         slot = (slot + 1) & size_mask;
     }
 
     if (i < size)
     {
-        hash_table_node* node_ptr = malloc(HASH_TABLE_NODE_SIZE);
-        hash_table_node node = { item, uint_key_type, key, 0, hash };
-        *node_ptr = node;
-        table[slot] = node_ptr;
+        if (update_current_node == true)
+        {
+            node_ptr->item = item;
+        }
+
+        else
+        {
+            node_ptr = malloc(HASH_TABLE_NODE_SIZE);
+            hash_table_node node = { item, uint_key_type, key, 0, hash };
+            *node_ptr = node;
+            table[slot] = node_ptr;
+        }
+
         is_insertion_successful = true;
     }
 
@@ -133,7 +160,7 @@ char* copy_string(const char* string)
     return copy;
 }
 
-// copies the key internally
+// copies the string key internally
 bool hash_table_insert_string_key(hash_table htable, void* item, const char* key)
 {
     hash_table_node** table = htable.table;
@@ -142,23 +169,43 @@ bool hash_table_insert_string_key(hash_table htable, void* item, const char* key
     uint32_t hash = hash_string(key);
     uint32_t slot = hash & size_mask;
     uint32_t i;
+    hash_table_node* node_ptr = NULL;
+    bool update_current_node = false;
     bool is_insertion_successful = false;
 
     for (i = 0; i < size; ++i)
     {
-        if (table[slot] == NULL)
+        node_ptr = table[slot];
+        if (node_ptr == NULL)
+        {
             break;
+        }
+
+        else if (node_ptr->hash == hash && strcmp(node_ptr->string_key, key) == 0)
+        {
+            update_current_node = true;
+            break;
+        }
 
         slot = (slot + 1) & size_mask;
     }
 
     if (i < size)
     {
-        hash_table_node* node_ptr = malloc(HASH_TABLE_NODE_SIZE);
-        char* key_copy = copy_string(key);
-        hash_table_node node = { item, string_key_type, 0, key_copy, hash };
-        *node_ptr = node;
-        table[slot] = node_ptr;
+        if (update_current_node == true)
+        {
+            node_ptr->item = item;
+        }
+
+        else
+        {
+            node_ptr = malloc(HASH_TABLE_NODE_SIZE);
+            char* key_copy = copy_string(key);
+            hash_table_node node = { item, string_key_type, 0, key_copy, hash };
+            *node_ptr = node;
+            table[slot] = node_ptr;
+        }
+
         is_insertion_successful = true;
     }
 
@@ -194,11 +241,11 @@ bool hash_table_remove_string_key(hash_table htable, void* item, const char* key
     uint32_t index = hash & size_mask;
     bool is_removal_successful = false;
 
-    hash_table_node* found_node = table[index];
-    if (found_node != NULL && found_node->string_key == key)
+    hash_table_node* node = table[index];
+    if (node != NULL && node->hash == hash && strcmp(node->string_key, key) == 0)
     {
-        free(found_node->string_key);
-        free(found_node);
+        free(node->string_key);
+        free(node);
         table[index] = NULL;
         is_removal_successful = true;
     }
@@ -245,7 +292,7 @@ void* hash_table_lookup_string_key(hash_table htable, const char* key)
     while (i < size)
     {
         hash_table_node* node = table[slot];
-        if (node != NULL && strcmp(node->string_key, key) == 0)
+        if (node != NULL && node->hash == hash && strcmp(node->string_key, key) == 0)
         {
             item_ptr = node->item;
             break;
