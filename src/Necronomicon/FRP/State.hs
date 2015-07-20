@@ -156,12 +156,12 @@ instance (Binary a, Eq a) => NecroFoldable [Entity a] where
                             cs            <- Hash.fromList csl
                             gs            <- Hash.fromList $ map (\n -> (netid n, ())) ns ++ gsl
                             es'           <- filterMapM' (netUpdateEntity gen nursery cs gs) es
-                            ns'           <- mapM (addNewNetEntities state gen nursery newEntRef) ns 
+                            ns'           <- mapM (addNewNetEntities state gen nursery newEntRef) ns
                             return $ Change $ ns' ++ es'
-                    
+
                     addNewNetEntities state gen nursery newEntRef e = do
-                        e' <- updateEntity state gen nursery newEntRef (Just . snd $ netid e) e{euid = New} 
-                        writeIORef newEntRef [] 
+                        e' <- updateEntity state gen nursery newEntRef (Just . snd $ netid e) e{euid = New}
+                        writeIORef newEntRef []
                         return e'
 
                     netUpdateEntity :: Int -> Nursery a -> Hash.CuckooHashTable (Int, Int) [NetEntityUpdate a] -> Hash.CuckooHashTable (Int, Int) () -> Entity a -> IO (Maybe (Entity a))
@@ -214,12 +214,12 @@ instance (Binary a, Eq a) => NecroFoldable (IntMap.IntMap (Entity a)) where
                             let (NetEntityMessage _ ns csl gsl) = decode msg
                                 es'                             = foldr (\((_, k), cs) m -> IntMap.adjust (netUpdate cs) k m) (foldr (\((_, k),_) m -> IntMap.delete k m) es gsl) csl
                             mapM_ (netInsertNursery gen nursery) es'
-                            ns'           <- IntMap.fromList <~ mapM (addNewNetEntities state gen nursery newEntRef) ns 
+                            ns'           <- IntMap.fromList <~ mapM (addNewNetEntities state gen nursery newEntRef) ns
                             return $ Change $ IntMap.union ns' es'
-                    
+
                     addNewNetEntities state gen nursery newEntRef e = do
-                        e' <- updateEntity state gen nursery newEntRef (Just . snd $ netid e) e{euid = New} 
-                        writeIORef newEntRef [] 
+                        e' <- updateEntity state gen nursery newEntRef (Just . snd $ netid e) e{euid = New}
+                        writeIORef newEntRef []
                         return (snd $ netid e, e')
 
                     netUpdate cs e = foldr go e cs
@@ -231,11 +231,11 @@ instance (Binary a, Eq a) => NecroFoldable (IntMap.IntMap (Entity a)) where
                                UpdateEntityScale    x -> e'{escale   = x}
                                UpdateEntityModel    x -> e'{model    = x}
                                UpdateEntityCollider x -> e'{collider = x}
- 
+
                     netInsertNursery gen nursery e' = case euid e' of
                         UID uid -> insertNursery uid gen e' nursery
                         _       -> return ()
-                   
+
 updateEntity :: SignalState -> Int -> Nursery a -> IORef [Entity a] -> Maybe Int -> Entity a -> IO (Entity a)
 updateEntity state gen nursery _ _ e@Entity{euid = UID uid} = do
     --Update existing Entities
@@ -273,23 +273,23 @@ updateEntity state gen nursery newEntRef maybeKey e = do
 
 removeAndNetworkEntities :: (Binary a, Eq a) => SignalState -> Int -> Nursery a -> IORef [Entity a] -> Int -> IO ()
 removeAndNetworkEntities state gen nursery newEntRef nid = do
-    (cs, ngs, gs) <- Hash.foldM collectGarbage ([], [], []) nursery
-    es            <- readIORef newEntRef
-    when (not (null cs && null gs && null es)) $ sendNetworkEntityMessage (signalClient state) $ encode $ NetEntityMessage nid es cs ngs
-    mapM_ removeGarbage gs
+    (cs, ngs) <- Hash.foldM collectChanges ([], []) nursery
+    es        <- readIORef newEntRef
+    when (not (null cs && null ngs && null es)) $ sendNetworkEntityMessage (signalClient state) $ encode $ NetEntityMessage nid es cs ngs
     writeIORef newEntRef []
     where
-        removeGarbage k = do
+        --Delete openGL resources? Use weak pointers and finalizers?
+        collectChanges (cs, ngs) (k, (gen', p, c)) = if gen == gen' then return (collectNetworkEntityUpdates p c cs, ngs) else do
             renderData <- readIORef (renderDataRef state)
             SMV.unsafeWith renderData $ \ptr -> pokeByteOff (ptr `advancePtr` k) 0 (0 :: CInt)
             Hash.delete nursery k
             atomically $ readTVar (uidRef state) >>= \uids -> writeTVar (uidRef state) (k : uids)
-            --Delete openGL resources? Use weak pointers and finalizers?
-        collectGarbage (cs, ngs, gs) (k, (gen', p, c)) = do
-            let (ngs', gs') = if gen /= gen'
-                    then (if not . null $ netOptions c then (netid c, ()) : ngs else ngs, k : gs)
-                    else (ngs, gs)
-            return (collectNetworkEntityUpdates p c cs, ngs', gs')
+            case camera c of
+                Nothing -> return ()
+                _       -> atomically $ modifyTVar' (cameraRef state) $ IntMap.delete k
+            if not . null $ netOptions c
+                then return (collectNetworkEntityUpdates p c cs, (netid c, ()) : ngs)
+                else return (collectNetworkEntityUpdates p c cs, ngs)
 
 type Nursery a = Hash.CuckooHashTable Int (Int, Entity a, Entity a)
 insertNursery :: Int -> Int -> Entity a -> Nursery a -> IO ()
@@ -297,8 +297,8 @@ insertNursery uid gen e n = Hash.lookup n uid >>= \me' -> case me' of
     Nothing         -> Hash.insert n uid (gen, e,  e)
     Just (_, _, e') -> Hash.insert n uid (gen, e', e)
 
-writeCam :: IORef (IntMap.IntMap (Matrix4x4, Camera)) -> UID -> Maybe Camera -> Entity a -> IO ()
-writeCam cref (UID uid) (Just c) e = modifyIORef cref (IntMap.insert uid (entityTransform e, c))
+writeCam :: TVar (IntMap.IntMap (Matrix4x4, Camera)) -> UID -> Maybe Camera -> Entity a -> IO ()
+writeCam cref (UID uid) (Just c) e = atomically $ modifyTVar' cref (IntMap.insert uid (entityTransform e, c))
 writeCam _    _         _        _ = return ()
 
 writeRenderData :: IORef (SMV.IOVector RenderData) -> Int -> Entity a -> IO ()

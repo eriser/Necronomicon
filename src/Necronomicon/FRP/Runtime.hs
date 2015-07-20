@@ -65,7 +65,7 @@ runSignal sig = initWindow (920, 540) False >>= \mw -> case mw of
                 atomically (takeTMVar (contextBarrier state)) >>= \(GLContext tid) -> when (tid /= mtid) (GLFW.makeContextCurrent (Just window))
 
                 gs <- readIORef (renderDataRef state)
-                cs <- readIORef (cameraRef state)
+                cs <- atomically $ readTVar (cameraRef state)
                 mapM_ (renderWithCameraRaw window (sigResources state) gs) cs
                 atomically $ putTMVar (contextBarrier state) $ GLContext mtid
 

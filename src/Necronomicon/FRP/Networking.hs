@@ -95,7 +95,7 @@ instance Binary a => Binary (NetEntityUpdate a) where
         _ -> UpdateEntityCollider <$> get
 
 
-data NetEntityMessage a   = NetEntityMessage Int [Entity a]      [((Int, Int), [NetEntityUpdate a])] [((Int, Int), ())]
+data NetEntityMessage a   = NetEntityMessage Int [Entity a] [((Int, Int), [NetEntityUpdate a])] [((Int, Int), ())]
 
 instance Binary a => Binary (NetEntityMessage a) where
     put (NetEntityMessage nid es us ds) = put (3 :: Word8) >> put nid >> put es >> put us >> put ds
@@ -128,7 +128,7 @@ userJoin = Signal $ \state -> do
         else readIORef uref >>= \(i, u, b) -> if not b
             then readIORef ref >>= return . NoChange
             else writeIORef ref (i, u) >> return (Change (i, u))
-
+--TODO: Add a ref to collect everyone logged in and only propogate changes if we receive a user who wasn't logged in before!
 userLeave :: Signal (Int, String)
 userLeave = Signal $ \state -> do
     let uref = netUserLoginRef state
@@ -141,15 +141,11 @@ userLeave = Signal $ \state -> do
             then readIORef ref >>= return . NoChange
             else writeIORef ref (i, u) >> return (Change (i, u))
 
--- userJoinLeave :: Signal (String, Bool)
--- userJoinLeave = inputSignal 204 netUserLoginRef
-
 userLog :: Signal (Int, String, Bool)
 userLog = inputSignal 204 netUserLoginRef
 
 userID :: Signal Int
 userID = Signal $ \state -> let cid = clientID $ signalClient state in return (\_ -> return $ NoChange cid, cid, IntSet.empty)
--- users :: Signal [String]
 
 chatMessage :: Signal (String, String)
 chatMessage = inputSignal 206 netChatRef

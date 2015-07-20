@@ -51,7 +51,7 @@ data SignalState = SignalState
                  , renderDataRef  :: IORef (SMV.IOVector RenderData)
                  , uidRef         :: TVar [Int]
                  , sidRef         :: TVar [Int]
-                 , cameraRef      :: IORef (IntMap.IntMap (Matrix4x4, Camera))
+                 , cameraRef      :: TVar (IntMap.IntMap (Matrix4x4, Camera))
 
                  --Input Event Refs
                  , runTimeRef     :: IORef Time
@@ -79,7 +79,7 @@ mkSignalState w2 dims inbox userName = SignalState
                            ~~ (SV.thaw (SV.fromList (replicate 16 nullRenderData)) >>= newIORef)
                            ~~ atomically (newTVar [0..])
                            ~~ atomically (newTVar [300..])
-                           ~~ newIORef IntMap.empty
+                           ~~ atomically (newTVar IntMap.empty)
                            ~~ newIORef 0
                            ~~ newIORef 0
                            ~~ newIORef (0, 0)
