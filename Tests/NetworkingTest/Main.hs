@@ -52,10 +52,10 @@ section1 = players *> terminals *> pure ()
                   [ TerminalTick <~ tick ]
 
 updatePlayers :: PlayerInput -> IntMap.IntMap (Entity Player) -> IntMap.IntMap (Entity Player)
-updatePlayers (PlayerTick       t uid) ps = IntMap.adjust (tickPlayer t)        uid ps
-updatePlayers (PlayerKeys       k uid) ps = IntMap.adjust (playerKeysUpdate k)  uid ps
-updatePlayers (PlayerMouse      m uid) ps = IntMap.adjust (playerMouseUpdate m) uid ps
-updatePlayers (PlayerLog (pid, _) uid) ps = if pid == uid then IntMap.insert uid mkPlayer ps else ps
+updatePlayers (PlayerTick       t uid) = IntMap.adjust (tickPlayer t)        uid
+updatePlayers (PlayerKeys       k uid) = IntMap.adjust (playerKeysUpdate k)  uid
+updatePlayers (PlayerMouse      m uid) = IntMap.adjust (playerMouseUpdate m) uid
+updatePlayers (PlayerLog (pid, _) uid) = if pid == uid then IntMap.insert uid mkPlayer else id
 
 playerMouseUpdate :: (Double, Double) -> Entity Player -> Entity Player
 playerMouseUpdate (mx, my) p@Entity{ edata = Player state (px, py)} = case state of

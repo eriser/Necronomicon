@@ -160,7 +160,7 @@ instance (Binary a, Eq a) => NecroFoldable [Entity a] where
                             return $ Change $ ns' ++ es'
 
                     addNewNetEntities state gen nursery newEntRef e = do
-                        e' <- updateEntity state gen nursery newEntRef (Just . snd $ netid e) e{euid = New}
+                        e' <- updateEntity state gen nursery newEntRef (Just $ netid e) e{euid = New}
                         writeIORef newEntRef []
                         return e'
 
@@ -201,7 +201,7 @@ instance (Binary a, Eq a) => NecroFoldable (IntMap.IntMap (Entity a)) where
                             Change   s -> do
                                 --Regular update
                                 gen        <- readIORef genCounter >>= \gen -> writeIORef genCounter (gen + 1) >> return gen
-                                es         <- IntMap.traverseWithKey (\k a -> updateEntity state gen nursery newEntRef (Just k) a) s
+                                es         <- IntMap.traverseWithKey (\k a -> updateEntity state gen nursery newEntRef (Just (clientID (signalClient state), k)) a) s
                                 removeAndNetworkEntities state gen nursery newEntRef nid
                                 writeIORef ref es
                                 return $ Change es
@@ -218,7 +218,7 @@ instance (Binary a, Eq a) => NecroFoldable (IntMap.IntMap (Entity a)) where
                             return $ Change $ IntMap.union ns' es'
 
                     addNewNetEntities state gen nursery newEntRef e = do
-                        e' <- updateEntity state gen nursery newEntRef (Just . snd $ netid e) e{euid = New}
+                        e' <- updateEntity state gen nursery newEntRef (Just $ netid e) e{euid = New}
                         writeIORef newEntRef []
                         return (snd $ netid e, e')
 
@@ -236,7 +236,8 @@ instance (Binary a, Eq a) => NecroFoldable (IntMap.IntMap (Entity a)) where
                         UID uid -> insertNursery uid gen e' nursery
                         _       -> return ()
 
-updateEntity :: SignalState -> Int -> Nursery a -> IORef [Entity a] -> Maybe Int -> Entity a -> IO (Entity a)
+--TODO: It's not just the UIDs that need to be set, it's also the net owner!
+updateEntity :: SignalState -> Int -> Nursery a -> IORef [Entity a] -> Maybe (Int, Int) -> Entity a -> IO (Entity a)
 updateEntity state gen nursery _ _ e@Entity{euid = UID uid} = do
     --Update existing Entities
     case model e of
@@ -247,7 +248,7 @@ updateEntity state gen nursery _ _ e@Entity{euid = UID uid} = do
     insertNursery uid gen e nursery
     return e
 
-updateEntity state gen nursery newEntRef maybeKey e = do
+updateEntity state gen nursery newEntRef maybeNetID e = do
     --Add new Entity
     mtid   <- myThreadId
     atomically (takeTMVar (contextBarrier state)) >>= \(GLContext tid) -> when (tid /= mtid) (GLFW.makeContextCurrent (Just $ context state))
@@ -258,10 +259,10 @@ updateEntity state gen nursery newEntRef maybeKey e = do
         UID _ -> return e{model = model'}
         New   -> do
             uid <- atomically $ readTVar (uidRef state) >>= \(uid : uids) -> writeTVar (uidRef state) uids >> return uid
-            let netKey = case maybeKey of
-                    Nothing -> uid
-                    Just k -> k
-                e'  = e{model = model', euid = UID uid, netid = (clientID (signalClient state), netKey)}
+            let netid' = case maybeNetID of
+                    Nothing -> (clientID (signalClient state), uid)
+                    Just n  -> n
+                e'  = e{model = model', euid = UID uid, netid = netid'}
             when (not $ null $ netOptions e') $ modifyIORef' newEntRef $ \es -> e' : es
             return e'
 
