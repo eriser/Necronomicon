@@ -98,7 +98,7 @@ mousePos = inputSignal 201 mousePosRef
 
 mouseDelta :: Signal (Double, Double)
 mouseDelta = Signal $ \state -> do
-    GLFW.setCursorInputMode     (context state) GLFW.CursorInputMode'Disabled
+    -- GLFW.setCursorInputMode     (context state) GLFW.CursorInputMode'Disabled
     let mref   = mousePosRef   state
     ref       <- newIORef ((0, 0), (0, 0))
     return (cont ref mref, (0, 0), IntSet.singleton 201)

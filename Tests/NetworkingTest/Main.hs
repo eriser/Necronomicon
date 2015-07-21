@@ -31,13 +31,20 @@ mkPlayer = ( mkEntity  <| Player PlayerIdle (180, 0) )
            { pos        = Vector3 0 0 (-6)
            , rot        = fromEuler 0 180 0
            , camera     = Just <| Camera 30 0.1 1000 black []
-           , netOptions = [NetworkPosition, NetworkRotation] }
+           , netOptions = mkNetworkOptions
+               { networkPos    = Network
+               , networkRot    = Network
+               , networkModel  = NetworkOthers <| Just <| Model cube <| vertexColored white
+               , networkCamera = NetworkOthers Nothing } }
+
 
 mkTerminal :: Vector3 -> Entity Terminal
 mkTerminal p = ( mkEntity  <| Terminal (0, 0, 0))
                { pos        = p
                , model      = Just <| Model cube <| vertexColored white
-               , netOptions = [NetworkPosition] }
+               , netOptions = mkNetworkOptions
+                   { networkPos  = Network
+                   , networkData = Network } }
 
 section1 :: Signal ()
 section1 = players *> terminals *> pure ()
@@ -75,8 +82,8 @@ playerKeysUpdate (x, y) p@Entity{ edata = Player state fpr } = case state of
         p' = p{ edata = Player (PlayerMoving <| Vector3 x 0 (-y)) fpr }
 
 tickPlayer :: (Double, Double) -> Entity Player -> Entity Player
-tickPlayer (dt, _) p@Entity{ edata = Player state fpr } = case state of
-    PlayerMoving    d -> translate (d * realToFrac dt * 1.25) p{ edata = Player state fpr }
+tickPlayer (dt, _) p@Entity{ edata = Player state _ } = case state of
+    PlayerMoving    d -> translate (d * realToFrac dt * 1.25) p
     _                 -> p
 
 updateTerminals :: TerminalInput -> [Entity Terminal] -> [Entity Terminal]

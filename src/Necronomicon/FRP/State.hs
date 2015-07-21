@@ -122,7 +122,9 @@ instance (Binary a, Eq a) => NecroFoldable (Entity a) where
                         UpdateEntityScale    x -> e{escale   = x}
                         UpdateEntityModel    x -> e{model    = x}
                         UpdateEntityCollider x -> e{collider = x}
+                        UpdateEntityCamera   x -> e{camera   = x}
 
+--TODO: Add sync messages for when players join. Easiest would be to respond to login events and send add all entities message
 instance (Binary a, Eq a) => NecroFoldable [Entity a] where
     foldn f scene input = sceneSig
         where
@@ -157,10 +159,12 @@ instance (Binary a, Eq a) => NecroFoldable [Entity a] where
                             gs            <- Hash.fromList $ map (\n -> (netid n, ())) ns ++ gsl
                             es'           <- filterMapM' (netUpdateEntity gen nursery cs gs) es
                             ns'           <- mapM (addNewNetEntities state gen nursery newEntRef) ns
-                            return $ Change $ ns' ++ es'
+                            let es''       = ns' ++ es'
+                            writeIORef ref es''
+                            return $ Change es''
 
                     addNewNetEntities state gen nursery newEntRef e = do
-                        e' <- updateEntity state gen nursery newEntRef (Just $ netid e) e{euid = New}
+                        e' <- updateEntity state gen nursery newEntRef (Just $ netid e) (setNetworkOtherVars e){euid = New}
                         writeIORef newEntRef []
                         return e'
 
@@ -178,6 +182,7 @@ instance (Binary a, Eq a) => NecroFoldable [Entity a] where
                                 UpdateEntityScale    x -> e'{escale   = x}
                                 UpdateEntityModel    x -> e'{model    = x}
                                 UpdateEntityCollider x -> e'{collider = x}
+                                UpdateEntityCamera   x -> e'{camera   = x}
                             netInsertNursery e' = case euid e' of
                                 UID uid -> insertNursery uid gen e' nursery
                                 _       -> return ()
@@ -201,7 +206,7 @@ instance (Binary a, Eq a) => NecroFoldable (IntMap.IntMap (Entity a)) where
                             Change   s -> do
                                 --Regular update
                                 gen        <- readIORef genCounter >>= \gen -> writeIORef genCounter (gen + 1) >> return gen
-                                es         <- IntMap.traverseWithKey (\k a -> updateEntity state gen nursery newEntRef (Just (clientID (signalClient state), k)) a) s
+                                es         <- IntMap.traverseWithKey (\k a -> updateEntity state gen nursery newEntRef (Just (fst $ netid a, k)) a) s
                                 removeAndNetworkEntities state gen nursery newEntRef nid
                                 writeIORef ref es
                                 return $ Change es
@@ -213,12 +218,13 @@ instance (Binary a, Eq a) => NecroFoldable (IntMap.IntMap (Entity a)) where
                             msg           <- readIORef (netSignalRef state)
                             let (NetEntityMessage _ ns csl gsl) = decode msg
                                 es'                             = foldr (\((_, k), cs) m -> IntMap.adjust (netUpdate cs) k m) (foldr (\((_, k),_) m -> IntMap.delete k m) es gsl) csl
-                            mapM_ (netInsertNursery gen nursery) es'
-                            ns'           <- IntMap.fromList <~ mapM (addNewNetEntities state gen nursery newEntRef) ns
-                            return $ Change $ IntMap.union ns' es'
+                            es''          <- IntMap.union es' . IntMap.fromList <~ mapM (addNewNetEntities state gen nursery newEntRef) ns
+                            writeIORef ref es''
+                            mapM_ (netInsertNursery gen nursery) es''
+                            return $ Change es''
 
                     addNewNetEntities state gen nursery newEntRef e = do
-                        e' <- updateEntity state gen nursery newEntRef (Just $ netid e) e{euid = New}
+                        e' <- updateEntity state gen nursery newEntRef (Just $ netid e) (setNetworkOtherVars e){euid = New}
                         writeIORef newEntRef []
                         return (snd $ netid e, e')
 
@@ -231,12 +237,12 @@ instance (Binary a, Eq a) => NecroFoldable (IntMap.IntMap (Entity a)) where
                                UpdateEntityScale    x -> e'{escale   = x}
                                UpdateEntityModel    x -> e'{model    = x}
                                UpdateEntityCollider x -> e'{collider = x}
+                               UpdateEntityCamera   x -> e'{camera   = x}
 
                     netInsertNursery gen nursery e' = case euid e' of
                         UID uid -> insertNursery uid gen e' nursery
                         _       -> return ()
 
---TODO: It's not just the UIDs that need to be set, it's also the net owner!
 updateEntity :: SignalState -> Int -> Nursery a -> IORef [Entity a] -> Maybe (Int, Int) -> Entity a -> IO (Entity a)
 updateEntity state gen nursery _ _ e@Entity{euid = UID uid} = do
     --Update existing Entities
@@ -263,7 +269,9 @@ updateEntity state gen nursery newEntRef maybeNetID e = do
                     Nothing -> (clientID (signalClient state), uid)
                     Just n  -> n
                 e'  = e{model = model', euid = UID uid, netid = netid'}
-            when (not $ null $ netOptions e') $ modifyIORef' newEntRef $ \es -> e' : es
+            case netOptions e' of
+                NoNetworkOptions -> return ()
+                _                 -> modifyIORef' newEntRef $ \es -> e' : es
             return e'
 
     let (UID uid) = euid e'
@@ -288,9 +296,9 @@ removeAndNetworkEntities state gen nursery newEntRef nid = do
             case camera c of
                 Nothing -> return ()
                 _       -> atomically $ modifyTVar' (cameraRef state) $ IntMap.delete k
-            if not . null $ netOptions c
-                then return (collectNetworkEntityUpdates p c cs, (netid c, ()) : ngs)
-                else return (collectNetworkEntityUpdates p c cs, ngs)
+            case netOptions c of
+                NoNetworkOptions -> return (collectNetworkEntityUpdates p c cs, ngs)
+                _                -> return (collectNetworkEntityUpdates p c cs, (netid c, ()) : ngs)
 
 type Nursery a = Hash.CuckooHashTable Int (Int, Entity a, Entity a)
 insertNursery :: Int -> Int -> Entity a -> Nursery a -> IO ()
