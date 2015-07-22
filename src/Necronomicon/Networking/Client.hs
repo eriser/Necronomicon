@@ -56,7 +56,7 @@ startup client serverIPAddress sigstate = do
         getSocket = do
             (serveraddr:_) <- getAddrInfo hints (Just serverIPAddress) (Just serverPort)
             sock           <- socket AF_INET Stream defaultProtocol
-            -- setSocketOption sock KeepAlive 1
+            setSocketOption sock KeepAlive 1
             setSocketOption sock NoDelay   1
             setSocketOption sock ReuseAddr 1
             return (sock,addrAddress serveraddr)

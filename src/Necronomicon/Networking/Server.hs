@@ -13,10 +13,10 @@ import Control.Monad (forever)
 import qualified Data.Map.Strict as Map
 import Data.Binary
 import Data.Binary.Get
--- import Necronomicon.Networking.User
+import Data.Time
+
 import Necronomicon.Networking.Message
 import Necronomicon.Networking.Types
-import Necronomicon.Utility
 
 ------------------------------
 --Server data
@@ -26,7 +26,7 @@ data User = User
     { userSocket    :: Socket
     , userAddress   :: SockAddr
     , userName      :: String
-    , userAliveTime :: Double }
+    , userAliveTime :: UTCTime }
     deriving (Show)
 
 data Server = Server
@@ -80,8 +80,8 @@ keepAlive server = forever $ do
     broadcast (Nothing, encode Alive) server
 
     currentTime <- getCurrentTime
-    atomically $ writeTVar (serverUsers server) $ Map.filter (\u -> (currentTime - userAliveTime u < 6)) users
-    mapM_ removeDeadUsers $ Map.filter (\u -> (currentTime - userAliveTime u >= 6)) users
+    atomically $ writeTVar (serverUsers server) $ Map.filter (\u -> (diffUTCTime currentTime (userAliveTime u) < 6)) users
+    mapM_ removeDeadUsers $ Map.filter (\u -> (diffUTCTime currentTime (userAliveTime u) >= 6)) users
     threadDelay 2000000
     where
         removeDeadUsers user = do
@@ -95,7 +95,7 @@ acceptLoop server nsocket = forever $ do
     if Map.member newUserAddress users
         then return ()
         else do
-            -- setSocketOption newUserSocket KeepAlive 1
+            setSocketOption newUserSocket KeepAlive 1
             setSocketOption newUserSocket NoDelay   1
             putStrLn $ "Accepting connection from user at: " ++ show newUserAddress
             _ <- forkIO $ userListen newUserSocket newUserAddress server
@@ -105,7 +105,7 @@ userListen :: Socket -> SockAddr -> Server -> IO ()
 userListen nsocket addr server = isConnected nsocket >>= \connected -> if not connected
     then putStrLn $ "userListen shutting down: " ++ show addr
     else receiveWithLength nsocket >>= \maybeMessage -> case maybeMessage of
-        Exception     e -> putStrLn ("userList Exception: " ++ show e) >> userListen nsocket addr server
+        Exception     e -> putStrLn ("userListen Exception: " ++ show e) >> userListen nsocket addr server
         ShutdownMessage -> putStrLn "Message has zero length. Shutting down userListen loop."
         IncorrectLength -> putStrLn "Message is incorrect length! Ignoring..." -- >> userListen nsocket addr stopVar server
         Receive     msg -> if B.null msg
