@@ -65,7 +65,7 @@ updatePlayers (PlayerMouse      m uid) = IntMap.adjust (playerMouseUpdate m) uid
 updatePlayers (PlayerLog (pid, _) uid) = if pid == uid then IntMap.insert uid mkPlayer else id
 
 playerMouseUpdate :: (Double, Double) -> Entity Player -> Entity Player
-playerMouseUpdate (mx, my) p@Entity{ edata = Player state (px, py)} = case state of
+playerMouseUpdate (mx, my) p@Entity{ edata = Player state (px, py) } = case state of
     PlayerIdle     -> p'
     PlayerMoving _ -> p'
     where

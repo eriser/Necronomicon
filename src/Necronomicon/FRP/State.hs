@@ -206,7 +206,8 @@ instance (Binary a, Eq a) => NecroFoldable (IntMap.IntMap (Entity a)) where
                             Change   s -> do
                                 --Regular update
                                 gen        <- readIORef genCounter >>= \gen -> writeIORef genCounter (gen + 1) >> return gen
-                                es         <- IntMap.traverseWithKey (\k a -> updateEntity state gen nursery newEntRef (Just (fst $ netid a, k)) a) s
+                                --TODO: I think maybe this netid owner is wrong????
+                                es         <- IntMap.traverseWithKey (updateMapEntitiesWithKey state gen nursery newEntRef) s
                                 removeAndNetworkEntities state gen nursery newEntRef nid
                                 writeIORef ref es
                                 return $ Change es
@@ -220,8 +221,12 @@ instance (Binary a, Eq a) => NecroFoldable (IntMap.IntMap (Entity a)) where
                                 es'                             = foldr (\((_, k), cs) m -> IntMap.adjust (netUpdate cs) k m) (foldr (\((_, k),_) m -> IntMap.delete k m) es gsl) csl
                             es''          <- IntMap.union es' . IntMap.fromList <~ mapM (addNewNetEntities state gen nursery newEntRef) ns
                             writeIORef ref es''
-                            mapM_ (netInsertNursery gen nursery) es''
+                            mapM_ (netInsertNursery gen nursery) es'
                             return $ Change es''
+
+                    updateMapEntitiesWithKey state gen nursery newEntRef k e = case euid e of
+                        UID _ -> updateEntity state gen nursery newEntRef Nothing e
+                        New   -> updateEntity state gen nursery newEntRef (Just (clientID $ signalClient state, k)) e 
 
                     addNewNetEntities state gen nursery newEntRef e = do
                         e' <- updateEntity state gen nursery newEntRef (Just $ netid e) (setNetworkOtherVars e){euid = New}
@@ -271,7 +276,7 @@ updateEntity state gen nursery newEntRef maybeNetID e = do
                 e'  = e{model = model', euid = UID uid, netid = netid'}
             case netOptions e' of
                 NoNetworkOptions -> return ()
-                _                 -> modifyIORef' newEntRef $ \es -> e' : es
+                _                -> modifyIORef' newEntRef $ \es -> e' : es
             return e'
 
     let (UID uid) = euid e'
