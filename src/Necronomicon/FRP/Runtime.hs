@@ -35,14 +35,14 @@ runSignal sig = initWindow (920, 540) False >>= \mw -> case mw of
             [] -> return Nothing
             as -> return $ Just as
         state         <- mkSignalState w (fromIntegral ww, fromIntegral wh) eventInbox $ maybe "noob" id $ fmap head args
+        (scont, _, _) <- unSignal sig state
         _             <- runNecroState (setTempo 150) (necroVars state)
         _             <- runNecroState startNecronomicon (necroVars state)
         _             <- runNecroState (waitForRunningStatus NecroRunning) (necroVars state)
-        (scont, _, _) <- unSignal sig state
+        _             <- forkIO $ processEvents scont state eventInbox
 
         setInputCallbacks w eventInbox
-        threadDelay 500000
-        _             <- forkIO $ processEvents scont state eventInbox
+        threadDelay 1000000
         case args of
             Just [n, a] -> startNetworking state n a $ signalClient state
             _           -> print "Incorrect arguments given for networking (name address). Networking is disabled"

@@ -34,7 +34,7 @@ data NetStatus = Inactive
 data Client = Client
     { clientUserName    :: String
     , clientID          :: Int
-    , clientUsers       :: TVar [String]
+    , clientUsers       :: TVar (IntMap.IntMap String)
     , clientNetSignals  :: TVar (IntMap.IntMap B.ByteString)
     , clientOutBox      :: TChan B.ByteString
     , clientInBox       :: TChan B.ByteString
@@ -43,7 +43,7 @@ data Client = Client
 
 mkClient :: String -> IO Client
 mkClient name = do
-    users       <- atomically $ newTVar []
+    users       <- atomically $ newTVar IntMap.empty
     cid         <- (randomIO :: IO Int) >>= \i -> return (foldl (\h c -> 33*h `xor` fromEnum c) 5381 $ name ++ show i)
     putStrLn $ "Client id: " ++ show cid
     netSignals  <- atomically $ newTVar IntMap.empty

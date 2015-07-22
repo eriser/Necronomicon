@@ -6,6 +6,7 @@ import Necronomicon.Networking.Server         (serverPort)
 import Necronomicon.Networking.Types
 import Necronomicon.FRP.Types
 
+import Control.Monad
 import Control.Concurrent.STM
 import Control.Exception
 import Control.Concurrent                     (forkIO,threadDelay)
@@ -14,6 +15,7 @@ import Data.Binary.Get
 import Network.Socket                  hiding (send,recv,recvFrom,sendTo)
 -- import qualified Data.ByteString.Char8 as C   (unpack,pack)
 import qualified Data.ByteString.Lazy  as B
+import qualified Data.IntMap           as IntMap
 
 --fix lazy chat and chat in general
 --Create reconnection scheme in case of disconnection
@@ -45,7 +47,7 @@ startup client serverIPAddress sigstate = do
     _ <- forkIO $ aliveLoop        client sock
     _ <- forkIO $ sender           client sock
     atomically  $ writeTChan (signalsInbox sigstate) $ NetStatusEvent Running
-    _ <- forkIO $ sendLoginMessage client
+    -- _ <- forkIO $ sendLoginMessage client
     sendLoginMessage client
     -- forkIO $ testNetworking   client
     statusLoop client sock serverIPAddress sigstate Running
@@ -81,9 +83,8 @@ connectionLoop client nsocket serverAddr = Control.Exception.catch tryConnect on
 
 sender :: Client -> Socket -> IO()
 sender client sock = executeIfConnected client (readTChan $ clientOutBox client) >>= \maybeMessage -> case maybeMessage of
-    Nothing                      -> putStrLn "Shutting down sender"
-    -- Just (UpdateNetSignal _ msg) -> Control.Exception.catch (sendWithLength sock msg) printError >> sender client sock
-    Just msg                     -> Control.Exception.catch (sendWithLength sock msg) printError >> sender client sock
+    Nothing  -> putStrLn "Shutting down sender"
+    Just msg -> Control.Exception.catch (sendWithLength sock msg) printError >> sender client sock
 
 --put into disconnect mode if too much time has passed
 aliveLoop :: Client -> Socket -> IO ()
@@ -191,14 +192,20 @@ parseMessage Alive client _ = do
     currentTime  <- getCurrentTime
     atomically $ writeTVar (clientAliveTime client) currentTime
 
-parseMessage (Login uid u) _ sigstate = do
+parseMessage (Login uid u) client sigstate = do
     putStrLn $ "User: " ++ show u ++ " logged in."
-    atomically $ writeTChan (signalsInbox sigstate) $ NetUserEvent uid u True
+    users <- atomically $ readTVar $ clientUsers client
+    when (not $ IntMap.member uid users) $ do
+        atomically $ writeTVar  (clientUsers client) $ IntMap.insert uid u users
+        atomically $ writeTChan (signalsInbox sigstate) $ NetUserEvent uid u True
     putStrLn $ "User logged in: " ++ u
 
-parseMessage (Logout uid u) _ sigstate = do
+parseMessage (Logout uid u) client sigstate = do
     putStrLn $ "User: " ++ show u ++ " logged out."
-    atomically $ writeTChan (signalsInbox sigstate) $ NetUserEvent uid u False
+    users <- atomically $ readTVar $ clientUsers client
+    when (IntMap.member uid users) $ do
+        atomically $ writeTVar  (clientUsers client) $ IntMap.delete uid users
+        atomically $ writeTChan (signalsInbox sigstate) $ NetUserEvent uid u False
     putStrLn $  "User logged out: " ++ u
 
 -- parseMessage (AddNetSignal uid netVal) _ sigstate = do

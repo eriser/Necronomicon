@@ -1,6 +1,7 @@
 module Necronomicon.FRP.Networking
     ( userJoin
     , userLeave
+    , userList
     , userID
     , userLog
     , chatMessage
@@ -26,6 +27,7 @@ import           Control.Concurrent.STM
 import           Data.IORef
 import           Data.Binary
 import qualified Data.IntSet          as IntSet
+import qualified Data.IntMap          as IntMap
 import qualified Data.ByteString.Lazy as B
 
 ---------------------------------------------
@@ -199,6 +201,18 @@ userLeave = Signal $ \state -> do
 
 userLog :: Signal (Int, String, Bool)
 userLog = inputSignal 204 netUserLoginRef
+
+userList :: Signal [String]
+userList = Signal $ \state -> do
+    let uref = clientUsers $ signalClient state
+    users <- map snd . IntMap.toList <$> (atomically $ readTVar uref)
+    return (cont uref, users, IntSet.singleton 204)
+    where
+        cont uref eid = do
+            users <- map snd . IntMap.toList <$> (atomically $ readTVar uref)
+            if eid == 204
+                then return $ Change users
+                else return $ NoChange users
 
 userID :: Signal Int
 userID = Signal $ \state -> let cid = clientID $ signalClient state in return (\_ -> return $ NoChange cid, cid, IntSet.empty)
