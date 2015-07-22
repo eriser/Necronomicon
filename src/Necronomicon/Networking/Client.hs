@@ -13,16 +13,9 @@ import Control.Concurrent                     (forkIO,threadDelay)
 import Data.Binary
 import Data.Binary.Get
 import Network.Socket                  hiding (send,recv,recvFrom,sendTo)
--- import qualified Data.ByteString.Char8 as C   (unpack,pack)
 import qualified Data.ByteString.Lazy  as B
 import qualified Data.IntMap           as IntMap
 
---fix lazy chat and chat in general
---Create reconnection scheme in case of disconnection
---Allow for a sandboxed environment when disconnected that merges on reconnect
-
--- Clock synchronization!
--- Server keeps like 10 - 20 line chat log?
 
 startClient :: String -> String -> SignalState -> Client -> IO ()
 startClient _ serverIPAddress sigstate client = do
@@ -30,10 +23,6 @@ startClient _ serverIPAddress sigstate client = do
     _ <- forkIO $ withSocketsDo $ startup client serverIPAddress sigstate
     return ()
 
---Setup all loops to recognize and die when disconnected
---Almost there.....got it somewhat working, need to walk through the steps and make it simpler I think
---Also print out exactly what is being killed and what is hanging.
---All threads should die and restart accordingly
 startup :: Client -> String -> SignalState -> IO ()
 startup client serverIPAddress sigstate = do
     putStrLn "Setting up networking..."
@@ -47,7 +36,6 @@ startup client serverIPAddress sigstate = do
     _ <- forkIO $ aliveLoop        client sock
     _ <- forkIO $ sender           client sock
     atomically  $ writeTChan (signalsInbox sigstate) $ NetStatusEvent Running
-    -- _ <- forkIO $ sendLoginMessage client
     sendLoginMessage client
     -- forkIO $ testNetworking   client
     statusLoop client sock serverIPAddress sigstate Running
@@ -104,9 +92,6 @@ aliveLoop client sock = getCurrentTime >>= \t -> executeIfConnected client (send
     where
         sendAliveMessage _ = writeTChan (clientOutBox client) $ encode Alive
 
---Should this shutdown or keep up the loop???
---Need alive loop to handle weird in between states
---Send empty message on close
 listener :: Client -> Socket -> IO ()
 listener client sock = receiveWithLength sock >>= \maybeMsg -> case maybeMsg of
     Exception     e -> putStrLn ("listener Exception: " ++ show e)         >> listener client sock
@@ -180,13 +165,6 @@ executeIfConnected client action = atomically (checkForStatus `orElse` checkForM
 --Message parsing
 ------------------------------
 parseMessage :: NetMessage -> Client -> SignalState -> IO ()
--- parseMessage (UserList ul) client sigstate = do
-    -- putStrLn $ "Received user list:" ++ show userStringList
-    -- atomically $ writeTVar (clientUsers client) userStringList
-    -- atomically $ writeTChan (userListBuffer sigstate) userStringList
-    -- where
-        -- userStringList = map C.unpack ul
-
 parseMessage Alive client _ = do
     putStrLn "Server is alive."
     currentTime  <- getCurrentTime
@@ -208,57 +186,12 @@ parseMessage (Logout uid u) client sigstate = do
         atomically $ writeTChan (signalsInbox sigstate) $ NetUserEvent uid u False
     putStrLn $  "User logged out: " ++ u
 
--- parseMessage (AddNetSignal uid netVal) _ sigstate = do
-    -- atomically (readTVar (netSignals client) >>= \sig -> writeTVar (netSignals client) (IntMap.insert uid (Change netVal) sig))
-    -- atomically $ readTVar (netSignalsBuffer sigstate) >>= writeTVar (netSignalsBuffer sigstate) . ((uid,netVal) :)
-    -- putStrLn $ "Adding NetSignal: " ++ show (uid,netVal)
-
--- parseMessage (UpdateNetSignal uid netval) _ sigstate = do
---     putStrLn $ "Updating net signal " ++ show uid
---     atomically $ writeTChan (signalsInbox sigstate) $ NetSignalEvent uid netval --Need to assign user ids!
---     -- need new system for this
---     -- sendToGlobalDispatch globalDispatch uid $ netValToDyn netVal
---     -- atomically $ readTVar (netSignals client) >>= \sigs -> writeTVar (netSignals client) (IntMap.insert uid (Change netVal) sigs)
---     -- atomically $ readTVar (netSignalsBuffer sigstate) >>= writeTVar (netSignalsBuffer sigstate) . ((uid,netVal) :)
---     -- putStrLn $ "Setting NetSignal : " ++ show (uid,netVal)
-
---Is sync necessary if we are using TCP?
---Is this even necessary
--- parseMessage (SyncNetSignals netVals) _ sigstate = do
-    -- print "SyncNetSignals"
-    -- oldNetSignals <- atomically $ readTVar (netSignals client)
-    -- mapM_ (sendMergeEvents oldNetSignals) $ IntMap.toList netVals
-    -- atomically $ writeTVar (netSignals client) $ IntMap.map Change netVals
-    -- atomically $ writeTVar (netSignals client) $ IntMap.map Change netVals
-    -- atomically $ readTVar (netSignalsBuffer sigstate) >>= writeTVar (netSignalsBuffer sigstate) . ((IntMap.toList netVals) ++)
-    -- putStrLn $ "Server sync. old signals size: " ++ show (IntMap.size oldNetSignals) ++ ", new signals size: " ++ show (IntMap.size netVals)
-    -- where
-        -- sendMergeEvents oldNetSignals (uid,netVal) = case IntMap.lookup uid oldNetSignals of
-            -- Nothing     -> sendToGlobalDispatch globalDispatch uid $ netValToDyn netVal
-            -- Just oldVal -> if netVal /= oldVal
-                -- then return () -- sendToGlobalDispatch globalDispatch uid $ netValToDyn netVal
-                -- else return ()
-
 parseMessage (Chat name msg) _ sigstate = atomically $ writeTChan (signalsInbox sigstate) $ NetChatEvent name msg
---parseMessage EmptyMessage        _ _ = putStrLn "Empty message received!?"
---parseMessage (RemoveNetSignal _) _ _ = putStrLn "Really no reason to remove net signals now is there?"
 parseMessage _                   _ _ = putStrLn "Didn't recognize that message!?"
 
 ------------------------------
 -- Utility
 -----------------------------
-
--- testNetworking :: Client -> IO()
--- testNetworking client = forever $ do
-    -- uid <- randomRIO (2,1000)
-    -- atomically $ writeTChan (outBox client) $ syncObjectMessage $ SyncObject uid "ClientName" "" $ Seq.fromList [SyncString (userName client),SyncDouble 0]
-    -- threadDelay 1000
-    -- atomically $ writeTChan (outBox client) $ setArgMessage uid 1 $ SyncDouble 666
-    -- threadDelay 1000
-    -- atomically $ writeTChan (outBox client) $ removeObjectMessage uid
-    -- threadDelay 1000
-    -- atomically $ writeTChan (outBox client) $ sendChatMessage client "This is a chat, motherfucker"
-    -- threadDelay 1000
 
 printError :: IOException -> IO ()
 printError e = print e
@@ -272,11 +205,6 @@ sendChatMessage chat client = atomically $ writeTChan (clientOutBox client) $ en
 
 sendUpdateNetSignal :: Client -> B.ByteString -> IO ()
 sendUpdateNetSignal client v = atomically $ writeTChan (clientOutBox client) v
-    -- atomically $ readTVar (netSignals client) >>= writeTVar (netSignals client) . IntMap.insert uid v
-
--- sendAddNetSignal :: Client -> (Int, B.ByteString) -> IO ()
--- sendAddNetSignal client (uid, netVal) = atomically $ writeTChan (clientOutBox client) $ AddNetSignal uid netVal
-    -- atomically (readTVar (clientNetSignals client) >>= \sig -> writeTVar (clientNetSignals client) (IntMap.insert uid (NoChange netVal) sig))
 
 startNetworking :: SignalState -> String -> String -> Client -> IO ()
 startNetworking sigstate name serverAddr client = startClient name serverAddr sigstate client

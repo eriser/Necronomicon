@@ -2,7 +2,6 @@ module Necronomicon.Networking.Server (startServer,serverPort,clientPort) where
 
 import Prelude
 import qualified Data.ByteString.Lazy  as B
--- import qualified Data.ByteString.Char8 as C
 
 import Control.Monad (when)
 import Control.Concurrent (forkIO,threadDelay)
