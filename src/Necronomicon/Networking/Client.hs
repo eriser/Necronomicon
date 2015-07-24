@@ -166,7 +166,7 @@ executeIfConnected client action = atomically (checkForStatus `orElse` checkForM
 ------------------------------
 parseMessage :: NetMessage -> Client -> SignalState -> IO ()
 parseMessage Alive client _ = do
-    putStrLn "Server is alive."
+    -- putStrLn "Server is alive."
     currentTime  <- getCurrentTime
     atomically $ writeTVar (clientAliveTime client) currentTime
 

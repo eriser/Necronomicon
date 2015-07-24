@@ -186,6 +186,7 @@ userJoin = Signal $ \state -> do
         else readIORef uref >>= \(i, u, b) -> if not b
             then readIORef ref >>= return . NoChange
             else writeIORef ref (i, u) >> return (Change (i, u))
+
 --TODO: Add a ref to collect everyone logged in and only propogate changes if we receive a user who wasn't logged in before!
 userLeave :: Signal (Int, String)
 userLeave = Signal $ \state -> do

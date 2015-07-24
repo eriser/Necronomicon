@@ -104,7 +104,7 @@ instance (Binary a, Eq a) => NecroFoldable (Entity a) where
                             --Network update
                             --Add time stamp to avoid out of order updates (still need out of order adds and deletes)
                             --TODO: Do we need to update graphics and other shit?
-                            -- putStrLn "Net update in foldn (Entity a)"
+                            putStrLn "Net update in foldn (Entity a)"
                             e            <- readIORef ref
                             msg          <- readIORef (netSignalRef state)
                             let (NetEntityMessage _ _ cs _) = decode msg
@@ -206,7 +206,6 @@ instance (Binary a, Eq a) => NecroFoldable (IntMap.IntMap (Entity a)) where
                             Change   s -> do
                                 --Regular update
                                 gen        <- readIORef genCounter >>= \gen -> writeIORef genCounter (gen + 1) >> return gen
-                                --TODO: I think maybe this netid owner is wrong????
                                 es         <- IntMap.traverseWithKey (updateMapEntitiesWithKey state gen nursery newEntRef) s
                                 removeAndNetworkEntities state gen nursery newEntRef nid
                                 writeIORef ref es
@@ -261,6 +260,7 @@ updateEntity state gen nursery _ _ e@Entity{euid = UID uid} = do
 
 updateEntity state gen nursery newEntRef maybeNetID e = do
     --Add new Entity
+    putStrLn "updateEntity - New Entity added!"
     mtid   <- myThreadId
     atomically (takeTMVar (contextBarrier state)) >>= \(GLContext tid) -> when (tid /= mtid) (GLFW.makeContextCurrent (Just $ context state))
     model' <- loadNewModel (sigResources state) (model e)
@@ -302,6 +302,7 @@ removeAndNetworkEntities state gen nursery newEntRef nid = do
                 Nothing -> return ()
                 _       -> atomically $ modifyTVar' (cameraRef state) $ IntMap.delete k
             case netOptions c of
+                --Is checking the arguments each frame causing the hiccup???
                 NoNetworkOptions -> return (collectNetworkEntityUpdates p c cs, ngs)
                 _                -> return (collectNetworkEntityUpdates p c cs, (netid c, ()) : ngs)
 

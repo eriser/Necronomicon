@@ -74,14 +74,14 @@ startServer = print "Starting a server." >> (withSocketsDo $ bracket getSocket s
 keepAlive :: Server -> IO ()
 keepAlive server = forever $ do
     users <- atomically $ readTVar $ serverUsers server
-    print users
+    -- print users
 
     broadcast (Nothing, encode Alive) server
 
     currentTime <- getCurrentTime
     atomically $ writeTVar (serverUsers server) $ Map.filter (\u -> (diffUTCTime currentTime (userAliveTime u) < 6)) users
     mapM_ removeDeadUsers $ Map.filter (\u -> (diffUTCTime currentTime (userAliveTime u) >= 6)) users
-    threadDelay 2000000
+    threadDelay 4000000
     where
         removeDeadUsers user = do
             putStrLn "Lost user alive messages. Closing user socket."
@@ -161,7 +161,7 @@ parseMessage m (Logout _ n) sock sa server = do
         return True
 
 parseMessage m Alive _ sa server = do
-    putStrLn $ show sa ++ " is alive."
+    -- putStrLn $ show sa ++ " is alive."
     users' <- atomically $ readTVar (serverUsers server)
     case Map.lookup sa users' of
         Nothing   -> putStrLn "Received alive message for a user that is not currently on the server." >> return False

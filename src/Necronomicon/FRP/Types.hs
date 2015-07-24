@@ -44,6 +44,7 @@ data InputEvent = TimeEvent        Time Time
                 | NetStatusEvent   NetStatus
                 | NetSignalEvent   Int B.ByteString --Need user ID
                 | NetChatEvent     String String
+                deriving (Show)
 
 data SignalState = SignalState
                  { contextBarrier :: TMVar GLContext
