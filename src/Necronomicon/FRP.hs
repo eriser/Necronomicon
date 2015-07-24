@@ -9,6 +9,7 @@ module Necronomicon.FRP
     , module Necronomicon.FRP.Runtime
     , module Necronomicon.FRP.Networking
     , module Necronomicon.FRP.State
+    , module Data.Monoid
     ) where
 
 import Necronomicon.FRP.GUI
@@ -21,3 +22,4 @@ import Necronomicon.FRP.State
 import Necronomicon.FRP.Runtime (runSignal)
 import Necronomicon.FRP.Types   ((<~), (~~), (~>), Time)
 import Necronomicon.FRP.Signal  (Signal)
+import Data.Monoid ((<>))

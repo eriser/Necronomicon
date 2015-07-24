@@ -49,14 +49,14 @@ mkTerminal p = ( mkEntity  <| Terminal (0, 0, 0))
 section1 :: Signal ()
 section1 = players *> terminals *> pure ()
     where
-        players = foldn updatePlayers IntMap.empty <| mergeMany
-                [ PlayerTick  <~ tick       ~~ userID
-                , PlayerKeys  <~ wasd       ~~ userID
-                , PlayerMouse <~ mouseDelta ~~ userID
-                , PlayerLog   <~ userJoin   ~~ userID ]
+        players = foldn updatePlayers IntMap.empty
+               <| PlayerTick  <~ tick       ~~ userID
+               <> PlayerKeys  <~ wasd       ~~ userID
+               <> PlayerMouse <~ mouseDelta ~~ userID
+               <> PlayerLog   <~ userJoin   ~~ userID
 
-        terminals = foldn updateTerminals [mkTerminal 0] <| mergeMany
-                  [ TerminalTick <~ tick ]
+        terminals = foldn updateTerminals [mkTerminal 0]
+                 <| TerminalTick <~ tick
 
 updatePlayers :: PlayerInput -> IntMap.IntMap (Entity Player) -> IntMap.IntMap (Entity Player)
 updatePlayers (PlayerTick       t uid) = IntMap.adjust (tickPlayer t)        uid

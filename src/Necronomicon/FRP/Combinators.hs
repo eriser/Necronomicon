@@ -25,7 +25,7 @@ import           Necronomicon.Linear
 import           Data.IORef
 import           Control.Monad
 import           System.Random
-import           Control.Applicative
+import           Data.Monoid
 import qualified Data.IntSet                  as IntSet
 import qualified Data.Vector                  as V
 
@@ -56,10 +56,7 @@ fmap8 :: Applicative f => (a -> b -> c -> d -> e -> ff -> g -> h -> i) -> f a ->
 fmap8 f a b c d e f' g h = f <~ a ~~ b ~~ c ~~ d ~~ e ~~ f' ~~ g ~~ h
 
 merge :: Signal a -> Signal a -> Signal a
-merge = (<|>)
-
--- mergeMany :: [Signal a] -> Signal a
--- mergeMany ss = foldr merge empty ss
+merge = (<>)
 
 mergeMany :: [Signal a] -> Signal a
 mergeMany ss = Signal $ \state -> do

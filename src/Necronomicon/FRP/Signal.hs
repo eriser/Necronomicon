@@ -23,8 +23,6 @@ module Necronomicon.FRP.Signal  where
 import           Control.Concurrent
 import           Control.Concurrent.STM
 import           Data.IORef
-import           Data.Monoid
-import           Control.Applicative
 import           Control.Monad
 import qualified Data.IntSet                       as IntSet
 
@@ -120,25 +118,25 @@ instance Applicative Signal where
 
     (<*) = flip (*>)
 
-instance Alternative Signal where
-    empty                 = Signal $ \_ -> return (const $ error "A Signal cannot be empty.", error "A Signal cannot be empty.", IntSet.empty)
-    Pure   x <|> Pure _   = Pure x
-    Pure   _ <|> s        = s
-    Signal s <|> Pure _   = Signal s
-    Signal x <|> Signal y = Signal $ \state -> do
-        (xcont, x', xids) <- x state
-        (ycont,  _, yids) <- y state
-        let uids           = IntSet.union xids yids
-        ref               <- newIORef x'
-        return (cont xcont ycont uids ref, x', uids)
-        where
-            cont xcont ycont uids ref eid
-                | not $ IntSet.member eid uids = readIORef ref >>= return . NoChange
-                | otherwise                    = xcont eid >>= \xe -> case xe of
-                    Change x' -> writeIORef ref x' >> return xe
-                    _         -> ycont eid >>= \ye -> case ye of
-                        Change y' -> writeIORef ref y' >>  return ye
-                        _         -> readIORef  ref    >>= return . NoChange
+-- instance Alternative Signal where
+--     empty                 = Signal $ \_ -> return (const $ error "A Signal cannot be empty.", error "A Signal cannot be empty.", IntSet.empty)
+--     Pure   x <|> Pure _   = Pure x
+--     Pure   _ <|> s        = s
+--     Signal s <|> Pure _   = Signal s
+--     Signal x <|> Signal y = Signal $ \state -> do
+--         (xcont, x', xids) <- x state
+--         (ycont,  _, yids) <- y state
+--         let uids           = IntSet.union xids yids
+--         ref               <- newIORef x'
+--         return (cont xcont ycont uids ref, x', uids)
+--         where
+--             cont xcont ycont uids ref eid
+--                 | not $ IntSet.member eid uids = readIORef ref >>= return . NoChange
+--                 | otherwise                    = xcont eid >>= \xe -> case xe of
+--                     Change x' -> writeIORef ref x' >> return xe
+--                     _         -> ycont eid >>= \ye -> case ye of
+--                         Change y' -> writeIORef ref y' >>  return ye
+--                         _         -> readIORef  ref    >>= return . NoChange
 
 instance Num a => Num (Signal a) where
     (+)         = \x y -> (+) <$> x <*> y
@@ -173,7 +171,45 @@ instance Floating a => Floating (Signal a) where
     atanh   = fmap atanh
     acosh   = fmap acosh
 
-instance Monoid a => Monoid (Signal a) where
-    mconcat ss = foldr (<>) (pure mempty) ss
-    mempty     = pure mempty
-    mappend    = \x y -> mappend <$> x <*> y
+-- instance Monoid a => Monoid (Signal a) where
+--     mconcat ss = foldr (<>) (pure mempty) ss
+--     mempty     = pure mempty
+--     mappend    = \x y -> mappend <$> x <*> y
+
+instance Monoid (Signal a) where
+    mempty                        = Signal $ \_ -> return (const $ error "A Signal cannot be empty.", error "A Signal cannot be empty.", IntSet.empty)
+    mappend (Pure   x) (Pure _  ) = Pure x
+    mappend (Pure   _) (s       ) = s
+    mappend (Signal s) (Pure _  ) = Signal s
+    mappend (Signal x) (Signal y) = Signal $ \state -> do
+        (xcont, x', xids) <- x state
+        (ycont,  _, yids) <- y state
+        let uids           = IntSet.union xids yids
+        ref               <- newIORef x'
+        return (cont xcont ycont uids ref, x', uids)
+        where
+            cont xcont ycont uids ref eid
+                | not $ IntSet.member eid uids = readIORef ref >>= return . NoChange
+                | otherwise                    = xcont eid >>= \xe -> case xe of
+                    Change x' -> writeIORef ref x' >> return xe
+                    _         -> ycont eid >>= \ye -> case ye of
+                        Change y' -> writeIORef ref y' >>  return ye
+                        _         -> readIORef  ref    >>= return . NoChange
+
+    mconcat ss = Signal $ \state -> do
+        (sconts, svals, sids) <- unzip3 <~ mapM (flip unSignal state) ss
+        let uids               = foldr IntSet.union IntSet.empty sids  
+        ref                   <- newIORef $ head svals
+        return (cont sconts ref uids, head svals, uids)
+        where
+            cont sconts ref uids eid
+                | not $ IntSet.member eid uids = readIORef ref >>= return . NoChange 
+                | otherwise                    = foldM (changed eid) Nothing sconts >>= \mcs -> case mcs of
+                    Nothing -> readIORef ref >>= return . NoChange
+                    Just e  -> return $ Change e
+
+            changed eid Nothing c = c eid >>= \mc -> case mc of
+                NoChange _ -> return Nothing
+                Change   e -> return $ Just e
+            changed _ e _ = return e
+
