@@ -11,7 +11,7 @@
 
 dir="./"
 user=$USER
-cmd="./dist/build/NecroNet/NecroNet server"
+cmd="./dist/build/NecroNet/NecroNet"
 
 name=`basename $0`
 pid_file="/var/run/$name.pid"

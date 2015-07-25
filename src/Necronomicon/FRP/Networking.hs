@@ -102,10 +102,14 @@ instance Binary a => Binary (NetEntityUpdate a) where
 
 
 data NetEntityMessage a = NetEntityMessage Int [Entity a] [((Int, Int), [NetEntityUpdate a])] [((Int, Int), ())]
+                        | NetEntitySync Int Int [Entity a]
 
 instance Binary a => Binary (NetEntityMessage a) where
-    put (NetEntityMessage nid es us ds) = put (4 :: Word8) >> put nid >> put es >> put us >> put ds
-    get                                 = (get :: Get Word8) >> (NetEntityMessage <$> get <*> get <*> get <*> get)
+    put (NetEntityMessage nid es us ds) = put (4 :: Word8) >> put nid >> put es  >> put us >> put ds
+    put (NetEntitySync uid nid es)      = put (5 :: Word8) >> put uid >> put nid >> put es
+    get                                 = (get :: Get Word8) >>= \t -> case t of
+        4 -> NetEntityMessage <$> get <*> get <*> get <*> get
+        _ -> NetEntitySync    <$> get <*> get <*> get
 
 sendNetworkEntityMessage :: Client -> B.ByteString -> IO ()
 sendNetworkEntityMessage client msg = atomically (readTVar (clientRunStatus client)) >>= \cstatus -> case cstatus of

@@ -1,14 +1,12 @@
 module Necronomicon.FRP.Signal  where
 
 --TODO:
---Port all of the old signals functionality to the new signals system
 --Look into revamping Texture data structure and texture loading
 --Revive Fonts and text
 --Revive GUI
 --Revive post-rendering FX
 --Revamp and Revive networking (Replace NetMessage type class usage with simple Binary type class)
 --Look into new networking schemes that make "virtual world" navigation possible
---Reorganize some files and split Signals module into separate smaller modules
 
 --If there's extra time TODO:
 --Replace and remove dependencies: mtl, Haskel OpengGL, perhaps Haskell OpenGLRaw

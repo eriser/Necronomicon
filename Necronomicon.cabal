@@ -52,7 +52,7 @@ library
         c_lib/Necronomicon/UGens/PanUGens.c,
         c_lib/Necronomicon/UGens/TimeUGens.c,
         c_lib/Necronomicon/Containers/HashTable.c
-    ghc-options:        -threaded -O2 -Wall -Werror
+    ghc-options:        -threaded -O2 -Wall -Werror -fwarn-incomplete-uni-patterns
     default-extensions: FlexibleInstances MultiParamTypeClasses ForeignFunctionInterface TypeFamilies BangPatterns
 
     exposed-modules:

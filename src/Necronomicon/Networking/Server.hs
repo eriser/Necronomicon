@@ -25,7 +25,8 @@ data User = User
     { userSocket    :: Socket
     , userAddress   :: SockAddr
     , userName      :: String
-    , userAliveTime :: UTCTime }
+    , userAliveTime :: UTCTime
+    , userID        :: Int }
     deriving (Show)
 
 data Server = Server
@@ -135,6 +136,12 @@ processMessage server sa sock msg = case runGet (get :: Get Word8) msg of
     2 -> parseMessage msg (decode msg) sock sa server
     3 -> parseMessage msg (decode msg) sock sa server
     4 -> broadcast (Just sa, msg) server >> return False
+    5 -> do
+        users  <- Map.elems <$> atomically (readTVar (serverUsers server))
+        let uid = runGet ((get :: Get Word8) >> (get :: Get Int)) msg
+        case foldr (\user user' -> if userID user == uid then Just user else user') Nothing users of
+            Nothing   -> putStrLn ("Couldn't find user: " ++ show uid ++ ", to send sync message to.") >> return False
+            Just user -> putStrLn ("Sending NetEntitySync message to user: " ++ show (userName user) ) >> sendMessage user msg server >> return False
     _ -> putStrLn ("Received unrecognized message type, ignoring.") >> return False
 
 ------------------------------
@@ -142,12 +149,12 @@ processMessage server sa sock msg = case runGet (get :: Get Word8) msg of
 ------------------------------
 
 parseMessage :: B.ByteString -> NetMessage -> Socket -> SockAddr  -> Server -> IO Bool
-parseMessage m (Login _ n) sock sa server = do
+parseMessage m (Login uid n) sock sa server = do
     putStrLn $ "Login message received from: " ++ show n
     users <- atomically $ readTVar (serverUsers server)
     when (not $ Map.member sa users) $ do
         t       <- getCurrentTime
-        let user = User sock sa n t
+        let user = User sock sa n t uid
         putStrLn   $ show n ++ " logged in."
         atomically $ modifyTVar (serverUsers server) (Map.insert (userAddress user) user)
         broadcast (Nothing, m) server
@@ -178,8 +185,7 @@ parseMessage m Alive _ sa server = do
         Just user -> do
             t <- getCurrentTime
             sendMessage user m server
-            let user' = User (userSocket user) (userAddress user) (userName user) t
-            atomically $ modifyTVar (serverUsers server) (Map.insert (userAddress user) user')
+            atomically $ modifyTVar (serverUsers server) (Map.insert (userAddress user) user{userAliveTime = t})
             return False
 
 parseMessage m (Chat name msg) _ _ server = do

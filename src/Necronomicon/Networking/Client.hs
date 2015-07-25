@@ -116,9 +116,10 @@ messageProcessor client sigstate = executeIfConnected client (atomically $ readT
         Nothing  -> parseMessage (decode m) client sigstate >> messageProcessor client sigstate
         Just nid -> atomically (writeTChan (signalsInbox sigstate) $ NetSignalEvent nid m) >> messageProcessor client sigstate
     where
-        isSignalUpdate = (get :: Get Word8) >>= \t -> if t >= 0 && t < 4 
-            then return Nothing
-            else Just <$> (get :: Get Int)
+        isSignalUpdate = (get :: Get Word8) >>= \t -> case t of
+            4 -> Just <$> (get :: Get Int)
+            5 -> (get :: Get Int) >> (Just <$> (get :: Get Int))
+            _ -> return Nothing
 
 ------------------------------
 --Quitting And Restarting
