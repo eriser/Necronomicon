@@ -47,24 +47,14 @@ mkClient name = do
 
 instance Binary NetMessage where
     put (Chat              n m) = put (0 ::Word8) >> put n   >> put m
-    -- put (AddNetSignal    uid s) = put (1 ::Word8) >> put uid >> put s
-    -- put (RemoveNetSignal uid  ) = put (2 ::Word8) >> put uid
-    put (UpdateNetSignal      ) = put (3 ::Word8)
-    put  Alive                  = put (4 ::Word8)
-    -- put (UserList           ul) = put (5 ::Word8) >> put ul
-    put (Login           uid n) = put (6 ::Word8) >> put uid >> put n
-    put (Logout          uid n) = put (7 ::Word8) >> put uid >> put n
-    -- put (SyncNetSignals     ss) = put (8 ::Word8) >> put ss
-    -- put (EmptyMessage)          = return ()
+    put  Alive                  = put (1 ::Word8)
+    put (Login           uid n) = put (2 ::Word8) >> put uid >> put n
+    put (Logout          uid n) = put (3 ::Word8) >> put uid >> put n
+    put (UpdateNetSignal      ) = put (4 ::Word8)
 
     get = (get ::Get Word8) >>= \ t -> case t of
         0 -> Chat            <$> get <*> get
-        -- 1 -> AddNetSignal    <$> get <*> get
-        -- 2 -> RemoveNetSignal <$> get
-        3 -> return UpdateNetSignal
-        4 -> return Alive
-        -- 5 -> UserList        <$> get
-        6 -> Login           <$> get <*> get
-        _ -> Logout          <$> get <*> get
-        -- 8 -> SyncNetSignals  <$> get
-        -- _ -> return EmptyMessage
+        1 -> return Alive
+        2 -> Login           <$> get <*> get
+        3 -> Logout          <$> get <*> get
+        _ -> return UpdateNetSignal

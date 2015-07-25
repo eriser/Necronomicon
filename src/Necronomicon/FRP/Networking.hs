@@ -104,7 +104,7 @@ instance Binary a => Binary (NetEntityUpdate a) where
 data NetEntityMessage a = NetEntityMessage Int [Entity a] [((Int, Int), [NetEntityUpdate a])] [((Int, Int), ())]
 
 instance Binary a => Binary (NetEntityMessage a) where
-    put (NetEntityMessage nid es us ds) = put (3 :: Word8) >> put nid >> put es >> put us >> put ds
+    put (NetEntityMessage nid es us ds) = put (4 :: Word8) >> put nid >> put es >> put us >> put ds
     get                                 = (get :: Get Word8) >> (NetEntityMessage <$> get <*> get <*> get <*> get)
 
 sendNetworkEntityMessage :: Client -> B.ByteString -> IO ()

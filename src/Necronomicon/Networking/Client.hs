@@ -91,6 +91,7 @@ aliveLoop client sock = getCurrentTime >>= \t -> executeIfConnected client (send
     where
         sendAliveMessage _ = atomically $ writeTChan (clientOutBox client) $ encode Alive
 
+--Reconnecting causing char error on server!?
 listener :: Client -> Socket -> String -> SignalState -> IO ()
 listener client sock serverIPAddress sigstate = receiveWithLength sock >>= \maybeMsg -> case maybeMsg of
     Exception     e -> putStrLn ("listener Exception: " ++ show e)         >> shutdownClient
@@ -115,9 +116,9 @@ messageProcessor client sigstate = executeIfConnected client (atomically $ readT
         Nothing  -> parseMessage (decode m) client sigstate >> messageProcessor client sigstate
         Just nid -> atomically (writeTChan (signalsInbox sigstate) $ NetSignalEvent nid m) >> messageProcessor client sigstate
     where
-        isSignalUpdate = (get :: Get Word8) >>= \t -> if t == 3
-            then Just <$> (get :: Get Int)
-            else return Nothing
+        isSignalUpdate = (get :: Get Word8) >>= \t -> if t >= 0 && t < 4 
+            then return Nothing
+            else Just <$> (get :: Get Int)
 
 ------------------------------
 --Quitting And Restarting

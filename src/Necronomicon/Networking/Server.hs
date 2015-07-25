@@ -129,9 +129,13 @@ sendUserMessage server _ = forever $ do
     Control.Exception.catch (sendWithLength (userSocket user) m) (\e -> putStrLn ("sendUserMessage: " ++ show (e :: IOException)))
 
 processMessage :: Server -> SockAddr -> Socket -> B.ByteString -> IO Bool
-processMessage server sa sock msg = if runGet ((get :: Get Word8) >>= return . (/=3)) msg
-    then parseMessage msg (decode msg) sock sa server
-    else broadcast (Just sa, msg) server >> return False
+processMessage server sa sock msg = case runGet (get :: Get Word8) msg of
+    0 -> parseMessage msg (decode msg) sock sa server
+    1 -> parseMessage msg (decode msg) sock sa server
+    2 -> parseMessage msg (decode msg) sock sa server
+    3 -> parseMessage msg (decode msg) sock sa server
+    4 -> broadcast (Just sa, msg) server >> return False
+    _ -> putStrLn ("Received unrecognized message type, ignoring.") >> return False
 
 ------------------------------
 --Parse Messages
@@ -147,7 +151,7 @@ parseMessage m (Login _ n) sock sa server = do
         putStrLn   $ show n ++ " logged in."
         atomically $ modifyTVar (serverUsers server) (Map.insert (userAddress user) user)
         broadcast (Nothing, m) server
-        
+
         putStrLn   $ "User logged in: " ++ show (userName user)
         putStrLn ""
         atomically (readTVar $ serverUsers server) >>= print
@@ -161,7 +165,7 @@ parseMessage m (Logout _ n) sock sa server = do
         close      sock
         atomically $ modifyTVar (serverUsers server) (Map.delete sa)
         broadcast (Nothing, m) server
-        
+
         putStrLn   $ "User logged out: " ++ show n
         putStrLn   $ "Removing from server."
         atomically (readTVar $ serverUsers server) >>= print
