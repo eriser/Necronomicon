@@ -94,7 +94,7 @@ acceptLoop server nsocket = forever $ do
     if Map.member newUserAddress users
         then return ()
         else do
-            setSocketOption newUserSocket KeepAlive 1
+            -- setSocketOption newUserSocket KeepAlive 1
             setSocketOption newUserSocket NoDelay   1
             putStrLn $ "Accepting connection from user at: " ++ show newUserAddress
             _ <- forkIO $ userListen newUserSocket newUserAddress server
@@ -105,10 +105,10 @@ userListen nsocket addr server = isConnected nsocket >>= \connected -> if not co
     then putStrLn $ "userListen shutting down: " ++ show addr
     else receiveWithLength nsocket >>= \maybeMessage -> case maybeMessage of
         Exception     e -> putStrLn ("userListen Exception: " ++ show e) >> userListen nsocket addr server
-        ShutdownMessage -> putStrLn "Message has zero length. Shutting down userListen loop."
+        ShutdownMessage -> putStrLn "Message has zero length. Shutting down userListen loop and removing user." >> close nsocket >> atomically (modifyTVar (serverUsers server) $ Map.delete addr)
         IncorrectLength -> putStrLn "Message is incorrect length! Ignoring..." -- >> userListen nsocket addr stopVar server
         Receive     msg -> if B.null msg
-            then putStrLn "Message has zero length. Shutting down userListen loop."
+            then putStrLn "Message has zero length. Shutting down userListen loop and removing users." >> close nsocket >> atomically (modifyTVar (serverUsers server) $ Map.delete addr)
             else processMessage server addr nsocket msg >>= \shouldQuit -> if shouldQuit
                 then putStrLn $ "Listening has been signaled as finished after processing a message.\nuserListen shutting down: " ++ show addr
                 else userListen nsocket addr server
@@ -145,23 +145,29 @@ parseMessage m (Login _ n) sock sa server = do
         t       <- getCurrentTime
         let user = User sock sa n t
         putStrLn   $ show n ++ " logged in."
-        atomically $ writeTVar (serverUsers server) (Map.insert (userAddress user) user users)
-        putStrLn   $ "User logged in: " ++ show (userName user)
+        atomically $ modifyTVar (serverUsers server) (Map.insert (userAddress user) user)
         broadcast (Nothing, m) server
+        
+        putStrLn   $ "User logged in: " ++ show (userName user)
+        putStrLn ""
+        atomically (readTVar $ serverUsers server) >>= print
+        putStrLn ""
     return False
 
 parseMessage m (Logout _ n) sock sa server = do
-    putStrLn $ "Login message received from: " ++ show n
+    putStrLn $ "Logout message received from: " ++ show n
     users <- atomically $ readTVar (serverUsers server)
     if (not $ Map.member sa users) then return False else do
         close      sock
-        atomically $ writeTVar (serverUsers server) (Map.delete sa users)
-        putStrLn   $ "User logged out: " ++ show n
+        atomically $ modifyTVar (serverUsers server) (Map.delete sa)
         broadcast (Nothing, m) server
+        
+        putStrLn   $ "User logged out: " ++ show n
+        putStrLn   $ "Removing from server."
+        atomically (readTVar $ serverUsers server) >>= print
         return True
 
 parseMessage m Alive _ sa server = do
-    -- putStrLn $ show sa ++ " is alive."
     users' <- atomically $ readTVar (serverUsers server)
     case Map.lookup sa users' of
         Nothing   -> putStrLn "Received alive message for a user that is not currently on the server." >> return False
@@ -169,7 +175,7 @@ parseMessage m Alive _ sa server = do
             t <- getCurrentTime
             sendMessage user m server
             let user' = User (userSocket user) (userAddress user) (userName user) t
-            atomically $ readTVar (serverUsers server) >>= \users -> writeTVar (serverUsers server) (Map.insert (userAddress user) user' users)
+            atomically $ modifyTVar (serverUsers server) (Map.insert (userAddress user) user')
             return False
 
 parseMessage m (Chat name msg) _ _ server = do

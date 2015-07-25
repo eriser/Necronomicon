@@ -32,19 +32,18 @@ startup client serverIPAddress sigstate = do
     connectionLoop            client sock serverAddr
     getCurrentTime >>= \t -> atomically $ writeTVar (clientAliveTime client) t
     _ <- forkIO $ messageProcessor client sigstate
-    _ <- forkIO $ listener         client sock
     _ <- forkIO $ aliveLoop        client sock
     _ <- forkIO $ sender           client sock
     atomically  $ writeTChan (signalsInbox sigstate) $ NetStatusEvent Running
     sendLoginMessage client
     -- forkIO $ testNetworking   client
-    statusLoop client sock serverIPAddress sigstate Running
+    listener client sock serverIPAddress sigstate
     where
         hints     = Just $ defaultHints {addrSocketType = Stream}
         getSocket = do
             (serveraddr:_) <- getAddrInfo hints (Just serverIPAddress) (Just serverPort)
             sock           <- socket AF_INET Stream defaultProtocol
-            setSocketOption sock KeepAlive 1
+            -- setSocketOption sock KeepAlive 1
             setSocketOption sock NoDelay   1
             setSocketOption sock ReuseAddr 1
             return (sock,addrAddress serveraddr)
@@ -70,7 +69,7 @@ connectionLoop client nsocket serverAddr = Control.Exception.catch tryConnect on
             connectionLoop client nsocket serverAddr
 
 sender :: Client -> Socket -> IO()
-sender client sock = executeIfConnected client (readTChan $ clientOutBox client) >>= \maybeMessage -> case maybeMessage of
+sender client sock = executeIfConnected client (atomically $ readTChan $ clientOutBox client) >>= \maybeMessage -> case maybeMessage of
     Nothing  -> putStrLn "Shutting down sender"
     Just msg -> Control.Exception.catch (sendWithLength sock msg) printError >> sender client sock
 
@@ -90,24 +89,27 @@ aliveLoop client sock = getCurrentTime >>= \t -> executeIfConnected client (send
                 atomically $ writeTVar (clientRunStatus client) Disconnected
                 sClose sock
     where
-        sendAliveMessage _ = writeTChan (clientOutBox client) $ encode Alive
+        sendAliveMessage _ = atomically $ writeTChan (clientOutBox client) $ encode Alive
 
-listener :: Client -> Socket -> IO ()
-listener client sock = receiveWithLength sock >>= \maybeMsg -> case maybeMsg of
-    Exception     e -> putStrLn ("listener Exception: " ++ show e)         >> listener client sock
+listener :: Client -> Socket -> String -> SignalState -> IO ()
+listener client sock serverIPAddress sigstate = receiveWithLength sock >>= \maybeMsg -> case maybeMsg of
+    Exception     e -> putStrLn ("listener Exception: " ++ show e)         >> shutdownClient
     ShutdownMessage -> putStrLn "Message has zero length. Shutting down."  >> shutdownClient
-    IncorrectLength -> putStrLn "Message is incorrect length! Ignoring..." >> shutdownClient -- listener client sock
+    IncorrectLength -> putStrLn "Message is incorrect length! Ignoring..." >> shutdownClient
     Receive     msg -> if B.null msg
         then shutdownClient
-        else atomically (writeTChan (clientInBox client) msg) >> listener client sock
+        else atomically (writeTChan (clientInBox client) msg) >> listener client sock serverIPAddress sigstate
     where
         shutdownClient = do
             putStrLn "Shutting down listener"
             atomically $ writeTVar (clientRunStatus client) Disconnected
             close sock
+            threadDelay 2500000
+            putStrLn "Disconnected. Trying to restart..."
+            startup client serverIPAddress sigstate
 
 messageProcessor :: Client -> SignalState -> IO ()
-messageProcessor client sigstate = executeIfConnected client (readTChan $ clientInBox client) >>= \maybeMessage -> case maybeMessage of
+messageProcessor client sigstate = executeIfConnected client (atomically $ readTChan $ clientInBox client) >>= \maybeMessage -> case maybeMessage of
     Nothing -> putStrLn "Shutting down messageProcessor"
     Just m  -> case runGet isSignalUpdate m of
         Nothing  -> parseMessage (decode m) client sigstate >> messageProcessor client sigstate
@@ -123,43 +125,20 @@ messageProcessor client sigstate = executeIfConnected client (readTChan $ client
 
 quitClient :: Client -> IO ()
 quitClient client = do
-    atomically $ writeTVar (clientRunStatus client) ShouldQuit
-    atomically $ readTVar  (clientRunStatus client) >>= \s ->
-        case s of
-            Inactive     -> return ()
-            Connecting   -> retry
-            Running      -> retry
-            Disconnected -> return ()
-            Quitting     -> retry
-            ShouldQuit   -> retry
-            DoneQuitting -> return ()
+    putStrLn "Quitting..."
+    atomically $ writeTVar  (clientRunStatus client) Quitting
+    putStrLn "Sending quit message to server..."
+    atomically $ writeTChan (clientOutBox client) $ encode $ Logout (clientID client) (clientUserName client)
+    putStrLn "Closing socket..."
+    threadDelay 50000
+    putStrLn "Done quitting..."
+    atomically $ writeTVar  (clientRunStatus client) DoneQuitting
 
-statusLoop :: Client -> Socket -> String -> SignalState -> NetStatus -> IO()
-statusLoop client sock serverIPAddress sigstate status = do
-    status' <-atomically (readTVar (clientRunStatus client) >>= \status' -> if status /= status' then return status' else retry)
-    atomically $ writeTChan (signalsInbox sigstate) $ NetStatusEvent status'
-    putStrLn ("Network status update: " ++ show status')
-    case status' of
-        Disconnected -> threadDelay 2500000 >> putStrLn "Disconnected. Trying to restart..." >> startup client serverIPAddress sigstate
-        ShouldQuit   -> do
-            putStrLn "Quitting..."
-            atomically $ writeTVar  (clientRunStatus client) Quitting
-            putStrLn "Sending quit message to server..."
-            Control.Exception.catch (sendWithLength sock $ encode $ Logout (clientID client) (clientUserName client)) printError
-            putStrLn "Closing socket..."
-            close sock
-            putStrLn "Done quitting..."
-            atomically $ writeTVar  (clientRunStatus client) DoneQuitting
-        _            -> statusLoop client sock serverIPAddress sigstate status'
-
-executeIfConnected :: Client -> STM a -> IO (Maybe a)
-executeIfConnected client action = atomically (checkForStatus `orElse` checkForMessage)
-    where
-        checkForMessage = action >>= return . Just
-        checkForStatus  = readTVar  (clientRunStatus client) >>= \status -> case status of
-            Connecting -> retry
-            Running    -> retry
-            _          -> return Nothing
+executeIfConnected :: Client -> IO a -> IO (Maybe a)
+executeIfConnected client action = atomically (readTVar (clientRunStatus client)) >>= \status -> case status of
+    Connecting -> Just <$> action
+    Running    -> Just <$> action
+    _          -> return Nothing
 
 ------------------------------
 --Message parsing

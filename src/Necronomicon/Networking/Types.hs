@@ -6,20 +6,12 @@ import System.Random
 import Data.Bits (xor)
 import qualified Data.IntMap           as IntMap
 import qualified Data.ByteString.Lazy  as B
--- import qualified Data.ByteString.Char8 as C
 
---We don't really need either add or remove!
 data NetMessage = Chat            String String
-                -- | AddNetSignal    Int String
-                -- | RemoveNetSignal Int
-                -- | UpdateNetSignal Int B.ByteString
                 | UpdateNetSignal
                 | Alive
-                -- | UserList        [String]
                 | Login            Int String
                 | Logout           Int String
-                -- | SyncNetSignals  (IntMap.IntMap B.ByteString)
-                -- | EmptyMessage
                 deriving (Show)
 
 data NetStatus = Inactive
