@@ -259,7 +259,7 @@ void test_doubly_linked_list()
 
         if (next)
         {
-            printf("(next: %llu) - (node: %llu) = %llu\n", next->time, node->time, next->time - node->time);
+            printf("(next: %llu) - (node: %llu) = %llu\n", (unsigned long long) next->time, (unsigned long long) node->time, (unsigned long long) (next->time - node->time));
             assert((next->time - node->time) == 1);
         }
 
@@ -281,7 +281,7 @@ void test_doubly_linked_list()
 
         if (next)
         {
-            printf("(next: %llu) - (node: %llu) = %llu\n", next->time, node->time, next->time - node->time);
+            printf("(next: %llu) - (node: %llu) = %llu\n", (unsigned long long) next->time, (unsigned long long) node->time, (unsigned long long) (next->time - node->time));
             assert((next->time - node->time) == 2);
         }
 

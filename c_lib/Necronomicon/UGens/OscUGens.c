@@ -131,13 +131,13 @@ bool minBLEP_Init()
 
     fseek(fp,0x134,SEEK_SET);
 
-    fread(&iSize,sizeof(int32_t),1,fp);
+    size_t file_size = fread(&iSize,sizeof(int32_t),1,fp);
     gMinBLEP.c=iSize/sizeof(double);
 
     gMinBLEP.lpTable=(double*)malloc(iSize);
     if (!gMinBLEP.lpTable) return false;
 
-    fread(gMinBLEP.lpTable,iSize,1,fp);
+    file_size = fread(gMinBLEP.lpTable,iSize,1,fp);
 
     fclose(fp);
 

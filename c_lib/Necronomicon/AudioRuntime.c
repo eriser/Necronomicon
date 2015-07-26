@@ -351,12 +351,12 @@ sample_buffer* retrieve_sample_buffer(const char* file_path)
 void print_sfinfo(SF_INFO sfinfo)
 {
     printf("SF_INFO { frames: %u, samplerate: %i, channels: %i, format: %i, sections: %i, seekable: %i }\n",
-        sfinfo.frames,
-        sfinfo.samplerate,
-        sfinfo.channels,
-        sfinfo.format,
-        sfinfo.sections,
-        sfinfo.seekable
+        (uint32_t) sfinfo.frames,
+        (int32_t) sfinfo.samplerate,
+        (int32_t) sfinfo.channels,
+        (int32_t) sfinfo.format,
+        (int32_t) sfinfo.sections,
+        (int32_t) sfinfo.seekable
     );
 }
 
@@ -989,7 +989,7 @@ void print_node(synth_node* node)
                node->ugen_wires_node,
                node->previous,
                node->next,
-               node->time,
+               (unsigned long long) node->time,
                node->key,
                node->hash,
                node->table_index,
