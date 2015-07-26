@@ -17,12 +17,13 @@ data Camera = Camera {
     _far        :: Double,
     _clearColor :: Color,
     _fx         :: [PostRenderingFX],
-    _layers     :: Int
+    _layers     :: Int,
+    _depth      :: Int
     } deriving (Show, Eq)
 
 instance Binary Camera where
-    put (Camera fov n far c fx l) = put fov >> put n >> put far >> put c >> put fx >> put l
-    get                           = Camera <$> get <*> get <*> get <*> get <*> get <*> get
+    put (Camera fov n far c fx l d) = put fov >> put n >> put far >> put c >> put fx >> put l >> put d
+    get                             = Camera <$> get <*> get <*> get <*> get <*> get <*> get <*> get
 
 fov_ :: Double -> Camera -> Camera
 fov_ v r = r{_fov=v}
@@ -47,7 +48,6 @@ _far_ f r = r{_far=f (_far r)}
 
 _clearColor_ :: (Color -> Color) -> Camera -> Camera
 _clearColor_ f r = r{_clearColor=f (_clearColor r)}
-
 
 ---------------------------------------
 -- Full screen Post-Rendering Effects

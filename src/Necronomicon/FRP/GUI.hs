@@ -12,7 +12,7 @@ import           Necronomicon.Networking.Types
 import           Data.Monoid
 
 guiCamera:: Entity ()
-guiCamera= (mkEntity ()){camera = Just <| Camera 0 0.001 10 black [] (toBitMask GUILayer)}
+guiCamera= (mkEntity ()){camera = Just <| Camera 0 0.001 10 transparent [] (toBitMask GUILayer) 1}
 
 label :: Vector2 -> Font -> String -> Entity ()
 label (Vector2 x y) font text = (mkEntity ())
@@ -35,7 +35,7 @@ basicNetGUI = foldn updateBasicNetGUI mkBasicNetGUI
            <> NetGUIStatus <~ networkStatus
 
 mkBasicNetGUI :: [Entity ()]
-mkBasicNetGUI = [guiCamera, guiRect (0, 0.1) (0.15, 0.05) (RGBA 1 1 1 0.1)]
+mkBasicNetGUI = [guiCamera, guiRect (0, 0.1) (0.15, 0.05) (RGBA 1 1 1 0.5)]
 
 updateBasicNetGUI :: BasicNetGUIInput -> [Entity ()] -> [Entity ()]
 updateBasicNetGUI (NetGUIUsers  _) es = es
