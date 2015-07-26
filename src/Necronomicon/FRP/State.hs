@@ -286,8 +286,8 @@ updateEntity :: SignalState -> Int -> Nursery a -> IORef [Entity a] -> Maybe (In
 updateEntity state gen nursery _ _ e@Entity{euid = UID uid} = do
     --Update existing Entities
     case model e of
-        Just (Model (Mesh        (Just _) _ _ _ _ _) (Material (Just _) _ _ _ _)) -> writeRenderData (renderDataRef state) uid e
-        Just (Model (DynamicMesh (Just _) _ _ _ _ _) (Material (Just _) _ _ _ _)) -> writeRenderData (renderDataRef state) uid e
+        Just (Model _ (Mesh        (Just _) _ _ _ _ _) (Material (Just _) _ _ _ _)) -> writeRenderData (renderDataRef state) uid e
+        Just (Model _ (DynamicMesh (Just _) _ _ _ _ _) (Material (Just _) _ _ _ _)) -> writeRenderData (renderDataRef state) uid e
         _                                                                         -> return ()
     writeCam (cameraRef state) (euid e) (camera e) e
     insertNursery uid gen e nursery
@@ -339,7 +339,7 @@ removeAndNetworkEntities state gen nursery newEntRef nid = do
                 _       -> atomically $ modifyTVar' (cameraRef state) $ IntMap.delete k
             case netOptions c of
                 --Is checking the arguments each frame causing the hiccup???
-                NoNetworkOptions -> return (collectNetworkEntityUpdates p c cs, ngs)
+                NoNetworkOptions -> return (cs, ngs)
                 _                -> return (collectNetworkEntityUpdates p c cs, (netid c, ()) : ngs)
 
 type Nursery a = Hash.CuckooHashTable Int (Int, Entity a, Entity a)

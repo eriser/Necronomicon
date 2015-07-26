@@ -5,9 +5,11 @@ import           Necronomicon.FRP.Signal
 import           Necronomicon.Runtime
 import           Necronomicon.Utility
 import           Necronomicon.Networking.Client
+import           Necronomicon.Graphics
 import qualified Necronomicon.Physics.DynamicTree  as DynTree
 
-import           Necronomicon.Graphics
+import           Data.List (sortBy)
+import           Data.Ord  (comparing)
 import           Control.Concurrent
 import           Control.Concurrent.STM
 import           Control.Monad
@@ -42,12 +44,12 @@ runSignal sig = initWindow (920, 540) False >>= \mw -> case mw of
         _             <- forkIO $ processEvents scont state eventInbox
 
         setInputCallbacks w eventInbox
-        threadDelay 1000000
+        -- threadDelay 1000000
         case args of
             Just [n, a] -> startNetworking state n a $ signalClient state
             _           -> print "Incorrect arguments given for networking (name address). Networking is disabled"
 
-        threadDelay 500000
+        -- threadDelay 500000
         run False w scont currentTime DynTree.empty eventInbox state
     where
         run quit window s runTime' tree eventInbox state
@@ -64,8 +66,11 @@ runSignal sig = initWindow (920, 540) False >>= \mw -> case mw of
                 atomically (takeTMVar (contextBarrier state)) >>= \(GLContext tid) -> when (tid /= mtid) (GLFW.makeContextCurrent (Just window))
 
                 gs <- readIORef (renderDataRef state)
-                cs <- atomically $ readTVar (cameraRef state)
+                cs <- sortBy (comparing (_depth . snd)) . IntMap.elems <$> atomically (readTVar (cameraRef state))
+                
+                preRender window
                 mapM_ (renderWithCameraRaw window (sigResources state) gs) cs
+                GLFW.swapBuffers window
                 atomically $ putTMVar (contextBarrier state) $ GLContext mtid
 
                 threadDelay 16667
