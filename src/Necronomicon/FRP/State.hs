@@ -339,7 +339,7 @@ removeAndNetworkEntities state gen nursery newEntRef nid = do
                 _       -> atomically $ modifyTVar' (cameraRef state) $ IntMap.delete k
             case netOptions c of
                 --Is checking the arguments each frame causing the hiccup???
-                NoNetworkOptions -> return (collectNetworkEntityUpdates p c cs, ngs)
+                NoNetworkOptions -> return (cs, ngs)
                 _                -> return (collectNetworkEntityUpdates p c cs, (netid c, ()) : ngs)
 
 type Nursery a = Hash.CuckooHashTable Int (Int, Entity a, Entity a)

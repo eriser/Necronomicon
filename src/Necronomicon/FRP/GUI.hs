@@ -1,31 +1,46 @@
 module Necronomicon.FRP.GUI where
 
--- import           Data.IORef
--- import           Necronomicon.FRP.Signal
--- import           Necronomicon.FRP.Types
+import           Necronomicon.FRP.Signal
+import           Necronomicon.FRP.Types
+import           Necronomicon.FRP.Networking
+import           Necronomicon.FRP.State
 import           Necronomicon.Graphics
 import           Necronomicon.Linear
 import           Necronomicon.Entity
--- import           Necronomicon.Networking (sendChatMessage)
+import           Necronomicon.Utility
+import           Necronomicon.Networking.Types
+import           Data.Monoid
 
--- data Gui a = Gui a (Entity a)
-data Size = Size Double Double
-
--- input :: Signal (Gui a) -> Signal a
--- input = fmap $ \(Gui a _) -> a
-
--- element :: Signal (Gui a) -> Signal SceneObject
--- element = fmap $ \(Gui _ s) -> s
-
--- gui :: [Signal SceneObject] -> Signal ()
--- gui gs = renderGUI $ root <~ combine gs
+guiCamera:: Entity ()
+guiCamera= (mkEntity ()){camera = Just <| Camera 0 0.001 10 black [] (toBitMask GUILayer)}
 
 label :: Vector2 -> Font -> String -> Entity ()
 label (Vector2 x y) font text = (mkEntity ())
     { pos    = Vector3 x y 0
-    , rot    = identity
-    , escale = 1
     , model  = Just $ drawText text font ambient }
+
+guiRect :: (Double, Double) -> (Double, Double) -> Color -> Entity ()
+guiRect (x, y) (w, h) color = (mkEntity ())
+    { pos = Vector3 x y 0
+    , model = Just <| mkModel GUILayer (rect w h) <| vertexColored color }
+
+data BasicNetGUIInput = NetGUIUsers [String]
+                      | NetGUIChat  (String, String)
+                      | NetGUIStatus NetStatus
+
+basicNetGUI :: Signal [Entity ()]
+basicNetGUI = foldn updateBasicNetGUI mkBasicNetGUI
+           <| NetGUIUsers  <~ userList
+           <> NetGUIChat   <~ chatMessage
+           <> NetGUIStatus <~ networkStatus
+
+mkBasicNetGUI :: [Entity ()]
+mkBasicNetGUI = [guiCamera, guiRect (0, 0.1) (0.15, 0.05) (RGBA 1 1 1 0.1)]
+
+updateBasicNetGUI :: BasicNetGUIInput -> [Entity ()] -> [Entity ()]
+updateBasicNetGUI (NetGUIUsers  _) es = es
+updateBasicNetGUI (NetGUIChat   _) es = es
+updateBasicNetGUI (NetGUIStatus _) es = es
 
 -- userBox :: Vector2 -> Size -> Font -> Material -> Signal SceneObject
 -- userBox (Vector2 x y) _ font _ = textBox <~ users
@@ -89,6 +104,14 @@ label (Vector2 x y) font text = (mkEntity ())
 
         -- chatObject t = SceneObject (Vector3  x y 0) identity 1 (Model (rect w h) (vertexColored (RGBA 0 0 0 0))) [textObject t]
         -- textObject t = SceneObject (Vector3  0 0 1) identity 1 (drawText t font ambient) []
+-- input :: Signal (Gui a) -> Signal a
+-- input = fmap $ \(Gui a _) -> a
+
+-- element :: Signal (Gui a) -> Signal SceneObject
+-- element = fmap $ \(Gui _ s) -> s
+
+-- gui :: [Signal SceneObject] -> Signal ()
+-- gui gs = renderGUI $ root <~ combine gs
 
 {-
 slider :: Vector2 -> Size -> Color -> Signal (Gui Double)

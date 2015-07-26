@@ -38,10 +38,7 @@ renderWithCameraRaw :: GLFW.Window -> Resources -> SMV.IOVector RenderData -> (M
 renderWithCameraRaw window resources scene (view, c) = do
     (w,h) <- GLFW.getWindowSize window
 
-    let (r, g, b, a) = case _clearColor c of
-            RGB  r' g' b'    -> (r', g', b', 1.0)
-            RGBA r' g' b' a' -> (r', g', b', a')
-        ratio = fromIntegral w / fromIntegral h
+    let ratio = fromIntegral w / fromIntegral h
         mptr  = matrixUniformPtr resources
         persp = perspMatrix (_fov c) ratio (_near c) (_far c)
         oproj = orthoMatrix 0 ratio 1 0 (-1) 1
@@ -56,12 +53,13 @@ renderWithCameraRaw window resources scene (view, c) = do
     glEnable  gl_BLEND
     -- GL.blendBuffer 0 GL.$= GL.Enabled
     glBlendFunc gl_SRC_ALPHA gl_ONE_MINUS_SRC_ALPHA
-
-    glClearColor (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a)
+    
+    case _clearColor c of
+        RGB  r g b   -> glClearColor (realToFrac r) (realToFrac g) (realToFrac b) 1
+        RGBA r g b a -> glClearColor (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a)
+    
     glClear $ gl_DEPTH_BUFFER_BIT .|. gl_COLOR_BUFFER_BIT
-
     glViewport 0 0 (fromIntegral w) (fromIntegral h)
-
     glLoadIdentity
 
     case _fov c of
@@ -70,7 +68,6 @@ renderWithCameraRaw window resources scene (view, c) = do
 
     -- mapM_ drawPostRenderFX $ _fx c
 
-    GLFW.swapBuffers window
     where
         -- drawPostRenderFX fx = do
             -- glBindFramebuffer gl_FRAMEBUFFER 0

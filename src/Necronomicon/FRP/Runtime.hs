@@ -66,6 +66,7 @@ runSignal sig = initWindow (920, 540) False >>= \mw -> case mw of
                 gs <- readIORef (renderDataRef state)
                 cs <- atomically $ readTVar (cameraRef state)
                 mapM_ (renderWithCameraRaw window (sigResources state) gs) cs
+                GLFW.swapBuffers window
                 atomically $ putTMVar (contextBarrier state) $ GLContext mtid
 
                 threadDelay 16667

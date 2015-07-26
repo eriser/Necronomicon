@@ -4,7 +4,7 @@ import Data.Binary
 import qualified Data.IntMap as IntMap
 
 main :: IO ()
-main = runSignal section1
+main = runSignal <| basicNetGUI *> section1
 
 data Player        = Player PlayerState (Double, Double) deriving (Show, Eq, Generic)
 data PlayerState   = PlayerIdle
@@ -30,7 +30,7 @@ mkPlayer :: Entity Player
 mkPlayer = ( mkEntity  <| Player PlayerIdle (180, 0) )
            { pos        = Vector3 0 0 (-6)
            , rot        = fromEuler 0 180 0
-           , camera     = Just <| Camera 30 0.1 1000 black [] (toBitMask DefaultLayer)
+           , camera     = Just <| Camera 30 0.1 1000 transparent [] (toBitMask DefaultLayer)
            , netOptions = mkNetworkOptions
                { networkPos    = Network
                , networkRot    = Network
