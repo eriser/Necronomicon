@@ -31,26 +31,8 @@ hash_table hash_table_new(uint32_t max_items)
 
 void hash_table_free(hash_table htable, bool free_items_in_table)
 {
-    hash_table_node** table = htable.table;
-    uint32_t size = htable.size;
-    uint32_t i;
-
-    for (i = 0; i < size; ++i)
-    {
-        hash_table_node* node = table[i];
-        if (node != NULL)
-        {
-            if (free_items_in_table == true)
-                free(node->item);
-
-            if (node->key_type == string_key_type)
-                free(node->string_key);
-
-            free(node);
-        }
-    }
-
-    free(table);
+    hash_table_clear(htable, free_items_in_table);
+    free(htable.table);
 }
 
 void hash_table_free_with_callback(hash_table htable, free_item_callback free_callback)
@@ -212,7 +194,7 @@ bool hash_table_insert_string_key(hash_table htable, void* item, const char* key
     return is_insertion_successful;
 }
 
-bool hash_table_remove_uint_key(hash_table htable, void* item, uint32_t key)
+bool hash_table_remove_uint_key(hash_table htable, uint32_t key)
 {
     hash_table_node** table = htable.table;
     uint32_t size = htable.size;
@@ -232,7 +214,7 @@ bool hash_table_remove_uint_key(hash_table htable, void* item, uint32_t key)
     return is_removal_successful;
 }
 
-bool hash_table_remove_string_key(hash_table htable, void* item, const char* key)
+bool hash_table_remove_string_key(hash_table htable, const char* key)
 {
     hash_table_node** table = htable.table;
     uint32_t size = htable.size;
@@ -303,4 +285,26 @@ void* hash_table_lookup_string_key(hash_table htable, const char* key)
     }
 
     return item_ptr;
+}
+
+void hash_table_clear(hash_table htable, bool free_items_in_table)
+{
+    hash_table_node** table = htable.table;
+    uint32_t size = htable.size;
+    uint32_t i;
+
+    for (i = 0; i < size; ++i)
+    {
+        hash_table_node* node = table[i];
+        if (node != NULL)
+        {
+            if (free_items_in_table == true)
+                free(node->item);
+
+            if (node->key_type == string_key_type)
+                free(node->string_key);
+
+            free(node);
+        }
+    }
 }
