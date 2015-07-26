@@ -1,5 +1,3 @@
-{-# LANGUAGE ForeignFunctionInterface #-}
-{-# LANGUAGE OverloadedLists #-}
 module Necronomicon.UGen where
 
 import GHC.Exts
@@ -494,7 +492,7 @@ feedback f = expand . localOut 0 $ output
         (output, numInputs) = prFeedback f 0
         -- Pad with extra localOut buses if numInputs is larger than numOutputs
         expand :: UGen -> UGen
-        expand larr = larr <> (foldl (\acc i -> acc <> (localOut i 0)) [] (drop (numChannels larr) [0..(numInputs - 1)]))
+        expand larr = larr <> (foldl (\acc i -> acc <> (localOut i 0)) (UGen []) (drop (numChannels larr) [0..(numInputs - 1)]))
 
 
 foreign import ccall "&accumulator_constructor" accumulatorConstructor :: CUGenFunc
@@ -1433,7 +1431,7 @@ initializeWireBufs numWires constants = {-print ("Wire Buffers: " ++ (show folde
         foldWires (c@((CompiledConstant d ci) : cs), ws) i
             | ci == i = (cs, (ws ++ [d]))
             | otherwise = (c, ws ++ zero)
-        foldWires (_,_) _ = ([], [])
+        -- foldWires (_,_) _ = ([], [])
         zero = [0]
 
 synthArgument :: Int -> UGenChannel
