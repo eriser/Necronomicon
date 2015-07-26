@@ -58,17 +58,17 @@ void randomize_and_print_list(node_list list)
     uint32_t i;
     for (i = 0; i < 1000; ++i)
     {
-        uint32_t num_pop = random() / (double) RAND_MAX * 100;
+        uint32_t num_pop = rand() / (double) RAND_MAX * 100;
         while ((num_pop > 0) && ((scheduled_list_read_index & FIFO_SIZE_MASK) != ((scheduled_list_write_index - 1) & FIFO_SIZE_MASK)))
         {
             SCHEDULED_LIST_POP();
             --num_pop;
         }
 
-        uint32_t num_push = random() / (double) RAND_MAX * 100;
+        uint32_t num_push = rand() / (double) RAND_MAX * 100;
         while ((num_push > 0) && ((scheduled_list_read_index & FIFO_SIZE_MASK) != (scheduled_list_write_index & FIFO_SIZE_MASK)))
         {
-            synth_node* node = new_test_synth((random() / (double) RAND_MAX) * 10000.0);
+            synth_node* node = new_test_synth((rand() / (double) RAND_MAX) * 10000.0);
             SCHEDULED_LIST_PUSH(node);
             --num_push;
         }
@@ -96,7 +96,7 @@ void test_list()
 
     while (scheduled_list_write_index < (MAX_FIFO_MESSAGES * 0.75))
     {
-        synth_node* node = new_test_synth((random() / (double) RAND_MAX) * 10000.0);
+        synth_node* node = new_test_synth((rand() / (double) RAND_MAX) * 10000.0);
         SCHEDULED_LIST_PUSH(node);
     }
 
@@ -152,7 +152,7 @@ void test_hash_table()
 
     for (i = 0; i < num_values; ++i)
     {
-        times[i] = (random() / (double) RAND_MAX) * 10000.0;
+        times[i] = (rand() / (double) RAND_MAX) * 10000.0;
         synth_node* node = new_test_synth(times[i]);
         node->key = i;
         node->hash = HASH_KEY(i);

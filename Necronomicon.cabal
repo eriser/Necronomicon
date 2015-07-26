@@ -53,6 +53,7 @@ library
         c_lib/Necronomicon/UGens/TimeUGens.c,
         c_lib/Necronomicon/Containers/HashTable.c
     ghc-options:        -threaded -O2 -Wall -Werror -fwarn-incomplete-uni-patterns
+    cc-options:         -std=c99 -Werror
     default-extensions: FlexibleInstances MultiParamTypeClasses ForeignFunctionInterface TypeFamilies BangPatterns
 
     exposed-modules:
@@ -144,6 +145,7 @@ executable PatternTest
     main-is:          Main.hs
     default-language: Haskell2010
     ghc-options:      -threaded -Wall -Werror -debug
+    cc-options:       -std=c99 -Werror
     hs-source-dirs:   Tests/PatternTest
     default-extensions: QuasiQuotes TemplateHaskell
     build-depends:
@@ -155,6 +157,7 @@ executable NecroNet
     main-is:          Main.hs
     default-language: Haskell2010
     ghc-options:      -threaded -Wall -Werror
+    cc-options:       -std=c99 -Werror
     hs-source-dirs:   NecroNet
     default-extensions:
     build-depends:
@@ -165,6 +168,7 @@ executable SigTest
     main-is:          Main.hs
     default-language: Haskell2010
     ghc-options:      -threaded -O3 -Wall -Werror
+    cc-options:       -std=c99 -Werror
     hs-source-dirs:   Tests/SigTest
     default-extensions: QuasiQuotes TemplateHaskell OverloadedLists
     build-depends:
@@ -176,6 +180,7 @@ executable StressTest
     main-is:          Main.hs
     default-language: Haskell2010
     ghc-options:      -threaded -O3 -Wall -Werror -debug
+    cc-options:       -std=c99 -Werror
     hs-source-dirs:   Tests/StressTest
     default-extensions: QuasiQuotes TemplateHaskell ParallelListComp
     build-depends:
@@ -187,6 +192,7 @@ executable UGenTest
     main-is:          Main.hs
     default-language: Haskell2010
     ghc-options:      -threaded -O3 -Wall -Werror -debug
+    cc-options:       -std=c99 -Werror
     hs-source-dirs:   Tests/UGenTest
     default-extensions: QuasiQuotes TemplateHaskell ParallelListComp
     build-depends:
@@ -198,6 +204,7 @@ executable CTest
     main-is:            Main.hs
     default-language:   Haskell2010
     ghc-options:        -threaded -Wall -Werror -debug
+    cc-options:         -std=c99 -Werror
     hs-source-dirs:     Tests/CTest
     Include-Dirs: 		c_lib
     Install-Includes:	AudioRuntime.h
@@ -211,6 +218,7 @@ executable AudioEngineTest
     main-is:          Main.hs
     default-language: Haskell2010
     ghc-options:      -threaded -Wall -Werror -debug
+    cc-options:       -std=c99 -Werror
     hs-source-dirs:   Tests/AudioEngineTest
     default-extensions: OverloadedLists
     build-depends:
@@ -222,6 +230,7 @@ executable PriorityQueueTest
     main-is:          Main.hs
     default-language: Haskell2010
     ghc-options:      -threaded -Wall -Werror -debug
+    cc-options:       -std=c99 -Werror
     hs-source-dirs:   Tests/PriorityQueueTest
     default-extensions:
     build-depends:
@@ -233,6 +242,7 @@ executable Shootout
     main-is:          Main.hs
     default-language: Haskell2010
     ghc-options:      -threaded -O3 -Wall -Werror
+    cc-options:       -std=c99 -Werror
     hs-source-dirs:   Tests/Shootout
     default-extensions: QuasiQuotes TemplateHaskell ParallelListComp OverloadedLists
     build-depends:
@@ -244,6 +254,7 @@ executable GenCalcBindings
     main-is:          Main.hs
     default-language: Haskell2010
     ghc-options:      -threaded -Wall -Werror
+    cc-options:       -std=c99 -Werror
     hs-source-dirs:   Tools/GenCalcBindings
     build-depends:    base             == 4.*
 
@@ -253,6 +264,7 @@ executable DynamicTreeTest
     -- ghc-options:      -threaded -O2 -Wall -Werror -fprof-auto "-with-rtsopts=-N4 -p -s -h -i0.1 -A16m"
     -- ghc-options:      -threaded -O2 -Wall -Werror -eventlog "-with-rtsopts=-N4 -h -i0.1 -A16m -ls"
     ghc-options:      -threaded -O2 -Wall -Werror "-with-rtsopts=-N4 -A16m"
+    cc-options:       -std=c99 -Werror
     hs-source-dirs:   Tests/DynamicTreeTest
     default-extensions: DeriveGeneric
     build-depends:    base             == 4.*,
@@ -266,6 +278,7 @@ executable NetworkingTest
     -- ghc-options:      -threaded -O2 -Wall -Werror -fprof-auto "-with-rtsopts=-N4 -p -s -h -i0.1 -A16m"
     -- ghc-options:      -threaded -O2 -Wall -Werror -eventlog "-with-rtsopts=-N4 -h -i0.1 -A16m -ls"
     ghc-options:      -threaded -O2 -Wall -Werror "-with-rtsopts=-N4 -A16m"
+    cc-options:       -std=c99 -Werror
     hs-source-dirs:   Tests/NetworkingTest
     default-extensions: DeriveGeneric
     build-depends:    base             == 4.*,
@@ -277,6 +290,7 @@ executable GenerativeTest
     main-is:          Main.hs
     default-language: Haskell2010
     ghc-options:      -threaded -O3 -Wall -Werror
+    cc-options:       -std=c99 -Werror
     hs-source-dirs:   Tests/GenerativeTest
     default-extensions: QuasiQuotes TemplateHaskell ParallelListComp OverloadedLists
     build-depends:
