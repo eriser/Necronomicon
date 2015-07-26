@@ -86,6 +86,7 @@ typedef struct
 
     GLint model_View_location;
     GLint proj_location;
+    GLint layer;
 } render_data_t;
 
 GLfloat* model_view_ptr;
@@ -106,7 +107,7 @@ void init_c_opengl()
     model_view_ptr = malloc(sizeof(GLfloat) * 16);
 }
 
-void draw_render_data( render_data_t* render_data, GLuint length
+void draw_render_data( render_data_t* render_data, GLuint length, GLint layerMask
                      , GLfloat v00, GLfloat v01, GLfloat v02, GLfloat v03
                      , GLfloat v10, GLfloat v11, GLfloat v12, GLfloat v13
                      , GLfloat v20, GLfloat v21, GLfloat v22, GLfloat v23
@@ -123,7 +124,7 @@ void draw_render_data( render_data_t* render_data, GLuint length
 
     for(i = 0; i < length; i++)
     {
-        if(!render_data->is_active)
+        if(!render_data->is_active || (render_data->layer & layerMask) == 0)
         {
             render_data++;
             continue;

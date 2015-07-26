@@ -390,7 +390,7 @@ data RenderData = RenderData {-# UNPACK #-} !GL.GLuint         --Active / Inacti
                              [UniformRaw]                      --Uniform values
                              {-# UNPACK #-} !GLRaw.GLint       --modelView location
                              {-# UNPACK #-} !GLRaw.GLint       --proj location
-                             {-# UNPACK #-} !GL.GLuint         --Layer for rendering
+                             {-# UNPACK #-} !GL.GLint          --Layer for rendering
 
 data UniformRaw =  UniformTextureRaw {-# UNPACK #-} !GL.GLint {-# UNPACK #-} !GL.GLuint  {-# UNPACK #-} !GL.GLuint
                  | UniformScalarRaw  {-# UNPACK #-} !GL.GLint {-# UNPACK #-} !GL.GLfloat

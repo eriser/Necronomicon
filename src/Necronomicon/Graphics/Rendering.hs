@@ -27,6 +27,7 @@ initWindow (width, height) isFullScreen = GLFW.init >>= \initSuccessful -> if in
 foreign import ccall safe "draw_render_data" drawRenderDataC ::
     Ptr RenderData ->
     GLuint ->
+    GLint ->
     CFloat -> CFloat -> CFloat -> CFloat ->
     CFloat -> CFloat -> CFloat -> CFloat ->
     CFloat -> CFloat -> CFloat -> CFloat ->
@@ -64,8 +65,8 @@ renderWithCameraRaw window resources scene (view, c) = do
     glLoadIdentity
 
     case _fov c of
-        0 -> setMatrixPtr oproj mptr >> (SMV.unsafeWith scene $ \ptr -> drawRenderDataC ptr (fromIntegral $ SMV.length scene) (realToFrac v00) (realToFrac v01) (realToFrac v02) (realToFrac v03) (realToFrac v10) (realToFrac v11) (realToFrac v12) (realToFrac v13) (realToFrac v20) (realToFrac v21) (realToFrac v22) (realToFrac v23) (realToFrac v30) (realToFrac v31) (realToFrac v32) (realToFrac v33) mptr)
-        _ -> setMatrixPtr persp mptr >> (SMV.unsafeWith scene $ \ptr -> drawRenderDataC ptr (fromIntegral $ SMV.length scene) (realToFrac v00) (realToFrac v01) (realToFrac v02) (realToFrac v03) (realToFrac v10) (realToFrac v11) (realToFrac v12) (realToFrac v13) (realToFrac v20) (realToFrac v21) (realToFrac v22) (realToFrac v23) (realToFrac v30) (realToFrac v31) (realToFrac v32) (realToFrac v33) mptr)
+        0 -> setMatrixPtr oproj mptr >> (SMV.unsafeWith scene $ \ptr -> drawRenderDataC ptr (fromIntegral $ SMV.length scene) (fromIntegral $ _layers c) (realToFrac v00) (realToFrac v01) (realToFrac v02) (realToFrac v03) (realToFrac v10) (realToFrac v11) (realToFrac v12) (realToFrac v13) (realToFrac v20) (realToFrac v21) (realToFrac v22) (realToFrac v23) (realToFrac v30) (realToFrac v31) (realToFrac v32) (realToFrac v33) mptr)
+        _ -> setMatrixPtr persp mptr >> (SMV.unsafeWith scene $ \ptr -> drawRenderDataC ptr (fromIntegral $ SMV.length scene) (fromIntegral $ _layers c) (realToFrac v00) (realToFrac v01) (realToFrac v02) (realToFrac v03) (realToFrac v10) (realToFrac v11) (realToFrac v12) (realToFrac v13) (realToFrac v20) (realToFrac v21) (realToFrac v22) (realToFrac v23) (realToFrac v30) (realToFrac v31) (realToFrac v32) (realToFrac v33) mptr)
 
     -- mapM_ drawPostRenderFX $ _fx c
 

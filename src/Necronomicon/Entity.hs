@@ -150,7 +150,7 @@ entityTransform Entity{pos = p, rot = r, escale = s} = trsMatrix p r s
 
 entityToRenderData :: Entity a -> Maybe RenderData
 entityToRenderData !(Entity _ _ position rotation scale _ (Just (Model layer (Mesh (Just loadedMesh) _ _ _ _ _) (Material (Just (program, GL.UniformLocation  mv : GL.UniformLocation  pr : ulocs, vloc, cloc, uloc)) _ _ uns _))) _ _ _ _) =
-    Just $RenderData 1 (unsafeCoerce vb) (unsafeCoerce ib) start end count vn vs vp cn cs cp uvn uvs uvp (unsafeCoerce program) (unsafeCoerce vloc) (unsafeCoerce cloc) (unsafeCoerce uloc) mat uniforms mv pr (fromIntegral layer :: GL.GLuint)
+    Just $RenderData 1 (unsafeCoerce vb) (unsafeCoerce ib) start end count vn vs vp cn cs cp uvn uvs uvp (unsafeCoerce program) (unsafeCoerce vloc) (unsafeCoerce cloc) (unsafeCoerce uloc) mat uniforms mv pr (fromIntegral layer :: GL.GLint)
     where
         (vb, ib, start, end, count, GL.VertexArrayDescriptor vn _ vs vp, GL.VertexArrayDescriptor cn _ cs cp, GL.VertexArrayDescriptor uvn _ uvs uvp) = loadedMesh
         mkLoadedUniform (GL.UniformLocation loc, UniformTexture _ (LoadedTexture t)) (us, tu) = (UniformTextureRaw loc (unsafeCoerce t) tu : us, tu + 1)
@@ -217,7 +217,7 @@ setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !
 
     pokeByteOff ptr 168 mv
     pokeByteOff ptr 172 pr
-    pokeByteOff ptr 176 (fromIntegral layer :: GL.GLuint)
+    pokeByteOff ptr 176 (fromIntegral layer :: GL.GLint)
     where
         (vb, ib, start, end, count, GL.VertexArrayDescriptor vn _ vs vp, GL.VertexArrayDescriptor cn _ cs cp, GL.VertexArrayDescriptor uvn _ uvs uvp) = loadedMesh
         ptr                                                                                   = rdptr `plusPtr` (uid * sizeOf (undefined :: RenderData))
