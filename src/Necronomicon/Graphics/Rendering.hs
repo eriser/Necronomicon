@@ -37,7 +37,6 @@ foreign import ccall safe "draw_render_data" drawRenderDataC ::
 renderWithCameraRaw :: GLFW.Window -> Resources -> SMV.IOVector RenderData -> (Matrix4x4, Camera) -> IO ()
 renderWithCameraRaw window resources scene (view, c) = do
     (w, h) <- GLFW.getWindowSize window
-    putStrLn $ "Rendering camera: " ++ show c
 
     let ratio = fromIntegral w / fromIntegral h
         mptr  = matrixUniformPtr resources

@@ -70,7 +70,6 @@ runSignal sig = initWindow (920, 540) False >>= \mw -> case mw of
 
                 mapM_ (renderWithCameraRaw window (sigResources state) gs) cs
                 GLFW.swapBuffers window
-                putStrLn "EndRendering"
                 atomically $ putTMVar (contextBarrier state) $ GLContext mtid
 
                 threadDelay 16667
