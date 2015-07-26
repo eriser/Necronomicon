@@ -107,4 +107,6 @@ bool hash_table_remove_string_key(hash_table htable, void* item, const char* key
 void* hash_table_lookup_uint_key(hash_table htable, uint32_t key); // will return null if the item was not found in the table
 void* hash_table_lookup_string_key(hash_table htable, const char* key); // will return null if the item was not found in the table
 
+void hash_table_clear(hash_table htable, bool free_items_in_table);
+
 #endif // NECRONOMICON_HASH_TABLE_H_INCLUDED
