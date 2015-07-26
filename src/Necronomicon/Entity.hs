@@ -24,11 +24,25 @@ data Entity a = Entity
     , collider   :: Maybe Collider
     , model      :: Maybe Model
     , camera     :: Maybe Camera
-    , netOptions :: [NetworkOptions]
+    , netOptions :: NetworkOptions a
     , netid      :: (Int, Int)
     , children   :: [Entity ()] }
 
-data NetworkOptions = NetworkData | NetworkPosition | NetworkRotation | NetworkScale | NetworkCollider | NetworkModel deriving (Show, Eq, Enum)
+--TODO: New NetworkOption data structure: NoNetworking Network a NetworkOthers a
+-- data NetworkOptions = NetworkData | NetworkPosition | NetworkRotation | NetworkScale | NetworkCollider | NetworkModel deriving (Show, Eq, Enum)
+data NetworkOption a = NoNetworking | Network | NetworkOthers a
+data NetworkOptions a = NetworkOptions
+    { networkData     :: NetworkOption a
+    , networkPos      :: NetworkOption Vector3
+    , networkRot      :: NetworkOption Quaternion
+    , networkScale    :: NetworkOption Vector3
+    , networkCollider :: NetworkOption (Maybe Collider)
+    , networkModel    :: NetworkOption (Maybe Model)
+    , networkCamera   :: NetworkOption (Maybe Camera) }
+    | NoNetworkOptions
+
+mkNetworkOptions :: NetworkOptions a
+mkNetworkOptions = NetworkOptions NoNetworking NoNetworking NoNetworking NoNetworking NoNetworking NoNetworking NoNetworking
 
 instance Show a => Show (Entity a) where
     show (Entity d uid p r s c m ca n ni cs) =
@@ -46,56 +60,63 @@ instance Show a => Show (Entity a) where
         ", children = " ++ show cs ++
         "}"
 
+instance Show a => Show (NetworkOptions a) where
+    show (NetworkOptions d p r s c m ca) =
+        "NetworkOptions{ " ++
+        "networkDat = " ++ show d ++
+        ", networkPos = " ++ show p ++
+        ", networkRot = " ++ show r ++
+        ", networkScale = " ++ show s ++
+        ", networkCollider = " ++ show c ++
+        ", networkModel = " ++ show m ++
+        ", networkCamera = " ++ show ca ++
+        "}"
+    show NoNetworkOptions = "NoNetworkOptions"
+
+instance Show a => Show (NetworkOption a) where
+    show NoNetworking      = "NoNetworking"
+    show Network           = "Network"
+    show (NetworkOthers x) = "NetworkOthers " ++ show x
+
 instance Functor Entity where
-    fmap f (Entity d uid p r s c m ca n o cs) = Entity (f d) uid p r s c m ca n o cs
+    fmap f (Entity d uid p r s c m ca n o cs) = Entity (f d) uid p r s c m ca (fmap f n) o cs
 
--- instance Foldable Entity where
-    -- foldMap f (Entity d _ _ _ _ _ _ _ _ _)= f d
--- instance Traversable Entity where
-    -- traverse f (Entity d uid p r s c m ca n cs) = (\d' -> Entity d' uid p r s c m ca n cs) <$> f d
+instance Functor NetworkOptions where
+    fmap f (NetworkOptions d p r s c m cam) = NetworkOptions (fmap f d) p r s c m cam
+    fmap _  NoNetworkOptions                = NoNetworkOptions
 
--- class (Binary entities) => Entities entities where
-    -- type EntityType entities :: *
-    -- mapEntitiesM :: Monad m => (Entity (EntityType entities) -> m (Entity (EntityType entities))) -> entities -> m entities
-    -- mapEntities  :: (Entity (EntityType entities) -> Entity (EntityType entities)) -> entities -> entities
-    -- addEntities  :: [Entity (EntityType entities)] -> entities -> entities
-    -- removeEntities :: IntSet.IntSet -> entities -> entities
-
--- instance Binary a => Entities (Entity a) where
-    -- type EntityType (Entity a) = a
-    -- mapEntitiesM f e = f e
-    -- mapEntities  f e = f e
-    -- addEntities []      e = e
-    -- addEntities (e : _) _ = e
-    -- removeEntities _ = id
-    -- {-# INLINE mapEntities #-}
-
--- instance Binary a => Entities [Entity a] where
-    -- type EntityType [Entity a] = a
-    -- mapEntitiesM f es = mapM f es
-    -- mapEntities  f es = map  f es
-    -- {-# INLINE mapEntities #-}
-    -- addEntities ns es = ns ++ es
-    -- removeEntities gs es = foldr maybeRemove [] es
-        -- where
-            -- maybeRemove e es' = case euid e of
-                -- UID uid -> if IntSet.member uid gs then es' else e : es'
-                -- _       -> e : es'
+instance Functor NetworkOption where
+    fmap f (NetworkOthers x) = NetworkOthers $ f x
+    fmap _ NoNetworking      = NoNetworking
+    fmap _ Network           = Network
 
 instance Binary a => Binary (Entity a) where
     put (Entity ed uid p r s c m cam n ni cs) = put ed >> put uid >> put p >> put r >> put s >> put c >> put m >> put cam >> put n >> put ni >> put cs
     get                                      = Entity <$> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get <*> get
 
-instance Binary NetworkOptions where
-    put = put . fromEnum
-    get = toEnum <$> get
+instance Binary a => Binary (NetworkOptions a) where
+    put (NetworkOptions d p r s c m cam) = put (0 :: Word8) >> put d >> put p >> put r >> put s >> put c >> put m >> put cam
+    put  _                               = put (1 :: Word8)
+    get                                  = (get :: Get Word8) >>= \t -> case t of
+        0 -> NetworkOptions <$> get <*> get <*> get <*> get <*> get <*> get <*> get
+        _ -> return NoNetworkOptions
+
+instance Binary a => Binary (NetworkOption a) where
+    put NoNetworking      = put (0 :: Word8)
+    put Network           = put (1 :: Word8)
+    put (NetworkOthers x) = put (2 :: Word8) >> put x
+
+    get = (get :: Get Word8) >>= \t -> case t of
+        0 -> return NoNetworking
+        1 -> return Network
+        _ -> NetworkOthers <$> get
 
 -------------------------------------------------------
 -- API
 -------------------------------------------------------
 
 mkEntity :: a -> Entity a
-mkEntity d = Entity d New 0 identity 1 Nothing Nothing Nothing [] (-1, -1) []
+mkEntity d = Entity d New 0 identity 1 Nothing Nothing Nothing NoNetworkOptions (-1, -1) []
 
 -- mkNetworkOptions :: NetworkOptions
 -- mkNetworkOptions = NetworkOptions False False False False False False False False
@@ -128,11 +149,10 @@ entityTransform :: Entity a -> Matrix4x4
 entityTransform Entity{pos = p, rot = r, escale = s} = trsMatrix p r s
 
 entityToRenderData :: Entity a -> Maybe RenderData
-entityToRenderData !(Entity _ _ position rotation scale _ (Just (Model (Mesh (Just loadedMesh) _ _ _ _ _) (Material (Just loadedMaterial) _ _ uns _))) _ _ _ _) = Just $
-    RenderData 1 (unsafeCoerce vb) (unsafeCoerce ib) start end count vn vs vp cn cs cp uvn uvs uvp (unsafeCoerce program) (unsafeCoerce vloc) (unsafeCoerce cloc) (unsafeCoerce uloc) mat uniforms mv pr
+entityToRenderData !(Entity _ _ position rotation scale _ (Just (Model (Mesh (Just loadedMesh) _ _ _ _ _) (Material (Just (program, GL.UniformLocation  mv : GL.UniformLocation  pr : ulocs, vloc, cloc, uloc)) _ _ uns _))) _ _ _ _) =
+    Just $RenderData 1 (unsafeCoerce vb) (unsafeCoerce ib) start end count vn vs vp cn cs cp uvn uvs uvp (unsafeCoerce program) (unsafeCoerce vloc) (unsafeCoerce cloc) (unsafeCoerce uloc) mat uniforms mv pr
     where
         (vb, ib, start, end, count, GL.VertexArrayDescriptor vn _ vs vp, GL.VertexArrayDescriptor cn _ cs cp, GL.VertexArrayDescriptor uvn _ uvs uvp) = loadedMesh
-        (program, GL.UniformLocation  mv : GL.UniformLocation  pr : ulocs, vloc, cloc, uloc)  = loadedMaterial
         mkLoadedUniform (GL.UniformLocation loc, UniformTexture _ (LoadedTexture t)) (us, tu) = (UniformTextureRaw loc (unsafeCoerce t) tu : us, tu + 1)
         mkLoadedUniform (GL.UniformLocation loc, UniformScalar  _ v)                 (us, tu) = (UniformScalarRaw  loc (realToFrac v) : us, tu)
         mkLoadedUniform (GL.UniformLocation loc, UniformVec2    _ (Vector2 x y))     (us, tu) = (UniformVec2Raw    loc (realToFrac x) (realToFrac y) : us, tu)
@@ -144,7 +164,7 @@ entityToRenderData !(Entity _ _ position rotation scale _ (Just (Model (Mesh (Ju
 entityToRenderData _ = Nothing
 
 setRenderDataPtr :: Entity a -> Ptr RenderData -> IO ()
-setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !(Vector3 sx sy sz) _ (Just (Model (Mesh (Just loadedMesh) _ _ _ _ _) (Material (Just loadedMaterial) _ _ uns _))) _ _ _ _) rdptr = do
+setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !(Vector3 sx sy sz) _ (Just (Model (Mesh (Just loadedMesh) _ _ _ _ _) (Material (Just (program, GL.UniformLocation  mv : GL.UniformLocation  pr : ulocs, vloc, cloc, uloc)) _ _ uns _))) _ _ _ _) rdptr = do
     pokeByteOff ptr 0  (1 :: CInt)
     pokeByteOff ptr 4  (unsafeCoerce vb :: GL.GLuint)
     pokeByteOff ptr 8  (unsafeCoerce ib :: GL.GLuint)
@@ -199,7 +219,6 @@ setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !
     pokeByteOff ptr 172 pr
     where
         (vb, ib, start, end, count, GL.VertexArrayDescriptor vn _ vs vp, GL.VertexArrayDescriptor cn _ cs cp, GL.VertexArrayDescriptor uvn _ uvs uvp) = loadedMesh
-        (program, GL.UniformLocation  mv : GL.UniformLocation  pr : ulocs, vloc, cloc, uloc)  = loadedMaterial
         ptr                                                                                   = rdptr `plusPtr` (uid * sizeOf (undefined :: RenderData))
         x2 = x * x
         y2 = y * y

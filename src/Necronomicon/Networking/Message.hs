@@ -14,9 +14,10 @@ lengthOfMessageLength :: Int64
 lengthOfMessageLength = 4
 
 decodeTransLength :: B.ByteString -> Maybe Int64
-decodeTransLength bs = if B.length bs == lengthOfMessageLength || B.length bs == 0
-    then Just $ fromIntegral (decode bs :: Word32)
-    else Nothing
+decodeTransLength bs 
+    | B.length bs == 0                     = Just 0
+    | B.length bs == lengthOfMessageLength = Just $ fromIntegral (decode bs :: Word32)
+    | otherwise                            = Nothing
 
 sendWithLength :: Socket -> B.ByteString -> IO()
 sendWithLength nsocket msg = Control.Exception.catch trySend onFailure

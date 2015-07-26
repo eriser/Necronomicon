@@ -1,6 +1,7 @@
 module Necronomicon.FRP.Networking
     ( userJoin
     , userLeave
+    , userList
     , userID
     , userLog
     , chatMessage
@@ -9,6 +10,7 @@ module Necronomicon.FRP.Networking
     , NetEntityUpdate(..)
     , sendNetworkEntityMessage
     , collectNetworkEntityUpdates
+    , setNetworkOtherVars
     ) where
 
 import           Necronomicon.FRP.Types
@@ -25,6 +27,7 @@ import           Control.Concurrent.STM
 import           Data.IORef
 import           Data.Binary
 import qualified Data.IntSet          as IntSet
+import qualified Data.IntMap          as IntMap
 import qualified Data.ByteString.Lazy as B
 
 ---------------------------------------------
@@ -76,6 +79,7 @@ data NetEntityUpdate a = UpdateEntityData     a
                        | UpdateEntityScale    Vector3
                        | UpdateEntityModel    (Maybe Model)
                        | UpdateEntityCollider (Maybe Collider)
+                       | UpdateEntityCamera   (Maybe Camera)
                        deriving (Show)
 
 instance Binary a => Binary (NetEntityUpdate a) where
@@ -85,6 +89,7 @@ instance Binary a => Binary (NetEntityUpdate a) where
     put (UpdateEntityScale    x) = put (3 :: Word8) >> put x
     put (UpdateEntityModel    x) = put (4 :: Word8) >> put x
     put (UpdateEntityCollider x) = put (5 :: Word8) >> put x
+    put (UpdateEntityCamera   x) = put (6 :: Word8) >> put x
 
     get = (get :: Get Word8) >>= \t -> case t of
         0 -> UpdateEntityData     <$> get
@@ -92,30 +97,87 @@ instance Binary a => Binary (NetEntityUpdate a) where
         2 -> UpdateEntityRotation <$> get
         3 -> UpdateEntityScale    <$> get
         4 -> UpdateEntityModel    <$> get
-        _ -> UpdateEntityCollider <$> get
+        5 -> UpdateEntityCollider <$> get
+        _ -> UpdateEntityCamera   <$> get
 
 
-data NetEntityMessage a   = NetEntityMessage Int [Entity a] [((Int, Int), [NetEntityUpdate a])] [((Int, Int), ())]
+data NetEntityMessage a = NetEntityMessage Int [Entity a] [((Int, Int), [NetEntityUpdate a])] [((Int, Int), ())]
+                        | NetEntitySync Int Int [Entity a]
 
 instance Binary a => Binary (NetEntityMessage a) where
-    put (NetEntityMessage nid es us ds) = put (3 :: Word8) >> put nid >> put es >> put us >> put ds
-    get                                 = (get :: Get Word8) >> (NetEntityMessage <$> get <*> get <*> get <*> get)
+    put (NetEntityMessage nid es us ds) = put (4 :: Word8) >> put nid >> put es  >> put us >> put ds
+    put (NetEntitySync uid nid es)      = put (5 :: Word8) >> put uid >> put nid >> put es
+    get                                 = (get :: Get Word8) >>= \t -> case t of
+        4 -> NetEntityMessage <$> get <*> get <*> get <*> get
+        _ -> NetEntitySync    <$> get <*> get <*> get
 
 sendNetworkEntityMessage :: Client -> B.ByteString -> IO ()
 sendNetworkEntityMessage client msg = atomically (readTVar (clientRunStatus client)) >>= \cstatus -> case cstatus of
-    Running -> sendUpdateNetSignal client msg 
+    Running -> sendUpdateNetSignal client msg
     _       -> return ()
 
 collectNetworkEntityUpdates :: Eq a => Entity a -> Entity a -> [((Int, Int), [NetEntityUpdate a])] -> [((Int, Int), [NetEntityUpdate a])]
-collectNetworkEntityUpdates prev curr us = if not (null us'') then (netid curr, us'') : us else us
+collectNetworkEntityUpdates prev curr us
+    | NoNetworkOptions <- netOptions curr = us
+    | null us6                            = us
+    | otherwise                           = (netid curr, us6) : us
     where
-        us'' = foldr addUpdate [] $ netOptions curr
-        addUpdate NetworkData     us' = if edata    prev /= edata    curr then UpdateEntityData     (edata    curr) : us' else us'
-        addUpdate NetworkPosition us' = if pos      prev /= pos      curr then UpdateEntityPosition (pos      curr) : us' else us'
-        addUpdate NetworkRotation us' = if rot      prev /= rot      curr then UpdateEntityRotation (rot      curr) : us' else us'
-        addUpdate NetworkScale    us' = if escale   prev /= escale   curr then UpdateEntityScale    (escale   curr) : us' else us'
-        addUpdate NetworkModel    us' = if model    prev /= model    curr then UpdateEntityModel    (model    curr) : us' else us'
-        addUpdate NetworkCollider us' = if collider prev /= collider curr then UpdateEntityCollider (collider curr) : us' else us'
+        nopts = netOptions curr
+
+        us0 = case networkData nopts of
+            Network -> if edata prev == edata curr then [] else UpdateEntityData (edata curr) : []
+            _       -> []
+
+        us1 = case networkPos nopts of
+            Network -> if pos prev == pos curr then us0 else UpdateEntityPosition (pos curr) : us0
+            _       -> us0
+
+        us2 = case networkRot nopts of
+            Network -> if rot prev == rot curr then us1 else UpdateEntityRotation (rot curr) : us1
+            _       -> us1
+
+        us3 = case networkScale nopts of
+            Network -> if escale prev == escale curr then us2 else UpdateEntityScale (escale curr) : us2
+            _       -> us2
+
+        us4 = case networkCamera nopts of
+            Network -> if camera prev == camera curr then us3 else UpdateEntityCamera (camera curr) : us3
+            _       -> us3
+
+        us5 = case networkModel nopts of
+            Network -> if model prev == model curr then us4 else UpdateEntityModel (model curr) : us4
+            _       -> us4
+
+        us6 = case networkCollider nopts of
+            Network -> if collider prev == collider curr then us5 else UpdateEntityCollider (collider curr) : us5
+            _       -> us5
+
+setNetworkOtherVars :: Entity a -> Entity a
+setNetworkOtherVars e = case netOptions e of
+    NoNetworkOptions -> e
+    nopts            -> e{edata = edata', pos = pos', rot = rot', escale = escale', camera = camera', model = model', collider = collider'}
+        where
+            edata' = case networkData nopts of
+                NetworkOthers x -> x
+                _               -> edata e
+            pos' = case networkPos nopts of
+                NetworkOthers x -> x
+                _               -> pos e
+            rot' = case networkRot nopts of
+                NetworkOthers x -> x
+                _               -> rot e
+            escale' = case networkScale nopts of
+                NetworkOthers x -> x
+                _               -> escale e
+            camera' = case networkCamera nopts of
+                NetworkOthers x -> x
+                _               -> camera e
+            model' = case networkModel nopts of
+                NetworkOthers x -> x
+                _               -> model e
+            collider' = case networkCollider nopts of
+                NetworkOthers x -> x
+                _               -> collider e
 
 userJoin :: Signal (Int, String)
 userJoin = Signal $ \state -> do
@@ -128,6 +190,7 @@ userJoin = Signal $ \state -> do
         else readIORef uref >>= \(i, u, b) -> if not b
             then readIORef ref >>= return . NoChange
             else writeIORef ref (i, u) >> return (Change (i, u))
+
 --TODO: Add a ref to collect everyone logged in and only propogate changes if we receive a user who wasn't logged in before!
 userLeave :: Signal (Int, String)
 userLeave = Signal $ \state -> do
@@ -143,6 +206,18 @@ userLeave = Signal $ \state -> do
 
 userLog :: Signal (Int, String, Bool)
 userLog = inputSignal 204 netUserLoginRef
+
+userList :: Signal [String]
+userList = Signal $ \state -> do
+    let uref = clientUsers $ signalClient state
+    users <- map snd . IntMap.toList <$> (atomically $ readTVar uref)
+    return (cont uref, users, IntSet.singleton 204)
+    where
+        cont uref eid = do
+            users <- map snd . IntMap.toList <$> (atomically $ readTVar uref)
+            if eid == 204
+                then return $ Change users
+                else return $ NoChange users
 
 userID :: Signal Int
 userID = Signal $ \state -> let cid = clientID $ signalClient state in return (\_ -> return $ NoChange cid, cid, IntSet.empty)

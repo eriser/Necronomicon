@@ -469,9 +469,11 @@ foreign import ccall "&local_out_k_calc" localOutKCalc :: CUGenFunc
 foreign import ccall "&local_out_a_calc" localOutACalc :: CUGenFunc
 
 localOut :: Int -> UGen -> UGen
-localOut busNum input = UGen $ foldr (\((UGenFunc (LocalOut feedBus) f c d is), i) acc -> UGenFunc (LocalOut (feedBus + i)) f c d is : acc) [] $ zip lOuts [0..]
+localOut busNum input = UGen $ foldr feed [] $ zip lOuts [0..]
     where
         (UGen lOuts) = optimizeUGenCalcFunc [localOutKCalc, localOutACalc] $ multiChannelExpandUGen (LocalOut busNum) localOutKCalc nullConstructor nullDeconstructor [input]
+        feed ((UGenFunc (LocalOut feedBus) f c d is), i) acc = UGenFunc (LocalOut (feedBus + i)) f c d is : acc
+        feed _                                           acc = acc
 
 -- feedback (\input feedbackChannels -> {- feedback function -}) inputUGen
 -- feedback :: (UGen -> UGen -> UGen) -> UGen -> UGen

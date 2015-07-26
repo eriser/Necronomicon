@@ -102,13 +102,14 @@ instance (Binary a, Eq a) => NecroFoldable (Entity a) where
                                 return $ Change es
                         | otherwise = do
                             --Network update
-                            --Add time stamp to avoid out of order updates (still need out of order adds and deletes)
                             --TODO: Do we need to update graphics and other shit?
-                            -- putStrLn "Net update in foldn (Entity a)"
+                            putStrLn "Net update in foldn (Entity a)"
                             e            <- readIORef ref
                             msg          <- readIORef (netSignalRef state)
-                            let (NetEntityMessage _ _ cs _) = decode msg
-                                e'                          = foldr netUpdateEntity e . concat $ map snd cs
+                            let e' = case decode msg of
+                                    NetEntityMessage _ _ cs _     -> foldr netUpdateEntity e . concat $ map snd cs
+                                    NetEntitySync    _ _ (ne : _) -> ne
+                                    _                             -> e
                             case euid e' of
                                 UID uid -> insertNursery uid 0 e' nursery
                                 New     -> return ()
@@ -122,7 +123,9 @@ instance (Binary a, Eq a) => NecroFoldable (Entity a) where
                         UpdateEntityScale    x -> e{escale   = x}
                         UpdateEntityModel    x -> e{model    = x}
                         UpdateEntityCollider x -> e{collider = x}
+                        UpdateEntityCamera   x -> e{camera   = x}
 
+--TODO: Add sync messages for when players join. Easiest would be to respond to login events and send add all entities message
 instance (Binary a, Eq a) => NecroFoldable [Entity a] where
     foldn f scene input = sceneSig
         where
@@ -134,33 +137,54 @@ instance (Binary a, Eq a) => NecroFoldable [Entity a] where
                 newEntRef        <- newIORef []
                 nid              <- nextStateID state
                 ref              <- newIORef s
-                return (cont scont state genCounter nursery newEntRef nid ref, s, IntSet.insert nid uids)
+                return (cont scont state genCounter nursery newEntRef nid ref, s, IntSet.union (IntSet.fromList [nid, 204]) uids)
                 where
                     cont scont state genCounter nursery newEntRef nid ref eid
-                        | eid /= nid  = scont eid >>= \se -> case se of
-                            NoChange _ -> return se
-                            Change   s -> do
-                                --Regular update
-                                gen        <- readIORef genCounter >>= \gen -> writeIORef genCounter (gen + 1) >> return gen
-                                es         <- mapM (updateEntity state gen nursery newEntRef Nothing) s
-                                removeAndNetworkEntities state gen nursery newEntRef nid
-                                writeIORef ref es
-                                return $ Change es
+                        | eid /= nid = do
+                            --Send Sync messages when other users login
+                            when (eid == 204) $ readIORef (netUserLoginRef state) >>= \(i, _, b) -> case b of
+                                False -> return ()
+                                _     -> if i == (clientID $ signalClient state) then return () else do
+                                    putStrLn "Sending NetEntitySync message for [Entity a]"
+                                    msg <- encode . NetEntitySync i nid <$> readIORef ref
+                                    sendNetworkEntityMessage (signalClient state) msg
+
+                            --Update Signal
+                            scont eid >>= \se -> case se of
+                                NoChange _ -> return se
+                                Change   s -> do
+                                    --Regular update
+                                    gen        <- readIORef genCounter >>= \gen -> writeIORef genCounter (gen + 1) >> return gen
+                                    es         <- mapM (updateEntity state gen nursery newEntRef Nothing) s
+                                    removeAndNetworkEntities state gen nursery newEntRef nid
+                                    writeIORef ref es
+                                    return $ Change es
                         | otherwise = do
                             --Network update
-                            putStrLn "Net update in foldn [Entity a]"
                             es            <- readIORef ref
                             gen           <- readIORef genCounter
                             msg           <- readIORef (netSignalRef state)
-                            let (NetEntityMessage _ ns csl gsl) = decode msg
-                            cs            <- Hash.fromList csl
-                            gs            <- Hash.fromList $ map (\n -> (netid n, ())) ns ++ gsl
+                            (ns, cs, gs)  <- case decode msg of
+                                NetEntityMessage _ ns csl gsl -> do
+                                    -- putStrLn "Net update in foldn [Entity a]"
+                                    cs <- Hash.fromList csl
+                                    gs <- Hash.fromList $ map (\n -> (netid n, ())) ns ++ gsl
+                                    return (ns, cs, gs)
+
+                                NetEntitySync    _ _  ns      -> do
+                                    putStrLn "Net sync in foldn [Entity a]"
+                                    cs <- Hash.new
+                                    gs <- Hash.fromList $ map (\n -> (netid n, ())) ns
+                                    return (ns, cs, gs)
                             es'           <- filterMapM' (netUpdateEntity gen nursery cs gs) es
                             ns'           <- mapM (addNewNetEntities state gen nursery newEntRef) ns
-                            return $ Change $ ns' ++ es'
+                            let es''       = ns' ++ es'
+                            writeIORef ref es''
+                            return $ Change es''
+
 
                     addNewNetEntities state gen nursery newEntRef e = do
-                        e' <- updateEntity state gen nursery newEntRef (Just $ netid e) e{euid = New}
+                        e' <- updateEntity state gen nursery newEntRef (Just $ netid e) (setNetworkOtherVars e){euid = New}
                         writeIORef newEntRef []
                         return e'
 
@@ -178,6 +202,7 @@ instance (Binary a, Eq a) => NecroFoldable [Entity a] where
                                 UpdateEntityScale    x -> e'{escale   = x}
                                 UpdateEntityModel    x -> e'{model    = x}
                                 UpdateEntityCollider x -> e'{collider = x}
+                                UpdateEntityCamera   x -> e'{camera   = x}
                             netInsertNursery e' = case euid e' of
                                 UID uid -> insertNursery uid gen e' nursery
                                 _       -> return ()
@@ -193,32 +218,52 @@ instance (Binary a, Eq a) => NecroFoldable (IntMap.IntMap (Entity a)) where
                 newEntRef        <- newIORef []
                 nid              <- nextStateID state
                 ref              <- newIORef s
-                return (cont scont state genCounter nursery newEntRef nid ref, s, IntSet.insert nid uids)
+                return (cont scont state genCounter nursery newEntRef nid ref, s, IntSet.union (IntSet.fromList [nid, 204]) uids)
                 where
                     cont scont state genCounter nursery newEntRef nid ref eid
-                        | eid /= nid  = scont eid >>= \se -> case se of
-                            NoChange _ -> return se
-                            Change   s -> do
-                                --Regular update
-                                gen        <- readIORef genCounter >>= \gen -> writeIORef genCounter (gen + 1) >> return gen
-                                es         <- IntMap.traverseWithKey (\k a -> updateEntity state gen nursery newEntRef (Just (clientID (signalClient state), k)) a) s
-                                removeAndNetworkEntities state gen nursery newEntRef nid
-                                writeIORef ref es
-                                return $ Change es
+                        | eid /= nid = do
+                            --Send Sync messages when other users login
+                            when (eid == 204) $ readIORef (netUserLoginRef state) >>= \(i, _, b) -> case b of
+                                False -> return ()
+                                _     -> if i == (clientID $ signalClient state) then return () else do
+                                    putStrLn "Sending NetEntitySync message for (Map k (Entity a))"
+                                    msg <- encode . NetEntitySync i nid . IntMap.elems <$> readIORef ref
+                                    sendNetworkEntityMessage (signalClient state) msg
+
+                            --Update signal
+                            scont eid >>= \se -> case se of
+                                NoChange _ -> return se
+                                Change   s -> do
+                                    --Regular update
+                                    gen        <- readIORef genCounter >>= \gen -> writeIORef genCounter (gen + 1) >> return gen
+                                    es         <- IntMap.traverseWithKey (updateMapEntitiesWithKey state gen nursery newEntRef) s
+                                    removeAndNetworkEntities state gen nursery newEntRef nid
+                                    writeIORef ref es
+                                    return $ Change es
                         | otherwise = do
                             --Network update
-                            putStrLn "Net update in foldn (Map k (Entity a))"
-                            es            <- readIORef ref
-                            gen           <- readIORef genCounter
-                            msg           <- readIORef (netSignalRef state)
-                            let (NetEntityMessage _ ns csl gsl) = decode msg
-                                es'                             = foldr (\((_, k), cs) m -> IntMap.adjust (netUpdate cs) k m) (foldr (\((_, k),_) m -> IntMap.delete k m) es gsl) csl
+                            es  <- readIORef ref
+                            gen <- readIORef genCounter
+                            msg <- readIORef (netSignalRef state)
+                            es' <- case decode msg of
+                                NetEntityMessage _ ns csl gsl -> do
+                                    -- putStrLn "Net update in foldn (Map k (Entity a))"
+                                    --TODO: I don't think this is quite put to bed yet. There is probably an issue with overwriting entities, handling correction deletion and making sure to NOT network the results
+                                    let es'' = foldr (\((_, k), cs) m -> IntMap.adjust (netUpdate cs) k m) (foldr (\((_, k),_) m -> IntMap.delete k m) es gsl) csl
+                                    (\ns' -> IntMap.union (IntMap.fromList ns') es'' ) <~ mapM (addNewNetEntities state gen nursery newEntRef) ns
+
+                                NetEntitySync  _ _ ns -> putStrLn "Net sync in foldn (Map k (Entity a))" >> (\ns' -> IntMap.union (IntMap.fromList ns') es) <~ mapM (addNewNetEntities state gen nursery newEntRef) ns
+
+                            writeIORef ref es'
                             mapM_ (netInsertNursery gen nursery) es'
-                            ns'           <- IntMap.fromList <~ mapM (addNewNetEntities state gen nursery newEntRef) ns
-                            return $ Change $ IntMap.union ns' es'
+                            return $ Change es'
+
+                    updateMapEntitiesWithKey state gen nursery newEntRef k e = case euid e of
+                        UID _ -> updateEntity state gen nursery newEntRef Nothing e
+                        New   -> updateEntity state gen nursery newEntRef (Just (clientID $ signalClient state, k)) e
 
                     addNewNetEntities state gen nursery newEntRef e = do
-                        e' <- updateEntity state gen nursery newEntRef (Just $ netid e) e{euid = New}
+                        e' <- updateEntity state gen nursery newEntRef (Just $ netid e) (setNetworkOtherVars e){euid = New}
                         writeIORef newEntRef []
                         return (snd $ netid e, e')
 
@@ -231,12 +276,12 @@ instance (Binary a, Eq a) => NecroFoldable (IntMap.IntMap (Entity a)) where
                                UpdateEntityScale    x -> e'{escale   = x}
                                UpdateEntityModel    x -> e'{model    = x}
                                UpdateEntityCollider x -> e'{collider = x}
+                               UpdateEntityCamera   x -> e'{camera   = x}
 
                     netInsertNursery gen nursery e' = case euid e' of
                         UID uid -> insertNursery uid gen e' nursery
                         _       -> return ()
 
---TODO: It's not just the UIDs that need to be set, it's also the net owner!
 updateEntity :: SignalState -> Int -> Nursery a -> IORef [Entity a] -> Maybe (Int, Int) -> Entity a -> IO (Entity a)
 updateEntity state gen nursery _ _ e@Entity{euid = UID uid} = do
     --Update existing Entities
@@ -250,23 +295,27 @@ updateEntity state gen nursery _ _ e@Entity{euid = UID uid} = do
 
 updateEntity state gen nursery newEntRef maybeNetID e = do
     --Add new Entity
+    putStrLn "updateEntity - New Entity added!"
     mtid   <- myThreadId
     atomically (takeTMVar (contextBarrier state)) >>= \(GLContext tid) -> when (tid /= mtid) (GLFW.makeContextCurrent (Just $ context state))
     model' <- loadNewModel (sigResources state) (model e)
     atomically $ putTMVar (contextBarrier state) $ GLContext mtid
 
-    e' <- case euid e of
-        UID _ -> return e{model = model'}
-        New   -> do
-            uid <- atomically $ readTVar (uidRef state) >>= \(uid : uids) -> writeTVar (uidRef state) uids >> return uid
+    (e', uid) <- case euid e of
+        UID uid -> return (e{model = model'}, uid)
+        New     -> do
+            uid <- atomically $ readTVar (uidRef state) >>= \muids -> case muids of
+                (uid : uids) -> writeTVar (uidRef state) uids >> return uid
+                _            -> error "This should be impossible: we've run out of uids to assign!"
             let netid' = case maybeNetID of
                     Nothing -> (clientID (signalClient state), uid)
                     Just n  -> n
                 e'  = e{model = model', euid = UID uid, netid = netid'}
-            when (not $ null $ netOptions e') $ modifyIORef' newEntRef $ \es -> e' : es
-            return e'
+            case netOptions e' of
+                NoNetworkOptions -> return ()
+                _                -> modifyIORef' newEntRef $ \es -> e' : es
+            return (e', uid)
 
-    let (UID uid) = euid e'
     writeRenderData (renderDataRef state) uid e'
     writeCam (cameraRef state) (euid e') (camera e') e
     insertNursery uid gen e nursery
@@ -288,9 +337,10 @@ removeAndNetworkEntities state gen nursery newEntRef nid = do
             case camera c of
                 Nothing -> return ()
                 _       -> atomically $ modifyTVar' (cameraRef state) $ IntMap.delete k
-            if not . null $ netOptions c
-                then return (collectNetworkEntityUpdates p c cs, (netid c, ()) : ngs)
-                else return (collectNetworkEntityUpdates p c cs, ngs)
+            case netOptions c of
+                --Is checking the arguments each frame causing the hiccup???
+                NoNetworkOptions -> return (collectNetworkEntityUpdates p c cs, ngs)
+                _                -> return (collectNetworkEntityUpdates p c cs, (netid c, ()) : ngs)
 
 type Nursery a = Hash.CuckooHashTable Int (Int, Entity a, Entity a)
 insertNursery :: Int -> Int -> Entity a -> Nursery a -> IO ()

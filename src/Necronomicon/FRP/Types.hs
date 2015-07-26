@@ -23,8 +23,8 @@ import qualified Data.ByteString.Lazy         as B
 (~>) :: Functor f => f a -> (a -> b) -> f b
 (~>) = flip fmap
 
-infixl 4 <~, ~~
-infixr 4 ~>
+infixl 7 <~, ~~
+infixr 7 ~>
 
 -- newtype Time = Time Double deriving (Eq, Show, Ord, Num, Floating, Fractional, Real, Binary)
 type Time = Double
@@ -44,6 +44,7 @@ data InputEvent = TimeEvent        Time Time
                 | NetStatusEvent   NetStatus
                 | NetSignalEvent   Int B.ByteString --Need user ID
                 | NetChatEvent     String String
+                deriving (Show)
 
 data SignalState = SignalState
                  { contextBarrier :: TMVar GLContext

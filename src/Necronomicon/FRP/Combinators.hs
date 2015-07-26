@@ -23,8 +23,9 @@ import           Necronomicon.FRP.Types
 import           Necronomicon.FRP.Signal
 import           Necronomicon.Linear
 import           Data.IORef
+import           Control.Monad
 import           System.Random
-import           Control.Applicative
+import           Data.Monoid
 import qualified Data.IntSet                  as IntSet
 import qualified Data.Vector                  as V
 
@@ -55,10 +56,25 @@ fmap8 :: Applicative f => (a -> b -> c -> d -> e -> ff -> g -> h -> i) -> f a ->
 fmap8 f a b c d e f' g h = f <~ a ~~ b ~~ c ~~ d ~~ e ~~ f' ~~ g ~~ h
 
 merge :: Signal a -> Signal a -> Signal a
-merge = (<|>)
+merge = (<>)
 
 mergeMany :: [Signal a] -> Signal a
-mergeMany ss = foldr merge empty ss
+mergeMany ss = Signal $ \state -> do
+    (sconts, svals, sids) <- unzip3 <~ mapM (flip unSignal state) ss
+    let uids               = foldr IntSet.union IntSet.empty sids  
+    ref                   <- newIORef $ head svals
+    return (cont sconts ref uids, head svals, uids)
+    where
+        cont sconts ref uids eid
+            | not $ IntSet.member eid uids = readIORef ref >>= return . NoChange 
+            | otherwise                    = foldM (changed eid) Nothing sconts >>= \mcs -> case mcs of
+                Nothing -> readIORef ref >>= return . NoChange
+                Just e  -> return $ Change e
+        
+        changed eid Nothing c = c eid >>= \mc -> case mc of
+            NoChange _ -> return Nothing
+            Change   e -> return $ Just e
+        changed _ e _ = return e
 
 filterIf :: (a -> Bool) -> a -> Signal a -> Signal a
 filterIf preds inits signal = Signal $ \state ->do

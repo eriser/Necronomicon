@@ -315,15 +315,6 @@ keyLeft  = GLFW.Key'Left
 keyRight :: GLFW.Key
 keyRight = GLFW.Key'Right
 
--- map (\k -> (fromEnum k, NoChange False))
---     [keyA, keyB, keyC, keyD, keyE, keyF, keyG, keyH, keyI, keyJ, keyK, keyL, keyM
---     ,keyN, keyO, keyP, keyQ, keyR, keyS, keyT, keyU, keyV, keyW, keyX, keyY, keyZ
---     ,keyEnter, keySpace, keyLCtrl, keyRCtrl, keyLAlt, keyRAlt, keySpace, keyLShift
---     ,keyRShift, keyBackspace, key0, key1, key2, key3, key4, key5, key6, key7, key8
---     ,key9, keyApostrophe, keyComma, keyMinus, keyEqual, keyPeriod, keySlash, keySemiColon
---     ,keyLeftBracket, keyBackSlash, keyRightBracket, keyGraveAccent, keyUp, keyDown
---     ,keyLeft, keyRight]
-
 isUp :: Key -> Signal Bool
 isUp k = not <~ isDown k
 
@@ -375,8 +366,3 @@ collision :: Signal (Map.Map UID Collision)
 collision = Signal $ \_ -> return (cont, Map.empty, IntSet.empty)
     where
         cont _ = return $ NoChange $ Map.empty
-
---collisionMany :: (NecroFoldable t, Binary a, Eq a) => Signal (t (Entity a)) -> Signal [Maybe Collision]
---collisionMany _ = Signal $ \_ -> return (cont, [], IntSet.empty)
---    where
---        cont _ = return $ NoChange []
