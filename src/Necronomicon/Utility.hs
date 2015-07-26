@@ -12,13 +12,16 @@ module Necronomicon.Utility ((|>),
                              dot2,
                              foldrM,
                              offsetPtr,
-                             offset0) where
+                             offset0,
+                             toBitMask,
+                             BitMask) where
 
 import Graphics.UI.GLFW (getTime)
 import Numeric (showIntAtBase)
 import qualified Numeric as N (showHex)
 import Data.Char (intToDigit)
 import Foreign.Ptr
+import Data.Bits
 
 (|>) :: a -> (a -> b) -> b
 b |> a = a b
@@ -98,3 +101,13 @@ offsetPtr = wordPtrToPtr . fromIntegral
 -- |A zero-offset 'Ptr'.
 offset0 :: Ptr a
 offset0 = offsetPtr 0
+
+class BitMask a where
+    toBitMask :: a -> Int
+
+instance (BitMask a) => BitMask [a] where
+    toBitMask = foldr (.|.) 0 . map toBitMask
+
+
+
+

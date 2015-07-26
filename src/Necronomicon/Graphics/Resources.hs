@@ -6,6 +6,7 @@ import Necronomicon.Graphics.Shader
 import Necronomicon.Graphics.Texture
 import Necronomicon.Graphics.Color
 import Necronomicon.Util.TGA              (loadTextureFromTGA)
+import Necronomicon.Utility
 import Control.Monad                      (foldM_)
 import Data.IORef
 import Data.Binary
@@ -15,17 +16,24 @@ import Foreign.C.Types
 import Foreign.Marshal.Alloc
 import Foreign.Marshal.Array
 import Unsafe.Coerce
+import Data.Bits
 import qualified Data.Map.Strict               as Map
 import qualified Graphics.Rendering.OpenGL     as GL
 import qualified Graphics.Rendering.OpenGL.Raw as GLRaw
 
 
---Need To add a resources module that sits on top of model, mkMesh, texture, etc in hierarchy
 data UID             = UID Int | New                                                             deriving (Show, Eq)
+data BasicLayers     = DefaultLayer
+                     | GUILayer
+                     | WaterLayer
+                     | FXLayer
+                     | MiscLayer
+                     deriving (Show, Eq, Enum)
+
 data Material        = Material    (Maybe LoadedShader) String String [Uniform] GL.PrimitiveMode deriving (Show, Eq)
 data Mesh            = Mesh        (Maybe LoadedMesh)   String [Vector3] [Color] [Vector2] [Int]
                      | DynamicMesh (Maybe LoadedMesh)   String [Vector3] [Color] [Vector2] [Int] deriving (Show, Eq)
-data Model           = Model Mesh Material | FontRenderer String Font Material                   deriving (Show, Eq)
+data Model           = Model Int Mesh Material | FontRenderer String Font Material               deriving (Show, Eq)
 data PostRenderingFX = PostRenderingFX (Maybe LoadedPostRenderingFX) String Material             deriving (Show, Eq)
 data Font            = Font {fontKey :: String, fontSize :: Int}                                 deriving (Show, Eq)
 data Uniform         = UniformTexture String Texture
@@ -52,6 +60,12 @@ mkMesh = Mesh Nothing
 
 mkDynamicMesh :: String -> [Vector3] -> [Color] -> [Vector2] -> [Int] -> Mesh
 mkDynamicMesh = DynamicMesh Nothing
+
+mkModel :: BitMask a => a -> Mesh -> Material -> Model
+mkModel layer = Model (toBitMask layer)
+
+instance BitMask BasicLayers where
+    toBitMask = shiftL 1 . fromEnum
 
 --Can we make a more general form to take any material which takes a texture, like the new font system?
 postRenderFX :: (Texture -> Material) -> PostRenderingFX
@@ -141,10 +155,10 @@ instance Binary Mesh where
         _ -> DynamicMesh Nothing <$> get <*> get <*> get <*> get <*> get
 
 instance Binary Model where
-    put (Model       me mat) = put (0 :: Word8) >> put me >> put mat
+    put (Model     l me mat) = put (0 :: Word8) >> put l >> put me >> put mat
     put (FontRenderer n f m) = put (1 :: Word8) >> put n  >> put f >> put m
     get                      = (get :: Get Word8) >>= \t -> case t of
-        0 -> Model        <$> get <*> get
+        0 -> Model        <$> get <*> get <*> get
         _ -> FontRenderer <$> get <*> get <*> get
 
 instance Binary PostRenderingFX where
@@ -249,10 +263,10 @@ posColorUV (Vector3 x y z : vs) (RGB  r g b   : cs) (Vector2 u v : uvs) = x : y 
 posColorUV (Vector3 x y z : vs) (RGBA r g b _ : cs) (Vector2 u v : uvs) = x : y : z : r : g : b : u : v : posColorUV vs cs uvs
 
 loadNewModel :: Resources -> Maybe Model -> IO (Maybe Model)
-loadNewModel r (Just (Model me ma)) = do
+loadNewModel r (Just (Model l me ma)) = do
     me' <- loadNewMesh r me
     ma' <- loadNewMat  r ma
-    return . Just $ Model me' ma'
+    return . Just $ Model l me' ma'
 loadNewModel _ m = return m
 
 loadNewMesh :: Resources -> Mesh -> IO Mesh
@@ -376,6 +390,7 @@ data RenderData = RenderData {-# UNPACK #-} !GL.GLuint         --Active / Inacti
                              [UniformRaw]                      --Uniform values
                              {-# UNPACK #-} !GLRaw.GLint       --modelView location
                              {-# UNPACK #-} !GLRaw.GLint       --proj location
+                             {-# UNPACK #-} !GL.GLuint         --Layer for rendering
 
 data UniformRaw =  UniformTextureRaw {-# UNPACK #-} !GL.GLint {-# UNPACK #-} !GL.GLuint  {-# UNPACK #-} !GL.GLuint
                  | UniformScalarRaw  {-# UNPACK #-} !GL.GLint {-# UNPACK #-} !GL.GLfloat
@@ -384,7 +399,7 @@ data UniformRaw =  UniformTextureRaw {-# UNPACK #-} !GL.GLint {-# UNPACK #-} !GL
                  | UniformVec4Raw    {-# UNPACK #-} !GL.GLint {-# UNPACK #-} !GL.GLfloat {-# UNPACK #-} !GL.GLfloat {-# UNPACK #-} !GL.GLfloat {-# UNPACK #-} !GL.GLfloat
 
 nullRenderData :: RenderData
-nullRenderData = RenderData 0 0 0 0 0 0 0 0 nullPtr 0 0 nullPtr 0 0 nullPtr 0 0 0 0 identity4 [] 0 0
+nullRenderData = RenderData 0 0 0 0 0 0 0 0 nullPtr 0 0 nullPtr 0 0 nullPtr 0 0 0 0 identity4 [] 0 0 0
 
 instance Storable UniformRaw where
     sizeOf    _ = 24
@@ -407,7 +422,7 @@ instance Storable UniformRaw where
 
 instance Storable RenderData where
     -- sizeOf    _ = (sizeOf (undefined :: GL.GLuint) * 9) + (sizeOf (undefined :: GLRaw.GLsizei) * 4) + (sizeOf (undefined :: GLRaw.GLint) * 3) + (sizeOf (undefined :: Ptr GL.GLfloat) * 3) + (sizeOf (undefined :: CFloat) * 16)
-    sizeOf    _ = 176
+    sizeOf    _ = 184 --176
     alignment _ = 8
     {-# INLINE peek #-}
     peek ptr = RenderData
@@ -439,6 +454,7 @@ instance Storable RenderData where
            <*> us
            <*> peekByteOff ptr 168
            <*> peekByteOff ptr 172
+           <*> peekByteOff ptr 176
         where
             us = do
                 len  <- peekByteOff ptr 152 :: IO CInt
@@ -468,7 +484,7 @@ instance Storable RenderData where
 
     {-# INLINE poke #-}
     poke ptr !(RenderData isActive vertexBuffer indexBuffer start end count vertexVadN vertexVadS vertexVadP colorVadN colorVadS colorVadP uvVadN uvVadS uvVadP program vloc cloc uvloc
-               (Matrix4x4 m00 m01 m02 m03 m10 m11 m12 m13 m20 m21 m22 m23 m30 m31 m32 m33) us mvloc projloc) = do
+               (Matrix4x4 m00 m01 m02 m03 m10 m11 m12 m13 m20 m21 m22 m23 m30 m31 m32 m33) us mvloc projloc layer) = do
         pokeByteOff ptr 0  isActive
         pokeByteOff ptr 4  vertexBuffer
         pokeByteOff ptr 8  indexBuffer
@@ -519,3 +535,4 @@ instance Storable RenderData where
 
         pokeByteOff ptr 168 mvloc
         pokeByteOff ptr 172 projloc
+        pokeByteOff ptr 176 layer
