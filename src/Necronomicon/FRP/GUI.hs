@@ -35,7 +35,7 @@ basicNetGUI = foldn updateBasicNetGUI mkBasicNetGUI
            <> NetGUIStatus <~ networkStatus
 
 mkBasicNetGUI :: [Entity ()]
-mkBasicNetGUI = [guiCamera, guiRect (0, 0.1) (0.15, 0.05) (RGBA 1 1 1 0.5)]
+mkBasicNetGUI = [guiCamera, guiRect (0, 0.1) (0.2, 0.05) (RGBA 1 1 1 0.5)]
 
 updateBasicNetGUI :: BasicNetGUIInput -> [Entity ()] -> [Entity ()]
 updateBasicNetGUI (NetGUIUsers  _) es = es

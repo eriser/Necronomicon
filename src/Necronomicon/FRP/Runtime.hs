@@ -67,7 +67,8 @@ runSignal sig = initWindow (920, 540) False >>= \mw -> case mw of
 
                 gs <- readIORef (renderDataRef state)
                 cs <- sortBy (comparing (_depth . snd)) . IntMap.elems <$> atomically (readTVar (cameraRef state))
-
+                
+                preRender window
                 mapM_ (renderWithCameraRaw window (sigResources state) gs) cs
                 GLFW.swapBuffers window
                 atomically $ putTMVar (contextBarrier state) $ GLContext mtid

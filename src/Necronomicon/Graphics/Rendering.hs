@@ -1,4 +1,4 @@
-module Necronomicon.Graphics.Rendering (initWindow, renderWithCameraRaw) where
+module Necronomicon.Graphics.Rendering (initWindow, preRender, renderWithCameraRaw) where
 
 import Necronomicon.Graphics.Resources
 import Necronomicon.Graphics.Color
@@ -34,6 +34,16 @@ foreign import ccall safe "draw_render_data" drawRenderDataC ::
     CFloat -> CFloat -> CFloat -> CFloat ->
     Ptr CFloat -> IO ()
 
+preRender :: GLFW.Window -> IO ()
+preRender window = do
+    (w, h) <- GLFW.getWindowSize window
+    glDepthFunc gl_LESS
+    glEnable  gl_BLEND
+    glBlendFunc gl_SRC_ALPHA gl_ONE_MINUS_SRC_ALPHA
+    glViewport 0 0 (fromIntegral w) (fromIntegral h)
+    glClear (gl_DEPTH_BUFFER_BIT .|. gl_COLOR_BUFFER_BIT)
+
+
 renderWithCameraRaw :: GLFW.Window -> Resources -> SMV.IOVector RenderData -> (Matrix4x4, Camera) -> IO ()
 renderWithCameraRaw window resources scene (view, c) = do
     (w, h) <- GLFW.getWindowSize window
@@ -49,17 +59,11 @@ renderWithCameraRaw window resources scene (view, c) = do
         []     -> return ()
         fx : _ -> getPostFX resources (fromIntegral w,fromIntegral h) fx >>= \postFX -> glBindFramebuffer gl_FRAMEBUFFER (postRenderFBO postFX)
 
-    glDepthFunc gl_LESS
-    glEnable  gl_BLEND
-    -- GL.blendBuffer 0 GL.$= GL.Enabled
-    glBlendFunc gl_SRC_ALPHA gl_ONE_MINUS_SRC_ALPHA
-
     case _clearColor c of
-        RGBA 0 0 0 0 -> glClear (gl_DEPTH_BUFFER_BIT .|. gl_COLOR_BUFFER_BIT)
+        RGBA 0 0 0 0 -> glClear (gl_DEPTH_BUFFER_BIT)
         RGB  r g b   -> glClearColor (realToFrac r) (realToFrac g) (realToFrac b) 1              >> glClear (gl_DEPTH_BUFFER_BIT .|. gl_COLOR_BUFFER_BIT)
         RGBA r g b a -> glClearColor (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a) >> glClear (gl_DEPTH_BUFFER_BIT .|. gl_COLOR_BUFFER_BIT)
 
-    glViewport 0 0 (fromIntegral w) (fromIntegral h)
 
     case _fov c of
         0 -> setMatrixPtr oproj mptr >> (SMV.unsafeWith scene $ \ptr -> drawRenderDataC ptr (fromIntegral $ SMV.length scene) (fromIntegral $ _layers c) (realToFrac v00) (realToFrac v01) (realToFrac v02) (realToFrac v03) (realToFrac v10) (realToFrac v11) (realToFrac v12) (realToFrac v13) (realToFrac v20) (realToFrac v21) (realToFrac v22) (realToFrac v23) (realToFrac v30) (realToFrac v31) (realToFrac v32) (realToFrac v33) mptr)
