@@ -100,9 +100,10 @@ bool hash_table_insert_string_key(hash_table htable, void* item, const char* key
 
 // Will remove the item from the table, but will not free the item itself.
 // Use free on the item itself after you have called remove if you want to release their memory.
-bool hash_table_remove_uint_key(hash_table htable, void* item, uint32_t key); // returns true if the item was found or false if not found in the table
+bool hash_table_remove_uint_key(hash_table htable, uint32_t key); // returns true if the item was found or false if not found in the table
+
 // This expects a null terminated string. A copy of the key will be made internally and will be managed in the hash table.
-bool hash_table_remove_string_key(hash_table htable, void* item, const char* key); // returns true if the item was found or false if not found in the table
+bool hash_table_remove_string_key(hash_table htable, const char* key); // returns true if the item was found or false if not found in the table
 
 void* hash_table_lookup_uint_key(hash_table htable, uint32_t key); // will return null if the item was not found in the table
 void* hash_table_lookup_string_key(hash_table htable, const char* key); // will return null if the item was not found in the table

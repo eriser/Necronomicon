@@ -194,7 +194,7 @@ bool hash_table_insert_string_key(hash_table htable, void* item, const char* key
     return is_insertion_successful;
 }
 
-bool hash_table_remove_uint_key(hash_table htable, void* item, uint32_t key)
+bool hash_table_remove_uint_key(hash_table htable, uint32_t key)
 {
     hash_table_node** table = htable.table;
     uint32_t size = htable.size;
@@ -214,7 +214,7 @@ bool hash_table_remove_uint_key(hash_table htable, void* item, uint32_t key)
     return is_removal_successful;
 }
 
-bool hash_table_remove_string_key(hash_table htable, void* item, const char* key)
+bool hash_table_remove_string_key(hash_table htable, const char* key)
 {
     hash_table_node** table = htable.table;
     uint32_t size = htable.size;
