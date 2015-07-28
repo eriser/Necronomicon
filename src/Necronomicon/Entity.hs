@@ -231,8 +231,10 @@ setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !
             UniformVec2    _ (Vector2 ux uy)       -> pokeByteOff p 0 (2 :: CInt) >> pokeByteOff p 4 l >> pokeByteOff p 8 (realToFrac ux :: GL.GLfloat) >> pokeByteOff p 12 (realToFrac uy :: GL.GLfloat) >> setUniforms uptr (i + 24) ls us
             UniformVec3    _ (Vector3 ux uy uz)    -> pokeByteOff p 0 (3 :: CInt) >> pokeByteOff p 4 l >> pokeByteOff p 8 (realToFrac ux :: GL.GLfloat) >> pokeByteOff p 12 (realToFrac uy :: GL.GLfloat) >> pokeByteOff p 16 (realToFrac uz :: GL.GLfloat) >> setUniforms uptr (i + 24) ls us
             UniformVec4    _ (Vector4 ux uy uz uw) -> pokeByteOff p 0 (4 :: CInt) >> pokeByteOff p 4 l >> pokeByteOff p 8 (realToFrac ux :: GL.GLfloat) >> pokeByteOff p 12 (realToFrac uy :: GL.GLfloat) >> pokeByteOff p 16 (realToFrac uz :: GL.GLfloat) >> pokeByteOff p 20 (realToFrac uw :: GL.GLfloat) >> setUniforms uptr (i + 24) ls us
-            UniformTexture _ (FontTexture (Just t) _ _) -> pokeByteOff p 0 (0 :: CInt) >> pokeByteOff p 4 l >> pokeByteOff p 8 (unsafeCoerce t :: CInt) >> pokeByteOff p 12 (0 :: CInt) >> setUniforms uptr (i + 24) ls us
-            _                                           -> return ()
+            UniformTexture _ (FontTexture  (Just t) _ _) -> pokeByteOff p 0 (0 :: CInt) >> pokeByteOff p 4 l >> pokeByteOff p 8 (unsafeCoerce t :: GL.GLuint) >> pokeByteOff p 12 (0 :: GL.GLuint) >> setUniforms uptr (i + 24) ls us
+            UniformTexture _ (TGATexture   (Just t)   _) -> pokeByteOff p 0 (0 :: CInt) >> pokeByteOff p 4 l >> pokeByteOff p 8 (unsafeCoerce t :: GL.GLuint) >> pokeByteOff p 12 (0 :: GL.GLuint) >> setUniforms uptr (i + 24) ls us
+            UniformTexture _ (AudioTexture (Just t)   _) -> pokeByteOff p 0 (0 :: CInt) >> pokeByteOff p 4 l >> pokeByteOff p 8 (unsafeCoerce t :: GL.GLuint) >> pokeByteOff p 12 (0 :: GL.GLuint) >> setUniforms uptr (i + 24) ls us
+            _                                            -> return ()
             where
                 p = uptr `plusPtr` (i :: Int)
         setUniforms _ _ _ _ = return ()

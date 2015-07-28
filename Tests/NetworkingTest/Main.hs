@@ -41,7 +41,7 @@ mkPlayer = ( mkEntity  <| Player PlayerIdle (180, 0) )
 mkTerminal :: Vector3 -> Entity Terminal
 mkTerminal p = ( mkEntity  <| Terminal (0, 0, 0))
                { pos        = p
-               , model      = Just <| mkModel DefaultLayer cube <| vertexColored white
+               , model      = Just <| mkModel DefaultLayer cube <| ambient <| tga "Gas20.tga"
                , netOptions = mkNetworkOptions
                    { networkPos  = Network
                    , networkData = Network } }

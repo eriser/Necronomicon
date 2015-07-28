@@ -327,8 +327,9 @@ loadMat r (Material sh vs fs us pr) = do
 loadTextureUniform :: Resources -> Uniform -> IO Uniform
 loadTextureUniform r (UniformTexture name t) = UniformTexture name <$> getTexture r t
 loadTextureUniform _ u                       = return u
---TODO: Work out the context switching! We're deadlocking. This feels dangerous and somewhat....wrong? Is there a different approach to this?
+
 getTexture :: Resources -> Texture -> IO Texture
+--TODO: Do we really need to set audio textures every frame?!?!?1 If we do, it really should lock the GL context, which sounds bad....
 getTexture _ t@(AudioTexture (Just u) i)         = setAudioTexture i u >> return t
 getTexture _ t@(FontTexture  (Just _) _ _)       = return t
 getTexture _ t@(TGATexture   (Just _) _)         = return t
