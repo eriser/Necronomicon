@@ -24,16 +24,17 @@ import           Necronomicon.Graphics
 import           Necronomicon.Patterns             (Pattern (..))
 import           Necronomicon.UGen
 import           Necronomicon.FRP.Runtime
+import           Debug.Trace
 
 ---------------------------------------------
 -- Audio
 ---------------------------------------------
 
 --consider dynamic texture constructor similar to dynamic mkMesh?
-audioTexture :: Int -> Signal Texture
+audioTexture :: Int -> Texture
 audioTexture index
-    | index < 8 = Signal $ \_ -> return (\eid -> if eid == 200 then return $ Change $ AudioTexture index else return $ NoChange $ AudioTexture index, AudioTexture index, IntSet.singleton 200)
-    | otherwise = pure EmptyTexture
+    | index < 8 = AudioTexture Nothing index
+    | otherwise = trace ("audioTexture called with index " ++ show index ++ ", which is higher than the maximum number of audioTexture channels (8).") EmptyTexture
 
 tempo :: Signal Rational -> Signal Rational
 tempo tempoSignal = Signal $ \state -> do

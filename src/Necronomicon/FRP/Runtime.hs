@@ -63,7 +63,7 @@ runSignal sig = initWindow (920, 540) False >>= \mw -> case mw of
                 atomically   $ writeTChan eventInbox $ TimeEvent (delta) (currentTime)
 
                 mtid <- myThreadId
-                atomically (takeTMVar (contextBarrier state)) >>= \(GLContext tid) -> when (tid /= mtid) (GLFW.makeContextCurrent (Just window))
+                atomically (takeTMVar (contextBarrier $ sigResources state)) >>= \(GLContext tid) -> when (tid /= mtid) (GLFW.makeContextCurrent (Just window))
 
                 gs <- readIORef (renderDataRef state)
                 cs <- sortBy (comparing (_depth . snd)) . IntMap.elems <$> atomically (readTVar (cameraRef state))
@@ -71,7 +71,7 @@ runSignal sig = initWindow (920, 540) False >>= \mw -> case mw of
                 preRender window
                 mapM_ (renderWithCameraRaw window (sigResources state) gs) cs
                 GLFW.swapBuffers window
-                atomically $ putTMVar (contextBarrier state) $ GLContext mtid
+                atomically $ putTMVar (contextBarrier $ sigResources state) $ GLContext mtid
 
                 threadDelay 16667
                 run q window s currentTime tree eventInbox state

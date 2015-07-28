@@ -14,8 +14,8 @@ import           Data.Monoid
 guiCamera:: Entity ()
 guiCamera= (mkEntity ()){camera = Just <| Camera 0 0.001 10 transparent [] (toBitMask GUILayer) 1}
 
-label :: Vector2 -> Font -> String -> Entity ()
-label (Vector2 x y) font text = (mkEntity ())
+label :: (Double, Double) -> Font -> String -> Entity ()
+label (x, y) font text = (mkEntity ())
     { pos    = Vector3 x y 0
     , model  = Just $ drawText text font ambient }
 
@@ -35,7 +35,17 @@ basicNetGUI = foldn updateBasicNetGUI mkBasicNetGUI
            <> NetGUIStatus <~ networkStatus
 
 mkBasicNetGUI :: [Entity ()]
-mkBasicNetGUI = [guiCamera, guiRect (0, 0.1) (0.2, 0.05) (RGBA 1 1 1 0.5)]
+mkBasicNetGUI = [ guiCamera
+                
+                --NetStatusBox
+                , label (0.85, 0.85) (Font "OCRA.ttf" 10) "Test"
+                , guiRect (0.8, 0.95) (0.2, 0.05) (RGBA 1 1 1 0.5)
+
+                
+                --PlayerBox
+                , label (0.05, 0.85) (Font "OCRA.ttf" 10) "Test"
+                , guiRect (0, 0.95) (0.2, 0.05) (RGBA 1 1 1 0.5)
+                ]
 
 updateBasicNetGUI :: BasicNetGUIInput -> [Entity ()] -> [Entity ()]
 updateBasicNetGUI (NetGUIUsers  _) es = es

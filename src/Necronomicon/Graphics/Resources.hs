@@ -7,7 +7,7 @@ import Necronomicon.Graphics.Texture
 import Necronomicon.Graphics.Color
 import Necronomicon.Util.TGA              (loadTextureFromTGA)
 import Necronomicon.Utility
-import Control.Monad                      (foldM_)
+import Necronomicon.Graphics.Text
 import Data.IORef
 import Data.Binary
 import Foreign.Storable
@@ -15,13 +15,18 @@ import Foreign.Ptr
 import Foreign.C.Types
 import Foreign.Marshal.Alloc
 import Foreign.Marshal.Array
-import Unsafe.Coerce
+import Data.List                                           (foldl')
+import Control.Monad (when)
 import Data.Bits
+import Control.Concurrent
+import Control.Concurrent.STM
 import qualified Data.Map.Strict               as Map
 import qualified Graphics.Rendering.OpenGL     as GL
 import qualified Graphics.Rendering.OpenGL.Raw as GLRaw
+import qualified Graphics.UI.GLFW              as GLFW
 
 
+data GLContext       = GLContext ThreadId
 data UID             = UID Int | New                                                             deriving (Show, Eq)
 data BasicLayers     = DefaultLayer
                      | GUILayer
@@ -30,12 +35,12 @@ data BasicLayers     = DefaultLayer
                      | MiscLayer
                      deriving (Show, Eq, Enum)
 
-data Material        = Material    (Maybe LoadedShader) String String [Uniform] GL.PrimitiveMode deriving (Show, Eq)
+data Material        = Material    (Maybe LoadedShader) String String [Uniform] GL.PrimitiveMode  deriving (Show, Eq)
 data Mesh            = Mesh        (Maybe LoadedMesh)   String [Vector3] [Color] [Vector2] [Int]
-                     | DynamicMesh (Maybe LoadedMesh)   String [Vector3] [Color] [Vector2] [Int] deriving (Show, Eq)
-data Model           = Model Int Mesh Material | FontRenderer String Font Material               deriving (Show, Eq)
-data PostRenderingFX = PostRenderingFX (Maybe LoadedPostRenderingFX) String Material             deriving (Show, Eq)
-data Font            = Font {fontKey :: String, fontSize :: Int}                                 deriving (Show, Eq)
+                     | DynamicMesh (Maybe LoadedMesh)   String [Vector3] [Color] [Vector2] [Int]
+                     | FontMesh    (Maybe LoadedMesh)   String Font                               deriving (Show, Eq)
+data Model           = Model Int Mesh Material                                                    deriving (Show, Eq)
+data PostRenderingFX = PostRenderingFX (Maybe LoadedPostRenderingFX) String Material              deriving (Show, Eq)
 data Uniform         = UniformTexture String Texture
                      | UniformScalar  String Double
                      | UniformVec2    String Vector2
@@ -77,6 +82,12 @@ unUID :: UID -> Int
 unUID (UID uid) = uid
 unUID _         = error "Attempted to unUID a New UID"
 
+drawText :: String -> Font -> (Texture -> Material) -> Model
+drawText text font material = Model (toBitMask GUILayer) fontModel fontMat
+    where
+        fontModel = FontMesh Nothing text font
+        fontMat   = material <| FontTexture Nothing (fontKey font) (fontSize font)
+
 ------------------------------
 -- Loaded Resources
 ------------------------------
@@ -88,27 +99,9 @@ data Resources = Resources
    , fontsRef             :: IORef (Map.Map String LoadedFont)
    , postRenderRef        :: IORef (Map.Map String LoadedPostRenderingFX)
    , matrixUniformPtr     :: Ptr CFloat
-   , audioSamplesRef      :: IORef [String] }
-
-data CharMetric = CharMetric
-  { character             :: Char
-  , advanceX              :: Double
-  , advanceY              :: Double
-  , bearingX              :: Double
-  , bearingY              :: Double
-  , charWidth             :: Double
-  , charHeight            :: Double
-  , charLeft              :: Double
-  , charTop               :: Double
-  , charTX                :: Double } deriving (Show)
-
-data LoadedFont = LoadedFont
-  { atlas                 :: Texture
-  , atlasWidth            :: Double
-  , atlasHeight           :: Double
-  , characters            :: Map.Map Char CharMetric
-  , characterVertexBuffer :: GL.BufferObject
-  , characterIndexBuffer  :: GL.BufferObject }   deriving (Show)
+   , audioSamplesRef      :: IORef [String] 
+   , contextBarrier       :: TMVar GLContext
+   , context              :: GLFW.Window }
 
 type LoadedMesh = (GL.BufferObject, GL.BufferObject, GL.GLuint, GL.GLuint, GL.GLsizei, GL.VertexArrayDescriptor GL.GLfloat, GL.VertexArrayDescriptor GL.GLfloat, GL.VertexArrayDescriptor GL.GLfloat)
 
@@ -126,8 +119,8 @@ data LoadedPostRenderingFX = LoadedPostRenderingFX
 instance Show Resources where
     show _ = "Resources"
 
-mkResources :: IO Resources
-mkResources = Resources
+mkResources :: GLFW.Window -> IO Resources
+mkResources w = Resources
           <$> newIORef Map.empty
           <*> newIORef Map.empty
           <*> newIORef Map.empty
@@ -135,6 +128,8 @@ mkResources = Resources
           <*> newIORef Map.empty
           <*> mallocBytes (sizeOf (undefined :: CFloat) * 16)
           <*> newIORef []
+          <*> (myThreadId >>= \mtid -> atomically (newTMVar $ GLContext mtid))
+          <*> return w
 
 ------------------------------
 -- Serialization
@@ -150,24 +145,19 @@ instance Binary UID where
 instance Binary Mesh where
     put (Mesh        _ s v c u i) = put (0 :: Word8) >> put s >> put v >> put c >> put u >> put i
     put (DynamicMesh _ s v c u i) = put (1 :: Word8) >> put s >> put v >> put c >> put u >> put i
+    put (FontMesh    _ s f)       = put (2 :: Word8) >> put s >> put f
     get                           = (get :: Get Word8) >>= \t -> case t of
         0 -> Mesh        Nothing <$> get <*> get <*> get <*> get <*> get
-        _ -> DynamicMesh Nothing <$> get <*> get <*> get <*> get <*> get
+        1 -> DynamicMesh Nothing <$> get <*> get <*> get <*> get <*> get
+        _ -> FontMesh    Nothing <$> get <*> get
 
 instance Binary Model where
-    put (Model     l me mat) = put (0 :: Word8) >> put l >> put me >> put mat
-    put (FontRenderer n f m) = put (1 :: Word8) >> put n  >> put f >> put m
-    get                      = (get :: Get Word8) >>= \t -> case t of
-        0 -> Model        <$> get <*> get <*> get
-        _ -> FontRenderer <$> get <*> get <*> get
+    put (Model     l me mat) = put l >> put me >> put mat
+    get                      = Model <$> get <*> get <*> get
 
 instance Binary PostRenderingFX where
     put (PostRenderingFX _ u m) = put u >> put m
     get                         = PostRenderingFX Nothing <$> get <*> get
-
-instance Binary Font where
-    put (Font k s) = put k >> put s
-    get            = Font <$> get <*> get
 
 instance Binary Uniform where
     put (UniformTexture n t) = put (0 :: Word8) >> put n >> put t
@@ -205,39 +195,31 @@ instance Binary Material where
 -- Loading Resources
 ------------------------------
 
+--Change dynamic mkMeshes to "load" their buffers the first time, so users don't have to supply them
+renderFont :: String -> Font -> Resources -> IO ([Vector3], [Color], [Vector2], [Int])
+renderFont text font resources = do
+    loadedFont <- getFont resources font
+    let characterMesh                       = textMesh (characters loadedFont) (atlasWidth loadedFont) (atlasHeight loadedFont)
+        (vertices,colors,uvs,indices,_,_,_) = foldl' characterMesh ([],[],[],[],0,0,0) text
+    return (vertices, colors, uvs, indices)
+
+getFont :: Resources -> Font -> IO LoadedFont
+getFont resources font = readIORef (fontsRef resources) >>= \fonts ->
+    case Map.lookup (fontKey font) fonts of
+        Nothing    -> loadFontAtlas font >>= \font' -> (writeIORef (fontsRef resources) $ Map.insert (fontKey font) font' fonts) >> return font'
+        Just font' -> return font'
+
 getShader :: Resources -> Shader -> IO LoadedShader
-getShader resources sh = readIORef (shadersRef resources) >>= \shaders ->
-    case Map.lookup (key sh) shaders of
+getShader resources sh = readIORef (shadersRef resources) >>= \shaders -> do
+   mtid <- myThreadId
+   case Map.lookup (key sh) shaders of
         Just loadedShader -> return loadedShader
         Nothing           -> do
+            atomically (takeTMVar (contextBarrier resources)) >>= \(GLContext tid) -> when (tid /= mtid) (GLFW.makeContextCurrent (Just (context resources)))
             loadedShader <- loadShader sh
             writeIORef (shadersRef resources) $ Map.insert (key sh) loadedShader shaders
+            atomically $ putTMVar (contextBarrier resources) $ GLContext mtid
             return loadedShader
-
-getMesh :: Resources -> Mesh -> IO LoadedMesh
-getMesh _       (Mesh (Just m) _ _ _ _ _) = return m
-getMesh resources m@(Mesh _ mKey _ _ _ _) = readIORef (meshesRef resources) >>= \mkMeshes -> case Map.lookup mKey mkMeshes of
-    Nothing         -> loadMesh m >>= \loadedMesh -> (writeIORef (meshesRef resources) $ Map.insert mKey loadedMesh mkMeshes) >> return loadedMesh
-    Just loadedMesh -> return loadedMesh
-getMesh _       (DynamicMesh (Just m) _ _ _ _ _) = return m
-getMesh resources m@(DynamicMesh _ mKey v c u i) = readIORef (meshesRef resources) >>= \mkMeshes -> case Map.lookup mKey mkMeshes of
-    Nothing              -> loadMesh m >>= \loadedMesh@(vbuf,ibuf,_,_,_,_,_,_) -> (writeIORef (meshesRef resources) (Map.insert mKey loadedMesh mkMeshes)) >> dynamicDrawMesh vbuf ibuf v c u i
-    Just (vbuf,ibuf,_,_,_,_,_,_) -> dynamicDrawMesh vbuf ibuf v c u i
-
-loadMesh :: Mesh -> IO LoadedMesh
-loadMesh (Mesh _ _ vertices colors uvs indices) = do
-    vertexBuffer  <- makeBuffer GL.ArrayBuffer        (map realToFrac (posColorUV vertices colors uvs) :: [GL.GLfloat])
-    indexBuffer   <- makeBuffer GL.ElementArrayBuffer (map fromIntegral indices :: [GL.GLuint])
-
-    let min'       = fromIntegral $ foldr min 999999 indices
-        max'       = fromIntegral $ foldr max 0      indices
-        (p, c, u)  = vadPosColorUV
-    return (vertexBuffer,indexBuffer, min', max', fromIntegral (length indices), p, c, u)
-loadMesh (DynamicMesh _ _ _ _ _ _) = do
-    vertexBuffer:_ <- GL.genObjectNames 1
-    indexBuffer :_ <- GL.genObjectNames 1
-    let (p, c, u)   = vadPosColorUV
-    return (vertexBuffer,indexBuffer,0,0,0,p, c, u)
 
 dynamicDrawMesh :: GL.BufferObject -> GL.BufferObject -> [Vector3] -> [Color] -> [Vector2] -> [Int] -> IO LoadedMesh
 dynamicDrawMesh vBuf iBuf vertices colors uvs indices = do
@@ -262,103 +244,117 @@ posColorUV _ _ [] = []
 posColorUV (Vector3 x y z : vs) (RGB  r g b   : cs) (Vector2 u v : uvs) = x : y : z : r : g : b : u : v : posColorUV vs cs uvs
 posColorUV (Vector3 x y z : vs) (RGBA r g b _ : cs) (Vector2 u v : uvs) = x : y : z : r : g : b : u : v : posColorUV vs cs uvs
 
-loadNewModel :: Resources -> Maybe Model -> IO (Maybe Model)
-loadNewModel r (Just (Model l me ma)) = do
-    me' <- loadNewMesh r me
-    ma' <- loadNewMat  r ma
+loadModel :: Resources -> Maybe Model -> IO (Maybe Model)
+loadModel r (Just (Model l me ma)) = do
+    me' <- loadMesh r me
+    ma' <- loadMat  r ma
     return . Just $ Model l me' ma'
-loadNewModel _ m = return m
+loadModel _ m = return m
 
-loadNewMesh :: Resources -> Mesh -> IO Mesh
-loadNewMesh r m@(Mesh        Nothing n vs cs us is) = getMesh r m >>= \lm -> return (Mesh        (Just lm) n vs cs us is)
-loadNewMesh r m@(DynamicMesh Nothing n vs cs us is) = getMesh r m >>= \lm -> return (DynamicMesh (Just lm) n vs cs us is)
-loadNewMesh _ m                                     = return m
+loadMesh :: Resources -> Mesh -> IO Mesh
+loadMesh r m = case m of
+    Mesh        Nothing n vs cs us is -> getMesh m >>= \lm -> return (Mesh        (Just lm) n vs cs us is)
+    DynamicMesh Nothing n vs cs us is -> getMesh m >>= \lm -> return (DynamicMesh (Just lm) n vs cs us is)
+    FontMesh    Nothing f t           -> getMesh m >>= \lm -> return (FontMesh    (Just lm) f t)
+    _                                 -> return m
+    where
 
-getMesh' :: Resources -> Mesh -> IO (Maybe LoadedMesh)
-getMesh' _         (Mesh        (Just m) _ _ _ _ _) = return $ Just m
-getMesh' _         (DynamicMesh (Just m) _ _ _ _ _) = return $ Just m
-getMesh' resources (Mesh        _ mKey _ _ _ _)     = readIORef (meshesRef resources) >>= return . Map.lookup mKey
-getMesh' resources (DynamicMesh _ mKey _ _ _ _)     = readIORef (meshesRef resources) >>= return . Map.lookup mKey
+        getMesh (Mesh (Just lm) _ _ _ _ _)        = return lm
+        getMesh (DynamicMesh (Just lm) _ _ _ _ _) = return lm
+        getMesh (FontMesh (Just lm) _ _)          = return lm
+        getMesh f@(FontMesh Nothing   _ _)        = createMesh f
+        getMesh (Mesh _ mKey _ _ _ _)             = readIORef (meshesRef r) >>= \meshes -> case Map.lookup mKey meshes of
+            Just loadedMesh              -> return loadedMesh
+            _                            -> do
+                loadedMesh <- createMesh m
+                writeIORef (meshesRef r) $ Map.insert mKey loadedMesh meshes
+                return loadedMesh
+        getMesh (DynamicMesh _ mKey v c u i)      = readIORef (meshesRef r) >>= \meshes -> case Map.lookup mKey meshes of
+            Just (vbuf,ibuf,_,_,_,_,_,_) -> dynamicDrawMesh vbuf ibuf v c u i
+            _                            -> do
+                loadedMesh@(vbuf,ibuf,_,_,_,_,_,_) <- createMesh m
+                writeIORef (meshesRef r) (Map.insert mKey loadedMesh meshes)
+                dynamicDrawMesh vbuf ibuf v c u i
+            
+        createMesh (Mesh _ _ vertices colors uvs indices) = do
+            mtid          <- myThreadId
+            atomically (takeTMVar (contextBarrier r)) >>= \(GLContext tid) -> when (tid /= mtid) (GLFW.makeContextCurrent (Just (context r)))
+            vertexBuffer  <- makeBuffer GL.ArrayBuffer        (map realToFrac (posColorUV vertices colors uvs) :: [GL.GLfloat])
+            indexBuffer   <- makeBuffer GL.ElementArrayBuffer (map fromIntegral indices :: [GL.GLuint])
+            let min'       = fromIntegral $ foldr min 999999 indices
+                max'       = fromIntegral $ foldr max 0      indices
+                (p, c, u)  = vadPosColorUV
+            atomically $ putTMVar (contextBarrier r) $ GLContext mtid
+            return (vertexBuffer,indexBuffer, min', max', fromIntegral (length indices), p, c, u)
+        createMesh (DynamicMesh _ _ _ _ _ _) = do
+            mtid          <- myThreadId
+            atomically (takeTMVar (contextBarrier r)) >>= \(GLContext tid) -> when (tid /= mtid) (GLFW.makeContextCurrent (Just (context r)))
+            vertexBuffer:_ <- GL.genObjectNames 1
+            indexBuffer :_ <- GL.genObjectNames 1
+            let (p, c, u)   = vadPosColorUV
+            atomically $ putTMVar (contextBarrier r) $ GLContext mtid
+            return (vertexBuffer,indexBuffer,0,0,0,p, c, u)
+        createMesh (FontMesh _ font text) = do
+            mtid          <- myThreadId
+            atomically (takeTMVar (contextBarrier r)) >>= \(GLContext tid) -> when (tid /= mtid) (GLFW.makeContextCurrent (Just (context r)))
+            (vertices, colors, uvs, indices) <- renderFont font text r
+            vertexBuffer  <- makeBuffer GL.ArrayBuffer        (map realToFrac (posColorUV vertices colors uvs) :: [GL.GLfloat])
+            indexBuffer   <- makeBuffer GL.ElementArrayBuffer (map fromIntegral indices :: [GL.GLuint])
+            let min'       = fromIntegral $ foldr min 999999 indices
+                max'       = fromIntegral $ foldr max 0      indices
+                (p, c, u)  = vadPosColorUV
+            atomically $ putTMVar (contextBarrier r) $ GLContext mtid
+            return (vertexBuffer,indexBuffer, min', max', fromIntegral (length indices), p, c, u)
 
-loadNewMat :: Resources -> Material -> IO Material
-loadNewMat r (Material Nothing vs fs us pr) = do
+
+--TODO: Load texture for uniforms here!
+--TODO: Detect needing to load texture uniforms separately from needing to load the shaders in a material!
+loadMat :: Resources -> Material -> IO Material
+loadMat r (Material Nothing vs fs us pr) = do
     sh' <- getShader r sh
-    return $ Material (Just sh') vs fs us pr
+    us' <- mapM (loadTextureUniform r) us
+    return $ Material (Just sh') vs fs us' pr
     where
         sh = shader
             (vs ++ " + " ++ fs)
             ("modelView" : "proj" : map uniformName us)
-            -- ["position", "in_color", "in_uv"]
             (loadVertexShader   vs)
             (loadFragmentShader fs)
-        -- getShader' resources sha = readIORef (shadersRef resources) >>= return . IntMap.lookup (key sha)
---TODO: Implement font loading
-loadNewMat _ m = return m
+loadMat r (Material sh vs fs us pr) = do
+    us'  <- mapM (loadTextureUniform r) us
+    return $ Material sh vs fs us' pr
 
-setUniform :: Resources -> Int -> (GL.UniformLocation, Uniform) -> IO Int
-setUniform _ t (GL.UniformLocation loc, UniformScalar  _ v)                 = GLRaw.glUniform1f loc (realToFrac v) >> return t
-setUniform _ t (GL.UniformLocation loc, UniformVec2    _ (Vector2 x y))     = GLRaw.glUniform2f loc (realToFrac x) (realToFrac y) >> return t
-setUniform _ t (GL.UniformLocation loc, UniformVec3    _ (Vector3 x y z))   = GLRaw.glUniform3f loc (realToFrac x) (realToFrac y) (realToFrac z) >> return t
-setUniform _ t (GL.UniformLocation loc, UniformVec4    _ (Vector4 x y z w)) = GLRaw.glUniform4f loc (realToFrac x) (realToFrac y) (realToFrac z) (realToFrac w) >> return t
-setUniform r t (loc,                    UniformTexture _ v)                 = getTexture r v >>= setTextureUniform loc t >> return (t + 1)
-setUniform _ t _                                                            = return t
-
-getTexture :: Resources -> Texture -> IO GL.TextureObject
-getTexture resources (AudioTexture i) = readIORef (texturesRef resources) >>= \textures -> case Map.lookup ("audio" ++ show i) textures of
-    Nothing      -> loadAudioTexture i >>= \texture -> (writeIORef (texturesRef resources) $ Map.insert ("audio" ++ show i) texture textures) >> setAudioTexture i texture
-    Just texture -> setAudioTexture i texture
-getTexture resources EmptyTexture     = readIORef (texturesRef resources) >>= \textures -> case Map.lookup "empty" textures of
-    Nothing      -> newBoundTexUnit 0 >>= \texture -> (writeIORef (texturesRef resources) $ Map.insert "empty" texture textures) >> return texture
-    Just texture -> return texture
-getTexture resources (TGATexture Nothing path) = readIORef (texturesRef resources) >>= \textures -> case Map.lookup path textures of
-    Nothing      -> loadTextureFromTGA path >>= \texture -> (writeIORef (texturesRef resources) $ Map.insert path texture textures) >> return texture
-    Just texture -> return texture
-getTexture _ (TGATexture (Just tex) _) = return tex
-getTexture _ (LoadedTexture t) = return t
-
-setEmptyTextures :: Texture -> Material -> Material
-setEmptyTextures tex (Material uid vs fs us primMode) = Material uid vs fs (foldr updateTex [] us) primMode
-    where
-        updateTex (UniformTexture t EmptyTexture) us' = UniformTexture t tex : us'
-        updateTex  u                              us' = u : us'
-
-setupAttribute :: GL.AttribLocation -> GL.VertexArrayDescriptor GL.GLfloat -> IO()
-setupAttribute (GL.AttribLocation loc) (GL.VertexArrayDescriptor n _ s p) = do
-    GLRaw.glVertexAttribPointer loc n GLRaw.gl_FLOAT (fromIntegral GLRaw.gl_FALSE) s p
-    GLRaw.glEnableVertexAttribArray loc
-{-# INLINE setupAttribute #-}
-
-drawMeshWithMaterial :: Material -> Mesh -> Matrix4x4 -> Matrix4x4 -> Resources -> IO()
-drawMeshWithMaterial (Material mat _ _ us _) m modelView proj resources = do
-    (program,GL.UniformLocation mv : GL.UniformLocation pr : ulocs, vertexVap, colorVap, uvVap) <- sh
-    (vertexBuffer, indexBuffer, start, end, count, vertexVad, colorVad, uvVad)                  <- getMesh resources m
-
-    GLRaw.glUseProgram $ unsafeCoerce program
-    foldM_ (setUniform resources) 0 $ zip ulocs us
-
-    setMatrixUniform mv modelView (matrixUniformPtr resources)
-    setMatrixUniform pr proj (matrixUniformPtr resources)
-    GLRaw.glBindBuffer GLRaw.gl_ARRAY_BUFFER $ unsafeCoerce vertexBuffer
-
-    setupAttribute vertexVap vertexVad
-    setupAttribute colorVap  colorVad
-    setupAttribute uvVap     uvVad
-
-    GLRaw.glBindBuffer GLRaw.gl_ELEMENT_ARRAY_BUFFER $ unsafeCoerce indexBuffer
-    GLRaw.glDrawRangeElements GLRaw.gl_TRIANGLES start end count GLRaw.gl_UNSIGNED_INT offset0
-
-    where
-        sh = case mat of
-            Just js -> return js
-            _       -> error "fuck!"
-            -- getShader resources $ shader
-                -- (vs ++ " + " ++ fs)
-                -- ("modelView" : "proj" : map uniformName us)
-                -- (loadVertexShader   vs)
-                -- (loadFragmentShader fs)
-{-# INLINE drawMeshWithMaterial #-}
-
-
+loadTextureUniform :: Resources -> Uniform -> IO Uniform
+loadTextureUniform r (UniformTexture name t) = UniformTexture name <$> getTexture r t
+loadTextureUniform _ u                       = return u
+--TODO: Work out the context switching! We're deadlocking. This feels dangerous and somewhat....wrong? Is there a different approach to this?
+getTexture :: Resources -> Texture -> IO Texture
+getTexture _ t@(AudioTexture (Just u) i)         = setAudioTexture i u >> return t
+getTexture _ t@(FontTexture  (Just _) _ _)       = return t
+getTexture _ t@(TGATexture   (Just _) _)         = return t
+getTexture r         (AudioTexture Nothing i)    = do
+    mtid <- myThreadId
+    atomically (takeTMVar (contextBarrier r)) >>= \(GLContext tid) -> when (tid /= mtid) (GLFW.makeContextCurrent (Just (context r)))
+    t    <- loadAudioTexture i
+    setAudioTexture i t
+    atomically $ putTMVar (contextBarrier r) $ GLContext mtid
+    return (AudioTexture (Just t) i)
+getTexture resources (FontTexture Nothing fn fs) = do
+    mtid <- myThreadId
+    atomically (takeTMVar (contextBarrier resources)) >>= \(GLContext tid) -> when (tid /= mtid) (GLFW.makeContextCurrent (Just (context resources)))
+    t    <- getFont resources (Font fn fs)
+    atomically $ putTMVar (contextBarrier resources) $ GLContext mtid
+    return (FontTexture (Just $ atlas t) fn fs)
+getTexture resources (TGATexture Nothing path)   = readIORef (texturesRef resources) >>= \textures -> case Map.lookup path textures of
+    Nothing      -> do
+        mtid <- myThreadId
+        atomically (takeTMVar (contextBarrier resources)) >>= \(GLContext tid) -> when (tid /= mtid) (GLFW.makeContextCurrent (Just (context resources)))
+        t    <- loadTextureFromTGA path
+        writeIORef (texturesRef resources) $ Map.insert path t textures
+        atomically $ putTMVar (contextBarrier resources) $ GLContext mtid
+        return (TGATexture (Just t) path)
+    Just texture -> return (TGATexture (Just texture) path)
+getTexture _ t@EmptyTexture                      = return t
 
 ------------------------------
 -- RenderData

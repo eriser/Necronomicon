@@ -148,20 +148,20 @@ translate dir e@Entity{pos = p, rot = r} = e{pos = p + (dir .*. rotFromQuaternio
 entityTransform :: Entity a -> Matrix4x4
 entityTransform Entity{pos = p, rot = r, escale = s} = trsMatrix p r s
 
-entityToRenderData :: Entity a -> Maybe RenderData
-entityToRenderData !(Entity _ _ position rotation scale _ (Just (Model layer (Mesh (Just loadedMesh) _ _ _ _ _) (Material (Just (program, GL.UniformLocation  mv : GL.UniformLocation  pr : ulocs, vloc, cloc, uloc)) _ _ uns _))) _ _ _ _) =
-    Just $RenderData 1 (unsafeCoerce vb) (unsafeCoerce ib) start end count vn vs vp cn cs cp uvn uvs uvp (unsafeCoerce program) (unsafeCoerce vloc) (unsafeCoerce cloc) (unsafeCoerce uloc) mat uniforms mv pr (fromIntegral layer :: GL.GLint)
-    where
-        (vb, ib, start, end, count, GL.VertexArrayDescriptor vn _ vs vp, GL.VertexArrayDescriptor cn _ cs cp, GL.VertexArrayDescriptor uvn _ uvs uvp) = loadedMesh
-        mkLoadedUniform (GL.UniformLocation loc, UniformTexture _ (LoadedTexture t)) (us, tu) = (UniformTextureRaw loc (unsafeCoerce t) tu : us, tu + 1)
-        mkLoadedUniform (GL.UniformLocation loc, UniformScalar  _ v)                 (us, tu) = (UniformScalarRaw  loc (realToFrac v) : us, tu)
-        mkLoadedUniform (GL.UniformLocation loc, UniformVec2    _ (Vector2 x y))     (us, tu) = (UniformVec2Raw    loc (realToFrac x) (realToFrac y) : us, tu)
-        mkLoadedUniform (GL.UniformLocation loc, UniformVec3    _ (Vector3 x y z))   (us, tu) = (UniformVec3Raw    loc (realToFrac x) (realToFrac y) (realToFrac z) : us, tu)
-        mkLoadedUniform (GL.UniformLocation loc, UniformVec4    _ (Vector4 x y z w)) (us, tu) = (UniformVec4Raw    loc (realToFrac x) (realToFrac y) (realToFrac z) (realToFrac w) : us, tu)
-        mkLoadedUniform _                                                            (us, tu) = (us, tu)
-        mat                                                                                   = trsMatrix position rotation scale
-        uniforms                                                                              = fst $ foldr mkLoadedUniform ([], 0) $ zip ulocs uns
-entityToRenderData _ = Nothing
+-- entityToRenderData :: Entity a -> Maybe RenderData
+-- entityToRenderData !(Entity _ _ position rotation scale _ (Just (Model layer (Mesh (Just loadedMesh) _ _ _ _ _) (Material (Just (program, GL.UniformLocation  mv : GL.UniformLocation  pr : ulocs, vloc, cloc, uloc)) _ _ uns _))) _ _ _ _) =
+--     Just $RenderData 1 (unsafeCoerce vb) (unsafeCoerce ib) start end count vn vs vp cn cs cp uvn uvs uvp (unsafeCoerce program) (unsafeCoerce vloc) (unsafeCoerce cloc) (unsafeCoerce uloc) mat uniforms mv pr (fromIntegral layer :: GL.GLint)
+--     where
+--         (vb, ib, start, end, count, GL.VertexArrayDescriptor vn _ vs vp, GL.VertexArrayDescriptor cn _ cs cp, GL.VertexArrayDescriptor uvn _ uvs uvp) = loadedMesh
+--         mkLoadedUniform (GL.UniformLocation loc, UniformTexture _ (LoadedTexture t)) (us, tu) = (UniformTextureRaw loc (unsafeCoerce t) tu : us, tu + 1)
+--         mkLoadedUniform (GL.UniformLocation loc, UniformScalar  _ v)                 (us, tu) = (UniformScalarRaw  loc (realToFrac v) : us, tu)
+--         mkLoadedUniform (GL.UniformLocation loc, UniformVec2    _ (Vector2 x y))     (us, tu) = (UniformVec2Raw    loc (realToFrac x) (realToFrac y) : us, tu)
+--         mkLoadedUniform (GL.UniformLocation loc, UniformVec3    _ (Vector3 x y z))   (us, tu) = (UniformVec3Raw    loc (realToFrac x) (realToFrac y) (realToFrac z) : us, tu)
+--         mkLoadedUniform (GL.UniformLocation loc, UniformVec4    _ (Vector4 x y z w)) (us, tu) = (UniformVec4Raw    loc (realToFrac x) (realToFrac y) (realToFrac z) (realToFrac w) : us, tu)
+--         mkLoadedUniform _                                                            (us, tu) = (us, tu)
+--         mat                                                                                   = trsMatrix position rotation scale
+--         uniforms                                                                              = fst $ foldr mkLoadedUniform ([], 0) $ zip ulocs uns
+-- entityToRenderData _ = Nothing
 
 setRenderDataPtr :: Entity a -> Ptr RenderData -> IO ()
 setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !(Vector3 sx sy sz) _ (Just (Model layer (Mesh (Just loadedMesh) _ _ _ _ _) (Material (Just (program, GL.UniformLocation  mv : GL.UniformLocation  pr : ulocs, vloc, cloc, uloc)) _ _ uns _))) _ _ _ _) rdptr = do
@@ -226,12 +226,13 @@ setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !
         z2 = z * z
 
         setUniforms uptr i (GL.UniformLocation l : ls) (uni : us) = case uni of
-            UniformTexture _ (LoadedTexture t)     -> pokeByteOff p 0 (0 :: CInt) >> pokeByteOff p 4 l >> pokeByteOff p 8 (unsafeCoerce t :: CInt) >> pokeByteOff p 12 (0 :: CInt) >> setUniforms uptr (i + 24) ls us
+            -- UniformTexture _ (LoadedTexture t)     -> pokeByteOff p 0 (0 :: CInt) >> pokeByteOff p 4 l >> pokeByteOff p 8 (unsafeCoerce t :: CInt) >> pokeByteOff p 12 (0 :: CInt) >> setUniforms uptr (i + 24) ls us
             UniformScalar  _ v                     -> pokeByteOff p 0 (1 :: CInt) >> pokeByteOff p 4 l >> pokeByteOff p 8 (realToFrac v  :: GL.GLfloat) >> setUniforms uptr (i + 24) ls us
             UniformVec2    _ (Vector2 ux uy)       -> pokeByteOff p 0 (2 :: CInt) >> pokeByteOff p 4 l >> pokeByteOff p 8 (realToFrac ux :: GL.GLfloat) >> pokeByteOff p 12 (realToFrac uy :: GL.GLfloat) >> setUniforms uptr (i + 24) ls us
             UniformVec3    _ (Vector3 ux uy uz)    -> pokeByteOff p 0 (3 :: CInt) >> pokeByteOff p 4 l >> pokeByteOff p 8 (realToFrac ux :: GL.GLfloat) >> pokeByteOff p 12 (realToFrac uy :: GL.GLfloat) >> pokeByteOff p 16 (realToFrac uz :: GL.GLfloat) >> setUniforms uptr (i + 24) ls us
             UniformVec4    _ (Vector4 ux uy uz uw) -> pokeByteOff p 0 (4 :: CInt) >> pokeByteOff p 4 l >> pokeByteOff p 8 (realToFrac ux :: GL.GLfloat) >> pokeByteOff p 12 (realToFrac uy :: GL.GLfloat) >> pokeByteOff p 16 (realToFrac uz :: GL.GLfloat) >> pokeByteOff p 20 (realToFrac uw :: GL.GLfloat) >> setUniforms uptr (i + 24) ls us
-            _                                      -> return ()
+            UniformTexture _ (FontTexture (Just t) _ _) -> pokeByteOff p 0 (0 :: CInt) >> pokeByteOff p 4 l >> pokeByteOff p 8 (unsafeCoerce t :: CInt) >> pokeByteOff p 12 (0 :: CInt) >> setUniforms uptr (i + 24) ls us
+            _                                           -> return ()
             where
                 p = uptr `plusPtr` (i :: Int)
         setUniforms _ _ _ _ = return ()

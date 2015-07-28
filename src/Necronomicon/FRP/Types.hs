@@ -5,7 +5,6 @@ import           Necronomicon.Linear
 import           Necronomicon.Graphics
 import           Necronomicon.Networking.Types
 import           Data.IORef
-import           Control.Concurrent
 import           Control.Concurrent.STM
 import qualified Graphics.UI.GLFW             as GLFW
 import qualified Data.Vector.Storable         as SV
@@ -30,7 +29,6 @@ infixr 7 ~>
 type Time = Double
 type Key  = GLFW.Key
 
-data GLContext = GLContext ThreadId
 
 --Add network events and network event uids!
 data InputEvent = TimeEvent        Time Time
@@ -47,37 +45,34 @@ data InputEvent = TimeEvent        Time Time
                 deriving (Show)
 
 data SignalState = SignalState
-                 { contextBarrier :: TMVar GLContext
-                 , context        :: GLFW.Window
-                 , renderDataRef  :: IORef (SMV.IOVector RenderData)
-                 , uidRef         :: TVar [Int]
-                 , sidRef         :: TVar [Int]
-                 , cameraRef      :: TVar (IntMap.IntMap (Matrix4x4, Camera))
+                 { renderDataRef   :: IORef (SMV.IOVector RenderData)
+                 , uidRef          :: TVar [Int]
+                 , sidRef          :: TVar [Int]
+                 , cameraRef       :: TVar (IntMap.IntMap (Matrix4x4, Camera))
 
                  --Input Event Refs
-                 , runTimeRef     :: IORef Time
-                 , deltaTimeRef   :: IORef Time
-                 , mousePosRef    :: IORef (Double, Double)
-                 , mouseClickRef  :: IORef Bool
-                 , keyboardRef    :: IORef (IntMap.IntMap Bool)
-                 , lastKeyPress   :: IORef (Key, Bool)
-                 , dimensionsRef  :: IORef (Double, Double)
+                 , runTimeRef      :: IORef Time
+                 , deltaTimeRef    :: IORef Time
+                 , mousePosRef     :: IORef (Double, Double)
+                 , mouseClickRef   :: IORef Bool
+                 , keyboardRef     :: IORef (IntMap.IntMap Bool)
+                 , lastKeyPress    :: IORef (Key, Bool)
+                 , dimensionsRef   :: IORef (Double, Double)
+
                  --Network Input Event refs
                  , netUserLoginRef :: IORef (Int, String, Bool)
                  , netStatusRef    :: IORef NetStatus
                  , netChatRef      :: IORef (String, String)
                  , netSignalRef    :: IORef B.ByteString
 
-                 , signalClient   :: Client
-                 , necroVars      :: NecroVars
-                 , sigResources   :: Resources
-                 , signalsInbox   :: TChan InputEvent }
+                 , signalClient    :: Client
+                 , necroVars       :: NecroVars
+                 , sigResources    :: Resources
+                 , signalsInbox    :: TChan InputEvent }
 
 mkSignalState :: GLFW.Window -> (Double, Double) -> TChan InputEvent -> String -> IO SignalState
-mkSignalState w2 dims inbox userName = SignalState
-                           <~ (myThreadId >>= \mtid -> atomically (newTMVar $ GLContext mtid))
-                           ~~ return w2
-                           ~~ (SV.thaw (SV.fromList (replicate 16 nullRenderData)) >>= newIORef)
+mkSignalState w dims inbox userName = SignalState
+                           <~ (SV.thaw (SV.fromList (replicate 16 nullRenderData)) >>= newIORef)
                            ~~ atomically (newTVar [0..])
                            ~~ atomically (newTVar [300..])
                            ~~ atomically (newTVar IntMap.empty)
@@ -94,5 +89,5 @@ mkSignalState w2 dims inbox userName = SignalState
                            ~~ newIORef B.empty
                            ~~ mkClient userName
                            ~~ mkNecroVars
-                           ~~ mkResources
+                           ~~ mkResources w
                            ~~ pure inbox

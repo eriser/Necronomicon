@@ -80,6 +80,7 @@ data IndirectHalfEdge     = IndirectHalfEdge Int (Int, Int) (Int, Int)
 data IndirectHalfEdgeMesh = IndirectHalfEdgeMesh (Map.Map (Int, Int) IndirectHalfEdge) (V.Vector (Vector3, Vector2)) [(Int, Int)]
 
 mkMeshToHalfEdge :: Mesh -> HalfEdge
+mkMeshToHalfEdge (FontMesh _ _ _)               = error "Cannot convert a font mesh to a Half-Edge-Mesh"
 mkMeshToHalfEdge (DynamicMesh _ n vs cs uvs is) = mkMeshToHalfEdge $ mkMesh n vs cs uvs is
 mkMeshToHalfEdge (Mesh        _ _ vs _  uvs is) = indirectToDirectHalfEdge . foldr insertFace (IndirectHalfEdgeMesh Map.empty (V.fromList $ zip vs uvs) []) $ chunksOf 3 is
     where

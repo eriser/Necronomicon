@@ -51,7 +51,9 @@ renderWithCameraRaw window resources scene (view, c) = do
     let ratio = fromIntegral w / fromIntegral h
         mptr  = matrixUniformPtr resources
         persp = perspMatrix (_fov c) ratio (_near c) (_far c)
-        oproj = orthoMatrix 0 ratio 1 0 (-1) 1
+        --TODO: Figure out a system for handling camera viewport ratios!
+        -- oproj = orthoMatrix 0 ratio 1 0 (-1) 1
+        oproj = orthoMatrix 0 1 1 0 (-1) 1
         (Matrix4x4 v00 v01 v02 v03 v10 v11 v12 v13 v20 v21 v22 v23 v30 v31 v32 v33) = invert view
 
     --If we have anye post-rendering fx let's bind their fbo

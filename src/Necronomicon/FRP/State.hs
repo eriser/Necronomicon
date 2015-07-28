@@ -16,7 +16,6 @@ import           Necronomicon.Graphics
 import           Necronomicon.Utility
 import           Necronomicon.Networking.Types
 
-import           Control.Concurrent
 import           Control.Concurrent.STM
 import           Control.Monad
 import           Control.Monad.ST
@@ -29,11 +28,9 @@ import           Foreign.Marshal.Array
 import           Data.Binary                       (Binary, decode, encode)
 
 import qualified Data.Vector.Storable.Mutable      as SMV
-import qualified Graphics.UI.GLFW                  as GLFW
 import qualified Data.IntSet                       as IntSet
 import qualified Data.HashTable.IO                 as Hash
 import qualified Data.IntMap.Strict                as IntMap
--- import qualified Data.Map.Strict                   as Map
 
 ----------------------------------
 -- State
@@ -283,27 +280,23 @@ instance (Binary a, Eq a) => NecroFoldable (IntMap.IntMap (Entity a)) where
                         _       -> return ()
 
 updateEntity :: SignalState -> Int -> Nursery a -> IORef [Entity a] -> Maybe (Int, Int) -> Entity a -> IO (Entity a)
-updateEntity state gen nursery _ _ e@Entity{euid = UID uid} = do
+-- updateEntity state gen nursery _ _ e@Entity{euid = UID uid} = do
     --Update existing Entities
-    case model e of
-        Just (Model _ (Mesh        (Just _) _ _ _ _ _) (Material (Just _) _ _ _ _)) -> writeRenderData (renderDataRef state) uid e
-        Just (Model _ (DynamicMesh (Just _) _ _ _ _ _) (Material (Just _) _ _ _ _)) -> writeRenderData (renderDataRef state) uid e
-        _                                                                         -> return ()
-    writeCam (cameraRef state) (euid e) (camera e) e
-    insertNursery uid gen e nursery
-    return e
+    -- case model e of
+        -- Just (Model _ (Mesh        (Just _) _ _ _ _ _) (Material (Just _) _ _ _ _)) -> writeRenderData (renderDataRef state) uid e
+        -- Just (Model _ (DynamicMesh (Just _) _ _ _ _ _) (Material (Just _) _ _ _ _)) -> writeRenderData (renderDataRef state) uid e
+        -- _                                                                           -> return ()
+    -- writeCam (cameraRef state) (euid e) (camera e) e
+    -- insertNursery uid gen e nursery
+    -- return e
 
 updateEntity state gen nursery newEntRef maybeNetID e = do
     --Add new Entity
-    putStrLn "updateEntity - New Entity added!"
-    mtid   <- myThreadId
-    atomically (takeTMVar (contextBarrier state)) >>= \(GLContext tid) -> when (tid /= mtid) (GLFW.makeContextCurrent (Just $ context state))
-    model' <- loadNewModel (sigResources state) (model e)
-    atomically $ putTMVar (contextBarrier state) $ GLContext mtid
-
+    model' <- loadModel (sigResources state) (model e)
     (e', uid) <- case euid e of
         UID uid -> return (e{model = model'}, uid)
         New     -> do
+            putStrLn "updateEntity - New Entity added!"
             uid <- atomically $ readTVar (uidRef state) >>= \muids -> case muids of
                 (uid : uids) -> writeTVar (uidRef state) uids >> return uid
                 _            -> error "This should be impossible: we've run out of uids to assign!"

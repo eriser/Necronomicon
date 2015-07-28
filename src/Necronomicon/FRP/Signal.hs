@@ -4,10 +4,8 @@ module Necronomicon.FRP.Signal  where
 --Look into revamping Texture data structure and texture loading
 --Revive Fonts and text
 --Revive GUI
---Look into camera layers (no implicit gui camera, but have a convenience function for one to make it dumb simple. Extensible systems please)
 --Revive post-rendering FX
 --Revamp and Revive networking (Replace NetMessage type class usage with simple Binary type class)
---Look into new networking schemes that make "virtual world" navigation possible
 
 --If there's extra time TODO:
 --Replace and remove dependencies: mtl, Haskel OpengGL, perhaps Haskell OpenGLRaw
