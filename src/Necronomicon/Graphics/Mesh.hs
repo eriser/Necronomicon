@@ -25,7 +25,8 @@ rect w h = mkMesh (show w ++ show h ++ "~rect") vertices colors uvs indices
         vertices = [Vector3 0 0 0,Vector3 w 0 0,Vector3 0 h 0,Vector3 w h 0]
         colors   = [white,white,white,white]
         uvs      = [Vector2 0 0,Vector2 1 0,Vector2 0 1,Vector2 1 1]
-        indices  = [2,0,1,3,2,1]
+        -- indices  = [2,0,1,3,2,1]
+        indices  = [2,1,0,3,1,2]
 
 cube :: Mesh
 cube = mkMesh "~cube" vertices colors uvs indices

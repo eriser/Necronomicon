@@ -340,14 +340,16 @@ orthoMatrix l r b t n f = Matrix4x4
                           0       0       0          1
 
 perspMatrix :: Double -> Double -> Double -> Double -> Matrix4x4
-perspMatrix fov aspect near far =
-    Matrix4x4
-    (negate $ f/aspect)  0  0                        0
-    0                  (-f) 0                        0
-    0                    0 ((near+far)/(near-far)) ((2*far*near)/(near-far))
-    0                    0 (-1)                      0
+perspMatrix fov aspect near far = Matrix4x4
+    a 0 0 0
+    0 b 0 0
+    0 0 c d
+    0 0 1 0
     where
-        f = 1 / tan (fov / 2)
+        a = 1 / atan (fov / 2)
+        b = 1 / tan  (fov / 2)
+        c = ((-near)-far) / (near-far) 
+        d = (2*far*near)  / (near-far))
 
 mat4ToList :: Matrix4x4 -> [Double]
 mat4ToList !(Matrix4x4 a b c d e f g h i j k l m n o p) = [a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p]
