@@ -6,6 +6,7 @@ import Prelude
 import Necronomicon.Utility
 import Necronomicon.Linear.Vector
 import Necronomicon.Linear.Quaternion
+import Necronomicon.Linear.Math
 import Foreign.Ptr
 import Foreign.Storable
 import Foreign.C.Types
@@ -346,10 +347,12 @@ perspMatrix fov aspect near far = Matrix4x4
     0 0 c d
     0 0 1 0
     where
-        a = 1 / atan (fov / 2)
-        b = 1 / tan  (fov / 2)
-        c = ((-near)-far) / (near-far) 
-        d = (2*far*near)  / (near-far))
+        a     = 1 / (tan fov' * aspect)
+        b     = 1 /  tan fov'
+        c     = (negate near - far)  / range
+        d     = (2 * far * near)     / range
+        fov'  = degToRad $ fov * 0.5
+        range = near - far
 
 mat4ToList :: Matrix4x4 -> [Double]
 mat4ToList !(Matrix4x4 a b c d e f g h i j k l m n o p) = [a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p]

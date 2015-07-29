@@ -22,8 +22,10 @@ initWindow (width, height) isFullScreen = GLFW.init >>= \initSuccessful -> if in
                 else GLFW.createWindow width height "Necronomicon" Nothing Nothing
             GLFW.makeContextCurrent w
             initCOpenGL
-            glFrontFace gl_CCW
-            glEnable gl_CULL_FACE
+            -- glFrontFace gl_CCW
+            glFrontFace gl_CW
+            glEnable    gl_CULL_FACE
+            glCullFace  gl_BACK
             return w
 
 foreign import ccall safe "draw_render_data" drawRenderDataC ::

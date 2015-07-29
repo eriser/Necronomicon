@@ -2,6 +2,7 @@ import Necronomicon
 import GHC.Generics
 import Data.Binary
 import qualified Data.IntMap as IntMap
+import Debug.Trace
 
 main :: IO ()
 main = runSignal <| basicNetGUI *> section1
@@ -27,10 +28,10 @@ instance Binary PlayerState
 instance Binary Terminal
 
 mkPlayer :: Entity Player
-mkPlayer = ( mkEntity  <| Player PlayerIdle (180, 0) )
+mkPlayer = ( mkEntity  <| Player PlayerIdle (0, 0) )
            { pos        = Vector3 0 0 (-6)
-           , rot        = fromEuler 0 180 0
-           , camera     = Just <| Camera 30 0.1 1000 black [] (toBitMask DefaultLayer) 0
+           -- , rot        = fromEuler 0 0 0
+           , camera     = Just <| Camera 60 0.1 1000 black [] (toBitMask DefaultLayer) 0
            , netOptions = mkNetworkOptions
                { networkPos    = Network
                , networkRot    = Network
@@ -66,13 +67,13 @@ updatePlayers input = case input of
     PlayerLog (pid, _) uid -> if pid == uid then IntMap.insert uid mkPlayer else id
 
 playerMouseUpdate :: (Double, Double) -> Entity Player -> Entity Player
-playerMouseUpdate (mx, my) p@Entity{ edata = Player state (px, py) } = p{ edata = Player state (x, y), rot = fromEuler 0 (-x) 0 * fromEuler (-y) 0 0 }
+playerMouseUpdate (mx, my) p@Entity{ edata = Player state (px, py) } = traceShow (pos p) p{ edata = Player state (x, y), rot = fromEuler 0 x 0 * fromEuler y 0 0 }
     where
         x  = floatRem 360   <| px + mx * 80
         y  = clamp (-90) 90 <| py + my * 80
 
 playerKeysUpdate :: (Double, Double) -> Entity Player -> Entity Player
-playerKeysUpdate (x, y) p@Entity{ edata = Player _ fpr } = p{ edata = Player (PlayerMoving <| Vector3 x 0 (-y)) fpr }
+playerKeysUpdate (x, y) p@Entity{ edata = Player _ fpr } = p{ edata = Player (PlayerMoving <| Vector3 x 0 y) fpr }
 
 tickPlayer :: (Double, Double) -> Entity Player -> Entity Player
 tickPlayer (dt, _) p = case p of

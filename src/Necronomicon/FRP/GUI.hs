@@ -20,9 +20,9 @@ label (x, y) font text = (mkEntity ())
     , model  = Just $ drawText text font ambient }
 
 guiRect :: (Double, Double) -> (Double, Double) -> Color -> Entity ()
-guiRect (x, y) (w, h) color = (mkEntity ())
+guiRect (x, y) (w, h) _ = (mkEntity ())
     { pos = Vector3 x y 0
-    , model = Just <| mkModel GUILayer (rect w h) <| vertexColored color }
+    , model = Just <| mkModel GUILayer (rect w h) <| ambient <| tga "Gas20.tga" }
 
 data BasicNetGUIInput = NetGUIUsers [String]
                       | NetGUIChat  (String, String)
