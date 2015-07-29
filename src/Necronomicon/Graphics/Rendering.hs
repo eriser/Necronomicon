@@ -22,7 +22,7 @@ initWindow (width, height) isFullScreen = GLFW.init >>= \initSuccessful -> if in
                 else GLFW.createWindow width height "Necronomicon" Nothing Nothing
             GLFW.makeContextCurrent w
             initCOpenGL
-            -- glFrontFace gl_CCW
+            --NOTE: We use a left-handed coordinate system with CCW windings in Necronomicon. However since OpenGL is right-handed we need to flip what it thinks the windings are.
             glFrontFace gl_CW
             glEnable    gl_CULL_FACE
             glCullFace  gl_BACK

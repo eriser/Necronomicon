@@ -99,7 +99,7 @@ data Resources = Resources
    , fontsRef             :: IORef (Map.Map String LoadedFont)
    , postRenderRef        :: IORef (Map.Map String LoadedPostRenderingFX)
    , matrixUniformPtr     :: Ptr CFloat
-   , audioSamplesRef      :: IORef [String] 
+   , audioSamplesRef      :: IORef [String]
    , contextBarrier       :: TMVar GLContext
    , context              :: GLFW.Window }
 
@@ -275,7 +275,7 @@ loadMesh r m = case m of
                 loadedMesh@(vbuf,ibuf,_,_,_,_,_,_) <- createMesh m
                 writeIORef (meshesRef r) (Map.insert mKey loadedMesh meshes)
                 dynamicDrawMesh vbuf ibuf v c u i
-            
+
         createMesh (Mesh _ _ vertices colors uvs indices) = do
             mtid          <- myThreadId
             atomically (takeTMVar (contextBarrier r)) >>= \(GLContext tid) -> when (tid /= mtid) (GLFW.makeContextCurrent (Just (context r)))

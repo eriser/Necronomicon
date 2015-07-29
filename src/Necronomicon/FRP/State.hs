@@ -296,7 +296,7 @@ updateEntity state gen nursery newEntRef maybeNetID e = do
     (e', uid) <- case euid e of
         UID uid -> return (e{model = model'}, uid)
         New     -> do
-            putStrLn "updateEntity - New Entity added!"
+            -- putStrLn "updateEntity - New Entity added!"
             uid <- atomically $ readTVar (uidRef state) >>= \muids -> case muids of
                 (uid : uids) -> writeTVar (uidRef state) uids >> return uid
                 _            -> error "This should be impossible: we've run out of uids to assign!"

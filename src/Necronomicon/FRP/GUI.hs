@@ -36,14 +36,14 @@ basicNetGUI = foldn updateBasicNetGUI mkBasicNetGUI
 
 mkBasicNetGUI :: [Entity ()]
 mkBasicNetGUI = [ guiCamera
-                
+
                 --NetStatusBox
-                , label (0.85, 0.85) (Font "OCRA.ttf" 10) "Test"
+                , label (0.5, 0.5) (Font "OCRA.ttf" 16) "Test this is a test motherfucker let us have some text to test with"
                 , guiRect (0.8, 0.95) (0.2, 0.05) (RGBA 1 1 1 0.5)
 
-                
+
                 --PlayerBox
-                , label (0.05, 0.85) (Font "OCRA.ttf" 10) "Test"
+                , label (0.05, 0.85) (Font "OCRA.ttf" 16) "Test"
                 , guiRect (0, 0.95) (0.2, 0.05) (RGBA 1 1 1 0.5)
                 ]
 

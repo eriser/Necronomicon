@@ -2,7 +2,6 @@ import Necronomicon
 import GHC.Generics
 import Data.Binary
 import qualified Data.IntMap as IntMap
-import Debug.Trace
 
 main :: IO ()
 main = runSignal <| basicNetGUI *> section1
@@ -67,7 +66,7 @@ updatePlayers input = case input of
     PlayerLog (pid, _) uid -> if pid == uid then IntMap.insert uid mkPlayer else id
 
 playerMouseUpdate :: (Double, Double) -> Entity Player -> Entity Player
-playerMouseUpdate (mx, my) p@Entity{ edata = Player state (px, py) } = traceShow (pos p) p{ edata = Player state (x, y), rot = fromEuler 0 x 0 * fromEuler y 0 0 }
+playerMouseUpdate (mx, my) p@Entity{ edata = Player state (px, py) } = p{ edata = Player state (x, y), rot = fromEuler 0 x 0 * fromEuler y 0 0 }
     where
         x  = floatRem 360   <| px + mx * 80
         y  = clamp (-90) 90 <| py + my * 80
