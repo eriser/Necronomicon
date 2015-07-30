@@ -20,9 +20,14 @@ label (x, y) font text = (mkEntity ())
     , model  = Just $ drawText text font ambient }
 
 guiRect :: (Double, Double) -> (Double, Double) -> Color -> Entity ()
-guiRect (x, y) (w, h) _ = (mkEntity ())
-    { pos = Vector3 x y 0
-    , model = Just <| mkModel GUILayer (rect w h) <| ambient <| tga "Gas20.tga" }
+guiRect (x, y) (w, h) color = (mkEntity ())
+    { pos = Vector3 x y (0.2)
+    , model = Just <| mkModel GUILayer (rect w h) <| vertexColored color }
+
+
+---------------------------------------------------------------
+-- BasicNetGUI
+--------------------------------------------------------------
 
 data BasicNetGUIInput = NetGUIUsers [String]
                       | NetGUIChat  (String, String)
@@ -34,23 +39,34 @@ basicNetGUI = foldn updateBasicNetGUI mkBasicNetGUI
            <> NetGUIChat   <~ chatMessage
            <> NetGUIStatus <~ networkStatus
 
+basicGUIColor :: Color
+basicGUIColor = RGBA 0.1 0.1 0.1 0.5
+
+mkNetStatusBox :: NetStatus -> Entity ()
+mkNetStatusBox Running = label (0.85, 0.9) (Font "OCRA.ttf" 24) ""
+mkNetStatusBox s       = label (0.85, 0.9) (Font "OCRA.ttf" 24) $ show s
+
+mkPlayerBox :: [String] -> Entity ()
+mkPlayerBox = label (0.01, 0.9) (Font "OCRA.ttf" 24) . filter (/= '\"') . show
+
 mkBasicNetGUI :: [Entity ()]
 mkBasicNetGUI = [ guiCamera
 
                 --NetStatusBox
-                , label (0.5, 0.5) (Font "OCRA.ttf" 16) "Test this is a test motherfucker let us have some text to test with"
-                , guiRect (0.8, 0.95) (0.2, 0.05) (RGBA 1 1 1 0.5)
+                , mkNetStatusBox Inactive
+                -- , guiRect (0.8, 0.95) (0.2, 0.05) basicGUIColor
 
 
                 --PlayerBox
-                , label (0.05, 0.85) (Font "OCRA.ttf" 16) "Test"
-                , guiRect (0, 0.95) (0.2, 0.05) (RGBA 1 1 1 0.5)
+                , mkPlayerBox [] 
+                -- , guiRect (0   , 0.95) (0.2, 0.05) basicGUIColor
                 ]
 
 updateBasicNetGUI :: BasicNetGUIInput -> [Entity ()] -> [Entity ()]
-updateBasicNetGUI (NetGUIUsers  _) es = es
-updateBasicNetGUI (NetGUIChat   _) es = es
-updateBasicNetGUI (NetGUIStatus _) es = es
+updateBasicNetGUI (NetGUIUsers  u) [g, nsb, _ ] = [g, nsb, mkPlayerBox u]
+updateBasicNetGUI (NetGUIStatus s) [g, _  , pb] = [g, mkNetStatusBox s, pb]
+updateBasicNetGUI (NetGUIChat   _) es           = es
+updateBasicNetGUI _                es           = es
 
 -- userBox :: Vector2 -> Size -> Font -> Material -> Signal SceneObject
 -- userBox (Vector2 x y) _ font _ = textBox <~ users

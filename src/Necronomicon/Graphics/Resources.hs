@@ -83,7 +83,7 @@ unUID (UID uid) = uid
 unUID _         = error "Attempted to unUID a New UID"
 
 drawText :: String -> Font -> (Texture -> Material) -> Model
-drawText text font material = Model (toBitMask GUILayer) fontModel fontMat
+drawText text font material = mkModel GUILayer fontModel fontMat
     where
         fontModel = FontMesh Nothing text font
         fontMat   = material <| FontTexture Nothing (fontKey font) (fontSize font)
@@ -199,15 +199,19 @@ instance Binary Material where
 renderFont :: String -> Font -> Resources -> IO ([Vector3], [Color], [Vector2], [Int])
 renderFont text font resources = do
     loadedFont <- getFont resources font
-    let characterMesh                       = textMesh (characters loadedFont) (atlasWidth loadedFont) (atlasHeight loadedFont)
+    (w, h)     <- GLFW.getWindowSize $ context resources
+    let ratio                               = fromIntegral h / fromIntegral w
+        characterMesh                       = textMesh ratio (characters loadedFont) (atlasWidth loadedFont) (atlasHeight loadedFont)
         (vertices,colors,uvs,indices,_,_,_) = foldl' characterMesh ([],[],[],[],0,0,0) text
     return (vertices, colors, uvs, indices)
 
 getFont :: Resources -> Font -> IO LoadedFont
 getFont resources font = readIORef (fontsRef resources) >>= \fonts ->
-    case Map.lookup (fontKey font) fonts of
-        Nothing    -> loadFontAtlas font >>= \font' -> (writeIORef (fontsRef resources) $ Map.insert (fontKey font) font' fonts) >> return font'
+    case Map.lookup fontName  fonts of
+        Nothing    -> loadFontAtlas font >>= \font' -> (writeIORef (fontsRef resources) $ Map.insert fontName font' fonts) >> return font'
         Just font' -> return font'
+    where
+        fontName = fontKey font ++ show (fontSize font)
 
 getShader :: Resources -> Shader -> IO LoadedShader
 getShader resources sh = readIORef (shadersRef resources) >>= \shaders -> do

@@ -157,15 +157,17 @@ charMetrics font = do
 fontScale :: Double
 fontScale = 1 / 1080
 
-textMesh :: Map.Map Char CharMetric ->
+--TODO: Add screen ratio in here?!?!
+textMesh :: Double ->
+            Map.Map Char CharMetric ->
             Double ->
             Double ->
             ([Vector3],[Color.Color],[Vector2],[Int],Int,Double,Double) ->
             Char ->
             ([Vector3],[Color.Color],[Vector2],[Int],Int,Double,Double)
-textMesh chMetrics aWidth aHeight (vertices,colors,uvs,indices,count,x,y) char
-    | '\n' <- char = (vertices ,colors ,uvs ,indices ,count    ,0   ,y + aHeight * fontScale)
-    | otherwise    = (vertices',colors',uvs',indices',count + 4,x+ax,y)
+textMesh ratio chMetrics aWidth aHeight (vertices,colors,uvs,indices,count,x,y) char
+    | '\n' <- char = (vertices , colors , uvs , indices , count    , 0     , y + aHeight * fontScale)
+    | otherwise    = (vertices', colors', uvs', indices', count + 4, x + ax, y)
     where
         charMetric = fromMaybe (CharMetric (toEnum 0) 0 0 0 0 0 0 0 0 0) $ Map.lookup char chMetrics
         w          = charWidth  charMetric * fontScale
@@ -175,10 +177,10 @@ textMesh chMetrics aWidth aHeight (vertices,colors,uvs,indices,count,x,y) char
         ax         = advanceX   charMetric * fontScale
         tx         = charTX     charMetric
 
-        vertices'  = Vector3 (l+x)   (y - t     + aHeight * fontScale) 0  :
-                     Vector3 (l+x+w) (y - t     + aHeight * fontScale) 0  :
-                     Vector3 (l+x)   (y - t + h + aHeight * fontScale) 0  :
-                     Vector3 (l+x+w) (y - t + h + aHeight * fontScale) 0  : vertices
+        vertices'  = Vector3 ((l + x )    * ratio) (y - t     + aHeight * fontScale) 0  :
+                     Vector3 ((l + x + w) * ratio) (y - t     + aHeight * fontScale) 0  :
+                     Vector3 ((l + x )    * ratio) (y - t + h + aHeight * fontScale) 0  :
+                     Vector3 ((l + x + w) * ratio) (y - t + h + aHeight * fontScale) 0  : vertices
         colors'    = Color.white : Color.white : Color.white : Color.white : colors
         uvs'       = Vector2 (tx                                   ) 0 :
                      Vector2 (tx + (charWidth  charMetric) / aWidth) 0 :
