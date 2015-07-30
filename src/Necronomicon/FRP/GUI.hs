@@ -52,13 +52,10 @@ mkPlayerBox = label (0.01, 0.9) (Font "OCRA.ttf" 24) . filter (/= '\"') . show
 mkBasicNetGUI :: [Entity ()]
 mkBasicNetGUI = [ guiCamera
 
-                --NetStatusBox
                 , mkNetStatusBox Inactive
                 -- , guiRect (0.8, 0.95) (0.2, 0.05) basicGUIColor
 
-
-                --PlayerBox
-                , mkPlayerBox [] 
+                , mkPlayerBox []
                 -- , guiRect (0   , 0.95) (0.2, 0.05) basicGUIColor
                 ]
 
