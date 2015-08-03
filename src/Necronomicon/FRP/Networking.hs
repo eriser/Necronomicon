@@ -15,7 +15,6 @@ module Necronomicon.FRP.Networking
 
 import           Necronomicon.FRP.Types
 import           Necronomicon.FRP.Signal
-import           Necronomicon.FRP.Runtime
 import           Necronomicon.Physics
 import           Necronomicon.Entity
 import           Necronomicon.Linear
@@ -26,7 +25,6 @@ import           Necronomicon.Networking.Client
 import           Control.Concurrent.STM
 import           Data.IORef
 import           Data.Binary
-import qualified Data.IntSet          as IntSet
 import qualified Data.IntMap          as IntMap
 import qualified Data.ByteString.Lazy as B
 
@@ -180,53 +178,62 @@ setNetworkOtherVars e = case netOptions e of
                 _               -> collider e
 
 userJoin :: Signal (Int, String)
-userJoin = Signal $ \state -> do
-    let uref = netUserLoginRef state
-    ref     <- newIORef (0, "")
-    return (cont uref ref, (0, ""), IntSet.singleton 204)
+userJoin = Signal $ \_ -> do
+    ref <- newIORef (0, "")
+    return (cont ref, (0, ""))
     where
-    cont uref ref eid = if eid /= 204
-        then readIORef ref >>= return . NoChange
-        else readIORef uref >>= \(i, u, b) -> if not b
-            then readIORef ref >>= return . NoChange
-            else writeIORef ref (i, u) >> return (Change (i, u))
+        cont ref (NetUserEvent i u True) = writeIORef ref (i, u) >>  return (Change (i, u))
+        cont ref _                       = readIORef  ref        >>= return . NoChange
 
---TODO: Add a ref to collect everyone logged in and only propogate changes if we receive a user who wasn't logged in before!
 userLeave :: Signal (Int, String)
-userLeave = Signal $ \state -> do
-    let uref = netUserLoginRef state
+userLeave = Signal $ \_ -> do
     ref     <- newIORef (0, "")
-    return (cont uref ref, (0, ""), IntSet.singleton 204)
+    return (cont ref, (0, ""))
     where
-    cont uref ref eid = if eid /= 204
-        then readIORef ref >>= return . NoChange
-        else readIORef uref >>= \(i, u, b) -> if b
-            then readIORef ref >>= return . NoChange
-            else writeIORef ref (i, u) >> return (Change (i, u))
+        cont ref (NetUserEvent i u False) = writeIORef ref (i, u) >>  return (Change (i, u))
+        cont ref _                        = readIORef  ref        >>= return . NoChange
 
 userLog :: Signal (Int, String, Bool)
-userLog = inputSignal 204 netUserLoginRef
+userLog = Signal $ \_ -> do
+    ref     <- newIORef (0, "", False)
+    return (cont ref, (0, "", False))
+    where
+        cont ref (NetUserEvent i u b) = writeIORef ref (i, u, False) >>  return (Change (i, u, b))
+        cont ref _                    = readIORef  ref               >>= return . NoChange
 
 userList :: Signal [String]
 userList = Signal $ \state -> do
     let uref = clientUsers $ signalClient state
     users <- map snd . IntMap.toList <$> (atomically $ readTVar uref)
-    return (cont uref, users, IntSet.singleton 204)
+    return (cont uref, users)
     where
-        cont uref eid = do
+        cont uref event = do
             users <- map snd . IntMap.toList <$> (atomically $ readTVar uref)
-            if eid == 204
-                then return $ Change users
-                else return $ NoChange users
+            case event of
+                NetUserEvent _ _ _ -> return $ Change   users
+                _                  -> return $ NoChange users
 
 userID :: Signal Int
-userID = Signal $ \state -> let cid = clientID $ signalClient state in return (\_ -> return $ NoChange cid, cid, IntSet.empty)
+userID = Signal $ \state -> let cid = clientID $ signalClient state in return (\_ -> return $ NoChange cid, cid)
 
 chatMessage :: Signal (String, String)
-chatMessage = inputSignal 206 netChatRef
+chatMessage = Signal $ \_ -> do
+    ref <- newIORef ("", "")
+    return (cont ref, ("", ""))
+    where
+        cont ref (NetChatEvent u c) = writeIORef ref (u, c) >>  return (Change (u, c))
+        cont ref _                  = readIORef  ref        >>= return . NoChange
+
 
 networkStatus :: Signal NetStatus
-networkStatus = inputSignal 205 netStatusRef
+networkStatus = Signal $ \_ -> do
+    ref <- newIORef Inactive
+    return (cont ref, Inactive)
+    where
+        cont ref (NetStatusEvent s) = writeIORef ref s >>  return  (Change s)
+        cont ref _                  = readIORef  ref   >>= return . NoChange
+
+
 
 -- users :: Signal [String]
 -- users = input userListSignal

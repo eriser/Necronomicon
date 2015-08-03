@@ -50,7 +50,7 @@ instance Binary NetMessage where
     put  Alive                  = put (1 :: Word8)
     put (Login           uid n) = put (2 :: Word8) >> put uid >> put n
     put (Logout          uid n) = put (3 :: Word8) >> put uid >> put n
-    
+
     --These are not directly used. Instead they are something of place holders for messages that require context specific encoding and decoding
     put  UpdateNetSignal        = put (4 :: Word8)
     put  NetSync                = put (5 :: Word8)

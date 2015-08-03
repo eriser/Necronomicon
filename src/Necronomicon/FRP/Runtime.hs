@@ -15,7 +15,6 @@ import           Control.Concurrent.STM
 import           Control.Monad
 import           System.Environment (getArgs)
 import           Data.IORef
-import qualified Data.IntSet                       as IntSet
 import qualified Data.IntMap                       as IntMap
 import qualified Graphics.UI.GLFW                  as GLFW
 
@@ -31,26 +30,24 @@ runSignal sig = initWindow (920, 540) False >>= \mw -> case mw of
     Just w -> do
         putStrLn "Starting Necronomicon"
 
-        currentTime   <- getCurrentTime
-        (ww, wh)      <- GLFW.getWindowSize w
-        eventInbox    <- atomically newTChan
-        args          <- getArgs >>= \args -> case args of
+        currentTime <- getCurrentTime
+        (ww, wh)    <- GLFW.getWindowSize w
+        eventInbox  <- atomically newTChan
+        args        <- getArgs >>= \args -> case args of
             [] -> return Nothing
             as -> return $ Just as
-        state         <- mkSignalState w (fromIntegral ww, fromIntegral wh) eventInbox $ maybe "noob" id $ fmap head args
-        (scont, _, _) <- unSignal sig state
-        _             <- runNecroState (setTempo 150) (necroVars state)
-        _             <- runNecroState startNecronomicon (necroVars state)
-        _             <- runNecroState (waitForRunningStatus NecroRunning) (necroVars state)
-        _             <- forkIO $ processEvents scont state eventInbox
+        state       <- mkSignalState w (fromIntegral ww, fromIntegral wh) eventInbox $ maybe "noob" id $ fmap head args
+        (scont, _)  <- unSignal sig state
+        _           <- runNecroState (setTempo 150) (necroVars state)
+        _           <- runNecroState startNecronomicon (necroVars state)
+        _           <- runNecroState (waitForRunningStatus NecroRunning) (necroVars state)
+        _           <- forkIO $ processEvents scont state eventInbox
 
         setInputCallbacks w eventInbox
-        -- threadDelay 1000000
         case args of
             Just [n, a] -> startNetworking state n a $ signalClient state
             _           -> print "Incorrect arguments given for networking (name address). Networking is disabled"
 
-        -- threadDelay 500000
         run False w scont currentTime DynTree.empty eventInbox state
     where
         run quit window s runTime' tree eventInbox state
@@ -77,20 +74,10 @@ runSignal sig = initWindow (920, 540) False >>= \mw -> case mw of
                 threadDelay 16667
                 run q window s currentTime tree eventInbox state
 
-processEvents :: Show a => (Int -> IO (Event a)) -> SignalState -> TChan InputEvent -> IO ()
+processEvents :: Show a => (InputEvent -> IO (Event a)) -> SignalState -> TChan InputEvent -> IO ()
 processEvents sig ss inbox = forever $ atomically (readTChan inbox) >>= \e -> case e of
-    TimeEvent        dt rt -> writeIORef  (deltaTimeRef  ss) dt >> writeIORef (runTimeRef ss) rt >> sig 200 >>= printEvent
-    MouseEvent       mp    -> writeIORef  (mousePosRef   ss) mp >> sig 201 >>= printEvent
-    MouseButtonEvent mb    -> writeIORef  (mouseClickRef ss) mb >> sig 202 >>= printEvent
-    DimensionsEvent  dm    -> writeIORef  (dimensionsRef ss) dm >> sig 203 >>= printEvent
-    KeyEvent         k b   -> do
-        modifyIORef (keyboardRef  ss) (\ks -> IntMap.insert (fromEnum k) b ks)
-        writeIORef  (lastKeyPress ss) (k, b)
-        sig (fromEnum k) >>= printEvent
-    NetUserEvent    i u b  -> writeIORef  (netUserLoginRef ss) (i, u, b) >> sig 204 >>= printEvent
-    NetStatusEvent  s      -> writeIORef  (netStatusRef    ss) s         >> sig 205 >>= printEvent
-    NetChatEvent    u m    -> writeIORef  (netChatRef      ss) (u, m)    >> sig 206 >>= printEvent
-    NetSignalEvent  u m    -> writeIORef  (netSignalRef    ss) m         >> sig u   >>= printEvent
+    TimeEvent        dt rt -> writeIORef  (deltaTimeRef  ss) dt >> writeIORef (runTimeRef ss) rt >> sig e >>= printEvent
+    _                      -> sig e >>= printEvent
     where
         printEvent (Change _) = return () -- print e
         printEvent  _         = return ()
@@ -111,17 +98,3 @@ setInputCallbacks w eventInbox = do
         let x' = x / fromIntegral ww
         let y' = y / fromIntegral wh
         atomically $ writeTChan eventInbox $ MouseEvent (x', y')
-
-inputSignal :: Show a => Int -> (SignalState -> IORef a) -> Signal a
-inputSignal uid getter = Signal $ \state -> do
-    let iref = getter state
-    x       <- readIORef iref
-    ref     <- newIORef x
-    return (cont ref iref, x, IntSet.singleton uid)
-    where
-        cont ref iref eid
-            | eid /= uid = readIORef ref  >>= return . NoChange
-            | otherwise  = do
-                i <- readIORef iref
-                -- print i
-                return $ Change i

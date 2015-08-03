@@ -53,17 +53,8 @@ data SignalState = SignalState
                  --Input Event Refs
                  , runTimeRef      :: IORef Time
                  , deltaTimeRef    :: IORef Time
-                 , mousePosRef     :: IORef (Double, Double)
-                 , mouseClickRef   :: IORef Bool
-                 , keyboardRef     :: IORef (IntMap.IntMap Bool)
-                 , lastKeyPress    :: IORef (Key, Bool)
-                 , dimensionsRef   :: IORef (Double, Double)
 
                  --Network Input Event refs
-                 , netUserLoginRef :: IORef (Int, String, Bool)
-                 , netStatusRef    :: IORef NetStatus
-                 , netChatRef      :: IORef (String, String)
-                 , netSignalRef    :: IORef B.ByteString
 
                  , signalClient    :: Client
                  , necroVars       :: NecroVars
@@ -71,22 +62,13 @@ data SignalState = SignalState
                  , signalsInbox    :: TChan InputEvent }
 
 mkSignalState :: GLFW.Window -> (Double, Double) -> TChan InputEvent -> String -> IO SignalState
-mkSignalState w dims inbox userName = SignalState
+mkSignalState w _ inbox userName = SignalState
                            <~ (SV.thaw (SV.fromList (replicate 16 nullRenderData)) >>= newIORef)
                            ~~ atomically (newTVar [0..])
                            ~~ atomically (newTVar [300..])
                            ~~ atomically (newTVar IntMap.empty)
                            ~~ newIORef 0
                            ~~ newIORef 0
-                           ~~ newIORef (0, 0)
-                           ~~ newIORef False
-                           ~~ newIORef IntMap.empty
-                           ~~ newIORef (GLFW.Key'W, False)
-                           ~~ newIORef dims
-                           ~~ newIORef (0, "", False)
-                           ~~ newIORef Connecting
-                           ~~ newIORef ("", "")
-                           ~~ newIORef B.empty
                            ~~ mkClient userName
                            ~~ mkNecroVars
                            ~~ mkResources w

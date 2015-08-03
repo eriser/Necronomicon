@@ -4,24 +4,27 @@ import           Necronomicon.FRP.Signal
 import           Necronomicon.FRP.Types
 import           Necronomicon.FRP.Networking
 import           Necronomicon.FRP.State
+import           Necronomicon.FRP.Combinators
+import           Necronomicon.FRP.Input
 import           Necronomicon.Graphics
 import           Necronomicon.Linear
 import           Necronomicon.Entity
 import           Necronomicon.Utility
 import           Necronomicon.Networking.Types
 import           Data.Monoid
+import           Debug.Trace
 
-guiCamera:: Entity ()
-guiCamera= (mkEntity ()){camera = Just <| Camera 0 0.001 10 transparent [] (toBitMask GUILayer) 1}
+guiCamera:: a -> Entity a
+guiCamera a = (mkEntity a){camera = Just <| Camera 0 0.001 10 transparent [] (toBitMask GUILayer) 1}
 
-label :: (Double, Double) -> Font -> String -> Entity ()
-label (x, y) font text = (mkEntity ())
+label :: a -> (Double, Double) -> Font -> String -> Entity a
+label a (x, y) font text = (mkEntity a)
     { pos    = Vector3 x y 0
     , model  = Just $ drawText text font ambient }
 
-guiRect :: (Double, Double) -> (Double, Double) -> Color -> Entity ()
-guiRect (x, y) (w, h) color = (mkEntity ())
-    { pos = Vector3 x y (0.2)
+guiRect :: a -> (Double, Double) -> (Double, Double) -> Color -> Entity a
+guiRect a (x, y) (w, h) color = (mkEntity a)
+    { pos = Vector3 x y 0
     , model = Just <| mkModel GUILayer (rect w h) <| vertexColored color }
 
 
@@ -32,38 +35,53 @@ guiRect (x, y) (w, h) color = (mkEntity ())
 data BasicNetGUIInput = NetGUIUsers [String]
                       | NetGUIChat  (String, String)
                       | NetGUIStatus NetStatus
+                      | NetGUIToggle Bool
+                      | NetGUIKeys   Bool Key
 
-basicNetGUI :: Signal [Entity ()]
+basicNetGUI :: Signal [Entity String]
 basicNetGUI = foldn updateBasicNetGUI mkBasicNetGUI
            <| NetGUIUsers  <~ userList
            <> NetGUIChat   <~ chatMessage
            <> NetGUIStatus <~ networkStatus
+           <> NetGUIToggle <~ toggle (fmap2 (&&) (isDown keyLCtrl) (isDown keyT))
+           <> NetGUIKeys   <~ sampleOn keys (fmap2 (||) (isDown keyLShift) (isDown keyRShift)) ~~ keys
 
 basicGUIColor :: Color
-basicGUIColor = RGBA 0.1 0.1 0.1 0.5
+basicGUIColor = RGBA 0.2 0.2 0.2 0.5
 
-mkNetStatusBox :: NetStatus -> Entity ()
-mkNetStatusBox Running = label (0.85, 0.9) (Font "OCRA.ttf" 24) ""
-mkNetStatusBox s       = label (0.85, 0.9) (Font "OCRA.ttf" 24) $ show s
+basicGUIFont :: Font
+basicGUIFont = Font "OCRA.ttf" 24
 
-mkPlayerBox :: [String] -> Entity ()
-mkPlayerBox = label (0.01, 0.9) (Font "OCRA.ttf" 24) . filter (/= '\"') . show
+basicGUILabel :: (Double, Double) -> String -> Entity String
+basicGUILabel p = label [] p basicGUIFont
 
-mkBasicNetGUI :: [Entity ()]
-mkBasicNetGUI = [ guiCamera
+mkNetStatusBox :: NetStatus -> Entity String
+mkNetStatusBox Running = basicGUILabel (0.85, 0.9) ""
+mkNetStatusBox s       = basicGUILabel (0.85, 0.9) $ show s
 
-                , mkNetStatusBox Inactive
-                -- , guiRect (0.8, 0.95) (0.2, 0.05) basicGUIColor
+mkPlayerBox :: [String] -> Entity String
+mkPlayerBox = basicGUILabel (0.02, 0.95) . filter (/= '\"') . show
 
-                , mkPlayerBox []
-                -- , guiRect (0   , 0.95) (0.2, 0.05) basicGUIColor
+mkChatInput :: String -> [Entity String]
+mkChatInput s = [ guiRect [] (0, 0.66) (0.2, 0.075) basicGUIColor
+                , label   s  (0.01, 0.68) basicGUIFont s
                 ]
 
-updateBasicNetGUI :: BasicNetGUIInput -> [Entity ()] -> [Entity ()]
-updateBasicNetGUI (NetGUIUsers  u) [g, nsb, _ ] = [g, nsb, mkPlayerBox u]
-updateBasicNetGUI (NetGUIStatus s) [g, _  , pb] = [g, mkNetStatusBox s, pb]
-updateBasicNetGUI (NetGUIChat   _) es           = es
-updateBasicNetGUI _                es           = es
+mkBasicNetGUI :: [Entity String]
+mkBasicNetGUI = [ mkNetStatusBox Inactive
+                , mkPlayerBox    []
+                , guiCamera      []
+                ]
+
+updateBasicNetGUI :: BasicNetGUIInput -> [Entity String] -> [Entity String]
+updateBasicNetGUI (NetGUIUsers      u) (nb : _  : c : es)    = nb               : mkPlayerBox u : c : es
+updateBasicNetGUI (NetGUIStatus     s) (_  : pb : c : es)    = mkNetStatusBox s : pb            : c : es
+updateBasicNetGUI (NetGUIToggle True ) (nb : pb : c : _)     = trace ("Toggle true") $ nb : pb : c : mkChatInput ""
+updateBasicNetGUI (NetGUIToggle False) (nb : pb : c : _)     = trace ("Toggle false") $ nb : pb : c : []
+updateBasicNetGUI (NetGUIKeys     s k) (nb : pb : c : i : r) = trace "NetGUIKeys" $ nb : pb : c : i{edata = text, model = Just $ drawText text basicGUIFont ambient} : r where text = updateTextWithChar (keyToChar k s) (edata i)
+updateBasicNetGUI (NetGUIKeys     _ _) (nb : pb : c : _)     = nb : pb : c : []
+updateBasicNetGUI (NetGUIChat       _) es                    = es
+updateBasicNetGUI _                    es                    = es
 
 -- userBox :: Vector2 -> Size -> Font -> Material -> Signal SceneObject
 -- userBox (Vector2 x y) _ font _ = textBox <~ users

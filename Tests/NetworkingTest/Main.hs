@@ -29,7 +29,6 @@ instance Binary Terminal
 mkPlayer :: Entity Player
 mkPlayer = ( mkEntity  <| Player PlayerIdle (0, 0) )
            { pos        = Vector3 0 0 (-6)
-           -- , rot        = fromEuler 0 0 0
            , camera     = Just <| Camera 60 0.1 1000 black [] (toBitMask DefaultLayer) 0
            , netOptions = mkNetworkOptions
                { networkPos    = Network
@@ -85,4 +84,3 @@ updateTerminals _                = id
 
 tickTerminal :: (Time, Time) -> Entity Terminal -> Entity Terminal
 tickTerminal (dt, _) t = rotate (realToFrac (dt * 10)) t
-
