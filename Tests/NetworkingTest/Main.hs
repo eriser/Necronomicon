@@ -4,7 +4,7 @@ import Data.Binary
 import qualified Data.IntMap as IntMap
 
 main :: IO ()
-main = runSignal <| basicNetGUI *> section1
+main = runSignal <| section1
 
 data Player        = Player PlayerState (Double, Double) deriving (Show, Eq, Generic)
 data PlayerState   = PlayerIdle

@@ -198,8 +198,8 @@ userLog = Signal $ \_ -> do
     ref     <- newIORef (0, "", False)
     return (cont ref, (0, "", False))
     where
-        cont ref (NetUserEvent i u b) = writeIORef ref (i, u, False) >>  return (Change (i, u, b))
-        cont ref _                    = readIORef  ref               >>= return . NoChange
+        cont ref (NetUserEvent i u b) = writeIORef ref (i, u, b) >>  return (Change (i, u, b))
+        cont ref _                    = readIORef  ref           >>= return . NoChange
 
 userList :: Signal [String]
 userList = Signal $ \state -> do
@@ -210,7 +210,7 @@ userList = Signal $ \state -> do
         cont uref event = do
             users <- map snd . IntMap.toList <$> (atomically $ readTVar uref)
             case event of
-                NetUserEvent _ _ _ -> return $ Change   users
+                NetUserEvent _ _ _ -> print users >> return (Change users)
                 _                  -> return $ NoChange users
 
 userID :: Signal Int

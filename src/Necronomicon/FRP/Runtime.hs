@@ -38,9 +38,9 @@ runSignal sig = initWindow (920, 540) False >>= \mw -> case mw of
             as -> return $ Just as
         state       <- mkSignalState w (fromIntegral ww, fromIntegral wh) eventInbox $ maybe "noob" id $ fmap head args
         (scont, _)  <- unSignal sig state
-        _           <- runNecroState (setTempo 150) (necroVars state)
-        _           <- runNecroState startNecronomicon (necroVars state)
-        _           <- runNecroState (waitForRunningStatus NecroRunning) (necroVars state)
+        -- _           <- runNecroState (setTempo 150) (necroVars state)
+        -- _           <- runNecroState startNecronomicon (necroVars state)
+        -- _           <- runNecroState (waitForRunningStatus NecroRunning) (necroVars state)
         _           <- forkIO $ processEvents scont state eventInbox
 
         setInputCallbacks w eventInbox

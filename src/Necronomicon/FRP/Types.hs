@@ -40,7 +40,7 @@ data InputEvent = TimeEvent        Time Time
                 --Network Events
                 | NetUserEvent     Int String Bool
                 | NetStatusEvent   NetStatus
-                | NetSignalEvent   Int B.ByteString --Need user ID
+                | NetSignalEvent   Int B.ByteString
                 | NetChatEvent     String String
                 deriving (Show)
 
@@ -50,11 +50,8 @@ data SignalState = SignalState
                  , sidRef          :: TVar [Int]
                  , cameraRef       :: TVar (IntMap.IntMap (Matrix4x4, Camera))
 
-                 --Input Event Refs
                  , runTimeRef      :: IORef Time
                  , deltaTimeRef    :: IORef Time
-
-                 --Network Input Event refs
 
                  , signalClient    :: Client
                  , necroVars       :: NecroVars
