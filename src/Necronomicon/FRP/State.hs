@@ -152,19 +152,14 @@ instance (Binary a, Eq a) => NecroFoldable [Entity a] where
                                 return (ns, cs, gs)
 
                             NetEntitySync    _ _  nsl -> do
-                                putStrLn "Net sync in foldn [Entity a]"
-                                putStrLn $ "nsl nids: " ++ show (map netid nsl)
                                 ns <- Hash.fromList $ zip (map netid nsl) nsl
                                 cs <- Hash.new
                                 gs <- Hash.new
                                 return (ns, cs, gs)
 
-                        putStrLn $ "Net update 1 [Entity a]: " ++ show (map netid es)
                         es'           <- filterMapM' (netUpdateEntity gen nursery ns cs gs) es
-                        putStrLn $ "Net update 2 [Entity a]: " ++ show (map netid es')
                         ns'           <- Hash.toList ns >>= mapM (addNewNetEntities state gen nursery newEntRef) . map snd
                         let es''       = ns' ++ es'
-                        putStrLn $ "Net update 3 [Entity a]: " ++ show (map netid es'')
                         writeIORef ref es''
                         return $ Change es''
 
@@ -178,7 +173,6 @@ instance (Binary a, Eq a) => NecroFoldable [Entity a] where
                                     (e : _) -> case netOptions e of
                                         NoNetworkOptions -> return ()
                                         _                -> do
-                                            putStrLn "Sending NetEntitySync message for [Entity a]"
                                             sendNetworkEntityMessage (signalClient state) $ encode $ NetEntitySync i nid es
                             _ -> return ()
 
@@ -197,7 +191,7 @@ instance (Binary a, Eq a) => NecroFoldable [Entity a] where
                     netUpdateEntity gen nursery ns cs gs e = Hash.lookup gs (netid e) >>= \g -> case g of
                         Just _  -> return Nothing
                         Nothing -> Hash.lookup ns (netid e) >>= \mne -> case mne of
-                            Just ne -> let ne' = ne{euid = euid e} in putStrLn ("replacing entity " ++ show (netid e)) >> Hash.delete ns (netid e) >> netInsertNursery ne' >> return (Just ne')
+                            Just ne -> let ne' = ne{euid = euid e} in Hash.delete ns (netid e) >> netInsertNursery ne' >> return (Just ne')
                             Nothing -> Hash.lookup cs (netid e) >>= \mcs -> case mcs of
                                 Nothing  -> netInsertNursery e >> return (Just e)
                                 Just cs' -> netInsertNursery e >> return (Just $ foldr netUpdate e cs')
@@ -235,6 +229,8 @@ instance (Binary a, Eq a) => NecroFoldable (IntMap.IntMap (Entity a)) where
                         gen <- readIORef genCounter
                         es' <- case decode msg of
                             NetEntityMessage _ ns csl gsl -> do
+                                --TODO: Do the same trick done with [Entity a] to initialize and replace initial entities
+                                --TODO: Set up system such that it doesn't "delete" replaced entities, but instead swaps out all values, but keeps same uid!
                                 let es'' = foldr (\((_, k), cs) m -> IntMap.adjust (netUpdate cs) k m) (foldr (\((_, k),_) m -> IntMap.delete k m) es gsl) csl
                                 unionizeNewEntitie es'' <~ mapM (addNewNetEntities state gen nursery newEntRef) ns
                             NetEntitySync  _ _ ns -> unionizeNewEntitie es <~ mapM (addNewNetEntities state gen nursery newEntRef) ns
