@@ -91,7 +91,6 @@ instance (Binary a, Eq a) => NecroFoldable (Entity a) where
                 where
                     cont _ _ nursery _ nid ref (NetSignalEvent nid' msg) = if nid /= nid' then readIORef ref >>= return . NoChange else do
                         --Network update
-                        putStrLn "Net update in foldn (Entity a)"
                         e     <- readIORef ref
                         let e' = case decode msg of
                                 NetEntityMessage _ _ cs _     -> foldr netUpdateEntity e . concat $ map snd cs
@@ -103,10 +102,10 @@ instance (Binary a, Eq a) => NecroFoldable (Entity a) where
                         writeIORef ref e'
                         return $ Change e'
 
+                    --Regular update
                     cont scont state nursery newEntRef nid ref event = scont event >>= \se -> case se of
                         NoChange _ -> return se
                         Change   s -> do
-                            --Regular update
                             es <- updateEntity state 0 nursery newEntRef Nothing s
                             removeAndNetworkEntities state 0 nursery newEntRef nid
                             writeIORef ref es
@@ -145,7 +144,6 @@ instance (Binary a, Eq a) => NecroFoldable [Entity a] where
 
                         (ns, cs, gs)  <- case decode msg of
                             NetEntityMessage _ nsl csl gsl -> do
-                                -- putStrLn "Net update in foldn [Entity a]"
                                 ns <- Hash.fromList $ zip (map netid nsl) nsl
                                 cs <- Hash.fromList csl
                                 gs <- Hash.fromList gsl
@@ -172,15 +170,13 @@ instance (Binary a, Eq a) => NecroFoldable [Entity a] where
                                     []      -> return ()
                                     (e : _) -> case netOptions e of
                                         NoNetworkOptions -> return ()
-                                        _                -> do
-                                            sendNetworkEntityMessage (signalClient state) $ encode $ NetEntitySync i nid es
+                                        _                -> sendNetworkEntityMessage (signalClient state) $ encode $ NetEntitySync i nid es
                             _ -> return ()
 
                         --Update Signal
                         scont event >>= \se -> case se of
                             NoChange _ -> return se
                             Change   s -> do
-                                --Regular update
                                 gen <- readIORef genCounter >>= \gen -> writeIORef genCounter (gen + 1) >> return gen
                                 es  <- mapM (updateEntity state gen nursery newEntRef Nothing) s
                                 removeAndNetworkEntities state gen nursery newEntRef nid
@@ -220,20 +216,23 @@ instance (Binary a, Eq a) => NecroFoldable (IntMap.IntMap (Entity a)) where
                 nursery    <- Hash.new :: IO (Nursery a)
                 newEntRef  <- newIORef []
                 nid        <- nextStateID state
-                ref        <- newIORef s
-                return (cont scont state genCounter nursery newEntRef nid ref, s)
+                es         <- mapM (addInitialEntity state nursery newEntRef) s
+                ref        <- newIORef es
+                return (cont scont state genCounter nursery newEntRef nid ref, es)
                 where
                     cont _ state genCounter nursery newEntRef nid ref (NetSignalEvent nid' msg) = if nid /= nid' then readIORef ref >>= return . NoChange else do
                         --Network update
                         es  <- readIORef ref
                         gen <- readIORef genCounter
                         es' <- case decode msg of
-                            NetEntityMessage _ ns csl gsl -> do
-                                --TODO: Do the same trick done with [Entity a] to initialize and replace initial entities
-                                --TODO: Set up system such that it doesn't "delete" replaced entities, but instead swaps out all values, but keeps same uid!
-                                let es'' = foldr (\((_, k), cs) m -> IntMap.adjust (netUpdate cs) k m) (foldr (\((_, k),_) m -> IntMap.delete k m) es gsl) csl
-                                unionizeNewEntitie es'' <~ mapM (addNewNetEntities state gen nursery newEntRef) ns
-                            NetEntitySync  _ _ ns -> unionizeNewEntitie es <~ mapM (addNewNetEntities state gen nursery newEntRef) ns
+                            NetEntityMessage _ nsl csl gsl -> do
+                                let es1       = foldr (\((_, k), _ ) m -> IntMap.delete k m) es gsl
+                                    es2       = foldr (\((_, k), cs) m -> IntMap.adjust (netUpdate cs) k m) es1 csl
+                                    (ns, es3) = foldr replaceEntities ([], es2) nsl
+                                unionizeNewEntitie es3 <~ mapM (addNewNetEntities state gen nursery newEntRef) ns
+                            NetEntitySync  _ _ nsl -> do
+                                let (ns, es') = foldr replaceEntities ([], es) nsl
+                                unionizeNewEntitie es' <~ mapM (addNewNetEntities state gen nursery newEntRef) ns
                         writeIORef ref es'
                         mapM_ (netInsertNursery gen nursery) es'
                         return $ Change es'
@@ -268,6 +267,10 @@ instance (Binary a, Eq a) => NecroFoldable (IntMap.IntMap (Entity a)) where
                     updateMapEntitiesWithKey state gen nursery newEntRef k e = case euid e of
                         UID _ -> updateEntity state gen nursery newEntRef Nothing e
                         New   -> updateEntity state gen nursery newEntRef (Just (clientID $ signalClient state, k)) e
+
+                    replaceEntities n (ns, es) = case IntMap.lookup (snd $ netid n) es of
+                        Nothing -> (n : ns, es)
+                        Just e  -> (ns, IntMap.insert (snd $ netid n) n{euid = euid e} es)
 
                     netUpdate cs e = foldr go e cs
                         where
