@@ -46,6 +46,7 @@ foreign import ccall safe "draw_render_data" drawRenderDataC ::
 preRender :: GLFW.Window -> IO ()
 preRender window = do
     (w, h) <- GLFW.getWindowSize window
+    glFrontFace gl_CW
     glDepthFunc gl_LESS
     glEnable    gl_BLEND
     glBlendFunc gl_SRC_ALPHA gl_ONE_MINUS_SRC_ALPHA
@@ -115,6 +116,7 @@ renderWithCameraRaw window resources scene (view, c) = do
         drawPostRenderFX fx = do
             (w, h) <- GLFW.getWindowSize window
             glBindFramebuffer gl_FRAMEBUFFER 0
+            glFrontFace gl_CCW
             glDepthFunc gl_NONE
             glDisable   gl_BLEND
             glViewport 0 0 (fromIntegral w) (fromIntegral h)
