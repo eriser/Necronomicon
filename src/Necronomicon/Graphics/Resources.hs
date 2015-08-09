@@ -10,6 +10,7 @@ import Necronomicon.Utility
 import Necronomicon.Graphics.Text
 import Data.IORef
 import Data.Binary
+import Foreign (with)
 import Foreign.Storable
 import Foreign.Ptr
 import Foreign.C.Types
@@ -22,7 +23,7 @@ import Control.Concurrent
 import Control.Concurrent.STM
 import qualified Data.Map.Strict               as Map
 import qualified Graphics.Rendering.OpenGL     as GL
-import qualified Graphics.Rendering.OpenGL.Raw as GLRaw
+import Graphics.Rendering.OpenGL.Raw
 import qualified Graphics.UI.GLFW              as GLFW
 
 
@@ -72,11 +73,10 @@ mkModel layer = Model (toBitMask layer)
 instance BitMask BasicLayers where
     toBitMask = shiftL 1 . fromEnum
 
---Can we make a more general form to take any material which takes a texture, like the new font system?
 postRenderFX :: (Texture -> Material) -> PostRenderingFX
 postRenderFX mat = PostRenderingFX Nothing (vs ++ "+" ++ fs) mat'
     where
-        mat'@(Material _ vs fs _ _) = mat EmptyTexture
+        mat'@(Material _ vs fs _ _) = mat $ PostRenderTexture Nothing
 
 unUID :: UID -> Int
 unUID (UID uid) = uid
@@ -99,6 +99,7 @@ data Resources = Resources
    , fontsRef             :: IORef (Map.Map String LoadedFont)
    , postRenderRef        :: IORef (Map.Map String LoadedPostRenderingFX)
    , matrixUniformPtr     :: Ptr CFloat
+   , postFXRenderDataPtr  :: Ptr RenderData
    , audioSamplesRef      :: IORef [String]
    , contextBarrier       :: TMVar GLContext
    , context              :: GLFW.Window }
@@ -127,6 +128,7 @@ mkResources w = Resources
           <*> newIORef Map.empty
           <*> newIORef Map.empty
           <*> mallocBytes (sizeOf (undefined :: CFloat) * 16)
+          <*> malloc
           <*> newIORef []
           <*> (myThreadId >>= \mtid -> atomically (newTMVar $ GLContext mtid))
           <*> return w
@@ -311,8 +313,6 @@ loadMesh r m = case m of
             return (vertexBuffer,indexBuffer, min', max', fromIntegral (length indices), p, c, u)
 
 
---TODO: Load texture for uniforms here!
---TODO: Detect needing to load texture uniforms separately from needing to load the shaders in a material!
 loadMat :: Resources -> Material -> IO Material
 loadMat r (Material Nothing vs fs us pr) = do
     sh' <- getShader r sh
@@ -360,6 +360,80 @@ getTexture resources (TGATexture Nothing path)   = readIORef (texturesRef resour
         return (TGATexture (Just t) path)
     Just texture -> return (TGATexture (Just texture) path)
 getTexture _ t@EmptyTexture                      = return t
+getTexture _ t@(PostRenderTexture _)             = return t
+
+---------------------------------------
+-- Full screen Post-Rendering Effects
+---------------------------------------
+
+loadPostFX :: PostRenderingFX -> (Double, Double) -> IO (Maybe LoadedPostRenderingFX)
+loadPostFX (PostRenderingFX _ name mat) (w, h) = do
+
+    --Init FBO Texture
+    glActiveTexture gl_TEXTURE0
+    fboTexture <- with 0  $ \ptr -> glGenTextures 1 ptr >> peek ptr
+    glBindTexture   gl_TEXTURE_2D fboTexture
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MAG_FILTER $ fromIntegral gl_LINEAR
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_MIN_FILTER $ fromIntegral gl_LINEAR
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_WRAP_S     $ fromIntegral gl_CLAMP_TO_EDGE
+    glTexParameteri gl_TEXTURE_2D gl_TEXTURE_WRAP_T     $ fromIntegral gl_CLAMP_TO_EDGE
+    glTexImage2D    gl_TEXTURE_2D 0 (fromIntegral gl_RGBA) (floor w) (floor h) 0 gl_RGBA gl_UNSIGNED_BYTE nullPtr
+    glBindTexture   gl_TEXTURE_2D 0
+
+    --init Framebuffer which links it all together
+    fbo <- with 0 $ \ptr -> glGenFramebuffers 1 ptr >> peek ptr
+    glBindFramebuffer         gl_FRAMEBUFFER fbo
+    glFramebufferTexture2D    gl_FRAMEBUFFER gl_COLOR_ATTACHMENT0 gl_TEXTURE_2D fboTexture 0
+
+    --init FBO Depth Buffer
+    rboDepth <- with 0 $ \ptr -> glGenRenderbuffers 1 ptr >> peek ptr
+    glBindRenderbuffer     gl_RENDERBUFFER rboDepth
+    glRenderbufferStorage  gl_RENDERBUFFER gl_DEPTH_COMPONENT16 (floor w) (floor h)
+    glFramebufferRenderbuffer gl_FRAMEBUFFER gl_DEPTH_ATTACHMENT  gl_RENDERBUFFER rboDepth
+
+    --Is the FBO complete?
+    fboStatus <- glCheckFramebufferStatus gl_FRAMEBUFFER
+    glBindFramebuffer gl_FRAMEBUFFER 0
+    if fboStatus /= gl_FRAMEBUFFER_COMPLETE
+        then putStrLn ("ERROR binding FBO, fboStatus: " ++ show fboStatus) >> return Nothing
+        else Just $ LoadedPostRenderingFX name mat (w,h) fboTexture rboDepth fbo fboStatus
+
+maybeReshape :: LoadedPostRenderingFX -> (Double,Double) -> IO (Maybe LoadedPostRenderingFX)
+maybeReshape post dim@(w,h) = if postRenderDimensions post == dim then return Nothing else do
+    glBindTexture gl_TEXTURE_2D $ postRenderTex post
+    glTexImage2D  gl_TEXTURE_2D 0 (fromIntegral gl_RGBA) (floor w) (floor h) 0 gl_RGBA gl_UNSIGNED_BYTE nullPtr
+    glBindTexture gl_TEXTURE_2D 0
+
+    glBindRenderbuffer    gl_RENDERBUFFER $ postRenderRBO post
+    glRenderbufferStorage gl_RENDERBUFFER gl_DEPTH_COMPONENT16 (floor w) (floor h)
+    glBindRenderbuffer    gl_RENDERBUFFER 0
+
+    return $ Just post{postRenderDimensions = dim}
+
+freePostFX :: LoadedPostRenderingFX -> IO()
+freePostFX post = do
+    with (postRenderRBO post) $ glDeleteRenderbuffers 1
+    with (postRenderTex post) $ glDeleteTextures      1
+    with (postRenderFBO post) $ glDeleteFramebuffers  1
+
+--Take into account reshape
+getPostFX' :: Resources -> (Double, Double) -> PostRenderingFX -> IO (Maybe LoadedPostRenderingFX)
+getPostFX' resources dim fx@(PostRenderingFX _ name _) = readIORef (postRenderRef resources) >>= \effects -> case Map.lookup name effects of
+    Nothing -> loadPostFX fx dim >>= \maybeLoadedPostFX -> case maybeLoadedPostFX of
+        Nothing       -> return Nothing
+        Just loadedFX -> (writeIORef (postRenderRef resources) $ Map.insert name loadedFX effects) >> return maybeLoadedPostFX
+    Just loadedFX  -> return $ Just loadedFX
+
+getPostFX :: Resources -> (Double, Double) -> PostRenderingFX -> IO PostRenderingFX
+getPostFX resources dim fx@(PostRenderingFX Nothing name mat) = getPostFX' resources dim fx >>= \maybeLoadedPostFX -> case maybeLoadedPostFX of
+    Nothing -> return fx
+    Just loadedPostFX -> do
+        Material lm vs fs us p <- loadMat resources mat
+        return $ PostRenderingFX maybeLoadedPostFX name (Material lm vs fs (map (setPFXTex (postRenderTex loadedPostFX)) us) p)
+    where
+        setPFXTex t (UniformTexture n (PostRenderTexture Nothing)) = UniformTexture n $ PostRenderTexture $ Just $ GL.TextureObject t
+        setPFXTex _ u                                              = u
+getPostFX _ _ fx = return fx
 
 ------------------------------
 -- RenderData
@@ -369,18 +443,18 @@ data RenderData = RenderData {-# UNPACK #-} !GL.GLuint         --Active / Inacti
                              {-# UNPACK #-} !GL.GLuint         --Index Buffer
                              {-# UNPACK #-} !GL.GLuint         --Start
                              {-# UNPACK #-} !GL.GLuint         --End
-                             {-# UNPACK #-} !GLRaw.GLsizei     --Count
+                             {-# UNPACK #-} !GLsizei           --Count
 
-                             {-# UNPACK #-} !GLRaw.GLint       --vertexVad
-                             {-# UNPACK #-} !GLRaw.GLsizei
+                             {-# UNPACK #-} !GLint             --vertexVad
+                             {-# UNPACK #-} !GLsizei
                              {-# UNPACK #-} !(Ptr GL.GLfloat)
 
-                             {-# UNPACK #-} !GLRaw.GLint       --colorVad
-                             {-# UNPACK #-} !GLRaw.GLsizei
+                             {-# UNPACK #-} !GLint             --colorVad
+                             {-# UNPACK #-} !GLsizei
                              {-# UNPACK #-} !(Ptr GL.GLfloat)
 
-                             {-# UNPACK #-} !GLRaw.GLint       --uvVad
-                             {-# UNPACK #-} !GLRaw.GLsizei
+                             {-# UNPACK #-} !GLint             --uvVad
+                             {-# UNPACK #-} !GLsizei
                              {-# UNPACK #-} !(Ptr GL.GLfloat)
 
                              {-# UNPACK #-} !GL.GLuint         --shader program
@@ -389,8 +463,8 @@ data RenderData = RenderData {-# UNPACK #-} !GL.GLuint         --Active / Inacti
                              {-# UNPACK #-} !GL.GLuint         --uv     attribute location
                              !Matrix4x4
                              [UniformRaw]                      --Uniform values
-                             {-# UNPACK #-} !GLRaw.GLint       --modelView location
-                             {-# UNPACK #-} !GLRaw.GLint       --proj location
+                             {-# UNPACK #-} !GLint             --modelView location
+                             {-# UNPACK #-} !GLint             --proj location
                              {-# UNPACK #-} !GL.GLint          --Layer for rendering
 
 data UniformRaw =  UniformTextureRaw {-# UNPACK #-} !GL.GLint {-# UNPACK #-} !GL.GLuint  {-# UNPACK #-} !GL.GLuint
@@ -422,7 +496,7 @@ instance Storable UniformRaw where
     poke ptr (UniformVec4Raw l x y z w) = pokeByteOff ptr 0 (4 :: CInt) >> pokeByteOff ptr 4 l >> pokeByteOff ptr 8 x >> pokeByteOff ptr 12 y >> pokeByteOff ptr 16 z >> pokeByteOff ptr 20 w
 
 instance Storable RenderData where
-    -- sizeOf    _ = (sizeOf (undefined :: GL.GLuint) * 9) + (sizeOf (undefined :: GLRaw.GLsizei) * 4) + (sizeOf (undefined :: GLRaw.GLint) * 3) + (sizeOf (undefined :: Ptr GL.GLfloat) * 3) + (sizeOf (undefined :: CFloat) * 16)
+    -- sizeOf    _ = (sizeOf (undefined :: GL.GLuint) * 9) + (sizeOf (undefined :: GLsizei) * 4) + (sizeOf (undefined :: GLint) * 3) + (sizeOf (undefined :: Ptr GL.GLfloat) * 3) + (sizeOf (undefined :: CFloat) * 16)
     sizeOf    _ = 184 --176
     alignment _ = 8
     {-# INLINE peek #-}

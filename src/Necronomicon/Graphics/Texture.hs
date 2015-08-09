@@ -13,22 +13,25 @@ import           Foreign.C
 import           Data.Binary
 
 
-data Texture = TGATexture   (Maybe GL.TextureObject) String
-             | FontTexture  (Maybe GL.TextureObject) String Int
-             | AudioTexture (Maybe GL.TextureObject) Int
+data Texture = TGATexture        (Maybe GL.TextureObject) String
+             | FontTexture       (Maybe GL.TextureObject) String Int
+             | AudioTexture      (Maybe GL.TextureObject) Int
+             | PostRenderTexture (Maybe GL.TextureObject)
              | EmptyTexture
              deriving (Show, Eq)
 
 instance Binary Texture where
-    put (TGATexture   _ s  ) = put (0 :: Word8) >> put s
-    put (AudioTexture _ i  ) = put (1 :: Word8) >> put i
-    put (FontTexture  _ f s) = put (2 :: Word8) >> put f >> put s
-    put (EmptyTexture      ) = put (3 :: Word8)
+    put (TGATexture   _ s    ) = put (0 :: Word8) >> put s
+    put (AudioTexture _ i    ) = put (1 :: Word8) >> put i
+    put (FontTexture  _ f s  ) = put (2 :: Word8) >> put f >> put s
+    put (PostRenderTexture _ ) = put (3 :: Word8)
+    put (EmptyTexture        ) = put (4 :: Word8)
 
     get = (get :: Get Word8) >>= \t -> case t of
         0 -> TGATexture   Nothing <$> get
         1 -> AudioTexture Nothing <$> get
         2 -> FontTexture  Nothing <$> get <*> get
+        3 -> return $ PostRenderTexture Nothing
         _ -> return EmptyTexture
 
 newBoundTexUnit :: Int -> IO GL.TextureObject

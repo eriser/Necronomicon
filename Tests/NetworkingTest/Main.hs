@@ -29,7 +29,7 @@ instance Binary Terminal
 mkPlayer :: Entity Player
 mkPlayer = ( mkEntity  <| Player PlayerIdle (0, 0) )
            { pos        = Vector3 0 0 (-6)
-           , camera     = Just <| Camera 60 0.1 1000 black [] (toBitMask DefaultLayer) 0
+           , camera     = Just <| Camera 60 0.1 1000 black [postRenderFX blur] (toBitMask DefaultLayer) 0
            , netOptions = mkNetworkOptions
                { networkPos    = Network
                , networkRot    = Network

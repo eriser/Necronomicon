@@ -136,8 +136,5 @@ colorTest tex = material "ambient-vert.glsl" "colorTest-frag.glsl" [UniformTextu
 blur      :: Texture -> Material
 blur      tex = material "ambient-vert.glsl" "blur-frag.glsl"      [UniformTexture "tex" tex]
 
-glowFX    :: Material
-glowFX        = material "ambient-vert.glsl" "blur-frag.glsl"      [UniformTexture "tex" EmptyTexture]
-
 material :: String -> String -> [Uniform] -> Material
 material vs fs us = Material Nothing vs fs us GL.Triangles

@@ -2,7 +2,9 @@ module Necronomicon.Entity where
 
 import Necronomicon.Linear
 import Necronomicon.Physics
-import Necronomicon.Graphics
+import Necronomicon.Graphics.Resources
+import Necronomicon.Graphics.Texture
+import Necronomicon.Graphics.Camera
 import Unsafe.Coerce
 import Data.Binary
 import Foreign.Storable
@@ -258,6 +260,14 @@ setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !
                 pokeByteOff p 8 (unsafeCoerce t :: GL.GLuint)
                 pokeByteOff p 12 (0 :: GL.GLuint)
                 setUniforms uptr (i + 24) ls us
+
+            UniformTexture _ (PostRenderTexture (Just t)) -> do
+                pokeByteOff p 0 (0 :: CInt)
+                pokeByteOff p 4 l
+                pokeByteOff p 8 (unsafeCoerce t :: GL.GLuint)
+                pokeByteOff p 12 (0 :: GL.GLuint)
+                setUniforms uptr (i + 24) ls us
+
             _                                            -> return ()
             where
                 p = uptr `plusPtr` (i :: Int)
@@ -374,6 +384,14 @@ setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !
                 pokeByteOff p 8 (unsafeCoerce t :: GL.GLuint)
                 pokeByteOff p 12 (0 :: GL.GLuint)
                 setUniforms uptr (i + 24) ls us
+
+            UniformTexture _ (PostRenderTexture (Just t)) -> do
+                pokeByteOff p 0 (0 :: CInt)
+                pokeByteOff p 4 l
+                pokeByteOff p 8 (unsafeCoerce t :: GL.GLuint)
+                pokeByteOff p 12 (0 :: GL.GLuint)
+                setUniforms uptr (i + 24) ls us
+
             _                                            -> return ()
             where
                 p = uptr `plusPtr` (i :: Int)
