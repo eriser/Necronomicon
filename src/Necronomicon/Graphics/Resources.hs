@@ -366,8 +366,10 @@ getTexture _ t@(PostRenderTexture _)             = return t
 -- Full screen Post-Rendering Effects
 ---------------------------------------
 
-loadPostFX :: PostRenderingFX -> (Double, Double) -> IO (Maybe LoadedPostRenderingFX)
-loadPostFX (PostRenderingFX _ name mat) (w, h) = do
+loadPostFX :: Resources -> PostRenderingFX -> (Double, Double) -> IO (Maybe LoadedPostRenderingFX)
+loadPostFX resources (PostRenderingFX _ name mat) (w, h) = do
+    mtid <- myThreadId
+    atomically (takeTMVar (contextBarrier resources)) >>= \(GLContext tid) -> when (tid /= mtid) (GLFW.makeContextCurrent (Just (context resources)))
 
     --Init FBO Texture
     glActiveTexture gl_TEXTURE0
@@ -387,16 +389,17 @@ loadPostFX (PostRenderingFX _ name mat) (w, h) = do
 
     --init FBO Depth Buffer
     rboDepth <- with 0 $ \ptr -> glGenRenderbuffers 1 ptr >> peek ptr
-    glBindRenderbuffer     gl_RENDERBUFFER rboDepth
-    glRenderbufferStorage  gl_RENDERBUFFER gl_DEPTH_COMPONENT16 (floor w) (floor h)
-    glFramebufferRenderbuffer gl_FRAMEBUFFER gl_DEPTH_ATTACHMENT  gl_RENDERBUFFER rboDepth
+    glBindRenderbuffer        gl_RENDERBUFFER rboDepth
+    glRenderbufferStorage     gl_RENDERBUFFER gl_DEPTH_COMPONENT16 (floor w) (floor h)
+    glFramebufferRenderbuffer gl_FRAMEBUFFER  gl_DEPTH_ATTACHMENT gl_RENDERBUFFER rboDepth
 
     --Is the FBO complete?
     fboStatus <- glCheckFramebufferStatus gl_FRAMEBUFFER
     glBindFramebuffer gl_FRAMEBUFFER 0
+    atomically $ putTMVar (contextBarrier resources) $ GLContext mtid
     if fboStatus /= gl_FRAMEBUFFER_COMPLETE
         then putStrLn ("ERROR binding FBO, fboStatus: " ++ show fboStatus) >> return Nothing
-        else Just $ LoadedPostRenderingFX name mat (w,h) fboTexture rboDepth fbo fboStatus
+        else putStrLn ("Successfully created FBO") >> return (Just $ LoadedPostRenderingFX name mat (w,h) fboTexture rboDepth fbo fboStatus)
 
 maybeReshape :: LoadedPostRenderingFX -> (Double,Double) -> IO (Maybe LoadedPostRenderingFX)
 maybeReshape post dim@(w,h) = if postRenderDimensions post == dim then return Nothing else do
@@ -419,21 +422,24 @@ freePostFX post = do
 --Take into account reshape
 getPostFX' :: Resources -> (Double, Double) -> PostRenderingFX -> IO (Maybe LoadedPostRenderingFX)
 getPostFX' resources dim fx@(PostRenderingFX _ name _) = readIORef (postRenderRef resources) >>= \effects -> case Map.lookup name effects of
-    Nothing -> loadPostFX fx dim >>= \maybeLoadedPostFX -> case maybeLoadedPostFX of
+    Nothing -> loadPostFX resources fx dim >>= \maybeLoadedPostFX -> case maybeLoadedPostFX of
         Nothing       -> return Nothing
         Just loadedFX -> (writeIORef (postRenderRef resources) $ Map.insert name loadedFX effects) >> return maybeLoadedPostFX
     Just loadedFX  -> return $ Just loadedFX
 
+--TODO: Need a flavor of this for rendering that doesn't actually attempt to load the fx, since this can cause deadlock
 getPostFX :: Resources -> (Double, Double) -> PostRenderingFX -> IO PostRenderingFX
 getPostFX resources dim fx@(PostRenderingFX Nothing name mat) = getPostFX' resources dim fx >>= \maybeLoadedPostFX -> case maybeLoadedPostFX of
     Nothing -> return fx
     Just loadedPostFX -> do
         Material lm vs fs us p <- loadMat resources mat
-        return $ PostRenderingFX maybeLoadedPostFX name (Material lm vs fs (map (setPFXTex (postRenderTex loadedPostFX)) us) p)
+        return $ PostRenderingFX maybeLoadedPostFX name (Material lm vs fs (map (setPostFXUniformTexture (postRenderTex loadedPostFX)) us) p)
     where
-        setPFXTex t (UniformTexture n (PostRenderTexture Nothing)) = UniformTexture n $ PostRenderTexture $ Just $ GL.TextureObject t
-        setPFXTex _ u                                              = u
 getPostFX _ _ fx = return fx
+
+setPostFXUniformTexture :: GL.GLuint -> Uniform -> Uniform
+setPostFXUniformTexture t (UniformTexture n (PostRenderTexture Nothing)) = UniformTexture n $ PostRenderTexture $ Just $ GL.TextureObject t
+setPostFXUniformTexture  _ u                                             = u
 
 ------------------------------
 -- RenderData

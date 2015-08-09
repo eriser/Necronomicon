@@ -31,6 +31,7 @@ import           Data.Binary                       (Binary, decode, encode)
 import qualified Data.Vector.Storable.Mutable      as SMV
 import qualified Data.HashTable.IO                 as Hash
 import qualified Data.IntMap.Strict                as IntMap
+import qualified Graphics.UI.GLFW                  as GLFW
 
 ----------------------------------
 -- State
@@ -319,9 +320,9 @@ updateEntity state gen nursery newEntRef maybeNetID e = do
             return (e', uid)
 
     writeRenderData (renderDataRef state) uid e'
-    writeCam (cameraRef state) (euid e') (camera e') e'
-    insertNursery uid gen e' nursery
-    return e'
+    e'' <- writeCam (sigResources state) (cameraRef state) (euid e') (camera e') e'
+    insertNursery uid gen e'' nursery
+    return e''
 
 removeAndNetworkEntities :: (Binary a, Eq a) => SignalState -> Int -> Nursery a -> IORef [Entity a] -> Int -> IO ()
 removeAndNetworkEntities state gen nursery newEntRef nid = do
@@ -351,9 +352,17 @@ insertNursery uid gen e n = Hash.lookup n uid >>= \me' -> case me' of
     Nothing         -> Hash.insert n uid (gen, e,  e)
     Just (_, _, e') -> Hash.insert n uid (gen, e', e)
 
-writeCam :: TVar (IntMap.IntMap (Matrix4x4, Camera)) -> UID -> Maybe Camera -> Entity a -> IO ()
-writeCam cref (UID uid) (Just c) e = atomically $ modifyTVar' cref (IntMap.insert uid (entityTransform e, c))
-writeCam _    _         _        _ = return ()
+writeCam :: Resources -> TVar (IntMap.IntMap (Matrix4x4, Camera)) -> UID -> Maybe Camera -> Entity a -> IO (Entity a)
+writeCam resources cref (UID uid) (Just c) e = do
+    (w, h) <- GLFW.getWindowSize (context resources)
+    _      <- loadMesh resources $ rect 1 1
+    fx' <- case _fx c of
+        []     -> return []
+        fx : _ -> getPostFX resources (fromIntegral w, fromIntegral h) fx >>= \fx' -> return (fx' : [])
+    let c' = c{_fx = fx'}
+    atomically $ modifyTVar' cref (IntMap.insert uid (entityTransform e, c'))
+    return $ e{camera = Just c'}
+writeCam _ _    _         _        e = return e
 
 writeRenderData :: IORef (SMV.IOVector RenderData) -> Int -> Entity a -> IO ()
 writeRenderData oref uid e = readIORef oref >>= \vec -> if uid < SMV.length vec

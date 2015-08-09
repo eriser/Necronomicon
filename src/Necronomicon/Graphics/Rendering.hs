@@ -11,8 +11,10 @@ import Foreign.Ptr
 import Foreign.C.Types
 import Graphics.Rendering.OpenGL.Raw
 import Data.Bits
+import Data.IORef
 import qualified Graphics.UI.GLFW             as GLFW
 import qualified Data.Vector.Storable.Mutable as SMV
+import qualified Data.Map                     as Map
 
 foreign import ccall safe "init_c_opengl" initCOpenGL ::  IO ()
 
@@ -67,7 +69,6 @@ renderWithCameraRaw window resources scene (view, c) = do
     glDepthFunc gl_LESS
     glEnable    gl_BLEND
     glBlendFunc gl_SRC_ALPHA gl_ONE_MINUS_SRC_ALPHA
-    glViewport 0 0 (fromIntegral w) (fromIntegral h)
 
     case _clearColor c of
         RGBA 0 0 0 0 -> glClear (gl_DEPTH_BUFFER_BIT)
@@ -77,6 +78,7 @@ renderWithCameraRaw window resources scene (view, c) = do
     case _fov c of
         0 -> setMatrixPtr oproj mptr
         _ -> setMatrixPtr persp mptr
+
     SMV.unsafeWith scene $ \ptr -> drawRenderDataC
         ptr
         (fromIntegral $ SMV.length scene)
@@ -103,42 +105,25 @@ renderWithCameraRaw window resources scene (view, c) = do
     where
         Matrix4x4 v00 v01 v02 v03 v10 v11 v12 v13 v20 v21 v22 v23 v30 v31 v32 v33 = invert view
         oproj                               = orthoMatrix 0 1 1 0 (-1) 1
+        oproj'                              = orthoMatrix 0 1 0 1 (-1) 1
         mptr                                = matrixUniformPtr resources
-        pfxEntity (PostRenderingFX _ _ mat) = (mkEntity ()){model = Just $ mkModel DefaultLayer (rect 1 1) mat}
+        --TODO: This is sloppy, probably need to change the pfx pipeline to include loading in an entity
+        pfxEntity (PostRenderingFX _ _ mat) = readIORef (meshesRef resources) >>= \ms -> case Map.lookup "1.01.0~rect" ms of
+            Nothing -> return $ (mkEntity ()){model = Just $ mkModel DefaultLayer (rect 1 1) mat}
+            Just m  -> return $ (mkEntity ()){euid = UID 0, model = Just $ mkModel DefaultLayer (Mesh (Just m) [] [] [] [] [])  mat}
 
         drawPostRenderFX fx = do
             (w, h) <- GLFW.getWindowSize window
             glBindFramebuffer gl_FRAMEBUFFER 0
             glDepthFunc gl_NONE
             glDisable   gl_BLEND
-
-            case _clearColor c of
-                RGBA 0 0 0 0 -> glClear (gl_DEPTH_BUFFER_BIT)
-                RGB  r g b   -> glClearColor (realToFrac r) (realToFrac g) (realToFrac b) 1              >> glClear (gl_DEPTH_BUFFER_BIT .|. gl_COLOR_BUFFER_BIT)
-                RGBA r g b a -> glClearColor (realToFrac r) (realToFrac g) (realToFrac b) (realToFrac a) >> glClear (gl_DEPTH_BUFFER_BIT .|. gl_COLOR_BUFFER_BIT)
+            glViewport 0 0 (fromIntegral w) (fromIntegral h)
+            glClearColor 0 0 0 1
+            glClear (gl_DEPTH_BUFFER_BIT .|. gl_COLOR_BUFFER_BIT)
 
             postFX <- getPostFX resources (fromIntegral w, fromIntegral h) fx
-            setRenderDataPtr (pfxEntity postFX) (postFXRenderDataPtr resources)
-            setMatrixPtr oproj mptr
+            pfe    <- pfxEntity postFX
+            setRenderDataPtr pfe (postFXRenderDataPtr resources)
+            setMatrixPtr oproj' mptr
 
-            drawRenderDataC
-                (postFXRenderDataPtr resources)
-                1
-                (fromIntegral $ toBitMask DefaultLayer)
-                (realToFrac v00)
-                (realToFrac v01)
-                (realToFrac v02)
-                (realToFrac v03)
-                (realToFrac v10)
-                (realToFrac v11)
-                (realToFrac v12)
-                (realToFrac v13)
-                (realToFrac v20)
-                (realToFrac v21)
-                (realToFrac v22)
-                (realToFrac v23)
-                (realToFrac v30)
-                (realToFrac v31)
-                (realToFrac v32)
-                (realToFrac v33)
-                mptr
+            drawRenderDataC (postFXRenderDataPtr resources) 1 (fromIntegral $ toBitMask DefaultLayer) 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 mptr
