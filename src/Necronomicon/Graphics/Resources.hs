@@ -36,11 +36,23 @@ data BasicLayers     = DefaultLayer
                      | MiscLayer
                      deriving (Show, Eq, Enum)
 
-data Material        = Material    (Maybe LoadedShader) String String [Uniform] GL.PrimitiveMode  deriving (Show, Eq)
+data Material = Material
+   { materialLoadedShader   :: (Maybe LoadedShader)
+   , materialVertexShader   :: String
+   , materialFragmentShader :: String
+   , materialUniforms       :: [Uniform]
+   , materialPrimitiveMode  :: GL.PrimitiveMode
+   } deriving (Show, Eq)
+
 data Mesh            = Mesh        (Maybe LoadedMesh)   String [Vector3] [Color] [Vector2] [Int]
                      | DynamicMesh (Maybe LoadedMesh)   String [Vector3] [Color] [Vector2] [Int]
                      | FontMesh    (Maybe LoadedMesh)   String Font                               deriving (Show, Eq)
-data Model           = Model Int Mesh Material                                                    deriving (Show, Eq)
+data Model = Model
+   { modelLayer    :: Int
+   , modelMesh     :: Mesh
+   , modelMaterial :: Material
+   } deriving (Show, Eq)
+
 data PostRenderingFX = PostRenderingFX (Maybe LoadedPostRenderingFX) String Material              deriving (Show, Eq)
 data Uniform         = UniformTexture String Texture
                      | UniformScalar  String Double
@@ -333,10 +345,15 @@ loadTextureUniform r (UniformTexture name t) = UniformTexture name <$> getTextur
 loadTextureUniform _ u                       = return u
 
 getTexture :: Resources -> Texture -> IO Texture
---TODO: Do we really need to set audio textures every frame?!?!?1 If we do, it really should lock the GL context, which sounds bad....
-getTexture _ t@(AudioTexture (Just u) i)         = setAudioTexture i u >> return t
 getTexture _ t@(FontTexture  (Just _) _ _)       = return t
 getTexture _ t@(TGATexture   (Just _) _)         = return t
+--TODO: Do we really need to set audio textures every frame?!?!?1 If we do, it really should lock the GL context, which sounds bad....
+getTexture r t@(AudioTexture (Just u) i)         = do
+    mtid <- myThreadId
+    atomically (takeTMVar (contextBarrier r)) >>= \(GLContext tid) -> when (tid /= mtid) (GLFW.makeContextCurrent (Just (context r)))
+    setAudioTexture i u
+    atomically $ putTMVar (contextBarrier r) $ GLContext mtid
+    return t
 getTexture r         (AudioTexture Nothing i)    = do
     mtid <- myThreadId
     atomically (takeTMVar (contextBarrier r)) >>= \(GLContext tid) -> when (tid /= mtid) (GLFW.makeContextCurrent (Just (context r)))

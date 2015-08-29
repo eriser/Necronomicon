@@ -30,8 +30,6 @@ data Entity a = Entity
     , netid      :: (Int, Int)
     , children   :: [Entity ()] }
 
---TODO: New NetworkOption data structure: NoNetworking Network a NetworkOthers a
--- data NetworkOptions = NetworkData | NetworkPosition | NetworkRotation | NetworkScale | NetworkCollider | NetworkModel deriving (Show, Eq, Enum)
 data NetworkOption a = NoNetworking | Network | NetworkOthers a
 data NetworkOptions a = NetworkOptions
     { networkData     :: NetworkOption a
@@ -146,6 +144,14 @@ translate dir e@Entity{pos = p, rot = r} = e{pos = p + (dir .*. rotFromQuaternio
 
 entityTransform :: Entity a -> Matrix4x4
 entityTransform Entity{pos = p, rot = r, escale = s} = trsMatrix p r s
+
+--TODO: This ridiculousness makes a good case for a Lens type system....
+setUniform :: Int -> Uniform -> Entity a -> Entity a
+setUniform i u e = case model e of
+    Nothing -> e
+    Just m  -> e{ model = Just $ m{modelMaterial = (modelMaterial m){materialUniforms = map setU $ zip [0..] $ materialUniforms $ modelMaterial m}}}
+    where
+        setU (ui, u') = if ui == i then u else u'
 
 setRenderDataPtr :: Entity a -> Ptr RenderData -> IO ()
 setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !(Vector3 sx sy sz) _ (Just (Model layer (Mesh (Just loadedMesh) _ _ _ _ _) (Material (Just (program, GL.UniformLocation  mv : GL.UniformLocation  pr : ulocs, vloc, cloc, uloc)) _ _ uns _))) _ _ _ _) rdptr = do
