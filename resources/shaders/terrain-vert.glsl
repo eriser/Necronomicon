@@ -102,6 +102,7 @@ float simplex(float x, float y)
 
 float columns = 1/ 256.0;
 float rows    = 1/ 256.0;
+float height  = 5;
 
 void main()
 {
@@ -118,9 +119,11 @@ void main()
 
     float x     = (pos.x * 6) * columns;
     float z     = (pos.z * 6) * rows;
-    float y     = (pos.y * 1) + simplex(x * 0.5 + time * 0.05, z * 0.5 + time * 0.041) * 1.65;
+    float y     = (pos.y * 1) + simplex(x * 0.5 + time * 0.05, z * 0.5 + time * 0.041) * height;
 
-    color       = vec3((x * 1.75) * (y * 0.5 + 0.2), y * 0.5 + 0.2, z * (y * 0.5 + 0.2));
+    float yamt  = y * (1 / height) + 0.4;
+
+    color       = vec3(x * 1.75 * yamt, yamt, z * yamt);
 
     gl_Position = vec4(pos.x, y, pos.z, 1.0) * modelView * proj;
 }
