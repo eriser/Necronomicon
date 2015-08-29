@@ -11,6 +11,7 @@ module Necronomicon.FRP.Combinators
     , toggle
     , whiteNoiseS
     , sigAnd
+    , sigOr
     , fmap2
     , fmap3
     , fmap4
@@ -178,4 +179,7 @@ whiteNoiseS = Signal $ \_ -> do
 
 sigAnd :: [Signal Bool] -> Signal Bool
 sigAnd = foldr (fmap2 (&&)) (pure True)
+
+sigOr :: [Signal Bool] -> Signal Bool
+sigOr = foldr (fmap2 (||)) (pure False)
 

@@ -177,7 +177,7 @@ slerp !q1@(Quaternion w1 x y z) q2 t = normalize $ Quaternion (w1*k1 + w3*k2) (k
 instance Num Quaternion where
     (+) !(Quaternion w1 x1 y1 z1) !(Quaternion w2 x2 y2 z2) = normalize $ Quaternion (w1 + w2) (x1 + x2) (y1 + y2) (z1 + z2)
     (-) !(Quaternion w1 x1 y1 z1) !(Quaternion w2 x2 y2 z2) = normalize $ Quaternion (w1 - w2) (x1 - x2) (y1 - y2) (z1 - z2)
-    (*) !(Quaternion w1 x1 y1 z1) !(Quaternion w2 x2 y2 z2) = normalize $ Quaternion w (w1 * x2 + w2 * x1 + (y1*z2-z1*y2)) (w1 * y2 + w2 * y1 + (z1*x2-x1*z2)) (w1 * z2 + w2 * z1 + (x1*y2-y1*x2))
+    (*) !(Quaternion w1 x1 y1 z1) !(Quaternion w2 x2 y2 z2) = Quaternion w (w1 * x2 + w2 * x1 + (y1*z2-z1*y2)) (w1 * y2 + w2 * y1 + (z1*x2-x1*z2)) (w1 * z2 + w2 * z1 + (x1*y2-y1*x2))
         where
             w = w1 * w2 - (x1 * x2 + y1 * y2 + z1 * z2)
 
@@ -192,7 +192,7 @@ instance LinearMath Double Quaternion where
     (.-.) = apply (-)
     (.*.) = apply (*)
     (./.) = apply (/)
-    apply f s !(Quaternion w x y z) = Quaternion (f s w) (f s x) (f s y) (f s z)
+    apply f s !(Quaternion w x y z) = normalize $ Quaternion (f s w) (f s x) (f s y) (f s z)
 
 instance LinearMath Quaternion Double where
     type Return Quaternion Double = Quaternion
@@ -200,7 +200,17 @@ instance LinearMath Quaternion Double where
     (.-.) = apply (-)
     (.*.) = apply (*)
     (./.) = apply (/)
-    apply f !(Quaternion w x y z) s = Quaternion (f w s) (f x s) (f y s) (f z s)
+    apply f !(Quaternion w x y z) s = normalize $ Quaternion (f w s) (f x s) (f y s) (f z s)
+
+instance LinearMath Vector3 Quaternion where
+    type Return Vector3 Quaternion = Vector3
+    Vector3 x y z .*. q = Vector3 x' y' z'
+        where
+            Quaternion _ x' y' z' = q * Quaternion 0 x y z * inverse q
+    (.+.) = undefined
+    (.-.) = undefined
+    (./.) = undefined
+    apply _ = undefined
 
 -- normalize    q@(Quaternion w  v )                    = if mag > 0 then Quaternion (w/mag) (v .*. mag) else identity
 

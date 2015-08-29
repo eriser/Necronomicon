@@ -184,11 +184,11 @@ instance LinearMath Vector2 Matrix2x2 where
 
 instance LinearMath Vector3 Matrix3x3 where
     type Return Vector3 Matrix3x3    = Vector3
-    (.*.) !(Vector3 x y z) !(Matrix3x3 a b c d e f g h i) =
+    (.*.) !(Vector3 x y z) !(Matrix3x3 m00 m01 m02 m10 m11 m12 m20 m21 m22) =
         Vector3
-        (x*a+y*d+z*g)
-        (x*b+y*e+z*h)
-        (x*c+y*f+z*i)
+        (x * m00 + y * m10 + z * m20)
+        (x * m01 + y * m11 + z * m21)
+        (x * m02 + y * m12 + z * m22)
     (.+.) _ _ = undefined
     (.-.) _ _ = undefined
     (./.) _ _ = undefined

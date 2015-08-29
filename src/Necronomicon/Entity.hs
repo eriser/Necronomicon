@@ -11,6 +11,7 @@ import Foreign.Storable
 import Foreign.Ptr
 import Foreign.C.Types
 import Foreign.Marshal.Array
+-- import Debug.Trace
 
 import qualified Graphics.Rendering.OpenGL as GL
 import qualified Data.Map                  as Map
@@ -140,8 +141,9 @@ rotate (Vector3 x y z) e@Entity{rot = Quaternion w1 x1 y1 z1} =
         z2   = cx*cy*sz + sx*sy*cz
         w    = w1 * w2 - (x1 * x2 + y1 * y2 + z1 * z2)
 
+--TODO: This is not right!
 translate :: Vector3 -> Entity a -> Entity a
-translate dir e@Entity{pos = p, rot = r} = e{pos = p + (dir .*. rotFromQuaternion r)}
+translate dir e@Entity{pos = p, rot = r} = e{pos = p + (dir .*. r)}
 
 entityTransform :: Entity a -> Matrix4x4
 entityTransform Entity{pos = p, rot = r, escale = s} = trsMatrix p r s

@@ -6,11 +6,13 @@ import Data.Fixed (mod')
 import qualified Data.IntMap as IntMap
 import qualified Data.Map    as Map
 
+import Debug.Trace
+
 main :: IO ()
 main = runSignal <| players *> terminals *> section1
     where
         players = foldn updatePlayers IntMap.empty
-               <| PlayerTick  <~ tick       ~~ userID
+               <| PlayerTick  <~ tick       ~~ userID ~~ sigOr [isDown keyLShift, isDown keyRShift]
                <> PlayerKeys  <~ wasd       ~~ userID
                <> PlayerMouse <~ mouseDelta ~~ userID
                <> PlayerLog   <~ userJoin   ~~ userID
@@ -29,7 +31,7 @@ data PlayerState   = PlayerIdle
                    deriving (Show, Eq, Generic)
 data PlayerInput   = PlayerKeys  (Double, Double) Int
                    | PlayerMouse (Double, Double) Int
-                   | PlayerTick  (Time, Time)     Int
+                   | PlayerTick  (Time, Time)     Int Bool
                    | PlayerLog   (Int, String)    Int
                    deriving (Show, Eq, Generic)
 
@@ -67,10 +69,10 @@ mkTerminals = map mkT [-3..3]
 
 updatePlayers :: PlayerInput -> IntMap.IntMap (Entity Player) -> IntMap.IntMap (Entity Player)
 updatePlayers input = case input of
-    PlayerTick       t uid -> IntMap.adjust (tickPlayer t)        uid
-    PlayerKeys       k uid -> IntMap.adjust (playerKeysUpdate k)  uid
-    PlayerMouse      m uid -> IntMap.adjust (playerMouseUpdate m) uid
-    PlayerLog (pid, _) uid -> if pid == uid then IntMap.insert uid mkPlayer else id
+    PlayerTick       t uid s -> IntMap.adjust (tickPlayer t s)      uid
+    PlayerKeys       k uid   -> IntMap.adjust (playerKeysUpdate k)  uid
+    PlayerMouse      m uid   -> IntMap.adjust (playerMouseUpdate m) uid
+    PlayerLog (pid, _) uid   -> if pid == uid then IntMap.insert uid mkPlayer else id
 
 playerMouseUpdate :: (Double, Double) -> Entity Player -> Entity Player
 playerMouseUpdate (mx, my) p@Entity{ edata = Player state (px, py) } = p{ edata = Player state (x, y), rot = fromEuler 0 x 0 * fromEuler y 0 0 }
@@ -81,9 +83,9 @@ playerMouseUpdate (mx, my) p@Entity{ edata = Player state (px, py) } = p{ edata 
 playerKeysUpdate :: (Double, Double) -> Entity Player -> Entity Player
 playerKeysUpdate (x, y) p@Entity{ edata = Player _ fpr } = p{ edata = Player (PlayerMoving <| Vector3 x 0 y) fpr }
 
-tickPlayer :: (Double, Double) -> Entity Player -> Entity Player
-tickPlayer (dt, _) p = case p of
-    Entity{ edata = Player (PlayerMoving d) _ } -> translate (d * realToFrac dt * 1.25) p
+tickPlayer :: (Double, Double) -> Bool -> Entity Player -> Entity Player
+tickPlayer (dt, _) s p = case p of
+    Entity{ edata = Player (PlayerMoving d) _ } -> traceShow s <| translate (d * realToFrac dt * if s then 8 else 3) p
     _                                           -> p
 
 updateTerminals :: TerminalInput -> [Entity Terminal] -> [Entity Terminal]
