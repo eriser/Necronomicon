@@ -6,8 +6,6 @@ import Data.Fixed (mod')
 import qualified Data.IntMap as IntMap
 import qualified Data.Map    as Map
 
-import Debug.Trace
-
 main :: IO ()
 main = runSignal <| players *> terminals *> section1
     where
@@ -85,7 +83,7 @@ playerKeysUpdate (x, y) p@Entity{ edata = Player _ fpr } = p{ edata = Player (Pl
 
 tickPlayer :: (Double, Double) -> Bool -> Entity Player -> Entity Player
 tickPlayer (dt, _) s p = case p of
-    Entity{ edata = Player (PlayerMoving d) _ } -> traceShow s <| translate (d * realToFrac dt * if s then 8 else 3) p
+    Entity{ edata = Player (PlayerMoving d) _ } -> translate (d * realToFrac dt * if s then 8 else 3) p
     _                                           -> p
 
 updateTerminals :: TerminalInput -> [Entity Terminal] -> [Entity Terminal]
