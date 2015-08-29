@@ -1,8 +1,10 @@
 import Necronomicon
 import GHC.Generics
 import Data.Binary
-import qualified Data.IntMap as IntMap
 import Data.Fixed (mod')
+
+import qualified Data.IntMap as IntMap
+import qualified Data.Map    as Map
 
 main :: IO ()
 main = runSignal <| players *> terminals *> section1
@@ -99,20 +101,19 @@ tickTerminal (dt, _) t = rotate (realToFrac (dt * 10)) t
 section1 :: Signal ()
 section1 = terrain *> pure ()
     where
-        terrain = foldn (\t e -> setUniform 3 (UniformScalar "time" t) e) mkTerrain <| runTime
+        terrain = foldn (\t e -> setUniform "time" (UniformScalar t) e) mkTerrain <| runTime
 
 mkTerrain :: Entity ()
 mkTerrain = e
     where
         e = (mkEntity ()) { pos = Vector3 (-w * 0.25) (-10) (-w * 0.25), model = Just <| mkModel DefaultLayer terrainMesh terrainMaterial }
         terrainMesh     = mkMesh "simplex" vertices colors uvs indices
-        terrainMaterial = material
-            "terrain-vert.glsl"
-            "terrain-frag.glsl"
-            [UniformTexture "tex1" <| audioTexture 0,
-             UniformTexture "tex2" <| audioTexture 1,
-             UniformTexture "tex3" <| audioTexture 2,
-             UniformScalar  "time" 0]
+        terrainMaterial = material"terrain-vert.glsl" "terrain-frag.glsl" <| Map.fromList <|
+                        [ ("tex1", UniformTexture <| audioTexture 0)
+                        , ("tex2", UniformTexture <| audioTexture 1)
+                        , ("tex3", UniformTexture <| audioTexture 2)
+                        , ("time", UniformScalar  0)
+                        ]
 
         (w,h)            = (256.0, 256.0)
         (tscale,vscale)  = (1 / 6,2.5)

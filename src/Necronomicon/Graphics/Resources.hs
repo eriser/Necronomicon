@@ -40,7 +40,7 @@ data Material = Material
    { materialLoadedShader   :: (Maybe LoadedShader)
    , materialVertexShader   :: String
    , materialFragmentShader :: String
-   , materialUniforms       :: [Uniform]
+   , materialUniforms       :: Map.Map String Uniform
    , materialPrimitiveMode  :: GL.PrimitiveMode
    } deriving (Show, Eq)
 
@@ -54,24 +54,14 @@ data Model = Model
    } deriving (Show, Eq)
 
 data PostRenderingFX = PostRenderingFX (Maybe LoadedPostRenderingFX) String Material              deriving (Show, Eq)
-data Uniform         = UniformTexture String Texture
-                     | UniformScalar  String Double
-                     | UniformVec2    String Vector2
-                     | UniformVec3    String Vector3
-                     | UniformVec4    String Vector4
-                     | MatrixView     String
-                     | Proj           String
+data Uniform         = UniformTexture Texture
+                     | UniformScalar  Double
+                     | UniformVec2    Vector2
+                     | UniformVec3    Vector3
+                     | UniformVec4    Vector4
+                     | MatrixView     
+                     | Proj           
                      deriving (Show, Eq)
-
-uniformName :: Uniform -> String
-uniformName (UniformTexture s _) = s
-uniformName (UniformScalar  s _) = s
-uniformName (UniformVec2    s _) = s
-uniformName (UniformVec3    s _) = s
-uniformName (UniformVec4    s _) = s
-uniformName (MatrixView     s  ) = s
-uniformName (Proj           s  ) = s
-
 
 mkMesh :: String -> [Vector3] -> [Color] -> [Vector2] -> [Int] -> Mesh
 mkMesh = Mesh Nothing
@@ -174,21 +164,21 @@ instance Binary PostRenderingFX where
     get                         = PostRenderingFX Nothing <$> get <*> get
 
 instance Binary Uniform where
-    put (UniformTexture n t) = put (0 :: Word8) >> put n >> put t
-    put (UniformScalar  n s) = put (1 :: Word8) >> put n >> put s
-    put (UniformVec2    n v) = put (2 :: Word8) >> put n >> put v
-    put (UniformVec3    n v) = put (3 :: Word8) >> put n >> put v
-    put (UniformVec4    n v) = put (4 :: Word8) >> put n >> put v
-    put (MatrixView     n  ) = put (5 :: Word8) >> put n
-    put (Proj           n  ) = put (6 :: Word8) >> put n
+    put (UniformTexture t) = put (0 :: Word8) >> put t
+    put (UniformScalar  s) = put (1 :: Word8) >> put s
+    put (UniformVec2    v) = put (2 :: Word8) >> put v
+    put (UniformVec3    v) = put (3 :: Word8) >> put v
+    put (UniformVec4    v) = put (4 :: Word8) >> put v
+    put (MatrixView      ) = put (5 :: Word8) 
+    put (Proj            ) = put (6 :: Word8) 
     get                      = (get :: Get Word8) >>= \t -> case t of
-        0 -> UniformTexture <$> get <*> get
-        1 -> UniformScalar  <$> get <*> get
-        2 -> UniformVec2    <$> get <*> get
-        3 -> UniformVec3    <$> get <*> get
-        4 -> UniformVec4    <$> get <*> get
-        5 -> MatrixView     <$> get
-        _ -> Proj           <$> get
+        0 -> UniformTexture <$> get
+        1 -> UniformScalar  <$> get
+        2 -> UniformVec2    <$> get
+        3 -> UniformVec3    <$> get
+        4 -> UniformVec4    <$> get
+        5 -> return MatrixView     
+        _ -> return Proj           
 
 instance Binary Material where
     put (Material _ vs fs us pm) = do
@@ -333,16 +323,16 @@ loadMat r (Material Nothing vs fs us pr) = do
     where
         sh = shader
             (vs ++ " + " ++ fs)
-            ("modelView" : "proj" : map uniformName us)
+            ("modelView" : "proj" : map fst (Map.toList us))
             (loadVertexShader   vs)
             (loadFragmentShader fs)
 loadMat r (Material sh vs fs us pr) = do
-    us'  <- mapM (loadTextureUniform r) us
+    us' <- mapM (loadTextureUniform r) us
     return $ Material sh vs fs us' pr
 
 loadTextureUniform :: Resources -> Uniform -> IO Uniform
-loadTextureUniform r (UniformTexture name t) = UniformTexture name <$> getTexture r t
-loadTextureUniform _ u                       = return u
+loadTextureUniform r (UniformTexture t) = UniformTexture <$> getTexture r t
+loadTextureUniform _ u                  = return u
 
 getTexture :: Resources -> Texture -> IO Texture
 getTexture _ t@(FontTexture  (Just _) _ _)       = return t
@@ -450,13 +440,13 @@ getPostFX resources dim fx@(PostRenderingFX Nothing name mat) = getPostFX' resou
     Nothing -> return fx
     Just loadedPostFX -> do
         Material lm vs fs us p <- loadMat resources mat
-        return $ PostRenderingFX maybeLoadedPostFX name (Material lm vs fs (map (setPostFXUniformTexture (postRenderTex loadedPostFX)) us) p)
+        return $ PostRenderingFX maybeLoadedPostFX name (Material lm vs fs (Map.map (setPostFXUniformTexture (postRenderTex loadedPostFX)) us) p)
     where
 getPostFX _ _ fx = return fx
 
 setPostFXUniformTexture :: GL.GLuint -> Uniform -> Uniform
-setPostFXUniformTexture t (UniformTexture n (PostRenderTexture Nothing)) = UniformTexture n $ PostRenderTexture $ Just $ GL.TextureObject t
-setPostFXUniformTexture  _ u                                             = u
+setPostFXUniformTexture t (UniformTexture (PostRenderTexture Nothing)) = UniformTexture $ PostRenderTexture $ Just $ GL.TextureObject t
+setPostFXUniformTexture  _ u                                           = u
 
 ------------------------------
 -- RenderData

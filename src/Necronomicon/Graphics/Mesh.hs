@@ -6,6 +6,7 @@ import           Necronomicon.Graphics.Texture
 import           Necronomicon.Linear
 
 import qualified Graphics.Rendering.OpenGL          as GL
+import qualified Data.Map                           as Map
 {-
 
 0,1,---------1,1
@@ -117,24 +118,24 @@ tri triSize color = mkMesh (show triSize ++ "~dyntri") vertices colors uvs indic
         indices  = [0,1,2]
 
 debugDraw :: Color -> Material
-debugDraw (RGBA r g b a) = Material Nothing "colored-vert.glsl" "colored-frag.glsl" [UniformVec4 "baseColor" (Vector4 r g b a)] GL.Lines
-debugDraw (RGB  r g b  ) = Material Nothing "colored-vert.glsl" "colored-frag.glsl" [UniformVec4 "baseColor" (Vector4 r g b 1)] GL.Lines
+debugDraw (RGBA r g b a) = Material Nothing "colored-vert.glsl" "colored-frag.glsl" (Map.fromList [("baseColor", UniformVec4 (Vector4 r g b a))]) GL.Lines
+debugDraw (RGB  r g b  ) = Material Nothing "colored-vert.glsl" "colored-frag.glsl" (Map.fromList [("baseColor", UniformVec4 (Vector4 r g b 1))]) GL.Lines
 
 vertexColored :: Color -> Material
-vertexColored (RGBA r g b a) = material "colored-vert.glsl" "colored-frag.glsl" [UniformVec4 "baseColor" (Vector4 r g b a)]
-vertexColored (RGB  r g b  ) = material "colored-vert.glsl" "colored-frag.glsl" [UniformVec4 "baseColor" (Vector4 r g b 1)]
+vertexColored (RGBA r g b a) = material "colored-vert.glsl" "colored-frag.glsl" $ Map.fromList [("baseColor", UniformVec4 (Vector4 r g b a))]
+vertexColored (RGB  r g b  ) = material "colored-vert.glsl" "colored-frag.glsl" $ Map.fromList [("baseColor", UniformVec4 (Vector4 r g b 1))]
 
 ambient   :: Texture -> Material
-ambient   tex = material "ambient-vert.glsl" "ambient-frag.glsl"   [UniformTexture "tex" tex]
+ambient   tex = material "ambient-vert.glsl" "ambient-frag.glsl"   (Map.fromList [("tex", UniformTexture tex)])
 
 uvTest    :: Texture -> Material
-uvTest    tex = material "ambient-vert.glsl" "uvTest-frag.glsl"    [UniformTexture "tex" tex]
+uvTest    tex = material "ambient-vert.glsl" "uvTest-frag.glsl"    (Map.fromList [("tex", UniformTexture tex)])
 
 colorTest :: Texture -> Material
-colorTest tex = material "ambient-vert.glsl" "colorTest-frag.glsl" [UniformTexture "tex" tex]
+colorTest tex = material "ambient-vert.glsl" "colorTest-frag.glsl" (Map.fromList [("tex", UniformTexture tex)])
 
 blur      :: Texture -> Material
-blur      tex = material "ambient-vert.glsl" "blur-frag.glsl"      [UniformTexture "tex" tex]
+blur      tex = material "ambient-vert.glsl" "blur-frag.glsl"      (Map.fromList [("tex", UniformTexture tex)])
 
-material :: String -> String -> [Uniform] -> Material
+material :: String -> String -> Map.Map String Uniform -> Material
 material vs fs us = Material Nothing vs fs us GL.Triangles

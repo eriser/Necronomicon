@@ -11,8 +11,9 @@ import Foreign.Storable
 import Foreign.Ptr
 import Foreign.C.Types
 import Foreign.Marshal.Array
-import qualified Graphics.Rendering.OpenGL as GL
 
+import qualified Graphics.Rendering.OpenGL as GL
+import qualified Data.Map                  as Map
 -------------------------------------------------------
 -- Entity
 -------------------------------------------------------
@@ -146,12 +147,10 @@ entityTransform :: Entity a -> Matrix4x4
 entityTransform Entity{pos = p, rot = r, escale = s} = trsMatrix p r s
 
 --TODO: This ridiculousness makes a good case for a Lens type system....
-setUniform :: Int -> Uniform -> Entity a -> Entity a
-setUniform i u e = case model e of
+setUniform :: String -> Uniform -> Entity a -> Entity a
+setUniform n u e = case model e of
     Nothing -> e
-    Just m  -> e{ model = Just $ m{modelMaterial = (modelMaterial m){materialUniforms = map setU $ zip [0..] $ materialUniforms $ modelMaterial m}}}
-    where
-        setU (ui, u') = if ui == i then u else u'
+    Just m  -> e{ model = Just $ m{modelMaterial = (modelMaterial m){materialUniforms = Map.insert n u $ materialUniforms $ modelMaterial m}}}
 
 setRenderDataPtr :: Entity a -> Ptr RenderData -> IO ()
 setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !(Vector3 sx sy sz) _ (Just (Model layer (Mesh (Just loadedMesh) _ _ _ _ _) (Material (Just (program, GL.UniformLocation  mv : GL.UniformLocation  pr : ulocs, vloc, cloc, uloc)) _ _ uns _))) _ _ _ _) rdptr = do
@@ -202,8 +201,8 @@ setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !
     let len  = length ulocs
     prevLen <- peekByteOff ptr 152 :: IO CInt
     if len == fromIntegral prevLen
-        then peekByteOff ptr 160 >>= \lptr -> setUniforms lptr 0 ulocs uns
-        else pokeByteOff ptr 152 (fromIntegral len :: CInt) >> (mallocArray len :: IO (Ptr UniformRaw)) >>= \lptr -> setUniforms lptr 0 ulocs uns >> pokeByteOff ptr 160 lptr
+        then peekByteOff ptr 160 >>= \lptr -> setUniforms lptr 0 ulocs (Map.toList uns :: [(String, Uniform)])
+        else pokeByteOff ptr 152 (fromIntegral len :: CInt) >> (mallocArray len :: IO (Ptr UniformRaw)) >>= \lptr -> setUniforms lptr 0 ulocs (Map.toList uns :: [(String, Uniform)]) >> pokeByteOff ptr 160 lptr
 
     pokeByteOff ptr 168 mv
     pokeByteOff ptr 172 pr
@@ -215,21 +214,21 @@ setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !
         y2 = y * y
         z2 = z * z
 
-        setUniforms uptr i (GL.UniformLocation l : ls) (uni : us) = case uni of
-            UniformScalar  _ v -> do
+        setUniforms uptr i (GL.UniformLocation l : ls) (uni : us) = case snd uni of
+            UniformScalar  v -> do
                 pokeByteOff p 0 (1 :: CInt)
                 pokeByteOff p 4 l
                 pokeByteOff p 8  (realToFrac v  :: GL.GLfloat)
                 setUniforms uptr (i + 24) ls us
 
-            UniformVec2    _ (Vector2 ux uy) -> do
+            UniformVec2    (Vector2 ux uy) -> do
                 pokeByteOff p 0 (2 :: CInt)
                 pokeByteOff p 4 l
                 pokeByteOff p 8  (realToFrac ux :: GL.GLfloat)
                 pokeByteOff p 12 (realToFrac uy :: GL.GLfloat)
                 setUniforms uptr (i + 24) ls us
 
-            UniformVec3    _ (Vector3 ux uy uz) -> do
+            UniformVec3    (Vector3 ux uy uz) -> do
                 pokeByteOff p 0 (3 :: CInt)
                 pokeByteOff p 4 l
                 pokeByteOff p 8  (realToFrac ux :: GL.GLfloat)
@@ -237,7 +236,7 @@ setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !
                 pokeByteOff p 16 (realToFrac uz :: GL.GLfloat)
                 setUniforms uptr (i + 24) ls us
 
-            UniformVec4    _ (Vector4 ux uy uz uw) -> do
+            UniformVec4    (Vector4 ux uy uz uw) -> do
                 pokeByteOff p 0 (4 :: CInt)
                 pokeByteOff p 4 l
                 pokeByteOff p 8  (realToFrac ux :: GL.GLfloat)
@@ -246,28 +245,28 @@ setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !
                 pokeByteOff p 20 (realToFrac uw :: GL.GLfloat)
                 setUniforms uptr (i + 24) ls us
 
-            UniformTexture _ (FontTexture  (Just t) _ _) -> do
+            UniformTexture (FontTexture  (Just t) _ _) -> do
                 pokeByteOff p 0 (0 :: CInt)
                 pokeByteOff p 4 l
                 pokeByteOff p 8  (unsafeCoerce t :: GL.GLuint)
                 pokeByteOff p 12 (0 :: GL.GLuint)
                 setUniforms uptr (i + 24) ls us
 
-            UniformTexture _ (TGATexture   (Just t)   _) -> do
+            UniformTexture (TGATexture   (Just t)   _) -> do
                 pokeByteOff p 0 (0 :: CInt)
                 pokeByteOff p 4 l
                 pokeByteOff p 8 (unsafeCoerce t :: GL.GLuint)
                 pokeByteOff p 12 (0 :: GL.GLuint)
                 setUniforms uptr (i + 24) ls us
 
-            UniformTexture _ (AudioTexture (Just t)   _) -> do
+            UniformTexture (AudioTexture (Just t)   _) -> do
                 pokeByteOff p 0 (0 :: CInt)
                 pokeByteOff p 4 l
                 pokeByteOff p 8 (unsafeCoerce t :: GL.GLuint)
                 pokeByteOff p 12 (0 :: GL.GLuint)
                 setUniforms uptr (i + 24) ls us
 
-            UniformTexture _ (PostRenderTexture (Just t)) -> do
+            UniformTexture (PostRenderTexture (Just t)) -> do
                 pokeByteOff p 0 (0 :: CInt)
                 pokeByteOff p 4 l
                 pokeByteOff p 8 (unsafeCoerce t :: GL.GLuint)
@@ -326,8 +325,8 @@ setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !
     let len  = length ulocs
     prevLen <- peekByteOff ptr 152 :: IO CInt
     if len == fromIntegral prevLen
-        then peekByteOff ptr 160 >>= \lptr -> setUniforms lptr 0 ulocs uns
-        else pokeByteOff ptr 152 (fromIntegral len :: CInt) >> (mallocArray len :: IO (Ptr UniformRaw)) >>= \lptr -> setUniforms lptr 0 ulocs uns >> pokeByteOff ptr 160 lptr
+        then peekByteOff ptr 160 >>= \lptr -> setUniforms lptr 0 ulocs (Map.toList uns :: [(String, Uniform)])
+        else pokeByteOff ptr 152 (fromIntegral len :: CInt) >> (mallocArray len :: IO (Ptr UniformRaw)) >>= \lptr -> setUniforms lptr 0 ulocs (Map.toList uns :: [(String, Uniform)]) >> pokeByteOff ptr 160 lptr
 
     pokeByteOff ptr 168 mv
     pokeByteOff ptr 172 pr
@@ -339,21 +338,21 @@ setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !
         y2 = y * y
         z2 = z * z
 
-        setUniforms uptr i (GL.UniformLocation l : ls) (uni : us) = case uni of
-            UniformScalar  _ v -> do
+        setUniforms uptr i (GL.UniformLocation l : ls) (uni : us) = case snd uni of
+            UniformScalar  v -> do
                 pokeByteOff p 0 (1 :: CInt)
                 pokeByteOff p 4 l
                 pokeByteOff p 8  (realToFrac v  :: GL.GLfloat)
                 setUniforms uptr (i + 24) ls us
 
-            UniformVec2    _ (Vector2 ux uy) -> do
+            UniformVec2    (Vector2 ux uy) -> do
                 pokeByteOff p 0 (2 :: CInt)
                 pokeByteOff p 4 l
                 pokeByteOff p 8  (realToFrac ux :: GL.GLfloat)
                 pokeByteOff p 12 (realToFrac uy :: GL.GLfloat)
                 setUniforms uptr (i + 24) ls us
 
-            UniformVec3    _ (Vector3 ux uy uz) -> do
+            UniformVec3    (Vector3 ux uy uz) -> do
                 pokeByteOff p 0 (3 :: CInt)
                 pokeByteOff p 4 l
                 pokeByteOff p 8  (realToFrac ux :: GL.GLfloat)
@@ -361,7 +360,7 @@ setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !
                 pokeByteOff p 16 (realToFrac uz :: GL.GLfloat)
                 setUniforms uptr (i + 24) ls us
 
-            UniformVec4    _ (Vector4 ux uy uz uw) -> do
+            UniformVec4    (Vector4 ux uy uz uw) -> do
                 pokeByteOff p 0 (4 :: CInt)
                 pokeByteOff p 4 l
                 pokeByteOff p 8  (realToFrac ux :: GL.GLfloat)
@@ -370,28 +369,28 @@ setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !
                 pokeByteOff p 20 (realToFrac uw :: GL.GLfloat)
                 setUniforms uptr (i + 24) ls us
 
-            UniformTexture _ (FontTexture  (Just t) _ _) -> do
+            UniformTexture (FontTexture  (Just t) _ _) -> do
                 pokeByteOff p 0 (0 :: CInt)
                 pokeByteOff p 4 l
                 pokeByteOff p 8  (unsafeCoerce t :: GL.GLuint)
                 pokeByteOff p 12 (0 :: GL.GLuint)
                 setUniforms uptr (i + 24) ls us
 
-            UniformTexture _ (TGATexture   (Just t)   _) -> do
+            UniformTexture (TGATexture   (Just t)   _) -> do
                 pokeByteOff p 0 (0 :: CInt)
                 pokeByteOff p 4 l
                 pokeByteOff p 8 (unsafeCoerce t :: GL.GLuint)
                 pokeByteOff p 12 (0 :: GL.GLuint)
                 setUniforms uptr (i + 24) ls us
 
-            UniformTexture _ (AudioTexture (Just t)   _) -> do
+            UniformTexture (AudioTexture (Just t)   _) -> do
                 pokeByteOff p 0 (0 :: CInt)
                 pokeByteOff p 4 l
                 pokeByteOff p 8 (unsafeCoerce t :: GL.GLuint)
                 pokeByteOff p 12 (0 :: GL.GLuint)
                 setUniforms uptr (i + 24) ls us
 
-            UniformTexture _ (PostRenderTexture (Just t)) -> do
+            UniformTexture (PostRenderTexture (Just t)) -> do
                 pokeByteOff p 0 (0 :: CInt)
                 pokeByteOff p 4 l
                 pokeByteOff p 8 (unsafeCoerce t :: GL.GLuint)
