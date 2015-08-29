@@ -17,6 +17,9 @@
         burst noise
         Diamond square (plasma)
 
+    various cool pattern generators (fractal, chaos, generative, etc..., etc...)
+    chord/scale monad
+    meta-patterns, pattern selectors, pattern filters
     bit twiddling ugens (support for Data.Bits type class)
     beat based ugens (bseq, blace, brand, etc...)
     better line and xline implementations (with range arguments)
@@ -352,11 +355,11 @@ void print_sfinfo(SF_INFO sfinfo)
 {
     printf("SF_INFO { frames: %u, samplerate: %i, channels: %i, format: %i, sections: %i, seekable: %i }\n",
         (uint32_t) sfinfo.frames,
-        (int32_t) sfinfo.samplerate,
-        (int32_t) sfinfo.channels,
-        (int32_t) sfinfo.format,
-        (int32_t) sfinfo.sections,
-        (int32_t) sfinfo.seekable
+        (int32_t)  sfinfo.samplerate,
+        (int32_t)  sfinfo.channels,
+        (int32_t)  sfinfo.format,
+        (int32_t)  sfinfo.sections,
+        (int32_t)  sfinfo.seekable
     );
 }
 
