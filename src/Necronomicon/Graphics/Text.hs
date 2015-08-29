@@ -1,10 +1,6 @@
-module Necronomicon.Graphics.Text (drawText,
-                                   renderFont,
-                                   charMetrics,
-                                   fitTextIntoBounds) where
+module Necronomicon.Graphics.Text where
 
 import           Control.Monad
-import           Data.IORef
 import           Data.List                                           (foldl')
 import           Data.Maybe                                          (fromMaybe)
 import           Foreign
@@ -16,18 +12,43 @@ import qualified Graphics.Rendering.FreeType.Internal.GlyphMetrics   as Metrics
 import           Graphics.Rendering.FreeType.Internal.GlyphSlot
 import           Graphics.Rendering.FreeType.Internal.Library
 import           Graphics.Rendering.FreeType.Internal.PrimitiveTypes
-import           Graphics.Rendering.OpenGL                           hiding (bitmap)
+import qualified Graphics.Rendering.OpenGL                           as GL hiding (bitmap)
 import           Graphics.Rendering.OpenGL.Raw                       (gl_TEXTURE_2D,glTexParameteri,gl_RED)
 import           Graphics.Rendering.OpenGL.Raw.EXT.TextureSwizzle    (gl_TEXTURE_SWIZZLE_G_EXT,gl_TEXTURE_SWIZZLE_B_EXT,gl_TEXTURE_SWIZZLE_A_EXT)
 
 import qualified Data.Map                                            as Map
-
+import           Data.Binary
 import qualified Necronomicon.Graphics.Color                         as Color (Color (..), white)
-import           Necronomicon.Graphics.Resources
-import qualified Necronomicon.Graphics.Texture                       as NecroTex
-import qualified Necronomicon.Linear                                 as Linear
+import           Necronomicon.Graphics.Texture
+import           Necronomicon.Linear
 import           Paths_Necronomicon
 
+
+data Font            = Font {fontKey :: String, fontSize :: Int}                                  deriving (Show, Eq)
+
+instance Binary Font where
+    put (Font k s) = put k >> put s
+    get            = Font <$> get <*> get
+
+data LoadedFont = LoadedFont
+  { atlas                 :: GL.TextureObject
+  , atlasWidth            :: Double
+  , atlasHeight           :: Double
+  , characters            :: Map.Map Char CharMetric
+  , characterVertexBuffer :: GL.BufferObject
+  , characterIndexBuffer  :: GL.BufferObject }   deriving (Show)
+
+data CharMetric = CharMetric
+  { character             :: Char
+  , advanceX              :: Double
+  , advanceY              :: Double
+  , bearingX              :: Double
+  , bearingY              :: Double
+  , charWidth             :: Double
+  , charHeight            :: Double
+  , charLeft              :: Double
+  , charTop               :: Double
+  , charTX                :: Double } deriving (Show)
 
 
 runFreeType :: IO FT_Error -> IO ()
@@ -46,9 +67,6 @@ fontFace ft fp = withCString fp $ \str ->
         runFreeType $ ft_New_Face ft str 0 ptr
         peek ptr
 
-drawText :: String -> Font -> (NecroTex.Texture -> Material) -> Model
-drawText text font material = FontRenderer text font (material NecroTex.EmptyTexture)
-
 loadFontAtlas :: Font -> IO LoadedFont
 loadFontAtlas font = do
     putStrLn $ "loadFontAtlas: " ++ fontKey font
@@ -60,16 +78,16 @@ loadFontAtlas font = do
     cmetrics <- mapM (getCharMetrics ff) [32..128]
     let (atlasWidth',atlasHeight') = foldr (\metric (w,h) -> (w + charWidth metric + 1, max h (charHeight metric))) (0,0) cmetrics
 
-    atlasTexture <- NecroTex.newBoundTexUnit 0
-    rowAlignment Unpack $= 1
+    atlasTexture <- newBoundTexUnit 0
+    GL.rowAlignment GL.Unpack GL.$= 1
 
-    let tsize = TextureSize2D (floor atlasWidth') (floor atlasHeight')
+    let tsize = GL.TextureSize2D (floor atlasWidth') (floor atlasHeight')
     putStrLn $ "Atlas size: " ++ show tsize
-    texImage2D Texture2D NoProxy 0 RGBA8 tsize 0 $ PixelData Red UnsignedByte nullPtr
+    GL.texImage2D GL.Texture2D GL.NoProxy 0 GL.RGBA8 tsize 0 $ GL.PixelData GL.Red GL.UnsignedByte nullPtr
 
-    textureFilter   Texture2D   $= ((Linear', Nothing), Linear')
-    textureWrapMode Texture2D S $= (Repeated, ClampToEdge)
-    textureWrapMode Texture2D T $= (Repeated, ClampToEdge)
+    GL.textureFilter   GL.Texture2D      GL.$= ((GL.Linear', Nothing), GL.Linear')
+    GL.textureWrapMode GL.Texture2D GL.S GL.$= (GL.Repeated, GL.ClampToEdge)
+    GL.textureWrapMode GL.Texture2D GL.T GL.$= (GL.Repeated, GL.ClampToEdge)
 
     let (_,charMap) = foldr (createCharMap atlasWidth') (0,Map.empty) cmetrics
 
@@ -79,10 +97,10 @@ loadFontAtlas font = do
     glTexParameteri gl_TEXTURE_2D gl_TEXTURE_SWIZZLE_B_EXT (fromIntegral gl_RED)
     glTexParameteri gl_TEXTURE_2D gl_TEXTURE_SWIZZLE_A_EXT (fromIntegral gl_RED)
 
-    vertexBuffer:_ <- genObjectNames 1
-    indexBuffer :_ <- genObjectNames 1
+    vertexBuffer : _ <- GL.genObjectNames 1
+    indexBuffer  : _ <- GL.genObjectNames 1
 
-    return $ LoadedFont (NecroTex.LoadedTexture atlasTexture) atlasWidth' atlasHeight' charMap vertexBuffer indexBuffer
+    return $ LoadedFont atlasTexture atlasWidth' atlasHeight' charMap vertexBuffer indexBuffer
 
 addCharToAtlas :: Double -> FT_Face -> Map.Map Char CharMetric -> Int -> IO()
 addCharToAtlas w ff charMap char = do
@@ -93,12 +111,12 @@ addCharToAtlas w ff charMap char = do
     bmp    <- peek $ bitmap slot
     case Map.lookup (toEnum char) charMap of
         Nothing         -> return ()
-        Just charMetric -> texSubImage2D
-                           Texture2D
+        Just charMetric -> GL.texSubImage2D
+                           GL.Texture2D
                            0
-                           (TexturePosition2D (round $ charTX charMetric * w) 0)
-                           (TextureSize2D     (round $ charWidth charMetric) (round $ charHeight charMetric))
-                           (PixelData Red UnsignedByte $ buffer bmp)
+                           (GL.TexturePosition2D (round $ charTX charMetric * w) 0)
+                           (GL.TextureSize2D     (round $ charWidth charMetric) (round $ charHeight charMetric))
+                           (GL.PixelData GL.Red GL.UnsignedByte $ buffer bmp)
 
 getCharMetrics :: FT_Face -> Int -> IO CharMetric
 getCharMetrics ff char = do
@@ -136,33 +154,20 @@ charMetrics font = do
     cmetrics <- mapM (getCharMetrics ff) [32..128]
     return $ foldr (\cm -> Map.insert (character cm) cm) Map.empty cmetrics
 
-getFont :: Resources -> Font -> IO LoadedFont
-getFont resources font = readIORef (fontsRef resources) >>= \fonts ->
-    case Map.lookup (fontKey font) fonts of
-        Nothing    -> loadFontAtlas font >>= \font' -> (writeIORef (fontsRef resources) $ Map.insert (fontKey font) font' fonts) >> return font'
-        Just font' -> return font'
-
 fontScale :: Double
 fontScale = 1 / 1080
 
---Change dynamic mkMeshes to "load" their buffers the first time, so users don't have to supply them
-renderFont :: String -> Font -> Resources -> IO (NecroTex.Texture, Mesh)
-renderFont text font resources = do
-    loadedFont <- getFont resources font
-    let characterMesh                       = textMesh (characters loadedFont) (atlasWidth loadedFont) (atlasHeight loadedFont)
-        (vertices,colors,uvs,indices,_,_,_) = foldl' characterMesh ([],[],[],[],0,0,0) text
-        fontMesh                            = mkDynamicMesh (fontKey font) vertices colors uvs indices
-    return (atlas loadedFont, fontMesh)
-
-textMesh :: Map.Map Char CharMetric ->
+--TODO: Add screen ratio in here?!?!
+textMesh :: Double ->
+            Map.Map Char CharMetric ->
             Double ->
             Double ->
-            ([Linear.Vector3],[Color.Color],[Linear.Vector2],[Int],Int,Double,Double) ->
+            ([Vector3],[Color.Color],[Vector2],[Int],Int,Double,Double) ->
             Char ->
-            ([Linear.Vector3],[Color.Color],[Linear.Vector2],[Int],Int,Double,Double)
-textMesh chMetrics aWidth aHeight (vertices,colors,uvs,indices,count,x,y) char
-    | '\n' <- char = (vertices ,colors ,uvs ,indices ,count    ,0   ,y + aHeight * fontScale)
-    | otherwise    = (vertices',colors',uvs',indices',count + 4,x+ax,y)
+            ([Vector3],[Color.Color],[Vector2],[Int],Int,Double,Double)
+textMesh ratio chMetrics aWidth aHeight (vertices,colors,uvs,indices,count,x,y) char
+    | '\n' <- char = (vertices , colors , uvs , indices , count    , 0     , y + aHeight * fontScale)
+    | otherwise    = (vertices', colors', uvs', indices', count + 4, x + ax, y)
     where
         charMetric = fromMaybe (CharMetric (toEnum 0) 0 0 0 0 0 0 0 0 0) $ Map.lookup char chMetrics
         w          = charWidth  charMetric * fontScale
@@ -172,15 +177,15 @@ textMesh chMetrics aWidth aHeight (vertices,colors,uvs,indices,count,x,y) char
         ax         = advanceX   charMetric * fontScale
         tx         = charTX     charMetric
 
-        vertices'  = Linear.Vector3 (l+x)   (y - t     + aHeight * fontScale) 0  :
-                     Linear.Vector3 (l+x+w) (y - t     + aHeight * fontScale) 0  :
-                     Linear.Vector3 (l+x)   (y - t + h + aHeight * fontScale) 0  :
-                     Linear.Vector3 (l+x+w) (y - t + h + aHeight * fontScale) 0  : vertices
+        vertices'  = Vector3 ((l + x )    * ratio) (y - t     + aHeight * fontScale) 0  :
+                     Vector3 ((l + x + w) * ratio) (y - t     + aHeight * fontScale) 0  :
+                     Vector3 ((l + x )    * ratio) (y - t + h + aHeight * fontScale) 0  :
+                     Vector3 ((l + x + w) * ratio) (y - t + h + aHeight * fontScale) 0  : vertices
         colors'    = Color.white : Color.white : Color.white : Color.white : colors
-        uvs'       = Linear.Vector2 (tx                                   ) 0 :
-                     Linear.Vector2 (tx + (charWidth  charMetric) / aWidth) 0 :
-                     Linear.Vector2 (tx                                   ) ((charHeight charMetric) / aHeight) :
-                     Linear.Vector2 (tx + (charWidth  charMetric) / aWidth) ((charHeight charMetric) / aHeight) : uvs
+        uvs'       = Vector2 (tx                                   ) 0 :
+                     Vector2 (tx + (charWidth  charMetric) / aWidth) 0 :
+                     Vector2 (tx                                   ) ((charHeight charMetric) / aHeight) :
+                     Vector2 (tx + (charWidth  charMetric) / aWidth) ((charHeight charMetric) / aHeight) : uvs
         indices'   = count + 2 : count + 0 : count + 1 : count + 3 : count + 2 : count + 1 : indices
 
 type TextWord = (String,Double)

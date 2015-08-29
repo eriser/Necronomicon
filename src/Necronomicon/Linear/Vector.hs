@@ -152,6 +152,7 @@ instance LinearMath Double Vector3 where
     (.+.) v1 v2    = apply (+) v1 v2
     (.-.) v1 v2    = apply (-) v1 v2
     (.*.) v1 v2    = apply (*) v1 v2
+    {-# INLINE (.*.) #-}
     (./.) v1 v2    = apply (/) v1 v2
     apply f x (Vector3 xx yy zz) = Vector3 (f x xx) (f x yy) (f x zz)
 

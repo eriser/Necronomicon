@@ -6,6 +6,7 @@ import Prelude
 import Necronomicon.Utility
 import Necronomicon.Linear.Vector
 import Necronomicon.Linear.Quaternion
+import Necronomicon.Linear.Math
 import Foreign.Ptr
 import Foreign.Storable
 import Foreign.C.Types
@@ -183,11 +184,11 @@ instance LinearMath Vector2 Matrix2x2 where
 
 instance LinearMath Vector3 Matrix3x3 where
     type Return Vector3 Matrix3x3    = Vector3
-    (.*.) !(Vector3 x y z) !(Matrix3x3 a b c d e f g h i) =
+    (.*.) !(Vector3 x y z) !(Matrix3x3 m00 m01 m02 m10 m11 m12 m20 m21 m22) =
         Vector3
-        (x*a+y*d+z*g)
-        (x*b+y*e+z*h)
-        (x*c+y*f+z*i)
+        (x * m00 + y * m10 + z * m20)
+        (x * m01 + y * m11 + z * m21)
+        (x * m02 + y * m12 + z * m22)
     (.+.) _ _ = undefined
     (.-.) _ _ = undefined
     (./.) _ _ = undefined
@@ -340,14 +341,18 @@ orthoMatrix l r b t n f = Matrix4x4
                           0       0       0          1
 
 perspMatrix :: Double -> Double -> Double -> Double -> Matrix4x4
-perspMatrix fov aspect near far =
-    Matrix4x4
-    (negate $ f/aspect)  0  0                        0
-    0                  (-f) 0                        0
-    0                    0 ((near+far)/(near-far)) ((2*far*near)/(near-far))
-    0                    0 (-1)                      0
+perspMatrix fov aspect near far = Matrix4x4
+    a 0 0 0
+    0 b 0 0
+    0 0 c d
+    0 0 1 0
     where
-        f = 1 / tan (fov / 2)
+        a     = 1 / (tan fov' * aspect)
+        b     = 1 /  tan fov'
+        c     = (negate near - far)  / range
+        d     = (2 * far * near)     / range
+        fov'  = degToRad $ fov * 0.5
+        range = near - far
 
 mat4ToList :: Matrix4x4 -> [Double]
 mat4ToList !(Matrix4x4 a b c d e f g h i j k l m n o p) = [a,b,c,d,e,f,g,h,i,j,k,l,m,n,o,p]

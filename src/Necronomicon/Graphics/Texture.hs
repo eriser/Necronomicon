@@ -12,21 +12,26 @@ import           Foreign
 import           Foreign.C
 import           Data.Binary
 
-data Texture = TGATexture   (Maybe GL.TextureObject) String
-             | AudioTexture Int
+
+data Texture = TGATexture        (Maybe GL.TextureObject) String
+             | FontTexture       (Maybe GL.TextureObject) String Int
+             | AudioTexture      (Maybe GL.TextureObject) Int
+             | PostRenderTexture (Maybe GL.TextureObject)
              | EmptyTexture
-             | LoadedTexture GL.TextureObject
              deriving (Show, Eq)
 
 instance Binary Texture where
-    put (TGATexture  _ s) = put (0 :: Word8) >> put s
-    put (AudioTexture  i) = put (1 :: Word8) >> put i
-    put (EmptyTexture   ) = put (2 :: Word8)
-    put (LoadedTexture _) = put (2 :: Word8)
+    put (TGATexture   _ s    ) = put (0 :: Word8) >> put s
+    put (AudioTexture _ i    ) = put (1 :: Word8) >> put i
+    put (FontTexture  _ f s  ) = put (2 :: Word8) >> put f >> put s
+    put (PostRenderTexture _ ) = put (3 :: Word8)
+    put (EmptyTexture        ) = put (4 :: Word8)
 
     get = (get :: Get Word8) >>= \t -> case t of
-        0 -> TGATexture   Nothing <$> (get :: Get String)
-        1 -> AudioTexture         <$> (get :: Get Int)
+        0 -> TGATexture   Nothing <$> get
+        1 -> AudioTexture Nothing <$> get
+        2 -> FontTexture  Nothing <$> get <*> get
+        3 -> return $ PostRenderTexture Nothing
         _ -> return EmptyTexture
 
 newBoundTexUnit :: Int -> IO GL.TextureObject
@@ -54,13 +59,12 @@ loadAudioTexture i = do
     where
         buf = advancePtr outBusBuffers (512 * i)
 
-setAudioTexture :: Int -> GL.TextureObject -> IO GL.TextureObject
+setAudioTexture :: Int -> GL.TextureObject -> IO ()
 setAudioTexture index tex = do
     GL.texture        GL.Texture2D GL.$= GL.Enabled
     GL.activeTexture               GL.$= GL.TextureUnit 0
     GL.textureBinding GL.Texture2D GL.$= Just tex
     GL.texSubImage1D  GL.Texture1D 0 (GL.TexturePosition1D 0) (GL.TextureSize1D 512) (GL.PixelData GL.Red GL.Float buf)
-    return tex
     where
         buf = advancePtr outBusBuffers (512 * index)
 

@@ -146,8 +146,8 @@ void draw_render_data( render_data_t* render_data, GLuint length, GLint layerMas
             {
                 case 0:
                     glActiveTexture(uniform.texture_uniform.u);
+                    glUniform1i(uniform.location, 0);
                     glBindTexture(GL_TEXTURE_2D, uniform.texture_uniform.t);
-                    glUniform1i(uniform.location, uniform.texture_uniform.t);
                     break;
                 case 1:
                     glUniform1f(uniform.location, uniform.scalar_uniform.x);
