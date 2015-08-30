@@ -43,5 +43,5 @@ receiveWithLength nsocket = Control.Exception.catch trySend onFailure
             Nothing -> return IncorrectLength
             Just len' -> if len' == 0
                 then return ShutdownMessage
-                else recv nsocket len' >>= return . Receive
+                else putStrLn ("Receiving message of length: " ++ show len') >> recv nsocket len' >>= return . Receive
         onFailure e = return $ Exception e

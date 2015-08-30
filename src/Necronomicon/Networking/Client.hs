@@ -40,7 +40,7 @@ startup client serverIPAddress sigstate = do
     where
         hints     = Just $ defaultHints {addrSocketType = Stream}
         getSocket = do
-            (serveraddr:_) <- getAddrInfo hints (Just serverIPAddress) (Just serverPort)
+            serveraddr : _ <- getAddrInfo hints (Just serverIPAddress) (Just serverPort)
             sock           <- socket AF_INET Stream defaultProtocol
             -- setSocketOption sock KeepAlive 1
             setSocketOption sock NoDelay   1
