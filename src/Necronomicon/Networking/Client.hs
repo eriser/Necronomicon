@@ -36,15 +36,15 @@ startup client serverIPAddress sigstate = do
     _ <- forkIO $ sender           client sock
     atomically  $ writeTChan (signalsInbox sigstate) $ NetStatusEvent Running
     sendLoginMessage client
-    -- forkIO $ testNetworking   client
     listener client sock serverIPAddress sigstate
     where
-        hints     = Just $ defaultHints {addrSocketType = Stream}
+        -- hints     = Just $ defaultHints {addrSocketType = Stream}
+        hints = Just $ defaultHints {addrSocketType = Stream}
         getSocket = do
-            (serveraddr:_) <- getAddrInfo hints (Just serverIPAddress) (Just serverPort)
+            serveraddr : _ <- getAddrInfo hints (Just serverIPAddress) (Just serverPort)
             sock           <- socket AF_INET Stream defaultProtocol
             -- setSocketOption sock KeepAlive 1
-            setSocketOption sock NoDelay   1
+            -- setSocketOption sock NoDelay   1
             setSocketOption sock ReuseAddr 1
             return (sock,addrAddress serveraddr)
 
@@ -94,9 +94,9 @@ aliveLoop client sock = getCurrentTime >>= \t -> executeIfConnected client (send
 --Reconnecting causing char error on server!?
 listener :: Client -> Socket -> String -> SignalState -> IO ()
 listener client sock serverIPAddress sigstate = receiveWithLength sock >>= \maybeMsg -> case maybeMsg of
-    Exception     e -> putStrLn ("listener Exception: " ++ show e)         >> shutdownClient
-    ShutdownMessage -> putStrLn "Message has zero length. Shutting down."  >> shutdownClient
-    IncorrectLength -> putStrLn "Message is incorrect length! Ignoring..." >> shutdownClient
+    Exception     e -> putStrLn ("listener Exception: " ++ show e)             >> shutdownClient
+    ShutdownMessage -> putStrLn "Message has zero length. Shutting down."      >> shutdownClient
+    IncorrectLength -> putStrLn "Message is incorrect length! Ignoring..."     >> listener client sock serverIPAddress sigstate
     Receive     msg -> if B.null msg
         then shutdownClient
         else atomically (writeTChan (clientInBox client) msg) >> listener client sock serverIPAddress sigstate

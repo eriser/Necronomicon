@@ -2,6 +2,7 @@ module Necronomicon.Networking.Server (startServer,serverPort,clientPort) where
 
 import Prelude
 import qualified Data.ByteString.Lazy  as B
+-- import qualified Data.ByteString as B
 
 import Control.Monad (when)
 import Control.Concurrent (forkIO,threadDelay)
@@ -26,13 +27,15 @@ data User = User
     , userAddress   :: SockAddr
     , userName      :: String
     , userAliveTime :: UTCTime
-    , userID        :: Int }
+    , userID        :: Int 
+    }
     deriving (Show)
 
 data Server = Server
     { serverUsers           :: TVar  (Map.Map SockAddr User)
     , serverOutBox          :: TChan (User,B.ByteString)
-    , serverBroadcastOutBox :: TChan (Maybe SockAddr,B.ByteString) }
+    , serverBroadcastOutBox :: TChan (Maybe SockAddr,B.ByteString) 
+    }
 
 serverPort :: String
 serverPort = "31337"
@@ -60,7 +63,8 @@ startServer = print "Starting a server." >> (withSocketsDo $ bracket getSocket s
             (serveraddr : _) <- getAddrInfo hints Nothing (Just serverPort)
             sock             <- socket AF_INET Stream defaultProtocol
 
-            setSocketOption sock ReuseAddr   1
+            setSocketOption sock ReuseAddr 1
+            -- setSocketOption sock NoDelay   1
             bindSocket sock (addrAddress serveraddr)
             listen sock 3
             return sock
@@ -96,7 +100,7 @@ acceptLoop server nsocket = forever $ do
         then return ()
         else do
             -- setSocketOption newUserSocket KeepAlive 1
-            setSocketOption newUserSocket NoDelay   1
+            -- setSocketOption newUserSocket NoDelay   1
             putStrLn $ "Accepting connection from user at: " ++ show newUserAddress
             _ <- forkIO $ userListen newUserSocket newUserAddress server
             return ()
@@ -107,7 +111,7 @@ userListen nsocket addr server = isConnected nsocket >>= \connected -> if not co
     else receiveWithLength nsocket >>= \maybeMessage -> case maybeMessage of
         Exception     e -> putStrLn ("userListen Exception: " ++ show e) >> userListen nsocket addr server
         ShutdownMessage -> putStrLn "Message has zero length. Shutting down userListen loop and removing user." >> close nsocket >> atomically (modifyTVar (serverUsers server) $ Map.delete addr)
-        IncorrectLength -> putStrLn "Message is incorrect length! Ignoring..." -- >> userListen nsocket addr stopVar server
+        IncorrectLength -> putStrLn "Message is incorrect length! Ignoring..."     >> userListen nsocket addr server
         Receive     msg -> if B.null msg
             then putStrLn "Message has zero length. Shutting down userListen loop and removing users." >> close nsocket >> atomically (modifyTVar (serverUsers server) $ Map.delete addr)
             else processMessage server addr nsocket msg >>= \shouldQuit -> if shouldQuit

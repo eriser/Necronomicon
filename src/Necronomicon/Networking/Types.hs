@@ -3,7 +3,7 @@ module Necronomicon.Networking.Types where
 import Control.Concurrent.STM
 import Data.Binary
 import System.Random
-import Data.Bits (xor)
+-- import Data.Bits (xor)
 import qualified Data.IntMap           as IntMap
 import qualified Data.ByteString.Lazy  as B
 
@@ -37,7 +37,8 @@ data Client = Client
 mkClient :: String -> IO Client
 mkClient name = do
     users       <- atomically $ newTVar IntMap.empty
-    cid         <- (randomIO :: IO Int) >>= \i -> return (foldl (\h c -> 33*h `xor` fromEnum c) 5381 $ name ++ show i)
+    -- cid         <- (randomIO :: IO Int) >>= \i -> return (foldl (\h c -> 33*h `xor` fromEnum c) 5381 $ name ++ show i)
+    cid         <- randomIO :: IO Int
     netSignals  <- atomically $ newTVar IntMap.empty
     outBox      <- atomically $ newTChan
     inBox       <- atomically $ newTChan
