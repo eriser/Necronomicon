@@ -28,6 +28,7 @@ sendWithLength nsocket msg = Control.Exception.catch trySend onFailure
             let messageLengthData = encode messageLength
             putStrLn $ "length of messageLength: " ++ show (B.length messageLengthData)
             putStrLn $ "messageLength: " ++ show messageLength
+            sendAll nsocket $ messageLengthData
             bytes <- send nsocket msg
             when (fromIntegral bytes /= messageLength) $ putStrLn "SEND ERROR: Disagreement in bytes sent"
             -- sendAll nsocket msg
