@@ -63,9 +63,11 @@ startServer = print "Starting a server." >> (withSocketsDo $ bracket getSocket s
             (serveraddr : _) <- getAddrInfo hints Nothing (Just serverPort)
             -- sock             <- socket AF_INET Stream defaultProtocol
             --6 should be the protocol number for TCP....
-            sock             <- socket AF_INET Stream 6
+            -- sock             <- socket AF_INET Stream 6
+            sock             <- socket AF_INET SeqPacket 6
 
-            setSocketOption sock ReuseAddr   1
+            setSocketOption sock ReuseAddr 1
+            setSocketOption sock NoDelay   1
             bindSocket sock (addrAddress serveraddr)
             listen sock 3
             return sock

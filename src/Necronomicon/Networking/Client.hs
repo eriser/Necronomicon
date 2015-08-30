@@ -38,10 +38,12 @@ startup client serverIPAddress sigstate = do
     sendLoginMessage client
     listener client sock serverIPAddress sigstate
     where
-        hints     = Just $ defaultHints {addrSocketType = Stream}
+        -- hints     = Just $ defaultHints {addrSocketType = Stream}
+        hints = Just $ defaultHints {addrSocketType = SeqPacket}
         getSocket = do
             serveraddr : _ <- getAddrInfo hints (Just serverIPAddress) (Just serverPort)
-            sock           <- socket AF_INET Stream defaultProtocol
+            -- sock           <- socket AF_INET Stream 6
+            sock           <- socket AF_INET SeqPacket 6
             -- setSocketOption sock KeepAlive 1
             setSocketOption sock NoDelay   1
             setSocketOption sock ReuseAddr 1
