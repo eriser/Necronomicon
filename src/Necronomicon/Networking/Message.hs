@@ -29,8 +29,8 @@ sendWithLength nsocket msg = Control.Exception.catch trySend onFailure
             | messageLength < 0 || messageLength >= maxMessageLength = putStrLn ("message length is out of bounds: " ++ show messageLength)
             | otherwise = do
                 let messageLengthData = encode messageLength
-                putStrLn $ "length of messageLength: " ++ show (B.length messageLengthData)
-                putStrLn $ "messageLength: " ++ show messageLength
+                -- putStrLn $ "length of messageLength: " ++ show (B.length messageLengthData)
+                -- putStrLn $ "messageLength: " ++ show messageLength
                 sendAll nsocket $ messageLengthData
                 bytes <- send nsocket msg
                 when (fromIntegral bytes /= messageLength) $ putStrLn "SEND ERROR: Disagreement in bytes sent"
@@ -47,9 +47,9 @@ receiveWithLength nsocket = Control.Exception.catch trySend onFailure
                 else readTillFinished len' B.empty
 
         readTillFinished amountToRead prevData = do
-            putStrLn $ "Attempting to receive data of length: " ++ show amountToRead
+            -- putStrLn $ "Attempting to receive data of length: " ++ show amountToRead
             streamData <- recv nsocket amountToRead
-            putStrLn $ "Actually received data of length: " ++ show (B.length streamData)
+            -- putStrLn $ "Actually received data of length: " ++ show (B.length streamData)
             if B.length streamData < amountToRead
                 then readTillFinished (amountToRead - B.length streamData) $ B.append prevData streamData
                 else return $ Receive $ B.append prevData streamData
