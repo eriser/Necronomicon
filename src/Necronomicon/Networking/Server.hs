@@ -55,16 +55,12 @@ newServer = do
 startServer :: IO()
 startServer = print "Starting a server." >> (withSocketsDo $ bracket getSocket sClose $ handler)
     where
-        -- hints = Just $ defaultHints {addrFlags = [AI_PASSIVE],addrSocketType = Stream}
-        --Experimenting with Sequenced packets socket type. A kind of halfway house between TCP and UDP
-        hints = Just $ defaultHints {addrFlags = [AI_PASSIVE],addrSocketType = SeqPacket}
+        hints = Just $ defaultHints {addrFlags = [AI_PASSIVE],addrSocketType = Stream}
 
         getSocket = do
             (serveraddr : _) <- getAddrInfo hints Nothing (Just serverPort)
-            -- sock             <- socket AF_INET Stream defaultProtocol
             --6 should be the protocol number for TCP....
-            -- sock             <- socket AF_INET Stream 6
-            sock             <- socket AF_INET SeqPacket 6
+            sock             <- socket AF_INET Stream 6
 
             setSocketOption sock ReuseAddr 1
             setSocketOption sock NoDelay   1
