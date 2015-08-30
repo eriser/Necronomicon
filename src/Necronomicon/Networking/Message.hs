@@ -45,6 +45,7 @@ receiveWithLength nsocket = Control.Exception.catch trySend onFailure
         trySend = isConnected nsocket >>= \connected -> if not connected then return ShutdownMessage else recv nsocket lengthOfMessageLength >>= \len -> case decodeTransLength len of
             Nothing   -> return IncorrectLength
             Just len' -> if len' == 0
-                then return ShutdownMessage
+                -- then return ShutdownMessage
+                then return IncorrectLength
                 else putStrLn ("Receiving message of length: " ++ show len') >> recv nsocket len' >>= return . Receive
         onFailure e = return $ Exception e
