@@ -107,7 +107,7 @@ userListen nsocket addr server = isConnected nsocket >>= \connected -> if not co
     else receiveWithLength nsocket >>= \maybeMessage -> case maybeMessage of
         Exception     e -> putStrLn ("userListen Exception: " ++ show e) >> userListen nsocket addr server
         ShutdownMessage -> putStrLn "Message has zero length. Shutting down userListen loop and removing user." >> close nsocket >> atomically (modifyTVar (serverUsers server) $ Map.delete addr)
-        IncorrectLength -> putStrLn "Message is incorrect length! Ignoring..." -- >> userListen nsocket addr stopVar server
+        IncorrectLength -> putStrLn "Message is incorrect length! Ignoring..." >> userListen nsocket addr server
         Receive     msg -> if B.null msg
             then putStrLn "Message has zero length. Shutting down userListen loop and removing users." >> close nsocket >> atomically (modifyTVar (serverUsers server) $ Map.delete addr)
             else processMessage server addr nsocket msg >>= \shouldQuit -> if shouldQuit

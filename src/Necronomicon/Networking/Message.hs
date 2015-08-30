@@ -15,7 +15,8 @@ lengthOfMessageLength = 2
 
 decodeTransLength :: B.ByteString -> Maybe Int64
 decodeTransLength bs
-    | B.length bs == 0                     = Just 0
+    -- | B.length bs == 0                     = Just 0
+    | B.length bs == 0                     = Nothing
     | B.length bs == lengthOfMessageLength = Just $ fromIntegral (decode bs :: Word16)
     | otherwise                            = Nothing
 
@@ -40,7 +41,7 @@ receiveWithLength :: Socket -> IO Receive
 receiveWithLength nsocket = Control.Exception.catch trySend onFailure
     where
         trySend = isConnected nsocket >>= \connected -> if not connected then return ShutdownMessage else recv nsocket lengthOfMessageLength >>= \len -> case decodeTransLength len of
-            Nothing -> return IncorrectLength
+            Nothing   -> return IncorrectLength
             Just len' -> if len' == 0
                 then return ShutdownMessage
                 else putStrLn ("Receiving message of length: " ++ show len') >> recv nsocket len' >>= return . Receive
