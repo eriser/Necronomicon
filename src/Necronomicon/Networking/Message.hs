@@ -43,7 +43,11 @@ receiveWithLength nsocket = Control.Exception.catch trySend onFailure
             Nothing   -> return IncorrectLength
             Just len' -> if len' == 0
                 then return ShutdownMessage
-                else putStrLn ("Receiving message of length: " ++ show len') >> recv nsocket len' >>= return . Receive
+                else do
+                    putStrLn $ "Attempting to receive data of length: " ++ show len'
+                    streamData <- recv nsocket len'
+                    putStrLn $ "Actually received data of length: " ++ show (B.length streamData)
+                    return $ Receive streamData
         onFailure e = return $ Exception e
 
         decodeTransLength bs
