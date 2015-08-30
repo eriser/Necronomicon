@@ -3,6 +3,8 @@ import GHC.Generics
 import Data.Binary
 import Data.Fixed (mod')
 
+import Debug.Trace
+
 import qualified Data.IntMap as IntMap
 import qualified Data.Map    as Map
 
@@ -13,8 +15,7 @@ main = runSignal <| players *> terminals *> section1
                <| PlayerTick   <~ tick       ~~ userID ~~ sigOr [isDown keyLShift, isDown keyRShift]
                <> PlayerKeys   <~ wasd       ~~ userID
                <> PlayerMouse  <~ mouseDelta ~~ userID
-               <> PlayerLogin  <~ userJoin   ~~ userID
-               <> PlayerLogout <~ userLeave
+               <> PlayerLog    <~ userLog    ~~ userID
 
         terminals = foldn updateTerminals mkTerminals
                  <| TerminalTick <~ tick
@@ -28,11 +29,10 @@ data Player        = Player PlayerState (Double, Double) deriving (Show, Eq, Gen
 data PlayerState   = PlayerIdle
                    | PlayerMoving Vector3
                    deriving (Show, Eq, Generic)
-data PlayerInput   = PlayerKeys   (Double, Double) Int
-                   | PlayerMouse  (Double, Double) Int
-                   | PlayerTick   (Time, Time)     Int Bool
-                   | PlayerLogin  (Int, String)    Int
-                   | PlayerLogout (Int, String)
+data PlayerInput   = PlayerKeys   (Double, Double)    Int
+                   | PlayerMouse  (Double, Double)    Int
+                   | PlayerTick   (Time, Time)        Int Bool
+                   | PlayerLog    (Int, String, Bool) Int
                    deriving (Show, Eq, Generic)
 
 data Terminal      = Terminal (Double, Double, Double) deriving (Show, Eq, Generic)
@@ -69,11 +69,11 @@ mkTerminals = map mkT [-3..3]
 
 updatePlayers :: PlayerInput -> IntMap.IntMap (Entity Player) -> IntMap.IntMap (Entity Player)
 updatePlayers input = case input of
-    PlayerTick          t uid s -> IntMap.adjust (tickPlayer t s)      uid
-    PlayerKeys          k uid   -> IntMap.adjust (playerKeysUpdate k)  uid
-    PlayerMouse         m uid   -> IntMap.adjust (playerMouseUpdate m) uid
-    PlayerLogin  (pid, _) uid   -> if pid == uid then IntMap.insert uid mkPlayer else id
-    PlayerLogout (pid, _)       -> IntMap.delete pid
+    PlayerTick              t uid s -> IntMap.adjust (tickPlayer t s)      uid
+    PlayerKeys              k uid   -> IntMap.adjust (playerKeysUpdate k)  uid
+    PlayerMouse             m uid   -> IntMap.adjust (playerMouseUpdate m) uid
+    PlayerLog (pid, _, True)  uid   -> trace ("PlayerLog in: "  ++ show pid) $ if pid == uid then IntMap.insert uid mkPlayer else id
+    PlayerLog (pid, _, False) _     -> trace ("PlayerLog out: " ++ show pid) $ IntMap.delete pid
 
 playerMouseUpdate :: (Double, Double) -> Entity Player -> Entity Player
 playerMouseUpdate (mx, my) p@Entity{ edata = Player state (px, py) } = p{ edata = Player state (x, y), rot = fromEuler 0 x 0 * fromEuler y 0 0 }
