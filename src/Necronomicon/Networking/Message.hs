@@ -39,16 +39,20 @@ sendWithLength nsocket msg = Control.Exception.catch trySend onFailure
 receiveWithLength :: Socket -> IO Receive
 receiveWithLength nsocket = Control.Exception.catch trySend onFailure
     where
-        trySend = isConnected nsocket >>= \connected -> if not connected then return ShutdownMessage else recv nsocket lengthOfMessageLength >>= \len -> case decodeTransLength len of
+        onFailure e = return $ Exception e
+        trySend     = isConnected nsocket >>= \connected -> if not connected then return ShutdownMessage else recv nsocket lengthOfMessageLength >>= \len -> case decodeTransLength len of
             Nothing   -> return IncorrectLength
             Just len' -> if len' == 0
                 then return ShutdownMessage
-                else do
-                    putStrLn $ "Attempting to receive data of length: " ++ show len'
-                    streamData <- recv nsocket len'
-                    putStrLn $ "Actually received data of length: " ++ show (B.length streamData)
-                    return $ Receive streamData
-        onFailure e = return $ Exception e
+                else readTillFinished len' B.empty
+
+        readTillFinished amountToRead prevData = do
+            putStrLn $ "Attempting to receive data of length: " ++ show amountToRead
+            streamData <- recv nsocket amountToRead
+            putStrLn $ "Actually received data of length: " ++ show (B.length streamData)
+            if B.length streamData < amountToRead
+                then readTillFinished (amountToRead - B.length streamData) $ B.append prevData streamData
+                else return $ Receive $ B.append prevData streamData
 
         decodeTransLength bs
             | B.length bs == 0                     = Just 0
