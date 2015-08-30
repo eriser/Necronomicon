@@ -36,7 +36,6 @@ startup client serverIPAddress sigstate = do
     _ <- forkIO $ sender           client sock
     atomically  $ writeTChan (signalsInbox sigstate) $ NetStatusEvent Running
     sendLoginMessage client
-    -- forkIO $ testNetworking   client
     listener client sock serverIPAddress sigstate
     where
         hints     = Just $ defaultHints {addrSocketType = Stream}

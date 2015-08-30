@@ -6,24 +6,25 @@ import Network.Socket                  hiding (send,recv,recvFrom,sendTo)
 import Data.Binary                            (encode,decode)
 import Data.Int                               (Int64)
 import Control.Monad                          (when)
-import Data.Word                              (Word32)
+import Data.Word                              (Word16)
 import Control.Exception
 import qualified Data.ByteString.Lazy  as B
 
 lengthOfMessageLength :: Int64
-lengthOfMessageLength = 4
+lengthOfMessageLength = 2
 
 decodeTransLength :: B.ByteString -> Maybe Int64
-decodeTransLength bs 
+decodeTransLength bs
     | B.length bs == 0                     = Just 0
-    | B.length bs == lengthOfMessageLength = Just $ fromIntegral (decode bs :: Word32)
+    | B.length bs == lengthOfMessageLength = Just $ fromIntegral (decode bs :: Word16)
     | otherwise                            = Nothing
 
 sendWithLength :: Socket -> B.ByteString -> IO()
 sendWithLength nsocket msg = Control.Exception.catch trySend onFailure
     where
-        messageLength  = fromIntegral $ B.length msg :: Word32
+        messageLength  = fromIntegral $ B.length msg :: Word16
         trySend = do
+            putStrLn $ "messageLength: " ++ show messageLength
             sendAll nsocket $ encode messageLength
             bytes <- send nsocket msg
             when (fromIntegral bytes /= messageLength) $ putStrLn "SEND ERROR: Disagreement in bytes sent"
