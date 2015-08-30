@@ -5,7 +5,7 @@ import Network.Socket.ByteString.Lazy
 import Network.Socket                  hiding (send,recv,recvFrom,sendTo)
 import Data.Binary                            (encode,decode)
 import Data.Int                               (Int64)
--- import Control.Monad                          (when)
+import Control.Monad                          (when)
 import Data.Word                              (Word16)
 import Control.Exception
 import qualified Data.ByteString.Lazy  as B
@@ -25,10 +25,11 @@ sendWithLength nsocket msg = Control.Exception.catch trySend onFailure
     where
         messageLength  = fromIntegral $ B.length msg :: Word16
         trySend = do
+            let messageLengthData = encode messageLength
+            putStrLn $ "length of messageLength: " ++ show (B.length messageLengthData)
             putStrLn $ "messageLength: " ++ show messageLength
-            sendAll nsocket $ encode messageLength
-            -- bytes <- send nsocket msg
-            -- when (fromIntegral bytes /= messageLength) $ putStrLn "SEND ERROR: Disagreement in bytes sent"
+            bytes <- send nsocket msg
+            when (fromIntegral bytes /= messageLength) $ putStrLn "SEND ERROR: Disagreement in bytes sent"
             sendAll nsocket msg
         onFailure e = print (e :: IOException)
 
