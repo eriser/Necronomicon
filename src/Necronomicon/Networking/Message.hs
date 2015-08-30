@@ -30,7 +30,7 @@ sendWithLength nsocket msg = Control.Exception.catch trySend onFailure
             putStrLn $ "messageLength: " ++ show messageLength
             bytes <- send nsocket msg
             when (fromIntegral bytes /= messageLength) $ putStrLn "SEND ERROR: Disagreement in bytes sent"
-            sendAll nsocket msg
+            -- sendAll nsocket msg
         onFailure e = print (e :: IOException)
 
 data Receive = Receive B.ByteString
