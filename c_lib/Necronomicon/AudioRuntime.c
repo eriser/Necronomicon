@@ -147,6 +147,30 @@ const uint32_t UGEN_POINTER_SIZE = sizeof(ugen*);
 const uint32_t UGEN_GRAPH_POOL_NODE_SIZE = sizeof(ugen_graph_pool_node);
 const uint32_t UGEN_WIRE_POOL_NODE_SIZE = sizeof(ugen_wires_pool_node);
 
+void print_ugen(ugen* u)
+{
+    if (u != NULL)
+    {
+        printf(
+            "ugen %p { calc = %p, constructor = %p, deconstructor = %p, data = %p, constructor_args = %p, inputs = %p, outputs = %p, calc_rate = %i }\n",
+            u,
+            u->calc,
+            u->constructor,
+            u->deconstructor,
+            u->data,
+            u->constructor_args,
+            u->inputs,
+            u->outputs,
+            u->calc_rate
+        );
+    }
+
+    else
+    {
+        puts("ugen { NULL }");
+    }
+}
+
 void print_ugen_graph_pool_node(ugen_graph_pool_node* ugen_graph)
 {
     if (ugen_graph != NULL)
@@ -573,6 +597,7 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, uint32_t 
     {
         ugen* graph_node = &ugen_graph[i];
         graph_node->constructor(graph_node);
+        print_ugen(graph_node);
     }
 
     _necronomicon_current_node_underconstruction = NULL;
@@ -1200,6 +1225,7 @@ void play_synth(synth_node* synth_definition, double* arguments, uint32_t num_ar
         msg.arg.node = synth;
         msg.type = START_SYNTH;
         RT_FIFO_PUSH(msg);
+        print_node(synth);
     }
 
     else

@@ -1,0 +1,7 @@
+{
+  "execPath": "/usr/bin/gcc",
+  "gccDefaultCFlags": "-Wall -Werror -std=c99",
+  "gccErrorLimit": 15,
+  "gccIncludePaths": "./c_lib,c_lib/Necronomicon,./c_lib/Necronomicon/Containers,./c_lib/Necronomicon/UGens",
+  "gccSuppressWarnings": false
+}
