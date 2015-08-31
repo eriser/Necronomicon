@@ -44,7 +44,7 @@ startup client serverIPAddress sigstate = do
             serveraddr : _ <- getAddrInfo hints (Just serverIPAddress) (Just serverPort)
             sock           <- socket AF_INET Stream defaultProtocol
             -- setSocketOption sock KeepAlive 1
-            -- setSocketOption sock NoDelay   1
+            setSocketOption sock NoDelay   1
             setSocketOption sock ReuseAddr 1
             return (sock,addrAddress serveraddr)
 
@@ -162,9 +162,9 @@ parseMessage (Login uid u) client sigstate = do
 parseMessage (Logout uid u) client sigstate = do
     putStrLn $ "User: " ++ show u ++ " logged out."
     users <- atomically $ readTVar $ clientUsers client
-    when (IntMap.member uid users) $ do
-        atomically $ writeTVar  (clientUsers client) $ IntMap.delete uid users
-        atomically $ writeTChan (signalsInbox sigstate) $ NetUserEvent uid u False
+    -- when (IntMap.member uid users) $ do
+    atomically $ writeTVar  (clientUsers client) $ IntMap.delete uid users
+    atomically $ writeTChan (signalsInbox sigstate) $ NetUserEvent uid u False
     putStrLn $  "User logged out: " ++ u
 
 parseMessage (Chat name msg) _ sigstate = atomically $ writeTChan (signalsInbox sigstate) $ NetChatEvent name msg

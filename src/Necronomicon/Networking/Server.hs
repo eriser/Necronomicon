@@ -27,14 +27,14 @@ data User = User
     , userAddress   :: SockAddr
     , userName      :: String
     , userAliveTime :: UTCTime
-    , userID        :: Int 
+    , userID        :: Int
     }
     deriving (Show)
 
 data Server = Server
     { serverUsers           :: TVar  (Map.Map SockAddr User)
     , serverOutBox          :: TChan (User,B.ByteString)
-    , serverBroadcastOutBox :: TChan (Maybe SockAddr,B.ByteString) 
+    , serverBroadcastOutBox :: TChan (Maybe SockAddr,B.ByteString)
     }
 
 serverPort :: String
@@ -84,12 +84,13 @@ keepAlive server = forever $ do
     broadcast (Nothing, encode Alive) server
 
     currentTime <- getCurrentTime
-    atomically $ writeTVar (serverUsers server) $ Map.filter (\u -> (diffUTCTime currentTime (userAliveTime u) < 6)) users
     mapM_ removeDeadUsers $ Map.filter (\u -> (diffUTCTime currentTime (userAliveTime u) >= 6)) users
+    atomically $ writeTVar (serverUsers server) $ Map.filter (\u -> (diffUTCTime currentTime (userAliveTime u) < 6)) users
     threadDelay 4000000
     where
         removeDeadUsers user = do
             putStrLn "Lost user alive messages. Closing user socket."
+            sendUserLogoutMessage (userAddress user) server
             close (userSocket user)
 
 acceptLoop :: Server -> Socket -> IO ()
@@ -100,7 +101,7 @@ acceptLoop server nsocket = forever $ do
         then return ()
         else do
             -- setSocketOption newUserSocket KeepAlive 1
-            -- setSocketOption newUserSocket NoDelay   1
+            setSocketOption newUserSocket NoDelay   1
             putStrLn $ "Accepting connection from user at: " ++ show newUserAddress
             _ <- forkIO $ userListen newUserSocket newUserAddress server
             return ()
@@ -110,10 +111,10 @@ userListen nsocket addr server = isConnected nsocket >>= \connected -> if not co
     then putStrLn $ "userListen shutting down: " ++ show addr
     else receiveWithLength nsocket >>= \maybeMessage -> case maybeMessage of
         Exception     e -> putStrLn ("userListen Exception: " ++ show e) >> userListen nsocket addr server
-        ShutdownMessage -> putStrLn "Message has zero length. Shutting down userListen loop and removing user." >> close nsocket >> atomically (modifyTVar (serverUsers server) $ Map.delete addr)
+        ShutdownMessage -> putStrLn "Message has zero length. Shutting down userListen loop and removing user." >> sendUserLogoutMessage addr server >> close nsocket >> atomically (modifyTVar (serverUsers server) $ Map.delete addr)
         IncorrectLength -> putStrLn "Message is incorrect length! Ignoring..."     >> userListen nsocket addr server
         Receive     msg -> if B.null msg
-            then putStrLn "Message has zero length. Shutting down userListen loop and removing users." >> close nsocket >> atomically (modifyTVar (serverUsers server) $ Map.delete addr)
+            then putStrLn "Message has zero length. Shutting down userListen loop and removing users." >> sendUserLogoutMessage addr server >> close nsocket >> atomically (modifyTVar (serverUsers server) $ Map.delete addr)
             else processMessage server addr nsocket msg >>= \shouldQuit -> if shouldQuit
                 then putStrLn $ "Listening has been signaled as finished after processing a message.\nuserListen shutting down: " ++ show addr
                 else userListen nsocket addr server
@@ -122,6 +123,7 @@ sendBroadcastMessages :: Server -> Socket -> IO ()
 sendBroadcastMessages server _ = forever $ do
     (maybeNoBounceback, nmessage) <- atomically $ readTChan $ serverBroadcastOutBox server
     userList <- (atomically $ readTVar (serverUsers server)) >>= return . Map.toList
+    putStrLn "Broadcasting message"
     case maybeNoBounceback of
         Nothing -> mapM_ (\(_,user) -> send' (userSocket user) nmessage) userList
         Just sa -> mapM_ (\(_,user) -> if userAddress user /= sa then send' (userSocket user) nmessage else return ()) userList
@@ -202,6 +204,13 @@ parseMessage _ _ _ _ _                 = putStrLn "Received unused message proto
 ------------------------------
 --Server Functions
 ------------------------------
+
+sendUserLogoutMessage :: SockAddr -> Server -> IO ()
+sendUserLogoutMessage addr server = do
+    users' <- atomically $ readTVar (serverUsers server)
+    case Map.lookup addr users' of
+        Just user -> broadcast (Nothing, encode $ Logout (userID user) (userName user)) server
+        Nothing   -> return ()
 
 broadcast :: (Maybe SockAddr,B.ByteString) -> Server -> IO ()
 broadcast nmessage server = atomically $ writeTChan (serverBroadcastOutBox server) nmessage
