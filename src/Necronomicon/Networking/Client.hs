@@ -38,7 +38,6 @@ startup client serverIPAddress sigstate = do
     sendLoginMessage client
     listener client sock serverIPAddress sigstate
     where
-        -- hints     = Just $ defaultHints {addrSocketType = Stream}
         hints = Just $ defaultHints {addrSocketType = Stream}
         getSocket = do
             serveraddr : _ <- getAddrInfo hints (Just serverIPAddress) (Just serverPort)
