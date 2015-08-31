@@ -42,15 +42,15 @@ runSignal sig = initWindow (920, 540) False >>= \mw -> case mw of
         _           <- runNecroState (waitForRunningStatus NecroRunning) (necroVars state)
 
         setInputCallbacks w eventInbox
+        (scont, _)  <- unSignal sig state
+        _           <- forkIO $ processEvents scont state eventInbox
+
+        threadDelay 2000000
 
         case args of
             Just [n, a] -> startNetworking state n a $ signalClient state
             _           -> print "Incorrect arguments given for networking (name address). Networking is disabled"
 
-        threadDelay 1000000
-
-        (scont, _)  <- unSignal sig state
-        _           <- forkIO $ processEvents scont state eventInbox
         run False w scont currentTime DynTree.empty eventInbox state
     where
         run quit window s runTime' tree eventInbox state
