@@ -57,9 +57,9 @@ void playSample_constructor(ugen* u)
 
 void playSample_deconstructor(ugen* u)
 {
-    playSample_constructor_args* constructor_args = (playSample_constructor_args*) u->constructor_args;
-    char* sample_file_path = constructor_args->sample_file_path;
-    free(sample_file_path);
+    // playSample_constructor_args* constructor_args = (playSample_constructor_args*) u->constructor_args;
+    // char* sample_file_path = constructor_args->sample_file_path;
+    // free(sample_file_path);
     free(u->data);
 }
 

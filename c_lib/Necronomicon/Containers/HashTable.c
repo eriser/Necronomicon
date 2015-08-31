@@ -287,6 +287,32 @@ void* hash_table_lookup_string_key(hash_table htable, const char* key)
     return item_ptr;
 }
 
+const char* hash_table_get_string_key(hash_table htable, const char* key)
+{
+    hash_table_node** table = htable.table;
+    uint32_t size = htable.size;
+    uint32_t size_mask = htable.size_mask;
+    uint32_t hash = hash_string(key);
+    uint32_t slot = hash & size_mask;
+    uint32_t i = 0;
+    const char* string_key_ptr = NULL;
+
+    while (i < size)
+    {
+        hash_table_node* node = table[slot];
+        if (node != NULL && node->hash == hash && strcmp(node->string_key, key) == 0)
+        {
+            string_key_ptr = node->string_key;
+            break;
+        }
+
+        ++i;
+        slot = (slot + 1) & size_mask;
+    }
+
+    return string_key_ptr;
+}
+
 void hash_table_clear(hash_table htable, bool free_items_in_table)
 {
     hash_table_node** table = htable.table;
