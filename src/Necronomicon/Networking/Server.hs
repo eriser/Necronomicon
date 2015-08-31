@@ -78,20 +78,20 @@ startServer = print "Starting a server." >> (withSocketsDo $ bracket getSocket s
 
 keepAlive :: Server -> IO ()
 keepAlive server = forever $ do
-    users <- atomically $ readTVar $ serverUsers server
+    -- users <- atomically $ readTVar $ serverUsers server
     -- print users
 
     broadcast (Nothing, encode Alive) server
 
-    currentTime <- getCurrentTime
-    mapM_ removeDeadUsers $ Map.filter (\u -> (diffUTCTime currentTime (userAliveTime u) >= 6)) users
-    atomically $ writeTVar (serverUsers server) $ Map.filter (\u -> (diffUTCTime currentTime (userAliveTime u) < 6)) users
+    -- currentTime <- getCurrentTime
+    -- mapM_ removeDeadUsers $ Map.filter (\u -> (diffUTCTime currentTime (userAliveTime u) >= 6)) users
+    -- atomically $ writeTVar (serverUsers server) $ Map.filter (\u -> (diffUTCTime currentTime (userAliveTime u) < 6)) users
     threadDelay 4000000
-    where
-        removeDeadUsers user = do
-            putStrLn "Lost user alive messages. Closing user socket."
-            sendUserLogoutMessage (userAddress user) server
-            close (userSocket user)
+    -- where
+        -- removeDeadUsers user = do
+            -- putStrLn "Lost user alive messages. Closing user socket."
+            -- sendUserLogoutMessage (userAddress user) server
+            -- close (userSocket user)
 
 acceptLoop :: Server -> Socket -> IO ()
 acceptLoop server nsocket = forever $ do
