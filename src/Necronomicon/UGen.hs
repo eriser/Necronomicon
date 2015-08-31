@@ -35,7 +35,7 @@ data UGenUnit = Sin | Add | Minus | Mul | Gain | Div | Line | Perc | Env Double 
               | Clip | SoftClip | Poly3 | TanHDist | SinDist | Wrap | DelayN Double | DelayL Double | DelayC Double | CombN Double | CombL Double | CombC Double
               | Negate | Crush | Decimate | FreeVerb | Pluck Double | WhiteNoise | PinkNoise | BrownNoise |Abs | Signum | Pow | Exp | Log | Cos | ASin | ACos
               | UMax | UMin | ATan | LogBase | Sqrt | Tan | SinH | CosH | TanH | ASinH | ATanH | ACosH | TimeMicros | TimeSecs | USeq | Limiter Double | Pan
-              | PlaySample FilePath
+              | PlaySample FilePath Int
               deriving (Show, Eq, Ord)
 
 data UGenRate = ControlRate | AudioRate deriving (Show, Enum, Eq, Ord)
@@ -1198,15 +1198,45 @@ foreign import ccall "&time_secs_calc" timeSecsCalc :: CUGenFunc
 timeSecs :: UGen
 timeSecs = UGen [UGenFunc TimeSecs timeSecsCalc nullConstructor nullDeconstructor []]
 
+data CPlaySampleConstructArgs = CPlaySampleConstructArgs CString CInt
+
+instance Storable CPlaySampleConstructArgs where
+    sizeOf _ = sizeOf (undefined :: CDouble) * 2
+    alignment _ = alignment (undefined :: CDouble)
+    peek ptr = do
+        sampleFilePath <- peekByteOff ptr 0 :: IO CString
+        numSampleChannels <- peekByteOff ptr 8 :: IO CInt
+        return (CPlaySampleConstructArgs sampleFilePath numSampleChannels)
+    poke ptr (CPlaySampleConstructArgs sampleFilePath numSampleChannels) = do
+        pokeByteOff ptr 0 sampleFilePath
+        pokeByteOff ptr 8 numSampleChannels
+
 foreign import ccall "&playSample_constructor" playSampleConstructor :: CUGenFunc
 foreign import ccall "&playSample_deconstructor" playSampleDeconstructor :: CUGenFunc
+
 foreign import ccall "&playSample_k_calc" playSampleKCalc :: CUGenFunc
 foreign import ccall "&playSample_a_calc" playSampleACalc :: CUGenFunc
 
-playSample :: FilePath -> UGen -> UGen
-playSample resourceFilePath rate = optimizeUGenCalcFunc cfuncs $ multiChannelExpandUGen (PlaySample resourceFilePath) playSampleACalc playSampleConstructor playSampleDeconstructor [rate]
+-- multichannel rate inputs will expand into multiple channels of playMonoSample ugens
+playMonoSample :: FilePath -> UGen -> UGen
+playMonoSample resourceFilePath rate = optimizeUGenCalcFunc cfuncs playSampleUGen
     where
+        numSampleChannels = 1
+        playSampleUGen = multiChannelExpandUGen (PlaySample resourceFilePath numSampleChannels) playSampleACalc playSampleConstructor playSampleDeconstructor [rate]
         cfuncs = [playSampleKCalc, playSampleACalc]
+
+foreign import ccall "&playSample_stereo_k_calc" playSampleStereoKCalc :: CUGenFunc
+foreign import ccall "&playSample_stereo_a_calc" playSampleStereoACalc :: CUGenFunc
+
+-- only takes mono rate input, extra channels will be ignored, outputs a stereo signal
+playStereoSample :: FilePath -> UGen -> UGen
+playStereoSample resourceFilePath rate = optimizeUGenCalcFunc cfuncs $ createMultiOutUGenFromChannel numSampleChannels playSampleUGenFunc
+    where
+        numSampleChannels = 2
+        createFlatRateList (UGen []) = [UGenNum 1]
+        createFlatRateList (UGen (channel:_)) = [channel]
+        playSampleUGenFunc = UGenFunc (PlaySample resourceFilePath numSampleChannels) playSampleACalc playSampleConstructor playSampleDeconstructor $ createFlatRateList rate
+        cfuncs = [playSampleStereoKCalc, playSampleStereoACalc]
 
 -- oneShotSample
 
@@ -1317,7 +1347,7 @@ pSynthArgStream synthName layout = pstream ("__pattern__" ++ synthName) pBeatFun
         pBeatFunc = return (\arg t -> playSynthAtJackTime synthName [arg] t >> return ())
 
 compileSynthDef :: UGenType a => String -> a -> Necronomicon ()
-compileSynthDef name synthDef = liftIO (runCompileSynthDef name synthDef) >>= addSynthDef
+compileSynthDef name synthDef = liftIO assertBlockSize >> liftIO (runCompileSynthDef name synthDef) >>= addSynthDef
 
 data CompiledConstant = CompiledConstant { compiledConstantValue :: CDouble, compiledConstantWireIndex :: CUInt } deriving (Eq, Show)
 
@@ -1420,8 +1450,11 @@ nextWireIndexes :: Int -> Compiled [CUInt]
 nextWireIndexes n = mapM (\_ -> nextWireIndex) [0..n]
 
 initializeWireBufs :: CUInt -> [CompiledConstant] -> IO (Ptr CDouble)
-initializeWireBufs numWires constants = {-print ("Wire Buffers: " ++ (show folded)) >> -} getJackBlockSize >>= \blockSize ->
-    let wires = foldl (++) [] $ map (replicate (fromIntegral blockSize)) folded in newArray wires
+initializeWireBufs numWires constants = {- print ("Wire Buffers: " ++ (show folded)) >> -} getJackBlockSize >>= \blockSize ->
+    let wires = foldl (++) [] $ map (replicate (fromIntegral blockSize)) folded in do
+        -- print ("Block Size: " ++ show blockSize)
+        -- print wires
+        newArray wires
     where
         wireIndexes :: [CUInt]
         wireIndexes = [0 .. (numWires - 1)]
@@ -1443,11 +1476,11 @@ compileSynthArg argIndex = let arg = (synthArgument argIndex) in compileUGen arg
 runCompileSynthDef :: UGenType a => String -> a -> IO SynthDef
 runCompileSynthDef name ugenFunc = do
     -- print ("Compiling synthdef " ++ name ++ " ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~")
-    (numArgs, (CompiledData {-table-}_ revGraph constants numWires _ _)) <- runCompile (compileSynthArgsAndUGenGraph ugenFunc) mkCompiledData
+    (numArgs, (CompiledData {- table -} _ revGraph constants numWires _ _)) <- runCompile (compileSynthArgsAndUGenGraph ugenFunc) mkCompiledData
     -- print ("table: " ++ (show table))
-    print ("Total ugens: " ++ (show $ length revGraph))
-    print ("Total constants: " ++ (show $ length constants))
-    print ("Num Wires: " ++ (show numWires))
+    -- print ("Total ugens: " ++ (show $ length revGraph))
+    -- print ("Total constants: " ++ (show $ length constants))
+    -- print ("Num Wires: " ++ (show numWires))
     -- Don't actually compile the arg ugens, they shouldn't be evaluated at run time. Instead they're controlled from the Haskell side.
     let graph = drop numArgs $ reverse revGraph -- Reverse the revGraph because we've been using cons during compilation.
     -- print ("UGenGraph: " ++ (show graph))
@@ -1538,12 +1571,14 @@ compileUGen ugen@(UGenFunc (Random seed rmin rmax) _ _ _ _) args key = liftIO (n
     compileUGenWithConstructorArgs ugen (castPtr randValuesPtr) args key
 compileUGen ugen@(UGenFunc (Limiter lookahead) _ _ _ _) args key = liftIO (new $ CDouble lookahead) >>= \lookaheadPtr ->
     compileUGenWithConstructorArgs ugen (castPtr lookaheadPtr) args key
-compileUGen ugen@(UGenFunc (PlaySample resourceFilePath) _ _ _ _) args key = do
+compileUGen ugen@(UGenFunc (PlaySample resourceFilePath numSampleChannels) _ _ _ _) args key = do
     fullFilePath <- liftIO $ getDataFileName resourceFilePath
-    cFilePath <- liftIO $ newCString fullFilePath
-    compileUGenWithConstructorArgs ugen (castPtr cFilePath) args key
+    cFilePath <- liftIO $ withCString fullFilePath prRetrieveSampleBufferNameString
+    -- Only temporarily allocate a CString to grab the stored string for the sample.
+    -- This way the ugen doesn't need to worry about managing the cstring memory
+    playSampleConstructArgs <- liftIO $ new $ CPlaySampleConstructArgs cFilePath $ fromIntegral numSampleChannels
+    compileUGenWithConstructorArgs ugen (castPtr playSampleConstructArgs) args key
 compileUGen ugen args key = compileUGenWithConstructorArgs ugen nullPtr args key
-
 
 ------------------------------------------
 -- Testing Functions

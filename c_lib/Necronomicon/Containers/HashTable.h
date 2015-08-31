@@ -51,6 +51,9 @@ extern const uint64_t SEED;
 // expects a null terminated char* string
 static inline uint32_t hash_string(const char* string)
 {
+    if (string == NULL)
+        return 0;
+
     uint64_t hash = SEED;
     int32_t i = 0;
     char c = string[i];
@@ -107,6 +110,8 @@ bool hash_table_remove_string_key(hash_table htable, const char* key); // return
 
 void* hash_table_lookup_uint_key(hash_table htable, uint32_t key); // will return null if the item was not found in the table
 void* hash_table_lookup_string_key(hash_table htable, const char* key); // will return null if the item was not found in the table
+
+const char* hash_table_get_string_key(hash_table htable, const char* key);
 
 void hash_table_clear(hash_table htable, bool free_items_in_table);
 

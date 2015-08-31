@@ -17,6 +17,48 @@
 
 #define LINEAR_INTERP(A, B, DELTA) (A + DELTA * (B - A))
 
+// does range checking but not wrapping
+inline double linear_interp_buffer(double* samples, long num_samples, long double read_index)
+{
+    double y = 0;
+    if (read_index >= 0 && read_index < num_samples)
+    {
+        const long lread_index = (long) read_index;
+        const long lread_index2 = read_index + 1;
+        const double delta = read_index - (long double) lread_index;
+        const double a = samples[lread_index];
+        const double b = lread_index2 < num_samples ? samples[lread_index2] : 0;
+        y = LINEAR_INTERP(a, b, delta);
+    }
+
+    else if(read_index > -1)
+    {
+        const double delta = 1 - fabs(read_index);
+        const double a = 0;
+        const double b = samples[0];
+        y = LINEAR_INTERP(a, b, delta);
+    }
+
+    return y;
+}
+
+// buffer lookup with linear interpolation and wrapping (assuming non-power-of-two buffer sizes). Not very fast, use sparingly and only when this functionality is required
+inline double linear_interp_buffer_with_index_wrap(double* samples, long num_samples, long double read_index)
+{
+    long lread_index = floor(read_index);
+    while (lread_index < 0)
+        lread_index = num_samples + lread_index;
+
+    if (lread_index >= num_samples)
+        lread_index = lread_index % num_samples;
+
+    const long lread_index2 = read_index + 1;
+    const double delta = read_index - (long double) lread_index;
+    const double a = samples[lread_index];
+    const double b = samples[lread_index2 % num_samples];
+    return LINEAR_INTERP(a, b, delta);
+}
+
 #define fast_pow(U,BASE,EXPONENT)                                   \
 U.d = BASE;                                                         \
 U.x[1] = (int32_t)(EXPONENT * (U.x[1] - 1072632447) + 1072632447);  \

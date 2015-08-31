@@ -72,12 +72,14 @@ lfpulseSynth freq = (lfpulse (lag 0.1 freq) 0) * 440 + 440 |> sin |> gain 0.2 |>
 slendroFilePath :: FilePath
 slendroFilePath = "samples/Slendro1.wav"
 
--- HOW TO DEAL WITH MULTIPLE CHANNELS???????????????????????????????????????????
--- Multichannel expansion?
--- num channels argument?
-
 slendroSampleSynth :: UGen -> UGen
-slendroSampleSynth rate = playSample slendroFilePath rate |> out 0
+slendroSampleSynth rate = playMonoSample slendroFilePath rate |> out 0
+
+harpKotoFilePath :: FilePath
+harpKotoFilePath = "samples/HarpKotoShort.wav"
+
+harpKotoSampleSynth :: UGen -> UGen
+harpKotoSampleSynth rate = playStereoSample harpKotoFilePath rate |> out 0
 
 main :: IO ()
 main = runSignal soundsig
@@ -104,3 +106,4 @@ soundsig = loadSample slendroFilePath
         *> play (toggle <| isDown keyR) lfsawSynth (mouseX ~> scale 0.1 2000)
         *> play (toggle <| isDown keyS) lfpulseSynth (mouseX ~> scale 0.1 2000)
         *> play (toggle <| isDown keyT) slendroSampleSynth (mouseX ~> scale 0.0001 2)
+        *> play (toggle <| isDown keyU) harpKotoSampleSynth (mouseX ~> scale 0.0001 2)

@@ -17,6 +17,9 @@
         burst noise
         Diamond square (plasma)
 
+    various cool pattern generators (fractal, chaos, generative, etc..., etc...)
+    chord/scale monad
+    meta-patterns, pattern selectors, pattern filters
     bit twiddling ugens (support for Data.Bits type class)
     beat based ugens (bseq, blace, brand, etc...)
     better line and xline implementations (with range arguments)
@@ -109,7 +112,7 @@ double SAMPLE_RATE = 44100;
 double RECIP_SAMPLE_RATE = 1.0 / 44100.0;
 double TABLE_MUL_RECIP_SAMPLE_RATE = TABLE_SIZE * (1.0 / 44100.0);
 double TWO_PI_TIMES_RECIP_SAMPLE_RATE;
-uint32_t BLOCK_SIZE = 64;
+uint32_t BLOCK_SIZE = 0;
 
 /////////////////////
 // Global Mutables
@@ -143,6 +146,30 @@ const uint32_t UGEN_SIZE = sizeof(ugen);
 const uint32_t UGEN_POINTER_SIZE = sizeof(ugen*);
 const uint32_t UGEN_GRAPH_POOL_NODE_SIZE = sizeof(ugen_graph_pool_node);
 const uint32_t UGEN_WIRE_POOL_NODE_SIZE = sizeof(ugen_wires_pool_node);
+
+void print_ugen(ugen* u)
+{
+    if (u != NULL)
+    {
+        printf(
+            "ugen %p { calc = %p, constructor = %p, deconstructor = %p, data = %p, constructor_args = %p, inputs = %p, outputs = %p, calc_rate = %i }\n",
+            u,
+            u->calc,
+            u->constructor,
+            u->deconstructor,
+            u->data,
+            u->constructor_args,
+            u->inputs,
+            u->outputs,
+            u->calc_rate
+        );
+    }
+
+    else
+    {
+        puts("ugen { NULL }");
+    }
+}
 
 void print_ugen_graph_pool_node(ugen_graph_pool_node* ugen_graph)
 {
@@ -344,25 +371,38 @@ void register_sample_buffer(const char* file_path, sample_buffer* buffer)
 
 sample_buffer* retrieve_sample_buffer(const char* file_path)
 {
-    sample_buffer* buffer = hash_table_lookup_string_key(sample_hash_table, file_path);
+    sample_buffer* buffer = NULL;
+    if (file_path != NULL)
+    {
+        buffer = hash_table_lookup_string_key(sample_hash_table, file_path);
+    }
+    else
+    {
+        puts("retrieve_sample_buffer: file_path = NULL");
+    }
     return buffer;
+}
+
+const char* retrieve_sample_buffer_name_string(const char* file_path)
+{
+    return hash_table_get_string_key(sample_hash_table, file_path);
 }
 
 void print_sfinfo(SF_INFO sfinfo)
 {
     printf("SF_INFO { frames: %u, samplerate: %i, channels: %i, format: %i, sections: %i, seekable: %i }\n",
         (uint32_t) sfinfo.frames,
-        (int32_t) sfinfo.samplerate,
-        (int32_t) sfinfo.channels,
-        (int32_t) sfinfo.format,
-        (int32_t) sfinfo.sections,
-        (int32_t) sfinfo.seekable
+        (int32_t)  sfinfo.samplerate,
+        (int32_t)  sfinfo.channels,
+        (int32_t)  sfinfo.format,
+        (int32_t)  sfinfo.sections,
+        (int32_t)  sfinfo.seekable
     );
 }
 
 sample_buffer* load_sample_into_buffer(const char* file_path)
 {
-    const int one_buffer = 1;
+    const int32_t one_buffer = 1;
     sample_buffer* buffer = calloc(one_buffer, SAMPLE_BUFFER_SIZE);
 
     SF_INFO sfinfo;
@@ -550,6 +590,15 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, uint32_t 
     synth->ugen_wires = synth->ugen_wires_node->ugen_wires;
     memcpy(synth->ugen_wires, synth_definition->ugen_wires, size_wires);
 
+    // printf("synth_definition : wires [");
+    // for (i = 0; i < num_wires; ++i)
+    // {
+    //     printf("%f", synth_definition->ugen_wires[i * BLOCK_SIZE]);
+    //     if (i < (synth->num_wires - 1))
+    //         printf(", ");
+    // }
+    // printf("]\n");
+
     double* ugen_wires = synth->ugen_wires;
     for (i = 0; i < num_arguments; ++i)
     {
@@ -570,6 +619,7 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, uint32_t 
     {
         ugen* graph_node = &ugen_graph[i];
         graph_node->constructor(graph_node);
+        // print_ugen(graph_node);
     }
 
     _necronomicon_current_node_underconstruction = NULL;
@@ -972,6 +1022,11 @@ int32_t get_running()
     return (necronomicon_running == true);
 }
 
+void assert_block_size()
+{
+    assert(BLOCK_SIZE != 0);
+}
+
 uint32_t get_block_size()
 {
     return BLOCK_SIZE;
@@ -999,6 +1054,28 @@ void print_node(synth_node* node)
                node->alive_status);
     else
         printf("NULL\n");
+}
+
+void print_synth_wires(synth_node* synth)
+{
+    if (synth != NULL)
+    {
+        printf("synth_node : wires [");
+
+        int32_t i;
+        for (i = 0; i < synth->num_wires; ++i)
+        {
+            printf("%f", synth->ugen_wires[i * BLOCK_SIZE]);
+            if (i < (synth->num_wires - 1))
+                printf(", ");
+        }
+
+        printf("]\n");
+    }
+    else
+    {
+        puts("synth { null }");
+    }
 }
 
 void print_synth_list()
@@ -1197,6 +1274,8 @@ void play_synth(synth_node* synth_definition, double* arguments, uint32_t num_ar
         msg.arg.node = synth;
         msg.type = START_SYNTH;
         RT_FIFO_PUSH(msg);
+        // print_node(synth);
+        // print_synth_wires(synth);
     }
 
     else
