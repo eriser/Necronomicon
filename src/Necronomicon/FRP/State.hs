@@ -77,6 +77,7 @@ delay initx sig = runST $ do
 class NecroFoldable entities where
     foldn :: (input -> entities -> entities) -> entities -> Signal input -> Signal entities
 
+--TODO: perhaps not enough to deal with it, just go to all Entity a network entities?
 instance (Binary a, Eq a) => NecroFoldable (Entity a) where
     foldn f scene input = sceneSig
         where
