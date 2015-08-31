@@ -123,6 +123,7 @@ sendBroadcastMessages :: Server -> Socket -> IO ()
 sendBroadcastMessages server _ = forever $ do
     (maybeNoBounceback, nmessage) <- atomically $ readTChan $ serverBroadcastOutBox server
     userList <- (atomically $ readTVar (serverUsers server)) >>= return . Map.toList
+    putStrLn "Broadcasting message"
     case maybeNoBounceback of
         Nothing -> mapM_ (\(_,user) -> send' (userSocket user) nmessage) userList
         Just sa -> mapM_ (\(_,user) -> if userAddress user /= sa then send' (userSocket user) nmessage else return ()) userList
