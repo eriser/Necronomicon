@@ -59,7 +59,8 @@ AUDIO_LOOP(                                                             \
     if (phase > DOUBLE_TABLE_SIZE)                                      \
         phase = phase - DOUBLE_TABLE_SIZE;                              \
 );                                                                      \
-*((double*) u.data) = phase;
+*((double*) u.data) = phase;\
+printf("sin_calc freq: %f\n", freq);
 
 #define mmsin_a0  1.0
 #define mmsin_a1 -1.666666666640169148537065260055e-1

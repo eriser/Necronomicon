@@ -112,7 +112,7 @@ double SAMPLE_RATE = 44100;
 double RECIP_SAMPLE_RATE = 1.0 / 44100.0;
 double TABLE_MUL_RECIP_SAMPLE_RATE = TABLE_SIZE * (1.0 / 44100.0);
 double TWO_PI_TIMES_RECIP_SAMPLE_RATE;
-uint32_t BLOCK_SIZE = 64;
+uint32_t BLOCK_SIZE = 0;
 
 /////////////////////
 // Global Mutables
@@ -389,7 +389,7 @@ void print_sfinfo(SF_INFO sfinfo)
 
 sample_buffer* load_sample_into_buffer(const char* file_path)
 {
-    const int one_buffer = 1;
+    const int32_t one_buffer = 1;
     sample_buffer* buffer = calloc(one_buffer, SAMPLE_BUFFER_SIZE);
 
     SF_INFO sfinfo;
@@ -576,6 +576,15 @@ synth_node* new_synth(synth_node* synth_definition, double* arguments, uint32_t 
     synth->ugen_wires_node = acquire_ugen_wires(num_wires);
     synth->ugen_wires = synth->ugen_wires_node->ugen_wires;
     memcpy(synth->ugen_wires, synth_definition->ugen_wires, size_wires);
+
+    printf("synth_definition : wires [");
+    for (i = 0; i < num_wires; ++i)
+    {
+        printf("%f", synth_definition->ugen_wires[i * BLOCK_SIZE]);
+        if (i < (synth->num_wires - 1))
+            printf(", ");
+    }
+    printf("]\n");
 
     double* ugen_wires = synth->ugen_wires;
     for (i = 0; i < num_arguments; ++i)
@@ -1000,8 +1009,14 @@ int32_t get_running()
     return (necronomicon_running == true);
 }
 
+void assert_block_size()
+{
+    assert(BLOCK_SIZE != 0);
+}
+
 uint32_t get_block_size()
 {
+    printf("get_block_size: %u\n", BLOCK_SIZE);
     return BLOCK_SIZE;
 }
 
@@ -1027,6 +1042,28 @@ void print_node(synth_node* node)
                node->alive_status);
     else
         printf("NULL\n");
+}
+
+void print_synth_wires(synth_node* synth)
+{
+    if (synth != NULL)
+    {
+        printf("synth_node : wires [");
+
+        int32_t i;
+        for (i = 0; i < synth->num_wires; ++i)
+        {
+            printf("%f", synth->ugen_wires[i * BLOCK_SIZE]);
+            if (i < (synth->num_wires - 1))
+                printf(", ");
+        }
+
+        printf("]\n");
+    }
+    else
+    {
+        puts("synth { null }");
+    }
 }
 
 void print_synth_list()
@@ -1226,6 +1263,7 @@ void play_synth(synth_node* synth_definition, double* arguments, uint32_t num_ar
         msg.type = START_SYNTH;
         RT_FIFO_PUSH(msg);
         print_node(synth);
+        print_synth_wires(synth);
     }
 
     else
@@ -1567,6 +1605,7 @@ void start_rt_runtime(const int8_t* resources_path)
     }
 
     BLOCK_SIZE = jack_get_buffer_size(client); // Maximum buffer size
+    printf("BLOCK_SIZE = %u\n", BLOCK_SIZE);
     init_rt_thread();
 
     if (status & JackServerStarted)

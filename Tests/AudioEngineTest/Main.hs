@@ -46,16 +46,16 @@ modulatingDelayC = sin 440 |> delayC 1 delayTime |> dup |> gain 0.1 |> out 0
         delayTime = sin 0.333333333333 |> range 0 1
 
 panSynth :: UGen -> UGen
-panSynth panPos = sin 440 |> gain 0.2 |> pan (lag 0.1 panPos) |> out 0
+panSynth panPos = sin 440 |> gain 0.2 |> pan (lag 0.1 panPos) |> poll |> out 0
 
 pinkSynth :: UGen
-pinkSynth = pinkNoise |> gain 0.3 |> dup |> out 0
+pinkSynth = pinkNoise |> gain 0.3 |> poll |> dup |> out 0
 
 brownSynth :: UGen
-brownSynth = brownNoise |> gain 0.3 |> dup |> out 0
+brownSynth = brownNoise |> gain 0.3 |> dup |> poll |> out 0
 
 whiteSynth :: UGen
-whiteSynth = whiteNoise |> gain 0.3 |> dup |> out 0
+whiteSynth = sin 440 |> out 1
 
 simplexSynth :: UGen -> UGen
 simplexSynth freq = simplex1D (lag 0.1 freq) |> exprange 20 20000 |> sin |> gain 0.2 |> dup |> out 0
@@ -86,24 +86,24 @@ main = runSignal soundsig
 
 soundsig :: Signal ()
 soundsig = loadSample slendroFilePath
-        *> play (toggle <| isDown keyA) reverbSynth
-        *> play (toggle <| isDown keyB) delaySynthN (mouseX ~> scale 20 10000)  mouseY
-        *> play (toggle <| isDown keyC) delaySynthL (mouseX ~> scale 20 10000)  mouseY
-        *> play (toggle <| isDown keyD) delaySynthC (mouseX ~> scale 20 10000)  mouseY
-        *> play (toggle <| isDown keyE) combSynthC  (mouseX ~> scale 1 4000) (mouseY ~> scale 0 20)
-        *> play (toggle <| isDown keyF) feedSynth (mouseX ~> scale 2 20000) (mouseY ~> scale 2 20000)
-        *> play (toggle <| isDown keyG) limiterSynth (mouseX ~> scale 0 4)
-        *> play (toggle <| isDown keyH) noLimiterSynth (mouseX ~> scale 0 4)
-        *> play (toggle <| isDown keyI) minMaxSynth (mouseX ~> scale 20 2000)
-        *> play (toggle <| isDown keyJ) lpfSynth (mouseX ~> scale 20 4000)
-        *> play (toggle <| isDown keyK) modulatingDelayC
-        *> play (toggle <| isDown keyL) panSynth (mouseX ~> linlin 0 1 (-1) 1)
-        *> play (toggle <| isDown keyM) pinkSynth
-        *> play (toggle <| isDown keyN) brownSynth
+        -- *> play (toggle <| isDown keyA) reverbSynth
+        -- *> play (toggle <| isDown keyB) delaySynthN (mouseX ~> scale 20 10000)  mouseY
+        -- *> play (toggle <| isDown keyC) delaySynthL (mouseX ~> scale 20 10000)  mouseY
+        -- *> play (toggle <| isDown keyD) delaySynthC (mouseX ~> scale 20 10000)  mouseY
+        -- *> play (toggle <| isDown keyE) combSynthC  (mouseX ~> scale 1 4000) (mouseY ~> scale 0 20)
+        -- *> play (toggle <| isDown keyF) feedSynth (mouseX ~> scale 2 20000) (mouseY ~> scale 2 20000)
+        -- *> play (toggle <| isDown keyG) limiterSynth (mouseX ~> scale 0 4)
+        -- *> play (toggle <| isDown keyH) noLimiterSynth (mouseX ~> scale 0 4)
+        -- *> play (toggle <| isDown keyI) minMaxSynth (mouseX ~> scale 20 2000)
+        -- *> play (toggle <| isDown keyJ) lpfSynth (mouseX ~> scale 20 4000)
+        -- *> play (toggle <| isDown keyK) modulatingDelayC
+        -- *> play (toggle <| isDown keyL) panSynth (mouseX ~> linlin 0 1 (-1) 1)
+        -- *> play (toggle <| isDown keyM) pinkSynth
+        -- *> play (toggle <| isDown keyN) brownSynth
         *> play (toggle <| isDown keyO) whiteSynth
-        *> play (toggle <| isDown keyP) simplexSynth (mouseX ~> scale 0.1 80)
-        *> play (toggle <| isDown keyQ) pluckSynth (mouseX ~> scale 20 2000) (mouseY ~> linlin 0 1 (-1) 1)
-        *> play (toggle <| isDown keyR) lfsawSynth (mouseX ~> scale 0.1 2000)
-        *> play (toggle <| isDown keyS) lfpulseSynth (mouseX ~> scale 0.1 2000)
-        *> play (toggle <| isDown keyT) slendroSampleSynth (mouseX ~> scale 0.0001 2)
-        *> play (toggle <| isDown keyU) harpKotoSampleSynth (mouseX ~> scale 0.0001 2)
+        -- *> play (toggle <| isDown keyP) simplexSynth (mouseX ~> scale 0.1 80)
+        -- *> play (toggle <| isDown keyQ) pluckSynth (mouseX ~> scale 20 2000) (mouseY ~> linlin 0 1 (-1) 1)
+        -- *> play (toggle <| isDown keyR) lfsawSynth (mouseX ~> scale 0.1 2000)
+        -- *> play (toggle <| isDown keyS) lfpulseSynth (mouseX ~> scale 0.1 2000)
+        -- *> play (toggle <| isDown keyT) slendroSampleSynth (mouseX ~> scale 0.0001 2)
+        -- *> play (toggle <| isDown keyU) harpKotoSampleSynth (mouseX ~> scale 0.0001 2)

@@ -738,6 +738,7 @@ foreign import ccall "get_running" getRtRunning :: IO Int
 foreign import ccall "free_synth_definition" freeCSynthDef :: Ptr CSynthDef -> IO ()
 foreign import ccall "jack_get_time" getJackTime :: IO JackTime
 foreign import ccall "get_block_size" getJackBlockSize :: IO CUInt
+foreign import ccall "assert_block_size" assertBlockSize :: IO ()
 foreign import ccall "load_and_register_sample" prloadAndRegisterSample :: CString -> IO ()
 foreign import ccall "load_and_register_samples" prloadAndRegisterSamples :: Ptr CString -> CInt -> IO ()
 foreign import ccall "retrieve_sample_buffer" prRetrieveSampleBuffer :: CString -> IO (Ptr CSampleBuffer)

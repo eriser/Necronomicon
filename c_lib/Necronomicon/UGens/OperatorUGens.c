@@ -18,7 +18,8 @@ CONTROL_ARGS                                        \
 AUDIO_LOOP(                                         \
     AUDIO_ARGS                                      \
     UGEN_OUT(out, a OP b);                          \
-);
+);\
+printf("a: %f, b: %f\n", a, b);
 
 #define BIN_FUNC_CALC(FUNC, CONTROL_ARGS, AUDIO_ARGS)   \
 double* in0 = UGEN_INPUT_BUFFER(u, 0);                  \
