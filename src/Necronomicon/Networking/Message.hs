@@ -35,8 +35,6 @@ sendWithLength nsocket msg = Control.Exception.catch trySend onFailure
                 -- putStrLn $ "messageLength: " ++ show messageLength
                 sendAll nsocket $ messageLengthData
                 sendAll nsocket $ BL.toStrict msg
-                -- bytes <- send nsocket msg
-                -- when (fromIntegral bytes /= messageLength) $ putStrLn "SEND ERROR: Disagreement in bytes sent"
         onFailure e = print (e :: IOException)
 
 receiveWithLength :: Socket -> IO Receive
@@ -55,8 +53,8 @@ receiveWithLength nsocket = Control.Exception.catch trySend onFailure
             putStrLn $ "Actually received data of length: " ++ show (B.length streamData)
             putStrLn ""
             if B.length streamData < amountToRead
-                then readTillFinished (amountToRead - B.length streamData) $ B.append prevData streamData
-                else return $ Receive $ BL.fromStrict $ B.append prevData streamData
+                then putStrLn "continue receiving" >> (readTillFinished (amountToRead - B.length streamData) $ B.append prevData streamData)
+                else putStrLn "done receiving" >> (return $ Receive $ BL.fromStrict $ B.append prevData streamData)
 
         decodeTransLength bs
             | B.length bs == 0                     = Just 0
