@@ -4,7 +4,8 @@ import Control.Concurrent.STM
 import Data.Binary
 import System.Random
 -- import Data.Bits (xor)
-import qualified Data.IntMap           as IntMap
+import qualified Data.IntMap      as IntMap
+-- import qualified Data.ByteString  as B
 import qualified Data.ByteString.Lazy  as B
 
 data NetMessage = Chat            String String

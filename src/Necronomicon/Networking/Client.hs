@@ -14,7 +14,8 @@ import Data.Binary
 import Data.Binary.Get
 import Network.Socket                  hiding (send,recv,recvFrom,sendTo)
 import qualified Data.ByteString.Lazy  as B
-import qualified Data.IntMap           as IntMap
+-- import qualified Data.ByteString as B
+import qualified Data.IntMap     as IntMap
 
 
 startClient :: String -> String -> SignalState -> Client -> IO ()
