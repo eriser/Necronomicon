@@ -113,7 +113,7 @@ messageProcessor client sigstate = executeIfConnected client (atomically $ readT
     Nothing -> putStrLn "Shutting down messageProcessor"
     Just m  -> case runGet isSignalUpdate m of
         Nothing  -> parseMessage (decode m) client sigstate >> messageProcessor client sigstate
-        Just nid -> atomically (writeTChan (signalsInbox sigstate) $ NetSignalEvent nid m) >> messageProcessor client sigstate
+        Just nid -> putStrLn "processing net entity data" >> atomically (writeTChan (signalsInbox sigstate) $ NetSignalEvent nid m) >> messageProcessor client sigstate
     where
         isSignalUpdate = (get :: Get Word8) >>= \t -> case t of
             4 -> Just <$> (get :: Get Int)

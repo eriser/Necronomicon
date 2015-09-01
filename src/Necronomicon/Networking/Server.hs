@@ -84,8 +84,8 @@ keepAlive server = forever $ do
     broadcast (SendToAll, encode Alive) server
 
     currentTime <- getCurrentTime
-    mapM_ removeDeadUsers $ Map.filter (\u -> (diffUTCTime currentTime (userAliveTime u) >= 6)) users
-    atomically $ writeTVar (serverUsers server) $ Map.filter (\u -> (diffUTCTime currentTime (userAliveTime u) < 6)) users
+    mapM_ removeDeadUsers $ Map.filter (\u -> (diffUTCTime currentTime (userAliveTime u) >= 12)) users
+    atomically $ writeTVar (serverUsers server) $ Map.filter (\u -> (diffUTCTime currentTime (userAliveTime u) < 12)) users
     threadDelay 4000000
     where
         removeDeadUsers user = do
@@ -126,7 +126,7 @@ sendBroadcastMessages server _ = forever $ (atomically $ readTChan $ serverBroad
     SendTo     user -> send' (userSocket user) msg
     DontSendTo sa   -> do
         userList <- (atomically $ readTVar (serverUsers server)) >>= return . Map.toList
-        mapM_ (\(_,user) -> if userAddress user /= sa then send' (userSocket user) msg else return ()) userList
+        mapM_ (\(usa, user) -> if usa /= sa then send' (userSocket user) msg else return ()) userList
     SendToAll       -> do
         userList <- (atomically $ readTVar (serverUsers server)) >>= return . Map.toList
         mapM_ (\(_,user) -> send' (userSocket user) msg) userList
@@ -140,6 +140,7 @@ sendBroadcastMessages server _ = forever $ (atomically $ readTChan $ serverBroad
 
 
 --TODO: Somehow we're losing alive messages when we send entity data.....WHY!?
+--TODO: It's definitely MOUSE MOVEMENT! in particular that's doing it. Why??
 processMessage :: Server -> SockAddr -> Socket -> B.ByteString -> IO Bool
 processMessage server sa sock msg = case runGet (get :: Get Word8) msg of
     0 -> parseMessage msg (decode msg) sock sa server
