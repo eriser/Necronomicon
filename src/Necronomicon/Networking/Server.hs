@@ -64,7 +64,6 @@ startServer = print "Starting a server." >> (withSocketsDo $ bracket getSocket s
             sock             <- socket AF_INET Stream defaultProtocol
 
             setSocketOption sock ReuseAddr 1
-            -- setSocketOption sock NoDelay   1
             bindSocket sock (addrAddress serveraddr)
             listen sock 3
             return sock
@@ -101,7 +100,6 @@ acceptLoop server nsocket = forever $ do
         then return ()
         else do
             -- setSocketOption newUserSocket KeepAlive 1
-            -- setSocketOption newUserSocket NoDelay   1
             putStrLn $ "Accepting connection from user at: " ++ show newUserAddress
             _ <- forkIO $ userListen newUserSocket newUserAddress server
             return ()

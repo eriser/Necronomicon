@@ -52,7 +52,7 @@ receiveWithLength nsocket = Control.Exception.catch trySend onFailure
             streamData <- recv nsocket amountToRead
             putStrLn $ "Actually received data of length: " ++ show (B.length streamData)
             putStrLn ""
-            if B.length streamData < amountToRead
+            if B.length streamData <= 0 then return ShutdownMessage else if B.length streamData < amountToRead
                 then putStrLn "continue receiving" >> (readTillFinished (amountToRead - B.length streamData) $ B.append prevData streamData)
                 else putStrLn "done receiving" >> (return $ Receive $ BL.fromStrict $ B.append prevData streamData)
 
