@@ -101,7 +101,7 @@ acceptLoop server nsocket = forever $ do
         then return ()
         else do
             -- setSocketOption newUserSocket KeepAlive 1
-            setSocketOption newUserSocket NoDelay   1
+            -- setSocketOption newUserSocket NoDelay   1
             putStrLn $ "Accepting connection from user at: " ++ show newUserAddress
             _ <- forkIO $ userListen newUserSocket newUserAddress server
             return ()

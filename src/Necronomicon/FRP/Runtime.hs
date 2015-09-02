@@ -74,7 +74,8 @@ runSignal sig = initWindow (920, 540) False >>= \mw -> case mw of
                 GLFW.swapBuffers window
                 atomically $ putTMVar (contextBarrier $ sigResources state) $ GLContext mtid
 
-                threadDelay 16667
+                -- threadDelay 16667
+                threadDelay $ 16667 * 2
                 run q window s currentTime tree eventInbox state
 
 processEvents :: Show a => (InputEvent -> IO (Event a)) -> SignalState -> TChan InputEvent -> IO ()

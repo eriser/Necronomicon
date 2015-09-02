@@ -32,7 +32,7 @@ sendWithLength nsocket msg = Control.Exception.catch trySend onFailure
             | otherwise = do
                 let messageLengthData = BL.toStrict $ encode messageLength
                 -- putStrLn $ "length of messageLength: " ++ show (B.length messageLengthData)
-                -- putStrLn $ "messageLength: " ++ show messageLength
+                putStrLn $ "sending message of length: " ++ show messageLength
                 sendAll nsocket $ messageLengthData
                 sendAll nsocket $ BL.toStrict msg
         onFailure e = print (e :: IOException)
