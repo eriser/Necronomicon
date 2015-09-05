@@ -85,15 +85,15 @@ terminalColor True  = Vector4 0.20 0.00 1.00 0.5
 updateTerminal :: TerminalInput -> Entity Terminal -> Entity Terminal
 updateTerminal input e = case input of
     TerminalSetActive a       -> flip fmap e <| \t -> t{terminalIsActive = a}
-    TerminalSetValues (x,  y) -> flip fmap e <| \t -> t{terminalValues   = (argfunc tx x, argfunc ty <| negate y)}
+    TerminalSetValues (x,  y) -> if not isActive then e else flip fmap e <| \t -> t{terminalValues   = (argfunc tx x, argfunc ty <| negate y)}
     TerminalTick      (dt, _) -> setUniform "baseColor" (UniformVec4 <| terminalColor isActive) <| if isActive
         then rotate (rotVec dt) e
         else e
     where
         isActive    = terminalIsActive <| edata e
         (tx, ty)    = terminalValues   <| edata e
-        rotVec dt   = Vector3 (dt * tx * 30) (dt * ty * 30) (dt * 5)
-        argfunc x v = clamp 0 20 <| x + v * 2
+        rotVec dt   = Vector3 (dt * tx * 600) (dt * ty * 600) (dt * 5)
+        argfunc x v = clamp 0 1 <| x + v * 0.1
 
 
 
