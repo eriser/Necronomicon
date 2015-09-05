@@ -88,6 +88,7 @@ import qualified Data.IntSet                  as IntSet
 import qualified Data.Map                     as Map
 import qualified Graphics.UI.GLFW             as GLFW
 
+
 ----------------------------------
 -- Input
 ----------------------------------
@@ -102,13 +103,13 @@ mousePos = Signal $ \_ -> do
 
 mouseDelta :: Signal (Double, Double)
 mouseDelta = Signal $ \state -> do
-    GLFW.setCursorInputMode     (context $ sigResources state) GLFW.CursorInputMode'Disabled
-    ref       <- newIORef ((0, 0), (0, 0))
-    return (cont ref , (0, 0))
+    GLFW.setCursorInputMode (context $ sigResources state) GLFW.CursorInputMode'Disabled
+    ref <- newIORef ((0, 0), (0, 0))
+    return (cont ref, (0, 0))
     where
         cont ref (MouseEvent (mx, my)) = do
             (px, py) <- fst <~ readIORef ref
-            let delta = ((mx - px), (my - py))
+            let delta = (mx - px, my - py)
             writeIORef ref ((mx, my), delta)
             return $ Change delta
         cont ref _ = readIORef ref >>= return . NoChange . snd

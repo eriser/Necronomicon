@@ -58,7 +58,7 @@ players = foldn updatePlayers IntMap.empty
        <| PlayerTick   <~ tick       ~~ userID ~~ sigOr [isDown keyLShift, isDown keyRShift]
        <> PlayerKeys   <~ wasd       ~~ userID
        <> PlayerLog    <~ userLog    ~~ userID
-       <> PlayerMouse  <~ filterWhen (fmap not <| areUp [keyB, keyC, keyE, keyF, keyG, keyH, keyI, keyJ, keyK, keyL, keyM, keyN, keyO, keyP, keyQ, keyR, keyT, keyU, keyV, keyX, keyY, keyZ]) mouseDelta ~~ userID
+       <> PlayerMouse  <~ filterWhen' (fmap not <| areUp [keyB, keyC, keyE, keyF, keyG, keyH, keyI, keyJ, keyK, keyL, keyM, keyN, keyO, keyP, keyQ, keyR, keyT, keyU, keyV, keyX, keyY, keyZ]) mouseDelta ~~ userID
 
 
 ---------------------------------------------------------------------------

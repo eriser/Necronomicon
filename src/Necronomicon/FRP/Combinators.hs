@@ -3,6 +3,7 @@ module Necronomicon.FRP.Combinators
     , mergeMany
     , filterIf
     , filterWhen
+    , filterWhen'
     , filterRepeats
     , sampleOn
     , switch
@@ -97,6 +98,20 @@ filterWhen sPred xsig = Signal $ \state -> do
         cont pcont xcont ref event = do
             p <- unEvent <~ pcont event
             if p then readIORef ref >>= return . NoChange else xcont event >>= \xe -> case xe of
+                NoChange _  -> return xe
+                Change   x' -> writeIORef ref x' >> return xe
+
+--Same as filterWhen, the value of the value signal is ignored when the predicate is true, however the value signal is still evaluated for effects
+filterWhen' :: Signal Bool -> Signal a -> Signal a
+filterWhen' sPred xsig = Signal $ \state -> do
+    (pcont, _) <- unSignal sPred state
+    (xcont, x) <- unSignal xsig  state
+    ref        <- newIORef x
+    return (cont pcont xcont ref, x)
+    where
+        cont pcont xcont ref event = do
+            p <- unEvent <~ pcont event
+            if p then xcont event >> readIORef ref >>= return . NoChange else xcont event >>= \xe -> case xe of
                 NoChange _  -> return xe
                 Change   x' -> writeIORef ref x' >> return xe
 
