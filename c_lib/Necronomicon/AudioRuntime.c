@@ -375,6 +375,7 @@ sample_buffer* retrieve_sample_buffer(const char* file_path)
     if (file_path != NULL)
     {
         buffer = hash_table_lookup_string_key(sample_hash_table, file_path);
+        printf("retrieved sound file %s\n", file_path);
     }
     else
     {

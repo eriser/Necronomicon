@@ -85,7 +85,7 @@ main :: IO ()
 main = runSignal soundsig
 
 soundsig :: Signal ()
-soundsig = loadSample slendroFilePath
+soundsig = loadSamples [slendroFilePath, harpKotoFilePath]
         *> play (toggle <| isDown keyA) reverbSynth
         *> play (toggle <| isDown keyB) delaySynthN (mouseX ~> scale 20 10000)  mouseY
         *> play (toggle <| isDown keyC) delaySynthL (mouseX ~> scale 20 10000)  mouseY

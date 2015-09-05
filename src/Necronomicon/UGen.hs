@@ -1571,14 +1571,27 @@ compileUGen ugen@(UGenFunc (Random seed rmin rmax) _ _ _ _) args key = liftIO (n
     compileUGenWithConstructorArgs ugen (castPtr randValuesPtr) args key
 compileUGen ugen@(UGenFunc (Limiter lookahead) _ _ _ _) args key = liftIO (new $ CDouble lookahead) >>= \lookaheadPtr ->
     compileUGenWithConstructorArgs ugen (castPtr lookaheadPtr) args key
-compileUGen ugen@(UGenFunc (PlaySample resourceFilePath numSampleChannels) _ _ _ _) args key = do
+compileUGen ugen@(UGenFunc (PlaySample _ _) _ _ _ _) args key = do
+    playSampleConstructorArgs <- compileSampleUGenArgs ugen
+    compileUGenWithConstructorArgs ugen (castPtr playSampleConstructorArgs) args key
+compileUGen ugen@(MultiOutUGenFunc _ _ ugenChannel@((UGenFunc (PlaySample _ _) _ _ _ _))) args key = do
+    playSampleConstructorArgs <- compileSampleUGenArgs ugenChannel
+    compileUGenWithConstructorArgs ugen (castPtr playSampleConstructorArgs) args key
+compileUGen ugen args key = compileUGenWithConstructorArgs ugen nullPtr args key
+
+compileSampleUGenArgs :: UGenChannel -> Compiled (Ptr CPlaySampleConstructArgs)
+compileSampleUGenArgs (UGenFunc (PlaySample resourceFilePath numSampleChannels) _ _ _ _) = do
     fullFilePath <- liftIO $ getDataFileName resourceFilePath
-    cFilePath <- liftIO $ withCString fullFilePath prRetrieveSampleBufferNameString
     -- Only temporarily allocate a CString to grab the stored string for the sample.
     -- This way the ugen doesn't need to worry about managing the cstring memory
-    playSampleConstructArgs <- liftIO $ new $ CPlaySampleConstructArgs cFilePath $ fromIntegral numSampleChannels
-    compileUGenWithConstructorArgs ugen (castPtr playSampleConstructArgs) args key
-compileUGen ugen args key = compileUGenWithConstructorArgs ugen nullPtr args key
+    cFilePath <- liftIO $ withCString fullFilePath prRetrieveSampleBufferNameString
+    liftIO . print $ show "compileSampleUGenArgs"
+    liftIO . print $ show resourceFilePath
+    liftIO . print $ show cFilePath
+    cString <- liftIO $ peekCString cFilePath
+    liftIO . print $ show cString
+    liftIO . new $ CPlaySampleConstructArgs cFilePath $ fromIntegral numSampleChannels
+compileSampleUGenArgs _ = return nullPtr
 
 ------------------------------------------
 -- Testing Functions

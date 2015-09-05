@@ -13,17 +13,12 @@
 #include "Containers/HashTable.h"
 #include "Util.h"
 
-// Use haskell threads to do actual loading
-// Have a single thread that reads a tchan for load sample messages?
-// Have it send a message to the nrt thread with the name/double* pair to for storing in the sample_hash_table
-// The RT thread never allocates/deallocates or accesses the sample_hash_table
-
 // playSample
 
 typedef struct
 {
     char* sample_file_path;
-    int num_channels;
+    int32_t num_channels;
 } playSample_constructor_args;
 
 typedef struct
@@ -36,8 +31,27 @@ typedef struct
 void playSample_constructor(ugen* u)
 {
     u->data = malloc(sizeof(playSample_data));
+    memset(u->data, 0, sizeof(playSample_data));
+
     playSample_constructor_args* constructor_args = (playSample_constructor_args*) u->constructor_args;
+    if (constructor_args == NULL)
+    {
+        puts("playSample_constructor :: constructor_args = NULL");
+        return;
+    }
+
     const char* sample_file_path = constructor_args->sample_file_path;
+
+    if (sample_file_path == NULL)
+    {
+        puts("playSample_constructor :: sample_file_path = NULL");
+        return;
+    }
+    else
+    {
+        printf("playSample_constructor :: sample_file_path =  %s\n", sample_file_path);
+    }
+
     int num_channels = constructor_args->num_channels;
     sample_buffer* buffer = retrieve_sample_buffer(sample_file_path);
 
@@ -47,7 +61,7 @@ void playSample_constructor(ugen* u)
     }
     else if(buffer->num_channels < num_channels)
     {
-        printf("the sample %s has %i channels, but %i were requested. Changing to %i channels", sample_file_path, buffer->num_channels, num_channels, buffer->num_channels);
+        printf("the sample %s has %i channels, but %i were requested. Changing to %i channels\n", sample_file_path, buffer->num_channels, num_channels, buffer->num_channels);
         num_channels = buffer->num_channels;
     }
 
@@ -57,9 +71,6 @@ void playSample_constructor(ugen* u)
 
 void playSample_deconstructor(ugen* u)
 {
-    // playSample_constructor_args* constructor_args = (playSample_constructor_args*) u->constructor_args;
-    // char* sample_file_path = constructor_args->sample_file_path;
-    // free(sample_file_path);
     free(u->data);
 }
 
