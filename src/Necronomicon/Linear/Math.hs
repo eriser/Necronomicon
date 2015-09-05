@@ -39,15 +39,6 @@ toGLDouble = realToFrac
 nearZero :: Double -> Bool
 nearZero v = v < epsilon
 
--- linlin :: Double -> Double -> Double -> Double -> Double -> Double
--- linlin inMin inMax outMin outMax val
-    -- | val <= inMin = outMin
-    -- | val >= inMax = outMax
-    -- | otherwise    = (((val - inMin) / (inMax - inMin)) * (outMax - outMin)) + outMin
-
--- clamp :: Double -> Double -> Double -> Double
--- clamp mn mx = min mx . max mn
-
 clamp :: Ord a => a -> a -> a -> a
 clamp mn mx x = min mx (max x mn)
 {-# INLINE clamp #-}
