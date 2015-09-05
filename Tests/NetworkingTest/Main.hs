@@ -23,7 +23,7 @@ data PlayerInput   = PlayerKeys   (Double, Double)    Int
 
 mkPlayer :: Entity Player
 mkPlayer = ( mkEntity  <| Player PlayerIdle (0, 0) )
-           { pos        = Vector3 0 0 (-6)
+           { pos        = Vector3 0 2 (-6)
            , camera     = Just <| Camera 60 0.1 1000 black [postRenderFX blur] (toBitMask DefaultLayer) 0
            , netOptions = mkNetworkOptions
                { networkPos    = Network
@@ -58,7 +58,7 @@ players = foldn updatePlayers IntMap.empty
        <| PlayerTick   <~ tick       ~~ userID ~~ sigOr [isDown keyLShift, isDown keyRShift]
        <> PlayerKeys   <~ wasd       ~~ userID
        <> PlayerLog    <~ userLog    ~~ userID
-       <> PlayerMouse  <~ filterWhen (isDown keyLAlt) mouseDelta ~~ userID
+       <> PlayerMouse  <~ filterWhen (fmap not <| areUp [keyB, keyC, keyE, keyF, keyG, keyH, keyI, keyJ, keyK, keyL, keyM, keyN, keyO, keyP, keyQ, keyR, keyT, keyU, keyV, keyX, keyY, keyZ]) mouseDelta ~~ userID
 
 
 ---------------------------------------------------------------------------
@@ -104,14 +104,14 @@ updateTerminal input e = case input of
         argfunc x v = clamp 0 1 <| x + v * 0.1
 
 mkTerminal :: Vector3 -> Key -> (UGen -> UGen -> UGen) -> Signal ()
-mkTerminal p k _ s = play isActive s (fmap fst values) (fmap snd values)
+mkTerminal p k s = play isActive s (fmap fst values) (fmap snd values)
     where
         isActive = fmap (\e -> terminalIsActive <| edata e) terminal
         values   = fmap (\e -> terminalValues   <| edata e) terminal
         terminal = foldn updateTerminal (mkTerminalEntity p)
                 <| TerminalTick      <~ tick
-                <> TerminalSetActive <~ toggle (sigAnd [isDown keyLCtrl, isDown k])
-                <> TerminalSetValues <~ filterWhen (fmap not <| isDown keyLAlt) mouseDelta
+                <> TerminalSetActive <~ toggle (areDown [keyLCtrl, k])
+                <> TerminalSetValues <~ filterWhen (fmap not <| isDown k) mouseDelta
 
 ---------------------------------------------------------------------------
 -- Main
@@ -120,7 +120,7 @@ mkTerminal p k _ s = play isActive s (fmap fst values) (fmap snd values)
 main :: IO ()
 main = runSignal
     <| players
-    *> mkTerminal (Vector3 0 2 0) keyT lfsawSynth
+    *> mkTerminal (Vector3 0 3 0) keyT lfsawSynth
     *> section1
 
 ---------------------------------------------------------------------------

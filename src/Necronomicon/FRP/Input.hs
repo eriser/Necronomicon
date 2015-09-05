@@ -71,6 +71,8 @@ module Necronomicon.FRP.Input
     , keyRight
     , isDown
     , isUp
+    , areDown
+    , areUp
     , wasd
     , keyboard
     , collision
@@ -438,10 +440,44 @@ isUp k = not <~ isDown k
 isDown :: Key -> Signal Bool
 isDown k = Signal $ \_ -> do
     ref <- newIORef False
-    return (cont ref , False)
+    return (cont ref, False)
     where
         cont ref (KeyEvent k' b) = if k == k' then writeIORef ref b >> return (Change b) else readIORef ref >>= return . NoChange
         cont ref  _              = readIORef ref >>= return . NoChange
+
+areDown :: [Key] -> Signal Bool
+areDown dks = Signal $ \_ -> do
+    ref   <- newIORef False
+    ksRef <- newIORef IntSet.empty
+    return (cont ref ksRef, False)
+    where
+        cont ref ksRef (KeyEvent k b) = if null dks then return $ NoChange False else do
+            ks <- readIORef ksRef
+            let ks' = if b
+                then IntSet.insert (fromEnum k) ks
+                else IntSet.delete (fromEnum k) ks
+                areDown' = foldr (\k' b' -> if not b' then b' else IntSet.member (fromEnum k') ks') True dks
+            writeIORef ksRef ks'
+            writeIORef ref   areDown'
+            return $ Change areDown'
+        cont ref _ _ = NoChange <$> readIORef ref
+
+areUp :: [Key] -> Signal Bool
+areUp dks = Signal $ \_ -> do
+    ref   <- newIORef False
+    ksRef <- newIORef IntSet.empty
+    return (cont ref ksRef, True)
+    where
+        cont ref ksRef (KeyEvent k b) = do
+            ks <- readIORef ksRef
+            let ks' = if b
+                then IntSet.insert (fromEnum k) ks
+                else IntSet.delete (fromEnum k) ks
+                areDown' = foldr (\k' b' -> if not b' then b' else not $ IntSet.member (fromEnum k') ks') True dks
+            writeIORef ksRef ks'
+            writeIORef ref   areDown'
+            return $ Change areDown'
+        cont ref _ _ = NoChange <$> readIORef ref
 
 wasd :: Signal (Double, Double)
 wasd = go <~ isDown keyW ~~ isDown keyA ~~ isDown keyS ~~ isDown keyD
