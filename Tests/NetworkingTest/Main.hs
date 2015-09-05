@@ -53,6 +53,14 @@ tickPlayer (dt, _) s p = case p of
     Entity{ edata = Player (PlayerMoving d) _ } -> translate (d * realToFrac dt * if s then 8 else 3) p
     _                                           -> p
 
+players :: Signal (IntMap.IntMap (Entity Player))
+players = foldn updatePlayers IntMap.empty
+       <| PlayerTick   <~ tick       ~~ userID ~~ sigOr [isDown keyLShift, isDown keyRShift]
+       <> PlayerKeys   <~ wasd       ~~ userID
+       <> PlayerLog    <~ userLog    ~~ userID
+       <> PlayerMouse  <~ filterWhen (isDown keyLAlt) mouseDelta ~~ userID
+
+
 ---------------------------------------------------------------------------
 -- Terminal
 ---------------------------------------------------------------------------
@@ -71,8 +79,8 @@ instance Binary Player
 instance Binary PlayerState
 instance Binary Terminal
 
-mkTerminal :: Vector3 -> Entity Terminal
-mkTerminal p = (mkEntity <| Terminal False (0, 0))
+mkTerminalEntity :: Vector3 -> Entity Terminal
+mkTerminalEntity p = (mkEntity <| Terminal False (0, 0))
              { pos        = p
              , model      = Just <| mkModel DefaultLayer cube <| vertexColored <| RGBA 0.15 0.15 0.15 0.25
              , netOptions = mkNetworkOptions
@@ -95,7 +103,15 @@ updateTerminal input e = case input of
         rotVec dt   = Vector3 (dt * tx * 600) (dt * ty * 600) (dt * 5)
         argfunc x v = clamp 0 1 <| x + v * 0.1
 
-
+mkTerminal :: Vector3 -> Key -> (UGen -> UGen -> UGen) -> Signal ()
+mkTerminal p k _ s = play isActive s (fmap fst values) (fmap snd values)
+    where
+        isActive = fmap (\e -> terminalIsActive <| edata e) terminal
+        values   = fmap (\e -> terminalValues   <| edata e) terminal
+        terminal = foldn updateTerminal (mkTerminalEntity p)
+                <| TerminalTick      <~ tick
+                <> TerminalSetActive <~ toggle (sigAnd [isDown keyLCtrl, isDown k])
+                <> TerminalSetValues <~ filterWhen (fmap not <| isDown keyLAlt) mouseDelta
 
 ---------------------------------------------------------------------------
 -- Main
@@ -104,20 +120,8 @@ updateTerminal input e = case input of
 main :: IO ()
 main = runSignal
     <| players
-    *> terminal1
+    *> mkTerminal (Vector3 0 2 0) keyT lfsawSynth
     *> section1
-    where
-        players   = foldn updatePlayers IntMap.empty
-                 <| PlayerTick   <~ tick       ~~ userID ~~ sigOr [isDown keyLShift, isDown keyRShift]
-                 <> PlayerKeys   <~ wasd       ~~ userID
-                 <> PlayerMouse  <~ filterWhen (isDown keyLAlt) mouseDelta ~~ userID
-                 <> PlayerLog    <~ userLog    ~~ userID
-
-        terminal1 = foldn updateTerminal (mkTerminal 0)
-                 <| TerminalTick      <~ tick
-                 <> TerminalSetActive <~ toggle (sigAnd [isDown keyLCtrl, isDown keyT])
-                 <> TerminalSetValues <~ filterWhen (fmap not <| isDown keyLAlt) mouseDelta
-
 
 ---------------------------------------------------------------------------
 -- Section 1
@@ -159,5 +163,7 @@ mkTerrain = terrainEntity
             | mod i w' < (w'-1) = i + 1 : i + w' : i + w' + 1 : i + 1 : i : i + w' : indicesList
             | otherwise         = indicesList
 
+lfsawSynth :: UGen -> UGen -> UGen
+lfsawSynth freq1 freq2 = (lfsaw (lag 0.1 [exprange 40 4000 freq1, exprange 40 4000 freq2]) 0) * 2 - 1 |> exprange 20 20000 |> sin |> gain 0.2 |> dup |> out 0
 
-        -- *> play (toggle <| isDown keyR) lfsawSynth (mouseX ~> scale 0.1 2000)
+

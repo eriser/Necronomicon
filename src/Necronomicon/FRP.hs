@@ -20,6 +20,6 @@ import Necronomicon.FRP.Input
 import Necronomicon.FRP.Networking
 import Necronomicon.FRP.State
 import Necronomicon.FRP.Runtime (runSignal)
-import Necronomicon.FRP.Types   ((<~), (~~), (~>), Time)
+import Necronomicon.FRP.Types   ((<~), (~~), (~>), Time, Key)
 import Necronomicon.FRP.Signal  (Signal)
 import Data.Monoid ((<>))

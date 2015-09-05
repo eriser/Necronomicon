@@ -47,8 +47,12 @@ instance Functor Event where
 -- Signal
 ----------------------------------
 
-data Signal a = Signal { unSignal :: SignalState -> IO (InputEvent -> IO (Event a), a) }
+data Signal a = Signal (SignalState -> IO (InputEvent -> IO (Event a), a))
               | Pure a
+
+unSignal :: Signal a -> (SignalState -> IO (InputEvent -> IO (Event a), a))
+unSignal (Signal sig) = sig
+unSignal (Pure   sig) = const (return (const (return (NoChange sig)), sig))
 
 instance Functor Signal where
     fmap f (Pure x)      = Pure $ f x

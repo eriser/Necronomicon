@@ -280,7 +280,7 @@ executable NetworkingTest
     ghc-options:      -threaded -O2 -Wall -Werror "-with-rtsopts=-N4 -A16m"
     cc-options:       -std=c99 -Werror
     hs-source-dirs:   Tests/NetworkingTest
-    default-extensions: DeriveGeneric
+    default-extensions: DeriveGeneric OverloadedLists
     build-depends:    base             == 4.*,
                       Necronomicon,
                       containers,
