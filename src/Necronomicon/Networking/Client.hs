@@ -113,7 +113,7 @@ processMessage :: B.ByteString -> Client -> SignalState -> IO ()
 processMessage m client sigstate =
     case runGet isSignalUpdate m of
         Nothing  -> parseMessage (decode m) client sigstate
-        Just nid -> putStrLn "processing net entity data" >> atomically (writeTChan (signalsInbox sigstate) $ NetSignalEvent nid m)
+        Just nid -> atomically (writeTChan (signalsInbox sigstate) $ NetSignalEvent nid m)
     where
         isSignalUpdate = (get :: Get Word8) >>= \t -> case t of
             4 -> Just <$> (get :: Get Int)

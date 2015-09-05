@@ -32,7 +32,7 @@ sendWithLength nsocket msg = Control.Exception.catch trySend onFailure
             | otherwise = do
                 let messageLengthData = BL.toStrict $ encode messageLength
                 -- putStrLn $ "length of messageLength: " ++ show (B.length messageLengthData)
-                putStrLn $ "sending message of length: " ++ show messageLength
+                -- putStrLn $ "sending message of length: " ++ show messageLength
                 sendAll nsocket $ messageLengthData
                 sendAll nsocket $ BL.toStrict msg
         onFailure e = print (e :: IOException)
@@ -48,13 +48,14 @@ receiveWithLength nsocket = Control.Exception.catch trySend onFailure
                 else readTillFinished len' B.empty
 
         readTillFinished amountToRead prevData = do
-            putStrLn $ "Attempting to receive data of length: " ++ show amountToRead
+            -- putStrLn $ "Attempting to receive data of length: " ++ show amountToRead
             streamData <- recv nsocket amountToRead
-            putStrLn $ "Actually received data of length: " ++ show (B.length streamData)
-            putStrLn ""
+            -- putStrLn $ "Actually received data of length: " ++ show (B.length streamData)
+            -- putStrLn ""
             if B.length streamData <= 0 then return ShutdownMessage else if B.length streamData < amountToRead
-                then putStrLn "continue receiving" >> (readTillFinished (amountToRead - B.length streamData) $ B.append prevData streamData)
-                else putStrLn "done receiving" >> (return $ Receive $ BL.fromStrict $ B.append prevData streamData)
+                then {-putStrLn "continue receiving" >> -} (readTillFinished (amountToRead - B.length streamData) $ B.append prevData streamData)
+                else {-putStrLn "done receiving" >> -} (return $ Receive $ BL.fromStrict $ B.append prevData streamData)
+
 
         decodeTransLength bs
             | B.length bs == 0                     = Just 0

@@ -74,18 +74,18 @@ instance Binary Terminal
 mkTerminal :: Vector3 -> Entity Terminal
 mkTerminal p = (mkEntity <| Terminal False (0, 0))
              { pos        = p
-             , model      = Just <| mkModel DefaultLayer cube <| vertexColored <| RGBA 0.15 0.15 0.15 0.5
+             , model      = Just <| mkModel DefaultLayer cube <| vertexColored <| RGBA 0.15 0.15 0.15 0.25
              , netOptions = mkNetworkOptions
                  { networkData = Network } }
 
 terminalColor :: Bool -> Vector4
-terminalColor False = Vector4 0.15 0.15 0.15 0.5
-terminalColor True  = Vector4 0.20 0.00 1.00 0.85
+terminalColor False = Vector4 0.15 0.15 0.15 0.25
+terminalColor True  = Vector4 0.20 0.00 1.00 0.5
 
 updateTerminal :: TerminalInput -> Entity Terminal -> Entity Terminal
 updateTerminal input e = case input of
     TerminalSetActive a       -> flip fmap e <| \t -> t{terminalIsActive = a}
-    TerminalSetValues (x,  y) -> flip fmap e <| \t -> t{terminalValues   = (argfunc tx x, argfunc ty y)}
+    TerminalSetValues (x,  y) -> flip fmap e <| \t -> t{terminalValues   = (argfunc tx x, argfunc ty <| negate y)}
     TerminalTick      (dt, _) -> setUniform "baseColor" (UniformVec4 <| terminalColor isActive) <| if isActive
         then rotate (rotVec dt) e
         else e
@@ -93,7 +93,7 @@ updateTerminal input e = case input of
         isActive    = terminalIsActive <| edata e
         (tx, ty)    = terminalValues   <| edata e
         rotVec dt   = Vector3 (dt * tx * 30) (dt * ty * 30) (dt * 5)
-        argfunc x v = clamp (-10) 10 <| x + v * 2
+        argfunc x v = clamp 0 20 <| x + v * 2
 
 
 
