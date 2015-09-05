@@ -14,7 +14,8 @@ import Data.Binary
 import Data.Binary.Get
 import Network.Socket                  hiding (send,recv,recvFrom,sendTo)
 import qualified Data.ByteString.Lazy  as B
-import qualified Data.IntMap           as IntMap
+-- import qualified Data.ByteString as B
+import qualified Data.IntMap     as IntMap
 
 
 startClient :: String -> String -> SignalState -> Client -> IO ()
@@ -31,20 +32,18 @@ startup client serverIPAddress sigstate = do
 
     connectionLoop            client sock serverAddr
     getCurrentTime >>= \t -> atomically $ writeTVar (clientAliveTime client) t
-    _ <- forkIO $ messageProcessor client sigstate
+    -- _ <- forkIO $ messageProcessor client sigstate
     _ <- forkIO $ aliveLoop        client sock
     _ <- forkIO $ sender           client sock
     atomically  $ writeTChan (signalsInbox sigstate) $ NetStatusEvent Running
     sendLoginMessage client
     listener client sock serverIPAddress sigstate
     where
-        -- hints     = Just $ defaultHints {addrSocketType = Stream}
         hints = Just $ defaultHints {addrSocketType = Stream}
         getSocket = do
             serveraddr : _ <- getAddrInfo hints (Just serverIPAddress) (Just serverPort)
             sock           <- socket AF_INET Stream defaultProtocol
             -- setSocketOption sock KeepAlive 1
-            setSocketOption sock NoDelay   1
             setSocketOption sock ReuseAddr 1
             return (sock,addrAddress serveraddr)
 
@@ -82,7 +81,7 @@ aliveLoop client sock = getCurrentTime >>= \t -> executeIfConnected client (send
         lastAliveTime <- atomically $ readTVar (clientAliveTime client)
         let delta = currentTime - lastAliveTime
         -- putStrLn $ "Time since last alive message: " ++ show delta
-        if delta < 6.5
+        if delta < 12
             then threadDelay 2000000 >> aliveLoop client sock
             else do
                 putStrLn "Lost server alive messages! Shutting down."
@@ -98,8 +97,9 @@ listener client sock serverIPAddress sigstate = receiveWithLength sock >>= \mayb
     ShutdownMessage -> putStrLn "Message has zero length. Shutting down."      >> shutdownClient
     IncorrectLength -> putStrLn "Message is incorrect length! Ignoring..."     >> listener client sock serverIPAddress sigstate
     Receive     msg -> if B.null msg
-        then shutdownClient
-        else atomically (writeTChan (clientInBox client) msg) >> listener client sock serverIPAddress sigstate
+        then putStrLn "Received null msg" >> shutdownClient
+        -- else atomically (writeTChan (clientInBox client) msg) >> listener client sock serverIPAddress sigstate
+        else processMessage msg client sigstate >> listener client sock serverIPAddress sigstate
     where
         shutdownClient = do
             putStrLn "Shutting down listener"
@@ -109,12 +109,11 @@ listener client sock serverIPAddress sigstate = receiveWithLength sock >>= \mayb
             putStrLn "Disconnected. Trying to restart..."
             startup client serverIPAddress sigstate
 
-messageProcessor :: Client -> SignalState -> IO ()
-messageProcessor client sigstate = executeIfConnected client (atomically $ readTChan $ clientInBox client) >>= \maybeMessage -> case maybeMessage of
-    Nothing -> putStrLn "Shutting down messageProcessor"
-    Just m  -> case runGet isSignalUpdate m of
-        Nothing  -> parseMessage (decode m) client sigstate >> messageProcessor client sigstate
-        Just nid -> atomically (writeTChan (signalsInbox sigstate) $ NetSignalEvent nid m) >> messageProcessor client sigstate
+processMessage :: B.ByteString -> Client -> SignalState -> IO ()
+processMessage m client sigstate =
+    case runGet isSignalUpdate m of
+        Nothing  -> parseMessage (decode m) client sigstate
+        Just nid -> atomically (writeTChan (signalsInbox sigstate) $ NetSignalEvent nid m)
     where
         isSignalUpdate = (get :: Get Word8) >>= \t -> case t of
             4 -> Just <$> (get :: Get Int)
@@ -168,7 +167,7 @@ parseMessage (Logout uid u) client sigstate = do
     putStrLn $  "User logged out: " ++ u
 
 parseMessage (Chat name msg) _ sigstate = atomically $ writeTChan (signalsInbox sigstate) $ NetChatEvent name msg
-parseMessage _                   _ _ = putStrLn "Didn't recognize that message!?"
+parseMessage _                      _ _ = putStrLn "Didn't recognize that message!?"
 
 ------------------------------
 -- Utility

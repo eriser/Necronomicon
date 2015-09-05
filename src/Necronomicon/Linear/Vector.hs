@@ -386,3 +386,11 @@ instance Ord Vector3 where
 
 sameDirection :: Vector3 -> Vector3 -> Bool
 sameDirection !a !b = a `dot` b > 0
+
+clampVector3 :: Double -> Double -> Vector3 -> Vector3
+clampVector3 low hi (Vector3 x y z) = Vector3 x' y' z'
+    where
+        x' = clamp low hi x
+        y' = clamp low hi y
+        z' = clamp low hi z
+

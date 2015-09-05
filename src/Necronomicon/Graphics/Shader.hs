@@ -67,11 +67,8 @@ loadFragmentShader path = FragmentShader $ do
 printError :: IO ()
 printError = GL.get GL.errors >>= mapM_ (hPutStrLn stderr . ("GL: "++) . show)
 
--- shader :: String -> [String] -> [String] -> VertexShader -> FragmentShader -> Shader
 shader :: String -> [String] -> VertexShader -> FragmentShader -> Shader
 shader shaderName uniformNames vs fs = Shader shaderName $ do
-    -- putStrLn $ "Compiling shader: " ++ shaderName
-
     program <- GL.createProgram
     vs'     <- unVertexShader   vs
     fs'     <- unFragmentShader fs
@@ -82,8 +79,6 @@ shader shaderName uniformNames vs fs = Shader shaderName $ do
     GL.linkProgram     program
 
     uniforms   <- mapM (GL.get . GL.uniformLocation program) uniformNames
-    -- attributes <- mapM (GL.get . GL.attribLocation  program) attributeNames
-
     pos        <- GL.get $ GL.attribLocation program "position"
     col        <- GL.get $ GL.attribLocation program "in_color"
     uvs        <- GL.get $ GL.attribLocation program "in_uv"

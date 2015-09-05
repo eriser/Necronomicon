@@ -109,5 +109,3 @@ instance (BitMask a) => BitMask [a] where
     toBitMask = foldr (.|.) 0 . map toBitMask
 
 
-
-

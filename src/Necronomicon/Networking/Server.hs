@@ -33,8 +33,8 @@ data User = User
 
 data Server = Server
     { serverUsers           :: TVar  (Map.Map SockAddr User)
-    , serverOutBox          :: TChan (User,B.ByteString)
-    , serverBroadcastOutBox :: TChan (Maybe SockAddr,B.ByteString)
+    -- , serverOutBox          :: TChan (User,B.ByteString)
+    , serverBroadcastOutBox :: TChan (MessageType, B.ByteString)
     }
 
 serverPort :: String
@@ -50,9 +50,9 @@ clientPort = "31338"
 newServer :: IO Server
 newServer = do
     users           <- atomically $ newTVar Map.empty
-    outBox          <- atomically $ newTChan
+    -- outBox          <- atomically $ newTChan
     broadcastOutBox <- atomically $ newTChan
-    return $ Server users outBox broadcastOutBox
+    return $ Server users broadcastOutBox
 
 startServer :: IO()
 startServer = print "Starting a server." >> (withSocketsDo $ bracket getSocket sClose $ handler)
@@ -64,7 +64,6 @@ startServer = print "Starting a server." >> (withSocketsDo $ bracket getSocket s
             sock             <- socket AF_INET Stream defaultProtocol
 
             setSocketOption sock ReuseAddr 1
-            -- setSocketOption sock NoDelay   1
             bindSocket sock (addrAddress serveraddr)
             listen sock 3
             return sock
@@ -72,7 +71,7 @@ startServer = print "Starting a server." >> (withSocketsDo $ bracket getSocket s
         handler sock = do
             server <- newServer
             _      <- forkIO $ sendBroadcastMessages server sock
-            _      <- forkIO $ sendUserMessage       server sock
+            -- _      <- forkIO $ sendUserMessage       server sock
             _      <- forkIO $ keepAlive             server
             acceptLoop                               server sock
 
@@ -81,11 +80,11 @@ keepAlive server = forever $ do
     users <- atomically $ readTVar $ serverUsers server
     -- print users
 
-    broadcast (Nothing, encode Alive) server
+    broadcast (SendToAll, encode Alive) server
 
     currentTime <- getCurrentTime
-    mapM_ removeDeadUsers $ Map.filter (\u -> (diffUTCTime currentTime (userAliveTime u) >= 6)) users
-    atomically $ writeTVar (serverUsers server) $ Map.filter (\u -> (diffUTCTime currentTime (userAliveTime u) < 6)) users
+    mapM_ removeDeadUsers $ Map.filter (\u -> (diffUTCTime currentTime (userAliveTime u) >= 12)) users
+    atomically $ writeTVar (serverUsers server) $ Map.filter (\u -> (diffUTCTime currentTime (userAliveTime u) < 12)) users
     threadDelay 4000000
     where
         removeDeadUsers user = do
@@ -101,7 +100,6 @@ acceptLoop server nsocket = forever $ do
         then return ()
         else do
             -- setSocketOption newUserSocket KeepAlive 1
-            setSocketOption newUserSocket NoDelay   1
             putStrLn $ "Accepting connection from user at: " ++ show newUserAddress
             _ <- forkIO $ userListen newUserSocket newUserAddress server
             return ()
@@ -119,29 +117,35 @@ userListen nsocket addr server = isConnected nsocket >>= \connected -> if not co
                 then putStrLn $ "Listening has been signaled as finished after processing a message.\nuserListen shutting down: " ++ show addr
                 else userListen nsocket addr server
 
+data MessageType = SendToAll | DontSendTo SockAddr | SendTo User
+
 sendBroadcastMessages :: Server -> Socket -> IO ()
-sendBroadcastMessages server _ = forever $ do
-    (maybeNoBounceback, nmessage) <- atomically $ readTChan $ serverBroadcastOutBox server
-    userList <- (atomically $ readTVar (serverUsers server)) >>= return . Map.toList
-    -- putStrLn "Broadcasting message"
-    case maybeNoBounceback of
-        Nothing -> mapM_ (\(_,user) -> send' (userSocket user) nmessage) userList
-        Just sa -> mapM_ (\(_,user) -> if userAddress user /= sa then send' (userSocket user) nmessage else return ()) userList
+sendBroadcastMessages server _ = forever $ (atomically $ readTChan $ serverBroadcastOutBox server) >>= \(messageType, msg) -> case messageType of
+    SendTo     user -> send' (userSocket user) msg
+    DontSendTo sa   -> do
+        userList <- (atomically $ readTVar (serverUsers server)) >>= return . Map.toList
+        mapM_ (\(usa, user) -> if usa /= sa then send' (userSocket user) msg else return ()) userList
+    SendToAll       -> do
+        userList <- (atomically $ readTVar (serverUsers server)) >>= return . Map.toList
+        mapM_ (\(_,user) -> send' (userSocket user) msg) userList
     where
         send' s m = Control.Exception.catch (sendWithLength s m) (\e -> putStrLn ("sendBroadcastMessages: " ++ show (e :: IOException)))
 
-sendUserMessage :: Server -> Socket -> IO ()
-sendUserMessage server _ = forever $ do
-    (user, m) <- atomically $ readTChan $ serverOutBox server
-    Control.Exception.catch (sendWithLength (userSocket user) m) (\e -> putStrLn ("sendUserMessage: " ++ show (e :: IOException)))
+--Sending is maybe not being threadsafe??? Perhaps combines sendUserMessage and sendBroadcastMessages, so that it is synchronized
+-- sendUserMessage :: Server -> Socket -> IO ()
+-- sendUserMessage server _ = forever $ do
+    -- (user, m) <- atomically $ readTChan $ serverOutBox server
 
+
+--TODO: Somehow we're losing alive messages when we send entity data.....WHY!?
+--TODO: It's definitely MOUSE MOVEMENT! in particular that's doing it. Why??
 processMessage :: Server -> SockAddr -> Socket -> B.ByteString -> IO Bool
 processMessage server sa sock msg = case runGet (get :: Get Word8) msg of
     0 -> parseMessage msg (decode msg) sock sa server
     1 -> parseMessage msg (decode msg) sock sa server
     2 -> parseMessage msg (decode msg) sock sa server
     3 -> parseMessage msg (decode msg) sock sa server
-    4 -> broadcast (Just sa, msg) server >> return False
+    4 -> broadcast (DontSendTo sa, msg) server >> return False
     5 -> do
         users  <- Map.elems <$> atomically (readTVar (serverUsers server))
         let uid = runGet ((get :: Get Word8) >> (get :: Get Int)) msg
@@ -163,7 +167,7 @@ parseMessage m (Login uid n) sock sa server = do
         let user = User sock sa n t uid
         putStrLn   $ show n ++ " logged in."
         atomically $ modifyTVar (serverUsers server) (Map.insert (userAddress user) user)
-        broadcast (Nothing, m) server
+        broadcast (SendToAll, m) server
 
         putStrLn   $ "User logged in: " ++ show (userName user)
         putStrLn ""
@@ -177,7 +181,7 @@ parseMessage m (Logout _ n) sock sa server = do
     if (not $ Map.member sa users) then return False else do
         close      sock
         atomically $ modifyTVar (serverUsers server) (Map.delete sa)
-        broadcast (Nothing, m) server
+        broadcast (SendToAll, m) server
 
         putStrLn   $ "User logged out: " ++ show n
         putStrLn   $ "Removing from server."
@@ -197,7 +201,7 @@ parseMessage m Alive _ sa server = do
 
 parseMessage m (Chat name msg) _ _ server = do
     putStrLn ("Chat - " ++ show name ++ ": " ++ show msg)
-    broadcast (Nothing, m) server
+    broadcast (SendToAll, m) server
     return False
 
 parseMessage _ _ _ _ _                 = putStrLn "Received unused message protocol" >> return False
@@ -210,11 +214,11 @@ sendUserLogoutMessage :: SockAddr -> Server -> IO ()
 sendUserLogoutMessage addr server = do
     users' <- atomically $ readTVar (serverUsers server)
     case Map.lookup addr users' of
-        Just user -> broadcast (Nothing, encode $ Logout (userID user) (userName user)) server
+        Just user -> broadcast (SendToAll, encode $ Logout (userID user) (userName user)) server
         Nothing   -> return ()
 
-broadcast :: (Maybe SockAddr,B.ByteString) -> Server -> IO ()
+broadcast :: (MessageType, B.ByteString) -> Server -> IO ()
 broadcast nmessage server = atomically $ writeTChan (serverBroadcastOutBox server) nmessage
 
 sendMessage :: User -> B.ByteString -> Server -> IO ()
-sendMessage user nmessage server = atomically $ writeTChan (serverOutBox server) (user,nmessage)
+sendMessage user nmessage server = atomically $ writeTChan (serverBroadcastOutBox server) (SendTo user, nmessage)

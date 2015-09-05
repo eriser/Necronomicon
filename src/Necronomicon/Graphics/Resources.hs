@@ -59,8 +59,8 @@ data Uniform         = UniformTexture Texture
                      | UniformVec2    Vector2
                      | UniformVec3    Vector3
                      | UniformVec4    Vector4
-                     | MatrixView     
-                     | Proj           
+                     | MatrixView
+                     | Proj
                      deriving (Show, Eq)
 
 mkMesh :: String -> [Vector3] -> [Color] -> [Vector2] -> [Int] -> Mesh
@@ -169,16 +169,16 @@ instance Binary Uniform where
     put (UniformVec2    v) = put (2 :: Word8) >> put v
     put (UniformVec3    v) = put (3 :: Word8) >> put v
     put (UniformVec4    v) = put (4 :: Word8) >> put v
-    put (MatrixView      ) = put (5 :: Word8) 
-    put (Proj            ) = put (6 :: Word8) 
+    put (MatrixView      ) = put (5 :: Word8)
+    put (Proj            ) = put (6 :: Word8)
     get                      = (get :: Get Word8) >>= \t -> case t of
         0 -> UniformTexture <$> get
         1 -> UniformScalar  <$> get
         2 -> UniformVec2    <$> get
         3 -> UniformVec3    <$> get
         4 -> UniformVec4    <$> get
-        5 -> return MatrixView     
-        _ -> return Proj           
+        5 -> return MatrixView
+        _ -> return Proj
 
 instance Binary Material where
     put (Material _ vs fs us pm) = do
