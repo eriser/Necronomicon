@@ -337,13 +337,7 @@ loadTextureUniform _ u                  = return u
 getTexture :: Resources -> Texture -> IO Texture
 getTexture _ t@(FontTexture  (Just _) _ _)       = return t
 getTexture _ t@(TGATexture   (Just _) _)         = return t
---TODO: Do we really need to set audio textures every frame?!?!?1 If we do, it really should lock the GL context, which sounds bad....
-getTexture r t@(AudioTexture (Just u) i)         = do
-    mtid <- myThreadId
-    atomically (takeTMVar (contextBarrier r)) >>= \(GLContext tid) -> when (tid /= mtid) (GLFW.makeContextCurrent (Just (context r)))
-    setAudioTexture i u
-    atomically $ putTMVar (contextBarrier r) $ GLContext mtid
-    return t
+getTexture _ t@(AudioTexture (Just _) _)         = return t
 getTexture r         (AudioTexture Nothing i)    = do
     mtid <- myThreadId
     atomically (takeTMVar (contextBarrier r)) >>= \(GLContext tid) -> when (tid /= mtid) (GLFW.makeContextCurrent (Just (context r)))

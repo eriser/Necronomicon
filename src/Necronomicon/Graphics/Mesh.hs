@@ -82,24 +82,55 @@ cubeOutline = mkMesh "*cube" vertices colors uvs indices
                     7,6,6,2,2,3,3,7, -- Top
                     1,0,0,4,4,5,5,1] -- Bottom
 
+hexahedron :: Mesh
+hexahedron = mkMesh "~hexahedron" vertices colors uvs indices
+    where
+        vertices = [ Vector3 (-0.5)   0      0    -- Left
+                   , Vector3   0      0    (-0.5) -- Back
+                   , Vector3   0.5    0      0    -- Right
+                   , Vector3   0      0      0.5  -- Front
+                   , Vector3   0      0.5    0    -- Top
+                   , Vector3   0    (-0.5)   0    -- Bottom
+                   ]
+        colors   = [ RGB 1 1 1
+                   , RGB 1 1 1
+                   , RGB 1 1 1
+                   , RGB 1 1 1
+                   , RGB 1 1 1
+                   , RGB 1 1 1
+                   ]
+        uvs      = [ Vector2 0   0.5
+                   , Vector2 0.5 0.5
+                   , Vector2 1   0.5
+                   , Vector2 0.5 0.5
+                   , Vector2 0.5 1
+                   , Vector2 0.5 0
+                   ]
+        indices  = [ 4, 0, 3
+                   , 4, 1, 0
+                   , 4, 2, 1
+                   , 4, 3, 2
+                   , 5, 3, 0
+                   , 5, 0, 1
+                   , 5, 1, 2
+                   , 5, 2, 3
+                   ]
+
 sphere :: Int -> Int -> Mesh
 sphere latitudes longitudes = mkMesh (show latitudes ++ show longitudes ++ "sphere") vertices colors uvs indices
     where
-        toRadians      = (* 0.0174532925)
         latitudesReal  = fromIntegral latitudes
-        latInc         = 360 / latitudesReal
         longitudesReal = fromIntegral longitudes
-        longInc        = 180 / longitudesReal
-        us             = map (* latInc)  [0..latitudesReal]
-        ts             = map (* longInc) [0..longitudesReal]
-        toVertex (u,t) = Vector3 (sin (toRadians t) * sin (toRadians u))
-                                 (cos (toRadians t))
-                                 (sin (toRadians t) * cos (toRadians u))
-        vertices       = map toVertex $ zip (cycle us) (ts >>= replicate longitudes)
+        latitudeInc    = 360 / latitudesReal
+        longitudeInc   = 180 / longitudesReal
+        us             = map (degToRad . (* latitudeInc))  [0..latitudesReal]
+        ts             = map (degToRad . (* longitudeInc)) [0..longitudesReal]
+        toVertex (u,t) = Vector3 (sin t * sin u) (cos t) (sin t * cos u)
+        vertices       = map toVertex $ zip (cycle us) (ts >>= replicate latitudes)
         lvs            = length vertices
         colors         = replicate lvs white
         uvs            = replicate lvs 0
-        indices        = foldr (\i acc -> i + 1 : i + 2 : i + 3 : i + 1 : i + 0 : i + 2 : acc) [] [0,4..latitudes * longitudes]
+        indices        = foldr (\i acc -> i + 1 : i + latitudes : i + latitudes + 1 : i + 1 : i + 0 : i + latitudes : acc) [] [0, 4..latitudes * longitudes]
 
 dynRect :: Double -> Double -> Mesh
 dynRect w h = mkDynamicMesh (show w ++ show h ++ "~dynrect") vertices colors uvs indices

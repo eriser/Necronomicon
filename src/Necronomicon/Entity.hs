@@ -252,6 +252,8 @@ setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !
                 pokeByteOff p 4 l
                 pokeByteOff p 8  (unsafeCoerce t :: GL.GLuint)
                 pokeByteOff p 12 (0 :: GL.GLuint)
+                pokeByteOff p 16 (0 :: GL.GLuint)
+                pokeByteOff p 20 (0 :: GL.GLuint)
                 setUniforms uptr (i + 24) ls us
 
             UniformTexture (TGATexture   (Just t)   _) -> do
@@ -259,13 +261,17 @@ setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !
                 pokeByteOff p 4 l
                 pokeByteOff p 8 (unsafeCoerce t :: GL.GLuint)
                 pokeByteOff p 12 (0 :: GL.GLuint)
+                pokeByteOff p 16 (0 :: GL.GLuint)
+                pokeByteOff p 20 (0 :: GL.GLuint)
                 setUniforms uptr (i + 24) ls us
 
-            UniformTexture (AudioTexture (Just t)   _) -> do
+            UniformTexture (AudioTexture (Just t)   a) -> do
                 pokeByteOff p 0 (0 :: CInt)
                 pokeByteOff p 4 l
                 pokeByteOff p 8 (unsafeCoerce t :: GL.GLuint)
                 pokeByteOff p 12 (0 :: GL.GLuint)
+                pokeByteOff p 16 (1 :: GL.GLuint)
+                pokeByteOff p 20 a
                 setUniforms uptr (i + 24) ls us
 
             UniformTexture (PostRenderTexture (Just t)) -> do
@@ -273,6 +279,8 @@ setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !
                 pokeByteOff p 4 l
                 pokeByteOff p 8 (unsafeCoerce t :: GL.GLuint)
                 pokeByteOff p 12 (0 :: GL.GLuint)
+                pokeByteOff p 16 (0 :: GL.GLuint)
+                pokeByteOff p 20 (0 :: GL.GLuint)
                 setUniforms uptr (i + 24) ls us
 
             _                                            -> return ()
@@ -376,6 +384,8 @@ setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !
                 pokeByteOff p 4 l
                 pokeByteOff p 8  (unsafeCoerce t :: GL.GLuint)
                 pokeByteOff p 12 (0 :: GL.GLuint)
+                pokeByteOff p 16 (0 :: GL.GLuint)
+                pokeByteOff p 20 (0 :: GL.GLuint)
                 setUniforms uptr (i + 24) ls us
 
             UniformTexture (TGATexture   (Just t)   _) -> do
@@ -383,13 +393,17 @@ setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !
                 pokeByteOff p 4 l
                 pokeByteOff p 8 (unsafeCoerce t :: GL.GLuint)
                 pokeByteOff p 12 (0 :: GL.GLuint)
+                pokeByteOff p 16 (0 :: GL.GLuint)
+                pokeByteOff p 20 (0 :: GL.GLuint)
                 setUniforms uptr (i + 24) ls us
 
-            UniformTexture (AudioTexture (Just t)   _) -> do
+            UniformTexture (AudioTexture (Just t)   a) -> do
                 pokeByteOff p 0 (0 :: CInt)
                 pokeByteOff p 4 l
                 pokeByteOff p 8 (unsafeCoerce t :: GL.GLuint)
                 pokeByteOff p 12 (0 :: GL.GLuint)
+                pokeByteOff p 16 (1 :: GL.GLuint)
+                pokeByteOff p 20 a
                 setUniforms uptr (i + 24) ls us
 
             UniformTexture (PostRenderTexture (Just t)) -> do
@@ -397,6 +411,8 @@ setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !
                 pokeByteOff p 4 l
                 pokeByteOff p 8 (unsafeCoerce t :: GL.GLuint)
                 pokeByteOff p 12 (0 :: GL.GLuint)
+                pokeByteOff p 16 (0 :: GL.GLuint)
+                pokeByteOff p 20 (0 :: GL.GLuint)
                 setUniforms uptr (i + 24) ls us
 
             _                                            -> return ()

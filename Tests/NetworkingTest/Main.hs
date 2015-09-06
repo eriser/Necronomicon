@@ -79,46 +79,64 @@ instance Binary Player
 instance Binary PlayerState
 instance Binary Terminal
 
-mkTerminalEntity :: Vector3 -> Entity Terminal
-mkTerminalEntity p = (mkEntity <| Terminal False (0, 0))
+mkTerminalEntity :: Vector3 -> Int -> Entity Terminal
+mkTerminalEntity p a = (mkEntity <| Terminal False (0, 0))
              { pos        = p
-             , model      = Just <| mkModel DefaultLayer cube <| vertexColored <| RGBA 0.15 0.15 0.15 0.25
-             , netOptions = mkNetworkOptions
-                 { networkData = Network } }
+             , escale     = Vector3 1 1 1
+             , model      = Just <| mkModel DefaultLayer (sphere 64 24) <| terminalMaterial (audioTexture a)
+             , netOptions = mkNetworkOptions { networkData = Network }
+             }
 
-terminalColor :: Bool -> Vector4
-terminalColor False = Vector4 0.15 0.15 0.15 0.25
-terminalColor True  = Vector4 0.20 0.00 1.00 0.5
+terminalMaterial :: Texture -> Material
+terminalMaterial a = material
+                     "terminal-vert.glsl"
+                     "terminal-frag.glsl"
+                     [ ("tex",       UniformTexture a)
+                     , ("arg1",      UniformScalar  0.5)
+                     , ("arg2",      UniformScalar  0.5)
+                     , ("is_active", UniformScalar  1)
+                     ]
 
 updateTerminal :: TerminalInput -> Entity Terminal -> Entity Terminal
 updateTerminal input e = case input of
-    TerminalSetActive a       -> flip fmap e <| \t -> t{terminalIsActive = a}
-    TerminalSetValues (x,  y) -> if not isActive then e else flip fmap e <| \t -> t{terminalValues   = (argfunc tx x, argfunc ty <| negate y)}
-    TerminalTick      (dt, _) -> setUniform "baseColor" (UniformVec4 <| terminalColor isActive) <| if isActive
-        then rotate (rotVec dt) e
-        else e
+    TerminalSetActive a  -> flip fmap e <| \t -> t{terminalIsActive = a}
+    TerminalSetValues vs -> terminalSetValues vs e
+    TerminalTick      t  -> terminalTick      t  e
+
+terminalSetValues :: (Double, Double) -> Entity Terminal -> Entity Terminal
+terminalSetValues (x, y) e = if not isActive
+    then e
+    else setUniform "arg1" (UniformScalar <| fst vs') <| setUniform "arg2" (UniformScalar <| snd vs') <| flip fmap e <| \t -> t{terminalValues   = vs'}
     where
         isActive    = terminalIsActive <| edata e
         (tx, ty)    = terminalValues   <| edata e
-        rotVec dt   = Vector3 (dt * tx * 600) (dt * ty * 600) (dt * 5)
-        argfunc x v = clamp 0 1 <| x + v * 0.1
+        vs'         = (argfunc tx x, argfunc ty <| negate y)
+        argfunc p a = clamp 0 1 <| p + a * 0.1
 
-mkTerminal :: Vector3 -> Key -> (UGen -> UGen -> UGen) -> Signal ()
-mkTerminal p k s = play' s <| fmap (tdata . edata) terminal
+terminalTick :: (Double, Double) -> Entity Terminal -> Entity Terminal
+terminalTick (dt, _) e = if terminalIsActive <| edata e
+    then setUniform "is_active" (UniformScalar   1 ) <| rotate rotVec e
+    else setUniform "is_active" (UniformScalar (-1)) <| e
+    where
+        -- rotVec dt   = Vector3 (dt * (tx + ty * 0.5) * 600) (dt * (ty - tx * 0.5) * 600) (dt * 10)
+        rotVec = Vector3 0 0 (dt * 20)
+
+mkTerminal :: Vector3 -> Int -> Key -> (UGen -> UGen -> UGen) -> Signal ()
+mkTerminal p a k s = play' s <| fmap (tdata . edata) terminal
     where
         tdata :: Terminal -> (Bool, [Double])
         tdata (Terminal p' (x, y)) = (p', [x, y])
-        terminal = foldn updateTerminal (mkTerminalEntity p)
+        terminal = foldn updateTerminal (mkTerminalEntity p a)
                 <| TerminalTick      <~ tick
                 <> TerminalSetActive <~ toggle (areDown [keyLCtrl, k])
                 <> TerminalSetValues <~ filterWhen (fmap not <| isDown k) mouseDelta
 
-mkPatternTerminal :: Vector3 -> Key -> (UGen -> UGen) -> PFunc Rational -> Signal ()
-mkPatternTerminal p k s f = playSynthPattern' s f <| fmap (tdata . edata) terminal
+mkPatternTerminal :: Vector3 -> Int -> Key -> (UGen -> UGen) -> PFunc Rational -> Signal ()
+mkPatternTerminal p a k s f = playSynthPattern' s f <| fmap (tdata . edata) terminal
     where
         tdata :: Terminal -> (Bool, [Double])
         tdata (Terminal p' (x, y)) = (p', [x, y])
-        terminal = foldn updateTerminal (mkTerminalEntity p)
+        terminal = foldn updateTerminal (mkTerminalEntity p a)
                 <| TerminalTick      <~ tick
                 <> TerminalSetActive <~ toggle (areDown [keyLCtrl, k])
                 <> TerminalSetValues <~ filterWhen (fmap not <| isDown k) mouseDelta
@@ -130,10 +148,10 @@ mkPatternTerminal p k s f = playSynthPattern' s f <| fmap (tdata . edata) termin
 main :: IO ()
 main = runSignal
     <| players
-    *> mkTerminal        (Vector3  0 3 0) keyT lfsawSynth
-    *> mkTerminal        (Vector3  4 3 0) keyR lfsawSynth
-    *> mkPatternTerminal (Vector3  8 3 0) keyH hyperMelody        hyperMelodyPattern
-    *> mkPatternTerminal (Vector3 12 3 0) keyG hyperMelodyHarmony hyperMelodyPattern2
+    *> mkTerminal        (Vector3  0 3 0) 0 keyT lfsawSynth
+    *> mkTerminal        (Vector3  4 3 0) 0 keyR lfsawSynth
+    *> mkPatternTerminal (Vector3  8 3 0) 2 keyH hyperMelody        hyperMelodyPattern
+    *> mkPatternTerminal (Vector3 12 3 0) 2 keyG hyperMelodyHarmony hyperMelodyPattern2
     *> section1
 
 ---------------------------------------------------------------------------
@@ -216,7 +234,7 @@ hyperMelodyPattern = PFunc0 <| pmap ((*1) . d2f sigScale) <| ploop [sec1]
                       _ _ _ _ _ _ 7 5 [_ 4] 5 _ _ _ _ _
                       _ _ _ _ 3 _ _ _ _ _ _ _ _ _ _ _ _
                       2 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
-                |]
+               |]
 
 hyperMelodyPattern2 :: PFunc Rational
 hyperMelodyPattern2 = PFunc0 <| pmap ((*2) . d2f sigScale) <| ploop [sec1]
@@ -233,7 +251,7 @@ hyperMelodyPattern2 = PFunc0 <| pmap ((*2) . d2f sigScale) <| ploop [sec1]
                       2 _ 1 _ _ _ 1 2 _
                       [3 _ 2] [_ 1 _] 0 _ _ _ _ _
                       _ _ _ _ _ _ _ _
-                |]
+               |]
 
 
 ------------------------------------------------------------------------------------------
