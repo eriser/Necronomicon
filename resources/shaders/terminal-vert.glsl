@@ -13,10 +13,26 @@ out vec2 uv;
 
 vec3 toPosition()
 {
-    float a1 = texture1D(tex, position.x * 2.0).r;
-    float a2 = texture1D(tex, position.y * 2.0).r;
+    float a1, a2, a3;
+    if(position.x >= 0)
+    {
+        a1 = texture1D(tex, abs(position.x) * 1.0).r;
+    }
+    else
+    {
+        a1 = texture1D(tex, abs(position.x) * -1.0).r;
+    }
+    if(position.y >= 0)
+    {
+        a2 = texture1D(tex, abs(position.y) * 1.0).r;
+    }
+    else
+    {
+        a2 = texture1D(tex, abs(position.y) * -1.0).r;
+    }
+    /* float a2 = texture1D(tex, position.y * 1.0).r; */
     /* float a3 = texture1D(tex, position.z * 2.0).r; */
-    return vec3(a1, a2, a2) * 4;
+    return vec3(a1, a2, 0) * 4;
 }
 
 void main()
