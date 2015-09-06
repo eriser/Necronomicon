@@ -29,8 +29,9 @@ initWindow (width, height) isFullScreen = GLFW.init >>= \initSuccessful -> if in
             initCOpenGL
             --NOTE: We use a left-handed coordinate system with CCW windings in Necronomicon. However since OpenGL is right-handed we need to flip what it thinks the windings are.
             glFrontFace gl_CW
-            glEnable    gl_CULL_FACE
-            glCullFace  gl_BACK
+            glDisable gl_CULL_FACE
+            -- glEnable    gl_CULL_FACE
+            -- glCullFace  gl_BACK
             return w
 
 foreign import ccall safe "draw_render_data" drawRenderDataC ::

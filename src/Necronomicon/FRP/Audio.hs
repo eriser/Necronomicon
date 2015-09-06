@@ -252,7 +252,7 @@ class PlaySynthPattern a where
 
 instance PlaySynthPattern (Pattern (Pattern Rational, Rational)) where
     type SynthPatternArgs  (Pattern (Pattern Rational, Rational)) = Signal ()
-    playSynthPattern playSig synth p = playSynthPattern'' playSig synth (PFunc0 p) []
+    playSynthPattern  playSig synth p = playSynthPattern'' playSig synth (PFunc0 p) []
 
 instance PlaySynthPattern (PRational -> Pattern (Pattern Rational, Rational)) where
     type SynthPatternArgs  (PRational -> Pattern (Pattern Rational, Rational)) = Signal Double -> Signal ()
