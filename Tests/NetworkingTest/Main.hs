@@ -130,9 +130,10 @@ mkPatternTerminal p k s f = playSynthPattern' s f <| fmap (tdata . edata) termin
 main :: IO ()
 main = runSignal
     <| players
-    *> mkTerminal        (Vector3 0 3 0) keyT lfsawSynth
-    *> mkTerminal        (Vector3 4 3 0) keyR lfsawSynth
-    *> mkPatternTerminal (Vector3 8 3 0) keyH hyperMelody hyperMelodyPattern
+    *> mkTerminal        (Vector3  0 3 0) keyT lfsawSynth
+    *> mkTerminal        (Vector3  4 3 0) keyR lfsawSynth
+    *> mkPatternTerminal (Vector3  8 3 0) keyH hyperMelody        hyperMelodyPattern
+    *> mkPatternTerminal (Vector3 12 3 0) keyG hyperMelodyHarmony hyperMelodyPattern2
     *> section1
 
 ---------------------------------------------------------------------------
@@ -189,8 +190,8 @@ sigScale = slendro
 visAux :: UGen -> UGen -> UGen -> UGen
 visAux bus a u = _useq (auxThrough bus (left u * a)) u
 
--- fromSlendro :: Rational -> UGen
--- fromSlendro degree = UGen [UGenNum . fromRational $ d2f slendro degree]
+fromSlendro :: Rational -> UGen
+fromSlendro degree = UGen [UGenNum . fromRational $ d2f slendro degree]
 
 hyperMelody :: UGen -> UGen
 hyperMelody f = [s,s2] |> gain 0.15 |> e |> visAux (random 0 2 5) 2 |> masterOut
@@ -199,12 +200,12 @@ hyperMelody f = [s,s2] |> gain 0.15 |> e |> visAux (random 0 2 5) 2 |> masterOut
         s  = sin <| sin 3 * 6 + f * 2
         s2 = sin <| sin 6 * 9 + f
 
--- hyperMelodyHarmony :: UGen -> UGen
--- hyperMelodyHarmony f = [s, s2] |> lpf (fromSlendro 25) 0.3 |> e |> visAux (random 0 2 5) 2 |> masterOut
---     where
---         e  = env [0, 0.3, 0.05, 0] [0.0001, 0.1, 7] (-8)
---         s  = sin <| sin 3 * 6 + f
---         s2 = sin <| sin 6 * 9 + f * 2
+hyperMelodyHarmony :: UGen -> UGen
+hyperMelodyHarmony f = [s, s2] |> lpf (fromSlendro 25) 0.3 |> e |> visAux (random 0 2 5) 2 |> masterOut
+    where
+        e  = env [0, 0.3, 0.05, 0] [0.0001, 0.1, 7] (-8)
+        s  = sin <| sin 3 * 6 + f
+        s2 = sin <| sin 6 * 9 + f * 2
 
 hyperMelodyPattern :: PFunc Rational
 hyperMelodyPattern = PFunc0 <| pmap ((*1) . d2f sigScale) <| ploop [sec1]
@@ -217,22 +218,22 @@ hyperMelodyPattern = PFunc0 <| pmap ((*1) . d2f sigScale) <| ploop [sec1]
                       2 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
                 |]
 
--- hyperMelodyPattern2 :: Signal ()
--- hyperMelodyPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyH]) hyperMelodyHarmony (pmap ((*2) . d2f sigScale) <| ploop [sec1])
---     where
---         sec1 = [lich| 4 _ 3 _ 2 _ _ _
---                       4 _ 3 _ 2 _ 3 _
---                       _ _ _ _ _ _ _ 0
---                       _ _ _ _ _ _ _ _
---                       4 _ 3 _ 2 _ _ _
---                       4 _ 3 _ 2 _ 3 _
---                       [1 1] 0 _ _ _ _ _ _
---                       _ _ _ _ _ _ _ _
---                       2 _ 1 _ _ _ 1
---                       2 _ 1 _ _ _ 1 2 _
---                       [3 _ 2] [_ 1 _] 0 _ _ _ _ _
---                       _ _ _ _ _ _ _ _
---                 |]
+hyperMelodyPattern2 :: PFunc Rational
+hyperMelodyPattern2 = PFunc0 <| pmap ((*2) . d2f sigScale) <| ploop [sec1]
+    where
+        sec1 = [lich| 4 _ 3 _ 2 _ _ _
+                      4 _ 3 _ 2 _ 3 _
+                      _ _ _ _ _ _ _ 0
+                      _ _ _ _ _ _ _ _
+                      4 _ 3 _ 2 _ _ _
+                      4 _ 3 _ 2 _ 3 _
+                      [1 1] 0 _ _ _ _ _ _
+                      _ _ _ _ _ _ _ _
+                      2 _ 1 _ _ _ 1
+                      2 _ 1 _ _ _ 1 2 _
+                      [3 _ 2] [_ 1 _] 0 _ _ _ _ _
+                      _ _ _ _ _ _ _ _
+                |]
 
 
 ------------------------------------------------------------------------------------------
