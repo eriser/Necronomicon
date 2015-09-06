@@ -1,5 +1,6 @@
 module Necronomicon.UGen where
 
+import Debug.Trace
 import GHC.Exts
 import Data.List
 import Foreign
@@ -1181,7 +1182,7 @@ panCFuncs = [panKKCalc, panAKCalc, panKACalc, panAACalc]
 -- Pan takes a mono signal and expands to a stereo field
 -- Note: multichannel inputs are simply mixed down to mono then panned.
 pan :: UGen -> UGen -> UGen
-pan (UGen (pos:[])) (UGen (x:[])) = optimizeUGenCalcFunc panCFuncs . createMultiOutUGenFromChannel 2 $ UGenFunc Pan panAACalc nullConstructor nullDeconstructor [pos, x]
+pan (UGen [pos]) (UGen [x]) = optimizeUGenCalcFunc panCFuncs . createMultiOutUGenFromChannel 2 $ UGenFunc Pan panAACalc nullConstructor nullDeconstructor [pos, x]
 pan pos x = pan (UGen [head mixedPos]) (UGen [head mixedX])
     where
         (UGen mixedPos) = mix pos
@@ -1225,12 +1226,34 @@ playMonoSample resourceFilePath rate = optimizeUGenCalcFunc cfuncs playSampleUGe
         playSampleUGen = multiChannelExpandUGen (PlaySample resourceFilePath numSampleChannels) playSampleACalc playSampleConstructor playSampleDeconstructor [rate]
         cfuncs = [playSampleKCalc, playSampleACalc]
 
+foreign import ccall "&playMonoSampleL_k_calc" playSampleLKCalc :: CUGenFunc
+foreign import ccall "&playMonoSampleL_a_calc" playSampleLACalc :: CUGenFunc
+
+-- multichannel rate inputs will expand into multiple channels of playMonoSample ugens
+playMonoSampleL :: FilePath -> UGen -> UGen
+playMonoSampleL resourceFilePath rate = optimizeUGenCalcFunc cfuncs playSampleUGen
+    where
+        numSampleChannels = 1
+        playSampleUGen = multiChannelExpandUGen (PlaySample resourceFilePath numSampleChannels) playSampleLACalc playSampleConstructor playSampleDeconstructor [rate]
+        cfuncs = [playSampleLKCalc, playSampleLACalc]
+
+foreign import ccall "&playMonoSampleC_k_calc" playSampleCKCalc :: CUGenFunc
+foreign import ccall "&playMonoSampleC_a_calc" playSampleCACalc :: CUGenFunc
+
+-- multichannel rate inputs will expand into multiple channels of playMonoSample ugens
+playMonoSampleC :: FilePath -> UGen -> UGen
+playMonoSampleC resourceFilePath rate = optimizeUGenCalcFunc cfuncs playSampleUGen
+    where
+        numSampleChannels = 1
+        playSampleUGen = multiChannelExpandUGen (PlaySample resourceFilePath numSampleChannels) playSampleCACalc playSampleConstructor playSampleDeconstructor [rate]
+        cfuncs = [playSampleCKCalc, playSampleCACalc]
+
 foreign import ccall "&playSample_stereo_k_calc" playSampleStereoKCalc :: CUGenFunc
 foreign import ccall "&playSample_stereo_a_calc" playSampleStereoACalc :: CUGenFunc
 
 -- only takes mono rate input, extra channels will be ignored, outputs a stereo signal
 playStereoSample :: FilePath -> UGen -> UGen
-playStereoSample resourceFilePath rate = optimizeUGenCalcFunc cfuncs $ createMultiOutUGenFromChannel numSampleChannels playSampleUGenFunc
+playStereoSample resourceFilePath rate = trace ("resourceFilePath: " ++ resourceFilePath) $ optimizeUGenCalcFunc cfuncs $ createMultiOutUGenFromChannel numSampleChannels playSampleUGenFunc
     where
         numSampleChannels = 2
         createFlatRateList (UGen []) = [UGenNum 1]
@@ -1571,14 +1594,27 @@ compileUGen ugen@(UGenFunc (Random seed rmin rmax) _ _ _ _) args key = liftIO (n
     compileUGenWithConstructorArgs ugen (castPtr randValuesPtr) args key
 compileUGen ugen@(UGenFunc (Limiter lookahead) _ _ _ _) args key = liftIO (new $ CDouble lookahead) >>= \lookaheadPtr ->
     compileUGenWithConstructorArgs ugen (castPtr lookaheadPtr) args key
-compileUGen ugen@(UGenFunc (PlaySample resourceFilePath numSampleChannels) _ _ _ _) args key = do
+compileUGen ugen@(UGenFunc (PlaySample _ _) _ _ _ _) args key = do
+    playSampleConstructorArgs <- compileSampleUGenArgs ugen
+    compileUGenWithConstructorArgs ugen (castPtr playSampleConstructorArgs) args key
+compileUGen ugen@(MultiOutUGenFunc _ _ ugenChannel@((UGenFunc (PlaySample _ _) _ _ _ _))) args key = do
+    playSampleConstructorArgs <- compileSampleUGenArgs ugenChannel
+    compileUGenWithConstructorArgs ugen (castPtr playSampleConstructorArgs) args key
+compileUGen ugen args key = compileUGenWithConstructorArgs ugen nullPtr args key
+
+compileSampleUGenArgs :: UGenChannel -> Compiled (Ptr CPlaySampleConstructArgs)
+compileSampleUGenArgs (UGenFunc (PlaySample resourceFilePath numSampleChannels) _ _ _ _) = do
     fullFilePath <- liftIO $ getDataFileName resourceFilePath
-    cFilePath <- liftIO $ withCString fullFilePath prRetrieveSampleBufferNameString
     -- Only temporarily allocate a CString to grab the stored string for the sample.
     -- This way the ugen doesn't need to worry about managing the cstring memory
-    playSampleConstructArgs <- liftIO $ new $ CPlaySampleConstructArgs cFilePath $ fromIntegral numSampleChannels
-    compileUGenWithConstructorArgs ugen (castPtr playSampleConstructArgs) args key
-compileUGen ugen args key = compileUGenWithConstructorArgs ugen nullPtr args key
+    cFilePath <- liftIO $ withCString fullFilePath prRetrieveSampleBufferNameString
+    liftIO . print $ show "compileSampleUGenArgs"
+    liftIO . print $ show resourceFilePath
+    liftIO . print $ show cFilePath
+    cString <- liftIO $ peekCString cFilePath
+    liftIO . print $ show cString
+    liftIO . new $ CPlaySampleConstructArgs cFilePath $ fromIntegral numSampleChannels
+compileSampleUGenArgs _ = return nullPtr
 
 ------------------------------------------
 -- Testing Functions

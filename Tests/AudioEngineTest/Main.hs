@@ -75,6 +75,12 @@ slendroFilePath = "samples/Slendro1.wav"
 slendroSampleSynth :: UGen -> UGen
 slendroSampleSynth rate = playMonoSample slendroFilePath rate |> out 0
 
+slendroSampleSynthL :: UGen -> UGen
+slendroSampleSynthL rate = playMonoSampleL slendroFilePath rate |> out 0
+
+slendroSampleSynthC :: UGen -> UGen
+slendroSampleSynthC rate = playMonoSampleC slendroFilePath rate |> out 0
+
 harpKotoFilePath :: FilePath
 harpKotoFilePath = "samples/HarpKotoShort.wav"
 
@@ -85,7 +91,7 @@ main :: IO ()
 main = runSignal soundsig
 
 soundsig :: Signal ()
-soundsig = loadSample slendroFilePath
+soundsig = loadSamples [slendroFilePath, harpKotoFilePath]
         *> play (toggle <| isDown keyA) reverbSynth
         *> play (toggle <| isDown keyB) delaySynthN (mouseX ~> scale 20 10000)  mouseY
         *> play (toggle <| isDown keyC) delaySynthL (mouseX ~> scale 20 10000)  mouseY
@@ -106,4 +112,6 @@ soundsig = loadSample slendroFilePath
         *> play (toggle <| isDown keyR) lfsawSynth (mouseX ~> scale 0.1 2000)
         *> play (toggle <| isDown keyS) lfpulseSynth (mouseX ~> scale 0.1 2000)
         *> play (toggle <| isDown keyT) slendroSampleSynth (mouseX ~> scale 0.0001 2)
-        *> play (toggle <| isDown keyU) harpKotoSampleSynth (mouseX ~> scale 0.0001 2)
+        *> play (toggle <| isDown keyU) slendroSampleSynthL (mouseX ~> scale 0.0001 2)
+        *> play (toggle <| isDown keyV) slendroSampleSynthC (mouseX ~> scale 0.0001 2)
+        *> play (toggle <| isDown keyW) harpKotoSampleSynth (mouseX ~> scale 0.0001 2)
