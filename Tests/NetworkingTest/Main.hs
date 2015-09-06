@@ -113,6 +113,16 @@ mkTerminal p k s = play' s <| fmap (tdata . edata) terminal
                 <> TerminalSetActive <~ toggle (areDown [keyLCtrl, k])
                 <> TerminalSetValues <~ filterWhen (fmap not <| isDown k) mouseDelta
 
+mkPatternTerminal :: Vector3 -> Key -> (UGen -> UGen) -> PFunc Rational -> Signal ()
+mkPatternTerminal p k s f = playSynthPattern' s f <| fmap (tdata . edata) terminal
+    where
+        tdata :: Terminal -> (Bool, [Double])
+        tdata (Terminal p' (x, y)) = (p', [x, y])
+        terminal = foldn updateTerminal (mkTerminalEntity p)
+                <| TerminalTick      <~ tick
+                <> TerminalSetActive <~ toggle (areDown [keyLCtrl, k])
+                <> TerminalSetValues <~ filterWhen (fmap not <| isDown k) mouseDelta
+
 ---------------------------------------------------------------------------
 -- Main
 ---------------------------------------------------------------------------
@@ -120,7 +130,9 @@ mkTerminal p k s = play' s <| fmap (tdata . edata) terminal
 main :: IO ()
 main = runSignal
     <| players
-    *> mkTerminal (Vector3 0 3 0) keyT lfsawSynth
+    *> mkTerminal        (Vector3 0 3 0) keyT lfsawSynth
+    *> mkTerminal        (Vector3 4 3 0) keyR lfsawSynth
+    *> mkPatternTerminal (Vector3 8 3 0) keyH hyperMelody hyperMelodyPattern
     *> section1
 
 ---------------------------------------------------------------------------
@@ -167,3 +179,104 @@ lfsawSynth :: UGen -> UGen -> UGen
 lfsawSynth freq1 freq2 = (lfsaw (lag 0.1 [exprange 40 4000 freq1, exprange 40 4000 freq2]) 0) * 2 - 1 |> exprange 20 20000 |> sin |> gain 0.2 |> out 0
 
 
+---------------------------------------------------------------------------
+-- Section 2
+---------------------------------------------------------------------------
+
+sigScale :: Scale
+sigScale = slendro
+
+visAux :: UGen -> UGen -> UGen -> UGen
+visAux bus a u = _useq (auxThrough bus (left u * a)) u
+
+-- fromSlendro :: Rational -> UGen
+-- fromSlendro degree = UGen [UGenNum . fromRational $ d2f slendro degree]
+
+hyperMelody :: UGen -> UGen
+hyperMelody f = [s,s2] |> gain 0.15 |> e |> visAux (random 0 2 5) 2 |> masterOut
+    where
+        e  = env [0, 1, 0.15, 0] [0.0001, 0.1, 7] (-1.5)
+        s  = sin <| sin 3 * 6 + f * 2
+        s2 = sin <| sin 6 * 9 + f
+
+-- hyperMelodyHarmony :: UGen -> UGen
+-- hyperMelodyHarmony f = [s, s2] |> lpf (fromSlendro 25) 0.3 |> e |> visAux (random 0 2 5) 2 |> masterOut
+--     where
+--         e  = env [0, 0.3, 0.05, 0] [0.0001, 0.1, 7] (-8)
+--         s  = sin <| sin 3 * 6 + f
+--         s2 = sin <| sin 6 * 9 + f * 2
+
+hyperMelodyPattern :: PFunc Rational
+hyperMelodyPattern = PFunc0 <| pmap ((*1) . d2f sigScale) <| ploop [sec1]
+    where
+        sec1 = [lich| [_ 3] [4 3] [_ 3] 6 7 _ [_ 3] 4 _ _ _ _ _ _
+                      [1 _ 2] [_ 3 _] [2 4 6] 5 _ _ _ _ _ _ _ _ _ _ _
+                      [4 _ _ 3] [_ _ 2 _] [_ 1 _ _] 3 _ _ _ _ 2 _ _ _ _ _ _ 1 _ _
+                      _ _ _ _ _ _ 7 5 [_ 4] 5 _ _ _ _ _
+                      _ _ _ _ 3 _ _ _ _ _ _ _ _ _ _ _ _
+                      2 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+                |]
+
+-- hyperMelodyPattern2 :: Signal ()
+-- hyperMelodyPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyH]) hyperMelodyHarmony (pmap ((*2) . d2f sigScale) <| ploop [sec1])
+--     where
+--         sec1 = [lich| 4 _ 3 _ 2 _ _ _
+--                       4 _ 3 _ 2 _ 3 _
+--                       _ _ _ _ _ _ _ 0
+--                       _ _ _ _ _ _ _ _
+--                       4 _ 3 _ 2 _ _ _
+--                       4 _ 3 _ 2 _ 3 _
+--                       [1 1] 0 _ _ _ _ _ _
+--                       _ _ _ _ _ _ _ _
+--                       2 _ 1 _ _ _ 1
+--                       2 _ 1 _ _ _ 1 2 _
+--                       [3 _ 2] [_ 1 _] 0 _ _ _ _ _
+--                       _ _ _ _ _ _ _ _
+--                 |]
+
+
+------------------------------------------------------------------------------------------
+-- Buses
+------------------------------------------------------------------------------------------
+
+-- Master 50, 51
+
+masterOutBus :: UGen
+-- masterOutBus = 50
+masterOutBus = 0
+
+-- masterOutRightBus :: UGen
+-- masterOutRightBus = 51
+
+masterOut :: UGen -> UGen
+masterOut = out masterOutBus
+
+{-
+-- Cave 20, 21
+
+caveBus :: UGen
+caveBus = 20
+
+caveRightBus :: UGen
+caveRightBus = 21
+
+caveOut :: UGen -> UGen
+caveOut = out caveBus
+
+-- Broodling 200, 201
+
+broodlingBus :: UGen
+broodlingBus = 200
+
+broodlingRightBus :: UGen
+broodlingRightBus = 201
+
+broodlingOut :: UGen -> UGen
+broodlingOut = out broodlingBus
+
+-- Artifact 150 - 156
+
+artifactOut :: UGen -> UGen
+artifactOut = out <| random 0 150 156
+
+-}
