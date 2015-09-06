@@ -25,7 +25,7 @@ typedef struct
 {
     sample_buffer* buffer;
     long double read_index;
-    int num_channels;
+    int32_t num_channels;
 } playSample_data;
 
 void playSample_constructor(ugen* u)
@@ -47,12 +47,8 @@ void playSample_constructor(ugen* u)
         puts("playSample_constructor :: sample_file_path = NULL");
         return;
     }
-    else
-    {
-        printf("playSample_constructor :: sample_file_path =  %s\n", sample_file_path);
-    }
 
-    int num_channels = constructor_args->num_channels;
+    int32_t num_channels = constructor_args->num_channels;
     sample_buffer* buffer = retrieve_sample_buffer(sample_file_path);
 
     if (buffer == NULL)
@@ -140,11 +136,14 @@ static inline playSample_stereo_out playSample_stereo_inline_calc(playSample_dat
     long double read_index = data->read_index;
     playSample_stereo_out y = { 0, 0 };
 
-    if (read_index >= 0 && read_index < num_samples)
+    const double two_channels_stride = 2.0;
+    const uint64_t lread_index = (uint64_t) (read_index * two_channels_stride); // interleaved indexes
+    const uint64_t one_channel_offset = 1;
+    const uint64_t rread_index = lread_index + one_channel_offset;
+    if (read_index >= 0 && rread_index < num_samples)
     {
-        const uint64_t lread_index = (uint64_t) (read_index * 2.0); // interleaved indexes
         y.l_channel = samples[lread_index];
-        y.r_channel = samples[lread_index + 1];
+        y.r_channel = samples[rread_index];
         data->read_index = read_index + (long double) rate;
     }
 

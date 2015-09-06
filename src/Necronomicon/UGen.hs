@@ -1,5 +1,6 @@
 module Necronomicon.UGen where
 
+import Debug.Trace
 import GHC.Exts
 import Data.List
 import Foreign
@@ -1181,7 +1182,7 @@ panCFuncs = [panKKCalc, panAKCalc, panKACalc, panAACalc]
 -- Pan takes a mono signal and expands to a stereo field
 -- Note: multichannel inputs are simply mixed down to mono then panned.
 pan :: UGen -> UGen -> UGen
-pan (UGen (pos:[])) (UGen (x:[])) = optimizeUGenCalcFunc panCFuncs . createMultiOutUGenFromChannel 2 $ UGenFunc Pan panAACalc nullConstructor nullDeconstructor [pos, x]
+pan (UGen [pos]) (UGen [x]) = optimizeUGenCalcFunc panCFuncs . createMultiOutUGenFromChannel 2 $ UGenFunc Pan panAACalc nullConstructor nullDeconstructor [pos, x]
 pan pos x = pan (UGen [head mixedPos]) (UGen [head mixedX])
     where
         (UGen mixedPos) = mix pos
@@ -1230,7 +1231,7 @@ foreign import ccall "&playSample_stereo_a_calc" playSampleStereoACalc :: CUGenF
 
 -- only takes mono rate input, extra channels will be ignored, outputs a stereo signal
 playStereoSample :: FilePath -> UGen -> UGen
-playStereoSample resourceFilePath rate = optimizeUGenCalcFunc cfuncs $ createMultiOutUGenFromChannel numSampleChannels playSampleUGenFunc
+playStereoSample resourceFilePath rate = trace ("resourceFilePath: " ++ resourceFilePath) $ optimizeUGenCalcFunc cfuncs $ createMultiOutUGenFromChannel numSampleChannels playSampleUGenFunc
     where
         numSampleChannels = 2
         createFlatRateList (UGen []) = [UGenNum 1]
