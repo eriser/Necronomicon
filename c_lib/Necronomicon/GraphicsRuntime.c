@@ -6,11 +6,14 @@
 #include <stdio.h>
 #include <GL/glew.h>
 #include <stdlib.h>
+#include "AudioRuntime.h"
 
 typedef struct
 {
     GLuint t;
     GLuint u;
+    GLuint is_audio;
+    GLuint a;
 } texture_t;
 
 typedef struct
@@ -148,6 +151,10 @@ void draw_render_data( render_data_t* render_data, GLuint length, GLint layerMas
                     glActiveTexture(uniform.texture_uniform.u);
                     glUniform1i(uniform.location, 0);
                     glBindTexture(GL_TEXTURE_2D, uniform.texture_uniform.t);
+                    if(uniform.texture_uniform.is_audio)
+                    {
+                        glTexSubImage1D(GL_TEXTURE_1D, 0, 0, 512, GL_RED, GL_FLOAT, out_bus_buffers[uniform.texture_uniform.a]);
+                    }
                     break;
                 case 1:
                     glUniform1f(uniform.location, uniform.scalar_uniform.x);
