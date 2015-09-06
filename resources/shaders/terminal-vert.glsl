@@ -11,13 +11,12 @@ in  vec2 in_uv;
 out vec3 color;
 out vec2 uv;
 
-float range = 1.0;
-
-vec3 toPosition(vec3 pos, float a1, float a2)
+vec3 toPosition()
 {
-    float xRads = pos.x * 0.0174532925;
-    float yRads = pos.y * 0.0174532925;
-    return vec3(sin(yRads + a1), sin(xRads + a2), cos(xRads + a1 - yRads + a2)) * range;
+    float a1 = texture1D(tex, position.x * 2.0).r;
+    float a2 = texture1D(tex, position.y * 2.0).r;
+    /* float a3 = texture1D(tex, position.z * 2.0).r; */
+    return vec3(a1, a2, a2) * 4;
 }
 
 void main()
@@ -26,9 +25,7 @@ void main()
     color = in_color;
     if(is_active > 0)
     {
-        float a1         = texture1D(tex, uv.x * 0.5).r;
-        float a2         = texture1D(tex, uv.y * 0.5).r;
-        vec3 newPosition = toPosition(position, a1, a2);
+        vec3 newPosition = toPosition();
         gl_Position      = vec4(position + newPosition, 1.0) * modelView * proj;
     }
     else

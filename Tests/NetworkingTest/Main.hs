@@ -83,7 +83,7 @@ mkTerminalEntity :: Vector3 -> Int -> Entity Terminal
 mkTerminalEntity p a = (mkEntity <| Terminal False (0, 0))
              { pos        = p
              , escale     = Vector3 1 1 1
-             , model      = Just <| mkModel DefaultLayer (sphere 16 16) <| terminalMaterial (audioTexture a)
+             , model      = Just <| mkModel DefaultLayer (sphere 52 32) <| terminalMaterial (audioTexture a)
              , netOptions = mkNetworkOptions { networkData = Network }
              }
 
@@ -92,8 +92,8 @@ terminalMaterial a = material
                      "terminal-vert.glsl"
                      "terminal-frag.glsl"
                      [ ("tex",       UniformTexture a)
-                     , ("arg1",      UniformScalar  0)
-                     , ("arg2",      UniformScalar  0)
+                     , ("arg1",      UniformScalar  0.5)
+                     , ("arg2",      UniformScalar  0.5)
                      , ("is_active", UniformScalar  1)
                      ]
 
