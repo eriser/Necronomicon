@@ -1226,6 +1226,28 @@ playMonoSample resourceFilePath rate = optimizeUGenCalcFunc cfuncs playSampleUGe
         playSampleUGen = multiChannelExpandUGen (PlaySample resourceFilePath numSampleChannels) playSampleACalc playSampleConstructor playSampleDeconstructor [rate]
         cfuncs = [playSampleKCalc, playSampleACalc]
 
+foreign import ccall "&playMonoSampleL_k_calc" playSampleLKCalc :: CUGenFunc
+foreign import ccall "&playMonoSampleL_a_calc" playSampleLACalc :: CUGenFunc
+
+-- multichannel rate inputs will expand into multiple channels of playMonoSample ugens
+playMonoSampleL :: FilePath -> UGen -> UGen
+playMonoSampleL resourceFilePath rate = optimizeUGenCalcFunc cfuncs playSampleUGen
+    where
+        numSampleChannels = 1
+        playSampleUGen = multiChannelExpandUGen (PlaySample resourceFilePath numSampleChannels) playSampleLACalc playSampleConstructor playSampleDeconstructor [rate]
+        cfuncs = [playSampleLKCalc, playSampleLACalc]
+
+foreign import ccall "&playMonoSampleC_k_calc" playSampleCKCalc :: CUGenFunc
+foreign import ccall "&playMonoSampleC_a_calc" playSampleCACalc :: CUGenFunc
+
+-- multichannel rate inputs will expand into multiple channels of playMonoSample ugens
+playMonoSampleC :: FilePath -> UGen -> UGen
+playMonoSampleC resourceFilePath rate = optimizeUGenCalcFunc cfuncs playSampleUGen
+    where
+        numSampleChannels = 1
+        playSampleUGen = multiChannelExpandUGen (PlaySample resourceFilePath numSampleChannels) playSampleCACalc playSampleConstructor playSampleDeconstructor [rate]
+        cfuncs = [playSampleCKCalc, playSampleCACalc]
+
 foreign import ccall "&playSample_stereo_k_calc" playSampleStereoKCalc :: CUGenFunc
 foreign import ccall "&playSample_stereo_a_calc" playSampleStereoACalc :: CUGenFunc
 
