@@ -1,6 +1,7 @@
 module Necronomicon.FRP.Audio
     ( audioTexture
     , play
+    , play'
     , playSynthPattern
     , playBeatPattern
     , tempo
@@ -84,12 +85,34 @@ playSynth' playSig u argSigs = Signal $ \state -> do
 
         updateArg index aCont synth sNecroVars event = aCont event >>= \a -> case a of
             NoChange _ -> return ()
-            Change   v -> runNecroState (setSynthArg synth index (toRational v)) sNecroVars >> return ()
+            Change   v -> putStrLn ("updateArg: " ++ show v) >> runNecroState (setSynthArg synth index (toRational v)) sNecroVars >> return ()
 
         playStopSynth args shouldPlay synthRef synthName = liftIO (readIORef synthRef) >>= \ms -> case (ms,shouldPlay) of
             (Nothing   ,True )  -> playSynth synthName (map toRational args) >>= \s -> liftIO (writeIORef synthRef $ Just s) >> return (Change ())
             (Just synth,False)  -> stopSynth synth                           >>        liftIO (writeIORef synthRef  Nothing) >> return (Change ())
             _                   -> return $ NoChange ()
+
+play' :: UGenType a => a -> Signal (Bool, [Double]) -> Signal ()
+play' u argSig = Signal $ \state -> do
+    (acont, _) <- unSignal argSig state
+    synthRef   <- newIORef Nothing
+    synthName  <- nextStateID state ~> \uid -> "~p" ++ show uid
+    _          <- runNecroState (compileSynthDef synthName u) (necroVars state)
+    putStrLn $ "Compiling synthDef: " ++ synthName
+
+    return (cont acont synthRef synthName (necroVars state), ())
+    where
+        cont acont synthRef synthName sNecroVars event = acont event >>= \ae -> case ae of
+            NoChange _     -> return $ NoChange ()
+            Change (p, as) -> runNecroState (playStopSynth as p synthRef synthName) sNecroVars >>= \(e, _) -> return e
+
+        playStopSynth args shouldPlay synthRef synthName = liftIO (readIORef synthRef) >>= \ms -> case (ms, shouldPlay) of
+            (Nothing   , True ) -> playSynth synthName (map toRational args) >>= \s -> liftIO (writeIORef synthRef $ Just s) >> return (Change ())
+            (Just synth, False) -> stopSynth synth                           >>        liftIO (writeIORef synthRef  Nothing) >> return (Change ())
+            (Just synth, True)  -> foldM (\i f -> updateArg i f synth >> return (i+1)) 0 args                                >> return (Change ())
+            _                   -> return $ NoChange ()
+
+        updateArg index v synth = setSynthArg synth index (toRational v) >> return ()
 
 class Play a where
     type PlayArgs a :: *

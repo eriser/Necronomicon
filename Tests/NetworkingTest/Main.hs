@@ -104,10 +104,10 @@ updateTerminal input e = case input of
         argfunc x v = clamp 0 1 <| x + v * 0.1
 
 mkTerminal :: Vector3 -> Key -> (UGen -> UGen -> UGen) -> Signal ()
-mkTerminal p k s = play isActive s (fmap fst values) (fmap snd values)
+mkTerminal p k s = play' s <| fmap (tdata . edata) terminal
     where
-        isActive = fmap (\e -> terminalIsActive <| edata e) terminal
-        values   = fmap (\e -> terminalValues   <| edata e) terminal
+        tdata :: Terminal -> (Bool, [Double])
+        tdata (Terminal p' (x, y)) = (p', [x, y])
         terminal = foldn updateTerminal (mkTerminalEntity p)
                 <| TerminalTick      <~ tick
                 <> TerminalSetActive <~ toggle (areDown [keyLCtrl, k])
@@ -164,6 +164,6 @@ mkTerrain = terrainEntity
             | otherwise         = indicesList
 
 lfsawSynth :: UGen -> UGen -> UGen
-lfsawSynth freq1 freq2 = (lfsaw (lag 0.1 [exprange 40 4000 freq1, exprange 40 4000 freq2]) 0) * 2 - 1 |> exprange 20 20000 |> sin |> gain 0.2 |> dup |> out 0
+lfsawSynth freq1 freq2 = (lfsaw (lag 0.1 [exprange 40 4000 freq1, exprange 40 4000 freq2]) 0) * 2 - 1 |> exprange 20 20000 |> sin |> gain 0.2 |> out 0
 
 
