@@ -6,6 +6,11 @@ import qualified Data.List as L
 import qualified Data.Set as S
 import qualified Data.Map as M
 import Control.Monad
+import qualified Necronomicon.Util.Grid as G
+
+{-
+    Binary wolfram
+-}
 
 data WolframCell = White | Black deriving (Ord, Eq, Enum, Show)
 
@@ -37,8 +42,14 @@ wolframCA cells ruleVector = V.fromList $ foldr binaryWolfram [] [0..maxCellInde
                 right = if rightIndex < cellsLength then cells V.! rightIndex else defaultBlankCell where rightIndex = i + 1
                 rule = min ruleVectorLength (max 0 (indexFunc left middle right))
 
+{-
+    Multicolored wolfram
+-}
+
+type WolframColor = Int
+
 -- Creates a rule map to be used with multiColoredWolframCA. Colors are Integers from 0 .. (numColors - 1). The rule can be any positive integer.
-multiColoredWolframRuleMap :: Int -> Int -> M.Map Double Int
+multiColoredWolframRuleMap :: Int -> Int -> M.Map Double WolframColor
 multiColoredWolframRuleMap numColors ruleNumber = foldl ruleNumberAndAverageToColor M.empty $ zip uniqueAveragesList [0 .. lastUniqueAveragesIndex]
     where
         uniqueAverages = foldl (\acc xs -> S.insert ((/numColorsDouble) $ sum xs) acc) S.empty $ replicateM numNeighbors [0.0 .. maxColorIndex]
@@ -53,7 +64,7 @@ multiColoredWolframRuleMap numColors ruleNumber = foldl ruleNumberAndAverageToCo
                 color = mod (floor (ruleNumberDouble / (fromIntegral (numColors ^ i)))) numColors
 
 -- Multicolored Wolframa Cellular Automata. Requires a rule map created with multiColoredWolframRuleMap to be passed in.
-multiColoredWolframCA :: V.Vector Int -> M.Map Double Int -> V.Vector Int
+multiColoredWolframCA :: V.Vector WolframColor -> M.Map Double WolframColor -> V.Vector WolframColor
 multiColoredWolframCA cells ruleMap = V.fromList $ foldr multiColoredWolfram [] [0..maxCellIndex]
     where
         numNeighbors = 3 :: Double
@@ -69,3 +80,45 @@ multiColoredWolframCA cells ruleMap = V.fromList $ foldr multiColoredWolfram [] 
                 color = case (M.lookup rule ruleMap) of
                     Nothing -> defaultBlankCell
                     Just c -> c
+
+{-
+    Wolfram Grid
+-}
+
+mkWolframGrid :: V.Vector a -> (V.Vector a -> V.Vector a) -> Int -> G.Grid a
+mkWolframGrid seedCells mkRow numRows = if numRows <= 1
+                                            then G.Grid $ V.fromList [seedCells]
+                                            else G.Grid grid
+    where
+        lastRowIndex = numRows - 1
+        rowIndexes = [1..lastRowIndex]
+        grid = V.fromList . reverse $ foldr (\_ acc -> mkRow (head acc) : acc) [seedCells] rowIndexes
+
+mkBinaryWolframGrid :: V.Vector WolframCell -> V.Vector WolframCell -> Int -> G.Grid WolframCell
+mkBinaryWolframGrid seedCells ruleVector numRows = mkWolframGrid seedCells (\row -> wolframCA row ruleVector) numRows
+
+mkMultiColoredWolframGrid :: V.Vector WolframColor -> M.Map Double WolframColor -> Int -> G.Grid WolframColor
+mkMultiColoredWolframGrid seedCells ruleMap numRows = mkWolframGrid seedCells (\row -> multiColoredWolframCA row ruleMap) numRows
+
+{-
+    Infinite grid
+-}
+
+type InfiniteGrid a = [V.Vector a]
+
+lookupInfiniteGrid :: InfiniteGrid a -> Int -> Int -> a
+lookupInfiniteGrid g x y = lookupX (g !! y')
+    where
+        lookupX v = v V.! (max 0 $ min x (length v - 1))
+        y' = max 0 y
+
+mkInfiniteGrid :: V.Vector a -> (V.Vector a -> V.Vector a) -> InfiniteGrid a
+mkInfiniteGrid seedCells mkRow = infGrid
+    where
+        infGrid = seedCells : (map (\x -> mkRow $ infGrid !! x) ([0..] :: [Int]))
+
+mkInfiniteWolframGrid :: V.Vector WolframCell -> V.Vector WolframCell -> InfiniteGrid WolframCell
+mkInfiniteWolframGrid seedCells ruleVector = mkInfiniteGrid seedCells (\row -> wolframCA row ruleVector)
+
+mkInfiniteMultiColoredWolframGrid :: V.Vector WolframColor -> M.Map Double WolframColor -> InfiniteGrid WolframColor
+mkInfiniteMultiColoredWolframGrid seedCells ruleMap = mkInfiniteGrid seedCells (\row -> multiColoredWolframCA row ruleMap)

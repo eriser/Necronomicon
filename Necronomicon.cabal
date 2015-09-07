@@ -59,9 +59,10 @@ library
     exposed-modules:
         Necronomicon
         Necronomicon.UGen
-        Necronomicon.Runtime,
-        Necronomicon.Util,
+        Necronomicon.Runtime
+        Necronomicon.Util
         Necronomicon.Util.PriorityQueue
+        Necronomicon.Util.Grid
         Necronomicon.Physics.DynamicTree
 
     other-modules:
@@ -122,6 +123,7 @@ library
         Necronomicon.Physics.Collider
         Necronomicon.Physics.GJK
         Paths_Necronomicon
+
     Build-Depends:
         base             == 4.*,
         stm              >= 2.4.0,
