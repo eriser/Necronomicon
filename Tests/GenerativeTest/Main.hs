@@ -1,10 +1,13 @@
 import Necronomicon
 import Control.Monad
 import qualified Data.Vector as V
+import qualified Necronomicon.Util.Grid as G
 
 main :: IO ()
 main = do
     testLSystem
+    testLSystemGenerations
+    testLSystemGenerationGrids
     testWolfram
     testMultiColoredWolfram
     testInfiniteWolframGrid
@@ -12,7 +15,12 @@ main = do
     testMultiColoredWolframGrid
 
 testLSystem :: IO ()
-testLSystem = mapM_ (\(name, gen) -> putStrLn (formatName name) >> (mapM_ (print . gen) iterations) >> (putStrLn "\n")) lsystems
+testLSystem = do
+    print "--------------------------------------------------------------------------------------------------------------------"
+    print "-- L-System Generation"
+    print "--------------------------------------------------------------------------------------------------------------------"
+    putStrLn "\n"
+    mapM_ (\(name, gen) -> putStrLn (formatName name) >> (mapM_ (print . gen) iterations) >> (putStrLn "\n")) lsystems
     where
         formatName n = divider ++ "\n-- " ++ n ++ "\n" ++ divider ++ "\n"
         divider = "--------------------------------------------------"
@@ -27,6 +35,52 @@ testLSystem = mapM_ (\(name, gen) -> putStrLn (formatName name) >> (mapM_ (print
                 ("dragonCurve", dragonCurve),
                 ("fractalPlant", fractalPlant)
             ]
+
+testLSystemGenerations :: IO ()
+testLSystemGenerations = do
+    print "--------------------------------------------------------------------------------------------------------------------"
+    print "-- L-System Generations"
+    print "--------------------------------------------------------------------------------------------------------------------"
+    putStrLn "\n"
+    mapM_ printLSystems lsystems
+    where
+        numGenerations = 6
+        formatName n = divider ++ "\n-- " ++ n ++ "\n" ++ divider ++ "\n"
+        divider = "--------------------------------------------------"
+        lsystems :: [(String, [String])]
+        lsystems = [
+                ("algaeSystems", algaeSystems),
+                ("pythagorasTrees", pythagorasTrees),
+                ("cantorDusts", cantorDusts),
+                ("kochCurves", kochCurves),
+                ("sierpinskiTriangles", sierpinskiTriangles),
+                ("dragonCurves", dragonCurves),
+                ("fractalPlants", fractalPlants)
+            ]
+        printLSystems (name, lsystem) = putStrLn (formatName name) >> mapM_ print (take numGenerations lsystem) >> putStrLn "\n"
+
+testLSystemGenerationGrids :: IO ()
+testLSystemGenerationGrids = do
+    print "--------------------------------------------------------------------------------------------------------------------"
+    print "-- L-System Generation Grids"
+    print "--------------------------------------------------------------------------------------------------------------------"
+    putStrLn "\n"
+    mapM_ printLSystems lsystems
+    where
+        numGenerations = 4
+        formatName n = divider ++ "\n-- " ++ n ++ "\n" ++ divider ++ "\n"
+        divider = "--------------------------------------------------"
+        lsystems :: [(String, (Int -> G.Grid Char))]
+        lsystems = [
+                ("algaeSystemGrid", algaeSystemGrid),
+                ("pythagorasTreeGrid", pythagorasTreeGrid),
+                ("cantorDustGrid", cantorDustGrid),
+                ("kochCurveGrid", kochCurveGrid),
+                ("sierpinskiTriangleGrid", sierpinskiTriangleGrid),
+                ("dragonCurveGrid", dragonCurveGrid),
+                ("fractalPlantGrid", fractalPlantGrid)
+            ]
+        printLSystems (name, lsystem) = putStrLn (formatName name) >> print (lsystem numGenerations) >> putStrLn "\n"
 
 wolframCellToAscii :: WolframCell -> Char
 wolframCellToAscii cell = case cell of
@@ -71,8 +125,8 @@ testWolframGrid = do
     putStrLn "\n"
     let seedCells = V.fromList (replicate 80 White ++ [Black] ++ replicate 80 White)
         ruleVector = binaryWolframRuleVector 105
-        wolframCAGrid = mapGrid wolframCellToAscii $ mkWolframGrid seedCells ruleVector numRows
-    mapM_ print $ V.toList wolframCAGrid
+        wolframCAGrid = G.map wolframCellToAscii $ mkBinaryWolframGrid seedCells ruleVector numRows
+    print wolframCAGrid
 
 testMultiColoredWolframGrid :: IO ()
 testMultiColoredWolframGrid = do
@@ -85,8 +139,8 @@ testMultiColoredWolframGrid = do
         numColors = 3
         rule = 573377
         ruleMap = multiColoredWolframRuleMap numColors rule
-        wolframCAGrid = mapGrid colorToAscii $ mkMultiColoredWolframGrid seedCells ruleMap numRows
-    mapM_ print $ V.toList wolframCAGrid
+        wolframCAGrid = G.map colorToAscii $ mkMultiColoredWolframGrid seedCells ruleMap numRows
+    print wolframCAGrid
 
 testInfiniteWolframGrid :: IO ()
 testInfiniteWolframGrid = do

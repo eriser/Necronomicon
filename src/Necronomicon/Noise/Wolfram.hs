@@ -6,6 +6,7 @@ import qualified Data.List as L
 import qualified Data.Set as S
 import qualified Data.Map as M
 import Control.Monad
+import qualified Necronomicon.Util.Grid as G
 
 {-
     Binary wolfram
@@ -81,32 +82,23 @@ multiColoredWolframCA cells ruleMap = V.fromList $ foldr multiColoredWolfram [] 
                     Just c -> c
 
 {-
-    Grid
+    Wolfram Grid
 -}
 
-type Grid a = V.Vector (V.Vector a)
-
-mkGrid :: V.Vector a -> (V.Vector a -> V.Vector a) -> Int -> Grid a
-mkGrid seedCells mkRow numRows = if numRows <= 1 then V.fromList [seedCells] else grid
+mkWolframGrid :: V.Vector a -> (V.Vector a -> V.Vector a) -> Int -> G.Grid a
+mkWolframGrid seedCells mkRow numRows = if numRows <= 1
+                                            then G.Grid $ V.fromList [seedCells]
+                                            else G.Grid grid
     where
         lastRowIndex = numRows - 1
         rowIndexes = [1..lastRowIndex]
         grid = V.fromList . reverse $ foldr (\_ acc -> mkRow (head acc) : acc) [seedCells] rowIndexes
 
-lookupGrid :: Grid a -> Int -> Int -> a
-lookupGrid g x y = lookupX (g V.! y')
-    where
-        lookupX v = v V.! (max 0 $ min x (length v - 1))
-        y' = max 0 $ min y (length g - 1)
+mkBinaryWolframGrid :: V.Vector WolframCell -> V.Vector WolframCell -> Int -> G.Grid WolframCell
+mkBinaryWolframGrid seedCells ruleVector numRows = mkWolframGrid seedCells (\row -> wolframCA row ruleVector) numRows
 
-mapGrid :: (a -> b) -> Grid a -> Grid b
-mapGrid f = V.map (V.map f)
-
-mkWolframGrid :: V.Vector WolframCell -> V.Vector WolframCell -> Int -> Grid WolframCell
-mkWolframGrid seedCells ruleVector numRows = mkGrid seedCells (\row -> wolframCA row ruleVector) numRows
-
-mkMultiColoredWolframGrid :: V.Vector WolframColor -> M.Map Double WolframColor -> Int -> Grid WolframColor
-mkMultiColoredWolframGrid seedCells ruleMap numRows = mkGrid seedCells (\row -> multiColoredWolframCA row ruleMap) numRows
+mkMultiColoredWolframGrid :: V.Vector WolframColor -> M.Map Double WolframColor -> Int -> G.Grid WolframColor
+mkMultiColoredWolframGrid seedCells ruleMap numRows = mkWolframGrid seedCells (\row -> multiColoredWolframCA row ruleMap) numRows
 
 {-
     Infinite grid

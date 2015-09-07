@@ -9,6 +9,7 @@ import Prelude
 import System.Random
 import qualified Data.Fixed as F
 import qualified Data.Vector as V
+import qualified Necronomicon.Util.Grid as G
 
 type Time = Rational
 
@@ -348,6 +349,19 @@ pdelay (PSeq s _) p = PGen (\t -> collapse (pdelay (collapse s t) p) t)
 pdelay (PGen f) p = PGen (\t -> collapse (pdelay (f t) p) t)
 pdelay (PVal n) p = PGen (\t -> collapse p (t + n))
 
+pgrid :: G.Grid a -> PNum -> PNum -> Pattern a
+pgrid _ PNothing _ = PNothing
+pgrid _ _ PNothing = PNothing
+pgrid grid (PSeq deltaX _) deltaY = PGen (\t -> collapse (pgrid grid (collapse deltaX t) deltaY) t)
+pgrid grid deltaX (PSeq deltaY _) = PGen (\t -> collapse (pgrid grid deltaX (collapse deltaY t)) t)
+pgrid grid (PGen deltaX) deltaY = PGen (\t -> collapse (pgrid grid (deltaX t) deltaY) t)
+pgrid grid deltaX (PGen deltaY) = PGen (\t -> collapse (pgrid grid deltaX (deltaY t)) t)
+pgrid grid (PVal deltaX) (PVal deltaY) = PGen plookupGrid
+        where
+            plookupGrid t = PVal $ G.wrapLookup grid x y
+                where
+                    x = floor (fromRational (deltaX * t) :: Double) :: Int
+                    y = floor (fromRational (deltaY * t) :: Double) :: Int
 
 instance Num a => Num (Pattern a) where
     (+) = padd
