@@ -114,18 +114,26 @@ cubeOutline3D w = mkMesh "*cube3" vertices colors uvs indices
                    cubeVertices w (Vector3 (-0.5) (-0.5) (-0.5)) ++
                    cubeVertices w (Vector3   0.5  (-0.5) (-0.5)) ++
                    cubeVertices w (Vector3 (-0.5)   0.5  (-0.5)) ++
-                   cubeVertices w (Vector3   0.5    0.5  (-0.5))
+                   cubeVertices w (Vector3   0.5    0.5  (-0.5)) ++
 
-        colors   = replicate (8 * 8) white
-        uvs      = replicate (8 * 8) 0
-        indices  = concatMap cubeIndices
-                   [ 2,0,1,3,2,1 -- Front
-                   , 7,5,4,6,7,4 -- Back
-                   , 3,1,5,7,3,5 -- Right
-                   , 6,4,0,2,6,0 -- Left
-                   , 6,2,3,7,6,3 -- Top
-                   , 0,4,5,1,0,5 -- Bottom
-                   ]
+                   cubeVertices w (Vector3 (-0.5)   0.0    0.5 ) ++
+                   cubeVertices w (Vector3   0.0    0.5    0.5 ) ++
+                   cubeVertices w (Vector3   0.5    0.0    0.5 ) ++
+                   cubeVertices w (Vector3   0.0  (-0.5)   0.5 ) ++
+
+                   cubeVertices w (Vector3 (-0.5) (-0.5)   0.0 ) ++
+                   cubeVertices w (Vector3 (-0.5)   0.5    0.0 ) ++
+                   cubeVertices w (Vector3   0.5    0.5    0.0 ) ++
+                   cubeVertices w (Vector3   0.5  (-0.5)   0.0 ) ++
+
+                   cubeVertices w (Vector3 (-0.5)   0.0  (-0.5)) ++
+                   cubeVertices w (Vector3   0.0    0.5  (-0.5)) ++
+                   cubeVertices w (Vector3   0.5    0.0  (-0.5)) ++
+                   cubeVertices w (Vector3   0.0  (-0.5) (-0.5))
+
+        colors   = replicate (8 * 20) white
+        uvs      = replicate (8 * 20) 0
+        indices  = concatMap cubeIndices [0 .. 19]
 
 hexahedron :: Mesh
 hexahedron = mkMesh "~hexahedron" vertices colors uvs indices
