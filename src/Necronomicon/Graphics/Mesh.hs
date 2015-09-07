@@ -129,7 +129,7 @@ sphere latitudes longitudes = mkMesh (show latitudes ++ show longitudes ++ "sphe
         vertices       = map toVertex $ zip (cycle us) (ts >>= replicate latitudes)
         lvs            = length vertices
         colors         = replicate lvs white
-        uvs            = replicate lvs 0
+        uvs            = map (\(u, v) -> Vector2 u v) $ zip (cycle us) (ts >>= replicate latitudes)
         indices        = foldr (\i acc -> i + 1 : i + latitudes : i + latitudes + 1 : i + 1 : i + 0 : i + latitudes : acc) [] [0, 4..latitudes * longitudes]
 
 dynRect :: Double -> Double -> Mesh
