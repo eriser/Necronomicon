@@ -86,6 +86,7 @@ mkTerminalEntity :: Vector3 -> Int -> Entity Terminal
 mkTerminalEntity p a = (mkEntity <| Terminal False (0, 0))
              { pos        = p
              , escale     = Vector3 1 1 1
+             , rot        = fromEuler (-90) 0 0
              , model      = Just <| mkModel DefaultLayer terminalMesh <| terminalMaterial (audioTexture a)
              , netOptions = mkNetworkOptions { networkData = Network }
              }
