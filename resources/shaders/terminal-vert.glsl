@@ -15,8 +15,8 @@ float width = 3;
 
 vec3 toPosition(vec3 pos)
 {
-    vec3 p0 = vec3(pos.y * 10, texture1D(tex, pos.y).r * 3, 0);
-    vec3 p1 = vec3(pos.z * 10, texture1D(tex, pos.z).r * 3, 0);
+    vec3 p0 = vec3((pos.y * 10) - 1, texture1D(tex, pos.y).r * 3, 0);
+    vec3 p1 = vec3((pos.z * 10) - 1, texture1D(tex, pos.z).r * 3, 0);
     vec3 cp = cross(normalize(p0), normalize(p1));
     vec3 p2 = p0 + cp * width;
     vec3 p3 = p1 + cp * width;

@@ -110,6 +110,11 @@ terminalMesh = mkMesh "terminal" vertices colors uvs indices
         colors      = replicate len white
         vertices    = zipWith3 Vector3 (cycle [3, 2, 1, 0]) (map (/lenr) ([0..lenr - 1] :: [Double]) >>= replicate 4) (map (/lenr) ([1..lenr - 2] :: [Double]) >>= replicate 4)
 
+terminalOutline :: Vector3 -> Signal (Entity ())
+terminalOutline p = foldn (flip const) e tick
+    where
+        e = (mkEntity ()) {pos = p, model = Just <| mkModel DefaultLayer (cubeOutline3D 0.25) <| vertexColored (RGBA 0.1 0.1 0.1 0.1) }
+
 updateTerminal :: TerminalInput -> Entity Terminal -> Entity Terminal
 updateTerminal input e = case input of
     TerminalSetActive a  -> flip fmap e <| \t -> t{terminalIsActive = a}
@@ -136,7 +141,7 @@ terminalTick (dt, _) e = if terminalIsActive <| edata e
         -- rotVec = 0
 
 mkTerminal :: Vector3 -> Int -> Key -> (UGen -> UGen -> UGen) -> Signal ()
-mkTerminal p a k s = play' s <| fmap (tdata . edata) terminal
+mkTerminal p a k s = terminalOutline p *> (play' s <| fmap (tdata . edata) terminal)
     where
         tdata :: Terminal -> (Bool, [Double])
         tdata (Terminal p' (x, y)) = (p', [x, y])
@@ -146,7 +151,7 @@ mkTerminal p a k s = play' s <| fmap (tdata . edata) terminal
                 <> TerminalSetValues <~ filterWhen (fmap not <| isDown k) mouseDelta
 
 mkPatternTerminal :: Vector3 -> Int -> Key -> (UGen -> UGen) -> PFunc Rational -> Signal ()
-mkPatternTerminal p a k s f = playSynthPattern' s f <| fmap (tdata . edata) terminal
+mkPatternTerminal p a k s f = terminalOutline p *> (playSynthPattern' s f <| fmap (tdata . edata) terminal)
     where
         tdata :: Terminal -> (Bool, [Double])
         tdata (Terminal p' (x, y)) = (p', [x, y])
