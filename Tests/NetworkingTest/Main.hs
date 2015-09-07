@@ -20,6 +20,8 @@ data PlayerInput   = PlayerKeys   (Double, Double)    Int
                    | PlayerTick   (Time, Time)        Int Bool
                    | PlayerLog    (Int, String, Bool) Int
                    deriving (Show, Eq, Generic)
+instance Binary Player
+instance Binary PlayerState
 
 mkPlayer :: Entity Player
 mkPlayer = ( mkEntity  <| Player PlayerIdle (0, 0) )
@@ -68,22 +70,24 @@ players = foldn updatePlayers IntMap.empty
 data Terminal = Terminal
     { terminalIsActive :: Bool
     , terminalValues   :: (Double, Double)
-    } deriving (Show, Eq, Generic)
+    } deriving (Show, Eq)
 
 data TerminalInput = TerminalTick (Time, Time)
                    | TerminalSetActive Bool
                    | TerminalSetValues (Double, Double)
-                   deriving (Show, Eq, Generic)
+                   deriving (Show, Eq)
 
-instance Binary Player
-instance Binary PlayerState
-instance Binary Terminal
+-- instance Binary Terminal
+instance Binary Terminal where
+    put (Terminal a vs) = put a *> put vs
+    get = Terminal <~ get ~~ get
 
 mkTerminalEntity :: Vector3 -> Int -> Entity Terminal
 mkTerminalEntity p a = (mkEntity <| Terminal False (0, 0))
              { pos        = p
              , escale     = Vector3 1 1 1
-             , model      = Just <| mkModel DefaultLayer (sphere 64 24) <| terminalMaterial (audioTexture a)
+             , rot        = fromEuler (-90) 0 0
+             , model      = Just <| mkModel DefaultLayer terminalMesh <| terminalMaterial (audioTexture a)
              , netOptions = mkNetworkOptions { networkData = Network }
              }
 
@@ -96,6 +100,21 @@ terminalMaterial a = material
                      , ("arg2",      UniformScalar  0.5)
                      , ("is_active", UniformScalar  1)
                      ]
+
+terminalMesh :: Mesh
+terminalMesh = mkMesh "terminal" vertices colors uvs indices
+    where
+        len         = 256
+        lenr        = fromIntegral len
+        indices     = foldr (\i acc -> i + 1 : i + 2 : i + 3 : i + 1 : i + 0 : i + 2 : acc) [] ([0..len - 1] :: [Int])
+        uvs         = replicate len 0
+        colors      = replicate len white
+        vertices    = zipWith3 Vector3 (cycle [3, 2, 1, 0]) (map (/lenr) ([0..lenr - 1] :: [Double]) >>= replicate 4) (map (/lenr) ([1..lenr - 2] :: [Double]) >>= replicate 4)
+
+terminalOutline :: Vector3 -> Signal (Entity ())
+terminalOutline p = foldn (flip const) e tick
+    where
+        e = (mkEntity ()) {pos = p, model = Just <| mkModel DefaultLayer (cubeOutline3D 0.25) <| vertexColored (RGBA 0.1 0.1 0.1 0.1) }
 
 updateTerminal :: TerminalInput -> Entity Terminal -> Entity Terminal
 updateTerminal input e = case input of
@@ -119,10 +138,11 @@ terminalTick (dt, _) e = if terminalIsActive <| edata e
     else setUniform "is_active" (UniformScalar (-1)) <| e
     where
         -- rotVec dt   = Vector3 (dt * (tx + ty * 0.5) * 600) (dt * (ty - tx * 0.5) * 600) (dt * 10)
-        rotVec = Vector3 0 0 (dt * 20)
+        rotVec = 0 * Vector3 0 0 (dt * 20)
+        -- rotVec = 0
 
 mkTerminal :: Vector3 -> Int -> Key -> (UGen -> UGen -> UGen) -> Signal ()
-mkTerminal p a k s = play' s <| fmap (tdata . edata) terminal
+mkTerminal p a k s = terminalOutline p *> (play' s <| fmap (tdata . edata) terminal)
     where
         tdata :: Terminal -> (Bool, [Double])
         tdata (Terminal p' (x, y)) = (p', [x, y])
@@ -132,7 +152,7 @@ mkTerminal p a k s = play' s <| fmap (tdata . edata) terminal
                 <> TerminalSetValues <~ filterWhen (fmap not <| isDown k) mouseDelta
 
 mkPatternTerminal :: Vector3 -> Int -> Key -> (UGen -> UGen) -> PFunc Rational -> Signal ()
-mkPatternTerminal p a k s f = playSynthPattern' s f <| fmap (tdata . edata) terminal
+mkPatternTerminal p a k s f = terminalOutline p *> (playSynthPattern' s f <| fmap (tdata . edata) terminal)
     where
         tdata :: Terminal -> (Bool, [Double])
         tdata (Terminal p' (x, y)) = (p', [x, y])

@@ -11,38 +11,37 @@ in  vec2 in_uv;
 out vec3 color;
 out vec2 uv;
 
-vec3 toPosition()
+float width = 3;
+
+vec3 toPosition(vec3 pos)
 {
-    float a1, a2, a3;
-    if(position.x >= 0)
-    {
-        a1 = texture1D(tex, abs(position.x) * 1.0).r;
-    }
-    else
-    {
-        a1 = texture1D(tex, abs(position.x) * -1.0).r;
-    }
-    if(position.y >= 0)
-    {
-        a2 = texture1D(tex, abs(position.y) * 1.0).r;
-    }
-    else
-    {
-        a2 = texture1D(tex, abs(position.y) * -1.0).r;
-    }
-    /* float a2 = texture1D(tex, position.y * 1.0).r; */
-    /* float a3 = texture1D(tex, position.z * 2.0).r; */
-    return vec3(a1, a2, 0) * 4;
+    vec3 p0 = vec3((pos.y * 10) - 1.5, texture1D(tex, pos.y).r * 3, 0);
+    vec3 p1 = vec3((pos.z * 10) - 1.5, texture1D(tex, pos.z).r * 3, 0);
+    vec3 cp = cross(normalize(p0), normalize(p1));
+    vec3 p2 = p0 + cp * width;
+    vec3 p3 = p1 + cp * width;
+
+    return p0 * float(pos.x == 0) + p1 * float(pos.x == 1) + p2 * float(pos.x == 2) + p3 * float(pos.x == 3);
 }
+
+/* vec3 sphere() */
+/* { */
+/*     float u = uv.x + texture1D(tex, mod(uv.x * 0.01, 1)).r * 3.141592654; */
+/*     float t = uv.y + texture1D(tex, mod(uv.y * 0.01, 1)).r * 3.141592654; */
+/*     return vec3(sin(t) * sin(u), cos(t), sin(t) * cos(u)); */
+/*         /1* toVertex (u,t) = Vector3 (sin t * sin u) (cos t) (sin t * cos u) *1/ */
+/* } */
 
 void main()
 {
-    uv    = position.xy;
+    uv    = in_uv;
     color = in_color;
     if(is_active > 0)
     {
-        vec3 newPosition = toPosition();
-        gl_Position      = vec4(position + newPosition, 1.0) * modelView * proj;
+        /* vec3 newPosition = sphere(); */
+        vec3 newPosition = toPosition(position);
+        color            = newPosition;
+        gl_Position      = vec4(newPosition, 1.0) * modelView * proj;
     }
     else
     {
