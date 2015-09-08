@@ -11,8 +11,8 @@ in  vec2 in_uv;
 out vec3 color;
 out vec2 uv;
 
-float width  = 1;
-float radius = 1;
+float width  = 0.5;
+float radius = 0.5;
 
 vec3 toPosition(vec3 pos)
 {
@@ -21,8 +21,8 @@ vec3 toPosition(vec3 pos)
     float u1 = pos.y * 8 * 3.141592654;
     float u2 = pos.z * 8 * 3.141592654;
 
-    vec3 p0 = vec3(sin(u1) * radius, texture1D(tex, pos.y).r * 3, cos(u1) * radius);
-    vec3 p1 = vec3(sin(u2) * radius, texture1D(tex, pos.z).r * 3, cos(u2) * radius);
+    vec3 p0 = vec3(sin(u1) * radius, radius + texture1D(tex, pos.y).r * 6, cos(u1) * radius);
+    vec3 p1 = vec3(sin(u2) * radius, radius + texture1D(tex, pos.z).r * 6, cos(u2) * radius);
 
     vec3 cp = cross(normalize(p0), normalize(p1));
     vec3 p2 = p0 + cp * width;

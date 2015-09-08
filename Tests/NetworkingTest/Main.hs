@@ -134,7 +134,7 @@ terminalSetValues (x, y) e = if not isActive
         isActive    = terminalIsActive <| edata e
         (tx, ty)    = terminalValues   <| edata e
         vs'         = (argfunc tx x, argfunc ty <| negate y)
-        argfunc p a = clamp 0 1 <| p + a * 0.1
+        argfunc p a = clamp 0 1 <| p + a * 0.2
 
 terminalTick :: (Double, Double) -> Entity Terminal -> Entity Terminal
 terminalTick (dt, _) e = if terminalIsActive <| edata e
