@@ -16,8 +16,6 @@ float radius = 0.75;
 
 vec3 toPosition(vec3 pos)
 {
-    /* vec3 p0 = vec3((pos.y * 10) - 1.5, texture1D(tex, pos.y).r * 3, 0); */
-    /* vec3 p1 = vec3((pos.z * 10) - 1.5, texture1D(tex, pos.z).r * 3, 0); */
     float u1 = pos.y * 8 * 3.141592654;
     float u2 = pos.z * 8 * 3.141592654;
 
