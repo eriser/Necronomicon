@@ -86,7 +86,7 @@ mkTerminalEntity :: Vector3 -> Int -> Entity Terminal
 mkTerminalEntity p a = (mkEntity <| Terminal False (0, 0))
              { pos        = p
              , escale     = Vector3 1 1 1
-             , rot        = fromEuler (-90) 0 0
+             -- , rot        = fromEuler (-90) 0 0
              , model      = Just <| mkModel DefaultLayer terminalMesh <| terminalMaterial (audioTexture a)
              , netOptions = mkNetworkOptions { networkData = Network }
              }
@@ -143,7 +143,7 @@ terminalTick (dt, _) e = if terminalIsActive <| edata e
     where
         -- (tx, ty)    = terminalValues   <| edata e
         -- rotVec      = Vector3 (dt * (tx + ty * 0.5) * 100) (dt * (ty - tx * 0.5) * 100) (dt * 20)
-        rotVec = Vector3 0 (dt * 5) (dt * 20)
+        rotVec = 0 * Vector3 0 (dt * 5) (dt * 20)
         -- rotVec = 0
 
 mkTerminal :: Vector3 -> Int -> Key -> (UGen -> UGen -> UGen) -> Signal ()
