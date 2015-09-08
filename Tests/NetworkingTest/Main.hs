@@ -114,7 +114,7 @@ terminalMesh = mkMesh "terminal" vertices colors uvs indices
 terminalOutline :: Vector3 -> Signal (Entity ())
 terminalOutline p = foldn (flip const) e tick
     where
-        e = (mkEntity ()) {pos = p, model = Just <| mkModel DefaultLayer (cubeOutline3D 0.1) <| vertexColored (RGBA 0.9 0.9 0.9 0.05) }
+        e = (mkEntity ()) {pos = p, model = Just <| mkModel DefaultLayer (cubeOutline3D 0.025) <| vertexColored <| RGBA 0.9 0.9 0.9 0.05 }
 
 updateTerminal :: TerminalInput -> Entity Terminal -> Entity Terminal
 updateTerminal input e = case input of

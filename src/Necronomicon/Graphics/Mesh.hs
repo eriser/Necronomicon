@@ -82,8 +82,8 @@ cubeOutline = mkMesh "*cube" vertices colors uvs indices
                     7,6,6,2,2,3,3,7, -- Top
                     1,0,0,4,4,5,5,1] -- Bottom
 
-cubeVertices :: Double -> Vector3 -> [Vector3]
-cubeVertices w p = map ((p +) . (Vector3 w w w *)) vertices
+cubeVertices :: Vector3 -> Vector3 -> [Vector3]
+cubeVertices w p = map ((p +) . (w *)) vertices
     where
         vertices = [Vector3 (-0.5) (-0.5)   0.5,
                     Vector3   0.5  (-0.5)   0.5,
@@ -104,36 +104,59 @@ cubeIndices i = map ((i * 8) +) indices
                     6,2,3,7,6,3, -- Top
                     0,4,5,1,0,5] -- Bottom
 
+--Cubed Outline version....
+-- cubeOutline3D :: Double -> Mesh
+-- cubeOutline3D w = mkMesh "*cube3" vertices colors uvs indices
+--     where
+--         vertices = cubeVertices w (Vector3 (-0.5) (-0.5)   0.5 ) ++
+--                    cubeVertices w (Vector3   0.5  (-0.5)   0.5 ) ++
+--                    cubeVertices w (Vector3 (-0.5)   0.5    0.5 ) ++
+--                    cubeVertices w (Vector3   0.5    0.5    0.5 ) ++
+--                    cubeVertices w (Vector3 (-0.5) (-0.5) (-0.5)) ++
+--                    cubeVertices w (Vector3   0.5  (-0.5) (-0.5)) ++
+--                    cubeVertices w (Vector3 (-0.5)   0.5  (-0.5)) ++
+--                    cubeVertices w (Vector3   0.5    0.5  (-0.5)) ++
+
+--                    cubeVertices w (Vector3 (-0.5)   0.0    0.5 ) ++
+--                    cubeVertices w (Vector3   0.0    0.5    0.5 ) ++
+--                    cubeVertices w (Vector3   0.5    0.0    0.5 ) ++
+--                    cubeVertices w (Vector3   0.0  (-0.5)   0.5 ) ++
+
+--                    cubeVertices w (Vector3 (-0.5) (-0.5)   0.0 ) ++
+--                    cubeVertices w (Vector3 (-0.5)   0.5    0.0 ) ++
+--                    cubeVertices w (Vector3   0.5    0.5    0.0 ) ++
+--                    cubeVertices w (Vector3   0.5  (-0.5)   0.0 ) ++
+
+--                    cubeVertices w (Vector3 (-0.5)   0.0  (-0.5)) ++
+--                    cubeVertices w (Vector3   0.0    0.5  (-0.5)) ++
+--                    cubeVertices w (Vector3   0.5    0.0  (-0.5)) ++
+--                    cubeVertices w (Vector3   0.0  (-0.5) (-0.5))
+
+--         colors   = replicate (8 * 20) white
+--         uvs      = replicate (8 * 20) 0
+--         indices  = concatMap cubeIndices [0 .. 19]
+
 cubeOutline3D :: Double -> Mesh
 cubeOutline3D w = mkMesh "*cube3" vertices colors uvs indices
     where
-        vertices = cubeVertices w (Vector3 (-0.5) (-0.5)   0.5 ) ++
-                   cubeVertices w (Vector3   0.5  (-0.5)   0.5 ) ++
-                   cubeVertices w (Vector3 (-0.5)   0.5    0.5 ) ++
-                   cubeVertices w (Vector3   0.5    0.5    0.5 ) ++
-                   cubeVertices w (Vector3 (-0.5) (-0.5) (-0.5)) ++
-                   cubeVertices w (Vector3   0.5  (-0.5) (-0.5)) ++
-                   cubeVertices w (Vector3 (-0.5)   0.5  (-0.5)) ++
-                   cubeVertices w (Vector3   0.5    0.5  (-0.5)) ++
+        vertices = cubeVertices (Vector3 1 w w) (Vector3   0.0  (-0.5)   0.5 ) ++
+                   cubeVertices (Vector3 1 w w) (Vector3   0.0    0.5    0.5 ) ++
+                   cubeVertices (Vector3 w 1 w) (Vector3 (-0.5)   0.0    0.5 ) ++
+                   cubeVertices (Vector3 w 1 w) (Vector3   0.5    0.0    0.5 ) ++
 
-                   cubeVertices w (Vector3 (-0.5)   0.0    0.5 ) ++
-                   cubeVertices w (Vector3   0.0    0.5    0.5 ) ++
-                   cubeVertices w (Vector3   0.5    0.0    0.5 ) ++
-                   cubeVertices w (Vector3   0.0  (-0.5)   0.5 ) ++
+                   cubeVertices (Vector3 1 w w) (Vector3   0.0  (-0.5) (-0.5)) ++
+                   cubeVertices (Vector3 1 w w) (Vector3   0.0    0.5  (-0.5)) ++
+                   cubeVertices (Vector3 w 1 w) (Vector3 (-0.5)   0.0  (-0.5)) ++
+                   cubeVertices (Vector3 w 1 w) (Vector3   0.5    0.0  (-0.5)) ++
 
-                   cubeVertices w (Vector3 (-0.5) (-0.5)   0.0 ) ++
-                   cubeVertices w (Vector3 (-0.5)   0.5    0.0 ) ++
-                   cubeVertices w (Vector3   0.5    0.5    0.0 ) ++
-                   cubeVertices w (Vector3   0.5  (-0.5)   0.0 ) ++
+                   cubeVertices (Vector3 w w 1) (Vector3 (-0.5) (-0.5)   0.0 ) ++
+                   cubeVertices (Vector3 w w 1) (Vector3 (-0.5)   0.5    0.0 ) ++
+                   cubeVertices (Vector3 w w 1) (Vector3   0.5    0.5    0.0 ) ++
+                   cubeVertices (Vector3 w w 1) (Vector3   0.5  (-0.5)   0.0 )
 
-                   cubeVertices w (Vector3 (-0.5)   0.0  (-0.5)) ++
-                   cubeVertices w (Vector3   0.0    0.5  (-0.5)) ++
-                   cubeVertices w (Vector3   0.5    0.0  (-0.5)) ++
-                   cubeVertices w (Vector3   0.0  (-0.5) (-0.5))
-
-        colors   = replicate (8 * 20) white
-        uvs      = replicate (8 * 20) 0
-        indices  = concatMap cubeIndices [0 .. 19]
+        colors   = replicate (8 * 12) white
+        uvs      = replicate (8 * 12) 0
+        indices  = concatMap cubeIndices [0 .. 12]
 
 hexahedron :: Mesh
 hexahedron = mkMesh "~hexahedron" vertices colors uvs indices
