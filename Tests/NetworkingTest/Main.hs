@@ -114,7 +114,11 @@ terminalMesh = mkMesh "terminal" vertices colors uvs indices
 terminalOutline :: Vector3 -> Signal (Entity ())
 terminalOutline p = foldn (flip const) e tick
     where
-        e = (mkEntity ()) {pos = p, model = Just <| mkModel DefaultLayer (cubeOutline3D 0.025) <| vertexColored <| RGBA 0.9 0.9 0.9 0.05 }
+        e = (mkEntity ())
+           { pos    = p
+           , escale = Vector3 1.5 1.5 1.5
+           , model  = Just <| mkModel DefaultLayer (cubeOutline3D 0.025) <| vertexColored <| RGBA 0.9 0.9 0.9 0.05
+           }
 
 updateTerminal :: TerminalInput -> Entity Terminal -> Entity Terminal
 updateTerminal input e = case input of
@@ -137,8 +141,9 @@ terminalTick (dt, _) e = if terminalIsActive <| edata e
     then setUniform "is_active" (UniformScalar   1 ) <| rotate rotVec e
     else setUniform "is_active" (UniformScalar (-1)) <| e
     where
-        -- rotVec dt   = Vector3 (dt * (tx + ty * 0.5) * 600) (dt * (ty - tx * 0.5) * 600) (dt * 10)
-        rotVec = 0 * Vector3 0 0 (dt * 20)
+        -- (tx, ty)    = terminalValues   <| edata e
+        -- rotVec      = Vector3 (dt * (tx + ty * 0.5) * 100) (dt * (ty - tx * 0.5) * 100) (dt * 20)
+        rotVec = Vector3 0 (dt * 5) (dt * 20)
         -- rotVec = 0
 
 mkTerminal :: Vector3 -> Int -> Key -> (UGen -> UGen -> UGen) -> Signal ()
@@ -169,9 +174,9 @@ main :: IO ()
 main = runSignal
     <| players
     *> mkTerminal        (Vector3  0 3 0) 0 keyT lfsawSynth
-    *> mkTerminal        (Vector3  4 3 0) 0 keyR lfsawSynth
-    *> mkPatternTerminal (Vector3  8 3 0) 2 keyH hyperMelody        hyperMelodyPattern
-    *> mkPatternTerminal (Vector3 12 3 0) 2 keyG hyperMelodyHarmony hyperMelodyPattern2
+    *> mkTerminal        (Vector3  6 3 0) 0 keyR lfsawSynth
+    *> mkPatternTerminal (Vector3 12 3 0) 2 keyH hyperMelody        hyperMelodyPattern
+    *> mkPatternTerminal (Vector3 18 3 0) 2 keyG hyperMelodyHarmony hyperMelodyPattern2
     *> section1
 
 ---------------------------------------------------------------------------
