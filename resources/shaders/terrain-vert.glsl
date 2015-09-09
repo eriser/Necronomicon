@@ -102,24 +102,22 @@ float simplex(float x, float y)
 
 float columns = 1/ 256.0;
 float rows    = 1/ 256.0;
-float height  = 5;
+float height  = 6;
+float audio_modulation_amount = 1.5;
 
 void main()
 {
     uv          = in_uv;
 
-    //not quite right
-    //transmit uvs from haskell land packed into x?
-    //IS THIS CLIPPING!?!?!?
     float a1    = (texture1D(tex1, uv.x * 1).r - 0.5) * 2.0;
     float a2    = (texture1D(tex2, uv.x * 1).r - 0.5) * 2.0;
     float a3    = (texture1D(tex3, uv.x * 1).r - 0.5) * 2.0;
 
-    vec3  pos   = vec3(position.x , position.y + a1 + a2 + a3, position.z );
+    vec3  pos   = vec3(position.x , position.y + a1 + a2 + a3, position.z);
 
     float x     = (pos.x * 6) * columns;
     float z     = (pos.z * 6) * rows;
-    float y     = (pos.y * 1) + simplex(x * 0.5 + time * 0.05, z * 0.5 + time * 0.041) * height;
+    float y     = (pos.y * audio_modulation_amount) + simplex(x * 0.5 + time * 0.05, z * 0.5 + time * 0.041) * height;
 
     float yamt  = y * (1 / height) + 0.4;
 

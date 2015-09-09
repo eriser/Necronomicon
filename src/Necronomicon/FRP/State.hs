@@ -334,10 +334,10 @@ removeAndNetworkEntities state gen nursery newEntRef nid = do
     writeIORef newEntRef []
     where
         --Delete openGL resources? Use weak pointers and finalizers?
-        collectChanges (cs, ngs) (k, (gen', p, c)) = if gen == gen' 
+        collectChanges (cs, ngs) (k, (gen', p, c)) = if gen == gen'
             then case netOptions c of
                 NoNetworkOptions -> return (cs, ngs)
-                _                -> return (collectNetworkEntityUpdates p c cs, ngs) 
+                _                -> return (collectNetworkEntityUpdates p c cs, ngs)
             else do
                 renderData <- readIORef (renderDataRef state)
                 SMV.unsafeWith renderData $ \ptr -> pokeByteOff (ptr `advancePtr` k) 0 (0 :: CInt)
