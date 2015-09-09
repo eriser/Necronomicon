@@ -5,7 +5,8 @@ import Data.Fixed (mod')
 
 import qualified Data.IntMap as IntMap
 import qualified Data.Map    as Map
-
+import qualified Data.Vector as V
+import qualified Necronomicon.Util.Grid as G
 
 ---------------------------------------------------------------------------
 -- Player
@@ -172,6 +173,7 @@ main = runSignal
     *> mkTerminal        (Vector3  4 3 0) 0 keyR lfsawSynth
     *> mkPatternTerminal (Vector3  8 3 0) 2 keyH hyperMelody        hyperMelodyPattern
     *> mkPatternTerminal (Vector3 12 3 0) 2 keyG hyperMelodyHarmony hyperMelodyPattern2
+    *> mkPatternTerminal (Vector3 16 3 0) 2 keyJ hyperMelody        binaryWolframPattern
     *> section1
 
 ---------------------------------------------------------------------------
@@ -273,6 +275,17 @@ hyperMelodyPattern2 = PFunc0 <| pmap ((*2) . d2f sigScale) <| ploop [sec1]
                       _ _ _ _ _ _ _ _
                |]
 
+binaryWolframPattern :: PFunc Rational
+binaryWolframPattern = PFunc0 <| PVal (pwolframGrid, 0.5)
+    where
+        cellToRational White = 0
+        cellToRational Black = 1
+        seedCells = V.fromList (replicate 80 White ++ [Black] ++ replicate 80 White)
+        ruleNumber = 105
+        ruleVector = binaryWolframRuleVector ruleNumber
+        numRows = 50
+        wolframCAGrid = G.map ((*2) . d2f sigScale . cellToRational) $ mkBinaryWolframGrid seedCells ruleVector numRows
+        pwolframGrid = pgridDelta wolframCAGrid 0 1
 
 ------------------------------------------------------------------------------------------
 -- Buses

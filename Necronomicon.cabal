@@ -286,7 +286,8 @@ executable NetworkingTest
     build-depends:    base             == 4.*,
                       Necronomicon,
                       containers,
-                      binary
+                      binary,
+                      vector
 
 executable GenerativeTest
     main-is:          Main.hs

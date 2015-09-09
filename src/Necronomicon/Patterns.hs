@@ -352,16 +352,30 @@ pdelay (PVal n) p = PGen (\t -> collapse p (t + n))
 pgrid :: G.Grid a -> PNum -> PNum -> Pattern a
 pgrid _ PNothing _ = PNothing
 pgrid _ _ PNothing = PNothing
-pgrid grid (PSeq deltaX _) deltaY = PGen (\t -> collapse (pgrid grid (collapse deltaX t) deltaY) t)
-pgrid grid deltaX (PSeq deltaY _) = PGen (\t -> collapse (pgrid grid deltaX (collapse deltaY t)) t)
-pgrid grid (PGen deltaX) deltaY = PGen (\t -> collapse (pgrid grid (deltaX t) deltaY) t)
-pgrid grid deltaX (PGen deltaY) = PGen (\t -> collapse (pgrid grid deltaX (deltaY t)) t)
-pgrid grid (PVal deltaX) (PVal deltaY) = PGen plookupGrid
-        where
-            plookupGrid t = PVal $ G.wrapLookup grid x y
-                where
-                    x = floor (fromRational (deltaX * t) :: Double) :: Int
-                    y = floor (fromRational (deltaY * t) :: Double) :: Int
+pgrid grid (PSeq x _) y = PGen (\t -> collapse (pgrid grid (collapse x t) y) t)
+pgrid grid x (PSeq y _) = PGen (\t -> collapse (pgrid grid x (collapse y t)) t)
+pgrid grid (PGen x) y = PGen (\t -> collapse (pgrid grid (x t) y) t)
+pgrid grid x (PGen y) = PGen (\t -> collapse (pgrid grid x (y t)) t)
+pgrid grid (PVal x) (PVal y) = PGen plookupGrid
+    where
+        plookupGrid _ = PVal $ G.wrapLookup grid ix iy
+            where
+                ix = floor (fromRational x :: Double) :: Int
+                iy = floor (fromRational y :: Double) :: Int
+
+pgridDelta :: G.Grid a -> PNum -> PNum -> Pattern a
+pgridDelta _ PNothing _ = PNothing
+pgridDelta _ _ PNothing = PNothing
+pgridDelta grid (PSeq deltaX _) deltaY = PGen (\t -> collapse (pgridDelta grid (collapse deltaX t) deltaY) t)
+pgridDelta grid deltaX (PSeq deltaY _) = PGen (\t -> collapse (pgridDelta grid deltaX (collapse deltaY t)) t)
+pgridDelta grid (PGen deltaX) deltaY = PGen (\t -> collapse (pgridDelta grid (deltaX t) deltaY) t)
+pgridDelta grid deltaX (PGen deltaY) = PGen (\t -> collapse (pgridDelta grid deltaX (deltaY t)) t)
+pgridDelta grid (PVal deltaX) (PVal deltaY) = PGen plookupGrid
+    where
+        plookupGrid t = PVal $ G.wrapLookup grid x y
+            where
+                x = floor (fromRational (deltaX * t) :: Double) :: Int
+                y = floor (fromRational (deltaY * t) :: Double) :: Int
 
 instance Num a => Num (Pattern a) where
     (+) = padd

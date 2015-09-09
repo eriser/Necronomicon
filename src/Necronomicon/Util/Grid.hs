@@ -2,6 +2,8 @@ module Necronomicon.Util.Grid where
 
 import qualified Data.Vector as V
 
+-- Grid stored internally as rows/columns.
+-- Don't access directly, instead use lookup or wrapLookup for indexing.
 newtype Grid a = Grid (V.Vector (V.Vector a))
 
 instance Functor Grid where
@@ -31,10 +33,21 @@ wrapLookup (Grid g) x y = lookupX (g V.! y')
 map :: (a -> b) -> Grid a -> Grid b
 map f (Grid g) = Grid $ V.map (V.map f) g
 
+-- This assumes a equally wide width across all rows.
+-- If not this won't work, but you can use rowWidth for a particular row's width instead.
 width :: Grid a -> Int
 width (Grid grid) = if V.length grid == 0
                         then 0
                         else V.length $ V.head grid
+
+-- Width for specific row. Useful if grid isn't evenly sized throughout the rows
+rowWidth :: Grid a -> Int -> Int
+rowWidth g@(Grid grid) row = if gridHeight == 0 || gridHeight <= row
+                                then 0
+                                else V.length (grid V.! row')
+    where
+        row' = max 0 $ min row (gridHeight - 1)
+        gridHeight = height g
 
 height :: Grid a -> Int
 height (Grid grid) = V.length grid

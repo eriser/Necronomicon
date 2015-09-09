@@ -19,7 +19,7 @@ lsystemGeneration (LSystem _ (RuleSet ruleset)) axiom n
                     Nothing -> acc ++ [letter]
                     Just ruleString  -> acc ++ ruleString
 
--- creates an infinite list of strings containing all possible versions of a given lsystem
+-- creates an infinite list of strings containing all possible iterations of a given lsystem
 lsystemGenerations :: LSystem -> String -> [String]
 lsystemGenerations (LSystem _ (RuleSet ruleset)) axiom = lSystemGenerationsList
     where

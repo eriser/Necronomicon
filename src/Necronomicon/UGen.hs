@@ -1353,6 +1353,13 @@ playSynth sdName args = playSynthAt sdName args 0
 stopSynth :: Synth -> Necronomicon ()
 stopSynth (Synth nodeID _) = sendMessage (StopSynth nodeID)
 
+grainTest :: UGenType a => a -> [Rational] -> Necronomicon ()
+grainTest synthDef args = do
+    let grainSynthDefName = "__grain_test__"
+    compileSynthDef grainSynthDefName synthDef
+    _ <- playSynth grainSynthDefName args
+    return ()
+
 setSynthArg :: Synth -> Int -> Rational -> Necronomicon ()
 setSynthArg synth argIndex argValue = sendMessage (SetSynthArg synth (fromIntegral argIndex) . CDouble $ fromRational argValue)
 
