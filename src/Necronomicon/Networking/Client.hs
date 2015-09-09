@@ -130,6 +130,7 @@ quitClient client = do
     atomically $ writeTVar  (clientRunStatus client) Quitting
     putStrLn "Sending quit message to server..."
     atomically $ writeTChan (clientOutBox client) $ encode $ Logout (clientID client) (clientUserName client)
+    atomically $ writeTChan (clientOutBox client) B.empty
     putStrLn "Closing socket..."
     threadDelay 50000
     putStrLn "Done quitting..."
