@@ -185,6 +185,7 @@ mkPatternTerminal p a k s f = terminalOutline p *> (playSynthPattern' s f <| fma
 main :: IO ()
 main = runSignal
     <| players
+    *> loadSamples hyperTerrainSamples
     *> mkTerminal        (Vector3  0 3 0) 0 keyT lfsawSynth
     *> mkTerminal        (Vector3  4 3 0) 0 keyR lfsawSynth
     *> mkPatternTerminal (Vector3  8 3 0) 2 keyH hyperMelody        hyperMelodyPattern
@@ -348,3 +349,40 @@ artifactOut :: UGen -> UGen
 artifactOut = out <| random 0 150 156
 
 -}
+
+hyperTerrainSamples :: [FilePath]
+hyperTerrainSamples = [
+        "samples/BassDrum.wav",
+        "samples/China18.wav",
+        "samples/Cymbal1.wav",
+        "samples/gong_1.wav",
+        "samples/gong_2.wav",
+        "samples/HarpKotoShort.wav",
+        "samples/HihatClosedS.wav",
+        "samples/HihatClosedT.wav",
+        "samples/HihatHalfS.wav",
+        "samples/HihatHalfT.wav",
+        "samples/HihatOpenT.wav",
+        "samples/HiHatPedal.wav",
+        "samples/MetalRing.wav",
+        "samples/Slendro1.wav",
+        "samples/SnareDrag.wav",
+        "samples/SnareFlam.wav",
+        "samples/SnareHit.wav",
+        "samples/SnareRim.wav",
+        "samples/SnareRimClick.wav",
+        "samples/SnareSS.wav",
+        "samples/tabla-hi-na.wav",
+        "samples/tabla-hi-tin.wav",
+        "samples/tabla-hi-tuh.wav",
+        "samples/tabla-hi-tun.wav",
+        "samples/tabla-hi-tuut.wav",
+        "samples/tabla-lick.wav",
+        "samples/tabla-lick-voiceanddrums.wav",
+        "samples/tabla-lo-geh.wav",
+        "samples/tabla-lo-geh-gliss.wav",
+        "samples/tabla-lo-keh.wav",
+        "samples/TomFloor.wav",
+        "samples/TomHi.wav",
+        "samples/TomMid.wav"
+    ]

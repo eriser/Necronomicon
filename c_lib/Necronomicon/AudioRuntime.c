@@ -428,6 +428,7 @@ sample_buffer* load_sample_into_buffer(const char* file_path)
     else
     {
         printf("Error opening sound file %s\n", file_path);
+        printf("sndfile_error -> %s\n", sf_strerror(sndfile));
     }
 
     return buffer;
