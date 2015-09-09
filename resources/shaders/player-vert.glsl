@@ -13,5 +13,5 @@ void main()
     uv          = in_uv;
     color       = in_color;
     pos         = position;
-    gl_Position = position * modelView * proj;
+    gl_Position = vec4(position, 1) * modelView * proj;
 }

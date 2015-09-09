@@ -23,26 +23,36 @@ data PlayerInput   = PlayerKeys   (Double, Double)    Int
 instance Binary Player
 instance Binary PlayerState
 
-mkPlayer :: Entity Player
-mkPlayer = ( mkEntity  <| Player PlayerIdle (0, 0) )
-           { pos        = Vector3 0 2 (-6)
-           , camera     = Just <| Camera 60 0.1 1000 black [postRenderFX blur] (toBitMask DefaultLayer) 0
-           , netOptions = mkNetworkOptions
-               { networkPos    = Network
-               , networkRot    = Network
-               , networkModel  = NetworkOthers <| Just <| mkModel DefaultLayer cube playerMaterial
-               , networkCamera = NetworkOthers Nothing } }
+mkPlayer :: Vector3 -> Entity Player
+mkPlayer p = ( mkEntity  <| Player PlayerIdle (0, 0) )
+             { pos        = p
+             , camera     = Nothing
+             , model      = Just <| mkModel DefaultLayer cube playerMaterial
+             -- , camera     = Just <| Camera 60 0.1 1000 black [postRenderFX blur] (toBitMask DefaultLayer) 0
+             , netOptions = mkNetworkOptions
+                 { networkPos    = Network
+                 , networkRot    = Network
+                 } }
+                 -- , networkModel  = NetworkOthers <| Just <| mkModel DefaultLayer cube playerMaterial
+                 -- , networkCamera = NetworkOthers Nothing } }
 
 playerMaterial :: Material
 playerMaterial = material "player-vert.glsl" "player-frag.glsl" []
 
 updatePlayers :: PlayerInput -> IntMap.IntMap (Entity Player) -> IntMap.IntMap (Entity Player)
-updatePlayers input = case input of
-    PlayerTick              t uid s -> IntMap.adjust (tickPlayer t s)      uid
-    PlayerKeys              k uid   -> IntMap.adjust (playerKeysUpdate k)  uid
-    PlayerMouse             m uid   -> IntMap.adjust (playerMouseUpdate m) uid
-    PlayerLog (pid, _, True)  uid   -> if pid == uid then IntMap.insert uid mkPlayer else id
-    PlayerLog (pid, _, False) _     -> IntMap.delete pid
+updatePlayers input m = case input of
+    PlayerKeys              k uid   -> IntMap.adjust (playerKeysUpdate k)  uid m
+    PlayerMouse             u uid   -> IntMap.adjust (playerMouseUpdate u) uid m
+    PlayerTick              t uid s -> case IntMap.lookup uid m of
+        Just p  -> IntMap.insert uid (tickPlayer t s <| p{model = Nothing, camera = Just <| Camera 60 0.1 1000 black [postRenderFX blur] (toBitMask DefaultLayer) 0}) m
+        Nothing -> m
+    _                               -> m
+
+    -- PlayerTick              t uid s -> IntMap.adjust (tickPlayer t s)      uid
+    -- PlayerKeys              k uid   -> IntMap.adjust (playerKeysUpdate k)  uid
+    -- PlayerMouse             m uid   -> IntMap.adjust (playerMouseUpdate m) uid
+    -- PlayerLog (pid, _, True)  uid   -> if pid == uid then IntMap.insert uid mkPlayer else id
+    -- PlayerLog (pid, _, False) _     -> IntMap.delete pid
 
 playerMouseUpdate :: (Double, Double) -> Entity Player -> Entity Player
 playerMouseUpdate (mx, my) p@Entity{ edata = Player state (px, py) } = p{ edata = Player state (x, y), rot = fromEuler 0 x 0 * fromEuler y 0 0 }
@@ -59,10 +69,10 @@ tickPlayer (dt, _) s p = case p of
     _                                           -> p
 
 players :: Signal (IntMap.IntMap (Entity Player))
-players = foldn updatePlayers IntMap.empty
+players = foldn updatePlayers (IntMap.fromList [(0, mkPlayer <| Vector3 0 2 (-6)), (1, mkPlayer <| Vector3 2 2 (-6))])
        <| PlayerTick   <~ tick       ~~ userID ~~ sigOr [isDown keyLShift, isDown keyRShift]
        <> PlayerKeys   <~ wasd       ~~ userID
-       <> PlayerLog    <~ userLog    ~~ userID
+       -- <> PlayerLog    <~ userLog    ~~ userID
        <> PlayerMouse  <~ filterWhen' (fmap not <| areUp [keyB, keyC, keyE, keyF, keyG, keyH, keyI, keyJ, keyK, keyL, keyM, keyN, keyO, keyP, keyQ, keyR, keyT, keyU, keyV, keyX, keyY, keyZ]) mouseDelta ~~ userID
 
 

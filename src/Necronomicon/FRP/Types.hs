@@ -56,7 +56,9 @@ data SignalState = SignalState
                  , signalClient    :: Client
                  , necroVars       :: NecroVars
                  , sigResources    :: Resources
-                 , signalsInbox    :: TChan InputEvent }
+                 , signalsInbox    :: TChan InputEvent
+                 , signalUserName  :: String
+                 }
 
 mkSignalState :: GLFW.Window -> (Double, Double) -> TChan InputEvent -> String -> IO SignalState
 mkSignalState w _ inbox userName = SignalState
@@ -70,3 +72,4 @@ mkSignalState w _ inbox userName = SignalState
                            ~~ mkNecroVars
                            ~~ mkResources w
                            ~~ pure inbox
+                           ~~ pure userName

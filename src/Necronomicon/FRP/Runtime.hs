@@ -24,8 +24,8 @@ import qualified Graphics.UI.GLFW                  as GLFW
 ----------------------------------
 
 runSignal :: (Show a) => Signal a -> IO ()
--- runSignal sig = initWindow (920, 540) False >>= \mw -> case mw of
-runSignal sig = initWindow (1920, 1080) False >>= \mw -> case mw of
+runSignal sig = initWindow (920, 540) False >>= \mw -> case mw of
+-- runSignal sig = initWindow (1920, 1080) False >>= \mw -> case mw of
 -- runSignal sig = initWindow (1920, 1080) True >>= \mw -> case mw of
     Nothing     -> print "Error starting GLFW." >> return ()
     Just w -> do
@@ -43,15 +43,15 @@ runSignal sig = initWindow (1920, 1080) False >>= \mw -> case mw of
         _           <- runNecroState (waitForRunningStatus NecroRunning) (necroVars state)
         (scont, _)  <- unSignal sig state
 
+        setInputCallbacks w eventInbox
+        _           <- forkIO $ processEvents scont state eventInbox
+
+        threadDelay 2000000
+
         case args of
             Just [n, a] -> startNetworking state n a $ signalClient state
             _           -> print "Incorrect arguments given for networking (name address). Networking is disabled"
 
-        threadDelay 9000000
-        
-        setInputCallbacks w eventInbox
-        _           <- forkIO $ processEvents scont state eventInbox
-        
         run False w scont currentTime DynTree.empty eventInbox state
     where
         run quit window s runTime' tree eventInbox state
