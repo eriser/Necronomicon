@@ -21,8 +21,20 @@ data PlayerInput   = PlayerKeys   (Double, Double)    Int
                    | PlayerTick   (Time, Time)        Int Bool
                    | PlayerLog    (Int, String, Bool) Int
                    deriving (Show, Eq, Generic)
-instance Binary Player
-instance Binary PlayerState
+-- instance Binary Player
+-- instance Binary PlayerState
+
+instance Binary Player where
+    put (Player s v) = put s >> put v
+    get              = Player <~ get ~~ get
+
+instance Binary PlayerState where
+    put PlayerIdle       = put (0 :: Word8)
+    put (PlayerMoving v) = put (1 :: Word8) >> put v
+
+    get = (get :: Get Word8) >>= \t -> case t of
+        0 -> return PlayerIdle
+        _ -> PlayerMoving <~ get
 
 mkPlayer :: Vector3 -> Entity Player
 mkPlayer p = ( mkEntity  <| Player PlayerIdle (0, 0) )
