@@ -99,7 +99,7 @@ instance Binary a => Binary (NetEntityUpdate a) where
         _ -> UpdateEntityCamera   <$> get
 
 
-data NetEntityMessage a = NetEntityMessage Int [Entity a] [((Int, Int), [NetEntityUpdate a])] [((Int, Int), ())]
+data NetEntityMessage a = NetEntityMessage Int [Entity a] [((Int, Int), [NetEntityUpdate a])] [(Int, Int)]
                         | NetEntitySync Int Int [Entity a]
 
 instance Binary a => Binary (NetEntityMessage a) where

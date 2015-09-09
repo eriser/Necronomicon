@@ -30,8 +30,11 @@ mkPlayer = ( mkEntity  <| Player PlayerIdle (0, 0) )
            , netOptions = mkNetworkOptions
                { networkPos    = Network
                , networkRot    = Network
-               , networkModel  = NetworkOthers <| Just <| mkModel DefaultLayer cube <| vertexColored white
+               , networkModel  = NetworkOthers <| Just <| mkModel DefaultLayer cube playerMaterial
                , networkCamera = NetworkOthers Nothing } }
+
+playerMaterial :: Material
+playerMaterial = material "player-vert.glsl" "player-frag.glsl" []
 
 updatePlayers :: PlayerInput -> IntMap.IntMap (Entity Player) -> IntMap.IntMap (Entity Player)
 updatePlayers input = case input of
@@ -85,8 +88,6 @@ instance Binary Terminal where
 mkTerminalEntity :: Vector3 -> Int -> Entity Terminal
 mkTerminalEntity p a = (mkEntity <| Terminal False (0, 0))
              { pos        = p
-             , escale     = Vector3 1 1 1
-             -- , rot        = fromEuler (-90) 0 0
              , model      = Just <| mkModel DefaultLayer terminalMesh <| terminalMaterial (audioTexture a)
              , netOptions = mkNetworkOptions { networkData = Network }
              }
@@ -104,12 +105,12 @@ terminalMaterial a = material
 terminalMesh :: Mesh
 terminalMesh = mkMesh "terminal" vertices colors uvs indices
     where
-        len         = 256
-        lenr        = fromIntegral len
-        indices     = foldr (\i acc -> i + 1 : i + 2 : i + 3 : i + 1 : i + 0 : i + 2 : acc) [] ([0..len - 1] :: [Int])
-        uvs         = replicate len 0
-        colors      = replicate len white
-        vertices    = zipWith3 Vector3 (cycle [3, 2, 1, 0]) (map (/lenr) ([0..lenr - 1] :: [Double]) >>= replicate 4) (map (/lenr) ([1..lenr - 2] :: [Double]) >>= replicate 4)
+        len      = 256
+        lenr     = fromIntegral len
+        indices  = foldr (\i acc -> i + 1 : i + 2 : i + 3 : i + 1 : i + 0 : i + 2 : acc) [] ([0..len - 1] :: [Int])
+        uvs      = replicate len 0
+        colors   = replicate len white
+        vertices = zipWith3 Vector3 (cycle [3, 2, 1, 0]) (map (/lenr) ([0..lenr - 1] :: [Double]) >>= replicate 4) (map (/lenr) ([1..lenr - 2] :: [Double]) >>= replicate 4)
 
 terminalOutline :: Vector3 -> Signal (Entity ())
 terminalOutline p = foldn (flip const) e tick

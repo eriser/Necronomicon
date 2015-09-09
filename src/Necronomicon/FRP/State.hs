@@ -148,7 +148,7 @@ instance (Binary a, Eq a) => NecroFoldable [Entity a] where
                             NetEntityMessage _ nsl csl gsl -> do
                                 ns <- Hash.fromList $ zip (map netid nsl) nsl
                                 cs <- Hash.fromList csl
-                                gs <- Hash.fromList gsl
+                                gs <- Hash.fromList $ map (\x -> (x, ())) gsl
                                 return (ns, cs, gs)
 
                             NetEntitySync    _ _  nsl -> do
@@ -228,7 +228,7 @@ instance (Binary a, Eq a) => NecroFoldable (IntMap.IntMap (Entity a)) where
                         gen <- readIORef genCounter
                         es' <- case decode msg of
                             NetEntityMessage _ nsl csl gsl -> do
-                                let es1       = foldr (\((_, k), _ ) m -> IntMap.delete k m) es gsl
+                                let es1       = foldr (\(k, _ ) m -> IntMap.delete k m) es gsl
                                     es2       = foldr (\((_, k), cs) m -> IntMap.adjust (netUpdate cs) k m) es1 csl
                                     (ns, es3) = foldr replaceEntities ([], es2) nsl
                                 unionizeNewEntitie es3 <~ mapM (addNewNetEntities state gen nursery newEntRef) ns
@@ -334,18 +334,22 @@ removeAndNetworkEntities state gen nursery newEntRef nid = do
     writeIORef newEntRef []
     where
         --Delete openGL resources? Use weak pointers and finalizers?
-        collectChanges (cs, ngs) (k, (gen', p, c)) = if gen == gen' then return (collectNetworkEntityUpdates p c cs, ngs) else do
-            renderData <- readIORef (renderDataRef state)
-            SMV.unsafeWith renderData $ \ptr -> pokeByteOff (ptr `advancePtr` k) 0 (0 :: CInt)
-            Hash.delete nursery k
-            atomically $ readTVar (uidRef state) >>= \uids -> writeTVar (uidRef state) (k : uids)
-            case camera c of
-                Nothing -> return ()
-                _       -> atomically $ modifyTVar' (cameraRef state) $ IntMap.delete k
-            case netOptions c of
-                --Is checking the arguments each frame causing the hiccup???
+        collectChanges (cs, ngs) (k, (gen', p, c)) = if gen == gen' 
+            then case netOptions c of
                 NoNetworkOptions -> return (cs, ngs)
-                _                -> return (collectNetworkEntityUpdates p c cs, (netid c, ()) : ngs)
+                _                -> return (collectNetworkEntityUpdates p c cs, ngs) 
+            else do
+                renderData <- readIORef (renderDataRef state)
+                SMV.unsafeWith renderData $ \ptr -> pokeByteOff (ptr `advancePtr` k) 0 (0 :: CInt)
+                Hash.delete nursery k
+                atomically $ readTVar (uidRef state) >>= \uids -> writeTVar (uidRef state) (k : uids)
+                case camera c of
+                    Nothing -> return ()
+                    _       -> atomically $ modifyTVar' (cameraRef state) $ IntMap.delete k
+                case netOptions c of
+                    --Is checking the arguments each frame causing the hiccup???
+                    NoNetworkOptions -> return (cs, ngs)
+                    _                -> return (collectNetworkEntityUpdates p c cs, netid c : ngs)
 
 type Nursery a = Hash.CuckooHashTable Int (Int, Entity a, Entity a)
 insertNursery :: Int -> Int -> Entity a -> Nursery a -> IO ()

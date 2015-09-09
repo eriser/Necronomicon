@@ -158,6 +158,14 @@ cubeOutline3D w = mkMesh "*cube3" vertices colors uvs indices
         uvs      = replicate (8 * 12) 0
         indices  = concatMap cubeIndices [0 .. 12]
 
+-- hexahedronOutline :: Double -> Double -> Double Mesh
+-- hexahedron asize bsize w - mkMesh ("*hexahedron" ++ show asize ++ show bsize ++ w) vertices colors uvs indices
+--     where
+--         vertices = cubeVertices (Vector3 1 w w) (Vector3   0.0    0.5    0.5 ) ++ 
+--         colors   = replicate (8 * 8) white
+--         uvs      = replicate (8 * 8) 0
+--         indices  = concatMap cubeIndices [0..8]
+
 hexahedron :: Mesh
 hexahedron = mkMesh "~hexahedron" vertices colors uvs indices
     where
