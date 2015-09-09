@@ -119,7 +119,7 @@ void main()
     float z     = (pos.z * 6) * rows;
     float y     = (pos.y * audio_modulation_amount) + simplex(x * 0.5 + time * 0.05, z * 0.5 + time * 0.041) * height;
 
-    float yamt  = y * (1 / height) + 0.4;
+    float yamt  = y * (1 / height) + 0.3;
 
     color       = vec3(x * 1.75 * yamt, yamt, z * yamt);
 
