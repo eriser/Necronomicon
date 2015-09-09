@@ -99,7 +99,7 @@ instance Binary a => Binary (NetEntityUpdate a) where
         _ -> UpdateEntityCamera   <$> get
 
 
-data NetEntityMessage a = NetEntityMessage Int [Entity a] [((Int, Int), [NetEntityUpdate a])] [((Int, Int), ())]
+data NetEntityMessage a = NetEntityMessage Int [Entity a] [((Int, Int), [NetEntityUpdate a])] [(Int, Int)]
                         | NetEntitySync Int Int [Entity a]
 
 instance Binary a => Binary (NetEntityMessage a) where
@@ -214,7 +214,7 @@ userList = Signal $ \state -> do
                 _                  -> return $ NoChange users
 
 userID :: Signal Int
-userID = Signal $ \state -> let cid = clientID $ signalClient state in return (\_ -> return $ NoChange cid, cid)
+userID = Signal $ \state -> let cid = if signalUserName state == "casiosk1" then 0 else 1 in return (\_ -> return $ NoChange cid, cid)
 
 chatMessage :: Signal (String, String)
 chatMessage = Signal $ \_ -> do

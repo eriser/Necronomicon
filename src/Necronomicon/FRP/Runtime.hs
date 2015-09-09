@@ -24,7 +24,8 @@ import qualified Graphics.UI.GLFW                  as GLFW
 ----------------------------------
 
 runSignal :: (Show a) => Signal a -> IO ()
-runSignal sig = initWindow (920, 540) False >>= \mw -> case mw of
+-- runSignal sig = initWindow (920, 540) False >>= \mw -> case mw of
+runSignal sig = initWindow (1920, 1080) False >>= \mw -> case mw of
 -- runSignal sig = initWindow (1920, 1080) True >>= \mw -> case mw of
     Nothing     -> print "Error starting GLFW." >> return ()
     Just w -> do
@@ -40,12 +41,12 @@ runSignal sig = initWindow (920, 540) False >>= \mw -> case mw of
         _           <- runNecroState (setTempo 150) (necroVars state)
         _           <- runNecroState startNecronomicon (necroVars state)
         _           <- runNecroState (waitForRunningStatus NecroRunning) (necroVars state)
+        (scont, _)  <- unSignal sig state
 
         setInputCallbacks w eventInbox
-        (scont, _)  <- unSignal sig state
         _           <- forkIO $ processEvents scont state eventInbox
 
-        threadDelay 2000000
+        -- threadDelay 2000000
 
         case args of
             Just [n, a] -> startNetworking state n a $ signalClient state

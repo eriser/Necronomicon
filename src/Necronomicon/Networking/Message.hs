@@ -1,40 +1,40 @@
 module Necronomicon.Networking.Message where
 
 import Prelude
--- import Network.Socket.ByteString.Lazy
-import Network.Socket.ByteString
+import Network.Socket.ByteString.Lazy
+-- import Network.Socket.ByteString
 import Network.Socket                  hiding (send, recv, recvFrom, sendTo)
 import Data.Binary                            (encode, decode)
--- import Data.Int                               (Int64)
+import Data.Int                               (Int64)
 -- import Control.Monad                          (when)
 import Data.Word                              (Word16)
 import Control.Exception
-import qualified Data.ByteString.Lazy  as BL
-import qualified Data.ByteString as B
+import qualified Data.ByteString.Lazy  as B
+-- import qualified Data.ByteString as B
 
-data Receive = Receive BL.ByteString
+data Receive = Receive B.ByteString
              | ShutdownMessage
              | IncorrectLength
              | Exception IOException
 
-lengthOfMessageLength :: Int
+lengthOfMessageLength :: Int64
 lengthOfMessageLength = 2
 
 maxMessageLength :: Word16
 maxMessageLength = 0x0FFFF
 
-sendWithLength :: Socket -> BL.ByteString -> IO()
+sendWithLength :: Socket -> B.ByteString -> IO()
 sendWithLength nsocket msg = Control.Exception.catch trySend onFailure
     where
-        messageLength = fromIntegral $ BL.length msg :: Word16
+        messageLength = fromIntegral $ B.length msg :: Word16
         trySend
             | messageLength < 0 || messageLength >= maxMessageLength = putStrLn ("message length is out of bounds: " ++ show messageLength)
             | otherwise = do
-                let messageLengthData = BL.toStrict $ encode messageLength
+                let messageLengthData = encode messageLength
                 -- putStrLn $ "length of messageLength: " ++ show (B.length messageLengthData)
                 -- putStrLn $ "sending message of length: " ++ show messageLength
                 sendAll nsocket $ messageLengthData
-                sendAll nsocket $ BL.toStrict msg
+                sendAll nsocket $ msg
         onFailure e = print (e :: IOException)
 
 receiveWithLength :: Socket -> IO Receive
@@ -54,11 +54,11 @@ receiveWithLength nsocket = Control.Exception.catch trySend onFailure
             -- putStrLn ""
             if B.length streamData <= 0 then return ShutdownMessage else if B.length streamData < amountToRead
                 then {-putStrLn "continue receiving" >> -} (readTillFinished (amountToRead - B.length streamData) $ B.append prevData streamData)
-                else {-putStrLn "done receiving" >> -} (return $ Receive $ BL.fromStrict $ B.append prevData streamData)
+                else {-putStrLn "done receiving" >> -} (return $ Receive $ B.append prevData streamData)
 
 
         decodeTransLength bs
             | B.length bs == 0                     = Just 0
-            | B.length bs == lengthOfMessageLength = Just $ fromIntegral (decode (BL.fromStrict bs) :: Word16)
+            | B.length bs == lengthOfMessageLength = Just $ fromIntegral (decode bs :: Word16)
             | otherwise                            = Nothing
 

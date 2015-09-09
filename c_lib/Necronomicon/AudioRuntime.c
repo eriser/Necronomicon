@@ -1575,14 +1575,14 @@ int32_t process(jack_nframes_t nframes, void* arg)
         out1[i] = _necronomicon_buses_out1[i];
 
         //Hand un-rolled this loop. The non-unrolled version was causing 13% cpu overhead on my machine, this doesn't make a blip...
-        _out_bus_0[out_bus_buffer_index] = _necronomicon_buses_out0[i];
-        _out_bus_1[out_bus_buffer_index] = _necronomicon_buses_out1[i];
-        _out_bus_2[out_bus_buffer_index] = _necronomicon_buses_out2[i];
-        _out_bus_3[out_bus_buffer_index] = _necronomicon_buses_out3[i];
-        _out_bus_4[out_bus_buffer_index] = _necronomicon_buses_out4[i];
-        _out_bus_5[out_bus_buffer_index] = _necronomicon_buses_out5[i];
-        _out_bus_6[out_bus_buffer_index] = _necronomicon_buses_out6[i];
-        _out_bus_7[out_bus_buffer_index] = _necronomicon_buses_out7[i];
+        _out_bus_0[out_bus_buffer_index] = (_necronomicon_buses_out0[i] * 0.5) + 0.5;
+        _out_bus_1[out_bus_buffer_index] = (_necronomicon_buses_out1[i] * 0.5) + 0.5;
+        _out_bus_2[out_bus_buffer_index] = (_necronomicon_buses_out2[i] * 0.5) + 0.5;
+        _out_bus_3[out_bus_buffer_index] = (_necronomicon_buses_out3[i] * 0.5) + 0.5;
+        _out_bus_4[out_bus_buffer_index] = (_necronomicon_buses_out4[i] * 0.5) + 0.5;
+        _out_bus_5[out_bus_buffer_index] = (_necronomicon_buses_out5[i] * 0.5) + 0.5;
+        _out_bus_6[out_bus_buffer_index] = (_necronomicon_buses_out6[i] * 0.5) + 0.5;
+        _out_bus_7[out_bus_buffer_index] = (_necronomicon_buses_out7[i] * 0.5) + 0.5;
         out_bus_buffer_index = (out_bus_buffer_index + 1) & 511;
     }
 

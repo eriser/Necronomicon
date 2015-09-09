@@ -24,23 +24,36 @@ data PlayerInput   = PlayerKeys   (Double, Double)    Int
 instance Binary Player
 instance Binary PlayerState
 
-mkPlayer :: Entity Player
-mkPlayer = ( mkEntity  <| Player PlayerIdle (0, 0) )
-           { pos        = Vector3 0 2 (-6)
-           , camera     = Just <| Camera 60 0.1 1000 black [postRenderFX blur] (toBitMask DefaultLayer) 0
-           , netOptions = mkNetworkOptions
-               { networkPos    = Network
-               , networkRot    = Network
-               , networkModel  = NetworkOthers <| Just <| mkModel DefaultLayer cube <| vertexColored white
-               , networkCamera = NetworkOthers Nothing } }
+mkPlayer :: Vector3 -> Entity Player
+mkPlayer p = ( mkEntity  <| Player PlayerIdle (0, 0) )
+             { pos        = p
+             , camera     = Nothing
+             , model      = Just <| mkModel DefaultLayer cube playerMaterial
+             -- , camera     = Just <| Camera 60 0.1 1000 black [postRenderFX blur] (toBitMask DefaultLayer) 0
+             , netOptions = mkNetworkOptions
+                 { networkPos    = Network
+                 , networkRot    = Network
+                 } }
+                 -- , networkModel  = NetworkOthers <| Just <| mkModel DefaultLayer cube playerMaterial
+                 -- , networkCamera = NetworkOthers Nothing } }
+
+playerMaterial :: Material
+playerMaterial = material "player-vert.glsl" "player-frag.glsl" []
 
 updatePlayers :: PlayerInput -> IntMap.IntMap (Entity Player) -> IntMap.IntMap (Entity Player)
-updatePlayers input = case input of
-    PlayerTick              t uid s -> IntMap.adjust (tickPlayer t s)      uid
-    PlayerKeys              k uid   -> IntMap.adjust (playerKeysUpdate k)  uid
-    PlayerMouse             m uid   -> IntMap.adjust (playerMouseUpdate m) uid
-    PlayerLog (pid, _, True)  uid   -> if pid == uid then IntMap.insert uid mkPlayer else id
-    PlayerLog (pid, _, False) _     -> IntMap.delete pid
+updatePlayers input m = case input of
+    PlayerKeys              k uid   -> IntMap.adjust (playerKeysUpdate k)  uid m
+    PlayerMouse             u uid   -> IntMap.adjust (playerMouseUpdate u) uid m
+    PlayerTick              t uid s -> case IntMap.lookup uid m of
+        Just p  -> IntMap.insert uid (tickPlayer t s <| p{model = Nothing, camera = Just <| Camera 60 0.1 1000 black [postRenderFX blur] (toBitMask DefaultLayer) 0}) m
+        Nothing -> m
+    _                               -> m
+
+    -- PlayerTick              t uid s -> IntMap.adjust (tickPlayer t s)      uid
+    -- PlayerKeys              k uid   -> IntMap.adjust (playerKeysUpdate k)  uid
+    -- PlayerMouse             m uid   -> IntMap.adjust (playerMouseUpdate m) uid
+    -- PlayerLog (pid, _, True)  uid   -> if pid == uid then IntMap.insert uid mkPlayer else id
+    -- PlayerLog (pid, _, False) _     -> IntMap.delete pid
 
 playerMouseUpdate :: (Double, Double) -> Entity Player -> Entity Player
 playerMouseUpdate (mx, my) p@Entity{ edata = Player state (px, py) } = p{ edata = Player state (x, y), rot = fromEuler 0 x 0 * fromEuler y 0 0 }
@@ -57,10 +70,10 @@ tickPlayer (dt, _) s p = case p of
     _                                           -> p
 
 players :: Signal (IntMap.IntMap (Entity Player))
-players = foldn updatePlayers IntMap.empty
+players = foldn updatePlayers (IntMap.fromList [(0, mkPlayer <| Vector3 0 2 (-6)), (1, mkPlayer <| Vector3 2 2 (-6))])
        <| PlayerTick   <~ tick       ~~ userID ~~ sigOr [isDown keyLShift, isDown keyRShift]
        <> PlayerKeys   <~ wasd       ~~ userID
-       <> PlayerLog    <~ userLog    ~~ userID
+       -- <> PlayerLog    <~ userLog    ~~ userID
        <> PlayerMouse  <~ filterWhen' (fmap not <| areUp [keyB, keyC, keyE, keyF, keyG, keyH, keyI, keyJ, keyK, keyL, keyM, keyN, keyO, keyP, keyQ, keyR, keyT, keyU, keyV, keyX, keyY, keyZ]) mouseDelta ~~ userID
 
 
@@ -86,8 +99,6 @@ instance Binary Terminal where
 mkTerminalEntity :: Vector3 -> Int -> Entity Terminal
 mkTerminalEntity p a = (mkEntity <| Terminal False (0, 0))
              { pos        = p
-             , escale     = Vector3 1 1 1
-             , rot        = fromEuler (-90) 0 0
              , model      = Just <| mkModel DefaultLayer terminalMesh <| terminalMaterial (audioTexture a)
              , netOptions = mkNetworkOptions { networkData = Network }
              }
@@ -105,17 +116,21 @@ terminalMaterial a = material
 terminalMesh :: Mesh
 terminalMesh = mkMesh "terminal" vertices colors uvs indices
     where
-        len         = 256
-        lenr        = fromIntegral len
-        indices     = foldr (\i acc -> i + 1 : i + 2 : i + 3 : i + 1 : i + 0 : i + 2 : acc) [] ([0..len - 1] :: [Int])
-        uvs         = replicate len 0
-        colors      = replicate len white
-        vertices    = zipWith3 Vector3 (cycle [3, 2, 1, 0]) (map (/lenr) ([0..lenr - 1] :: [Double]) >>= replicate 4) (map (/lenr) ([1..lenr - 2] :: [Double]) >>= replicate 4)
+        len      = 256
+        lenr     = fromIntegral len
+        indices  = foldr (\i acc -> i + 1 : i + 2 : i + 3 : i + 1 : i + 0 : i + 2 : acc) [] ([0..len - 1] :: [Int])
+        uvs      = replicate len 0
+        colors   = replicate len white
+        vertices = zipWith3 Vector3 (cycle [3, 2, 1, 0]) (map (/lenr) ([0..lenr - 1] :: [Double]) >>= replicate 4) (map (/lenr) ([1..lenr - 2] :: [Double]) >>= replicate 4)
 
 terminalOutline :: Vector3 -> Signal (Entity ())
 terminalOutline p = foldn (flip const) e tick
     where
-        e = (mkEntity ()) {pos = p, model = Just <| mkModel DefaultLayer (cubeOutline3D 0.25) <| vertexColored (RGBA 0.1 0.1 0.1 0.1) }
+        e = (mkEntity ())
+           { pos    = p
+           , escale = Vector3 1.5 1.5 1.5
+           , model  = Just <| mkModel DefaultLayer (cubeOutline3D 0.025) <| vertexColored <| RGBA 0.9 0.9 0.9 0.05
+           }
 
 updateTerminal :: TerminalInput -> Entity Terminal -> Entity Terminal
 updateTerminal input e = case input of
@@ -131,15 +146,16 @@ terminalSetValues (x, y) e = if not isActive
         isActive    = terminalIsActive <| edata e
         (tx, ty)    = terminalValues   <| edata e
         vs'         = (argfunc tx x, argfunc ty <| negate y)
-        argfunc p a = clamp 0 1 <| p + a * 0.1
+        argfunc p a = clamp 0 1 <| p + a * 0.2
 
 terminalTick :: (Double, Double) -> Entity Terminal -> Entity Terminal
 terminalTick (dt, _) e = if terminalIsActive <| edata e
     then setUniform "is_active" (UniformScalar   1 ) <| rotate rotVec e
     else setUniform "is_active" (UniformScalar (-1)) <| e
     where
-        -- rotVec dt   = Vector3 (dt * (tx + ty * 0.5) * 600) (dt * (ty - tx * 0.5) * 600) (dt * 10)
-        rotVec = 0 * Vector3 0 0 (dt * 20)
+        -- (tx, ty)    = terminalValues   <| edata e
+        -- rotVec      = Vector3 (dt * (tx + ty * 0.5) * 100) (dt * (ty - tx * 0.5) * 100) (dt * 20)
+        rotVec = 0 * Vector3 0 (dt * 5) (dt * 20)
         -- rotVec = 0
 
 mkTerminal :: Vector3 -> Int -> Key -> (UGen -> UGen -> UGen) -> Signal ()

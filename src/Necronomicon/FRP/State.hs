@@ -148,7 +148,7 @@ instance (Binary a, Eq a) => NecroFoldable [Entity a] where
                             NetEntityMessage _ nsl csl gsl -> do
                                 ns <- Hash.fromList $ zip (map netid nsl) nsl
                                 cs <- Hash.fromList csl
-                                gs <- Hash.fromList gsl
+                                gs <- Hash.fromList $ map (\x -> (x, ())) gsl
                                 return (ns, cs, gs)
 
                             NetEntitySync    _ _  nsl -> do
@@ -207,7 +207,7 @@ instance (Binary a, Eq a) => NecroFoldable [Entity a] where
                                 _       -> return ()
     {-# NOINLINE foldn #-}
 
-instance (Binary a, Eq a) => NecroFoldable (IntMap.IntMap (Entity a)) where
+instance (Show a, Binary a, Eq a) => NecroFoldable (IntMap.IntMap (Entity a)) where
     foldn f scene input = sceneSig
         where
             sceneSig  = delay scene $ necro $ f <~ input ~~ sampleOn input sceneSig
@@ -218,23 +218,31 @@ instance (Binary a, Eq a) => NecroFoldable (IntMap.IntMap (Entity a)) where
                 nursery    <- Hash.new :: IO (Nursery a)
                 newEntRef  <- newIORef []
                 nid        <- nextStateID state
-                es         <- mapM (addInitialEntity state nursery newEntRef) s
+                -- es         <- mapM (addInitialEntity state nursery newEntRef) s
+                es         <- IntMap.fromList <$> (mapM (addInitialEntityWithKey state nursery newEntRef) $ IntMap.toList s)
                 ref        <- newIORef es
                 return (cont scont state genCounter nursery newEntRef nid ref, es)
                 where
-                    cont _ state genCounter nursery newEntRef nid ref (NetSignalEvent nid' msg) = if nid /= nid' then readIORef ref >>= return . NoChange else do
+                    cont _ _ genCounter nursery _ nid ref (NetSignalEvent nid' msg) = if nid /= nid' then readIORef ref >>= return . NoChange else do
                         --Network update
                         es  <- readIORef ref
                         gen <- readIORef genCounter
                         es' <- case decode msg of
-                            NetEntityMessage _ nsl csl gsl -> do
-                                let es1       = foldr (\((_, k), _ ) m -> IntMap.delete k m) es gsl
+                            -- NetEntityMessage _ nsl csl gsl -> do
+                            NetEntityMessage _ _ csl gsl -> do
+                                let es1       = foldr (\(k, _ ) m -> IntMap.delete k m) es gsl
                                     es2       = foldr (\((_, k), cs) m -> IntMap.adjust (netUpdate cs) k m) es1 csl
-                                    (ns, es3) = foldr replaceEntities ([], es2) nsl
-                                unionizeNewEntitie es3 <~ mapM (addNewNetEntities state gen nursery newEntRef) ns
-                            NetEntitySync  _ _ nsl -> do
-                                let (ns, es') = foldr replaceEntities ([], es) nsl
-                                unionizeNewEntitie es' <~ mapM (addNewNetEntities state gen nursery newEntRef) ns
+                                    -- es2       = foldr (\((k, _), cs) m -> IntMap.adjust (netUpdate cs) k m) es1 csl
+                                    -- (ns, es3) = foldr replaceEntities ([], es2) nsl
+                                    -- (_, es3) = foldr replaceEntities ([], es2) nsl
+                                -- putStrLn $ "Network changes: " ++ show csl
+                                -- unionizeNewEntitie es3 <~ mapM (addNewNetEntities state gen nursery newEntRef) ns
+                                return es2
+                            -- NetEntitySync  _ _ nsl -> do
+                            NetEntitySync  _ _ _ -> do
+                                -- let (ns, es') = foldr replaceentities ([], es) nsl
+                                return  es
+                                -- unionizenewentitie es' <~ mapm (addnewnetentities state gen nursery newentref) ns
                         writeIORef ref es'
                         mapM_ (netInsertNursery gen nursery) es'
                         return $ Change es'
@@ -242,15 +250,15 @@ instance (Binary a, Eq a) => NecroFoldable (IntMap.IntMap (Entity a)) where
                     cont scont state genCounter nursery newEntRef nid ref event = do
                         --Send Sync messages when other users login
                         case event of
-                            NetUserEvent i _ True -> if i == (clientID $ signalClient state) then return () else do
-                                es <- IntMap.elems <$> readIORef ref
-                                case es of
-                                    []      -> return ()
-                                    (e : _) -> case netOptions e of
-                                        NoNetworkOptions -> return ()
-                                        _                -> do
-                                            putStrLn "Sending NetEntitySync message for (Map k (Entity a))"
-                                            sendNetworkEntityMessage (signalClient state) $ encode $ NetEntitySync i nid es
+                            -- NetUserEvent i _ True -> if i == (clientID $ signalClient state) then return () else do
+                                -- es <- IntMap.elems <$> readIORef ref
+                                -- case es of
+                                    -- []      -> return ()
+                                    -- (e : _) -> case netOptions e of
+                                        -- NoNetworkOptions -> return ()
+                                        -- _                -> do
+                                            -- putStrLn "Sending NetEntitySync message for (Map k (Entity a))"
+                                            -- sendNetworkEntityMessage (signalClient state) $ encode $ NetEntitySync i nid es
                             _ -> return ()
 
                         --Update signal
@@ -264,15 +272,15 @@ instance (Binary a, Eq a) => NecroFoldable (IntMap.IntMap (Entity a)) where
                                 writeIORef ref es
                                 return $ Change es
 
-                    unionizeNewEntitie es ns = IntMap.union (IntMap.fromList $ zip (map (snd . netid) ns) ns) es
+                    -- unionizeNewEntitie es ns = IntMap.union (IntMap.fromList $ zip (map (snd . netid) ns) ns) es
 
                     updateMapEntitiesWithKey state gen nursery newEntRef k e = case euid e of
                         UID _ -> updateEntity state gen nursery newEntRef Nothing e
                         New   -> updateEntity state gen nursery newEntRef (Just (clientID $ signalClient state, k)) e
 
-                    replaceEntities n (ns, es) = case IntMap.lookup (snd $ netid n) es of
-                        Nothing -> (n : ns, es)
-                        Just e  -> (ns, IntMap.insert (snd $ netid n) n{euid = euid e} es)
+                    -- replaceEntities n (ns, es) = case IntMap.lookup (snd $ netid n) es of
+                    --     Nothing -> (n : ns, es)
+                    --     Just e  -> (ns, IntMap.insert (snd $ netid n) n{euid = euid e} es)
 
                     netUpdate cs e = foldr go e cs
                         where
@@ -296,6 +304,13 @@ addInitialEntity state nursery newEntRef e = do
     e'  <- updateEntity state 0 nursery newEntRef (Just (-1, nid)) e
     writeIORef newEntRef []
     return e'
+
+addInitialEntityWithKey :: SignalState -> Nursery a -> IORef [Entity a] -> (Int, Entity a) -> IO (Int, Entity a)
+addInitialEntityWithKey state nursery newEntRef (k, e) = do
+    -- nid <- nextStateID  state
+    e'  <- updateEntity state 0 nursery newEntRef (Just (-1, k)) e
+    writeIORef newEntRef []
+    return (k, e')
 
 addNewNetEntities  :: SignalState -> Int -> Nursery a -> IORef [Entity a] -> Entity a -> IO (Entity a)
 addNewNetEntities state gen nursery newEntRef e = do
@@ -328,24 +343,29 @@ updateEntity state gen nursery newEntRef maybeNetID e = do
 removeAndNetworkEntities :: (Binary a, Eq a) => SignalState -> Int -> Nursery a -> IORef [Entity a] -> Int -> IO ()
 removeAndNetworkEntities state gen nursery newEntRef nid = do
     (cs, ngs) <- Hash.foldM collectChanges ([], []) nursery
-    es        <- readIORef newEntRef
+    -- es        <- readIORef newEntRef
+    let es = []
     when (not $ null es) $ putStrLn $ "removeAndNetworkEntities - newEntRef: " ++ show (length es)
     when (not (null cs && null ngs && null es)) $ sendNetworkEntityMessage (signalClient state) $ encode $ NetEntityMessage nid es cs ngs
     writeIORef newEntRef []
     where
         --Delete openGL resources? Use weak pointers and finalizers?
-        collectChanges (cs, ngs) (k, (gen', p, c)) = if gen == gen' then return (collectNetworkEntityUpdates p c cs, ngs) else do
-            renderData <- readIORef (renderDataRef state)
-            SMV.unsafeWith renderData $ \ptr -> pokeByteOff (ptr `advancePtr` k) 0 (0 :: CInt)
-            Hash.delete nursery k
-            atomically $ readTVar (uidRef state) >>= \uids -> writeTVar (uidRef state) (k : uids)
-            case camera c of
-                Nothing -> return ()
-                _       -> atomically $ modifyTVar' (cameraRef state) $ IntMap.delete k
-            case netOptions c of
-                --Is checking the arguments each frame causing the hiccup???
+        collectChanges (cs, ngs) (k, (gen', p, c)) = if gen == gen'
+            then case netOptions c of
                 NoNetworkOptions -> return (cs, ngs)
-                _                -> return (collectNetworkEntityUpdates p c cs, (netid c, ()) : ngs)
+                _                -> return (collectNetworkEntityUpdates p c cs, ngs)
+            else do
+                renderData <- readIORef (renderDataRef state)
+                SMV.unsafeWith renderData $ \ptr -> pokeByteOff (ptr `advancePtr` k) 0 (0 :: CInt)
+                Hash.delete nursery k
+                atomically $ readTVar (uidRef state) >>= \uids -> writeTVar (uidRef state) (k : uids)
+                case camera c of
+                    Nothing -> return ()
+                    _       -> atomically $ modifyTVar' (cameraRef state) $ IntMap.delete k
+                case netOptions c of
+                    --Is checking the arguments each frame causing the hiccup???
+                    NoNetworkOptions -> return (cs, ngs)
+                    _                -> return (collectNetworkEntityUpdates p c cs, netid c : ngs)
 
 type Nursery a = Hash.CuckooHashTable Int (Int, Entity a, Entity a)
 insertNursery :: Int -> Int -> Entity a -> Nursery a -> IO ()
