@@ -22,6 +22,13 @@ Shuggoth                - CHECK!
 Lich.js                 - CHECK!
 Necronomicon            - CHECK!?
 
+What motivated us to make Necronomicon:
+-We wanted an environment that made making multi-media networked pieces easier to compose
+-We wanted to create a custom audio engine that had the capabilities that we cared about (simple and effective busing and feedback systems, access to audio buffers from graphics land)
+-We wanted a safer environment to construct pieces with. Network music is inherently a wild and unpredictable medium
+-We wanted a less obtrusive syntax for expressing musical ideas
+
+
 
 Random thoughts:
 -We're less interested in the "distance" aspect of network music
