@@ -3,7 +3,7 @@ uniform sampler1D tex;
 uniform float     arg1;
 uniform float     arg2;
 uniform float     is_active;
-uniform mat4      modelView,proj;
+uniform mat4      modelView, proj;
 
 in  vec3 position, in_color;
 in  vec2 in_uv;

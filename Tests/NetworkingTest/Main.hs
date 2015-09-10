@@ -303,12 +303,11 @@ oscModel = mkModel DefaultLayer mesh oscMaterial
         uvs         = replicate len 0
         colors      = replicate len white
         vertices    = zipWith3 Vector3 (cycle [3, 2, 1, 0]) (map (/lenr) ([0..lenr - 1] :: [Double]) >>= replicate 4) (map (/lenr) ([1..lenr - 2] :: [Double]) >>= replicate 4)
-        oscMaterial = material
-                      "osc-vert.glsl"
-                      "osc-frag.glsl"
+        oscMaterial = material "osc-vert.glsl" "osc-frag.glsl" <| Map.fromList <|
                       [ ("tex1", UniformTexture <| audioTexture 2)
                       , ("tex2", UniformTexture <| audioTexture 3)
-                      , ("tex3", UniformTexture <| audioTexture 2)
+                      , ("tex3", UniformTexture <| audioTexture 4)
+                      , ("time", UniformScalar  0)
                       ]
 
 lfsawSynth :: UGen -> UGen -> UGen
@@ -354,7 +353,7 @@ terrainModel = mkModel DefaultLayer terrainMesh terrainMaterial
         terrainMaterial    = material"terrain-vert.glsl" "terrain-frag.glsl" <| Map.fromList <|
                            [ ("tex1", UniformTexture <| audioTexture 2)
                            , ("tex2", UniformTexture <| audioTexture 3)
-                           , ("tex3", UniformTexture <| audioTexture 2)
+                           , ("tex3", UniformTexture <| audioTexture 4)
                            , ("time", UniformScalar  0)
                            ]
 
