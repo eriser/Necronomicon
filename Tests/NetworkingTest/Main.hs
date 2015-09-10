@@ -317,6 +317,77 @@ binaryWolframPattern = PFunc0 <| PVal (pwolframGrid, 0.5)
         pwolframGrid = pgridDelta wolframCAGrid 0 1
 
 ------------------------------------------------------------------------------------------
+-- Samples
+------------------------------------------------------------------------------------------
+
+-- wrapLookup :: [a] -> Int -> Maybe a
+-- wrapLookup [] _ = Nothing
+-- wrapLookup list index = Just $ list !! index'
+--     where
+--         index' = mod index (length list)
+
+kitSamples :: [FilePath]
+kitSamples = [
+        "samples/BassDrum.wav",
+        "samples/SnareHit.wav",
+        "samples/SnareRim.wav",
+        "samples/SnareRimClick.wav",
+        "samples/SnareSS.wav",
+        "samples/TomFloor.wav",
+        "samples/TomHi.wav",
+        "samples/TomMid.wav"
+    ]
+
+tablaSamples :: [FilePath]
+tablaSamples = [
+        "samples/tabla-hi-na.wav",
+        "samples/tabla-hi-tin.wav",
+        "samples/tabla-hi-tuh.wav",
+        "samples/tabla-hi-tun.wav",
+        "samples/tabla-hi-tuut.wav",
+        "samples/tabla-lick.wav",
+        "samples/tabla-lick-voiceanddrums.wav",
+        "samples/tabla-lo-geh.wav",
+        "samples/tabla-lo-geh-gliss.wav",
+        "samples/tabla-lo-keh.wav"
+    ]
+
+hyperTerrainSamples :: [FilePath]
+hyperTerrainSamples = kitSamples ++ tablaSamples ++ [
+        "samples/China18.wav",
+        "samples/Cymbal1.wav",
+        "samples/gong_1.wav",
+        "samples/gong_2.wav",
+        "samples/HarpKotoShort.wav",
+        "samples/HihatClosedS.wav",
+        "samples/HihatClosedT.wav",
+        "samples/HihatHalfS.wav",
+        "samples/HihatHalfT.wav",
+        "samples/HihatOpenT.wav",
+        "samples/HiHatPedal.wav",
+        "samples/MetalRing.wav",
+        "samples/Slendro1.wav"
+    ]
+
+-- mapSynthsToSamples :: [FilePath] -> [UGen]
+-- mapSynthsToSamples = map synth
+--     where
+--         synth sampleFilePath = playMonoSample sampleFilePath rate |> gain 0.3 |> out 0
+--         rate = 1
+--
+-- kitSynths :: [UGen]
+-- kitSynths = mapSynthsToSamples kitSamples
+--
+-- lookupKitSynth :: Int -> Maybe UGen
+-- lookupKitSynth = wrapLookup kitSynths
+--
+-- tablaSynths :: [UGen]
+-- tablaSynths = mapSynthsToSamples tablaSamples
+--
+-- lookupTablaSynth :: Int -> Maybe UGen
+-- lookupTablaSynth = wrapLookup tablaSynths
+
+------------------------------------------------------------------------------------------
 -- Buses
 ------------------------------------------------------------------------------------------
 
@@ -361,40 +432,3 @@ artifactOut :: UGen -> UGen
 artifactOut = out <| random 0 150 156
 
 -}
-
-hyperTerrainSamples :: [FilePath]
-hyperTerrainSamples = [
-        "samples/BassDrum.wav",
-        "samples/China18.wav",
-        "samples/Cymbal1.wav",
-        "samples/gong_1.wav",
-        "samples/gong_2.wav",
-        "samples/HarpKotoShort.wav",
-        "samples/HihatClosedS.wav",
-        "samples/HihatClosedT.wav",
-        "samples/HihatHalfS.wav",
-        "samples/HihatHalfT.wav",
-        "samples/HihatOpenT.wav",
-        "samples/HiHatPedal.wav",
-        "samples/MetalRing.wav",
-        "samples/Slendro1.wav",
-        "samples/SnareDrag.wav",
-        "samples/SnareFlam.wav",
-        "samples/SnareHit.wav",
-        "samples/SnareRim.wav",
-        "samples/SnareRimClick.wav",
-        "samples/SnareSS.wav",
-        "samples/tabla-hi-na.wav",
-        "samples/tabla-hi-tin.wav",
-        "samples/tabla-hi-tuh.wav",
-        "samples/tabla-hi-tun.wav",
-        "samples/tabla-hi-tuut.wav",
-        "samples/tabla-lick.wav",
-        "samples/tabla-lick-voiceanddrums.wav",
-        "samples/tabla-lo-geh.wav",
-        "samples/tabla-lo-geh-gliss.wav",
-        "samples/tabla-lo-keh.wav",
-        "samples/TomFloor.wav",
-        "samples/TomHi.wav",
-        "samples/TomMid.wav"
-    ]
