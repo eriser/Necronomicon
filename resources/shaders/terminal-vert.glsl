@@ -3,12 +3,12 @@ uniform sampler1D tex;
 uniform float     arg1;
 uniform float     arg2;
 uniform float     is_active;
-uniform mat4      modelView,proj;
+uniform mat4      modelView, proj;
 
 in  vec3 position, in_color;
 in  vec2 in_uv;
 
-out vec3 color;
+out vec4 color;
 out vec2 uv;
 
 float width  = 0.5;
@@ -32,11 +32,11 @@ vec3 toPosition(vec3 pos)
 void main()
 {
     uv    = in_uv;
-    color = in_color;
     if(is_active > 0)
     {
         vec3 newPosition = toPosition(position);
-        color            = newPosition;
+        /* color            = vec3(newPosition.y * 0.5, newPosition.y * 0.75, abs(newPosition.y) * 1);; */
+        color            = vec4(1, 1, 1, abs(newPosition.y * 0.5));;
         gl_Position      = vec4(newPosition, 1.0) * modelView * proj;
     }
     else

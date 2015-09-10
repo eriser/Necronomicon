@@ -419,5 +419,10 @@ setRenderDataPtr (Entity _ (UID uid) !(Vector3 tx ty tz) !(Quaternion w x y z) !
             where
                 p = uptr `plusPtr` (i :: Int)
         setUniforms _ _ _ _ = return ()
+
+setRenderDataPtr Entity{euid = UID uid} rdptr = pokeByteOff ptr 0  (0 :: CInt)
+    where
+        ptr = rdptr `plusPtr` (uid * sizeOf (undefined :: RenderData))
+
 setRenderDataPtr _ _ = return ()
 {-# INLINE setRenderDataPtr #-}
