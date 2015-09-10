@@ -1,5 +1,4 @@
 import Necronomicon
-import GHC.Generics
 import Data.Binary
 import Data.Fixed (mod')
 
@@ -12,17 +11,15 @@ import qualified Necronomicon.Util.Grid as G
 -- Player
 ---------------------------------------------------------------------------
 
-data Player        = Player PlayerState (Double, Double) deriving (Show, Eq, Generic)
+data Player        = Player PlayerState (Double, Double) deriving (Show, Eq)
 data PlayerState   = PlayerIdle
                    | PlayerMoving Vector3
-                   deriving (Show, Eq, Generic)
+                   deriving (Show, Eq)
 data PlayerInput   = PlayerKeys   (Double, Double)    Int
                    | PlayerMouse  (Double, Double)    Int
                    | PlayerTick   (Time, Time)        Int Bool
                    | PlayerLog    (Int, String, Bool) Int
-                   deriving (Show, Eq, Generic)
--- instance Binary Player
--- instance Binary PlayerState
+                   deriving (Show, Eq)
 
 instance Binary Player where
     put (Player s v) = put s >> put v
@@ -142,9 +139,7 @@ terminalOutline p = foldn (flip const) e tick
     where
         e = (mkEntity ())
            { pos    = p
-           -- , rot    = fromEuler (-90) 0 0
            , escale = Vector3 0.5 0.5 0.5
-           -- , model  = Just <| mkModel DefaultLayer (cubeOutline3D 0.025) <| vertexColored <| RGBA 0.9 0.9 0.9 0.05
            , model  = Just <| mkModel DefaultLayer hexahedron <| playerMaterial
            }
 
@@ -207,24 +202,151 @@ main = runSignal
     *> mkPatternTerminal (Vector3 12 3 0) 2 keyG hyperMelodyHarmony hyperMelodyPattern2
     *> mkPatternTerminal (Vector3 16 3 0) 2 keyJ hyperMelody        binaryWolframPattern
     *> section1
+    *> section2
+
+------------------------------------------------------------------------------------------
+-- Buses
+------------------------------------------------------------------------------------------
+
+-- Master 50, 51
+
+masterOutBus :: UGen
+-- masterOutBus = 50
+masterOutBus = 0
+
+-- masterOutRightBus :: UGen
+-- masterOutRightBus = 51
+
+masterOut :: UGen -> UGen
+masterOut = out masterOutBus
+
+{-
+-- Cave 20, 21
+
+caveBus :: UGen
+caveBus = 20
+
+caveRightBus :: UGen
+caveRightBus = 21
+
+caveOut :: UGen -> UGen
+caveOut = out caveBus
+
+-- Broodling 200, 201
+
+broodlingBus :: UGen
+broodlingBus = 200
+
+broodlingRightBus :: UGen
+broodlingRightBus = 201
+
+broodlingOut :: UGen -> UGen
+broodlingOut = out broodlingBus
+
+-- Artifact 150 - 156
+
+artifactOut :: UGen -> UGen
+artifactOut = out <| random 0 150 156
+
+-}
+
+
+---------------------------------------------------------------------------
+-- Sections
+---------------------------------------------------------------------------
+
+data Section      = Section1 | Section2 | Section3 deriving (Show, Eq)
+data SectionInput = SectionTick Double | SectionNum Section
+instance Binary Section where
+    put Section1 = put (0 :: Word8)
+    put Section2 = put (1 :: Word8)
+    put Section3 = put (2 :: Word8)
+    get          = (get :: Get Word8) >>= \t -> case t of
+        0 -> return Section1
+        1 -> return Section2
+        _ -> return Section3
 
 ---------------------------------------------------------------------------
 -- Section 1
 ---------------------------------------------------------------------------
 
-section1 :: Signal ()
-section1 = terrain *> pure ()
+section1 :: Signal (Entity Section)
+section1 = osc
     where
-        terrain = foldn (\t e -> setUniform "time" (UniformScalar t) e) mkTerrain <| runTime
+        updateOsc (SectionNum  s) e = e{edata = s}
+        updateOsc (SectionTick _) e = case edata e of
+            Section1 -> e{model = Just oscModel}
+            Section2 -> e{model = Nothing}
+            Section3 -> e{model = Nothing}
 
-mkTerrain :: Entity ()
-mkTerrain = terrainEntity
+        osc = foldn updateOsc mkOscillator
+           <| SectionTick <~ runTime
+           <> SectionNum  <~ sampleOn (isDown key1) (pure Section1)
+           <> SectionNum  <~ sampleOn (isDown key2) (pure Section2)
+           <> SectionNum  <~ sampleOn (isDown key3) (pure Section3)
+
+mkOscillator :: Entity Section
+mkOscillator = (mkEntity Section1)
+             { pos        = Vector3 0 0 3
+             , model      = Just oscModel
+             , netOptions = mkNetworkOptions {networkData = Network}
+             }
+
+oscModel :: Model
+oscModel = mkModel DefaultLayer mesh oscMaterial
     where
-        terrainEntity      = (mkEntity ())
-                           { pos   = Vector3 (-w * 0.25) (-10) (-w * 0.25)
-                           , model = Just <| mkModel DefaultLayer terrainMesh terrainMaterial
-                           }
+        mesh        = mkMesh "osc1" vertices colors uvs indices
+        indices     = foldr (\i acc -> i + 1 : i + 2 : i + 3 : i + 1 : i + 0 : i + 2 : acc) [] ([0..511] :: [Int])
+        uvs         = repeat 0
+        colors      = repeat black
+        vertices    = zipWith3 Vector3 (cycle [3, 2, 1, 0]) (map (/512) ([0..511] :: [Double]) >>= replicate 4) (map (/512) ([1..512] :: [Double]) >>= replicate 4)
+        oscMaterial = material
+                      "osc-vert.glsl"
+                      "osc-frag.glsl"
+                      [ ("tex1", UniformTexture <| audioTexture 0)
+                      , ("tex2", UniformTexture <| audioTexture 1)
+                      , ("tex3", UniformTexture <| audioTexture 2)
+                      ]
 
+lfsawSynth :: UGen -> UGen -> UGen
+lfsawSynth freq1 freq2 = (lfsaw (lag 0.1 [exprange 40 4000 freq1, exprange 40 4000 freq2]) 0) * 2 - 1 |> exprange 20 20000 |> sin |> gain 0.2 |> out 0
+
+
+---------------------------------------------------------------------------
+-- Section 2
+---------------------------------------------------------------------------
+
+section2 :: Signal (Entity Section)
+section2 = terrain
+    where
+        updateTerrain (SectionNum   s) e = e{edata = s}
+        updateTerrain (SectionTick  t) e = case edata e of
+            Section1 -> e{model = Nothing}
+            Section2 -> setUniform "time" (UniformScalar t) <| e{model = Just terrainModel}
+            Section3 -> e{model = Nothing}
+
+        terrain = foldn updateTerrain mkTerrain
+               <| SectionTick <~ runTime
+               <> SectionNum  <~ sampleOn (isDown key1) (pure Section1)
+               <> SectionNum  <~ sampleOn (isDown key2) (pure Section2)
+               <> SectionNum  <~ sampleOn (isDown key3) (pure Section3)
+
+terrainWidth :: Double
+terrainWidth = 256
+
+terrainHeight :: Double
+terrainHeight = 256
+
+mkTerrain :: Entity Section
+mkTerrain = (mkEntity Section1)
+          { pos        = Vector3 (-terrainWidth * 0.25) (-10) (-terrainWidth * 0.25)
+          , model      = Nothing
+          , netOptions = mkNetworkOptions {networkData = Network}
+          }
+
+terrainModel :: Model
+terrainModel = mkModel DefaultLayer terrainMesh terrainMaterial
+    where
         terrainMesh        = mkMesh "simplex" vertices colors uvs indices
         terrainMaterial    = material"terrain-vert.glsl" "terrain-frag.glsl" <| Map.fromList <|
                            [ ("tex1", UniformTexture <| audioTexture 0)
@@ -233,7 +355,7 @@ mkTerrain = terrainEntity
                            , ("time", UniformScalar  0)
                            ]
 
-        (w, h)             = (256.0, 256.0)
+        (w, h)             = (terrainWidth, terrainHeight)
         (tscale, vscale)   = (1 / 6,2.5)
         values             = [(x,0,y) | (x,y) <- map (\n -> (mod' n w, n / h)) [0..w*h]]
         toVertex (x, y, z) = Vector3 (x * tscale * 3) (y * vscale) (z * tscale * 3)
@@ -248,13 +370,6 @@ mkTerrain = terrainEntity
             | mod i w' < (w'-1) = i + 1 : i + w' : i + w' + 1 : i + 1 : i : i + w' : indicesList
             | otherwise         = indicesList
 
-lfsawSynth :: UGen -> UGen -> UGen
-lfsawSynth freq1 freq2 = (lfsaw (lag 0.1 [exprange 40 4000 freq1, exprange 40 4000 freq2]) 0) * 2 - 1 |> exprange 20 20000 |> sin |> gain 0.2 |> out 0
-
-
----------------------------------------------------------------------------
--- Section 2
----------------------------------------------------------------------------
 
 sigScale :: Scale
 sigScale = slendro
@@ -319,48 +434,4 @@ binaryWolframPattern = PFunc0 <| PVal (pwolframGrid, 0.5)
         wolframCAGrid = G.map ((*2) . d2f sigScale . cellToRational) $ mkBinaryWolframGrid seedCells ruleVector numRows
         pwolframGrid = pgridDelta wolframCAGrid 0 1
 
-------------------------------------------------------------------------------------------
--- Buses
-------------------------------------------------------------------------------------------
 
--- Master 50, 51
-
-masterOutBus :: UGen
--- masterOutBus = 50
-masterOutBus = 0
-
--- masterOutRightBus :: UGen
--- masterOutRightBus = 51
-
-masterOut :: UGen -> UGen
-masterOut = out masterOutBus
-
-{-
--- Cave 20, 21
-
-caveBus :: UGen
-caveBus = 20
-
-caveRightBus :: UGen
-caveRightBus = 21
-
-caveOut :: UGen -> UGen
-caveOut = out caveBus
-
--- Broodling 200, 201
-
-broodlingBus :: UGen
-broodlingBus = 200
-
-broodlingRightBus :: UGen
-broodlingRightBus = 201
-
-broodlingOut :: UGen -> UGen
-broodlingOut = out broodlingBus
-
--- Artifact 150 - 156
-
-artifactOut :: UGen -> UGen
-artifactOut = out <| random 0 150 156
-
--}
