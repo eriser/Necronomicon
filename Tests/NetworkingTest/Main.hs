@@ -320,19 +320,31 @@ lfsawSynth freq1 freq2 = (lfsaw (lag 0.1 [exprange 40 4000 freq1, exprange 40 40
 ---------------------------------------------------------------------------
 
 section2 :: Signal (Entity Section)
-section2 = terrain
+section2 = terrain *> spherea
     where
-        updateTerrain (SectionNum   s) e = e{edata = s}
-        updateTerrain (SectionTick  t) e = case edata e of
-            Section1 -> e{model = Nothing}
-            Section2 -> setUniform "time" (UniformScalar t) <| e{model = Just terrainModel}
-            Section3 -> e{model = Nothing}
-
         terrain = foldn updateTerrain mkTerrain
                <| SectionTick <~ runTime
                <> SectionNum  <~ sampleOn (isDown key1) (pure Section1)
                <> SectionNum  <~ sampleOn (isDown key2) (pure Section2)
                <> SectionNum  <~ sampleOn (isDown key3) (pure Section3)
+
+        spherea = foldn updateSphere mkSphereObject
+               <| SectionTick <~ runTime
+               <> SectionNum  <~ sampleOn (isDown key1) (pure Section1)
+               <> SectionNum  <~ sampleOn (isDown key2) (pure Section2)
+               <> SectionNum  <~ sampleOn (isDown key3) (pure Section3)
+
+        updateTerrain (SectionNum   s) e = e{edata = s}
+        updateTerrain (SectionTick  t) e = case edata e of
+            Section1 -> e{model = Nothing}
+            Section2 -> setUniform "time" (UniformScalar t) <| e{model = Just terrainModel}
+            Section3 -> setUniform "time" (UniformScalar t) <| e{model = Just terrainModel}
+
+        updateSphere (SectionNum   s) e = e{edata = s}
+        updateSphere (SectionTick  t) e = case edata e of
+            Section1 -> e{model = Nothing}
+            Section2 -> e{model = Nothing}
+            Section3 -> setUniform "time" (UniformScalar t) <| e{model = Just sphereObjectModel}
 
 terrainWidth :: Double
 terrainWidth = 256
@@ -373,6 +385,35 @@ terrainModel = mkModel DefaultLayer terrainMesh terrainMaterial
             | mod i w' < (w'-1) = i + 1 : i + w' : i + w' + 1 : i + 1 : i : i + w' : indicesList
             | otherwise         = indicesList
 
+mkSphereObject :: Entity Section
+mkSphereObject = (mkEntity Section1)
+               { pos        = Vector3 0 0 1
+               , escale     = Vector3 3 3 3
+               , model      = Nothing
+               , netOptions = mkNetworkOptions{ networkData = Network}
+               }
+
+sphereObjectModel :: Model
+sphereObjectModel = mkModel DefaultLayer sphereMesh sphereMaterial
+    where
+        len            = 512
+        lenr           = fromIntegral len
+        latitudes      = 144.0
+        longitudes     = 144.0
+        us             = (* (360 / latitudes))  <~ [0..latitudes]
+        ts             = (* (180 / longitudes)) <~ [0..longitudes]
+        vertices       = zipWith3 Vector3 (cycle us) (ts >>= replicate l) (map (/ lenr) <| cycle [0..lenr])
+        colors         = replicate len black
+        uvs            = replicate len 0
+        l              = floor longitudes
+        indices        = foldr (\i acc -> i + 1 : i + l : i + l + 1 : i + 1 : i + 0 : i + l : acc) [] ([0, 3..floor (latitudes * longitudes) - (l + 1)] :: [Int])
+        sphereMesh     = mkMesh "aSphere" vertices colors uvs indices
+        sphereMaterial = material "sphere-vert.glsl" "sphere-frag.glsl" <| Map.fromList <|
+                       [ ("tex1", UniformTexture <| audioTexture 0)
+                       , ("tex2", UniformTexture <| audioTexture 1)
+                       , ("tex3", UniformTexture <| audioTexture 2)
+                       , ("time", UniformScalar  0)
+                       ]
 
 sigScale :: Scale
 sigScale = slendro
