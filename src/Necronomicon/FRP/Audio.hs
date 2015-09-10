@@ -5,6 +5,7 @@ module Necronomicon.FRP.Audio
     , playSynthPattern
     , playSynthPattern'
     , playBeatPattern
+    , playBeatPattern'
     , tempo
     , synthDef
     , loadSample
@@ -306,8 +307,8 @@ instance PlaySynthPattern (PRational -> PRational -> PRational -> PRational -> P
 -- playBeatPattern
 ---------------------------------------------
 
-playBeatPattern' :: Signal Bool -> PFunc (String, UGen) -> [Signal Double] -> Signal ()
-playBeatPattern' playSig pattern argSigs = Signal $ \state -> do
+playBeatPattern'' :: Signal Bool -> PFunc (String, UGen) -> [Signal Double] -> Signal ()
+playBeatPattern'' playSig pattern argSigs = Signal $ \state -> do
 
     (pcont,  p)  <- unSignal playSig state
     (aconts, a)  <- unzip <~ mapM (\a -> unSignal a state) argSigs
@@ -336,6 +337,40 @@ playBeatPattern' playSig pattern argSigs = Signal $ \state -> do
             NoChange _ -> return ()
             Change val -> runNecroState (setPDefArg sPattern index $ PVal $ toRational val) sNecroVars >> return ()
 
+playBeatPattern' :: (UGen -> UGen) -> PFunc (String, UGen) -> Signal (Bool, [Double]) -> Signal ()
+playBeatPattern' u pattern argSig = Signal $ \state -> do
+
+    (acont, (p, as)) <- unSignal argSig state
+    pid              <- nextStateID state
+
+    let synthName     = "~p" ++ show pid
+    _                <- runNecroState (compileSynthDef synthName u) (necroVars state)
+
+    -- let pFunc         = return (\val t -> playSynthAtJackTime synthName [val] t >> return ())
+    let pFunc         = return (\synth t -> playSynthAtJackTimeAndMaybeCompile synth [] t >> return ())
+        pDef          = pstreamWithArgs ("sigPat" ++ show pid) pFunc pattern (map (PVal . toRational) as)
+
+    _                <- if p then runNecroState (runPDef pDef) (necroVars state) >> return () else return ()
+    playingRef       <- newIORef p
+
+    return (processSignal playingRef pDef acont (necroVars state), ())
+    where
+        processSignal playingRef pDef acont sNecroVars event = acont event >>= \ae -> case ae of
+            NoChange _       -> return $ NoChange ()
+            Change (p, args) -> do
+                isPlaying  <- readIORef playingRef
+                playChange <- case (p, isPlaying) of
+                    (True , False) -> runNecroState (runPDef pDef) sNecroVars >> writeIORef playingRef True  >> return (Change ())
+                    (False, True)  -> runNecroState (pstop   pDef) sNecroVars >> writeIORef playingRef False >> return (Change ())
+                    _                     -> return $ NoChange ()
+                readIORef playingRef >>= \isPlaying' -> case isPlaying' of
+                    False -> return ()
+                    True  -> foldM (\i f -> updateArg i f pDef sNecroVars >> return (i+1)) 0 args >> return ()
+                return playChange
+
+        updateArg index val sPattern sNecroVars = runNecroState (setPDefArg sPattern index $ PVal $ toRational val) sNecroVars >> return ()
+
+
 class PlayBeatPattern a where
     type BeatPatternArgs a :: *
     playBeatPattern    :: Signal Bool -> a -> BeatPatternArgs a
@@ -343,54 +378,54 @@ class PlayBeatPattern a where
 instance PlayBeatPattern (Pattern (Pattern (String, UGen), Rational)) where
     type BeatPatternArgs (Pattern (Pattern (String, UGen), Rational)) =
         Signal ()
-    playBeatPattern  playSig p = playBeatPattern'  playSig (PFunc0 p) []
+    playBeatPattern  playSig p = playBeatPattern''  playSig (PFunc0 p) []
 
 instance PlayBeatPattern (PRational -> Pattern (Pattern (String, UGen), Rational)) where
     type BeatPatternArgs (PRational -> Pattern (Pattern (String, UGen), Rational)) =
         Signal Double -> Signal ()
-    playBeatPattern  playSig p a = playBeatPattern' playSig (PFunc1 p) [a]
+    playBeatPattern  playSig p a = playBeatPattern'' playSig (PFunc1 p) [a]
 
 instance PlayBeatPattern (PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) where
     type BeatPatternArgs (PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) =
         Signal Double -> Signal Double -> Signal ()
-    playBeatPattern  playSig p a b = playBeatPattern' playSig (PFunc2 p) [a, b]
+    playBeatPattern  playSig p a b = playBeatPattern'' playSig (PFunc2 p) [a, b]
 
 instance PlayBeatPattern (PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) where
     type BeatPatternArgs (PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) =
         Signal Double -> Signal Double -> Signal Double -> Signal ()
-    playBeatPattern  playSig p a b c = playBeatPattern' playSig (PFunc3 p) [a, b, c]
+    playBeatPattern  playSig p a b c = playBeatPattern'' playSig (PFunc3 p) [a, b, c]
 
 instance PlayBeatPattern (PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) where
     type BeatPatternArgs (PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) =
         Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
-    playBeatPattern  playSig p a b c d = playBeatPattern' playSig (PFunc4 p) [a, b, c ,d]
+    playBeatPattern  playSig p a b c d = playBeatPattern'' playSig (PFunc4 p) [a, b, c ,d]
 
 instance PlayBeatPattern (PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) where
     type BeatPatternArgs (PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) =
         Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
-    playBeatPattern  playSig p a b c d e = playBeatPattern' playSig (PFunc5 p) [a, b, c, d, e]
+    playBeatPattern  playSig p a b c d e = playBeatPattern'' playSig (PFunc5 p) [a, b, c, d, e]
 
 instance PlayBeatPattern (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) where
     type BeatPatternArgs (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) =
         Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
-    playBeatPattern  playSig p a b c d e f = playBeatPattern' playSig (PFunc6 p) [a, b, c, d, e, f]
+    playBeatPattern  playSig p a b c d e f = playBeatPattern'' playSig (PFunc6 p) [a, b, c, d, e, f]
 
 instance PlayBeatPattern (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) where
     type BeatPatternArgs (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) =
         Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
-    playBeatPattern  playSig p a b c d e f g = playBeatPattern' playSig (PFunc7 p) [a, b, c, d, e, f, g]
+    playBeatPattern  playSig p a b c d e f g = playBeatPattern'' playSig (PFunc7 p) [a, b, c, d, e, f, g]
 
 instance PlayBeatPattern (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) where
     type BeatPatternArgs (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) =
         Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
-    playBeatPattern  playSig p a b c d e f g h = playBeatPattern' playSig (PFunc8 p) [a, b, c, d, e, f, g, h]
+    playBeatPattern  playSig p a b c d e f g h = playBeatPattern'' playSig (PFunc8 p) [a, b, c, d, e, f, g, h]
 
 instance PlayBeatPattern (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) where
     type BeatPatternArgs (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) =
         Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
-    playBeatPattern  playSig p a b c d e f g h i  = playBeatPattern' playSig (PFunc9 p) [a, b, c, d, e, f, g, h, i]
+    playBeatPattern  playSig p a b c d e f g h i  = playBeatPattern'' playSig (PFunc9 p) [a, b, c, d, e, f, g, h, i]
 
 instance PlayBeatPattern (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) where
     type BeatPatternArgs (PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> PRational -> Pattern (Pattern (String, UGen), Rational)) =
         Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal Double -> Signal ()
-    playBeatPattern  playSig p a b c d e f g h i j = playBeatPattern' playSig (PFunc10 p) [a, b, c, d, e, f, g, h, i, j]
+    playBeatPattern  playSig p a b c d e f g h i j = playBeatPattern'' playSig (PFunc10 p) [a, b, c, d, e, f, g, h, i, j]
