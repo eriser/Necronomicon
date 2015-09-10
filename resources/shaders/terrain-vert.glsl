@@ -97,7 +97,7 @@ float simplex(float x, float y)
 {
     // return simplex2(8 * x, 4 * y) + simplex2(4 * x, 2 * y) + simplex2(2 * x, 1 * y);
     //This is off for aesthetic reasons, normally the x and y are matched.
-    return simplex2(32 * x, 32 * y) * 0.125 + simplex2(16 * x, 16 * y) * 0.25 + simplex2(8 * x, 8 * y) * 0.5 + simplex2(4 * x, 4 * y) + simplex2(2 * x, 2 * y) * 2;
+    return simplex2(32 * x, 32 * y) * 0.125 + simplex2(16 * x, 16 * y) * 0.25 + simplex2(8 * x, 8 * y) * 0.5 + simplex2(4 * x, 4 * y) + simplex2(2 * x, 2 * y) * 2 + simplex2(x, y) * 0.5;
 }
 
 float columns = 1/ 256.0;

@@ -288,6 +288,7 @@ section1 = osc
 mkOscillator :: Entity Section
 mkOscillator = (mkEntity Section1)
              { pos        = Vector3 0 0 3
+             , escale     = Vector3 4 4 4
              , model      = Just oscModel
              , netOptions = mkNetworkOptions {networkData = Network}
              }
@@ -296,15 +297,17 @@ oscModel :: Model
 oscModel = mkModel DefaultLayer mesh oscMaterial
     where
         mesh        = mkMesh "osc1" vertices colors uvs indices
-        indices     = foldr (\i acc -> i + 1 : i + 2 : i + 3 : i + 1 : i + 0 : i + 2 : acc) [] ([0..511] :: [Int])
-        uvs         = repeat 0
-        colors      = repeat black
-        vertices    = zipWith3 Vector3 (cycle [3, 2, 1, 0]) (map (/512) ([0..511] :: [Double]) >>= replicate 4) (map (/512) ([1..512] :: [Double]) >>= replicate 4)
+        len         = 256
+        lenr        = fromIntegral len
+        indices     = foldr (\i acc -> i + 1 : i + 2 : i + 3 : i + 1 : i + 0 : i + 2 : acc) [] ([0..len - 1] :: [Int])
+        uvs         = replicate len 0
+        colors      = replicate len white
+        vertices    = zipWith3 Vector3 (cycle [3, 2, 1, 0]) (map (/lenr) ([0..lenr - 1] :: [Double]) >>= replicate 4) (map (/lenr) ([1..lenr - 2] :: [Double]) >>= replicate 4)
         oscMaterial = material
                       "osc-vert.glsl"
                       "osc-frag.glsl"
-                      [ ("tex1", UniformTexture <| audioTexture 0)
-                      , ("tex2", UniformTexture <| audioTexture 1)
+                      [ ("tex1", UniformTexture <| audioTexture 2)
+                      , ("tex2", UniformTexture <| audioTexture 3)
                       , ("tex3", UniformTexture <| audioTexture 2)
                       ]
 
@@ -349,8 +352,8 @@ terrainModel = mkModel DefaultLayer terrainMesh terrainMaterial
     where
         terrainMesh        = mkMesh "simplex" vertices colors uvs indices
         terrainMaterial    = material"terrain-vert.glsl" "terrain-frag.glsl" <| Map.fromList <|
-                           [ ("tex1", UniformTexture <| audioTexture 0)
-                           , ("tex2", UniformTexture <| audioTexture 1)
+                           [ ("tex1", UniformTexture <| audioTexture 2)
+                           , ("tex2", UniformTexture <| audioTexture 3)
                            , ("tex3", UniformTexture <| audioTexture 2)
                            , ("time", UniformScalar  0)
                            ]
@@ -406,14 +409,14 @@ hyperMelodyPattern = PFunc0 <| pmap ((*1) . d2f sigScale) <| ploop [sec1]
                |]
 
 hyperMelodyPattern2 :: PFunc Rational
-hyperMelodyPattern2 = PFunc0 <| pmap ((*2) . d2f sigScale) <| ploop [sec1]
+hyperMelodyPattern2 = PFunc0 <| pmap ((* 0.5) . d2f sigScale) <| ploop [sec1]
     where
-        sec1 = [lich| 4 _ 3 _ 2 _ _ _
-                      4 _ 3 _ 2 _ 3 _
-                      _ _ _ _ _ _ _ 0
-                      _ _ _ _ _ _ _ _
-                      4 _ 3 _ 2 _ _ _
-                      4 _ 3 _ 2 _ 3 _
+        sec1 = [lich| 4 _ _ _ 2 _ _ _
+                      4 _ _ _ 2 _ 3 _
+                      2 _ _ _ 1 _ _ 0
+                      2 _ _ _ 1 _ _ _
+                      4 _ _ _ 2 _ _ _
+                      4 _ _ _ 2 _ 3 _
                       [1 1] 0 _ _ _ _ _ _
                       _ _ _ _ _ _ _ _
                       2 _ 1 _ _ _ 1
