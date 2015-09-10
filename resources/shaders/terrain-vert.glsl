@@ -97,12 +97,12 @@ float simplex(float x, float y)
 {
     // return simplex2(8 * x, 4 * y) + simplex2(4 * x, 2 * y) + simplex2(2 * x, 1 * y);
     //This is off for aesthetic reasons, normally the x and y are matched.
-    return simplex2(16 * x, 16 * y) * 0.25 + simplex2(8 * x, 8 * y) * 0.5 + simplex2(4 * x, 4 * y) + simplex2(2 * x, 2 * y) * 2;
+    return simplex2(32 * x, 32 * y) * 0.125 + simplex2(16 * x, 16 * y) * 0.25 + simplex2(8 * x, 8 * y) * 0.5 + simplex2(4 * x, 4 * y) + simplex2(2 * x, 2 * y) * 2;
 }
 
 float columns = 1/ 256.0;
 float rows    = 1/ 256.0;
-float height  = 6;
+float height  = 8;
 float audio_modulation_amount = 1.5;
 
 void main()
@@ -119,9 +119,9 @@ void main()
     float z     = (pos.z * 6) * rows;
     float y     = (pos.y * audio_modulation_amount) + simplex(x * 0.5 + time * 0.05, z * 0.5 + time * 0.041) * height;
 
-    float yamt  = y * (1 / height) + 0.3;
+    float yamt  = y * (1 / height) - 0.35;
 
-    color       = vec3(x * 1.75 * yamt, yamt, z * yamt);
+    color       = vec3(abs(x) * 1 * -yamt, 0.75 * -yamt, abs(z) * 1.75 * -yamt);
 
     gl_Position = vec4(pos.x, y, pos.z, 1.0) * modelView * proj;
 }

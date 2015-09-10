@@ -6,7 +6,7 @@ import Network.Socket.ByteString
 import Network.Socket                  hiding (send, recv, recvFrom, sendTo)
 import Data.Binary                            (encode, decode)
 -- import Data.Int                               (Int64)
--- import Control.Monad                          (when)
+import Control.Monad                          (when)
 import Data.Word                              (Word16)
 import Control.Exception
 import qualified Data.ByteString.Lazy  as BL
@@ -32,7 +32,7 @@ sendWithLength nsocket msg = Control.Exception.catch trySend onFailure
             | otherwise = do
                 let messageLengthData = encode messageLength
                 -- putStrLn $ "length of messageLength: " ++ show (B.length messageLengthData)
-                putStrLn $ "sending message of length: " ++ show messageLength
+                -- putStrLn $ "sending message of length: " ++ show messageLength
                 sendAll nsocket $ BL.toStrict messageLengthData
                 sendAll nsocket $ BL.toStrict msg
         onFailure e = print (e :: IOException)
@@ -50,17 +50,17 @@ receiveWithLength nsocket = Control.Exception.catch trySend onFailure
                     else return $ Receive msg
 
         readTillFinished amountToRead prevData = do
-            putStrLn $ "Attempting to receive data of length: " ++ show amountToRead
+            -- putStrLn $ "Attempting to receive data of length: " ++ show amountToRead
             streamData <- BL.fromStrict <$> recv nsocket amountToRead
-            putStrLn $ "Actually received data of length: " ++ show (BL.length streamData)
+            when (BL.length streamData <= 0) $ putStrLn $ "received 0 length message"
+            -- when (BL.length streamData <= 0) $ putStrLn $ "Actually received data of length: " ++ show (BL.length streamData)
             -- putStrLn ""
             if BL.length streamData < 0 then return BL.empty else if fromIntegral (BL.length streamData) < amountToRead
                 then readTillFinished (amountToRead - fromIntegral (BL.length streamData)) $ BL.append prevData streamData
                 else return $ BL.append prevData streamData
 
-
         decodeTransLength bs
-            | BL.null bs                                           = Just 0
+            | BL.null bs                                                     = Just 0
             | (fromIntegral (BL.length bs) :: Int)  == lengthOfMessageLength = Just $ fromIntegral (decode bs :: Word16)
-            | otherwise                                            = Nothing
+            | otherwise                                                      = Nothing
 

@@ -39,8 +39,9 @@ instance Binary PlayerState where
 mkPlayer :: Vector3 -> Entity Player
 mkPlayer p = ( mkEntity  <| Player PlayerIdle (0, 0) )
              { pos        = p
+             , escale     = Vector3 1 1 1
              , camera     = Nothing
-             , model      = Just <| mkModel DefaultLayer cube playerMaterial
+             , model      = Just <| mkModel DefaultLayer hexahedron playerMaterial
              -- , camera     = Just <| Camera 60 0.1 1000 black [postRenderFX blur] (toBitMask DefaultLayer) 0
              , netOptions = mkNetworkOptions
                  { networkPos    = Network
@@ -106,11 +107,12 @@ data TerminalInput = TerminalTick (Time, Time)
 -- instance Binary Terminal
 instance Binary Terminal where
     put (Terminal a vs) = put a *> put vs
-    get = Terminal <~ get ~~ get
+    get                 = Terminal <~ get ~~ get
 
 mkTerminalEntity :: Vector3 -> Int -> Entity Terminal
 mkTerminalEntity p a = (mkEntity <| Terminal False (0, 0))
              { pos        = p
+             , rot        = fromEuler (-90) 0 0
              , model      = Just <| mkModel DefaultLayer terminalMesh <| terminalMaterial (audioTexture a)
              , netOptions = mkNetworkOptions { networkData = Network }
              }
@@ -140,8 +142,10 @@ terminalOutline p = foldn (flip const) e tick
     where
         e = (mkEntity ())
            { pos    = p
-           , escale = Vector3 1.5 1.5 1.5
-           , model  = Just <| mkModel DefaultLayer (cubeOutline3D 0.025) <| vertexColored <| RGBA 0.9 0.9 0.9 0.05
+           -- , rot    = fromEuler (-90) 0 0
+           , escale = Vector3 0.5 0.5 0.5
+           -- , model  = Just <| mkModel DefaultLayer (cubeOutline3D 0.025) <| vertexColored <| RGBA 0.9 0.9 0.9 0.05
+           , model  = Just <| mkModel DefaultLayer hexahedron <| playerMaterial
            }
 
 updateTerminal :: TerminalInput -> Entity Terminal -> Entity Terminal
