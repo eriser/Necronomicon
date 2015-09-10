@@ -408,7 +408,7 @@ hyperMelodyPattern = PFunc0 <| pmap ((*1) . d2f sigScale) <| ploop [sec1]
                |]
 
 hyperMelodyPattern2 :: PFunc Rational
-hyperMelodyPattern2 = PFunc0 <| pmap ((* 0.5) . d2f sigScale) <| ploop [sec1]
+hyperMelodyPattern2 = PFunc0 <| pmap ((* 0.25) . d2f sigScale) <| ploop [sec1]
     where
         sec1 = [lich| 4 _ _ _ 2 _ _ _
                       4 _ _ _ 2 _ 3 _
