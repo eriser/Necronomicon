@@ -410,8 +410,8 @@ sphereObjectModel = mkModel DefaultLayer sphereMesh sphereMaterial
         lenr           = fromIntegral len
         latitudes      = 144.0
         longitudes     = 144.0
-        us             = (* (360 / latitudes))  <~ [0..latitudes]
-        ts             = (* (180 / longitudes)) <~ [0..longitudes]
+        ts             = ((* 360) . (/ latitudes))  <~ [0..latitudes]
+        us             = ((* 180) . (/ longitudes)) <~ [0..longitudes]
         vertices       = zipWith3 Vector3 (cycle us) (ts >>= replicate l) (map (/ lenr) <| cycle [0..lenr])
         colors         = replicate len black
         uvs            = replicate len 0
