@@ -7,6 +7,8 @@ import qualified Data.Map    as Map
 import qualified Data.Vector as V
 import qualified Necronomicon.Util.Grid as G
 
+-- import Debug.Trace
+
 ---------------------------------------------------------------------------
 -- Player
 ---------------------------------------------------------------------------
@@ -400,8 +402,8 @@ terrainModel = mkModel DefaultLayer terrainMesh terrainMaterial
 
 mkSphereObject :: Entity Section
 mkSphereObject = (mkEntity Section1)
-               { pos        = Vector3 0 5 15
-               , escale     = Vector3 2 2 2
+               { pos        = Vector3 0 0 0
+               , escale     = Vector3 20 20 20
                , model      = Nothing
                , netOptions = mkNetworkOptions{ networkData = Network}
                }

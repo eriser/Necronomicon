@@ -29,9 +29,9 @@ void main()
 {
     uv               = in_uv;
     vec3 newPosition = toPosition(position);
-    float a1         = abs((texture1D(tex1, position.z).r - 0.5) * 8);
-    float a2         = abs((texture1D(tex2, position.z).r - 0.5) * 8);
-    float a3         = abs((texture1D(tex3, position.z).r - 0.5) * 8);
+    float a1         = abs((texture1D(tex1, position.z).r - 0.5) * 2);
+    float a2         = abs((texture1D(tex2, position.z).r - 0.5) * 2);
+    float a3         = abs((texture1D(tex3, position.z).r - 0.5) * 2);
     color            = vec3(a1, a2, a1);
     gl_Position      = vec4(newPosition, 1.0) * modelView * proj;
 }
