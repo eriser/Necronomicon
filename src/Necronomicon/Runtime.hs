@@ -151,25 +151,15 @@ data NecroVars = NecroVars {
 data Necronomicon a = Necronomicon { runNecroState :: NecroVars -> IO (a, NecroVars) }
 
 instance Functor Necronomicon where
-    fmap f (Necronomicon h) = Necronomicon $ \n -> do
-        (a, n') <- h n 
-        case f a of
-            b -> return (b, n')
+    fmap f (Necronomicon h) = Necronomicon (\n -> h n >>= \(a, n') -> return (f a, n'))
 
 instance Applicative Necronomicon where
     pure x = Necronomicon (\n -> return (x, n))
-    Necronomicon x <*> Necronomicon y = Necronomicon $ \n -> do
-        (a, n')  <- x n 
-        (b, n'') <- y n' 
-        case a b of
-            c -> return (c, n'') 
+    (Necronomicon x) <*> (Necronomicon y) = Necronomicon (\n -> x n >>= \(a, n') -> y n' >>= \(b, n'') -> return (a b, n''))
 
 instance Monad Necronomicon where
     return x = Necronomicon (\n -> return (x, n))
-    Necronomicon h >>= f = Necronomicon $ \n -> do
-        (a, n') <- h n 
-        case f a of
-            Necronomicon g -> g n'
+    (Necronomicon h) >>= f = Necronomicon (\n -> h n >>= \(a, n') -> let (Necronomicon g) = f a in (g n'))
 
 instance MonadIO Necronomicon where
     liftIO f = Necronomicon (\n -> f >>= \result -> return (result, n))

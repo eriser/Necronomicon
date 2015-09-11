@@ -55,15 +55,34 @@ void freeverb_constructor(ugen* u)
 
 void freeverb_deconstructor(ugen* u)
 {
+    puts("freeverb_deconstructor");
+    puts("about to print freeverb_deconstructor ugen");
+    printf("%p\n", u);
+    puts("about to print freeverb_deconstructor ugen->data");
+    printf("%p\n", u->data);
     freeverb_data* freeverb = (freeverb_data*) u->data;
+
+    puts("about to print freeverb_deconstructor freeverb->combFilterDelays");
+    printf("%p\n", freeverb->combFilterDelays);
+
+    puts("about to print freeverb_deconstructor freeverb->allpassDelays");
+    printf("%p\n", freeverb->allpassDelays);
+
     int32_t i;
     for(i=0;i<8;++i)
     {
+        printf("about to print freeverb_deconstructor freeverb->combFilterDelays[%i].buffer\n", i);
+        printf("%p\n", freeverb->combFilterDelays[i].buffer);
         release_sample_buffer(freeverb->combFilterDelays[i].buffer);
         // free(freeverb->combz1s);
     }
     for(i=0;i<4;++i)
+    {
+        printf("about to print freeverb_deconstructor freeverb->allpassDelays[%i].buffer\n", i);
+        printf("%p\n", freeverb->allpassDelays[i].buffer);
         release_sample_buffer(freeverb->allpassDelays[i].buffer);
+    }
+
     free(u->data);
 }
 
