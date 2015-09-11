@@ -525,21 +525,21 @@ metallic4 :: UGen -> UGen
 metallic4 f = metallicBass f 0.25
 
 hyperMelody :: UGen -> UGen
-hyperMelody f = [s,s2] |> gain 0.15 |> e |> visAux (random 0 2 5) 2 |> masterOut
+hyperMelody f = [s,s2] |> gain 0.4 |> e |> visAux (random 0 2 5) 2 |> masterOut
     where
         e  = env [0, 1, 0.15, 0] [0.0001, 0.1, 7] (-1.5)
         s  = sin <| sin 3 * 6 + f * 2
         s2 = sin <| sin 6 * 9 + f
 
 hyperMelodyHarmony :: UGen -> UGen
-hyperMelodyHarmony f = [s, s2] |> lpf (fromSlendro 25) 0.3 |> e |> visAux (random 0 2 5) 2 |> masterOut
+hyperMelodyHarmony f = [s, s2] |> lpf (fromSlendro 25) 0.3 |> e |> gain 2 |> visAux (random 0 2 5) 2 |> masterOut
     where
         e  = env [0, 0.3, 0.05, 0] [0.0001, 0.1, 7] (-8)
         s  = sin <| sin 3 * 6 + f
         s2 = sin <| sin 6 * 9 + f * 2
 
 reverseSwellPanned :: UGen -> UGen -> UGen
-reverseSwellPanned f panPos =  sig1 + sig2 + sig3 |> e |> tanhDist (random 31 0.125 0.5) |> (+ whiteNoise * 0.25) |> gain 0.65 |> filt |> e |> visAux 5 1 |> pan panPos |> caveOut
+reverseSwellPanned f panPos =  sig1 + sig2 + sig3 |> e |> tanhDist (random 31 0.0625 0.125) |> (+ whiteNoise * 0.125) |> m |> gain 1.5 |> filt |> e |> visAux 5 1 |> pan panPos |> caveOut
     where
         hf   = f * 0.5
         e    = env [0,1,0]         [4,4] 3
@@ -552,6 +552,7 @@ reverseSwellPanned f panPos =  sig1 + sig2 + sig3 |> e |> tanhDist (random 31 0.
         mod2 = saw (random 9 0.5 2.0)   |> range 0.01 1
         mod3 = saw (random 10 0.25 1.0) |> range 0.25 1
         mod4 = saw (random 11 0.5 2.0)  |> range 0.01 1
+        m x  = x - 0.125
 
 --add sins for visuals and modulation
 reverseSwell :: UGen -> UGen

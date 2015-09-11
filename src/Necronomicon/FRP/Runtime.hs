@@ -25,7 +25,8 @@ import qualified Graphics.UI.GLFW                  as GLFW
 
 runSignal :: (Show a) => Signal a -> IO ()
 -- runSignal sig = initWindow (920, 540) False >>= \mw -> case mw of
-runSignal sig = initWindow (1920, 1080) False >>= \mw -> case mw of
+-- runSignal sig = initWindow (1920, 1080) False >>= \mw -> case mw of
+runSignal sig = initWindow (1024, 768) False >>= \mw -> case mw of
 -- runSignal sig = initWindow (1920, 1080) True >>= \mw -> case mw of
     Nothing     -> print "Error starting GLFW." >> return ()
     Just w -> do

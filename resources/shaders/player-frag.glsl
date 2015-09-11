@@ -5,8 +5,8 @@ in  vec2 uv;
 in  vec3 pos;
 out vec4 fragColor;
 
-float thickness = 0.01;
-float alpha     = 0.15;
+float thickness = 0.05;
+float alpha     = 0.1;
 bool within_range(float x)
 {
     return x < thickness && x > -thickness;
