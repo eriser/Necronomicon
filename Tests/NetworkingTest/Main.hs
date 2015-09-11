@@ -397,8 +397,8 @@ terrainModel = mkModel DefaultLayer terrainMesh terrainMaterial
 
 mkSphereObject :: Entity Section
 mkSphereObject = (mkEntity Section1)
-               { pos        = Vector3 0 0 1
-               , escale     = Vector3 3 3 3
+               { pos        = Vector3 0 5 15
+               , escale     = Vector3 2 2 2
                , model      = Nothing
                , netOptions = mkNetworkOptions{ networkData = Network}
                }
@@ -408,15 +408,17 @@ sphereObjectModel = mkModel DefaultLayer sphereMesh sphereMaterial
     where
         len            = 512
         lenr           = fromIntegral len
-        latitudes      = 144.0
-        longitudes     = 144.0
-        ts             = ((* 360) . (/ latitudes))  <~ [0..latitudes]
-        us             = ((* 180) . (/ longitudes)) <~ [0..longitudes]
-        vertices       = zipWith3 Vector3 (cycle us) (ts >>= replicate l) (map (/ lenr) <| cycle [0..lenr])
+        latitudes      = 36.0
+        longitudes     = 36.0
+        latI           = floor latitudes  :: Int
+        longI          = floor longitudes :: Int
+        us             = ((* 360) . (/ latitudes))  <~ map fromIntegral [0..latI]
+        ts             = ((* 180) . (/ longitudes)) <~ map fromIntegral [0..longI]
+        vertices       = zipWith3 Vector3 (cycle us) (ts >>= replicate latI) (map (/ lenr) <| cycle [0..lenr])
         colors         = replicate len black
         uvs            = replicate len 0
         l              = floor longitudes
-        indices        = foldr (\i acc -> i + 1 : i + l : i + l + 1 : i + 1 : i + 0 : i + l : acc) [] ([0, 3..floor (latitudes * longitudes) - (l + 1)] :: [Int])
+        indices        = foldr (\i acc -> i + 1 : i + l : i + l + 1 : i + 1 : i + 0 : i + l : acc) [] ([0, 2..floor (latitudes * longitudes) - (l + 3)] :: [Int])
         sphereMesh     = mkMesh "aSphere" vertices colors uvs indices
         sphereMaterial = material "sphere-vert.glsl" "sphere-frag.glsl" <| Map.fromList <|
                        [ ("tex1", UniformTexture <| audioTexture 0)
