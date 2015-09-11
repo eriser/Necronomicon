@@ -173,21 +173,21 @@ mkTerminal :: Vector3 -> Int -> Key -> (Double -> Double) -> (UGen -> UGen -> UG
 mkTerminal p a k scalef s = terminalOutline p *> (play' s <| fmap (tdata . edata) terminal)
     where
         tdata :: Terminal -> (Bool, [Double])
-        tdata (Terminal p' (x, y)) = (p', [x, y])
+        tdata (Terminal p' (x, y)) = (p', [scalef x, scalef y])
         terminal = foldn updateTerminal (mkTerminalEntity p a)
                 <| TerminalTick      <~ tick
                 <> TerminalSetActive <~ toggle (areDown [keyLCtrl, k])
-                <> TerminalSetValues <~ filterWhen (fmap not <| isDown k) (fmap (\(x, y) -> (scalef x, scalef y)) mouseDelta)
+                <> TerminalSetValues <~ filterWhen (fmap not <| isDown k) mouseDelta
 
 mkPatternTerminal :: Vector3 -> Int -> Key -> (Double -> Double) -> (UGen -> UGen) -> PFunc Rational -> Signal ()
 mkPatternTerminal p a k scalef s f = terminalOutline p *> (playSynthPattern' s f <| fmap (tdata . edata) terminal)
     where
         tdata :: Terminal -> (Bool, [Double])
-        tdata (Terminal p' (x, y)) = (p', [x, y])
+        tdata (Terminal p' (x, y)) = (p', [scalef x, scalef y])
         terminal = foldn updateTerminal (mkTerminalEntity p a)
                 <| TerminalTick      <~ tick
                 <> TerminalSetActive <~ toggle (areDown [keyLCtrl, k])
-                <> TerminalSetValues <~ filterWhen (fmap not <| isDown k) (fmap (\(x, y) -> (scalef x, scalef y)) mouseDelta)
+                <> TerminalSetValues <~ filterWhen (fmap not <| isDown k) mouseDelta
 
 mkBeatPatternTerminal :: Vector3 -> Int -> Key -> PFunc (String, UGen) -> Signal ()
 mkBeatPatternTerminal p a k f = terminalOutline p *> (playBeatPattern' f <| fmap (tdata . edata) terminal)
