@@ -216,7 +216,11 @@ main = runSignal
     *> mkPatternTerminal     (Vector3 16 3 0) 2 keyJ id hyperMelody        binaryWolframPattern
     *> mkBeatPatternTerminal (Vector3 20 3 0) 2 keyK binaryWolframSamplesTablaPattern
     *> mkBeatPatternTerminal (Vector3 24 3 0) 2 keyL binaryWolframSamplesKitPattern
-    *> mkTerminal            (Vector3 28 3 0) 2 keyY mouseToSlendro triOsc32
+    *> mkBeatPatternTerminal (Vector3 28 3 0) 2 keyM multiColoredWolframSamplesKitPattern
+    *> mkTerminal            (Vector3 32 3 0) 2 keyN feedbackKitMouseScale feedbackKitWrapFX
+    *> mkBeatPatternTerminal (Vector3 36 3 0) 2 keyO multiColoredWolframSamplesTablaPattern
+    *> mkTerminal            (Vector3 40 3 0) 2 keyP feedbackTablaMouseScale feedbackTablaWrapFX
+    *> mkTerminal            (Vector3 44 3 0) 2 keyY mouseToSlendro triOsc32
     *> section1
     *> section2
 
@@ -266,6 +270,11 @@ artifactOut = out <| random 0 150 156
 
 -}
 
+feedbackKitBuses :: (UGen, UGen)
+feedbackKitBuses = (55, 56)
+
+feedbackTablaBuses :: (UGen, UGen)
+feedbackTablaBuses = (57, 58)
 
 ---------------------------------------------------------------------------
 -- Sections
@@ -540,6 +549,36 @@ binaryWolframSamplesKitPattern = PFunc0 <| PVal (pwolframGrid, 0.5)
         wolframCAGrid = G.map cellToSampleAndSynth $ mkBinaryWolframGrid seedCells ruleVector numRows
         pwolframGrid = pgridDelta wolframCAGrid 0 1
 
+multiColoredWolframSamplesKitPattern :: PFunc (String, UGen)
+multiColoredWolframSamplesKitPattern = PFunc0 <| pwolframGridVals
+    where
+        seedCells = V.fromList (replicate 80 0 ++ [1] ++ replicate 80 0)
+        numColors = 3
+        numRows = 1000
+        rules = [573377, 706951, 77245, 210819]
+        deltas = [(0, 1), (0, 1), (-1, 1), (1, 1)]
+        ruleMaps = map (multiColoredWolframRuleMap numColors) rules
+        wolframCAGrids = map (\ruleMap -> mkMultiColoredWolframGrid seedCells ruleMap numRows) ruleMaps
+        pwolframGrids = map (\(wolframCAGrid, (dx, dy)) -> pgridDelta wolframCAGrid dx dy) $ zip wolframCAGrids deltas
+        pwolframGridSynths = fmap lookupFeedbackKitNameAndSynth . head $ pwolframGrids
+        durs = cycle [0.5, 0.25, 0.125]
+        pwolframGridVals = fmap (\n -> (pwolframGridSynths, durs !! n)) (pwolframGrids !! 1)
+
+
+multiColoredWolframSamplesTablaPattern :: PFunc (String, UGen)
+multiColoredWolframSamplesTablaPattern = PFunc0 <| pwolframGridVals
+    where
+        seedCells = V.fromList (replicate 80 0 ++ [1] ++ replicate 80 0)
+        numColors = 3
+        numRows = 1000
+        rules = [573377, 706951, 77245, 210819]
+        deltas = [(0, 1), (0, 1), (-1, 1), (1, 1)]
+        ruleMaps = map (multiColoredWolframRuleMap numColors) rules
+        wolframCAGrids = map (\ruleMap -> mkMultiColoredWolframGrid seedCells ruleMap numRows) ruleMaps
+        pwolframGrids = map (\(wolframCAGrid, (dx, dy)) -> pgridDelta wolframCAGrid dx dy) $ zip wolframCAGrids deltas
+        pwolframGridSynths = fmap lookupFeedbackTablaNameAndSynth . head $ pwolframGrids
+        durs = cycle [0.5, 0.25, 0.125]
+        pwolframGridVals = fmap (\n -> (pwolframGridSynths, durs !! n)) (pwolframGrids !! 1)
 
 ------------------------------------------------------------------------------------------
 -- Samples
@@ -631,3 +670,75 @@ lookupSampleAndSynth list index = case wrapLookup list index of
 
 __null_sample_and_synth :: (String, UGen)
 __null_sample_and_synth = ("__null__", 0)
+
+
+-- Feedback kit synths
+
+feedbackKitSynth :: FilePath -> UGen
+feedbackKitSynth sampleFilePath = playMonoSample sampleFilePath rate |> e |> dup |> out (fst feedbackKitBuses)
+    where
+        e = perc 0.0 1 4 1
+        -- e2 = perc2 0.0001 0.01 10 (-64) 60000 |> umax 30 -- move umax around 20,30,40,50,60,etc..
+        -- filt = lpf e2 10
+        rate = 1
+
+feedbackKitSynths :: [UGen]
+feedbackKitSynths = map feedbackKitSynth kitSamples
+
+feedbackKitNamesAndSynths :: [(String, UGen)]
+feedbackKitNamesAndSynths = zip (map ("feedbackKit"++) kitSamples) feedbackKitSynths
+
+lookupFeedbackKitNameAndSynth :: Int -> (String, UGen)
+lookupFeedbackKitNameAndSynth = lookupSampleAndSynth feedbackKitNamesAndSynths
+
+-- feedback effect bus
+feedbackKitWrapFX :: UGen -> UGen -> UGen
+feedbackKitWrapFX mx _ = feed |> gain 4 |> masterLimiter |> out 0
+    where
+        auxes = auxIn (fst feedbackKitBuses <> snd feedbackKitBuses) |> filt
+        feed = feedback $ \l r -> auxes + (r <> l) +> crush 1 |> crush 8 |> delayN 0.3 (0.001 <> 0.002) |> gain 0.249
+        e2 = perc2 0.0001 0.01 10 (-64) maxFreq |> umax minFreq -- move umax around 20,30,40,50,60,etc..
+        filt = lpf e2 10
+        minFreq = lag 0.1 mx
+        maxFreq = 60000 -- lag 0.1 (my * 1000) -- was 60000
+        -- wrapDist n = (n |> wrap 0.1 |> gain 9) - n
+
+feedbackKitMouseScale :: Double -> Double
+feedbackKitMouseScale md = (round md :: Int) |> fromIntegral |> (*) 100.0 |> (+) 20.0
+
+
+-- Feedback Tabla synths
+
+feedbackTablaSynth :: FilePath -> UGen
+feedbackTablaSynth sampleFilePath = playMonoSample sampleFilePath rate |> e |> filt |> dup |> out (fst feedbackTablaBuses)
+    where
+        e = perc 0.0 0.3 1 1
+        e2 = perc2 0.0001 0.01 10 (-64) 60000 |> umax 40 -- move umax around 20,30,40,50,60,etc..
+        filt = lpf e2 10
+        rate = 1
+
+feedbackTablaSynths :: [UGen]
+feedbackTablaSynths = map feedbackTablaSynth tablaSamples
+
+feedbackTablaNamesAndSynths :: [(String, UGen)]
+feedbackTablaNamesAndSynths = zip (map ("feedbackTabla"++) tablaSamples) feedbackTablaSynths
+
+lookupFeedbackTablaNameAndSynth :: Int -> (String, UGen)
+lookupFeedbackTablaNameAndSynth = lookupSampleAndSynth feedbackTablaNamesAndSynths
+
+-- feedback effect bus
+feedbackTablaWrapFX :: UGen -> UGen -> UGen
+feedbackTablaWrapFX mx my = feed |> gain 4 |> masterLimiter |> out 0
+    where
+        auxes = auxIn (fst feedbackTablaBuses <> snd feedbackTablaBuses) -- |> filt
+        feed = feedback $ \l r -> auxes + (r <> l) |> delayC 0.3 (0.3 <> 0.2) +> delayC 0.2 (mx <> my) |> wrapDist |> wrap 0.9
+        wrapDist n = (n |> wrap 0.1 |> gain 9) - n
+        -- e2 = perc2 0.0001 0.01 10 (-64) maxFreq |> umax minFreq -- move umax around 20,30,40,50,60,etc..
+        -- filt = lpf maxFreq 0.1
+        -- minFreq = lag 0.1 mx
+        -- maxFreq = lag 0.1 (my * 100) |> umax minFreq -- was 60000
+        -- wrapDist n = (n |> wrap 0.1 |> gain 9) - n
+
+feedbackTablaMouseScale :: Double -> Double
+feedbackTablaMouseScale md = md * 0.1 + 0.0001
+-- feedbackTablaMouseScale md = ((round $ md * 100.0 + 20) :: Int) |> fromIntegral

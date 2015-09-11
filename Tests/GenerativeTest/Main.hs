@@ -13,6 +13,7 @@ main = do
     testInfiniteWolframGrid
     testWolframGrid
     testMultiColoredWolframGrid
+    mapM_ testMultiColoredWolframGrid8Colors ([3150000..3160000] :: [Int])
 
 testLSystem :: IO ()
 testLSystem = do
@@ -138,6 +139,19 @@ testMultiColoredWolframGrid = do
     let seedCells = V.fromList (replicate 80 0 ++ [1] ++ replicate 80 0)
         numColors = 3
         rule = 573377
+        ruleMap = multiColoredWolframRuleMap numColors rule
+        wolframCAGrid = G.map colorToAscii $ mkMultiColoredWolframGrid seedCells ruleMap numRows
+    print wolframCAGrid
+
+testMultiColoredWolframGrid8Colors :: Int -> IO ()
+testMultiColoredWolframGrid8Colors rule = do
+    putStrLn "\n"
+    print "--------------------------------------------------------------------------------------------------------------------"
+    print "-- Multi-colored Wolfram Grid: 8 Colors"
+    print "--------------------------------------------------------------------------------------------------------------------"
+    putStrLn "\n"
+    let seedCells = V.fromList . take 161 $ map (flip mod numColors) [0,5..]
+        numColors = 8
         ruleMap = multiColoredWolframRuleMap numColors rule
         wolframCAGrid = G.map colorToAscii $ mkMultiColoredWolframGrid seedCells ruleMap numRows
     print wolframCAGrid
