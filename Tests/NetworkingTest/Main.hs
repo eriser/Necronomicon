@@ -548,7 +548,7 @@ hyperMelodyHarmony f = [s, s2] |> lpf (fromSlendro 25) 0.3 |> e |> visAux (rando
         s2 = sin <| sin 6 * 9 + f * 2
 
 reverseSwellPanned :: UGen -> UGen -> UGen
-reverseSwellPanned f panPos =  sig1 + sig2 + sig3 |> e |> tanhDist (random 31 0.125 0.5) |> (+ whiteNoise * 0.25) |> gain 0.35 |> filt |> e |> visAux 6 1 |> pan panPos |> caveOut
+reverseSwellPanned f panPos =  sig1 + sig2 + sig3 |> e |> tanhDist (random 31 0.125 0.5) |> (+ whiteNoise * 0.25) |> gain 0.65 |> filt |> e |> visAux 5 1 |> pan panPos |> caveOut
     where
         hf   = f * 0.5
         e    = env [0,1,0]         [4,4] 3
@@ -699,7 +699,7 @@ floorPattern = mkPatternTerminal (Vector3 12 0 0) 2 keyD id floorPerc <| PFunc0 
 
 
 swellPattern :: Signal ()
-swellPattern = mkPatternTerminal (Vector3 16 0 0) 6 keyP id reverseSwell <| PFunc0 <| (pmap ((*1) . d2f sigScale) <| ploop [sec1])
+swellPattern = mkPatternTerminal (Vector3 16 0 0) 5 keyP id reverseSwell <| PFunc0 <| (pmap ((*1) . d2f sigScale) <| ploop [sec1])
 -- swellPattern = playSynthPattern (toggle <| combo [alt,isDown keyP]) reverseSwell (pmap ((*1) . d2f sigScale) <| ploop [sec1])
     where
         sec1 = [lich| 0 _ _ _
@@ -720,7 +720,7 @@ swellPattern = mkPatternTerminal (Vector3 16 0 0) 6 keyP id reverseSwell <| PFun
                       _ _ _ _|]
 
 swellPattern2 :: Signal ()
-swellPattern2 = mkPatternTerminal (Vector3 20 0 0) 6 keyP id reverseSwell2 <| PFunc0 <| (pmap ((*1) . d2f sigScale) <| ploop [sec1])
+swellPattern2 = mkPatternTerminal (Vector3 20 0 0) 5 keyP id reverseSwell2 <| PFunc0 <| (pmap ((*1) . d2f sigScale) <| ploop [sec1])
 -- swellPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyP]) reverseSwell2 (pmap ((*1) . d2f sigScale) <| ploop [sec1])
     where
         sec1 = [lich| 3 _ _ _
@@ -771,7 +771,7 @@ hyperMelodyPattern2 = mkPatternTerminal (Vector3 28 0 0) 2 keyH id hyperMelodyHa
                 |]
 
 pulseDemon :: UGen -> UGen
-pulseDemon f = [s, s2] |> filt |> softclip (random 31 100 200) |> gain 0.0225 |> e |> dup |> out 18
+pulseDemon f = [s, s2] |> filt |> softclip (random 31 5 10) |> gain 0.4225 |> e |> out 18
     where
         e    = env   [0,1,0]         [0.01, 0.6] (-1)
         e2   = env   [1.0,0.1,0.001] [0.6, 0.01] 0
@@ -780,9 +780,11 @@ pulseDemon f = [s, s2] |> filt |> softclip (random 31 100 200) |> gain 0.0225 |>
         filt = lpf   (f * random 19 2 16 |> e2) 3
 
 demonCave :: UGen -> UGen -> UGen
-demonCave f1 f2 = [l * 0.875 + r * 0.125, r * 0.875 + l * 0.125] |> gain g |> masterOut
+demonCave x y = [l * 0.875 + r * 0.125, r * 0.875 + l * 0.125] |> gain g |> visAux 7 1 |> masterOut
     where
-        g     = (f1 * 0.000625) + 1
+        f1    = linlin 0 1 250 8000 x
+        f2    = linlin 0 1 250 8000 y
+        g     = linlin 0 1 1   1.5  x
         l     = auxIn 18 |> filt1 +> d2 |> verb +> d
         r     = auxIn 19 |> filt2 +> d2 |> verb +> d
         filt1 = lpf (lag 0.1 f1) 4
@@ -795,9 +797,9 @@ pulseDemonPattern :: Signal ()
 pulseDemonPattern = fx *> patt
 -- pulseDemonPattern = fx <> patt
     where
-        fx   = mkTerminal (Vector3 32 0 0) 2 keyG (scale 250 8000) demonCave
+        fx   = mkTerminal (Vector3 32 0 0) 7 keyG id demonCave
         -- fx   = play (toggle <| combo [alt,isDown keyG]) demonCave (scale 250 8000 <~ mouseX) (scale 250 8000 <~ mouseY) (scale 1 1.5 <~ mouseX)
-        patt = mkPatternTerminal (Vector3 36 0 0) 2 keyG id pulseDemon <| PFunc0 <| (pmap ((*0.5) . d2f sigScale) <| ploop [sec1])
+        patt = mkPatternTerminal (Vector3 36 0 0) 7 keyG id pulseDemon <| PFunc0 <| (pmap ((*0.5) . d2f sigScale) <| ploop [sec1])
         -- patt = playSynthPattern (toggle <| combo [alt,isDown keyG]) pulseDemon (pmap ((*0.5) . d2f sigScale) <| ploop [sec1])
         sec1 = [lich| 0 1 _ 0 1 _ 0 1
                       _ 2 3 _ 2 3 _ 2
@@ -808,7 +810,7 @@ pulseDemonPattern = fx *> patt
                 |]
 
 pulseDemonPattern2 :: Signal ()
-pulseDemonPattern2 = mkPatternTerminal (Vector3 0 (-3) 0) 2 keyV id pulseDemon <| PFunc0 <| (pmap ((*1.0) . d2f sigScale) <| ploop [sec1])
+pulseDemonPattern2 = mkPatternTerminal (Vector3 0 (-3) 0) 7 keyV id pulseDemon <| PFunc0 <| (pmap ((*1.0) . d2f sigScale) <| ploop [sec1])
 -- pulseDemonPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyV]) pulseDemon (pmap ((*1.0) . d2f sigScale) <| ploop [sec1])
     where
         sec1 = [lich| 4 [_ 5] _ 4 [_ 5] _ 4 [_ 5]
