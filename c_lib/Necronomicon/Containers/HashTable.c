@@ -145,50 +145,63 @@ char* copy_string(const char* string)
 // copies the string key internally
 bool hash_table_insert_string_key(hash_table htable, void* item, const char* key)
 {
-    hash_table_node** table = htable.table;
-    uint32_t size = htable.size;
-    uint32_t size_mask = htable.size_mask;
-    uint32_t hash = hash_string(key);
-    uint32_t slot = hash & size_mask;
-    uint32_t i;
-    hash_table_node* node_ptr = NULL;
-    bool update_current_node = false;
     bool is_insertion_successful = false;
-
-    for (i = 0; i < size; ++i)
+    if (key == NULL)
     {
-        node_ptr = table[slot];
-        if (node_ptr == NULL)
-        {
-            break;
-        }
-
-        else if (node_ptr->hash == hash && strcmp(node_ptr->string_key, key) == 0)
-        {
-            update_current_node = true;
-            break;
-        }
-
-        slot = (slot + 1) & size_mask;
+        puts("hash_table_insert_string_key error: key is null.");
     }
 
-    if (i < size)
+    else if (htable.table == NULL)
     {
-        if (update_current_node == true)
+        puts("hash_table_insert_string_key error: htable.table is null.");
+    }
+
+    else
+    {
+        hash_table_node** table = htable.table;
+        uint32_t size = htable.size;
+        uint32_t size_mask = htable.size_mask;
+        uint32_t hash = hash_string(key);
+        uint32_t slot = hash & size_mask;
+        uint32_t i;
+        hash_table_node* node_ptr = NULL;
+        bool update_current_node = false;
+
+        for (i = 0; i < size; ++i)
         {
-            node_ptr->item = item;
+            node_ptr = table[slot];
+            if (node_ptr == NULL)
+            {
+                break;
+            }
+
+            else if (node_ptr->hash == hash && strcmp(node_ptr->string_key, key) == 0)
+            {
+                update_current_node = true;
+                break;
+            }
+
+            slot = (slot + 1) & size_mask;
         }
 
-        else
+        if (i < size)
         {
-            node_ptr = malloc(HASH_TABLE_NODE_SIZE);
-            char* key_copy = copy_string(key);
-            hash_table_node node = { item, string_key_type, 0, key_copy, hash };
-            *node_ptr = node;
-            table[slot] = node_ptr;
-        }
+            if (update_current_node == true)
+            {
+                node_ptr->item = item;
+            }
 
-        is_insertion_successful = true;
+            else
+            {
+                node_ptr = malloc(HASH_TABLE_NODE_SIZE);
+                char* key_copy = copy_string(key);
+                hash_table_node node = { item, string_key_type, 0, key_copy, hash };
+                *node_ptr = node;
+                table[slot] = node_ptr;
+            }
+
+            is_insertion_successful = true;
+        }
     }
 
     return is_insertion_successful;

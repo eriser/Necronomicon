@@ -351,13 +351,20 @@ processMessages messages =  mapM_ (processMessage) messages
             SetSynthArgs synth args -> processSetSynthArgs synth args
             StopSynth nodeID -> liftIO $ stopSynthInRtRuntime nodeID
             CollectSynthDef synthDef -> trace ("CollectSynthDef: " ++ show synthDef) $ addSynthDef synthDef
-            LoadSample filePath -> liftIO $ withCString filePath prloadAndRegisterSample
-            LoadSamples filePaths -> do
-                filePathsPtrs <- mapM (liftIO . newCString) filePaths :: Necronomicon [CString]
-                filePathsArrayPtr <- liftIO $ newArray filePathsPtrs :: Necronomicon (Ptr CString)
-                liftIO $ prloadAndRegisterSamples filePathsArrayPtr $ fromIntegral $ length filePaths
-                liftIO $ free filePathsArrayPtr
-                mapM_ (liftIO . free) filePathsPtrs
+            LoadSample filePath -> do
+                cFilePath <- liftIO $ newCString filePath  -- We're leaking here because this is causing crashing. TO DO: Figure out why.
+                liftIO $ prloadAndRegisterSample cFilePath
+                --liftIO $ withCString filePath prloadAndRegisterSample
+            LoadSamples filePaths -> mapM_ registerFilePath filePaths
+                where
+                    registerFilePath filePath = do
+                        cFilePath <- liftIO $ newCString filePath -- We're leaking here because this is causing crashing. TO DO: Figure out why.
+                        liftIO $ prloadAndRegisterSample cFilePath
+                -- filePathsPtrs <- mapM (liftIO . newCString) filePaths :: Necronomicon [CString]
+                -- filePathsArrayPtr <- liftIO $ newArray filePathsPtrs :: Necronomicon (Ptr CString)
+                -- liftIO $ prloadAndRegisterSamples filePathsArrayPtr $ fromIntegral $ length filePaths
+                -- liftIO $ free filePathsArrayPtr
+                -- mapM_ (liftIO . free) filePathsPtrs
             ShutdownNrt -> necronomiconEndSequence
 
 startNrtRuntime :: Necronomicon ()
