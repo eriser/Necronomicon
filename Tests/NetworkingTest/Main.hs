@@ -189,8 +189,8 @@ mkPatternTerminal p a k s f = terminalOutline p *> (playSynthPattern' s f <| fma
                 <> TerminalSetActive <~ toggle (areDown [keyLCtrl, k])
                 <> TerminalSetValues <~ filterWhen (fmap not <| isDown k) mouseDelta
 
--- mkBeatPatternTerminal :: Vector3 -> Int -> Key -> (UGen -> UGen) -> PFunc (String, UGen) -> Signal ()
--- mkBeatPatternTerminal p a k s f = terminalOutline p *> (playBeatPattern' s f <| fmap (tdata . edata) terminal)
+-- mkBeatPatternTerminal :: Vector3 -> Int -> Key -> PFunc (String, UGen) -> Signal ()
+-- mkBeatPatternTerminal p a k f = terminalOutline p *> (playBeatPattern' f <| fmap (tdata . edata) terminal)
 --     where
 --         tdata :: Terminal -> (Bool, [Double])
 --         tdata (Terminal p' (x, y)) = (p', [x, y])
