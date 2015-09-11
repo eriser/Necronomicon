@@ -189,8 +189,8 @@ mkPatternTerminal p a k s f = terminalOutline p *> (playSynthPattern' s f <| fma
                 <> TerminalSetActive <~ toggle (areDown [keyLCtrl, k])
                 <> TerminalSetValues <~ filterWhen (fmap not <| isDown k) mouseDelta
 
-mkBeatPatternTerminal :: Vector3 -> Int -> Key -> (UGen -> UGen) -> PFunc (String, UGen) -> Signal ()
-mkBeatPatternTerminal p a k s f = terminalOutline p *> (playBeatPattern' s f <| fmap (tdata . edata) terminal)
+mkBeatPatternTerminal :: Vector3 -> Int -> Key -> PFunc (String, UGen) -> Signal ()
+mkBeatPatternTerminal p a k f = terminalOutline p *> (playBeatPattern' f <| fmap (tdata . edata) terminal)
     where
         tdata :: Terminal -> (Bool, [Double])
         tdata (Terminal p' (x, y)) = (p', [x, y])
@@ -212,7 +212,8 @@ main = runSignal
     *> mkPatternTerminal     (Vector3  8 3 0) 2 keyH hyperMelody        hyperMelodyPattern
     *> mkPatternTerminal     (Vector3 12 3 0) 2 keyG hyperMelodyHarmony hyperMelodyPattern2
     *> mkPatternTerminal     (Vector3 16 3 0) 2 keyJ hyperMelody        binaryWolframPattern
-    *> mkBeatPatternTerminal (Vector3 20 3 0) 2 keyI ()                 binaryWolframSamplesPattern
+    *> mkBeatPatternTerminal (Vector3 20 3 0) 2 keyK binaryWolframSamplesTablaPattern
+    *> mkBeatPatternTerminal (Vector3 20 3 0) 2 keyL binaryWolframSamplesKitPattern
     *> section1
     *> section2
 
@@ -398,8 +399,8 @@ terrainModel = mkModel DefaultLayer terrainMesh terrainMaterial
 
 mkSphereObject :: Entity Section
 mkSphereObject = (mkEntity Section1)
-               { pos        = Vector3 0 0 1
-               , escale     = Vector3 3 3 3
+               { pos        = Vector3 0 5 15
+               , escale     = Vector3 2 2 2
                , model      = Nothing
                , netOptions = mkNetworkOptions{ networkData = Network}
                }
@@ -409,15 +410,17 @@ sphereObjectModel = mkModel DefaultLayer sphereMesh sphereMaterial
     where
         len            = 512
         lenr           = fromIntegral len
-        latitudes      = 144.0
-        longitudes     = 144.0
-        us             = (* (360 / latitudes))  <~ [0..latitudes]
-        ts             = (* (180 / longitudes)) <~ [0..longitudes]
-        vertices       = zipWith3 Vector3 (cycle us) (ts >>= replicate l) (map (/ lenr) <| cycle [0..lenr])
+        latitudes      = 36.0
+        longitudes     = 36.0
+        latI           = floor latitudes  :: Int
+        longI          = floor longitudes :: Int
+        us             = ((* 360) . (/ latitudes))  <~ map fromIntegral [0..latI]
+        ts             = ((* 180) . (/ longitudes)) <~ map fromIntegral [0..longI]
+        vertices       = zipWith3 Vector3 (cycle us) (ts >>= replicate latI) (map (/ lenr) <| cycle [0..lenr])
         colors         = replicate len black
         uvs            = replicate len 0
         l              = floor longitudes
-        indices        = foldr (\i acc -> i + 1 : i + l : i + l + 1 : i + 1 : i + 0 : i + l : acc) [] ([0, 3..floor (latitudes * longitudes) - (l + 1)] :: [Int])
+        indices        = foldr (\i acc -> i + 1 : i + l : i + l + 1 : i + 1 : i + 0 : i + l : acc) [] ([0, 2..floor (latitudes * longitudes) - (l + 3)] :: [Int])
         sphereMesh     = mkMesh "aSphere" vertices colors uvs indices
         sphereMaterial = material "sphere-vert.glsl" "sphere-frag.glsl" <| Map.fromList <|
                        [ ("tex1", UniformTexture <| audioTexture 0)
@@ -477,27 +480,53 @@ hyperMelodyPattern2 = PFunc0 <| pmap ((* 0.25) . d2f sigScale) <| ploop [sec1]
                       _ _ _ _ _ _ _ _
                |]
 
-binaryWolframSamplesPattern :: PFunc Rational
-binaryWolframSamplesPattern = PFunc0 <| PVal (pwolframGrid, 0.5)
+binaryWolframPattern :: PFunc Rational
+binaryWolframPattern = PFunc0 <| PVal (pwolframGrid, 0.5)
+   where
+       cellToRational White = 0
+       cellToRational Black = 1
+       seedCells = V.fromList (replicate 80 White ++ [Black] ++ replicate 80 White)
+       ruleNumber = 105
+       ruleVector = binaryWolframRuleVector ruleNumber
+       numRows = 50
+       wolframCAGrid = G.map ((*2) . d2f sigScale . cellToRational) $ mkBinaryWolframGrid seedCells ruleVector numRows
+       pwolframGrid = pgridDelta wolframCAGrid 0 1
+
+binaryWolframSamplesTablaPattern :: PFunc (String, UGen)
+binaryWolframSamplesTablaPattern = PFunc0 <| PVal (pwolframGrid, 0.5)
     where
-        cellToRational White = 0
-        cellToRational Black = 1
+        cellToSampleAndSynth White = lookupTablaSampleAndSynth 0
+        cellToSampleAndSynth Black = lookupTablaSampleAndSynth 1
         seedCells = V.fromList (replicate 80 White ++ [Black] ++ replicate 80 White)
         ruleNumber = 105
         ruleVector = binaryWolframRuleVector ruleNumber
         numRows = 50
-        wolframCAGrid = G.map ((*2) . d2f sigScale . cellToRational) $ mkBinaryWolframGrid seedCells ruleVector numRows
+        wolframCAGrid = G.map cellToSampleAndSynth $ mkBinaryWolframGrid seedCells ruleVector numRows
         pwolframGrid = pgridDelta wolframCAGrid 0 1
+
+
+binaryWolframSamplesKitPattern :: PFunc (String, UGen)
+binaryWolframSamplesKitPattern = PFunc0 <| PVal (pwolframGrid, 0.5)
+    where
+        cellToSampleAndSynth White = lookupKitSampleAndSynth 0
+        cellToSampleAndSynth Black = lookupKitSampleAndSynth 1
+        seedCells = V.fromList (replicate 80 White ++ [Black] ++ replicate 80 White)
+        ruleNumber = 105
+        ruleVector = binaryWolframRuleVector ruleNumber
+        numRows = 50
+        wolframCAGrid = G.map cellToSampleAndSynth $ mkBinaryWolframGrid seedCells ruleVector numRows
+        pwolframGrid = pgridDelta wolframCAGrid 0 1
+
 
 ------------------------------------------------------------------------------------------
 -- Samples
 ------------------------------------------------------------------------------------------
 
--- wrapLookup :: [a] -> Int -> Maybe a
--- wrapLookup [] _ = Nothing
--- wrapLookup list index = Just $ list !! index'
---     where
---         index' = mod index (length list)
+wrapLookup :: [a] -> Int -> Maybe a
+wrapLookup [] _ = Nothing
+wrapLookup list index = Just $ list !! index'
+    where
+        index' = mod index (length list)
 
 kitSamples :: [FilePath]
 kitSamples = [
@@ -542,20 +571,40 @@ hyperTerrainSamples = kitSamples ++ tablaSamples ++ [
         "samples/Slendro1.wav"
     ]
 
--- mapSynthsToSamples :: [FilePath] -> [UGen]
--- mapSynthsToSamples = map synth
---     where
---         synth sampleFilePath = playMonoSample sampleFilePath rate |> gain 0.3 |> out 0
---         rate = 1
---
--- kitSynths :: [UGen]
--- kitSynths = mapSynthsToSamples kitSamples
---
+mapSynthsToSamples :: [FilePath] -> [UGen]
+mapSynthsToSamples = map synth
+    where
+        synth sampleFilePath = playMonoSample sampleFilePath rate |> gain 0.3 |> out 0
+        rate = 1
+
+kitSynths :: [UGen]
+kitSynths = mapSynthsToSamples kitSamples
+
 -- lookupKitSynth :: Int -> Maybe UGen
 -- lookupKitSynth = wrapLookup kitSynths
---
--- tablaSynths :: [UGen]
--- tablaSynths = mapSynthsToSamples tablaSamples
---
+
+kitSamplesAndSynths :: [(String, UGen)]
+kitSamplesAndSynths = zip kitSamples kitSynths
+
+lookupKitSampleAndSynth :: Int -> (String, UGen)
+lookupKitSampleAndSynth = lookupSampleAndSynth kitSamplesAndSynths
+
+tablaSynths :: [UGen]
+tablaSynths = mapSynthsToSamples tablaSamples
+
 -- lookupTablaSynth :: Int -> Maybe UGen
 -- lookupTablaSynth = wrapLookup tablaSynths
+
+tablaSamplesAndSynths :: [(String, UGen)]
+tablaSamplesAndSynths = zip tablaSamples tablaSynths
+
+lookupTablaSampleAndSynth :: Int -> (String, UGen)
+lookupTablaSampleAndSynth = lookupSampleAndSynth tablaSamplesAndSynths
+
+lookupSampleAndSynth :: [(String, UGen)] -> Int -> (String, UGen)
+lookupSampleAndSynth list index = case wrapLookup list index of
+    Nothing -> __null_sample_and_synth
+    Just sampleAndSynth -> sampleAndSynth
+
+__null_sample_and_synth :: (String, UGen)
+__null_sample_and_synth = ("__null__", 0)

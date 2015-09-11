@@ -93,7 +93,7 @@ instance Applicative Signal where
     Pure   _ *> Signal g = Signal g
     Signal f *> Pure   g = Signal $ \state -> do
         (fcont, _) <- f state
-        fchan      <- atomically $ newTBQueue 10
+        fchan      <- atomically $ newTBQueue 60
         _          <- forkIO $ contf fcont fchan
         return (contg fchan, g)
         where
@@ -102,7 +102,7 @@ instance Applicative Signal where
     Signal f *> Signal g = Signal $ \state -> do
         (fcont,  _) <- f state
         (gcont, g') <- g state
-        fchan       <- atomically $ newTBQueue 10
+        fchan       <- atomically $ newTBQueue 60
         _           <- forkIO $ contf fcont  fchan
         return (contg gcont fchan, g')
         where

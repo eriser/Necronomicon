@@ -1199,6 +1199,15 @@ foreign import ccall "&time_secs_calc" timeSecsCalc :: CUGenFunc
 timeSecs :: UGen
 timeSecs = UGen [UGenFunc TimeSecs timeSecsCalc nullConstructor nullDeconstructor []]
 
+
+unaryToUGen :: (Double -> Double) -> UGen -> UGen
+unaryToUGen f (UGen [UGenNum d]) = UGen [UGenNum $ f d]
+unaryToUGen _ _ = 0
+
+----------------
+-- C Bindings
+----------------
+
 data CPlaySampleConstructArgs = CPlaySampleConstructArgs CString CInt
 
 instance Storable CPlaySampleConstructArgs where

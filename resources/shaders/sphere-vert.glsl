@@ -16,7 +16,7 @@ float audioAmount = 6;
 vec3 toPosition(vec3 pos)
 {
     float xRads = pos.x * 0.0174532925 * 3.141592654 * sin(time * 0.5);
-    float yRads = pos.y * 0.0174532925 * 3.141592654 * cos(time * 0.123454 * 0.5);
+    float yRads = pos.y * 0.0174532925 * 3.141592654 * sin(time * 0.123454 * 0.5);
 
     float a1    = (texture1D(tex1, pos.z).r - 0.5) * audioAmount;
     float a2    = (texture1D(tex2, pos.z).r - 0.5) * audioAmount;

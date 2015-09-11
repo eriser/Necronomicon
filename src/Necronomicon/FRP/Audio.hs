@@ -337,16 +337,11 @@ playBeatPattern'' playSig pattern argSigs = Signal $ \state -> do
             NoChange _ -> return ()
             Change val -> runNecroState (setPDefArg sPattern index $ PVal $ toRational val) sNecroVars >> return ()
 
-playBeatPattern' :: (UGen -> UGen) -> PFunc (String, UGen) -> Signal (Bool, [Double]) -> Signal ()
-playBeatPattern' u pattern argSig = Signal $ \state -> do
+playBeatPattern' :: PFunc (String, UGen) -> Signal (Bool, [Double]) -> Signal ()
+playBeatPattern' pattern argSig = Signal $ \state -> do
 
     (acont, (p, as)) <- unSignal argSig state
     pid              <- nextStateID state
-
-    let synthName     = "~p" ++ show pid
-    _                <- runNecroState (compileSynthDef synthName u) (necroVars state)
-
-    -- let pFunc         = return (\val t -> playSynthAtJackTime synthName [val] t >> return ())
     let pFunc         = return (\synth t -> playSynthAtJackTimeAndMaybeCompile synth [] t >> return ())
         pDef          = pstreamWithArgs ("sigPat" ++ show pid) pFunc pattern (map (PVal . toRational) as)
 
