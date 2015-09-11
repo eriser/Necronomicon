@@ -16,8 +16,8 @@ float oscSize = 1;
 
 vec3 toPosition(vec3 pos)
 {
-    vec3 p0 = vec3((texture1D(tex1, pos.y).r - 0.5) * oscSize, (texture1D(tex1, pos.y).r - 0.5) * oscSize, (texture1D(tex1, pos.y).r - 0.5) * oscSize);
-    vec3 p1 = vec3((texture1D(tex1, pos.z).r - 0.5) * oscSize, (texture1D(tex1, pos.z).r - 0.5) * oscSize, (texture1D(tex1, pos.z).r - 0.5) * oscSize);
+    vec3 p0 = vec3((texture1D(tex1, pos.y).r - 0.5) * oscSize, (texture1D(tex2, pos.y).r - 0.5) * oscSize, (texture1D(tex3, pos.y).r - 0.5) * oscSize);
+    vec3 p1 = vec3((texture1D(tex1, pos.z).r - 0.5) * oscSize, (texture1D(tex2, pos.z).r - 0.5) * oscSize, (texture1D(tex3, pos.z).r - 0.5) * oscSize);
     vec3 cp = cross(normalize(p0), normalize(p1));
     vec3 p2 = p0 + cp * width;
     vec3 p3 = p1 + cp * width;
@@ -29,7 +29,7 @@ void main()
 {
     uv               = in_uv;
     vec3 newPosition = toPosition(position);
-     /* color           = (normalize(newPosition) + 0.5) * 0.5; */
-    color            = vec3(1, 1, 1);
+    color           = (normalize(newPosition) + 0.5) * 0.5;
+    /* color            = vec3(1, 1, 1); */
     gl_Position      = vec4(newPosition, 1.0) * modelView * proj;
 }

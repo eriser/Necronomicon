@@ -3,7 +3,7 @@ uniform sampler1D tex1;
 uniform sampler1D tex2;
 uniform sampler1D tex3;
 uniform float     time;
-uniform mat4      modelView,proj;
+uniform mat4      modelView, proj;
 
 in  vec3 position, in_color;
 in  vec2 in_uv;

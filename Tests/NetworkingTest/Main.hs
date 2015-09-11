@@ -169,25 +169,25 @@ terminalTick (dt, _) e = if terminalIsActive <| edata e
         rotVec = 0 * Vector3 0 (dt * 5) (dt * 20)
         -- rotVec = 0
 
-mkTerminal :: Vector3 -> Int -> Key -> (UGen -> UGen -> UGen) -> Signal ()
-mkTerminal p a k s = terminalOutline p *> (play' s <| fmap (tdata . edata) terminal)
+mkTerminal :: Vector3 -> Int -> Key -> (Double -> Double) -> (UGen -> UGen -> UGen) -> Signal ()
+mkTerminal p a k scalef s = terminalOutline p *> (play' s <| fmap (tdata . edata) terminal)
     where
         tdata :: Terminal -> (Bool, [Double])
         tdata (Terminal p' (x, y)) = (p', [x, y])
         terminal = foldn updateTerminal (mkTerminalEntity p a)
                 <| TerminalTick      <~ tick
                 <> TerminalSetActive <~ toggle (areDown [keyLCtrl, k])
-                <> TerminalSetValues <~ filterWhen (fmap not <| isDown k) mouseDelta
+                <> TerminalSetValues <~ filterWhen (fmap not <| isDown k) (fmap (\(x, y) -> (scalef x, scalef y)) mouseDelta)
 
-mkPatternTerminal :: Vector3 -> Int -> Key -> (UGen -> UGen) -> PFunc Rational -> Signal ()
-mkPatternTerminal p a k s f = terminalOutline p *> (playSynthPattern' s f <| fmap (tdata . edata) terminal)
+mkPatternTerminal :: Vector3 -> Int -> Key -> (Double -> Double) -> (UGen -> UGen) -> PFunc Rational -> Signal ()
+mkPatternTerminal p a k scalef s f = terminalOutline p *> (playSynthPattern' s f <| fmap (tdata . edata) terminal)
     where
         tdata :: Terminal -> (Bool, [Double])
         tdata (Terminal p' (x, y)) = (p', [x, y])
         terminal = foldn updateTerminal (mkTerminalEntity p a)
                 <| TerminalTick      <~ tick
                 <> TerminalSetActive <~ toggle (areDown [keyLCtrl, k])
-                <> TerminalSetValues <~ filterWhen (fmap not <| isDown k) mouseDelta
+                <> TerminalSetValues <~ filterWhen (fmap not <| isDown k) (fmap (\(x, y) -> (scalef x, scalef y)) mouseDelta)
 
 -- mkBeatPatternTerminal :: Vector3 -> Int -> Key -> PFunc (String, UGen) -> Signal ()
 -- mkBeatPatternTerminal p a k f = terminalOutline p *> (playBeatPattern' f <| fmap (tdata . edata) terminal)
@@ -207,11 +207,12 @@ main :: IO ()
 main = runSignal
     <| players
     *> loadSamples hyperTerrainSamples
-    *> mkTerminal        (Vector3  0 3 0) 0 keyT lfsawSynth
-    *> mkTerminal        (Vector3  4 3 0) 0 keyR lfsawSynth
-    *> mkPatternTerminal (Vector3  8 3 0) 2 keyH hyperMelody        hyperMelodyPattern
-    *> mkPatternTerminal (Vector3 12 3 0) 2 keyG hyperMelodyHarmony hyperMelodyPattern2
-    *> mkPatternTerminal (Vector3 16 3 0) 2 keyJ hyperMelody        binaryWolframPattern
+    *> mkTerminal        (Vector3  0 3 0) 0 keyT id lfsawSynth
+    *> mkTerminal        (Vector3  4 3 0) 0 keyR id lfsawSynth
+    *> mkPatternTerminal (Vector3  8 3 0) 2 keyH id hyperMelody        hyperMelodyPattern
+    *> mkPatternTerminal (Vector3 12 3 0) 2 keyG id hyperMelodyHarmony hyperMelodyPattern2
+    *> mkPatternTerminal (Vector3 16 3 0) 2 keyJ id hyperMelody        binaryWolframPattern
+    *> mkTerminal        (Vector3 20 3 0) 0 keyY mouseToSlendro triOsc32
     *> section1
     *> section2
 
@@ -307,8 +308,8 @@ mkOscillator = (mkEntity Section1)
 oscModel :: Model
 oscModel = mkModel DefaultLayer mesh oscMaterial
     where
-        mesh        = mkMesh "osc1" vertices colors uvs indices
-        len         = 256
+        mesh        = mkMesh "oscMesh" vertices colors uvs indices
+        len         = 512
         lenr        = fromIntegral len
         indices     = foldr (\i acc -> i + 1 : i + 2 : i + 3 : i + 1 : i + 0 : i + 2 : acc) [] ([0..len - 1] :: [Int])
         uvs         = replicate len 0
@@ -421,9 +422,9 @@ sphereObjectModel = mkModel DefaultLayer sphereMesh sphereMaterial
         indices        = foldr (\i acc -> i + 1 : i + l : i + l + 1 : i + 1 : i + 0 : i + l : acc) [] ([0, 2..floor (latitudes * longitudes) - (l + 3)] :: [Int])
         sphereMesh     = mkMesh "aSphere" vertices colors uvs indices
         sphereMaterial = material "sphere-vert.glsl" "sphere-frag.glsl" <| Map.fromList <|
-                       [ ("tex1", UniformTexture <| audioTexture 0)
-                       , ("tex2", UniformTexture <| audioTexture 1)
-                       , ("tex3", UniformTexture <| audioTexture 2)
+                       [ ("tex1", UniformTexture <| audioTexture 2)
+                       , ("tex2", UniformTexture <| audioTexture 3)
+                       , ("tex3", UniformTexture <| audioTexture 4)
                        , ("time", UniformScalar  0)
                        ]
 
@@ -477,6 +478,26 @@ hyperMelodyPattern2 = PFunc0 <| pmap ((* 0.25) . d2f sigScale) <| ploop [sec1]
                       [3 _ 2] [_ 1 _] 0 _ _ _ _ _
                       _ _ _ _ _ _ _ _
                |]
+
+mouseToSlendro :: Double -> Double
+mouseToSlendro m = fromRational . d2f slendro . toRational <| (floor <| scale 0 24 m :: Integer)
+
+triOsc32 :: UGen -> UGen -> UGen
+triOsc32 mx my = feedback fSig |> verb |> gain 0.0385 |> masterOut
+    where
+        f1     = lag 0.25 mx
+        f2     = lag 0.25 my
+        verb   = freeverb 0.25 0.5 0.95
+        d      = delayN 0.6 0.6
+        fSig :: UGen -> UGen
+        fSig i = [sig4 + sig6, sig5 + sig6]
+            where
+                sig1 = sinOsc (f1 + sig3 * 26.162)    * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> auxThrough 2
+                sig2 = sinOsc (f2 - sig3 * 26.162)    * (sinOsc (f1 * 0.00025) |> range 0.5 1) |> auxThrough 3
+                sig3 = sinOsc (f1 - f2 +  i * 26.162) * (sinOsc ( i * 0.00025) |> range 0.5 1) |> auxThrough 4
+                sig4 = sinOsc (f1 * 0.25 + sig1 * 261.6255653006) * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 60 |> gain 0.5 +> d
+                sig5 = sinOsc (f2 * 0.25 - sig2 * 261.6255653006) * (sinOsc (f1 * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 60 |> gain 0.5 +> d
+                sig6 = sinOsc (f1 * 0.25 - sig3 * 261.6255653006) * (sinOsc ( i * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 60 |> gain 0.5 +> d
 
 binaryWolframPattern :: PFunc Rational
 binaryWolframPattern = PFunc0 <| PVal (pwolframGrid, 0.5)
