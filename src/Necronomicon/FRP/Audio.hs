@@ -70,12 +70,13 @@ loadSamples resourceFilePaths = sigNecro $ sendloadSamples resourceFilePaths
 --Need to network this shit
 playSynth' :: UGenType a => Signal Bool -> a -> [Signal Double] -> Signal ()
 playSynth' playSig u argSigs = Signal $ \state -> do
-    (pcont,  _) <- unSignal playSig state
-    (aconts, _) <- unzip <~ mapM (\a -> unSignal a state) argSigs
+    (pcont,  p) <- unSignal playSig state
+    (aconts, a) <- unzip <~ mapM (\a -> unSignal a state) argSigs
     synthRef  <- newIORef Nothing
     synthName <- nextStateID state ~> \uid -> "~p" ++ show uid
     _         <- runNecroState (compileSynthDef synthName u) (necroVars state)
     putStrLn $ "Compiling synthDef: " ++ synthName
+    when p $ runNecroState (playStopSynth a p synthRef synthName) (necroVars state) >> return ()
 
     return (cont pcont aconts synthRef synthName (necroVars state), ())
     where

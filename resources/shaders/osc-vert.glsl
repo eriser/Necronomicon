@@ -12,15 +12,31 @@ out vec3 color;
 out vec2 uv;
 
 float width   = 1;
-float oscSize = 1;
+float oscSize = 8;
+float radius  = 1;
 
 vec3 toPosition(vec3 pos)
 {
-    vec3 p0 = vec3((texture1D(tex1, pos.y).r - 0.5) * oscSize, (texture1D(tex2, pos.y).r - 0.5) * oscSize, (texture1D(tex3, pos.y).r - 0.5) * oscSize);
-    vec3 p1 = vec3((texture1D(tex1, pos.z).r - 0.5) * oscSize, (texture1D(tex2, pos.z).r - 0.5) * oscSize, (texture1D(tex3, pos.z).r - 0.5) * oscSize);
-    vec3 cp = cross(normalize(p0), normalize(p1));
-    vec3 p2 = p0 + cp * width;
-    vec3 p3 = p1 + cp * width;
+    /* vec3 p0 = vec3((texture1D(tex1, pos.y).r - 0.5) * oscSize, (texture1D(tex2, pos.y).r - 0.5) * oscSize, (texture1D(tex3, pos.y).r - 0.5) * oscSize); */
+    /* vec3 p1 = vec3((texture1D(tex1, pos.z).r - 0.5) * oscSize, (texture1D(tex2, pos.z).r - 0.5) * oscSize, (texture1D(tex3, pos.z).r - 0.5) * oscSize); */
+
+    float u1 = pos.y * 8 * 3.141592654;
+    float u2 = pos.z * 8 * 3.141592654;
+
+    float a1 = (texture1D(tex2, pos.y).r - 0.5) * oscSize;
+    float a2 = (texture1D(tex1, pos.y).r - 0.5) * oscSize;
+    float a3 = (texture1D(tex1, pos.y).r - 0.5) * oscSize;
+
+    float a4 = (texture1D(tex2, pos.z).r - 0.5) * oscSize;
+    float a5 = (texture1D(tex1, pos.z).r - 0.5) * oscSize;
+    float a6 = (texture1D(tex1, pos.z).r - 0.5) * oscSize;
+
+    vec3  p0 = vec3(u1 * radius + a1, a2, a3);
+    vec3  p1 = vec3(u2 * radius + a4, a5, a6);
+
+    vec3  cp = cross(normalize(p0), normalize(p1));
+    vec3  p2 = p0 + cp * width;
+    vec3  p3 = p1 + cp * width;
 
     return p0 * float(pos.x == 0) + p1 * float(pos.x == 1) + p2 * float(pos.x == 2) + p3 * float(pos.x == 3);
 }
@@ -29,7 +45,9 @@ void main()
 {
     uv               = in_uv;
     vec3 newPosition = toPosition(position);
-    color           = (normalize(newPosition) + 0.5) * 0.5;
-    /* color            = vec3(1, 1, 1); */
+    float a2         = (texture1D(tex1, position.y).r - 0.5) * oscSize;
+    /* color            = (normalize(newPosition) + 0.5) * 0.5; */
+    /* color            = abs(vec3(a2, 0, 0)); */
+    color            = vec3(0, 0, 0);
     gl_Position      = vec4(newPosition, 1.0) * modelView * proj;
 }

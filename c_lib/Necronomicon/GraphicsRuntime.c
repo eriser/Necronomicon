@@ -123,7 +123,8 @@ void draw_render_data( render_data_t* render_data, GLuint length, GLint layerMas
     render_data_t rd;
     uniform_t uniform;
     GLint prev_index_buffer = 0;
-    GLuint prev_program = 0;
+    GLuint prev_program     = 0;
+    GLuint textureUnit      = 0;
 
     for(i = 0; i < length; i++)
     {
@@ -140,7 +141,8 @@ void draw_render_data( render_data_t* render_data, GLuint length, GLint layerMas
             prev_program = rd.shader_program;
         }
 
-        uniforms = rd.uniforms;
+        uniforms    = rd.uniforms;
+        textureUnit = 0;
 
         for(u = 0; u < rd.uniform_length; u++)
         {
@@ -148,13 +150,32 @@ void draw_render_data( render_data_t* render_data, GLuint length, GLint layerMas
             switch(uniform.type)
             {
                 case 0:
-                    glActiveTexture(uniform.texture_uniform.u);
-                    glUniform1i(uniform.location, 0);
-                    glBindTexture(GL_TEXTURE_2D, uniform.texture_uniform.t);
+                    if(textureUnit == 0)
+                    {
+                        glActiveTexture(GL_TEXTURE0);
+                    }
+                    if(textureUnit == 1)
+                    {
+                        glActiveTexture(GL_TEXTURE1);
+                    }
+                    if(textureUnit == 2)
+                    {
+                        glActiveTexture(GL_TEXTURE2);
+                    }
+
                     if(uniform.texture_uniform.is_audio)
                     {
+                        glBindTexture(GL_TEXTURE_1D, uniform.texture_uniform.t);
                         glTexSubImage1D(GL_TEXTURE_1D, 0, 0, 512, GL_RED, GL_FLOAT, out_bus_buffers[uniform.texture_uniform.a]);
                     }
+                    else
+                    {
+                        glBindTexture(GL_TEXTURE_2D, uniform.texture_uniform.t);
+                    }
+
+                    glUniform1i(uniform.location, textureUnit);
+
+                    textureUnit++;
                     break;
                 case 1:
                     glUniform1f(uniform.location, uniform.scalar_uniform.x);
