@@ -134,7 +134,8 @@ char* copy_string(const char* string)
     char* copy = NULL;
     if (string != NULL)
     {
-        uint32_t length = strlen(string);
+        const uint32_t null_terminator_length = 1;
+        uint32_t length = strlen(string) + null_terminator_length;
         copy = malloc(length);
         strcpy(copy, string);
     }
