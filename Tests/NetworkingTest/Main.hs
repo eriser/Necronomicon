@@ -189,15 +189,15 @@ mkPatternTerminal p a k s f = terminalOutline p *> (playSynthPattern' s f <| fma
                 <> TerminalSetActive <~ toggle (areDown [keyLCtrl, k])
                 <> TerminalSetValues <~ filterWhen (fmap not <| isDown k) mouseDelta
 
--- mkBeatPatternTerminal :: Vector3 -> Int -> Key -> (UGen -> UGen) -> PFunc (String, UGen) -> Signal ()
--- mkBeatPatternTerminal p a k s f = terminalOutline p *> (playBeatPattern' s f <| fmap (tdata . edata) terminal)
---     where
---         tdata :: Terminal -> (Bool, [Double])
---         tdata (Terminal p' (x, y)) = (p', [x, y])
---         terminal = foldn updateTerminal (mkTerminalEntity p a)
---                 <| TerminalTick      <~ tick
---                 <> TerminalSetActive <~ toggle (areDown [keyLCtrl, k])
---                 <> TerminalSetValues <~ filterWhen (fmap not <| isDown k) mouseDelta
+mkBeatPatternTerminal :: Vector3 -> Int -> Key -> (UGen -> UGen) -> PFunc (String, UGen) -> Signal ()
+mkBeatPatternTerminal p a k s f = terminalOutline p *> (playBeatPattern' s f <| fmap (tdata . edata) terminal)
+    where
+        tdata :: Terminal -> (Bool, [Double])
+        tdata (Terminal p' (x, y)) = (p', [x, y])
+        terminal = foldn updateTerminal (mkTerminalEntity p a)
+                <| TerminalTick      <~ tick
+                <> TerminalSetActive <~ toggle (areDown [keyLCtrl, k])
+                <> TerminalSetValues <~ filterWhen (fmap not <| isDown k) mouseDelta
 
 ---------------------------------------------------------------------------
 -- Main
@@ -207,11 +207,12 @@ main :: IO ()
 main = runSignal
     <| players
     *> loadSamples hyperTerrainSamples
-    *> mkTerminal        (Vector3  0 3 0) 0 keyT lfsawSynth
-    *> mkTerminal        (Vector3  4 3 0) 0 keyR lfsawSynth
-    *> mkPatternTerminal (Vector3  8 3 0) 2 keyH hyperMelody        hyperMelodyPattern
-    *> mkPatternTerminal (Vector3 12 3 0) 2 keyG hyperMelodyHarmony hyperMelodyPattern2
-    *> mkPatternTerminal (Vector3 16 3 0) 2 keyJ hyperMelody        binaryWolframPattern
+    *> mkTerminal            (Vector3  0 3 0) 0 keyT lfsawSynth
+    *> mkTerminal            (Vector3  4 3 0) 0 keyR lfsawSynth
+    *> mkPatternTerminal     (Vector3  8 3 0) 2 keyH hyperMelody        hyperMelodyPattern
+    *> mkPatternTerminal     (Vector3 12 3 0) 2 keyG hyperMelodyHarmony hyperMelodyPattern2
+    *> mkPatternTerminal     (Vector3 16 3 0) 2 keyJ hyperMelody        binaryWolframPattern
+    *> mkBeatPatternTerminal (Vector3 20 3 0) 2 keyI ()                 binaryWolframSamplesPattern
     *> section1
     *> section2
 
@@ -410,8 +411,8 @@ sphereObjectModel = mkModel DefaultLayer sphereMesh sphereMaterial
         lenr           = fromIntegral len
         latitudes      = 144.0
         longitudes     = 144.0
-        ts             = ((* 360) . (/ latitudes))  <~ [0..latitudes]
-        us             = ((* 180) . (/ longitudes)) <~ [0..longitudes]
+        us             = (* (360 / latitudes))  <~ [0..latitudes]
+        ts             = (* (180 / longitudes)) <~ [0..longitudes]
         vertices       = zipWith3 Vector3 (cycle us) (ts >>= replicate l) (map (/ lenr) <| cycle [0..lenr])
         colors         = replicate len black
         uvs            = replicate len 0
@@ -476,8 +477,8 @@ hyperMelodyPattern2 = PFunc0 <| pmap ((* 0.25) . d2f sigScale) <| ploop [sec1]
                       _ _ _ _ _ _ _ _
                |]
 
-binaryWolframPattern :: PFunc Rational
-binaryWolframPattern = PFunc0 <| PVal (pwolframGrid, 0.5)
+binaryWolframSamplesPattern :: PFunc Rational
+binaryWolframSamplesPattern = PFunc0 <| PVal (pwolframGrid, 0.5)
     where
         cellToRational White = 0
         cellToRational Black = 1
