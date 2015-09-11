@@ -214,7 +214,7 @@ main = runSignal
     *> mkPatternTerminal     (Vector3 16 3 0) 2 keyJ id hyperMelody        binaryWolframPattern
     *> mkBeatPatternTerminal (Vector3 20 3 0) 2 keyK binaryWolframSamplesTablaPattern
     *> mkBeatPatternTerminal (Vector3 24 3 0) 2 keyL binaryWolframSamplesKitPattern
-    *> mkTerminal            (Vector3 28 3 0) 0 keyY mouseToSlendro triOsc32
+    *> mkTerminal            (Vector3 28 3 0) 2 keyY mouseToSlendro triOsc32
     *> section1
     *> section2
 
