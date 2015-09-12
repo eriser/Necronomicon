@@ -351,7 +351,12 @@ oscModel = mkModel DefaultLayer mesh oscMaterial
                       ]
 
 lfsawSynth :: UGen -> UGen -> UGen
-lfsawSynth freq1 freq2 = (lfsaw (lag 0.1 [exprange 40 4000 freq1, exprange 40 4000 freq2]) 0) * 2 - 1 |> exprange 20 20000 |> sin |> gain 0.1 |> visAux 7 1 |> out 22
+lfsawSynth freq1 freq2 = o1 + o2 |> exprange 20 20000 |> sin |> gain 0.1 |> visAux 7 1 |> out 22
+    where
+        o1 = (lfsaw (lag 0.1 [f1, f2]) 0) * 2 - 1
+        o2 = (lfsaw (lag 1 [f1 * 0.5, f2 * 0.5]) 0) * 2 - 1
+        f1 = exprange 40 4000 freq1
+        f2 = exprange 40 4000 freq2
 
 
 ---------------------------------------------------------------------------
