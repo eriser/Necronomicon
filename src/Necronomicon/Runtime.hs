@@ -123,6 +123,18 @@ pstreamWithArgs name func layoutFunc defaultArgs = PDefWithArgs name pfunc defau
                 _ -> return (Just d)
             _ -> return Nothing
 
+pstreamWithArgsFunc :: String -> Pattern (a -> [PRational] -> Time -> JackTime -> Necronomicon ()) -> PFunc a -> [PRational] -> PDef
+pstreamWithArgsFunc name func layoutFunc defaultArgs = PDefWithArgs name pfunc defaultArgs
+    where
+        applyArgs layoutArgs = applyPDefFuncArgs layoutFunc layoutArgs
+        pfunc t i jackTime as = case collapse (applyArgs (as ++ cycle [PVal 0])) t of
+            PVal (p, d) -> case collapse p t of
+                PVal v -> case collapse func (fromIntegral i) of
+                    PVal pf -> pf v as t jackTime >> return (Just d)
+                    _ -> return (Just d)
+                _ -> return (Just d)
+            _ -> return Nothing
+
 pbind :: String -> Pattern (JackTime -> Necronomicon ()) -> Pattern Rational -> PDef
 pbind name values durs = PDefNoArgs name (PVal pfunc)
     where
@@ -456,9 +468,7 @@ printSetPatternNotFound :: String -> Necronomicon ()
 printSetPatternNotFound name = nPrint ("Failed setting argument for pattern " ++ name ++ ". Pattern not found.")
 
 setListIndex :: Int -> a -> [a] -> [a]
-setListIndex i x xs = if i >= 0 && i < length xs
-                          then take i xs ++ x : drop (i + 1) xs
-                          else xs
+setListIndex index x xs = map (\(i, originalX) -> if i == index then x else originalX) $ zip [0..] xs
 
 pmessageSetPDefArg :: String -> [PRational] -> Necronomicon ()
 pmessageSetPDefArg name argValues = getPatternQueue >>= \(pqueue, pdict) ->

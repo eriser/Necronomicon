@@ -45,13 +45,6 @@ void delayC_constructor(ugen* u)
 
 void delay_deconstructor(ugen* u)
 {
-    puts("delay_deconstructor");
-    puts("about to print delay_deconstructor ugen");
-    printf("%p\n", u);
-    puts("about to print delay_deconstructor ugen->data");
-    printf("%p\n", u->data);
-    puts("about to print delay_deconstructor ugen->data->buffer");
-    printf("%p\n", ((delay_data*) u->data)->buffer);
     release_sample_buffer(((delay_data*) u->data)->buffer);
     free(u->data);
 }
