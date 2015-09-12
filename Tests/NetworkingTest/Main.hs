@@ -592,7 +592,7 @@ reverseSwellPanned f panPos =  sig1 + sig2 + sig3 |> e |> tanhDist (random 31 0.
         m x  = x - 0.125
 
 dissonances :: UGen -> UGen -> UGen
-dissonances x y = [s1 + s3, s2 + s4] |> e |> constrain (-0.1) 0.1 |> gain 4 |> visAux 5 1 |> caveOut
+dissonances x y = [s1 + s3, s2 + s4] |> e |> constrain (-0.1) 0.1 +> delayN 0.5 0.5 |> gain 2 |> visAux 5 1 |> caveOut
     where
         f        = random 0 50 150 * linlin 0 1 0.8 1.2 y
         e v      = v * x
@@ -1500,7 +1500,7 @@ feedbackKitHellSynth sampleFilePath _ _ = playMonoSample sampleFilePath rate |> 
         -- maxFreq = my |> exprange 800 40000
 
 feedbackKitHellFX :: UGen -> UGen -> UGen
-feedbackKitHellFX _ _ = feed |> gain 2 |> constrain (-1) 1 |> poll |> visAux 2 1 |> masterOut
+feedbackKitHellFX _ _ = feed |> gain 2 |> constrain (-1) 1 |> gain 0.5 |> poll |> visAux 2 1 |> masterOut
     where
         -- ms = [mx, my] * 2 - 1
         auxes = auxIn (fst feedbackKitHellBuses <> snd feedbackKitHellBuses) |> gain 10
@@ -1544,8 +1544,8 @@ feedbackSolo0x10cSequence = PFunc0 <| pfractalVals
 feedbackSolo0x10cSequenceArgs :: [PatternArgsFunc]
 feedbackSolo0x10cSequenceArgs = map (patternArgsFunc . pArgFunc) [mouseXIndex, mouseYIndex]
     where
-        rangeScale = 77
-        maxRange = 217
+        rangeScale  = 77
+        maxRange    = 217
         mouseXIndex = 0
         mouseYIndex = 1
         pArgFunc :: Int -> [Rational] -> PRational
@@ -1558,21 +1558,22 @@ feedbackSolo0x10cSequenceArgs = map (patternArgsFunc . pArgFunc) [mouseXIndex, m
 feedbackSolo0x10cSynth :: FilePath -> UGen -> UGen -> UGen
 feedbackSolo0x10cSynth sampleFilePath mx my = playMonoSample sampleFilePath rate |> e |> filt |> constrain (-1) 1 |> out (fst feedbackSolo0x10cBuses)
     where
-        e = perc 0.01 1 1 0
-        e2 = perc2 0.001 1 1 (-4) freqs
-        filt = bpf e2 1
-        lFreq = mx |> exprange 40 1000 |> lag 0.1
-        rFreq = my |> exprange 40 1000 |> lag 0.1
+        atk   = random 2 (-1) 1 |> exprange 0.01 1
+        e     = perc  atk 1 1 0
+        e2    = perc2 atk 1 1 (-4) freqs
+        filt  = bpf e2 1
+        lFreq = mx |> exprange 40 1000 |> lag (random 0 0.1 2)
+        rFreq = my |> exprange 40 1000 |> lag (random 1 0.1 2)
         freqs = lFreq <> rFreq
-        rate = 1
+        rate  = mx + my |> gain 0.5 |> range 0.75 1.5
 
 feedbackSolo0x10cFX :: UGen -> UGen -> UGen
-feedbackSolo0x10cFX mx my = feed |> gain 2 |> constrain (-1) 1 |> poll |> visAux 2 1 |> masterOut
+feedbackSolo0x10cFX mx my = feed |> gain 4 |> constrain (-1) 1 |> poll |> visAux 2 1 |> masterOut
     where
-        ms = [mx, my] * 2 - 1
-        auxes = auxIn (fst feedbackSolo0x10cBuses <> snd feedbackSolo0x10cBuses) |> gain 10
+        ms         = [mx, my] * 2 - 1
+        auxes      = auxIn (fst feedbackSolo0x10cBuses <> snd feedbackSolo0x10cBuses) |> gain 10
         delayTimes = ms |> exprange 0.5 1 |> lag 1
         -- delayTimes2 = ms |> range 1 2
-        feed = feedback $ \l r -> auxes + (r <> l) +> delayC 0.5 0.5 |> delayC 1 delayTimes |> gain 0.9 |> constrain (-1) 1 |> fxLimiter
+        feed       = feedback $ \l r -> auxes + (r <> l) +> delayC 0.25 0.25 |> delayC 1 delayTimes |> gain 0.9 |> constrain (-1) 1 |> fxLimiter
         -- verb = freeverb 0.1 10 0.01
-        fxLimiter = limiter 0.1 0.01 0.03 (-9) 0.1 <> limiter 0.175 0.01 0.03 (-9) 0.1
+        fxLimiter  = limiter 0.1 0.01 0.03 (-9) 0.1 <> limiter 0.175 0.01 0.03 (-9) 0.1
