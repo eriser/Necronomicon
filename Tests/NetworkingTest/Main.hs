@@ -1529,59 +1529,82 @@ feedbackSolo0x10cNameAndSynth :: Int -> (String, UGen -> UGen -> UGen)
 feedbackSolo0x10cNameAndSynth = lookupSampleAndSynth feedbackSolo0x10cNamesAndSynths
 
 feedbackSolo0x10cSequence :: PFunc (String, UGen -> UGen -> UGen)
-feedbackSolo0x10cSequence = PFunc0 <| pfractalVals
+feedbackSolo0x10cSequence = PFunc0 <| place [pfractalVals,pwolframGridVals]
     where
-        fractalPlantFour = fractalPlant 4
+        fractalPlantFour = fractalPlant 6
         sierpinskiTriangleSix = sierpinskiTriangle 6
-        pfractalPlants = pwrapLookup fractalPlantFour '-' (ploop [0..99])
-        psierpinskiTriangles = pwrapLookup sierpinskiTriangleSix '-' (ploop [0..99])
-        pfractalVals = ploop [pfractalPlants, psierpinskiTriangles] |> fmap fractalPlantSynthAndDur
+        dragonCurvesSix = dragonCurve 6
+        cantorDustSix = cantorDust 6
+        pfractalPlants = pwrapLookup fractalPlantFour 'B' (ploop [0..99])
+        psierpinskiTriangles = pwrapLookup sierpinskiTriangleSix 'B' (ploop [0..99])
+        pDragonCurves = pwrapLookup dragonCurvesSix 'A' (ploop [0..99])
+        pCantorDusts = pwrapLookup cantorDustSix 'A' (ploop [0..99])
+        pfractalVals = ploop [pfractalPlants, psierpinskiTriangles, pDragonCurves, pCantorDusts] |> fmap fractalPlantSynthAndDur
         fractalPlantSynthAndDur plantChar = (PVal $ feedbackSolo0x10cNameAndSynth index, plantLookupDur index)
             where
                 index = lsystemCharToInt plantChar
         pfractalPlantDurs = map plantToRational fractalPlantFour
             where
-                plantToRational c = 8 / ((toRational $ lsystemCharToInt c) + 1 |> (*) 2)
+                plantToRational c = 2 / ((toRational $ lsystemCharToInt c) + 1)
         plantLookupDur n = case wrapLookup pfractalPlantDurs n of
             Nothing -> 1
             Just v -> v
+        seedCells = V.fromList (replicate 80 0 ++ [1] ++ replicate 80 0)
+        numColors = 3
+        numRows = 1000
+        rules = [77245, 210819] -- [573377, 706951, 77245, 210819]
+        deltas = [(-1, 1), (1, -1), (-1, 1), (1, 1)]
+        ruleMaps = map (multiColoredWolframRuleMap numColors) rules
+        wolframCAGrids = map (\ruleMap -> mkMultiColoredWolframGrid seedCells ruleMap numRows) ruleMaps
+        pwolframGrids = map (\(wolframCAGrid, (dx, dy)) -> pgridDelta wolframCAGrid dx dy) $ zip wolframCAGrids deltas
+        pwolframGridSynths = fmap feedbackSolo0x11dNameAndSynth . head $ pwolframGrids
+        durs = cycle [1, 0.5, 0.25]
+        pwolframGridVals = fmap (\n -> (pwolframGridSynths, durs !! n)) (pwolframGrids !! 1)
 
 feedbackSolo0x10cSequenceArgs :: [PatternArgsFunc]
 feedbackSolo0x10cSequenceArgs = map (patternArgsFunc . pArgFunc) [mouseXIndex, mouseYIndex]
     where
-        rangeScale  = 77
-        maxRange    = 217
+        rangeScale  = 40
         mouseXIndex = 0
         mouseYIndex = 1
+        fractalPlantFour = fractalPlant 4
+        sierpinskiTriangleSix = sierpinskiTriangle 4
+        pfractalPlants = pwrapLookup fractalPlantFour '-' (ploop [0..99])
+        psierpinskiTriangles = pwrapLookup sierpinskiTriangleSix '-' (ploop [0..99])
+        pfractalVals = ploop [pfractalPlants, psierpinskiTriangles] |> fmap fractalPlantInts
+        fractalPlantInts plantChar = lsystemCharToInt plantChar |> toRational
         pArgFunc :: Int -> [Rational] -> PRational
         pArgFunc index args = case (wrapLookup args index) of
             Nothing  -> 0
-            Just val -> pval |> pseries 1 |> pwrap 1 maxRange |> (/maxRange) |> (*) 2 |> (subtract 1)
+            Just val -> pfractalVals |> (*) pval |> fmap (d2f mothra . toRational)
                 where
                     pval = PVal <| val * rangeScale
 
 feedbackSolo0x10cSynth :: FilePath -> UGen -> UGen -> UGen
-feedbackSolo0x10cSynth sampleFilePath mx my = playMonoSample sampleFilePath rate |> e |> filt |> constrain (-1) 1 |> out (fst feedbackSolo0x10cBuses)
+feedbackSolo0x10cSynth sampleFilePath mx my = sample |> e |> filt |> constrain (-1) 1 |> out (fst feedbackSolo0x10cBuses)
     where
-        atk   = random 2 (-1) 1 |> exprange 0.01 1
-        e     = perc  atk 1 1 0
-        e2    = perc2 atk 1 1 (-4) freqs
-        filt  = bpf e2 1
-        lFreq = mx |> exprange 40 1000 |> lag (random 0 0.1 2)
-        rFreq = my |> exprange 40 1000 |> lag (random 1 0.1 2)
+        atk   = random 2 (-1) 1 |> exprange 0.00001 0.5
+        e     = perc  atk 10 1 (-32)
+        e2    = perc2 atk 2 1 (-32) freqs |> umax (freqs * 0.5)
+        filt  = lpf e2 100
+        -- lFreq = mx |> exprange 40 1000 |> lag (random 0 0.1 2)
+        -- rFreq = my |> exprange 40 1000 |> lag (random 1 0.1 2)
+        lFreq = mx |> lag 0.1
+        rFreq = my |> lag 0.1
         freqs = lFreq <> rFreq
-        rate  = mx + my |> gain 0.5 |> range 0.75 1.5
+        rates  = [1500 / lFreq, 0.5]
+        sample = playMonoSampleC sampleFilePath rates |> sinDist 50
 
 feedbackSolo0x10cFX :: UGen -> UGen -> UGen
 feedbackSolo0x10cFX mx my = feed |> gain 2 |> constrain (-1) 1 |> poll |> visAux 2 1 |> masterOut
     where
         ms         = [mx, my] * 2 - 1
-        auxes      = auxIn (fst feedbackSolo0x10cBuses <> snd feedbackSolo0x10cBuses) |> gain 10
-        delayTimes = ms |> exprange 0.5 1 |> lag 1
+        auxes      = auxIn (fst feedbackSolo0x10cBuses <> snd feedbackSolo0x10cBuses) |> gain 4
+        delayTimes = ms |> exprange 0.00001 1 |> lag 1
         -- delayTimes2 = ms |> range 1 2
-        feed       = feedback $ \l r -> auxes + (r <> l) +> delayC 0.5 0.5 |> delayC 1 delayTimes |> gain 0.9 |> constrain (-1) 1 |> fxLimiter
-        -- verb = freeverb 0.1 10 0.01
-        fxLimiter = limiter 0.1 0.01 0.03 (-9) 0.1 <> limiter 0.175 0.01 0.03 (-9) 0.1
+        feed       = feedback $ \l r -> auxes + (r <> l) +> delayC 0.5 0.5 |> delayC 1 delayTimes |> verb |> constrain (-1) 1 |> fxLimiter
+        verb = freeverb (my |> exprange 0.001 0.3 |> lag 0.1) 100 (mx |> lag 0.1)
+        fxLimiter = limiter 0.1 0.01 0.03 (-9) 0.1
 
 ----------------------------
 -- Feedback Solo 0x11d
@@ -1672,5 +1695,5 @@ feedbackSolo0x11dFX mx my = feed |> gain 2 |> constrain (-1) 1 |> poll |> visAux
         delayTimes = ms |> exprange 0.000001 0.033333333 |> lag 1
         -- delayTimes2 = ms |> range 1 2
         feed = feedback $ \l r -> auxes + (r <> l) +> delayC 0.5 0.5 |> delayC 1 delayTimes |> verb |> gain 0.9 |> constrain (-1) 1 |> fxLimiter
-        verb = freeverb (my |> exprange 0.001 1 |> lag 0.1) 50 (mx |> lag 0.1)
+        verb = freeverb (my |> exprange 0.001 0.5 |> lag 0.1) 50 (mx |> lag 0.1)
         fxLimiter = limiter 0.1 0.01 0.03 (-9) 0.1 <> limiter 0.175 0.01 0.03 (-9) 0.1
