@@ -504,7 +504,7 @@ mouseToSlendro :: Double -> Double
 mouseToSlendro m = fromRational . d2f slendro . toRational <| (floor <| scale 0 24 m :: Integer)
 
 triOsc32 :: UGen -> UGen -> UGen
-triOsc32 mx my = feedback fSig |> verb |> gain 0.4785 |> masterOut
+triOsc32 mx my = feedback fSig |> verb |> gain 0.785 |> masterOut
     where
         f1     = lag 0.25 mx
         f2     = lag 0.25 my
