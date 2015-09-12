@@ -172,8 +172,9 @@ terminalTick (dt, _) e = if terminalIsActive <| edata e
         -- rotVec = 0
 
 mkTerminal :: Vector3 -> Int -> Key -> (Double -> Double) -> (UGen -> UGen -> UGen) -> Signal ()
-mkTerminal p a k scalef s = terminalOutline p *> (play' s <| fmap (tdata . edata) terminal)
+mkTerminal (Vector3 px py pz) a k scalef s = terminalOutline p *> (play' s <| fmap (tdata . edata) terminal)
     where
+        p = Vector3 px py pz
         tdata :: Terminal -> (Bool, [Double])
         tdata (Terminal p' (x, y)) = (p', [scalef x, scalef y])
         terminal = foldn updateTerminal (mkTerminalEntity p a)
@@ -210,33 +211,31 @@ main = runSignal
     <| players
     *> play (pure True) masterSynth
     *> loadSamples hyperTerrainSamples
-    *> mkTerminal            (Vector3  0 3 0) 7 keyT id lfsawSynth
-    *> mkTerminal            (Vector3  4 3 0) 7 keyR id lfsawSynth
-    *> mkTerminal            (Vector3  8 3 0) 0 keyR id halfVerb
-    -- *> mkPatternTerminal     (Vector3  8 3 0) 2 keyH id hyperMelody        hyperMelodyPattern
-    -- *> mkPatternTerminal     (Vector3 12 3 0) 2 keyG id hyperMelodyHarmony hyperMelodyPattern2
-    *> mkPatternTerminal     (Vector3 16 3 0) 2 keyJ id hyperMelody        binaryWolframPattern
-    *> mkBeatPatternTerminal (Vector3 20 3 0) 2 keyK binaryWolframSamplesTablaPattern []
-    *> mkBeatPatternTerminal (Vector3 24 3 0) 2 keyL binaryWolframSamplesKitPattern []
-    *> mkBeatPatternTerminal (Vector3 28 3 0) 2 keyM multiColoredWolframSamplesKitPattern []
-    *> mkTerminal            (Vector3 32 3 0) 2 keyN feedbackKitMouseScale feedbackKitWrapFX
-    *> mkBeatPatternTerminal (Vector3 36 3 0) 2 keyX multiColoredWolframSamplesTablaPattern multiColoredWolframSamplesTablaPatternArgs
-    *> mkTerminal            (Vector3 40 3 0) 2 keyX feedbackTablaMouseScale feedbackTablaWrapFX
-    *> mkBeatPatternTerminal (Vector3 44 3 0) 2 keyZ feedbackTablaTanHDistSequence feedbackTablaTanHDistSequenceArgs
-    *> mkTerminal            (Vector3 48 3 0) 2 keyZ id feedbackTablaTanHDistFX
-    *> mkBeatPatternTerminal (Vector3 52 3 0) 2 keyC feedbackTablaSinDistSequence feedbackTablaSinDistSequenceArgs
-    *> mkTerminal            (Vector3 56 3 0) 2 keyC id feedbackTablaSinDistFX
-    *> mkBeatPatternTerminal (Vector3 60 3 0) 2 keyComma feedbackKitHellSequence feedbackKitHellSequenceArgs
-    *> mkTerminal            (Vector3 64 3 0) 2 keyComma id feedbackKitHellFX
-    *> mkBeatPatternTerminal (Vector3 60 3 0) 2 keyApostrophe feedbackKitHell2Sequence feedbackKitHell2SequenceArgs
-    *> mkTerminal            (Vector3 64 3 0) 2 keyApostrophe id feedbackKitHell2FX
-    *> mkBeatPatternTerminal (Vector3 68 3 0) 2 keyPeriod feedbackSolo0x10cSequence feedbackSolo0x10cSequenceArgs
-    *> mkTerminal            (Vector3 72 3 0) 2 keyPeriod id feedbackSolo0x10cFX
-    *> mkBeatPatternTerminal (Vector3 76 3 0) 2 keySemiColon feedbackSolo0x11dSequence feedbackSolo0x11dSequenceArgs
-    *> mkTerminal            (Vector3 80 3 0) 2 keySemiColon id feedbackSolo0x11dFX
-    *> mkTerminal            (Vector3 84 3 0) 2 keyY mouseToSlendro triOsc32
-    *> mkTerminal            (Vector3 68 3 0) 2 keyY mouseToSlendro triOsc32
-    *> mkTerminal            (Vector3 68 3 0) 2 keyEqual mouseToSlendro triOsc32'
+    *> mkTerminal            (Vector3  0 6 0) 7 keyT id lfsawSynth
+    *> mkTerminal            (Vector3  4 6 0) 7 keyR id lfsawSynth
+    *> mkTerminal            (Vector3  8 6 0) 0 keyR id halfVerb
+    *> mkPatternTerminal     (Vector3 12 6 0) 2 keyJ id hyperMelody        binaryWolframPattern
+    *> mkBeatPatternTerminal (Vector3 16 6 0) 2 keyK binaryWolframSamplesTablaPattern []
+    *> mkBeatPatternTerminal (Vector3 20 6 0) 2 keyL binaryWolframSamplesKitPattern []
+    *> mkBeatPatternTerminal (Vector3 24 6 0) 2 keyM multiColoredWolframSamplesKitPattern []
+    *> mkTerminal            (Vector3 28 6 0) 2 keyN feedbackKitMouseScale feedbackKitWrapFX
+    *> mkBeatPatternTerminal (Vector3 32 6 0) 2 keyX multiColoredWolframSamplesTablaPattern multiColoredWolframSamplesTablaPatternArgs
+    *> mkTerminal            (Vector3 36 6 0) 2 keyX feedbackTablaMouseScale feedbackTablaWrapFX
+    *> mkBeatPatternTerminal (Vector3  0 3 0) 2 keyZ feedbackTablaTanHDistSequence feedbackTablaTanHDistSequenceArgs
+    *> mkTerminal            (Vector3  4 3 0) 2 keyZ id feedbackTablaTanHDistFX
+    *> mkBeatPatternTerminal (Vector3  8 3 0) 2 keyC feedbackTablaSinDistSequence feedbackTablaSinDistSequenceArgs
+    *> mkTerminal            (Vector3 12 3 0) 2 keyC id feedbackTablaSinDistFX
+    *> mkBeatPatternTerminal (Vector3 16 3 0) 2 keyComma feedbackKitHellSequence feedbackKitHellSequenceArgs
+    *> mkTerminal            (Vector3 20 3 0) 2 keyComma id feedbackKitHellFX
+    *> mkBeatPatternTerminal (Vector3 24 3 0) 2 keyApostrophe feedbackKitHell2Sequence feedbackKitHell2SequenceArgs
+    *> mkTerminal            (Vector3 28 3 0) 2 keyApostrophe id feedbackKitHell2FX
+    *> mkBeatPatternTerminal (Vector3 32 3 0) 2 keyPeriod feedbackSolo0x10cSequence feedbackSolo0x10cSequenceArgs
+    *> mkTerminal            (Vector3 36 3 0) 2 keyPeriod id feedbackSolo0x10cFX
+    *> mkBeatPatternTerminal (Vector3  0 0 0) 2 keySemiColon feedbackSolo0x11dSequence feedbackSolo0x11dSequenceArgs
+    *> mkTerminal            (Vector3  4 0 0) 2 keySemiColon id feedbackSolo0x11dFX
+    *> mkTerminal            (Vector3  8 0 0) 2 keyY mouseToSlendro triOsc32
+    *> mkTerminal            (Vector3 12 0 0) 2 keyY mouseToSlendro triOsc32
+    *> mkTerminal            (Vector3 16 0 0) 2 keyEqual mouseToSlendro triOsc32'
     *> section1
     *> section2
     *> section2Synths
@@ -672,13 +671,13 @@ section2Synths = play (pure True) caveTime
               *> pulseDemonPattern3
               -- *> hyperMelodyPrimePattern
               -- *> manaLeakPrimePattern
-              *> mkTerminal (Vector3 36 (-3) 0) 5 keyI id dissonances
+              *> mkTerminal (Vector3 20 0 0) 5 keyI id dissonances
               -- *> broodlingPattern
               -- *> subControlPattern
               -- *> section2Drums
 
 metallicPattern3 :: Signal ()
-metallicPattern3 = mkPatternTerminal (Vector3 0 0 0) 7 keyD id metallic3 <| PFunc0 <| pmap ((*0.25) . d2f sigScale) <| ploop [sec1]
+metallicPattern3 = mkPatternTerminal (Vector3 24 0 0) 7 keyD id metallic3 <| PFunc0 <| pmap ((*0.25) . d2f sigScale) <| ploop [sec1]
 -- metallicPattern3 = playSynthPattern (toggle <| combo [alt,isDown keyD]) metallic3 <| pmap ((*0.25) . d2f sigScale) <| ploop [sec1]
     where
         sec1 = [lich| _ _ _ _
@@ -691,7 +690,7 @@ metallicPattern3 = mkPatternTerminal (Vector3 0 0 0) 7 keyD id metallic3 <| PFun
                       _ _ _ 0 |]
 
 metallicPattern3_2 :: Signal ()
-metallicPattern3_2 = mkPatternTerminal (Vector3 4 0 0) 7 keyD id metallic4 <| PFunc0 <| pmap ((*0.25) . d2f sigScale) <| ploop [sec1]
+metallicPattern3_2 = mkPatternTerminal (Vector3 28 0 0) 7 keyD id metallic4 <| PFunc0 <| pmap ((*0.25) . d2f sigScale) <| ploop [sec1]
 -- metallicPattern3_2 = playSynthPattern (toggle <| combo [alt,isDown keyD]) metallic4 (pmap ((*0.25) . d2f sigScale) <| ploop [sec1])
     where
         sec1 = [lich| _ _ _ _
@@ -713,7 +712,7 @@ metallicPattern3_2 = mkPatternTerminal (Vector3 4 0 0) 7 keyD id metallic4 <| PF
 
 
 shakePattern :: Signal ()
-shakePattern = mkPatternTerminal (Vector3 8 0 0) 7 keyD id shake <| PFunc0 <| ploop [sec1]
+shakePattern = mkPatternTerminal (Vector3 32 0 0) 7 keyD id shake <| PFunc0 <| ploop [sec1]
 -- shakePattern = playSynthPattern (toggle <| combo [alt,isDown keyD]) shake (ploop [sec1])
     where
         sec1 = [lich| 1
@@ -735,7 +734,7 @@ shakePattern = mkPatternTerminal (Vector3 8 0 0) 7 keyD id shake <| PFunc0 <| pl
                       _ 6       |]
 
 floorPattern :: Signal ()
-floorPattern = mkPatternTerminal (Vector3 12 0 0) 7 keyD id floorPerc <| PFunc0 <| (pmap (* 0.5) <| ploop [sec1])
+floorPattern = mkPatternTerminal (Vector3 36 0 0) 7 keyD id floorPerc <| PFunc0 <| (pmap (* 0.5) <| ploop [sec1])
 -- floorPattern = playSynthPattern (toggle <| combo [alt,isDown keyO]) floorPerc (pmap (* 0.5) <| ploop [sec1])
     where
         sec1 = [lich| 2     [_ 1] 1 _
@@ -749,7 +748,7 @@ floorPattern = mkPatternTerminal (Vector3 12 0 0) 7 keyD id floorPerc <| PFunc0 
 
 
 swellPattern :: Signal ()
-swellPattern = mkPatternTerminal (Vector3 16 0 0) 5 keyP id reverseSwell <| PFunc0 <| (pmap ((*1) . d2f sigScale) <| ploop [sec1])
+swellPattern = mkPatternTerminal (Vector3 0 (-3) 0) 5 keyP id reverseSwell <| PFunc0 <| (pmap ((*1) . d2f sigScale) <| ploop [sec1])
 -- swellPattern = playSynthPattern (toggle <| combo [alt,isDown keyP]) reverseSwell (pmap ((*1) . d2f sigScale) <| ploop [sec1])
     where
         sec1 = [lich| 0 _ _ _
@@ -770,7 +769,7 @@ swellPattern = mkPatternTerminal (Vector3 16 0 0) 5 keyP id reverseSwell <| PFun
                       _ _ _ _|]
 
 swellPattern2 :: Signal ()
-swellPattern2 = mkPatternTerminal (Vector3 20 0 0) 5 keyP id reverseSwell2 <| PFunc0 <| (pmap ((*1) . d2f sigScale) <| ploop [sec1])
+swellPattern2 = mkPatternTerminal (Vector3 4 (-3) 0) 5 keyP id reverseSwell2 <| PFunc0 <| (pmap ((*1) . d2f sigScale) <| ploop [sec1])
 -- swellPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyP]) reverseSwell2 (pmap ((*1) . d2f sigScale) <| ploop [sec1])
     where
         sec1 = [lich| 3 _ _ _
@@ -791,7 +790,7 @@ swellPattern2 = mkPatternTerminal (Vector3 20 0 0) 5 keyP id reverseSwell2 <| PF
                       _ _ _ _ |]
 
 hyperMelodyPattern :: Signal ()
-hyperMelodyPattern = mkPatternTerminal (Vector3 24 0 0) 2 keyF id hyperMelody <| PFunc0 <| (pmap ((*1) . d2f sigScale) <| ploop [sec1])
+hyperMelodyPattern = mkPatternTerminal (Vector3 8 (-3) 0) 2 keyF id hyperMelody <| PFunc0 <| (pmap ((*1) . d2f sigScale) <| ploop [sec1])
 -- hyperMelodyPattern = playSynthPattern (toggle <| combo [alt,isDown keyF]) hyperMelody (pmap ((*1) . d2f sigScale) <| ploop [sec1])
     where
         sec1 = [lich| [_ 3] [4 3] [_ 3] 6 7 _ [_ 3] 4 _ _ _ _ _ _
@@ -803,7 +802,7 @@ hyperMelodyPattern = mkPatternTerminal (Vector3 24 0 0) 2 keyF id hyperMelody <|
                 |]
 
 hyperMelodyPattern2 :: Signal ()
-hyperMelodyPattern2 = mkPatternTerminal (Vector3 28 0 0) 2 keyH id hyperMelodyHarmony <| PFunc0 <| (pmap ((*2) . d2f sigScale) <| ploop [sec1])
+hyperMelodyPattern2 = mkPatternTerminal (Vector3 12 (-3) 0) 2 keyH id hyperMelodyHarmony <| PFunc0 <| (pmap ((*2) . d2f sigScale) <| ploop [sec1])
 -- hyperMelodyPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyH]) hyperMelodyHarmony (pmap ((*2) . d2f sigScale) <| ploop [sec1])
     where
         sec1 = [lich| 4 _ 3 _ 2 _ _ _
@@ -847,9 +846,9 @@ pulseDemonPattern :: Signal ()
 pulseDemonPattern = fx *> patt
 -- pulseDemonPattern = fx <> patt
     where
-        fx   = mkTerminal (Vector3 32 0 0) 7 keyG id demonCave
+        fx   = mkTerminal (Vector3 16 (-3) 0) 7 keyG id demonCave
         -- fx   = play (toggle <| combo [alt,isDown keyG]) demonCave (scale 250 8000 <~ mouseX) (scale 250 8000 <~ mouseY) (scale 1 1.5 <~ mouseX)
-        patt = mkPatternTerminal (Vector3 36 0 0) 7 keyG id pulseDemon <| PFunc0 <| (pmap ((*0.5) . d2f sigScale) <| ploop [sec1])
+        patt = mkPatternTerminal (Vector3 20 (-3) 0) 7 keyG id pulseDemon <| PFunc0 <| (pmap ((*0.5) . d2f sigScale) <| ploop [sec1])
         -- patt = playSynthPattern (toggle <| combo [alt,isDown keyG]) pulseDemon (pmap ((*0.5) . d2f sigScale) <| ploop [sec1])
         sec1 = [lich| 0 1 _ 0 1 _ 0 1
                       _ 2 3 _ 2 3 _ 2
@@ -860,7 +859,7 @@ pulseDemonPattern = fx *> patt
                 |]
 
 pulseDemonPattern2 :: Signal ()
-pulseDemonPattern2 = mkPatternTerminal (Vector3 0 (-3) 0) 7 keyV id pulseDemon <| PFunc0 <| (pmap ((*1.0) . d2f sigScale) <| ploop [sec1])
+pulseDemonPattern2 = mkPatternTerminal (Vector3 24 (-3) 0) 7 keyV id pulseDemon <| PFunc0 <| (pmap ((*1.0) . d2f sigScale) <| ploop [sec1])
 -- pulseDemonPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyV]) pulseDemon (pmap ((*1.0) . d2f sigScale) <| ploop [sec1])
     where
         sec1 = [lich| 4 [_ 5] _ 4 [_ 5] _ 4 [_ 5]
@@ -872,7 +871,7 @@ pulseDemonPattern2 = mkPatternTerminal (Vector3 0 (-3) 0) 7 keyV id pulseDemon <
                 |]
 
 pulseDemonPattern3 :: Signal ()
-pulseDemonPattern3 = mkPatternTerminal (Vector3 4 (-3) 0) 2 keyB id pulseDemon <| PFunc0 <| (pmap ((*2.0) . d2f sigScale) <| ploop [sec1])
+pulseDemonPattern3 = mkPatternTerminal (Vector3 28 (-3) 0) 2 keyB id pulseDemon <| PFunc0 <| (pmap ((*2.0) . d2f sigScale) <| ploop [sec1])
 -- pulseDemonPattern3 = playSynthPattern (toggle <| combo [alt,isDown keyB]) pulseDemon (pmap ((*2.0) . d2f sigScale) <| ploop [sec1])
     where
         --try 16ths, alternating with triplet 8ths! [0 0 0 _] _ [0 0 0] _
@@ -1025,7 +1024,7 @@ section2_5 = mkTerminal (Vector3 32 (-3) 0) 4 keyU id distPercVerb
                               -- _ _
                         -- |]
 
-        floorPattern2 = mkPatternTerminal (Vector3 28 (-3) 0) 6 keyU id floorPerc2 <| PFunc0 <| pmap (d2f slendro . (* 0.25)) <| ploop [sec1]
+        floorPattern2 = mkPatternTerminal (Vector3 36 (-3) 0) 6 keyU id floorPerc2 <| PFunc0 <| pmap (d2f slendro . (* 0.25)) <| ploop [sec1]
         -- floorPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyU]) floorPerc2 (pmap (* 0.25) <| ploop [sec1])
             where
                 -- sec1 = [lich| [6 1] [_ 1] [_ 6] [_ 1] |]
