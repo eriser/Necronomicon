@@ -1134,7 +1134,7 @@ lookupFeedbackTablaNameAndSynth = lookupSampleAndSynth feedbackTablaNamesAndSynt
 
 -- feedback effect bus
 feedbackTablaWrapFX :: UGen -> UGen -> UGen
-feedbackTablaWrapFX mx my = feed |> gain 4 |> masterLimiter |> out 0
+feedbackTablaWrapFX mx my = feed |> gain 4 |> masterLimiter |> visAux 2 1 |> out 0
     where
         auxes = auxIn (fst feedbackTablaBuses <> snd feedbackTablaBuses) -- |> filt
         feed = feedback $ \l r -> auxes + (r <> l) |> delayC 0.3 (0.3 <> 0.2) +> delayC 0.2 (mx <> my) |> wrapDist |> wrap 0.9
