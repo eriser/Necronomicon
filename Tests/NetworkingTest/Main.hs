@@ -536,18 +536,18 @@ metallic4 :: UGen -> UGen
 metallic4 f = metallicBass f 0.25
 
 hyperMelody :: UGen -> UGen
-hyperMelody f = [s,s2] |> gain 0.3 |> e |> visAux (random 0 2 5) 2 |> masterOut
+hyperMelody f = [s,s2] |> gain 0.6 |> e |> visAux (random 0 2 5) 2 |> caveOut
     where
         e  = env [0, 1, 0.15, 0] [0.0001, 0.1, 7] (-1.5)
-        s  = sin <| sin 3 * 6 + f * 2
-        s2 = sin <| sin 6 * 9 + f
+        s  = sin <| sin 3 * 6 + f * 1
+        s2 = sin <| sin 6 * 9 + f * 0.5
 
 hyperMelodyHarmony :: UGen -> UGen
-hyperMelodyHarmony f = [s, s2] |> lpf (fromSlendro 25) 0.3 |> e |> gain 1.5 |> visAux (random 0 2 5) 2 |> masterOut
+hyperMelodyHarmony f = [s, s2] |> lpf (fromSlendro 25) 0.3 |> e |> gain 1.5 |> visAux (random 0 2 5) 2 |> caveOut
     where
         e  = env [0, 0.3, 0.05, 0] [0.0001, 0.1, 7] (-8)
-        s  = sin <| sin 3 * 6 + f
-        s2 = sin <| sin 6 * 9 + f * 2
+        s  = sin <| sin 3 * 6 + f * 0.5
+        s2 = sin <| sin 6 * 9 + f * 1
 
 reverseSwellPanned :: UGen -> UGen -> UGen
 reverseSwellPanned f panPos =  sig1 + sig2 + sig3 |> e |> tanhDist (random 31 0.0625 0.125) |> (+ whiteNoise * 0.125) |> m |> gain 1 |> filt |> e |> visAux 5 1 |> pan panPos |> caveOut
@@ -566,11 +566,12 @@ reverseSwellPanned f panPos =  sig1 + sig2 + sig3 |> e |> tanhDist (random 31 0.
         m x  = x - 0.125
 
 dissonances :: UGen -> UGen -> UGen
-dissonances _ _ = [s1 + s3, s2 + s4] |> e |> constrain (-0.1) 0.1 |> gain 4 |> visAux 5 1 |> caveOut
+dissonances x y = [s1 + s3, s2 + s4] |> e |> constrain (-0.1) 0.1 |> gain 4 |> visAux 5 1 |> caveOut
     where
-        f        = random 0 50 150
-        e        = env [0, 1, 0]         [12, 6] 3
-        e2       = env [0.125, 1, 0.125] [12, 6] 3
+        f        = random 0 50 150 * linlin 0 1 0.8 1.2 y
+        e v      = v * x
+        -- e        = env [0, 1, 0]         [12, 6] 3
+        -- e2       = env [0.125, 1, 0.125] [12, 6] 3
         s1       = map (s 2) [2, 6..16]   |> sum
         s2       = map (s 2) [16, 20..32] |> sum
         s3       = map (s 1) [32, 36..48] |> sum
@@ -580,8 +581,8 @@ dissonances _ _ = [s1 + s3, s2 + s4] |> e |> constrain (-0.1) 0.1 |> gain 4 |> v
                 mod1 = sin (random (r + 1) 0.06125 0.125) |> range 0.5 3
                 mod2 = sin (random (r + 2) 0.06125 0.125) |> range 0.5 3
                 mod3 = sin (random (r + 4) 0.05 0.1)      |> range 0.98 1.02
-                osc  = sin (fmul * f * mod3 * random (r + 3) 0.95 1.05) |> e2 |> constrain (-0.1) 0.1 |> gain mod1
-                filt = lpf (fmul * f * random r 0.5 5 * mod2 |> e2) 1 
+                osc  = sin (fmul * f * mod3 * random (r + 3) 0.95 1.05) |> e |> constrain (-0.1) 0.1 |> gain mod1
+                filt = lpf (fmul * f * random r 0.5 5 * mod2 |> e) 1 
 
 --add sins for visuals and modulation
 reverseSwell :: UGen -> UGen
