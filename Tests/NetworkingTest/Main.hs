@@ -86,7 +86,7 @@ players = foldn updatePlayers (IntMap.fromList [(0, mkPlayer <| Vector3 0 2 (-6)
        <| PlayerTick   <~ tick       ~~ userID ~~ sigOr [isDown keyLShift, isDown keyRShift]
        <> PlayerKeys   <~ wasd       ~~ userID
        -- <> PlayerLog    <~ userLog    ~~ userID
-       <> PlayerMouse  <~ filterWhen' (fmap not <| areUp [keyB, keyC, keyE, keyF, keyG, keyH, keyI, keyJ, keyK, keyL, keyM, keyN, keyO, keyP, keyQ, keyR, keyT, keyU, keyV, keyX, keyY, keyZ]) mouseDelta ~~ userID
+       <> PlayerMouse  <~ filterWhen' (fmap not <| areUp [keyB, keyC, keyE, keyF, keyG, keyH, keyI, keyJ, keyK, keyL, keyM, keyN, keyO, keyP, keyQ, keyR, keyT, keyU, keyV, keyX, keyY, keyZ, keyPeriod, keyComma, keyMinus, keyEquals, keyApostrophe, keySlash, keySemiColon]) mouseDelta ~~ userID
 
 
 ---------------------------------------------------------------------------
@@ -954,26 +954,26 @@ shake2 _ = sig1 |> e |> gain 0.5 |> pan 0.6 |> visAux 6 1 |> out 24
 section2_5 :: Signal ()
 section2_5 = mkTerminal (Vector3 32 (-3) 0) 4 keyU id distPercVerb
           *> floorPattern2 
-          *> shake2Pattern 
-          *> shake1Pattern 
-          *> omniPrimePattern 
-          *> distortedBassHits
+          -- *> shake2Pattern 
+          -- *> shake1Pattern 
+          -- *> omniPrimePattern 
+          -- *> distortedBassHits
     where
-        shake1Pattern = mkPatternTerminal (Vector3 20 (-3) 0) 6 keyC id shakeSnare <| PFunc0 <| (pmap (* 0.125) <| ploop [sec1])
+        -- shake1Pattern = mkPatternTerminal (Vector3 20 (-3) 0) 6 keyC id shakeSnare <| PFunc0 <| (pmap (* 0.125) <| ploop [sec1])
         -- shake1Pattern = playSynthPattern (toggle <| combo [alt,isDown keyU]) shakeSnare (pmap (* 0.125) <| ploop [sec1])
-            where
-                sec1 = [lich| 1 _ 1 _ 1 _ 1 _
-                              1 _ 1 _ 1 _ 1 [4 4]
-                        |]
+            -- where
+                -- sec1 = [lich| 1 _ 1 _ 1 _ 1 _
+                              -- 1 _ 1 _ 1 _ 1 [4 4]
+                        -- |]
 
-        shake2Pattern = mkPatternTerminal (Vector3 24 (-3) 0) 6 keyC id shake2 <| PFunc0 <| (pmap (* 0.1) <| ploop [sec1])
+        -- shake2Pattern = mkPatternTerminal (Vector3 24 (-3) 0) 6 keyC id shake2 <| PFunc0 <| (pmap (* 0.1) <| ploop [sec1])
         -- shake2Pattern = playSynthPattern (toggle <| combo [alt,isDown keyU]) shake2 (pmap (* 0.1) <| ploop [sec1])
-            where
-                sec1 = [lich| _ [2 1] _ [1 1] _ 1
-                              _ [2 1] _ [_ 2] _ 1
-                              _ [_ 1] _ [_ 1] _ 1
-                              _ _
-                        |]
+            -- where
+                -- sec1 = [lich| _ [2 1] _ [1 1] _ 1
+                              -- _ [2 1] _ [_ 2] _ 1
+                              -- _ [_ 1] _ [_ 1] _ 1
+                              -- _ _
+                        -- |]
 
         floorPattern2 = mkPatternTerminal (Vector3 28 (-3) 0) 6 keyU id floorPerc2 <| PFunc0 <| pmap (d2f slendro . (* 0.25)) <| ploop [sec1]
         -- floorPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyU]) floorPerc2 (pmap (* 0.25) <| ploop [sec1])
