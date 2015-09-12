@@ -210,8 +210,9 @@ main = runSignal
     <| players
     *> play (pure True) masterSynth
     *> loadSamples hyperTerrainSamples
-    *> mkTerminal            (Vector3  0 3 0) 0 keyT id lfsawSynth
-    *> mkTerminal            (Vector3  4 3 0) 0 keyR id lfsawSynth
+    *> mkTerminal            (Vector3  0 3 0) 7 keyT id lfsawSynth
+    *> mkTerminal            (Vector3  4 3 0) 7 keyR id lfsawSynth
+    *> mkTerminal            (Vector3  8 3 0) 0 keyR id halfVerb
     -- *> mkPatternTerminal     (Vector3  8 3 0) 2 keyH id hyperMelody        hyperMelodyPattern
     -- *> mkPatternTerminal     (Vector3 12 3 0) 2 keyG id hyperMelodyHarmony hyperMelodyPattern2
     *> mkPatternTerminal     (Vector3 16 3 0) 2 keyJ id hyperMelody        binaryWolframPattern
@@ -350,7 +351,7 @@ oscModel = mkModel DefaultLayer mesh oscMaterial
                       ]
 
 lfsawSynth :: UGen -> UGen -> UGen
-lfsawSynth freq1 freq2 = (lfsaw (lag 0.1 [exprange 40 4000 freq1, exprange 40 4000 freq2]) 0) * 2 - 1 |> exprange 20 20000 |> sin |> gain 0.1 |> caveOut
+lfsawSynth freq1 freq2 = (lfsaw (lag 0.1 [exprange 40 4000 freq1, exprange 40 4000 freq2]) 0) * 2 - 1 |> exprange 20 20000 |> sin |> gain 0.1 |> visAux 7 1 |> out 22
 
 
 ---------------------------------------------------------------------------
@@ -840,12 +841,12 @@ pulseDemonPattern3 = mkPatternTerminal (Vector3 4 (-3) 0) 2 keyB id pulseDemon <
                       [7 7 7 _] _ _ _ [7 7 7 _] _ _ _
                 |]
 
--- halfVerb :: UGen -> UGen -> UGen
--- halfVerb _ _ = [l * 0.9 + r * 0.1, r * 0.9 + l * 0.1] |> masterOut
---     where
---         l     = auxIn 22 |> verb |> auxThrough 2 |> auxThrough 3
---         r     = auxIn 23 |> verb |> auxThrough 3 |> auxThrough 4
---         verb  = freeverb 0.5 1.0 0.125
+halfVerb :: UGen -> UGen -> UGen
+halfVerb _ _ = [l * 0.9 + r * 0.1, r * 0.9 + l * 0.1] |> masterOut
+    where
+        l     = auxIn 22 |> verb
+        r     = auxIn 23 |> verb
+        verb  = freeverb 0.5 0.75 0.95
 
 -- hyperMelodyPrime :: UGen -> UGen
 -- hyperMelodyPrime f = [s, s2] |> softclip 20 |> filt |> e |> gain 0.25 |> visAux (random 0 2 5) 2 |> pan 0.2 |> out 22
