@@ -896,7 +896,7 @@ lfsawSynth :: UGen -> UGen -> UGen
 lfsawSynth freq1 freq2 = s1 + s2 |> gain 0.3 |> visAux 7 1 |> out 22
     where
         s1 = o1 |> exprange 20 20000 |> sin
-        s2 = o2 |> exprange 20 20000 |> sin
+        s2 = o2 |> exprange 10 10000 |> sin
         o1 = (lfsaw (lag 0.1 [f1, f2]) 0) * 2 - 1
         o2 = (lfsaw (lag 2 [f1 * 0.5, f2 * 0.5]) 0) * 2 - 1
         f1 = exprange 40 4000 freq1
