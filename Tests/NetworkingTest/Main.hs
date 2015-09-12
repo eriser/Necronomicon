@@ -925,30 +925,30 @@ floorPerc2 f = sig1 + sig2 |> e |> gain 1 |> visAux 6 1 |> pan 0.35 |> out 24
         e     = perc 0.01 3 1 0
         e2    = env [1,0.9, 0.1] [0.01, 3] 0
 
-shakeSnare :: UGen -> UGen
-shakeSnare _ = sig1 + sig2 |> e |> gain 0.5 |> visAux 6 1 |> pan 0.75 |> out 24
-    where
-        d = random 1 0.1 0.25
-        -- p a u = [u * (1 - a), u * a]
-        sig1  = whiteNoise |> bpf (12000 * d |> e2) 4 |> gain 0.05
-        sig2  = whiteNoise |> bpf (9000 * d  |> e2) 5 |> gain 0.05
-        -- sig2  = whiteNoise |> bpf (9000 + 12000 * d |> e2) 4 |> gain 0.05
-        -- e     = perc 0.01 (d*4) 1 (-6)
-        -- e2    = env2 [1,1,0.125] [0.01,d*4] (-6)
-        e     = perc 0.01 0.5 1 (-24)
-        e2    = env2 [1,1,0.1] [0.01,0.5] (-24)
+-- shakeSnare :: UGen -> UGen
+-- shakeSnare _ = sig1 + sig2 |> e |> gain 0.5 |> visAux 6 1 |> pan 0.75 |> out 24
+--     where
+--         d = random 1 0.1 0.25
+--         -- p a u = [u * (1 - a), u * a]
+--         sig1  = whiteNoise |> bpf (12000 * d |> e2) 4 |> gain 0.05
+--         sig2  = whiteNoise |> bpf (9000 * d  |> e2) 5 |> gain 0.05
+--         -- sig2  = whiteNoise |> bpf (9000 + 12000 * d |> e2) 4 |> gain 0.05
+--         -- e     = perc 0.01 (d*4) 1 (-6)
+--         -- e2    = env2 [1,1,0.125] [0.01,d*4] (-6)
+--         e     = perc 0.01 0.5 1 (-24)
+--         e2    = env2 [1,1,0.1] [0.01,0.5] (-24)
 
 
-shake2 :: UGen -> UGen
-shake2 _ = sig1 |> e |> gain 0.5 |> pan 0.6 |> visAux 6 1 |> out 24
-    where
-        d = random 1 0.1 0.25
-        -- p a u = [u * (1 - a), u * a]
-        sig1  = whiteNoise |> bpf (d * 12000 |> e2) 7 |> gain 0.05
-        -- e     = perc 0.01 (d) 1 (-6)
-        -- e2    = env [1,0.95, 0.9] [0.01,d] (-9)
-        e     = perc 0.01 (0.25) 1 (-24)
-        e2    = env [1,0.95, 0.1] [0.01,0.25] (-24)
+-- shake2 :: UGen -> UGen
+-- shake2 _ = sig1 |> e |> gain 0.5 |> pan 0.6 |> visAux 6 1 |> out 24
+--     where
+--         d = random 1 0.1 0.25
+--         -- p a u = [u * (1 - a), u * a]
+--         sig1  = whiteNoise |> bpf (d * 12000 |> e2) 7 |> gain 0.05
+--         -- e     = perc 0.01 (d) 1 (-6)
+--         -- e2    = env [1,0.95, 0.9] [0.01,d] (-9)
+--         e     = perc 0.01 (0.25) 1 (-24)
+--         e2    = env [1,0.95, 0.1] [0.01,0.25] (-24)
 
 
 section2_5 :: Signal ()
@@ -991,57 +991,57 @@ section2_5 = mkTerminal (Vector3 32 (-3) 0) 4 keyU id distPercVerb
                               _ _ _ _ _ _ _
                        |]
 
-omniPrime :: UGen -> UGen
-omniPrime f = [s, s2] |> filt |> gain 0.75 |> e |> auxThrough 4 |> pan 0.2 |> auxThrough 24 |> masterOut
-    where
-        e   = env [0,1,0.1,0] [0.01,0.1,1.5] (-4)
-        e2  = env [523.251130601, 1.5, 1, 1] [0.01,0.1,1.5] (-4)
-        s   = saw (sin (3 * 6) + e2 f * 2)
-        s2  = saw (sin (6 * 9) + e2 f)
-        filt = lpf (e2 6) 4
+-- omniPrime :: UGen -> UGen
+-- omniPrime f = [s, s2] |> filt |> gain 0.75 |> e |> auxThrough 4 |> pan 0.2 |> auxThrough 24 |> masterOut
+--     where
+--         e   = env [0,1,0.1,0] [0.01,0.1,1.5] (-4)
+--         e2  = env [523.251130601, 1.5, 1, 1] [0.01,0.1,1.5] (-4)
+--         s   = saw (sin (3 * 6) + e2 f * 2)
+--         s2  = saw (sin (6 * 9) + e2 f)
+--         filt = lpf (e2 6) 4
 
-omniPrimePattern :: Signal ()
-omniPrimePattern = mkPatternTerminal (Vector3 0 (-6) 0) 4 keyX id omniPrime <| PFunc0 <| (pmap ((* 0.125) . d2f slendro) <| ploop [sec1])
--- omniPrimePattern = playSynthPattern (toggle <| combo [alt,isDown keyQ]) omniPrime (pmap ((* 0.03125) . d2f slendro) <| ploop [sec1])
-    where
-        sec1 = [lich| 6 7 5 _
-                      _ _ _ [_ 7]
-                      6 7 [_ 7] _
-                      5 [_ 5 _] 5 _
-                |]
+-- omniPrimePattern :: Signal ()
+-- omniPrimePattern = mkPatternTerminal (Vector3 0 (-6) 0) 4 keyX id omniPrime <| PFunc0 <| (pmap ((* 0.125) . d2f slendro) <| ploop [sec1])
+-- -- omniPrimePattern = playSynthPattern (toggle <| combo [alt,isDown keyQ]) omniPrime (pmap ((* 0.03125) . d2f slendro) <| ploop [sec1])
+--     where
+--         sec1 = [lich| 6 7 5 _
+--                       _ _ _ [_ 7]
+--                       6 7 [_ 7] _
+--                       5 [_ 5 _] 5 _
+--                 |]
 
-distortedBassPrime :: UGen -> UGen
-distortedBassPrime f = [s, s2] |> e |> softclip 0.1 |> filt |> softclip 0.1 |> filt2 |> gain 0.1 |> verb |> e |> masterOut
-    where
-        e   = env [0,1,0] [0.1,6.75] (-4)
-        -- e2  = env [523.251130601,f,f] [0.05,3.95] (-3)
-        e2  = env [f * 1.25,f,f * 0.5] [0.1,6.75] (-4)
-        s   = pulse (f * 0.995) 0.25 + pulse (f * 0.4995) 0.25
-        s2  = pulse (f * 1.005) 0.75 + pulse (f * 0.505)  0.75
-        filt = lpf (e2 6) 6
-        filt2 i = lpf (e2 8) 6 i + lpf (e2 4) 6 i + i * 1
-        verb = freeverb 0.5 1.0 0.75
+-- distortedBassPrime :: UGen -> UGen
+-- distortedBassPrime f = [s, s2] |> e |> softclip 0.1 |> filt |> softclip 0.1 |> filt2 |> gain 0.1 |> verb |> e |> masterOut
+--     where
+--         e   = env [0,1,0] [0.1,6.75] (-4)
+--         -- e2  = env [523.251130601,f,f] [0.05,3.95] (-3)
+--         e2  = env [f * 1.25,f,f * 0.5] [0.1,6.75] (-4)
+--         s   = pulse (f * 0.995) 0.25 + pulse (f * 0.4995) 0.25
+--         s2  = pulse (f * 1.005) 0.75 + pulse (f * 0.505)  0.75
+--         filt = lpf (e2 6) 6
+--         filt2 i = lpf (e2 8) 6 i + lpf (e2 4) 6 i + i * 1
+--         verb = freeverb 0.5 1.0 0.75
 
-distortedBassHits :: Signal ()
-distortedBassHits = mkPatternTerminal (Vector3 4 (-6) 0) 2 keyZ id distortedBassPrime <| PFunc0 <| (pmap ((*0.125) . d2f sigScale) <| ploop [sec1])
--- distortedBassHits = playSynthPattern (toggle <| combo [alt,isDown keyE]) distortedBassPrime (pmap ((*0.125) . d2f sigScale) <| ploop [sec1])
-    where
-        sec1 = [lich| _ _ _ 6
-                      _ _ _ _
-                      _ _ _ 7
-                      _ _ _ _
-                      _ _ _ 6
-                      _ _ _ _
-                      _ _ _ 5
-                      _ _ _ _
-                      _ _ _ 6
-                      _ _ _ _
-                      _ _ _ 7
-                      _ _ _ _
-                      _ _ _ 6
-                      _ _ _ _
-                      _ _ _ 5
-                      _ _ _ _ |]
+-- distortedBassHits :: Signal ()
+-- distortedBassHits = mkPatternTerminal (Vector3 4 (-6) 0) 2 keyZ id distortedBassPrime <| PFunc0 <| (pmap ((*0.125) . d2f sigScale) <| ploop [sec1])
+-- -- distortedBassHits = playSynthPattern (toggle <| combo [alt,isDown keyE]) distortedBassPrime (pmap ((*0.125) . d2f sigScale) <| ploop [sec1])
+--     where
+--         sec1 = [lich| _ _ _ 6
+--                       _ _ _ _
+--                       _ _ _ 7
+--                       _ _ _ _
+--                       _ _ _ 6
+--                       _ _ _ _
+--                       _ _ _ 5
+--                       _ _ _ _
+--                       _ _ _ 6
+--                       _ _ _ _
+--                       _ _ _ 7
+--                       _ _ _ _
+--                       _ _ _ 6
+--                       _ _ _ _
+--                       _ _ _ 5
+--                       _ _ _ _ |]
 
 
 -- subDestruction :: UGen -> UGen -> UGen
