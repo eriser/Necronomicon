@@ -211,7 +211,7 @@ main = runSignal
     *> play (pure True) masterSynth
     *> loadSamples hyperTerrainSamples
     *> mkTerminal            (Vector3  0 3 0) 0 keyT id lfsawSynth
-    *> mkTerminal            (Vector3  4 3 0) 0 keyR id lfsawSynth
+    -- *> mkTerminal            (Vector3  4 3 0) 0 keyR id lfsawSynth
     -- *> mkPatternTerminal     (Vector3  8 3 0) 2 keyH id hyperMelody        hyperMelodyPattern
     -- *> mkPatternTerminal     (Vector3 12 3 0) 2 keyG id hyperMelodyHarmony hyperMelodyPattern2
     *> mkPatternTerminal     (Vector3 16 3 0) 2 keyJ id hyperMelody        binaryWolframPattern
@@ -520,12 +520,13 @@ triOsc32 mx my = feedback fSig |> verb |> gain 0.0785 |> masterOut
                 sig6 = sinOsc (f1 * 0.25 - sig3 * 261.6255653006) * (sinOsc ( i * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 3 |> gain 0.5 +> d
 
 metallicBass :: UGen -> UGen -> UGen
-metallicBass f panPos = sig + sig2 + sig3 |> softclip 0.2 |> lpf (f * 3) 1 |> e |> visAux 2 2 |> pan panPos |> caveOut
+metallicBass f panPos = sig + sig2 + sig3 |> softclip 0.4 |> sub |> lpf (f * 3) 1 |> e |> gain 0.74 |> visAux 7 1 |> pan panPos |> caveOut
     where
         sig    = sin (f * random 0 0.999 1.001) |> gain 0.15
         sig2   = sin (f * random 1 0.499 0.500) |> gain 0.15
         sig3   = sin (f * random 2 0.499 0.501) |> gain 0.15
         e      = env [0, 1, 0.01, 0] [0.1, 6, 0.1] (-1)
+        sub x  = x - 0.6
 
 metallic3 :: UGen -> UGen
 metallic3 f = metallicBass f 0.75
@@ -534,21 +535,21 @@ metallic4 :: UGen -> UGen
 metallic4 f = metallicBass f 0.25
 
 hyperMelody :: UGen -> UGen
-hyperMelody f = [s,s2] |> gain 0.15 |> e |> visAux (random 0 2 5) 2 |> masterOut
+hyperMelody f = [s,s2] |> gain 0.4 |> e |> visAux (random 0 2 5) 2 |> masterOut
     where
         e  = env [0, 1, 0.15, 0] [0.0001, 0.1, 7] (-1.5)
         s  = sin <| sin 3 * 6 + f * 2
         s2 = sin <| sin 6 * 9 + f
 
 hyperMelodyHarmony :: UGen -> UGen
-hyperMelodyHarmony f = [s, s2] |> lpf (fromSlendro 25) 0.3 |> e |> visAux (random 0 2 5) 2 |> masterOut
+hyperMelodyHarmony f = [s, s2] |> lpf (fromSlendro 25) 0.3 |> e |> gain 2 |> visAux (random 0 2 5) 2 |> masterOut
     where
         e  = env [0, 0.3, 0.05, 0] [0.0001, 0.1, 7] (-8)
         s  = sin <| sin 3 * 6 + f
         s2 = sin <| sin 6 * 9 + f * 2
 
 reverseSwellPanned :: UGen -> UGen -> UGen
-reverseSwellPanned f panPos =  sig1 + sig2 + sig3 |> e |> tanhDist (random 31 0.125 0.5) |> (+ whiteNoise * 0.25) |> gain 0.65 |> filt |> e |> visAux 5 1 |> pan panPos |> caveOut
+reverseSwellPanned f panPos =  sig1 + sig2 + sig3 |> e |> tanhDist (random 31 0.0625 0.125) |> (+ whiteNoise * 0.125) |> m |> gain 1.5 |> filt |> e |> visAux 5 1 |> pan panPos |> caveOut
     where
         hf   = f * 0.5
         e    = env [0,1,0]         [4,4] 3
@@ -561,6 +562,7 @@ reverseSwellPanned f panPos =  sig1 + sig2 + sig3 |> e |> tanhDist (random 31 0.
         mod2 = saw (random 9 0.5 2.0)   |> range 0.01 1
         mod3 = saw (random 10 0.25 1.0) |> range 0.25 1
         mod4 = saw (random 11 0.5 2.0)  |> range 0.01 1
+        m x  = x - 0.125
 
 --add sins for visuals and modulation
 reverseSwell :: UGen -> UGen
@@ -573,13 +575,13 @@ fromSlendro :: Rational -> UGen
 fromSlendro degree = UGen [UGenNum . fromRational $ d2f slendro degree]
 
 shake :: UGen -> UGen
-shake d = whiteNoise |> e2 |> bpf (fromSlendro 13) 0.7 |> e |> pan 0.25 |> mixThrough caveBus 0.3 |> masterOut
+shake d = whiteNoise |> e2 |> bpf (fromSlendro 13) 0.7 |> e |> pan 0.25 |> visAux 7 1 |> mixThrough caveBus 0.3 |> masterOut
     where
         e = env [0, 0.1, 0.05, 0] [0.0001, 0.02, d] (-16)
         e2 = perc2 0.01 0.1 4 (-32)
 
 floorPerc :: UGen -> UGen
-floorPerc d = sig1 + sig2 |> e |> pan 0.35 |> gain 0.3 |> masterOut
+floorPerc d = sig1 + sig2 |> e |> pan 0.35 |> gain 0.3 |> visAux 7 1 |> masterOut
     where
         -- p a u = [u * (1 - a), u * a]
         sig1  = sin 40
@@ -628,7 +630,7 @@ section2Synths = play (pure True) caveTime
 --                <> section2Drums
 
 metallicPattern3 :: Signal ()
-metallicPattern3 = mkPatternTerminal (Vector3 0 0 0) 2 keyD id metallic3 <| PFunc0 <| pmap ((*0.25) . d2f sigScale) <| ploop [sec1]
+metallicPattern3 = mkPatternTerminal (Vector3 0 0 0) 7 keyD id metallic3 <| PFunc0 <| pmap ((*0.25) . d2f sigScale) <| ploop [sec1]
 -- metallicPattern3 = playSynthPattern (toggle <| combo [alt,isDown keyD]) metallic3 <| pmap ((*0.25) . d2f sigScale) <| ploop [sec1]
     where
         sec1 = [lich| _ _ _ _
@@ -641,7 +643,7 @@ metallicPattern3 = mkPatternTerminal (Vector3 0 0 0) 2 keyD id metallic3 <| PFun
                       _ _ _ 0 |]
 
 metallicPattern3_2 :: Signal ()
-metallicPattern3_2 = mkPatternTerminal (Vector3 4 0 0) 2 keyD id metallic4 <| PFunc0 <| pmap ((*0.25) . d2f sigScale) <| ploop [sec1]
+metallicPattern3_2 = mkPatternTerminal (Vector3 4 0 0) 7 keyD id metallic4 <| PFunc0 <| pmap ((*0.25) . d2f sigScale) <| ploop [sec1]
 -- metallicPattern3_2 = playSynthPattern (toggle <| combo [alt,isDown keyD]) metallic4 (pmap ((*0.25) . d2f sigScale) <| ploop [sec1])
     where
         sec1 = [lich| _ _ _ _
@@ -663,7 +665,7 @@ metallicPattern3_2 = mkPatternTerminal (Vector3 4 0 0) 2 keyD id metallic4 <| PF
 
 
 shakePattern :: Signal ()
-shakePattern = mkPatternTerminal (Vector3 8 0 0) 2 keyD id shake <| PFunc0 <| ploop [sec1]
+shakePattern = mkPatternTerminal (Vector3 8 0 0) 7 keyD id shake <| PFunc0 <| ploop [sec1]
 -- shakePattern = playSynthPattern (toggle <| combo [alt,isDown keyD]) shake (ploop [sec1])
     where
         sec1 = [lich| 1
@@ -685,7 +687,7 @@ shakePattern = mkPatternTerminal (Vector3 8 0 0) 2 keyD id shake <| PFunc0 <| pl
                       _ 6       |]
 
 floorPattern :: Signal ()
-floorPattern = mkPatternTerminal (Vector3 12 0 0) 2 keyD id floorPerc <| PFunc0 <| (pmap (* 0.5) <| ploop [sec1])
+floorPattern = mkPatternTerminal (Vector3 12 0 0) 7 keyD id floorPerc <| PFunc0 <| (pmap (* 0.5) <| ploop [sec1])
 -- floorPattern = playSynthPattern (toggle <| combo [alt,isDown keyO]) floorPerc (pmap (* 0.5) <| ploop [sec1])
     where
         sec1 = [lich| 2     [_ 1] 1 _

@@ -11,7 +11,7 @@ in  vec2 in_uv;
 out vec4 color;
 out vec2 uv;
 
-float width  = 0.5;
+float width  = 1;
 float radius = 0.75;
 
 vec3 toPosition(vec3 pos)

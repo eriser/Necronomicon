@@ -31,6 +31,7 @@ isNotFullScreen = False
 
 runSignal :: (Show a) => Signal a -> IO ()
 -- runSignal sig = initWindow (920, 540) isNotFullScreen >>= \mw -> case mw of
+-- runSignal sig = initWindow (1920, 1080) isNotFullScreen >>= \mw -> case mw of
 runSignal sig = initWindow (1024, 768) isNotFullScreen >>= \mw -> case mw of
 -- runSignal sig = initWindow (1920, 1080) isFullScreen >>= \mw -> case mw of
     Nothing     -> print "Error starting GLFW." >> return ()
