@@ -228,6 +228,8 @@ main = runSignal
     *> mkTerminal            (Vector3 56 3 0) 2 keyC id feedbackTablaSinDistFX
     *> mkBeatPatternTerminal (Vector3 60 3 0) 2 keyComma feedbackKitHellSequence feedbackKitHellSequenceArgs
     *> mkTerminal            (Vector3 64 3 0) 2 keyComma id feedbackKitHellFX
+    *> mkBeatPatternTerminal (Vector3 60 3 0) 2 keyApostrophe feedbackKitHell2Sequence feedbackKitHell2SequenceArgs
+    *> mkTerminal            (Vector3 64 3 0) 2 keyApostrophe id feedbackKitHell2FX
     *> mkBeatPatternTerminal (Vector3 68 3 0) 2 keyPeriod feedbackSolo0x10cSequence feedbackSolo0x10cSequenceArgs
     *> mkTerminal            (Vector3 72 3 0) 2 keyPeriod id feedbackSolo0x10cFX
     *> mkBeatPatternTerminal (Vector3 76 3 0) 2 keySemiColon feedbackSolo0x11dSequence feedbackSolo0x11dSequenceArgs
@@ -309,11 +311,14 @@ feedbackTablaSinDistBuses = (66, 67)
 feedbackKitHellBuses :: (UGen, UGen)
 feedbackKitHellBuses = (68, 69)
 
+feedbackKitHell2Buses :: (UGen, UGen)
+feedbackKitHell2Buses = (70, 71)
+
 feedbackSolo0x10cBuses :: (UGen, UGen)
-feedbackSolo0x10cBuses = (70, 71)
+feedbackSolo0x10cBuses = (72, 73)
 
 feedbackSolo0x11dBuses :: (UGen, UGen)
-feedbackSolo0x11dBuses = (72, 73)
+feedbackSolo0x11dBuses = (74, 75)
 
 ---------------------------------------------------------------------------
 -- Sections
@@ -1513,6 +1518,89 @@ feedbackKitHellFX _ _ = feed |> gain 2 |> constrain (-1) 1 |> gain 0.5 |> poll |
         -- delayTimes2 = ms |> range 1 2
         feed = feedback $ \l r -> auxes + (r <> l) +> delayC 0.5 0.5 |> gain 0.9 |> constrain (-1) 1 |> fxLimiter
         -- verb = freeverb 0.1 10 0.01
+        fxLimiter = limiter 0.1 0.01 0.03 (-9) 0.1 <> limiter 0.175 0.01 0.03 (-9) 0.1
+
+----------------------------
+-- Feedback Kit Hell 2
+----------------------------
+
+feedbackKitHell2Synths :: [UGen -> UGen -> UGen]
+feedbackKitHell2Synths = map feedbackKitHell2Synth kitSamples
+
+feedbackKitHell2NamesAndSynths :: [(String, UGen -> UGen -> UGen)]
+feedbackKitHell2NamesAndSynths = zip (map ("feedbackKitHell2"++) kitSamples) feedbackKitHell2Synths
+
+lookupfeedbackKitHell2NameAndSynth :: Int -> (String, UGen -> UGen -> UGen)
+lookupfeedbackKitHell2NameAndSynth = lookupSampleAndSynth feedbackKitHell2NamesAndSynths
+
+feedbackKitHell2Sequence :: PFunc (String, UGen -> UGen -> UGen)
+feedbackKitHell2Sequence = PFunc0 <| place [pfractalVals,pwolframGridVals]
+    where
+        fractalPlantFour = fractalPlant 6
+        sierpinskiTriangleSix = sierpinskiTriangle 6
+        dragonCurvesSix = dragonCurve 6
+        cantorDustSix = cantorDust 6
+        pfractalPlants = pwrapLookup fractalPlantFour 'B' (ploop [0..99])
+        psierpinskiTriangles = pwrapLookup sierpinskiTriangleSix 'B' (ploop [0..99])
+        pDragonCurves = pwrapLookup dragonCurvesSix 'A' (ploop [0..99])
+        pCantorDusts = pwrapLookup cantorDustSix 'A' (ploop [0..99])
+        pfractalVals = ploop [pfractalPlants, psierpinskiTriangles, pDragonCurves, pCantorDusts] |> fmap fractalPlantSynthAndDur
+        fractalPlantSynthAndDur plantChar = (PVal $ lookupfeedbackKitHell2NameAndSynth index, plantLookupDur index)
+            where
+                index = lsystemCharToInt plantChar
+        pfractalPlantDurs = map plantToRational fractalPlantFour
+            where
+                plantToRational c = 2 / ((toRational $ lsystemCharToInt c) + 1)
+        plantLookupDur n = case wrapLookup pfractalPlantDurs n of
+            Nothing -> 1
+            Just v -> v
+        seedCells = V.fromList (replicate 80 0 ++ [1] ++ replicate 80 0)
+        numColors = 3
+        numRows = 1000
+        rules = [77245, 210819] -- [573377, 706951, 77245, 210819]
+        deltas = [(-1, 1), (1, -1), (-1, 1), (1, 1)]
+        ruleMaps = map (multiColoredWolframRuleMap numColors) rules
+        wolframCAGrids = map (\ruleMap -> mkMultiColoredWolframGrid seedCells ruleMap numRows) ruleMaps
+        pwolframGrids = map (\(wolframCAGrid, (dx, dy)) -> pgridDelta wolframCAGrid dx dy) $ zip wolframCAGrids deltas
+        pwolframGridSynths = fmap feedbackSolo0x11dNameAndSynth . head $ pwolframGrids
+        durs = cycle [0.5, 0.25, 0.125]
+        pwolframGridVals = fmap (\n -> (pwolframGridSynths, durs !! n)) (pwolframGrids !! 1)
+
+feedbackKitHell2SequenceArgs :: [PatternArgsFunc]
+feedbackKitHell2SequenceArgs = map (patternArgsFunc . pArgFunc) [mouseXIndex, mouseYIndex]
+    where
+        rangeScale = 77
+        maxRange = 217
+        mouseXIndex = 0
+        mouseYIndex = 1
+        pArgFunc :: Int -> [Rational] -> PRational
+        pArgFunc index args = case (wrapLookup args index) of
+            Nothing  -> 0
+            Just val -> pval |> pseries 1 |> pwrap 1 maxRange |> (/maxRange) |> (*) 2 |> (subtract 1)
+                where
+                    pval = PVal <| val * rangeScale
+
+feedbackKitHell2Synth :: FilePath -> UGen -> UGen -> UGen
+feedbackKitHell2Synth sampleFilePath mx my = sample * osc |> e |> filt |> dup |> out (fst feedbackKitHell2Buses)
+    where
+        e = perc 0.0 1 1 1
+        e2 = perc2 0.01 0.3 0.3 (-64) maxFreq |> umax minFreq -- move umax around 20,30,40,50,60,etc..
+        filt n = n + (n |> lpf e2 3 |> gain 0.5) |> lowshelf 60 4 0.3
+        rate = 1
+        sample = playMonoSample sampleFilePath rate |> gain 4 |> sinDist 1
+        osc = lfpulse 7.5 (mx + my |> gain 0.5) |> gain 2
+        minFreq = mx |> range 20 2000 |> lag 0.1
+        maxFreq = my |> exprange 2000 20000 |> lag 0.1
+
+feedbackKitHell2FX :: UGen -> UGen -> UGen
+feedbackKitHell2FX mx my = feed |> gain 2 |> constrain (-1) 1 |> gain 0.5 |> poll |> visAux 2 1 |> masterOut
+    where
+        ms = [mx, my] * 2 - 1
+        auxes = auxIn (fst feedbackKitHell2Buses <> snd feedbackKitHell2Buses) |> gain 10
+        delayTimes = ms |> exprange 0.000001 0.033333333 |> lag 1
+        -- delayTimes2 = ms |> range 1 2
+        feed = feedback $ \l r -> auxes + (r <> l) +> delayC 0.5 0.5 |> delayC 1 delayTimes |> verb |> gain 0.9 |> constrain (-1) 1 |> fxLimiter
+        verb = freeverb (my |> exprange 0.001 0.1 |> lag 0.1) 50 (mx |> lag 0.1)
         fxLimiter = limiter 0.1 0.01 0.03 (-9) 0.1 <> limiter 0.175 0.01 0.03 (-9) 0.1
 
 ----------------------------
