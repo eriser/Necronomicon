@@ -370,15 +370,6 @@ oscModel = mkModel DefaultLayer mesh oscMaterial
                       , ("time", UniformScalar  0)
                       ]
 
-lfsawSynth :: UGen -> UGen -> UGen
-lfsawSynth freq1 freq2 = o1 + o2 |> exprange 20 20000 |> sin |> gain 0.4 |> visAux 7 1 |> out 22
-    where
-        o1 = (lfsaw (lag 0.1 [f1, f2]) 0) * 2 - 1
-        o2 = (lfsaw (lag 2 [f1 * 0.5, f2 * 0.5]) 0) * 2 - 1
-        f1 = exprange 40 4000 freq1
-        f2 = exprange 40 4000 freq2
-
-
 ---------------------------------------------------------------------------
 -- Section 2
 ---------------------------------------------------------------------------
@@ -867,11 +858,21 @@ pulseDemonPattern3 = mkPatternTerminal (Vector3 4 (-3) 0) 2 keyB id pulseDemon <
                 |]
 
 halfVerb :: UGen -> UGen -> UGen
-halfVerb _ _ = [l * 0.9 + r * 0.1, r * 0.9 + l * 0.1] |> masterOut
+halfVerb _ _ = [l * 0.9 + r * 0.1, r * 0.9 + l * 0.1] |> verb |> masterOut
     where
-        l     = auxIn 22 |> verb
-        r     = auxIn 23 |> verb
-        verb  = freeverb 0.5 0.75 0.95
+        l     = auxIn 22
+        r     = auxIn 23
+        verb  = freeverb 0.25 0.5 0.95
+
+lfsawSynth :: UGen -> UGen -> UGen
+lfsawSynth freq1 freq2 = s1 + s2 |> gain 0.8 |> visAux 7 1 |> out 22
+    where
+        s1 = o1 |> exprange 20 20000 |> sin 
+        s2 = o2 |> exprange 20 20000 |> sin 
+        o1 = (lfsaw (lag 0.1 [f1, f2]) 0) * 2 - 1
+        o2 = (lfsaw (lag 2 [f1 * 0.5, f2 * 0.5]) 0) * 2 - 1
+        f1 = exprange 40 4000 freq1
+        f2 = exprange 40 4000 freq2
 
 -- hyperMelodyPrime :: UGen -> UGen
 -- hyperMelodyPrime f = [s, s2] |> softclip 20 |> filt |> e |> gain 0.25 |> visAux (random 0 2 5) 2 |> pan 0.2 |> out 22
