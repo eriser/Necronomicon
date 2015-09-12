@@ -228,9 +228,11 @@ main = runSignal
     *> mkTerminal            (Vector3 56 3 0) 2 keyC id feedbackTablaSinDistFX
     *> mkBeatPatternTerminal (Vector3 60 3 0) 2 keyComma feedbackKitHellSequence feedbackKitHellSequenceArgs
     *> mkTerminal            (Vector3 64 3 0) 2 keyComma id feedbackKitHellFX
-    *> mkBeatPatternTerminal (Vector3 60 3 0) 2 keyPeriod feedbackSolo0x10cSequence feedbackSolo0x10cSequenceArgs
-    *> mkTerminal            (Vector3 64 3 0) 2 keyPeriod id feedbackSolo0x10cFX
-    *> mkTerminal            (Vector3 68 3 0) 2 keyY mouseToSlendro triOsc32
+    *> mkBeatPatternTerminal (Vector3 68 3 0) 2 keyPeriod feedbackSolo0x10cSequence feedbackSolo0x10cSequenceArgs
+    *> mkTerminal            (Vector3 72 3 0) 2 keyPeriod id feedbackSolo0x10cFX
+    *> mkBeatPatternTerminal (Vector3 76 3 0) 2 keySemiColon feedbackSolo0x11dSequence feedbackSolo0x11dSequenceArgs
+    *> mkTerminal            (Vector3 80 3 0) 2 keySemiColon id feedbackSolo0x11dFX
+    *> mkTerminal            (Vector3 84 3 0) 2 keyY mouseToSlendro triOsc32
     *> section1
     *> section2
     *> section2Synths
@@ -309,6 +311,9 @@ feedbackKitHellBuses = (68, 69)
 
 feedbackSolo0x10cBuses :: (UGen, UGen)
 feedbackSolo0x10cBuses = (70, 71)
+
+feedbackSolo0x11dBuses :: (UGen, UGen)
+feedbackSolo0x11dBuses = (72, 73)
 
 ---------------------------------------------------------------------------
 -- Sections
@@ -973,10 +978,10 @@ floorPerc2 f = sig1 + sig2 |> e |> gain 1 |> visAux 6 1 |> pan 0.35 |> out 24
 
 section2_5 :: Signal ()
 section2_5 = mkTerminal (Vector3 32 (-3) 0) 4 keyU id distPercVerb
-          *> floorPattern2 
-          -- *> shake2Pattern 
-          -- *> shake1Pattern 
-          -- *> omniPrimePattern 
+          *> floorPattern2
+          -- *> shake2Pattern
+          -- *> shake1Pattern
+          -- *> omniPrimePattern
           -- *> distortedBassHits
     where
         -- shake1Pattern = mkPatternTerminal (Vector3 20 (-3) 0) 6 keyC id shakeSnare <| PFunc0 <| (pmap (* 0.125) <| ploop [sec1])
@@ -1575,4 +1580,80 @@ feedbackSolo0x10cFX mx my = feed |> gain 2 |> constrain (-1) 1 |> poll |> visAux
         -- delayTimes2 = ms |> range 1 2
         feed = feedback $ \l r -> auxes + (r <> l) +> delayC 0.5 0.5 |> delayC 1 delayTimes |> gain 0.9 |> constrain (-1) 1 |> fxLimiter
         -- verb = freeverb 0.1 10 0.01
+        fxLimiter = limiter 0.1 0.01 0.03 (-9) 0.1 <> limiter 0.175 0.01 0.03 (-9) 0.1
+
+----------------------------
+-- Feedback Solo 0x11d
+----------------------------
+
+metallicSamples :: [FilePath]
+metallicSamples = [
+        "samples/MetalRing.wav",
+        "samples/Slendro1.wav",
+        "samples/gong_1.wav",
+        "samples/gong_2.wav"
+    ]
+
+feedbackSolo0x11dSynths :: [UGen -> UGen -> UGen]
+feedbackSolo0x11dSynths = map feedbackSolo0x11dSynth metallicSamples
+
+feedbackSolo0x11dNamesAndSynths :: [(String, UGen -> UGen -> UGen)]
+feedbackSolo0x11dNamesAndSynths = zip (map ("feedbackSolo0x11d0"++) kitSamples) feedbackSolo0x11dSynths
+
+feedbackSolo0x11dNameAndSynth :: Int -> (String, UGen -> UGen -> UGen)
+feedbackSolo0x11dNameAndSynth = lookupSampleAndSynth feedbackSolo0x11dNamesAndSynths
+
+feedbackSolo0x11dSequence :: PFunc (String, UGen -> UGen -> UGen)
+feedbackSolo0x11dSequence = PFunc0 <| pfractalVals
+    where
+        fractalPlantFour = fractalPlant 6
+        sierpinskiTriangleSix = sierpinskiTriangle 6
+        pfractalPlants = pwrapLookup fractalPlantFour '-' (ploop [0..99])
+        psierpinskiTriangles = pwrapLookup sierpinskiTriangleSix '-' (ploop [0..99])
+        pfractalVals = ploop [pfractalPlants, psierpinskiTriangles] |> fmap fractalPlantSynthAndDur
+        fractalPlantSynthAndDur plantChar = (PVal $ feedbackSolo0x11dNameAndSynth index, plantLookupDur index)
+            where
+                index = lsystemCharToInt plantChar
+        pfractalPlantDurs = map plantToRational fractalPlantFour
+            where
+                plantToRational c = 1 / ((toRational $ lsystemCharToInt c) + 1)
+        plantLookupDur n = case wrapLookup pfractalPlantDurs n of
+            Nothing -> 1
+            Just v -> v
+
+feedbackSolo0x11dSequenceArgs :: [PatternArgsFunc]
+feedbackSolo0x11dSequenceArgs = map (patternArgsFunc . pArgFunc) [mouseXIndex, mouseYIndex]
+    where
+        rangeScale = 77
+        maxRange = 217
+        mouseXIndex = 0
+        mouseYIndex = 1
+        pArgFunc :: Int -> [Rational] -> PRational
+        pArgFunc index args = case (wrapLookup args index) of
+            Nothing  -> 0
+            Just val -> pval |> pseries 1 |> pwrap 1 maxRange |> (/maxRange) |> (*) 2 |> (subtract 1)
+                where
+                    pval = PVal <| val * rangeScale
+
+feedbackSolo0x11dSynth :: FilePath -> UGen -> UGen -> UGen
+feedbackSolo0x11dSynth sampleFilePath mx my = playMonoSample sampleFilePath rate + osc |> e |> filt |> constrain (-1) 1 |> out (fst feedbackSolo0x11dBuses)
+    where
+        e = perc 0.01 1 1 (-128)
+        e2 = perc2 0.001 0.3 1 (-4) freqs |> umax 52
+        filt = bpf e2 1
+        lFreq = mx |> exprange 40 1000 |> lag 0.1
+        rFreq = my |> exprange 40 1000 |> lag 0.1
+        freqs = lFreq <> rFreq
+        rate = 0.125
+        osc = lfpulse 13 (mx + my |> gain 0.5) |> gain 2
+
+feedbackSolo0x11dFX :: UGen -> UGen -> UGen
+feedbackSolo0x11dFX mx my = feed |> gain 2 |> constrain (-1) 1 |> poll |> visAux 2 1 |> masterOut
+    where
+        ms = [mx, my] * 2 - 1
+        auxes = auxIn (fst feedbackSolo0x11dBuses <> snd feedbackSolo0x11dBuses) |> gain 10
+        delayTimes = ms |> exprange 0.0005 0.033333333 |> lag 1
+        -- delayTimes2 = ms |> range 1 2
+        feed = feedback $ \l r -> auxes + (r <> l) +> delayC 0.5 0.5 |> delayC 1 delayTimes |> verb |> gain 0.9 |> constrain (-1) 1 |> fxLimiter
+        verb = freeverb 0.1 10 0.01
         fxLimiter = limiter 0.1 0.01 0.03 (-9) 0.1 <> limiter 0.175 0.01 0.03 (-9) 0.1
