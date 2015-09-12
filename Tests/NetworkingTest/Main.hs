@@ -227,6 +227,8 @@ main = runSignal
     *> mkTerminal            (Vector3 56 3 0) 2 keyC id feedbackTablaSinDistFX
     *> mkBeatPatternTerminal (Vector3 60 3 0) 2 keyComma feedbackKitHellSequence feedbackKitHellSequenceArgs
     *> mkTerminal            (Vector3 64 3 0) 2 keyComma id feedbackKitHellFX
+    *> mkBeatPatternTerminal (Vector3 60 3 0) 2 keyPeriod feedbackSolo0x10cSequence feedbackSolo0x10cSequenceArgs
+    *> mkTerminal            (Vector3 64 3 0) 2 keyPeriod id feedbackSolo0x10cFX
     *> mkTerminal            (Vector3 68 3 0) 2 keyY mouseToSlendro triOsc32
     *> section1
     *> section2
@@ -303,6 +305,9 @@ feedbackTablaSinDistBuses = (66, 67)
 
 feedbackKitHellBuses :: (UGen, UGen)
 feedbackKitHellBuses = (68, 69)
+
+feedbackSolo0x10cBuses :: (UGen, UGen)
+feedbackSolo0x10cBuses = (70, 71)
 
 ---------------------------------------------------------------------------
 -- Sections
@@ -1496,5 +1501,72 @@ feedbackKitHellFX _ _ = feed |> gain 2 |> constrain (-1) 1 |> poll |> visAux 2 1
         -- delayTimes = ms |> exprange 0.001 1 |> lag 1
         -- delayTimes2 = ms |> range 1 2
         feed = feedback $ \l r -> auxes + (r <> l) +> delayC 0.5 0.5 |> gain 0.9 |> constrain (-1) 1 |> fxLimiter
+        -- verb = freeverb 0.1 10 0.01
+        fxLimiter = limiter 0.1 0.01 0.03 (-9) 0.1 <> limiter 0.175 0.01 0.03 (-9) 0.1
+
+----------------------------
+-- Feedback Solo 0x10c
+----------------------------
+
+feedbackSolo0x10cSynths :: [UGen -> UGen -> UGen]
+feedbackSolo0x10cSynths = map feedbackSolo0x10cSynth tablaSamples
+
+feedbackSolo0x10cNamesAndSynths :: [(String, UGen -> UGen -> UGen)]
+feedbackSolo0x10cNamesAndSynths = zip (map ("feedbackSolo0x10c0"++) kitSamples) feedbackSolo0x10cSynths
+
+feedbackSolo0x10cNameAndSynth :: Int -> (String, UGen -> UGen -> UGen)
+feedbackSolo0x10cNameAndSynth = lookupSampleAndSynth feedbackSolo0x10cNamesAndSynths
+
+feedbackSolo0x10cSequence :: PFunc (String, UGen -> UGen -> UGen)
+feedbackSolo0x10cSequence = PFunc0 <| pfractalVals
+    where
+        fractalPlantFour = fractalPlant 4
+        sierpinskiTriangleSix = sierpinskiTriangle 6
+        pfractalPlants = pwrapLookup fractalPlantFour '-' (ploop [0..99])
+        psierpinskiTriangles = pwrapLookup sierpinskiTriangleSix '-' (ploop [0..99])
+        pfractalVals = ploop [pfractalPlants, psierpinskiTriangles] |> fmap fractalPlantSynthAndDur
+        fractalPlantSynthAndDur plantChar = (PVal $ feedbackSolo0x10cNameAndSynth index, plantLookupDur index)
+            where
+                index = lsystemCharToInt plantChar
+        pfractalPlantDurs = map plantToRational fractalPlantFour
+            where
+                plantToRational c = 1 / ((toRational $ lsystemCharToInt c) + 1 |> (*) 2)
+        plantLookupDur n = case wrapLookup pfractalPlantDurs n of
+            Nothing -> 1
+            Just v -> v
+
+feedbackSolo0x10cSequenceArgs :: [PatternArgsFunc]
+feedbackSolo0x10cSequenceArgs = map (patternArgsFunc . pArgFunc) [mouseXIndex, mouseYIndex]
+    where
+        rangeScale = 77
+        maxRange = 217
+        mouseXIndex = 0
+        mouseYIndex = 1
+        pArgFunc :: Int -> [Rational] -> PRational
+        pArgFunc index args = case (wrapLookup args index) of
+            Nothing  -> 0
+            Just val -> pval |> pseries 1 |> pwrap 1 maxRange |> (/maxRange) |> (*) 2 |> (subtract 1)
+                where
+                    pval = PVal <| val * rangeScale
+
+feedbackSolo0x10cSynth :: FilePath -> UGen -> UGen -> UGen
+feedbackSolo0x10cSynth sampleFilePath mx my = playMonoSample sampleFilePath rate |> e |> filt |> constrain (-1) 1 |> out (fst feedbackSolo0x10cBuses)
+    where
+        e = perc 0.01 1 1 0
+        e2 = perc2 0.001 1 1 (-4) freqs
+        filt = bpf e2 1
+        lFreq = mx |> exprange 40 1000 |> lag 0.1
+        rFreq = my |> exprange 40 1000 |> lag 0.1
+        freqs = lFreq <> rFreq
+        rate = 1
+
+feedbackSolo0x10cFX :: UGen -> UGen -> UGen
+feedbackSolo0x10cFX mx my = feed |> gain 2 |> constrain (-1) 1 |> poll |> visAux 2 1 |> masterOut
+    where
+        ms = [mx, my] * 2 - 1
+        auxes = auxIn (fst feedbackSolo0x10cBuses <> snd feedbackSolo0x10cBuses) |> gain 10
+        delayTimes = ms |> exprange 0.0001 0.1 |> lag 1
+        -- delayTimes2 = ms |> range 1 2
+        feed = feedback $ \l r -> auxes + (r <> l) +> delayC 0.5 0.5 |> delayC 1 delayTimes |> gain 0.9 |> constrain (-1) 1 |> fxLimiter
         -- verb = freeverb 0.1 10 0.01
         fxLimiter = limiter 0.1 0.01 0.03 (-9) 0.1 <> limiter 0.175 0.01 0.03 (-9) 0.1
