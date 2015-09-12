@@ -1536,7 +1536,7 @@ feedbackSolo0x10cSequence = PFunc0 <| pfractalVals
                 index = lsystemCharToInt plantChar
         pfractalPlantDurs = map plantToRational fractalPlantFour
             where
-                plantToRational c = 1 / ((toRational $ lsystemCharToInt c) + 1 |> (*) 2)
+                plantToRational c = 8 / ((toRational $ lsystemCharToInt c) + 1 |> (*) 2)
         plantLookupDur n = case wrapLookup pfractalPlantDurs n of
             Nothing -> 1
             Just v -> v
@@ -1571,7 +1571,7 @@ feedbackSolo0x10cFX mx my = feed |> gain 2 |> constrain (-1) 1 |> poll |> visAux
     where
         ms = [mx, my] * 2 - 1
         auxes = auxIn (fst feedbackSolo0x10cBuses <> snd feedbackSolo0x10cBuses) |> gain 10
-        delayTimes = ms |> exprange 0.0001 0.1 |> lag 1
+        delayTimes = ms |> exprange 0.5 1 |> lag 1
         -- delayTimes2 = ms |> range 1 2
         feed = feedback $ \l r -> auxes + (r <> l) +> delayC 0.5 0.5 |> delayC 1 delayTimes |> gain 0.9 |> constrain (-1) 1 |> fxLimiter
         -- verb = freeverb 0.1 10 0.01
