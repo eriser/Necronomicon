@@ -219,8 +219,8 @@ main = runSignal
     *> mkBeatPatternTerminal (Vector3 24 3 0) 2 keyL binaryWolframSamplesKitPattern []
     *> mkBeatPatternTerminal (Vector3 28 3 0) 2 keyM multiColoredWolframSamplesKitPattern []
     *> mkTerminal            (Vector3 32 3 0) 2 keyN feedbackKitMouseScale feedbackKitWrapFX
-    *> mkBeatPatternTerminal (Vector3 36 3 0) 2 keyQ multiColoredWolframSamplesTablaPattern multiColoredWolframSamplesTablaPatternArgs
-    *> mkTerminal            (Vector3 40 3 0) 2 keyR feedbackTablaMouseScale feedbackTablaWrapFX
+    *> mkBeatPatternTerminal (Vector3 36 3 0) 2 keyX multiColoredWolframSamplesTablaPattern multiColoredWolframSamplesTablaPatternArgs
+    *> mkTerminal            (Vector3 40 3 0) 2 keyZ feedbackTablaMouseScale feedbackTablaWrapFX
     *> mkTerminal            (Vector3 44 3 0) 2 keyY mouseToSlendro triOsc32
     *> section1
     *> section2
