@@ -1297,20 +1297,20 @@ lookupFeedbackKitNameAndSynth = lookupSampleAndSynth feedbackKitNamesAndSynths
 
 
 feedbackKitSynth :: FilePath -> UGen -> UGen -> UGen
-feedbackKitSynth sampleFilePath _ _ = playMonoSample sampleFilePath rate |> e |> dup |> out (fst feedbackKitBuses)
+feedbackKitSynth sampleFilePath _ _ = playMonoSample sampleFilePath rate {-|> filt -} |> e |> dup |> out (fst feedbackKitBuses)
     where
         e = perc 0.0 1 4 1
         rate = 1
+        -- e2 = perc2 0.0001 0.01 10 (-64) maxFreq |> umax minFreq -- move umax around 20,30,40,50,60,etc..
+        -- filt = lpf e2 0.1
+        -- minFreq = lag 0.1 mx
+        -- maxFreq = 60000 -- lag 0.1 (my * 1000) -- was 60000
 
 feedbackKitWrapFX :: UGen -> UGen -> UGen
-feedbackKitWrapFX mx _ = feed |> gain 4 |> masterLimiter |> out 0
+feedbackKitWrapFX mx my = feed |> constrain (-1) 1 |> gain 0.3 |> out 0
     where
-        auxes = auxIn (fst feedbackKitBuses <> snd feedbackKitBuses) |> filt
-        feed = feedback $ \l r -> auxes + (r <> l) +> crush 1 |> crush 8 |> delayN 0.3 (0.001 <> 0.002) |> gain 0.249
-        e2 = perc2 0.0001 0.01 10 (-64) maxFreq |> umax minFreq -- move umax around 20,30,40,50,60,etc..
-        filt = lpf e2 10
-        minFreq = lag 0.1 mx
-        maxFreq = 60000 -- lag 0.1 (my * 1000) -- was 60000
+        auxes = auxIn (fst feedbackKitBuses <> snd feedbackKitBuses)
+        feed = feedback $ \l r -> auxes + (r <> l) +> sinDist 1 +> crush 1 |> crush 1 +> delayC 0.5 0.5 |> delayC 1 ((mx + 0.01) <> (my + 0.01)) |> masterLimiter |> constrain (-0.5) 0.5
 
 feedbackKitMouseScale :: Double -> Double
 feedbackKitMouseScale md = (round md :: Int) |> fromIntegral |> (*) 100.0 |> (+) 20.0
