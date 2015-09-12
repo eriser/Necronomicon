@@ -231,6 +231,7 @@ main = runSignal
     *> mkBeatPatternTerminal (Vector3 60 3 0) 2 keyPeriod feedbackSolo0x10cSequence feedbackSolo0x10cSequenceArgs
     *> mkTerminal            (Vector3 64 3 0) 2 keyPeriod id feedbackSolo0x10cFX
     *> mkTerminal            (Vector3 68 3 0) 2 keyY mouseToSlendro triOsc32
+    *> mkTerminal            (Vector3 68 3 0) 2 keyEqual mouseToSlendro triOsc32'
     *> section1
     *> section2
     *> section2Synths
@@ -536,6 +537,23 @@ triOsc32 mx my = feedback fSig |> verb |> gain 0.785 |> masterOut
                 sig4 = sinOsc (f1 * 0.25 + sig1 * 261.6255653006) * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 3 |> gain 0.5 +> d
                 sig5 = sinOsc (f2 * 0.25 - sig2 * 261.6255653006) * (sinOsc (f1 * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 3 |> gain 0.5 +> d
                 sig6 = sinOsc (f1 * 0.25 - sig3 * 261.6255653006) * (sinOsc ( i * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 3 |> gain 0.5 +> d
+
+triOsc32' :: UGen -> UGen -> UGen
+triOsc32' mx my = feedback fSig |> verb |> lowshelf 150 6 0.01 |> gain 0.785 |> masterOut
+    where
+        f1     = lag 0.25 mx
+        f2     = lag 0.25 my
+        verb   = freeverb 0.25 0.5 0.95
+        d      = delayN 0.6 0.6
+        fSig :: UGen -> UGen
+        fSig i = [sig4 + sig6, sig5 + sig6]
+            where
+                sig1 = sinOsc (f1 + sig3 * 26.162 * 0.5) * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> auxThrough 2
+                sig2 = sinOsc (f2 - sig3 * 26.162)    * (sinOsc (f1 * 0.00025) |> range 0.5 1) |> auxThrough 3
+                sig3 = sinOsc (f1 - f2 + i * 26.162) * (sinOsc ( i * 0.00025) |> range 0.5 1) |> auxThrough 4
+                sig4 = sinOsc (f1 * 0.125 - sig1 * 261.6255653006 * 0.5) * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 6 |> gain 0.5 +> d
+                sig5 = sinOsc (f2 * 0.125 - sig2 * 261.6255653006 * 0.5) * (sinOsc (f1 * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 3 |> gain 0.5 +> d
+                sig6 = sinOsc (f1 * 0.25 + sig3 * 261.6255653006 * 0.25) * (sinOsc ( i * 0.00025) |> range 0.5 1) |> gain (saw 0.8 |> range 0 1) |> softclip 6 |> gain 0.5 +> d
 
 metallicBass :: UGen -> UGen -> UGen
 metallicBass f panPos = sig + sig2 + sig3 |> softclip 0.4 |> sub |> lpf (f * 3) 1 |> e |> gain 0.74 |> visAux 7 1 |> pan panPos |> caveOut
@@ -865,7 +883,7 @@ halfVerb _ _ = [l * 0.9 + r * 0.1, r * 0.9 + l * 0.1] |> verb |> masterOut
         verb  = freeverb 0.25 0.5 0.95
 
 lfsawSynth :: UGen -> UGen -> UGen
-lfsawSynth freq1 freq2 = s1 + s2 |> gain 0.8 |> visAux 7 1 |> out 22
+lfsawSynth freq1 freq2 = s1 + s2 |> gain 0.3 |> visAux 7 1 |> out 22
     where
         s1 = o1 |> exprange 20 20000 |> sin 
         s2 = o2 |> exprange 20 20000 |> sin 
