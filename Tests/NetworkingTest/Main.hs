@@ -1341,7 +1341,7 @@ lookupFeedbackTablaNameAndSynth = lookupSampleAndSynth feedbackTablaNamesAndSynt
 
 -- feedback effect bus
 feedbackTablaWrapFX :: UGen -> UGen -> UGen
-feedbackTablaWrapFX _ _ = feed |> constrain (-1) 1 |> poll |> visAux 2 1 |> masterOut
+feedbackTablaWrapFX _ _ = feed |> constrain (-1) 1 |> visAux 2 1 |> masterOut
     where
         auxes = auxIn (fst feedbackTablaBuses <> snd feedbackTablaBuses) -- |> filt
         feed = feedback $ \l r -> auxes + (r <> l) {- |> delayC 0.3 (0.3 <> 0.2) -} {-+> delayC 0.2 (mx <> my)-} |> wrapDist |> wrap 0.9 |> fxLimiter
@@ -1403,7 +1403,7 @@ feedbackTablaTanHDistSynth sampleFilePath rx ry = playMonoSample sampleFilePath 
         filt = lpf e2 3
 
 feedbackTablaTanHDistFX :: UGen -> UGen -> UGen
-feedbackTablaTanHDistFX mx my = feed |> gain 2 |> visAux 2 1 |> poll |> masterOut
+feedbackTablaTanHDistFX mx my = feed |> gain 2 |> visAux 2 1 |> masterOut
     where
         preGain = [mx, my] * 10 |> add 10 |> lag 0.1
         auxes = auxIn (fst feedbackTablaTanHDistBuses <> snd feedbackTablaTanHDistBuses) |> gain preGain
@@ -1467,7 +1467,7 @@ feedbackTablaSinDistSynth sampleFilePath mx my = playMonoSample sampleFilePath r
         maxFreq = my |> exprange 800 40000
 
 feedbackTablaSinDistFX :: UGen -> UGen -> UGen
-feedbackTablaSinDistFX mx my = feed |> gain 10 |> constrain (-1) 1 |> poll |> visAux 2 1 |> masterOut
+feedbackTablaSinDistFX mx my = feed |> gain 10 |> constrain (-1) 1 |> visAux 2 1 |> masterOut
     where
         ms = [mx, my] * 2 - 1
         preGain = ms |> exprange 10 50 |> lag 0.1
@@ -1530,7 +1530,7 @@ feedbackKitHellSynth sampleFilePath _ _ = playMonoSample sampleFilePath rate |> 
         -- maxFreq = my |> exprange 800 40000
 
 feedbackKitHellFX :: UGen -> UGen -> UGen
-feedbackKitHellFX _ _ = feed |> gain 2 |> constrain (-1) 1 |> gain 0.5 |> poll |> visAux 2 1 |> masterOut
+feedbackKitHellFX _ _ = feed |> gain 2 |> constrain (-1) 1 |> gain 0.5 |> visAux 2 1 |> masterOut
     where
         -- ms = [mx, my] * 2 - 1
         auxes = auxIn (fst feedbackKitHellBuses <> snd feedbackKitHellBuses) |> gain 10
@@ -1613,7 +1613,7 @@ feedbackKitHell2Synth sampleFilePath mx my = sample * osc |> e |> filt |> dup |>
         maxFreq = my |> exprange 2000 20000 |> lag 0.1
 
 feedbackKitHell2FX :: UGen -> UGen -> UGen
-feedbackKitHell2FX mx my = feed |> gain 2 |> constrain (-1) 1 |> gain 0.5 |> poll |> visAux 2 1 |> masterOut
+feedbackKitHell2FX mx my = feed |> gain 2 |> constrain (-1) 1 |> gain 0.5 |> visAux 2 1 |> masterOut
     where
         ms = [mx, my] * 2 - 1
         auxes = auxIn (fst feedbackKitHell2Buses <> snd feedbackKitHell2Buses) |> gain 10
@@ -1704,7 +1704,7 @@ feedbackSolo0x10cSynth sampleFilePath mx my = sample |> e |> filt |> constrain (
         sample = playMonoSampleC sampleFilePath rates |> sinDist 50
 
 feedbackSolo0x10cFX :: UGen -> UGen -> UGen
-feedbackSolo0x10cFX mx my = feed |> gain 2 |> constrain (-1) 1 |> poll |> visAux 2 1 |> masterOut
+feedbackSolo0x10cFX mx my = feed |> gain 2 |> constrain (-1) 1 |> visAux 2 1 |> masterOut
     where
         ms         = [mx, my] * 2 - 1
         auxes      = auxIn (fst feedbackSolo0x10cBuses <> snd feedbackSolo0x10cBuses) |> gain 4
@@ -1796,7 +1796,7 @@ feedbackSolo0x11dSynth sampleFilePath mx my = samples * osc |> e |> filt |> cons
         osc = lfpulse 7.5 (mx + my |> gain 0.5) |> gain 2
 
 feedbackSolo0x11dFX :: UGen -> UGen -> UGen
-feedbackSolo0x11dFX mx my = feed |> gain 2 |> constrain (-1) 1 |> poll |> visAux 2 1 |> masterOut
+feedbackSolo0x11dFX mx my = feed |> gain 2 |> constrain (-1) 1 |> visAux 2 1 |> masterOut
     where
         ms = [mx, my] * 2 - 1
         auxes = auxIn (fst feedbackSolo0x11dBuses <> snd feedbackSolo0x11dBuses) |> gain 10
