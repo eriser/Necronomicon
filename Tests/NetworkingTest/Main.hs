@@ -536,14 +536,14 @@ metallic4 :: UGen -> UGen
 metallic4 f = metallicBass f 0.25
 
 hyperMelody :: UGen -> UGen
-hyperMelody f = [s,s2] |> gain 0.6 |> e |> visAux (random 0 2 5) 2 |> caveOut
+hyperMelody f = [s,s2] |> lpf (fromSlendro 25) 0.3 |> e |> gain 1 |> visAux (random 0 2 5) 2 |> caveOut
     where
-        e  = env [0, 1, 0.15, 0] [0.0001, 0.1, 7] (-1.5)
-        s  = sin <| sin 3 * 6 + f * 1
-        s2 = sin <| sin 6 * 9 + f * 0.5
+        e  = env [0, 1, 0.05, 0] [0.0001, 0.1, 7] (-8)
+        s  = sin <| sin 3 * 6 + f * 0.5
+        s2 = sin <| sin 6 * 9 + f * 1
 
 hyperMelodyHarmony :: UGen -> UGen
-hyperMelodyHarmony f = [s, s2] |> lpf (fromSlendro 25) 0.3 |> e |> gain 1.5 |> visAux (random 0 2 5) 2 |> caveOut
+hyperMelodyHarmony f = [s, s2] |> lpf (fromSlendro 25) 0.3 |> e |> gain 3 |> visAux (random 0 2 5) 2 |> caveOut
     where
         e  = env [0, 0.3, 0.05, 0] [0.0001, 0.1, 7] (-8)
         s  = sin <| sin 3 * 6 + f * 0.5
@@ -809,8 +809,8 @@ pulseDemonPattern = fx *> patt
                       _ 2 3 _ 2 3 _ 2
                       3 _ 0 1 _ 0 1 _
                       2 3 _ 2 3 _ 2 3
-                      4 [_ 5] _ 4 [_ 5] _ 4 [_ 5]
-                      _ 6 [_ 7] _ 6 [_ 7] _ 8
+                      4 5 _ 4 5 _ 4 5
+                      _ 6 7 _ 6 7 _ 8
                 |]
 
 pulseDemonPattern2 :: Signal ()
