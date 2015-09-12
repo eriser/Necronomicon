@@ -210,8 +210,9 @@ main = runSignal
     <| players
     *> play (pure True) masterSynth
     *> loadSamples hyperTerrainSamples
-    -- *> mkTerminal            (Vector3  0 3 0) 0 keyT id lfsawSynth
-    -- *> mkTerminal            (Vector3  4 3 0) 0 keyR id lfsawSynth
+    *> mkTerminal            (Vector3  0 3 0) 7 keyT id lfsawSynth
+    *> mkTerminal            (Vector3  4 3 0) 7 keyR id lfsawSynth
+    *> mkTerminal            (Vector3  8 3 0) 0 keyR id halfVerb
     -- *> mkPatternTerminal     (Vector3  8 3 0) 2 keyH id hyperMelody        hyperMelodyPattern
     -- *> mkPatternTerminal     (Vector3 12 3 0) 2 keyG id hyperMelodyHarmony hyperMelodyPattern2
     *> mkPatternTerminal     (Vector3 16 3 0) 2 keyJ id hyperMelody        binaryWolframPattern
@@ -369,8 +370,13 @@ oscModel = mkModel DefaultLayer mesh oscMaterial
                       , ("time", UniformScalar  0)
                       ]
 
--- lfsawSynth :: UGen -> UGen -> UGen
--- lfsawSynth freq1 freq2 = (lfsaw (lag 0.1 [exprange 40 4000 freq1, exprange 40 4000 freq2]) 0) * 2 - 1 |> exprange 20 20000 |> sin |> gain 0.2 |> out 0
+lfsawSynth :: UGen -> UGen -> UGen
+lfsawSynth freq1 freq2 = o1 + o2 |> exprange 20 20000 |> sin |> gain 0.1 |> visAux 7 1 |> out 22
+    where
+        o1 = (lfsaw (lag 0.1 [f1, f2]) 0) * 2 - 1
+        o2 = (lfsaw (lag 1 [f1 * 0.5, f2 * 0.5]) 0) * 2 - 1
+        f1 = exprange 40 4000 freq1
+        f2 = exprange 40 4000 freq2
 
 
 ---------------------------------------------------------------------------
@@ -524,7 +530,7 @@ mouseToSlendro :: Double -> Double
 mouseToSlendro m = fromRational . d2f slendro . toRational <| (floor <| scale 0 24 m :: Integer)
 
 triOsc32 :: UGen -> UGen -> UGen
-triOsc32 mx my = feedback fSig |> verb |> gain 0.4785 |> masterOut
+triOsc32 mx my = feedback fSig |> verb |> gain 0.785 |> masterOut
     where
         f1     = lag 0.25 mx
         f2     = lag 0.25 my
@@ -556,14 +562,14 @@ metallic4 :: UGen -> UGen
 metallic4 f = metallicBass f 0.25
 
 hyperMelody :: UGen -> UGen
-hyperMelody f = [s,s2] |> gain 0.6 |> e |> visAux (random 0 2 5) 2 |> caveOut
+hyperMelody f = [s,s2] |> lpf (fromSlendro 25) 0.3 |> e |> gain 1 |> visAux (random 0 2 5) 2 |> caveOut
     where
-        e  = env [0, 1, 0.15, 0] [0.0001, 0.1, 7] (-1.5)
-        s  = sin <| sin 3 * 6 + f * 1
-        s2 = sin <| sin 6 * 9 + f * 0.5
+        e  = env [0, 1, 0.05, 0] [0.0001, 0.1, 7] (-8)
+        s  = sin <| sin 3 * 6 + f * 0.5
+        s2 = sin <| sin 6 * 9 + f * 1
 
 hyperMelodyHarmony :: UGen -> UGen
-hyperMelodyHarmony f = [s, s2] |> lpf (fromSlendro 25) 0.3 |> e |> gain 1.5 |> visAux (random 0 2 5) 2 |> caveOut
+hyperMelodyHarmony f = [s, s2] |> lpf (fromSlendro 25) 0.3 |> e |> gain 3 |> visAux (random 0 2 5) 2 |> caveOut
     where
         e  = env [0, 0.3, 0.05, 0] [0.0001, 0.1, 7] (-8)
         s  = sin <| sin 3 * 6 + f * 0.5
@@ -644,8 +650,8 @@ section2Synths = play (pure True) caveTime
               *> pulseDemonPattern
               *> pulseDemonPattern2
               *> pulseDemonPattern3
-              *> hyperMelodyPrimePattern
-              *> manaLeakPrimePattern
+              -- *> hyperMelodyPrimePattern
+              -- *> manaLeakPrimePattern
               *> mkTerminal (Vector3 36 (-3) 0) 5 keyI id dissonances
               -- *> broodlingPattern
               -- *> subControlPattern
@@ -829,8 +835,8 @@ pulseDemonPattern = fx *> patt
                       _ 2 3 _ 2 3 _ 2
                       3 _ 0 1 _ 0 1 _
                       2 3 _ 2 3 _ 2 3
-                      4 [_ 5] _ 4 [_ 5] _ 4 [_ 5]
-                      _ 6 [_ 7] _ 6 [_ 7] _ 8
+                      4 5 _ 4 5 _ 4 5
+                      _ 6 7 _ 6 7 _ 8
                 |]
 
 pulseDemonPattern2 :: Signal ()
@@ -863,59 +869,59 @@ pulseDemonPattern3 = mkPatternTerminal (Vector3 4 (-3) 0) 2 keyB id pulseDemon <
 halfVerb :: UGen -> UGen -> UGen
 halfVerb _ _ = [l * 0.9 + r * 0.1, r * 0.9 + l * 0.1] |> masterOut
     where
-        l     = auxIn 22 |> verb |> auxThrough 2 |> auxThrough 3
-        r     = auxIn 23 |> verb |> auxThrough 3 |> auxThrough 4
-        verb  = freeverb 0.5 1.0 0.125
+        l     = auxIn 22 |> verb
+        r     = auxIn 23 |> verb
+        verb  = freeverb 0.5 0.75 0.95
 
-hyperMelodyPrime :: UGen -> UGen
-hyperMelodyPrime f = [s, s2] |> softclip 20 |> filt |> e |> gain 0.25 |> visAux (random 0 2 5) 2 |> pan 0.2 |> out 22
-    where
-        e    = env [0,1,0]         [0.01,0.75] (-3)
-        e2   = env [1,1,0.125] [0.05,0.75] (-3)
-        s    = syncsaw (sin (3 * 6) + f * 2) <| auxIn 42
-        s2   = syncsaw (sin (6 * 9) + f)     <| auxIn 42
-        filt = lpf (e2 4 * f) 2
+-- hyperMelodyPrime :: UGen -> UGen
+-- hyperMelodyPrime f = [s, s2] |> softclip 20 |> filt |> e |> gain 0.25 |> visAux (random 0 2 5) 2 |> pan 0.2 |> out 22
+--     where
+--         e    = env [0,1,0]         [0.01,0.75] (-3)
+--         e2   = env [1,1,0.125] [0.05,0.75] (-3)
+--         s    = syncsaw (sin (3 * 6) + f * 2) <| auxIn 42
+--         s2   = syncsaw (sin (6 * 9) + f)     <| auxIn 42
+--         filt = lpf (e2 4 * f) 2
 
-manaLeakPrime :: UGen -> UGen
-manaLeakPrime f = [s, s2] |> softclip 20 |> filt |> e |> gain 0.225 |> visAux (random 0 2 5) 2 |> auxThrough 42 |> pan 0.8 |> out 22
-    where
-        e    = env [0,1, 0]        [0.01,0.75] (-3)
-        e2   = env [1,1,0.125] [0.05,0.75] (-3)
-        s    = saw <| sin (3 * 6) + f
-        s2   = saw <| sin (6 * 9) + f * 2
-        filt = lpf (e2 [5, 6] * f) 2
+-- manaLeakPrime :: UGen -> UGen
+-- manaLeakPrime f = [s, s2] |> softclip 20 |> filt |> e |> gain 0.225 |> visAux (random 0 2 5) 2 |> auxThrough 42 |> pan 0.8 |> out 22
+--     where
+--         e    = env [0,1, 0]        [0.01,0.75] (-3)
+--         e2   = env [1,1,0.125] [0.05,0.75] (-3)
+--         s    = saw <| sin (3 * 6) + f
+--         s2   = saw <| sin (6 * 9) + f * 2
+--         filt = lpf (e2 [5, 6] * f) 2
 
-hyperMelodyPrimePattern :: Signal ()
-hyperMelodyPrimePattern = fx *> pat
--- hyperMelodyPrimePattern = fx <> (playSynthPattern (toggle <| combo [alt,isDown keyR]) hyperMelodyPrime (pmap ((*0.5) . d2f sigScale . (+1)) <| ploop [sec1]))
-    where
-        fx  = mkTerminal (Vector3 8 (-3) 0) 2 keyR id halfVerb
-        pat = mkPatternTerminal (Vector3 12 (-3) 0) 2 keyR id hyperMelodyPrime <| PFunc0 <| (pmap ((*0.5) . d2f sigScale . (+1)) <| ploop [sec1])
-        -- fx   = play (toggle <| combo [alt,isDown keyR]) halfVerb
-        -- fx   = play (toggle <| combo [alt,isDown keyR]) halfVerb
-        sec1 = [lich| [_ 3] [4 3] [_ 3] 6 7 _ [_ 3] 4 _ _ _ _ _ _
-                      [1 _ 2] [_ 3 _] [2 4 6] 5 _ _ _ _ _ _ _ _ _ _ _
-                      [4 _ _ 3] [_ _ 2 _] [_ 1 _ _] 3 _ _ _ _ 2 _ _ _ _ _ _ 1 _ _
-                      _ _ _ _ _ _ 7 5 [_ 4] 5 _ _ _ _ _
-                      _ _ _ _ 3 _ _ _ _ _ _ _ _ _ _ _ _
-                      2 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ |]
+-- -- hyperMelodyPrimePattern :: Signal ()
+-- -- hyperMelodyPrimePattern = fx *> pat
+-- -- hyperMelodyPrimePattern = fx <> (playSynthPattern (toggle <| combo [alt,isDown keyR]) hyperMelodyPrime (pmap ((*0.5) . d2f sigScale . (+1)) <| ploop [sec1]))
+--     -- where
+--         -- fx  = mkTerminal (Vector3 8 (-3) 0) 2 keyR id halfVerb
+--         -- pat = mkPatternTerminal (Vector3 12 (-3) 0) 2 keyR id hyperMelodyPrime <| PFunc0 <| (pmap ((*0.5) . d2f sigScale . (+1)) <| ploop [sec1])
+--         -- fx   = play (toggle <| combo [alt,isDown keyR]) halfVerb
+--         -- fx   = play (toggle <| combo [alt,isDown keyR]) halfVerb
+--         -- sec1 = [lich| [_ 3] [4 3] [_ 3] 6 7 _ [_ 3] 4 _ _ _ _ _ _
+--                       -- [1 _ 2] [_ 3 _] [2 4 6] 5 _ _ _ _ _ _ _ _ _ _ _
+--                       [4 _ _ 3] [_ _ 2 _] [_ 1 _ _] 3 _ _ _ _ 2 _ _ _ _ _ _ 1 _ _
+--                       _ _ _ _ _ _ 7 5 [_ 4] 5 _ _ _ _ _
+--                       _ _ _ _ 3 _ _ _ _ _ _ _ _ _ _ _ _
+--                       2 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ |]
 
-manaLeakPrimePattern :: Signal ()
-manaLeakPrimePattern = mkPatternTerminal (Vector3 16 (-3) 0) 2 keyT id manaLeakPrime <| PFunc0 <| (pmap ((*0.25) . d2f sigScale . (+3)) <| ploop [sec1])
--- manaLeakPrimePattern = playSynthPattern (toggle <| combo [alt,isDown keyT]) manaLeakPrime (pmap ((*0.25) . d2f sigScale . (+3)) <| ploop [sec1])
-    where
-        sec1 = [lich| 4 _ 3 _ 2 _ _ _
-                      4 _ 3 _ 2 _ 3 _
-                      [4 6 8] 7 _ _ _ _ _ _
-                      _ _ _ _ _ _ _ _
-                      4 _ 3 _ 2 _ _ _
-                      4 _ 3 _ 2 _ 3 _
-                      [1 1] 0 _ _ _ _ _ _
-                      _ _ _ _ _ _ _ _
-                      2 _ 1 _ _ _ 1
-                      2 _ 1 _ _ _ 1 2 _
-                      [3 _ 2] [_ 1 _] 0 _ _ _ _ _
-                      _ _ _ _ _ _ _ _ |]
+-- manaLeakPrimePattern :: Signal ()
+-- manaLeakPrimePattern = mkPatternTerminal (Vector3 16 (-3) 0) 2 keyT id manaLeakPrime <| PFunc0 <| (pmap ((*0.25) . d2f sigScale . (+3)) <| ploop [sec1])
+-- -- manaLeakPrimePattern = playSynthPattern (toggle <| combo [alt,isDown keyT]) manaLeakPrime (pmap ((*0.25) . d2f sigScale . (+3)) <| ploop [sec1])
+--     where
+--         sec1 = [lich| 4 _ 3 _ 2 _ _ _
+--                       4 _ 3 _ 2 _ 3 _
+--                       [4 6 8] 7 _ _ _ _ _ _
+--                       _ _ _ _ _ _ _ _
+--                       4 _ 3 _ 2 _ _ _
+--                       4 _ 3 _ 2 _ 3 _
+--                       [1 1] 0 _ _ _ _ _ _
+--                       _ _ _ _ _ _ _ _
+--                       2 _ 1 _ _ _ 1
+--                       2 _ 1 _ _ _ 1 2 _
+--                       [3 _ 2] [_ 1 _] 0 _ _ _ _ _
+--                       _ _ _ _ _ _ _ _ |]
 
 ------------------------------------
 -- Section 2.5
