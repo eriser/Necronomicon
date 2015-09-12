@@ -371,10 +371,10 @@ oscModel = mkModel DefaultLayer mesh oscMaterial
                       ]
 
 lfsawSynth :: UGen -> UGen -> UGen
-lfsawSynth freq1 freq2 = o1 + o2 |> exprange 20 20000 |> sin |> gain 0.1 |> visAux 7 1 |> out 22
+lfsawSynth freq1 freq2 = o1 + o2 |> exprange 20 20000 |> sin |> gain 0.4 |> visAux 7 1 |> out 22
     where
         o1 = (lfsaw (lag 0.1 [f1, f2]) 0) * 2 - 1
-        o2 = (lfsaw (lag 1 [f1 * 0.5, f2 * 0.5]) 0) * 2 - 1
+        o2 = (lfsaw (lag 2 [f1 * 0.5, f2 * 0.5]) 0) * 2 - 1
         f1 = exprange 40 4000 freq1
         f2 = exprange 40 4000 freq2
 
@@ -1568,12 +1568,12 @@ feedbackSolo0x10cSynth sampleFilePath mx my = playMonoSample sampleFilePath rate
         rate  = mx + my |> gain 0.5 |> range 0.75 1.5
 
 feedbackSolo0x10cFX :: UGen -> UGen -> UGen
-feedbackSolo0x10cFX mx my = feed |> gain 4 |> constrain (-1) 1 |> poll |> visAux 2 1 |> masterOut
+feedbackSolo0x10cFX mx my = feed |> gain 2 |> constrain (-1) 1 |> poll |> visAux 2 1 |> masterOut
     where
         ms         = [mx, my] * 2 - 1
         auxes      = auxIn (fst feedbackSolo0x10cBuses <> snd feedbackSolo0x10cBuses) |> gain 10
         delayTimes = ms |> exprange 0.5 1 |> lag 1
         -- delayTimes2 = ms |> range 1 2
-        feed       = feedback $ \l r -> auxes + (r <> l) +> delayC 0.25 0.25 |> delayC 1 delayTimes |> gain 0.9 |> constrain (-1) 1 |> fxLimiter
+        feed       = feedback $ \l r -> auxes + (r <> l) +> delayC 0.5 0.5 |> delayC 1 delayTimes |> gain 0.9 |> constrain (-1) 1 |> fxLimiter
         -- verb = freeverb 0.1 10 0.01
         fxLimiter  = limiter 0.1 0.01 0.03 (-9) 0.1 <> limiter 0.175 0.01 0.03 (-9) 0.1
