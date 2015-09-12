@@ -504,7 +504,7 @@ mouseToSlendro :: Double -> Double
 mouseToSlendro m = fromRational . d2f slendro . toRational <| (floor <| scale 0 24 m :: Integer)
 
 triOsc32 :: UGen -> UGen -> UGen
-triOsc32 mx my = feedback fSig |> verb |> gain 0.0785 |> masterOut
+triOsc32 mx my = feedback fSig |> verb |> gain 0.4785 |> masterOut
     where
         f1     = lag 0.25 mx
         f2     = lag 0.25 my
@@ -536,21 +536,21 @@ metallic4 :: UGen -> UGen
 metallic4 f = metallicBass f 0.25
 
 hyperMelody :: UGen -> UGen
-hyperMelody f = [s,s2] |> gain 0.4 |> e |> visAux (random 0 2 5) 2 |> masterOut
+hyperMelody f = [s,s2] |> gain 0.3 |> e |> visAux (random 0 2 5) 2 |> masterOut
     where
         e  = env [0, 1, 0.15, 0] [0.0001, 0.1, 7] (-1.5)
         s  = sin <| sin 3 * 6 + f * 2
         s2 = sin <| sin 6 * 9 + f
 
 hyperMelodyHarmony :: UGen -> UGen
-hyperMelodyHarmony f = [s, s2] |> lpf (fromSlendro 25) 0.3 |> e |> gain 2 |> visAux (random 0 2 5) 2 |> masterOut
+hyperMelodyHarmony f = [s, s2] |> lpf (fromSlendro 25) 0.3 |> e |> gain 1.5 |> visAux (random 0 2 5) 2 |> masterOut
     where
         e  = env [0, 0.3, 0.05, 0] [0.0001, 0.1, 7] (-8)
         s  = sin <| sin 3 * 6 + f
         s2 = sin <| sin 6 * 9 + f * 2
 
 reverseSwellPanned :: UGen -> UGen -> UGen
-reverseSwellPanned f panPos =  sig1 + sig2 + sig3 |> e |> tanhDist (random 31 0.0625 0.125) |> (+ whiteNoise * 0.125) |> m |> gain 1.5 |> filt |> e |> visAux 5 1 |> pan panPos |> caveOut
+reverseSwellPanned f panPos =  sig1 + sig2 + sig3 |> e |> tanhDist (random 31 0.0625 0.125) |> (+ whiteNoise * 0.125) |> m |> gain 1 |> filt |> e |> visAux 5 1 |> pan panPos |> caveOut
     where
         hf   = f * 0.5
         e    = env [0,1,0]         [4,4] 3
@@ -564,6 +564,24 @@ reverseSwellPanned f panPos =  sig1 + sig2 + sig3 |> e |> tanhDist (random 31 0.
         mod3 = saw (random 10 0.25 1.0) |> range 0.25 1
         mod4 = saw (random 11 0.5 2.0)  |> range 0.01 1
         m x  = x - 0.125
+
+dissonances :: UGen -> UGen -> UGen
+dissonances _ _ = [s1 + s3, s2 + s4] |> e |> constrain (-0.1) 0.1 |> gain 4 |> visAux 5 1 |> caveOut
+    where
+        f        = random 0 50 150
+        e        = env [0, 1, 0]         [12, 6] 3
+        e2       = env [0.125, 1, 0.125] [12, 6] 3
+        s1       = map (s 2) [2, 6..16]   |> sum
+        s2       = map (s 2) [16, 20..32] |> sum
+        s3       = map (s 1) [32, 36..48] |> sum
+        s4       = map (s 1) [48, 54..64] |> sum
+        s fmul r = osc |> filt
+            where
+                mod1 = sin (random (r + 1) 0.06125 0.125) |> range 0.5 3
+                mod2 = sin (random (r + 2) 0.06125 0.125) |> range 0.5 3
+                mod3 = sin (random (r + 4) 0.05 0.1)      |> range 0.98 1.02
+                osc  = sin (fmul * f * mod3 * random (r + 3) 0.95 1.05) |> e2 |> constrain (-0.1) 0.1 |> gain mod1
+                filt = lpf (fmul * f * random r 0.5 5 * mod2 |> e2) 1 
 
 --add sins for visuals and modulation
 reverseSwell :: UGen -> UGen
@@ -607,6 +625,7 @@ section2Synths = play (pure True) caveTime
               *> pulseDemonPattern3
               *> hyperMelodyPrimePattern
               *> manaLeakPrimePattern
+              *> mkTerminal (Vector3 36 (-3) 0) 5 keyI id dissonances
               -- *> broodlingPattern
               -- *> subControlPattern
               -- *> section2Drums
