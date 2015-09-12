@@ -6,6 +6,9 @@ module Necronomicon.FRP.Audio
     , playSynthPattern'
     , playBeatPattern
     , playBeatPattern'
+    , playBeatPatternWithPatternArgs
+    , patternArgsFunc
+    , PatternArgsFunc
     , tempo
     , synthDef
     , loadSample
@@ -23,7 +26,7 @@ import           Necronomicon.FRP.Types
 import           Necronomicon.FRP.Signal
 import           Necronomicon.Runtime
 import           Necronomicon.Graphics
-import           Necronomicon.Patterns             (Pattern (..))
+import           Necronomicon.Patterns             (Pattern (..), collapse)
 import           Necronomicon.UGen
 import           Necronomicon.FRP.Runtime
 import           Debug.Trace
@@ -337,6 +340,52 @@ playBeatPattern'' playSig pattern argSigs = Signal $ \state -> do
         updateArg index aCont sPattern sNecroVars event = aCont event >>= \a -> case a of
             NoChange _ -> return ()
             Change val -> runNecroState (setPDefArg sPattern index $ PVal $ toRational val) sNecroVars >> return ()
+
+
+type PatternArgsFunc = [PRational] -> Rational -> Rational
+
+patternArgsFunc :: ([Rational] -> Pattern Rational) -> PatternArgsFunc
+patternArgsFunc pfunc args time = collapsePattern $ pfunc collapsedArgs
+    where
+        collapsedArgs = map collapsePattern args :: [Rational]
+        collapsePattern pattern = case collapse pattern time of
+            PNothing -> 0
+            PVal val -> val
+            nestedPattern -> collapsePattern nestedPattern
+
+playBeatPatternWithPatternArgs :: PFunc (String, UGen -> UGen -> UGen) -> [PatternArgsFunc] -> Signal (Bool, [Double]) -> Signal ()
+playBeatPatternWithPatternArgs pattern pArgFuncs argSig = Signal $ \state -> do
+
+    (acont, (p, _)) <- unSignal argSig state
+    pid              <- nextStateID state
+    let pFunc         = return pSynth
+        pSynth :: (String, UGen -> UGen -> UGen) -> [PRational] -> Rational -> JackTime -> Necronomicon ()
+        pSynth synth patternArgs patternTime jackTime = do
+            let synthArgs = map (\pArgFunc -> pArgFunc patternArgs patternTime) pArgFuncs
+            _ <- playSynthAtJackTimeAndMaybeCompile synth synthArgs jackTime
+            return ()
+
+        pDef          = pstreamWithArgsFunc ("sigPat" ++ show pid) pFunc pattern [0,0]
+
+    _                <- if p then runNecroState (runPDef pDef) (necroVars state) >> return () else return ()
+    playingRef       <- newIORef p
+
+    return (processSignal playingRef pDef acont (necroVars state), ())
+    where
+        processSignal playingRef pDef acont sNecroVars event = acont event >>= \ae -> case ae of
+            NoChange _       -> return $ NoChange ()
+            Change (p, args) -> do
+                isPlaying  <- readIORef playingRef
+                playChange <- case (p, isPlaying) of
+                    (True , False) -> runNecroState (runPDef pDef) sNecroVars >> writeIORef playingRef True  >> return (Change ())
+                    (False, True)  -> runNecroState (pstop   pDef) sNecroVars >> writeIORef playingRef False >> return (Change ())
+                    _                     -> return $ NoChange ()
+                readIORef playingRef >>= \isPlaying' -> case isPlaying' of
+                    False -> return ()
+                    True  -> do
+                        _ <- runNecroState (setPDefArgs pDef $ map (PVal . toRational) args) sNecroVars
+                        return ()
+                return playChange
 
 playBeatPattern' :: PFunc (String, UGen) -> Signal (Bool, [Double]) -> Signal ()
 playBeatPattern' pattern argSig = Signal $ \state -> do

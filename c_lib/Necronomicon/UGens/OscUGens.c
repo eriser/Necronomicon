@@ -19,12 +19,6 @@ void accumulator_constructor(ugen* u)
 
 void accumulator_deconstructor(ugen* u)
 {
-    puts("accumulator_deconstructor");
-    puts("about to print accumulator_deconstructor ugen");
-    printf("%p\n", u);
-    puts("accumulator_deconstructor");
-    puts("about to print accumulator_deconstructor ugen->data");
-    printf("%p\n", u->data);
     free(u->data);
 }
 
@@ -36,11 +30,6 @@ void sin_constructor(ugen* u)
 
 void sin_deconstructor(ugen* u)
 {
-    puts("sin_deconstructor");
-    puts("about to print sin_deconstructor ugen");
-    printf("%p\n", u);
-    puts("about to print sin_deconstructor ugen->data");
-    printf("%p\n", u->data);
     free(u->data);
 }
 
@@ -176,11 +165,6 @@ void minblep_constructor(ugen* u)
 
 void minblep_deconstructor(ugen* u)
 {
-    puts("minblep_deconstructor");
-    puts("about to print minblep_deconstructor ugen");
-    printf("%p\n", u);
-    puts("about to print minblep_deconstructor ugen->data");
-    printf("%p\n", u->data);
     minblep* mb = (minblep*) u->data;
     // free(mb->buffer);
     free(u->data);

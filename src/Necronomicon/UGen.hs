@@ -1348,7 +1348,7 @@ playSynthAtJackTime sdName args time = getSynthDef sdName >>= \maybeSynthDef -> 
                 Just synthDef -> incrementNodeID >>= \nodeID -> sendMessage (StartSynth synthDef (map (CDouble . fromRational) args) nodeID time) >> return (Synth nodeID synthDef)
                 Nothing -> nPrint ("SynthDef " ++ sdName ++ " not found. Unable to start synth.") >> return (Synth nullID nullSynth)
 
-playSynthAtJackTimeAndMaybeCompile :: (String, UGen) -> [Rational] -> JackTime -> Necronomicon Synth
+playSynthAtJackTimeAndMaybeCompile :: UGenType a => (String, a) -> [Rational] -> JackTime -> Necronomicon Synth
 playSynthAtJackTimeAndMaybeCompile (sdName, u) args time = getSynthDef sdName >>= \maybeSynthDef -> case maybeSynthDef of
                 Just synthDef -> incrementNodeID >>= \nodeID -> sendMessage (StartSynth synthDef (map (CDouble . fromRational) args) nodeID time) >> return (Synth nodeID synthDef)
                 Nothing       -> compileSynthDef sdName u >> playSynthAtJackTime sdName args time
