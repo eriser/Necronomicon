@@ -174,3 +174,11 @@ fractalPlants = lsystemGenerations lsystem "X"
 
 fractalPlantGrid :: Int -> G.Grid Char
 fractalPlantGrid numGenerations = mkLSystemGenerationsGrid $ take numGenerations fractalPlants
+
+lsystemCharMap :: M.Map Char Int
+lsystemCharMap = M.fromList $ zip "XF[]+-AB01Y" [0..]
+
+lsystemCharToInt :: Char -> Int
+lsystemCharToInt c = case M.lookup c lsystemCharMap of
+    Nothing -> 11
+    Just n -> n
