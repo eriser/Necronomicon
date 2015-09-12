@@ -597,7 +597,7 @@ reverseSwellPanned f panPos =  sig1 + sig2 + sig3 |> e |> tanhDist (random 31 0.
         m x  = x - 0.125
 
 dissonances :: UGen -> UGen -> UGen
-dissonances x y = [s1 + s3, s2 + s4] |> e |> constrain (-0.1) 0.1 |> gain 4 |> visAux 5 1 |> caveOut
+dissonances x y = [s1 + s3, s2 + s4] |> e |> constrain (-0.1) 0.1 +> delayN 0.5 0.5 |> gain 2 |> visAux 5 1 |> caveOut
     where
         f        = random 0 50 150 * linlin 0 1 0.8 1.2 y
         e v      = v * x
@@ -1505,7 +1505,7 @@ feedbackKitHellSynth sampleFilePath _ _ = playMonoSample sampleFilePath rate |> 
         -- maxFreq = my |> exprange 800 40000
 
 feedbackKitHellFX :: UGen -> UGen -> UGen
-feedbackKitHellFX _ _ = feed |> gain 2 |> constrain (-1) 1 |> poll |> visAux 2 1 |> masterOut
+feedbackKitHellFX _ _ = feed |> gain 2 |> constrain (-1) 1 |> gain 0.5 |> poll |> visAux 2 1 |> masterOut
     where
         -- ms = [mx, my] * 2 - 1
         auxes = auxIn (fst feedbackKitHellBuses <> snd feedbackKitHellBuses) |> gain 10
@@ -1549,8 +1549,8 @@ feedbackSolo0x10cSequence = PFunc0 <| pfractalVals
 feedbackSolo0x10cSequenceArgs :: [PatternArgsFunc]
 feedbackSolo0x10cSequenceArgs = map (patternArgsFunc . pArgFunc) [mouseXIndex, mouseYIndex]
     where
-        rangeScale = 77
-        maxRange = 217
+        rangeScale  = 77
+        maxRange    = 217
         mouseXIndex = 0
         mouseYIndex = 1
         pArgFunc :: Int -> [Rational] -> PRational
@@ -1563,22 +1563,23 @@ feedbackSolo0x10cSequenceArgs = map (patternArgsFunc . pArgFunc) [mouseXIndex, m
 feedbackSolo0x10cSynth :: FilePath -> UGen -> UGen -> UGen
 feedbackSolo0x10cSynth sampleFilePath mx my = playMonoSample sampleFilePath rate |> e |> filt |> constrain (-1) 1 |> out (fst feedbackSolo0x10cBuses)
     where
-        e = perc 0.01 1 1 0
-        e2 = perc2 0.001 1 1 (-4) freqs
-        filt = bpf e2 1
-        lFreq = mx |> exprange 40 1000 |> lag 0.1
-        rFreq = my |> exprange 40 1000 |> lag 0.1
+        atk   = random 2 (-1) 1 |> exprange 0.01 1
+        e     = perc  atk 1 1 0
+        e2    = perc2 atk 1 1 (-4) freqs
+        filt  = bpf e2 1
+        lFreq = mx |> exprange 40 1000 |> lag (random 0 0.1 2)
+        rFreq = my |> exprange 40 1000 |> lag (random 1 0.1 2)
         freqs = lFreq <> rFreq
-        rate = 1
+        rate  = mx + my |> gain 0.5 |> range 0.75 1.5
 
 feedbackSolo0x10cFX :: UGen -> UGen -> UGen
-feedbackSolo0x10cFX mx my = feed |> gain 2 |> constrain (-1) 1 |> poll |> visAux 2 1 |> masterOut
+feedbackSolo0x10cFX mx my = feed |> gain 4 |> constrain (-1) 1 |> poll |> visAux 2 1 |> masterOut
     where
-        ms = [mx, my] * 2 - 1
-        auxes = auxIn (fst feedbackSolo0x10cBuses <> snd feedbackSolo0x10cBuses) |> gain 10
+        ms         = [mx, my] * 2 - 1
+        auxes      = auxIn (fst feedbackSolo0x10cBuses <> snd feedbackSolo0x10cBuses) |> gain 10
         delayTimes = ms |> exprange 0.5 1 |> lag 1
         -- delayTimes2 = ms |> range 1 2
-        feed = feedback $ \l r -> auxes + (r <> l) +> delayC 0.5 0.5 |> delayC 1 delayTimes |> gain 0.9 |> constrain (-1) 1 |> fxLimiter
+        feed       = feedback $ \l r -> auxes + (r <> l) +> delayC 0.25 0.25 |> delayC 1 delayTimes |> gain 0.9 |> constrain (-1) 1 |> fxLimiter
         -- verb = freeverb 0.1 10 0.01
         fxLimiter = limiter 0.1 0.01 0.03 (-9) 0.1 <> limiter 0.175 0.01 0.03 (-9) 0.1
 
@@ -1604,22 +1605,37 @@ feedbackSolo0x11dNameAndSynth :: Int -> (String, UGen -> UGen -> UGen)
 feedbackSolo0x11dNameAndSynth = lookupSampleAndSynth feedbackSolo0x11dNamesAndSynths
 
 feedbackSolo0x11dSequence :: PFunc (String, UGen -> UGen -> UGen)
-feedbackSolo0x11dSequence = PFunc0 <| pfractalVals
+feedbackSolo0x11dSequence = PFunc0 <| place [pfractalVals,pwolframGridVals]
     where
         fractalPlantFour = fractalPlant 6
         sierpinskiTriangleSix = sierpinskiTriangle 6
-        pfractalPlants = pwrapLookup fractalPlantFour '-' (ploop [0..99])
-        psierpinskiTriangles = pwrapLookup sierpinskiTriangleSix '-' (ploop [0..99])
-        pfractalVals = ploop [pfractalPlants, psierpinskiTriangles] |> fmap fractalPlantSynthAndDur
+        dragonCurvesSix = dragonCurve 6
+        cantorDustSix = cantorDust 6
+        pfractalPlants = pwrapLookup fractalPlantFour 'B' (ploop [0..99])
+        psierpinskiTriangles = pwrapLookup sierpinskiTriangleSix 'B' (ploop [0..99])
+        pDragonCurves = pwrapLookup dragonCurvesSix 'A' (ploop [0..99])
+        pCantorDusts = pwrapLookup cantorDustSix 'A' (ploop [0..99])
+        pfractalVals = ploop [pfractalPlants, psierpinskiTriangles, pDragonCurves, pCantorDusts] |> fmap fractalPlantSynthAndDur
         fractalPlantSynthAndDur plantChar = (PVal $ feedbackSolo0x11dNameAndSynth index, plantLookupDur index)
             where
                 index = lsystemCharToInt plantChar
         pfractalPlantDurs = map plantToRational fractalPlantFour
             where
-                plantToRational c = 1 / ((toRational $ lsystemCharToInt c) + 1)
+                plantToRational c = 2 / ((toRational $ lsystemCharToInt c) + 1)
         plantLookupDur n = case wrapLookup pfractalPlantDurs n of
             Nothing -> 1
             Just v -> v
+        seedCells = V.fromList (replicate 80 0 ++ [1] ++ replicate 80 0)
+        numColors = 3
+        numRows = 1000
+        rules = [77245, 210819] -- [573377, 706951, 77245, 210819]
+        deltas = [(-1, 1), (1, -1), (-1, 1), (1, 1)]
+        ruleMaps = map (multiColoredWolframRuleMap numColors) rules
+        wolframCAGrids = map (\ruleMap -> mkMultiColoredWolframGrid seedCells ruleMap numRows) ruleMaps
+        pwolframGrids = map (\(wolframCAGrid, (dx, dy)) -> pgridDelta wolframCAGrid dx dy) $ zip wolframCAGrids deltas
+        pwolframGridSynths = fmap feedbackSolo0x11dNameAndSynth . head $ pwolframGrids
+        durs = cycle [0.5, 0.25, 0.125]
+        pwolframGridVals = fmap (\n -> (pwolframGridSynths, durs !! n)) (pwolframGrids !! 1)
 
 feedbackSolo0x11dSequenceArgs :: [PatternArgsFunc]
 feedbackSolo0x11dSequenceArgs = map (patternArgsFunc . pArgFunc) [mouseXIndex, mouseYIndex]
@@ -1636,24 +1652,25 @@ feedbackSolo0x11dSequenceArgs = map (patternArgsFunc . pArgFunc) [mouseXIndex, m
                     pval = PVal <| val * rangeScale
 
 feedbackSolo0x11dSynth :: FilePath -> UGen -> UGen -> UGen
-feedbackSolo0x11dSynth sampleFilePath mx my = playMonoSample sampleFilePath rate + osc |> e |> filt |> constrain (-1) 1 |> out (fst feedbackSolo0x11dBuses)
+feedbackSolo0x11dSynth sampleFilePath mx my = samples * osc |> e |> filt |> constrain (-1) 1 |> out (fst feedbackSolo0x11dBuses)
     where
         e = perc 0.01 1 1 (-128)
-        e2 = perc2 0.001 0.3 1 (-4) freqs |> umax 52
-        filt = bpf e2 1
+        e2 = perc2 0.001 11 1 (-128) freqs |> umax 52
+        filt = hpf e2 10
         lFreq = mx |> exprange 40 1000 |> lag 0.1
         rFreq = my |> exprange 40 1000 |> lag 0.1
         freqs = lFreq <> rFreq
-        rate = 0.125
-        osc = lfpulse 13 (mx + my |> gain 0.5) |> gain 2
+        rate = [0.5, 1]
+        samples = playMonoSample sampleFilePath rate |> mix
+        osc = lfpulse 7.5 (mx + my |> gain 0.5) |> gain 2
 
 feedbackSolo0x11dFX :: UGen -> UGen -> UGen
 feedbackSolo0x11dFX mx my = feed |> gain 2 |> constrain (-1) 1 |> poll |> visAux 2 1 |> masterOut
     where
         ms = [mx, my] * 2 - 1
         auxes = auxIn (fst feedbackSolo0x11dBuses <> snd feedbackSolo0x11dBuses) |> gain 10
-        delayTimes = ms |> exprange 0.0005 0.033333333 |> lag 1
+        delayTimes = ms |> exprange 0.000001 0.033333333 |> lag 1
         -- delayTimes2 = ms |> range 1 2
         feed = feedback $ \l r -> auxes + (r <> l) +> delayC 0.5 0.5 |> delayC 1 delayTimes |> verb |> gain 0.9 |> constrain (-1) 1 |> fxLimiter
-        verb = freeverb 0.1 10 0.01
+        verb = freeverb (my |> exprange 0.001 1 |> lag 0.1) 50 (mx |> lag 0.1)
         fxLimiter = limiter 0.1 0.01 0.03 (-9) 0.1 <> limiter 0.175 0.01 0.03 (-9) 0.1
