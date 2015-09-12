@@ -886,11 +886,12 @@ pulseDemonPattern3 = mkPatternTerminal (Vector3 28 (-3) 0) 2 keyB id pulseDemon 
                 |]
 
 halfVerb :: UGen -> UGen -> UGen
-halfVerb _ _ = [l * 0.9 + r * 0.1, r * 0.9 + l * 0.1] |> verb +> delayN 0.5 0.5 |> masterOut
+halfVerb _ _ = [l * 0.9 + r * 0.1, r * 0.9 + l * 0.1] |> verb |> d2 0.5 |> d2 0.25 |> d2 0.125 |> masterOut
     where
         l     = auxIn 22
         r     = auxIn 23
         verb  = freeverb 0.25 0.5 0.95
+        d2 x v= x + delayN 0.5 0.5 x * v
 
 lfsawSynth :: UGen -> UGen -> UGen
 lfsawSynth freq1 freq2 = s1 + s2 |> f |> gain 0.3 |> visAux 7 1 |> out 22
