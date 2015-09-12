@@ -533,9 +533,9 @@ triOsc32 mx my = feedback fSig |> verb |> gain 0.785 |> masterOut
             where
                 sig1 = sinOsc (f1 + sig3 * 26.162)    * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> auxThrough 2
                 sig2 = sinOsc (f2 - sig3 * 26.162)    * (sinOsc (f1 * 0.00025) |> range 0.5 1) |> auxThrough 3
-                sig3 = sinOsc (f1 - f2 +  i * 26.162) * (sinOsc ( i * 0.00025) |> range 0.5 1) |> auxThrough 4
-                sig4 = sinOsc (f1 * 0.25 + sig1 * 261.6255653006) * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 3 |> gain 0.5 +> d
-                sig5 = sinOsc (f2 * 0.25 - sig2 * 261.6255653006) * (sinOsc (f1 * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 3 |> gain 0.5 +> d
+                sig3 = sinOsc (f1 - f2 +  i * 26.162 * 2) * (sinOsc ( i * 0.00025) |> range 0.5 1) |> auxThrough 4
+                sig4 = sinOsc (f1 * 0.5 + sig1 * 261.6255653006) * (sinOsc (f2 * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 3 |> gain 0.5 +> d
+                sig5 = sinOsc (f2 * 0.25 + sig2 * 261.6255653006) * (sinOsc (f1 * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 3 |> gain 0.5 +> d
                 sig6 = sinOsc (f1 * 0.25 - sig3 * 261.6255653006) * (sinOsc ( i * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 3 |> gain 0.5 +> d
 
 triOsc32' :: UGen -> UGen -> UGen
