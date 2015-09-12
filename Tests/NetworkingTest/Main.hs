@@ -220,9 +220,17 @@ main = runSignal
     *> mkBeatPatternTerminal (Vector3 24 3 0) 2 keyL binaryWolframSamplesKitPattern []
     *> mkBeatPatternTerminal (Vector3 28 3 0) 2 keyM multiColoredWolframSamplesKitPattern []
     *> mkTerminal            (Vector3 32 3 0) 2 keyN feedbackKitMouseScale feedbackKitWrapFX
-    *> mkBeatPatternTerminal (Vector3 36 3 0) 2 keyQ multiColoredWolframSamplesTablaPattern multiColoredWolframSamplesTablaPatternArgs
-    *> mkTerminal            (Vector3 40 3 0) 2 keyR feedbackTablaMouseScale feedbackTablaWrapFX
-    *> mkTerminal            (Vector3 44 3 0) 2 keyY mouseToSlendro triOsc32
+    *> mkBeatPatternTerminal (Vector3 36 3 0) 2 keyX multiColoredWolframSamplesTablaPattern multiColoredWolframSamplesTablaPatternArgs
+    *> mkTerminal            (Vector3 40 3 0) 2 keyX feedbackTablaMouseScale feedbackTablaWrapFX
+    *> mkBeatPatternTerminal (Vector3 44 3 0) 2 keyZ feedbackTablaTanHDistSequence feedbackTablaTanHDistSequenceArgs
+    *> mkTerminal            (Vector3 48 3 0) 2 keyZ id feedbackTablaTanHDistFX
+    *> mkBeatPatternTerminal (Vector3 52 3 0) 2 keyC feedbackTablaSinDistSequence feedbackTablaSinDistSequenceArgs
+    *> mkTerminal            (Vector3 56 3 0) 2 keyC id feedbackTablaSinDistFX
+    *> mkBeatPatternTerminal (Vector3 60 3 0) 2 keyComma feedbackKitHellSequence feedbackKitHellSequenceArgs
+    *> mkTerminal            (Vector3 64 3 0) 2 keyComma id feedbackKitHellFX
+    *> mkBeatPatternTerminal (Vector3 60 3 0) 2 keyPeriod feedbackSolo0x10cSequence feedbackSolo0x10cSequenceArgs
+    *> mkTerminal            (Vector3 64 3 0) 2 keyPeriod id feedbackSolo0x10cFX
+    *> mkTerminal            (Vector3 68 3 0) 2 keyY mouseToSlendro triOsc32
     *> section1
     *> section2
     *> section2Synths
@@ -285,10 +293,22 @@ artifactOut = out <| random 0 150 156
 -}
 
 feedbackKitBuses :: (UGen, UGen)
-feedbackKitBuses = (55, 56)
+feedbackKitBuses = (60, 61)
 
 feedbackTablaBuses :: (UGen, UGen)
-feedbackTablaBuses = (57, 58)
+feedbackTablaBuses = (62, 63)
+
+feedbackTablaTanHDistBuses :: (UGen, UGen)
+feedbackTablaTanHDistBuses = (64, 65)
+
+feedbackTablaSinDistBuses :: (UGen, UGen)
+feedbackTablaSinDistBuses = (66, 67)
+
+feedbackKitHellBuses :: (UGen, UGen)
+feedbackKitHellBuses = (68, 69)
+
+feedbackSolo0x10cBuses :: (UGen, UGen)
+feedbackSolo0x10cBuses = (70, 71)
 
 ---------------------------------------------------------------------------
 -- Sections
@@ -588,7 +608,7 @@ dissonances x y = [s1 + s3, s2 + s4] |> e |> constrain (-0.1) 0.1 |> gain 4 |> v
                 mod2 = sin (random (r + 2) 0.06125 0.125) |> range 0.5 3
                 mod3 = sin (random (r + 4) 0.05 0.1)      |> range 0.98 1.02
                 osc  = sin (fmul * f * mod3 * random (r + 3) 0.95 1.05) |> e |> constrain (-0.1) 0.1 |> gain mod1
-                filt = lpf (fmul * f * random r 0.5 5 * mod2 |> e) 1 
+                filt = lpf (fmul * f * random r 0.5 5 * mod2 |> e) 1
 
 --add sins for visuals and modulation
 reverseSwell :: UGen -> UGen
@@ -912,7 +932,7 @@ distPercVerb _ _ = [l * 0.9 + r * 0.1, r * 0.9 + l * 0.1] |> masterOut
     where
         l      = auxIn 24 |> verb
         r      = auxIn 25 |> verb
-        verb x = x |> freeverb 0.75 1.0 0.85 |> gain 1 |> visAux 4 1 
+        verb x = x |> freeverb 0.75 1.0 0.85 |> gain 1 |> visAux 4 1
 
 floorPerc2 :: UGen -> UGen
 floorPerc2 f = sig1 + sig2 |> e |> gain 1 |> visAux 6 1 |> pan 0.35 |> out 24
@@ -979,7 +999,7 @@ section2_5 = mkTerminal (Vector3 32 (-3) 0) 4 keyU id distPercVerb
         -- floorPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyU]) floorPerc2 (pmap (* 0.25) <| ploop [sec1])
             where
                 -- sec1 = [lich| [6 1] [_ 1] [_ 6] [_ 1] |]
-                sec1 = [lich| 6 _ _ _ _ _ _ 
+                sec1 = [lich| 6 _ _ _ _ _ _
                               _ _ _ _ _ _ _
                               1 _ _ _ _ _ _
                               _ _ _ _ _ _ _
@@ -1124,13 +1144,16 @@ multiColoredWolframSamplesTablaPattern = PFunc0 <| pwolframGridVals
 multiColoredWolframSamplesTablaPatternArgs :: [PatternArgsFunc]
 multiColoredWolframSamplesTablaPatternArgs = map (patternArgsFunc . pArgFunc) [mouseXIndex, mouseYIndex]
     where
-        rangeScale = 10
+        rangeScale = 77
+        maxRange = 217
         mouseXIndex = 0
         mouseYIndex = 1
         pArgFunc :: Int -> [Rational] -> PRational
         pArgFunc index args = case (wrapLookup args index) of
             Nothing  -> 0
-            Just val -> pseries 1 <| PVal <| fromIntegral ((val * rangeScale |> floor) :: Int)
+            Just val -> pval |> pseries 1 |> pwrap 2 maxRange
+                where
+                    pval = PVal <| val * rangeScale
 
 ------------------------------------------------------------------------------------------
 -- Samples
@@ -1141,6 +1164,13 @@ wrapLookup [] _ = Nothing
 wrapLookup list index = Just $ list !! index'
     where
         index' = mod index (length list)
+
+pwrapLookup :: [a] -> a -> PRational -> Pattern a
+pwrapLookup list defaultValue pIndex = fmap pLookup pIndex
+    where
+        pLookup rationalIndex = case wrapLookup list (floor rationalIndex :: Int) of
+            Nothing -> defaultValue
+            Just val -> val
 
 kitSamples :: [FilePath]
 kitSamples = [
@@ -1223,16 +1253,9 @@ lookupSampleAndSynth list index = case wrapLookup list index of
 __null_sample_and_synth :: (String, UGen -> UGen -> UGen)
 __null_sample_and_synth = ("__null__", \_ _ -> 0)
 
-
+-----------------------
 -- Feedback kit synths
-
-feedbackKitSynth :: FilePath -> UGen -> UGen -> UGen
-feedbackKitSynth sampleFilePath _ _ = playMonoSample sampleFilePath rate |> e |> dup |> out (fst feedbackKitBuses)
-    where
-        e = perc 0.0 1 4 1
-        -- e2 = perc2 0.0001 0.01 10 (-64) 60000 |> umax 30 -- move umax around 20,30,40,50,60,etc..
-        -- filt = lpf e2 10
-        rate = 1
+-----------------------
 
 feedbackKitSynths :: [UGen -> UGen -> UGen]
 feedbackKitSynths = map feedbackKitSynth kitSamples
@@ -1243,7 +1266,13 @@ feedbackKitNamesAndSynths = zip (map ("feedbackKit"++) kitSamples) feedbackKitSy
 lookupFeedbackKitNameAndSynth :: Int -> (String, UGen -> UGen -> UGen)
 lookupFeedbackKitNameAndSynth = lookupSampleAndSynth feedbackKitNamesAndSynths
 
--- feedback effect bus
+
+feedbackKitSynth :: FilePath -> UGen -> UGen -> UGen
+feedbackKitSynth sampleFilePath _ _ = playMonoSample sampleFilePath rate |> e |> dup |> out (fst feedbackKitBuses)
+    where
+        e = perc 0.0 1 4 1
+        rate = 1
+
 feedbackKitWrapFX :: UGen -> UGen -> UGen
 feedbackKitWrapFX mx _ = feed |> gain 4 |> masterLimiter |> out 0
     where
@@ -1253,23 +1282,23 @@ feedbackKitWrapFX mx _ = feed |> gain 4 |> masterLimiter |> out 0
         filt = lpf e2 10
         minFreq = lag 0.1 mx
         maxFreq = 60000 -- lag 0.1 (my * 1000) -- was 60000
-        -- wrapDist n = (n |> wrap 0.1 |> gain 9) - n
 
 feedbackKitMouseScale :: Double -> Double
 feedbackKitMouseScale md = (round md :: Int) |> fromIntegral |> (*) 100.0 |> (+) 20.0
 
-
+---------------------------
 -- Feedback Tabla synths
+---------------------------
 
 feedbackTablaSynth :: FilePath -> UGen -> UGen -> UGen
 feedbackTablaSynth sampleFilePath mx my = playMonoSample sampleFilePath rate |> e |> filt |> dup |> out (fst feedbackTablaBuses)
     where
-        e = perc 0.0 0.3 1 1
-        e2 = perc2 0.0001 0.01 10 (-64) maxFreq |> umax minFreq
+        e = perc 0.0 1 1 (-16)
+        e2 = perc2 onset 0.01 10 (-64) 60000 |> umax minFreq
         filt = lpf e2 10
         rate = 1
-        minFreq = mx |> lag 0.1
-        maxFreq = my |> gain 100 |> lag 0.1 |> umax minFreq
+        minFreq = mx + 20 |> lag 0.1
+        onset = my * 0.002 |> lag 0.1
 
 feedbackTablaSynths :: [UGen -> UGen -> UGen]
 feedbackTablaSynths = map feedbackTablaSynth tablaSamples
@@ -1282,17 +1311,268 @@ lookupFeedbackTablaNameAndSynth = lookupSampleAndSynth feedbackTablaNamesAndSynt
 
 -- feedback effect bus
 feedbackTablaWrapFX :: UGen -> UGen -> UGen
-feedbackTablaWrapFX mx my = feed |> gain 4 |> masterLimiter |> out 0
+feedbackTablaWrapFX _ _ = feed |> constrain (-1) 1 |> poll |> visAux 2 1 |> masterOut
     where
         auxes = auxIn (fst feedbackTablaBuses <> snd feedbackTablaBuses) -- |> filt
-        feed = feedback $ \l r -> auxes + (r <> l) |> delayC 0.3 (0.3 <> 0.2) +> delayC 0.2 (mx <> my) |> wrapDist |> wrap 0.9
-        wrapDist n = (n |> wrap 0.1 |> gain 9) - n
-        -- e2 = perc2 0.0001 0.01 10 (-64) maxFreq |> umax minFreq -- move umax around 20,30,40,50,60,etc..
-        -- filt = lpf maxFreq 0.1
-        -- minFreq = lag 0.1 mx
-        -- maxFreq = lag 0.1 (my * 100) |> umax minFreq -- was 60000
-        -- wrapDist n = (n |> wrap 0.1 |> gain 9) - n
+        feed = feedback $ \l r -> auxes + (r <> l) {- |> delayC 0.3 (0.3 <> 0.2) -} {-+> delayC 0.2 (mx <> my)-} |> wrapDist |> wrap 0.9 |> fxLimiter
+        wrapDist n = (n |> wrap 1 |> gain 9) - n
+        fxLimiter = (limiter 0.3 0.01 0.03 (-32) 0.01 <> limiter 0.2 0.01 0.03 (-32) 0.01)
 
 feedbackTablaMouseScale :: Double -> Double
 feedbackTablaMouseScale md = md * 0.1 + 0.0001
--- feedbackTablaMouseScale md = ((round $ md * 100.0 + 20) :: Int) |> fromIntegral
+
+-------------------------------
+-- Feedback Tabla TanhDist
+-------------------------------
+
+feedbackTablaTanHDistSynths :: [UGen -> UGen -> UGen]
+feedbackTablaTanHDistSynths = map feedbackTablaTanHDistSynth tablaSamples
+
+feedbackTablaTanHDistNamesAndSynths :: [(String, UGen -> UGen -> UGen)]
+feedbackTablaTanHDistNamesAndSynths = zip (map ("feedbackTablaTanHDist"++) tablaSamples) feedbackTablaTanHDistSynths
+
+lookupFeedbackTablaTanHDistNameAndSynth :: Int -> (String, UGen -> UGen -> UGen)
+lookupFeedbackTablaTanHDistNameAndSynth = lookupSampleAndSynth feedbackTablaTanHDistNamesAndSynths
+
+feedbackTablaTanHDistSequence :: PFunc (String, UGen -> UGen -> UGen)
+feedbackTablaTanHDistSequence = PFunc0 <| pwolframGridVals
+    where
+        seedCells = V.fromList (replicate 80 0 ++ [1] ++ replicate 80 0)
+        numColors = 3
+        numRows = 1000
+        rules = [77245, 210819] -- [573377, 706951, 77245, 210819]
+        deltas = [(-1, 1), (1, -1), (-1, 1), (1, 1)]
+        ruleMaps = map (multiColoredWolframRuleMap numColors) rules
+        wolframCAGrids = map (\ruleMap -> mkMultiColoredWolframGrid seedCells ruleMap numRows) ruleMaps
+        pwolframGrids = map (\(wolframCAGrid, (dx, dy)) -> pgridDelta wolframCAGrid dx dy) $ zip wolframCAGrids deltas
+        pwolframGridSynths = fmap lookupFeedbackTablaTanHDistNameAndSynth . head $ pwolframGrids
+        durs = cycle [0.5, 0.25, 0.125]
+        pwolframGridVals = fmap (\n -> (pwolframGridSynths, durs !! n)) (pwolframGrids !! 1)
+
+feedbackTablaTanHDistSequenceArgs :: [PatternArgsFunc]
+feedbackTablaTanHDistSequenceArgs = map (patternArgsFunc . pArgFunc) [mouseXIndex, mouseYIndex]
+    where
+        rangeScale = 77
+        maxRange = 217
+        mouseXIndex = 0
+        mouseYIndex = 1
+        rates = [0.125, 0.25, 0.5, 0.75, 1, 1.25, 1.5]
+        defaultRate = 1
+        pArgFunc :: Int -> [Rational] -> PRational
+        pArgFunc index args = case (wrapLookup args index) of
+            Nothing  -> 0
+            Just val -> pval |> pseries 1 |> pwrap 2 maxRange |> pwrapLookup rates defaultRate
+                where
+                    pval = PVal <| val * rangeScale
+
+feedbackTablaTanHDistSynth :: FilePath -> UGen -> UGen -> UGen
+feedbackTablaTanHDistSynth sampleFilePath rx ry = playMonoSample sampleFilePath [rx, ry] |> e |> filt |> dup |> out (fst feedbackTablaTanHDistBuses)
+    where
+        e = perc 0.0 1 1 (-32)
+        e2 = perc2 0.0001 0.01 1 (-1) 60000 |> umax 30
+        filt = lpf e2 3
+
+feedbackTablaTanHDistFX :: UGen -> UGen -> UGen
+feedbackTablaTanHDistFX mx my = feed |> gain 2 |> visAux 2 1 |> poll |> masterOut
+    where
+        preGain = [mx, my] * 10 |> add 10 |> lag 0.1
+        auxes = auxIn (fst feedbackTablaTanHDistBuses <> snd feedbackTablaTanHDistBuses) |> gain preGain
+        fxLimiter = limiter 0.1 0.01 0.03 (-32) 0.9 <> limiter 0.175 0.01 0.03 (-32) 0.9
+        feed = feedback $ \l r -> auxes + (r <> l) |> tanhDist 1 |> gain 10 +> delayC 0.2 0.2 |> fxLimiter
+
+-----------------------
+-- Feedback SinDist
+-----------------------
+
+feedbackTablaSinDistSynths :: [UGen -> UGen -> UGen]
+feedbackTablaSinDistSynths = map feedbackTablaSinDistSynth tablaSamples
+
+feedbackTablaSinDistNamesAndSynths :: [(String, UGen -> UGen -> UGen)]
+feedbackTablaSinDistNamesAndSynths = zip (map ("feedbackTablaSinDist"++) tablaSamples) feedbackTablaSinDistSynths
+
+lookupFeedbackTablaSinDistNameAndSynth :: Int -> (String, UGen -> UGen -> UGen)
+lookupFeedbackTablaSinDistNameAndSynth = lookupSampleAndSynth feedbackTablaSinDistNamesAndSynths
+
+feedbackTablaSinDistSequence :: PFunc (String, UGen -> UGen -> UGen)
+feedbackTablaSinDistSequence = PFunc0 <| pwolframGridVals
+    where
+        seedCells = V.fromList (replicate 80 0 ++ [1] ++ replicate 80 0)
+        numColors = 3
+        numRows = 1000
+        rules = [573377, 706951, 77245, 210819]
+        deltas = [(-1, -1), (1, -1), (-1, 1), (1, 1)]
+        ruleMaps = map (multiColoredWolframRuleMap numColors) rules
+        wolframCAGrids = map (\ruleMap -> mkMultiColoredWolframGrid seedCells ruleMap numRows) ruleMaps
+        pwolframGrids = map (\(wolframCAGrid, (dx, dy)) -> pgridDelta wolframCAGrid dx dy) $ zip wolframCAGrids deltas
+        pwolframGridSynths = fmap lookupFeedbackTablaSinDistNameAndSynth . head $ pwolframGrids
+        durs = cycle [0.5, 0.25, 0.125]
+        durs2 = cycle [0.25, 1/3, 4/5]
+        pwolframGridVals = place [
+                fmap (\n -> (pwolframGridSynths, durs !! n)) (pwolframGrids !! 1),
+                fmap (\n -> (pwolframGridSynths, durs2 !! n)) (pwolframGrids !! 2)
+            ]
+
+feedbackTablaSinDistSequenceArgs :: [PatternArgsFunc]
+feedbackTablaSinDistSequenceArgs = map (patternArgsFunc . pArgFunc) [mouseXIndex, mouseYIndex]
+    where
+        rangeScale = 77
+        maxRange = 217
+        mouseXIndex = 0
+        mouseYIndex = 1
+        pArgFunc :: Int -> [Rational] -> PRational
+        pArgFunc index args = case (wrapLookup args index) of
+            Nothing  -> 0
+            Just val -> pval |> pseries 1 |> pwrap 1 maxRange |> (/maxRange) |> (*) 2 |> (subtract 1)
+                where
+                    pval = PVal <| val * rangeScale
+
+feedbackTablaSinDistSynth :: FilePath -> UGen -> UGen -> UGen
+feedbackTablaSinDistSynth sampleFilePath mx my = playMonoSample sampleFilePath rate |> e |> filt |> dup |> out (fst feedbackTablaSinDistBuses)
+    where
+        e = perc 0.0 1 1 1
+        e2 = perc2 0.01 1 0.01 (-16) maxFreq |> umax minFreq -- move umax around 20,30,40,50,60,etc..
+        filt n = lpf e2 1 n |> lowshelf 80 16 0.3
+        rate = 1
+        minFreq = mx + 20 |> lag 0.1
+        maxFreq = my |> exprange 800 40000
+
+feedbackTablaSinDistFX :: UGen -> UGen -> UGen
+feedbackTablaSinDistFX mx my = feed |> gain 10 |> constrain (-1) 1 |> poll |> visAux 2 1 |> masterOut
+    where
+        ms = [mx, my] * 2 - 1
+        preGain = ms |> exprange 10 50 |> lag 0.1
+        auxes = auxIn (fst feedbackTablaSinDistBuses <> snd feedbackTablaSinDistBuses) |> gain preGain
+        delayTimes = ms |> exprange 0.001 1 |> lag 1
+        delayTimes2 = ms |> range 1 2
+        feed = feedback $ \l r -> auxes + (r <> l) +> delayC 1 delayTimes +> delayC 2 delayTimes2 |> sinDist 0.9 |> fxLimiter
+        fxLimiter = limiter 0.1 0.01 0.03 (-32) 0.1 <> limiter 0.175 0.01 0.03 (-32) 0.1
+
+-----------------------
+-- Feedback Kit Hell
+-----------------------
+
+feedbackKitHellSynths :: [UGen -> UGen -> UGen]
+feedbackKitHellSynths = map feedbackKitHellSynth kitSamples
+
+feedbackKitHellNamesAndSynths :: [(String, UGen -> UGen -> UGen)]
+feedbackKitHellNamesAndSynths = zip (map ("feedbackKitHell"++) kitSamples) feedbackKitHellSynths
+
+lookupfeedbackKitHellNameAndSynth :: Int -> (String, UGen -> UGen -> UGen)
+lookupfeedbackKitHellNameAndSynth = lookupSampleAndSynth feedbackKitHellNamesAndSynths
+
+feedbackKitHellSequence :: PFunc (String, UGen -> UGen -> UGen)
+feedbackKitHellSequence = PFunc0 <| pfractalPlantVals
+    where
+        fractalPlantSix = fractalPlant 6
+        pfractalPlantVals = pwrapLookup fractalPlantSix '-' (ploop [0..99]) |> fmap fractalPlantSynthAndDur
+        fractalPlantSynthAndDur plantChar = (PVal $ lookupfeedbackKitHellNameAndSynth index, plantLookupDur index)
+            where
+                index = lsystemCharToInt plantChar
+        pfractalPlantDurs = map plantToRational fractalPlantSix
+            where
+                plantToRational c = 2 / ((toRational $ lsystemCharToInt c) + 1 |> (*) 2)
+        plantLookupDur n = case wrapLookup pfractalPlantDurs n of
+            Nothing -> 1
+            Just v -> v
+
+feedbackKitHellSequenceArgs :: [PatternArgsFunc]
+feedbackKitHellSequenceArgs = map (patternArgsFunc . pArgFunc) [mouseXIndex, mouseYIndex]
+    where
+        rangeScale = 77
+        maxRange = 217
+        mouseXIndex = 0
+        mouseYIndex = 1
+        pArgFunc :: Int -> [Rational] -> PRational
+        pArgFunc index args = case (wrapLookup args index) of
+            Nothing  -> 0
+            Just val -> pval |> pseries 1 |> pwrap 1 maxRange |> (/maxRange) |> (*) 2 |> (subtract 1)
+                where
+                    pval = PVal <| val * rangeScale
+
+feedbackKitHellSynth :: FilePath -> UGen -> UGen -> UGen
+feedbackKitHellSynth sampleFilePath _ _ = playMonoSample sampleFilePath rate |> e |> filt |> dup |> out (fst feedbackKitHellBuses)
+    where
+        e = perc 0.0 1 1 1
+        -- e2 = perc2 0.01 0.1 0.01 (-64) maxFreq |> umax minFreq -- move umax around 20,30,40,50,60,etc..
+        filt n = n {-+> lpf e2 0.1 -} |> lowshelf 40 3 0.3
+        rate = 1
+        -- minFreq = mx + 20 |> lag 0.1
+        -- maxFreq = my |> exprange 800 40000
+
+feedbackKitHellFX :: UGen -> UGen -> UGen
+feedbackKitHellFX _ _ = feed |> gain 2 |> constrain (-1) 1 |> poll |> visAux 2 1 |> masterOut
+    where
+        -- ms = [mx, my] * 2 - 1
+        auxes = auxIn (fst feedbackKitHellBuses <> snd feedbackKitHellBuses) |> gain 10
+        -- delayTimes = ms |> exprange 0.001 1 |> lag 1
+        -- delayTimes2 = ms |> range 1 2
+        feed = feedback $ \l r -> auxes + (r <> l) +> delayC 0.5 0.5 |> gain 0.9 |> constrain (-1) 1 |> fxLimiter
+        -- verb = freeverb 0.1 10 0.01
+        fxLimiter = limiter 0.1 0.01 0.03 (-9) 0.1 <> limiter 0.175 0.01 0.03 (-9) 0.1
+
+----------------------------
+-- Feedback Solo 0x10c
+----------------------------
+
+feedbackSolo0x10cSynths :: [UGen -> UGen -> UGen]
+feedbackSolo0x10cSynths = map feedbackSolo0x10cSynth tablaSamples
+
+feedbackSolo0x10cNamesAndSynths :: [(String, UGen -> UGen -> UGen)]
+feedbackSolo0x10cNamesAndSynths = zip (map ("feedbackSolo0x10c0"++) kitSamples) feedbackSolo0x10cSynths
+
+feedbackSolo0x10cNameAndSynth :: Int -> (String, UGen -> UGen -> UGen)
+feedbackSolo0x10cNameAndSynth = lookupSampleAndSynth feedbackSolo0x10cNamesAndSynths
+
+feedbackSolo0x10cSequence :: PFunc (String, UGen -> UGen -> UGen)
+feedbackSolo0x10cSequence = PFunc0 <| pfractalVals
+    where
+        fractalPlantFour = fractalPlant 4
+        sierpinskiTriangleSix = sierpinskiTriangle 6
+        pfractalPlants = pwrapLookup fractalPlantFour '-' (ploop [0..99])
+        psierpinskiTriangles = pwrapLookup sierpinskiTriangleSix '-' (ploop [0..99])
+        pfractalVals = ploop [pfractalPlants, psierpinskiTriangles] |> fmap fractalPlantSynthAndDur
+        fractalPlantSynthAndDur plantChar = (PVal $ feedbackSolo0x10cNameAndSynth index, plantLookupDur index)
+            where
+                index = lsystemCharToInt plantChar
+        pfractalPlantDurs = map plantToRational fractalPlantFour
+            where
+                plantToRational c = 8 / ((toRational $ lsystemCharToInt c) + 1 |> (*) 2)
+        plantLookupDur n = case wrapLookup pfractalPlantDurs n of
+            Nothing -> 1
+            Just v -> v
+
+feedbackSolo0x10cSequenceArgs :: [PatternArgsFunc]
+feedbackSolo0x10cSequenceArgs = map (patternArgsFunc . pArgFunc) [mouseXIndex, mouseYIndex]
+    where
+        rangeScale = 77
+        maxRange = 217
+        mouseXIndex = 0
+        mouseYIndex = 1
+        pArgFunc :: Int -> [Rational] -> PRational
+        pArgFunc index args = case (wrapLookup args index) of
+            Nothing  -> 0
+            Just val -> pval |> pseries 1 |> pwrap 1 maxRange |> (/maxRange) |> (*) 2 |> (subtract 1)
+                where
+                    pval = PVal <| val * rangeScale
+
+feedbackSolo0x10cSynth :: FilePath -> UGen -> UGen -> UGen
+feedbackSolo0x10cSynth sampleFilePath mx my = playMonoSample sampleFilePath rate |> e |> filt |> constrain (-1) 1 |> out (fst feedbackSolo0x10cBuses)
+    where
+        e = perc 0.01 1 1 0
+        e2 = perc2 0.001 1 1 (-4) freqs
+        filt = bpf e2 1
+        lFreq = mx |> exprange 40 1000 |> lag 0.1
+        rFreq = my |> exprange 40 1000 |> lag 0.1
+        freqs = lFreq <> rFreq
+        rate = 1
+
+feedbackSolo0x10cFX :: UGen -> UGen -> UGen
+feedbackSolo0x10cFX mx my = feed |> gain 2 |> constrain (-1) 1 |> poll |> visAux 2 1 |> masterOut
+    where
+        ms = [mx, my] * 2 - 1
+        auxes = auxIn (fst feedbackSolo0x10cBuses <> snd feedbackSolo0x10cBuses) |> gain 10
+        delayTimes = ms |> exprange 0.5 1 |> lag 1
+        -- delayTimes2 = ms |> range 1 2
+        feed = feedback $ \l r -> auxes + (r <> l) +> delayC 0.5 0.5 |> delayC 1 delayTimes |> gain 0.9 |> constrain (-1) 1 |> fxLimiter
+        -- verb = freeverb 0.1 10 0.01
+        fxLimiter = limiter 0.1 0.01 0.03 (-9) 0.1 <> limiter 0.175 0.01 0.03 (-9) 0.1
