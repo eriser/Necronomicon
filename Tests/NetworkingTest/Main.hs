@@ -1307,7 +1307,7 @@ feedbackKitSynth sampleFilePath _ _ = playMonoSample sampleFilePath rate {-|> fi
         -- maxFreq = 60000 -- lag 0.1 (my * 1000) -- was 60000
 
 feedbackKitWrapFX :: UGen -> UGen -> UGen
-feedbackKitWrapFX mx my = feed |> constrain (-1) 1 |> gain 0.3 |> out 0
+feedbackKitWrapFX mx my = feed |> constrain (-1) 1 |> gain 0.3 |> masterOut
     where
         auxes = auxIn (fst feedbackKitBuses <> snd feedbackKitBuses)
         feed = feedback $ \l r -> auxes + (r <> l) +> sinDist 1 +> crush 1 |> crush 1 +> delayC 0.5 0.5 |> delayC 1 ((mx + 0.01) <> (my + 0.01)) |> masterLimiter |> constrain (-0.5) 0.5
@@ -1402,11 +1402,11 @@ feedbackTablaTanHDistSynth sampleFilePath rx ry = playMonoSample sampleFilePath 
         filt = lpf e2 3
 
 feedbackTablaTanHDistFX :: UGen -> UGen -> UGen
-feedbackTablaTanHDistFX mx my = feed |> gain 2 |> visAux 2 1 |> masterOut
+feedbackTablaTanHDistFX mx my = feed |> gain 2 |> visAux 2 1 |> constrain (-1) 1 |> masterOut
     where
         preGain = [mx, my] * 10 |> add 10 |> lag 0.1
         auxes = auxIn (fst feedbackTablaTanHDistBuses <> snd feedbackTablaTanHDistBuses) |> gain preGain
-        fxLimiter = limiter 0.1 0.01 0.03 (-32) 0.9 <> limiter 0.175 0.01 0.03 (-32) 0.9
+        fxLimiter = limiter 0.1 0.01 0.03 (-32) 0.1 <> limiter 0.175 0.01 0.03 (-32) 0.1
         feed = feedback $ \l r -> auxes + (r <> l) |> tanhDist 1 |> gain 10 +> delayC 0.2 0.2 |> fxLimiter
 
 -----------------------
