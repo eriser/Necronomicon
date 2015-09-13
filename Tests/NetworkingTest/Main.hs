@@ -217,8 +217,8 @@ main = runSignal
     *> mkPatternTerminal     (Vector3 12 6 0) 2 keyJ id hyperMelody        binaryWolframPattern
     *> mkBeatPatternTerminal (Vector3 16 6 0) 2 keyK binaryWolframSamplesTablaPattern []
     *> mkBeatPatternTerminal (Vector3 20 6 0) 2 keyL binaryWolframSamplesKitPattern []
-    *> mkBeatPatternTerminal (Vector3 24 6 0) 2 keyM multiColoredWolframSamplesKitPattern []
-    *> mkTerminal            (Vector3 28 6 0) 2 keyN feedbackKitMouseScale feedbackKitWrapFX
+    *> mkBeatPatternTerminal (Vector3 24 6 0) 4 keyN multiColoredWolframSamplesKitPattern []
+    *> mkTerminal            (Vector3 28 6 0) 4 keyN feedbackKitMouseScale feedbackKitWrapFX
     *> mkBeatPatternTerminal (Vector3 32 6 0) 2 keyX multiColoredWolframSamplesTablaPattern multiColoredWolframSamplesTablaPatternArgs
     *> mkTerminal            (Vector3 36 6 0) 2 keyX feedbackTablaMouseScale feedbackTablaWrapFX
     *> mkBeatPatternTerminal (Vector3  0 3 0) 2 keyZ feedbackTablaTanHDistSequence feedbackTablaTanHDistSequenceArgs
@@ -549,7 +549,7 @@ triOsc32 mx my = feedback fSig |> verb |> gain 0.785 |> masterOut
                 sig6 = sinOsc (f1 * 0.25 - sig3 * 261.6255653006) * (sinOsc ( i * 0.00025) |> range 0.5 1) |> gain (saw 1.6 |> range 0 1) |> softclip 3 |> gain 0.5 +> d
 
 triOsc32' :: UGen -> UGen -> UGen
-triOsc32' mx my = feedback fSig |> verb |> lowshelf 150 6 0.01 |> gain 0.785 |> masterOut
+triOsc32' mx my = feedback fSig |> verb |> lowshelf 150 6 0.01 |> gain 0.585 |> masterOut
     where
         f1     = lag 0.25 mx
         f2     = lag 0.25 my
@@ -581,17 +581,17 @@ metallic4 :: UGen -> UGen
 metallic4 f = metallicBass f 0.25
 
 hyperMelody :: UGen -> UGen
-hyperMelody f = [s,s2] |> lpf (fromSlendro 25) 0.3 |> e |> gain 1 |> visAux (random 0 2 5) 2 |> caveOut
+hyperMelody f = [s,s2] |> e |> gain 0.4 |> visAux (random 0 2 5) 2 |> caveOut
     where
-        e  = env [0, 1, 0.05, 0] [0.0001, 0.1, 7] (-8)
-        s  = sin <| sin 3 * 6 + f * 0.5
+        e  = env [0, 1, 0.05, 0] [0.0001, 0.1, 7] (-4)
+        s  = sin <| sin 3 * 6 + f * 2
         s2 = sin <| sin 6 * 9 + f * 1
 
 hyperMelodyHarmony :: UGen -> UGen
-hyperMelodyHarmony f = [s, s2] |> lpf (fromSlendro 25) 0.3 |> e |> gain 3 |> visAux (random 0 2 5) 2 |> caveOut
+hyperMelodyHarmony f = [s, s2] |> lpf (fromSlendro 25) 0.3 |> e |> gain 1 |> visAux (random 0 2 5) 2 |> caveOut
     where
-        e  = env [0, 0.3, 0.05, 0] [0.0001, 0.1, 7] (-8)
-        s  = sin <| sin 3 * 6 + f * 0.5
+        e  = env [0, 0.3, 0.05, 0] [0.0001, 0.1, 7] (-4)
+        s  = sin <| sin 3 * 6 + f * 1
         s2 = sin <| sin 6 * 9 + f * 1
 
 reverseSwellPanned :: UGen -> UGen -> UGen
@@ -640,18 +640,18 @@ fromSlendro :: Rational -> UGen
 fromSlendro degree = UGen [UGenNum . fromRational $ d2f slendro degree]
 
 shake :: UGen -> UGen
-shake d = whiteNoise |> e2 |> bpf (fromSlendro 13) 0.7 |> e |> pan 0.25 |> visAux 7 1 |> mixThrough caveBus 0.3 |> masterOut
+shake _ = whiteNoise |> e2 |> lpf (fromSlendro 6) 0.5 |> e |> gain 0.125 |> pan 0.25 |> visAux 7 1 |> mixThrough caveBus 0.3 |> masterOut
     where
-        e = env [0, 0.1, 0.05, 0] [0.0001, 0.02, d] (-16)
+        e = env [0, 0.1, 0.05, 0] [0.0001, 0.02, 3] (-4)
         e2 = perc2 0.01 0.1 4 (-32)
 
 floorPerc :: UGen -> UGen
-floorPerc d = sig1 + sig2 |> e |> pan 0.35 |> gain 0.3 |> visAux 7 1 |> masterOut
+floorPerc _ = sig1 + sig2 |> e |> pan 0.35 |> gain 0.3 |> visAux 7 1 |> masterOut
     where
         -- p a u = [u * (1 - a), u * a]
         sig1  = sin 40
         sig2  = sin 80 * 0.25
-        e     = env [0,1,0.01,0] [0.05, d,0.1] (-9)
+        e     = env [0,1,0.01,0] [0.05, 0.5,0.1] (-9)
 
 sigScale :: Scale
 sigScale = slendro
@@ -1299,20 +1299,23 @@ lookupFeedbackKitNameAndSynth = lookupSampleAndSynth feedbackKitNamesAndSynths
 
 
 feedbackKitSynth :: FilePath -> UGen -> UGen -> UGen
-feedbackKitSynth sampleFilePath _ _ = playMonoSample sampleFilePath rate {-|> filt -} |> e |> dup |> out (fst feedbackKitBuses)
+feedbackKitSynth sampleFilePath mx my = playMonoSample sampleFilePath rate +> filt |> e |> dup |> out (fst feedbackKitBuses)
     where
         e = perc 0.0 1 4 1
         rate = 1
-        -- e2 = perc2 0.0001 0.01 10 (-64) maxFreq |> umax minFreq -- move umax around 20,30,40,50,60,etc..
-        -- filt = lpf e2 0.1
-        -- minFreq = lag 0.1 mx
-        -- maxFreq = 60000 -- lag 0.1 (my * 1000) -- was 60000
+        e2 = perc2 0.0001 1 1 (-8) maxFreq |> umax minFreq -- move umax around 20,30,40,50,60,etc..
+        filt n = n |> bpf e2 5
+        minFreq = mx * 2 - 1 |> exprange 40 1000
+        maxFreq = my * 2 - 1 |> exprange 1000 6000 -- was 60000
 
 feedbackKitWrapFX :: UGen -> UGen -> UGen
-feedbackKitWrapFX mx my = feed |> constrain (-1) 1 |> gain 0.3 |> masterOut
+feedbackKitWrapFX mx my = feed + low |> constrain (-1) 1 |> visAux 4 1 |> gain 0.3 |> masterOut
     where
         auxes = auxIn (fst feedbackKitBuses <> snd feedbackKitBuses)
-        feed = feedback $ \l r -> auxes + (r <> l) +> sinDist 1 +> crush 1 |> crush 1 +> delayC 0.5 0.5 |> delayC 1 ((mx + 0.01) <> (my + 0.01)) |> masterLimiter |> constrain (-0.5) 0.5
+        ms = [mx, my] * 2 - 1 |> exprange 0.001 1
+        mDelay = delayC 1 ms
+        feed = feedback $ \l r -> auxes + (r <> l) +> sinDist 1 +> crush 1 |> crush 1 +> delayC 0.5 0.5 |> mDelay |> masterLimiter |> constrain (-0.5) 0.5
+        low = auxes |> mDelay |> gain 4 |> lpf 50 0.3
 
 feedbackKitMouseScale :: Double -> Double
 feedbackKitMouseScale md = (round md :: Int) |> fromIntegral |> (*) 100.0 |> (+) 20.0
@@ -1404,7 +1407,7 @@ feedbackTablaTanHDistSynth sampleFilePath rx ry = playMonoSample sampleFilePath 
         filt = lpf e2 3
 
 feedbackTablaTanHDistFX :: UGen -> UGen -> UGen
-feedbackTablaTanHDistFX mx my = feed |> gain 2 |> visAux 2 1 |> constrain (-1) 1 |> masterOut
+feedbackTablaTanHDistFX mx my = feed |> constrain (-1) 1 |> visAux 2 1 |> masterOut
     where
         preGain = [mx, my] * 10 |> add 10 |> lag 0.1
         auxes = auxIn (fst feedbackTablaTanHDistBuses <> snd feedbackTablaTanHDistBuses) |> gain preGain
@@ -1460,23 +1463,25 @@ feedbackTablaSinDistSequenceArgs = map (patternArgsFunc . pArgFunc) [mouseXIndex
 feedbackTablaSinDistSynth :: FilePath -> UGen -> UGen -> UGen
 feedbackTablaSinDistSynth sampleFilePath mx my = playMonoSample sampleFilePath rate |> e |> filt |> dup |> out (fst feedbackTablaSinDistBuses)
     where
-        e = perc 0.0 1 1 1
-        e2 = perc2 0.01 1 0.01 (-16) maxFreq |> umax minFreq -- move umax around 20,30,40,50,60,etc..
+        e = perc 0.0 2 1 1
+        e2 = perc2 0.01 2 0.01 (-16) maxFreq |> umax minFreq -- move umax around 20,30,40,50,60,etc..
         filt n = lpf e2 1 n |> lowshelf 80 16 0.3
         rate = 1
-        minFreq = mx + 20 |> lag 0.1
+        minFreq = mx |> exprange 30 200 |> lag 0.1
         maxFreq = my |> exprange 800 40000
 
 feedbackTablaSinDistFX :: UGen -> UGen -> UGen
-feedbackTablaSinDistFX mx my = feed |> gain 10 |> constrain (-1) 1 |> visAux 2 1 |> masterOut
+feedbackTablaSinDistFX mx my = feed + low |> gain 5 |> constrain (-1) 1 |> visAux 2 1 |> masterOut
     where
         ms = [mx, my] * 2 - 1
         preGain = ms |> exprange 10 50 |> lag 0.1
-        auxes = auxIn (fst feedbackTablaSinDistBuses <> snd feedbackTablaSinDistBuses) |> gain preGain
+        preAuxes = auxIn (fst feedbackTablaSinDistBuses <> snd feedbackTablaSinDistBuses)
+        auxes = preAuxes |> gain preGain
         delayTimes = ms |> exprange 0.001 1 |> lag 1
         delayTimes2 = ms |> range 1 2
         feed = feedback $ \l r -> auxes + (r <> l) +> delayC 1 delayTimes +> delayC 2 delayTimes2 |> sinDist 0.9 |> fxLimiter
         fxLimiter = limiter 0.1 0.01 0.03 (-32) 0.1 <> limiter 0.175 0.01 0.03 (-32) 0.1
+        low = preAuxes |> delayC 0.2 [0.1, 0.175] |> gain 4 |> lpf 50 0.3
 
 -----------------------
 -- Feedback Kit Hell
@@ -1531,7 +1536,7 @@ feedbackKitHellSynth sampleFilePath _ _ = playMonoSample sampleFilePath rate |> 
         -- maxFreq = my |> exprange 800 40000
 
 feedbackKitHellFX :: UGen -> UGen -> UGen
-feedbackKitHellFX _ _ = feed |> gain 2 |> constrain (-1) 1 |> gain 0.5 |> visAux 2 1 |> masterOut
+feedbackKitHellFX _ _ = feed + low |> constrain (-1) 1 |> gain 0.35 |> visAux 2 1 |> masterOut
     where
         -- ms = [mx, my] * 2 - 1
         auxes = auxIn (fst feedbackKitHellBuses <> snd feedbackKitHellBuses) |> gain 10
@@ -1540,6 +1545,7 @@ feedbackKitHellFX _ _ = feed |> gain 2 |> constrain (-1) 1 |> gain 0.5 |> visAux
         feed = feedback $ \l r -> auxes + (r <> l) +> delayC 0.5 0.5 |> gain 0.9 |> constrain (-1) 1 |> fxLimiter
         -- verb = freeverb 0.1 10 0.01
         fxLimiter = limiter 0.1 0.01 0.03 (-9) 0.1 <> limiter 0.175 0.01 0.03 (-9) 0.1
+        low = auxes |> delayC 0.2 [0.1, 0.175] |> lpf 60 0.3
 
 ----------------------------
 -- Feedback Kit Hell 2
@@ -1614,15 +1620,17 @@ feedbackKitHell2Synth sampleFilePath mx my = sample * osc |> e |> filt |> dup |>
         maxFreq = my |> exprange 2000 20000 |> lag 0.1
 
 feedbackKitHell2FX :: UGen -> UGen -> UGen
-feedbackKitHell2FX mx my = feed |> gain 2 |> constrain (-1) 1 |> gain 0.5 |> visAux 2 1 |> masterOut
+feedbackKitHell2FX mx my = feed + low |> gain 0.5 |> constrain (-1) 1 |> gain 0.5 |> visAux 2 1 |> masterOut
     where
         ms = [mx, my] * 2 - 1
-        auxes = auxIn (fst feedbackKitHell2Buses <> snd feedbackKitHell2Buses) |> gain 10
+        preAuxes = auxIn (fst feedbackKitHell2Buses <> snd feedbackKitHell2Buses)
+        auxes = preAuxes |> gain 10
         delayTimes = ms |> exprange 0.000001 0.033333333 |> lag 1
         -- delayTimes2 = ms |> range 1 2
         feed = feedback $ \l r -> auxes + (r <> l) +> delayC 0.5 0.5 |> delayC 1 delayTimes |> verb |> gain 0.9 |> constrain (-1) 1 |> fxLimiter
         verb = freeverb (my |> exprange 0.001 0.1 |> lag 0.1) 50 (mx |> lag 0.1)
         fxLimiter = limiter 0.1 0.01 0.03 (-9) 0.1 <> limiter 0.175 0.01 0.03 (-9) 0.1
+        low = preAuxes |> gain 3 |> delayC 0.2 [0.1, 0.175] |> lpf 60 0.3
 
 ----------------------------
 -- Feedback Solo 0x10c
@@ -1705,7 +1713,7 @@ feedbackSolo0x10cSynth sampleFilePath mx my = sample |> e |> filt |> constrain (
         sample = playMonoSampleC sampleFilePath rates |> sinDist 50
 
 feedbackSolo0x10cFX :: UGen -> UGen -> UGen
-feedbackSolo0x10cFX mx my = feed |> gain 2 |> constrain (-1) 1 |> visAux 2 1 |> masterOut
+feedbackSolo0x10cFX mx my = feed + low |> constrain (-1) 1 |> gain 0.5 |> visAux 2 1 |> masterOut
     where
         ms         = [mx, my] * 2 - 1
         auxes      = auxIn (fst feedbackSolo0x10cBuses <> snd feedbackSolo0x10cBuses) |> gain 4
@@ -1714,6 +1722,7 @@ feedbackSolo0x10cFX mx my = feed |> gain 2 |> constrain (-1) 1 |> visAux 2 1 |> 
         feed       = feedback $ \l r -> auxes + (r <> l) +> delayC 0.5 0.5 |> delayC 1 delayTimes |> verb |> constrain (-1) 1 |> fxLimiter
         verb = freeverb (my |> exprange 0.001 0.3 |> lag 0.1) 100 (mx |> lag 0.1)
         fxLimiter = limiter 0.1 0.01 0.03 (-9) 0.1
+        low = auxes |>  delayC 0.1 0.1 |> lpf 60 0.3
 
 ----------------------------
 -- Feedback Solo 0x11d
@@ -1797,12 +1806,14 @@ feedbackSolo0x11dSynth sampleFilePath mx my = samples * osc |> e |> filt |> cons
         osc = lfpulse 7.5 (mx + my |> gain 0.5) |> gain 2
 
 feedbackSolo0x11dFX :: UGen -> UGen -> UGen
-feedbackSolo0x11dFX mx my = feed |> gain 2 |> constrain (-1) 1 |> visAux 2 1 |> masterOut
+feedbackSolo0x11dFX mx my = feed + low |> constrain (-1) 1 |> gain 0.5 |> visAux 2 1 |> masterOut
     where
         ms = [mx, my] * 2 - 1
-        auxes = auxIn (fst feedbackSolo0x11dBuses <> snd feedbackSolo0x11dBuses) |> gain 10
+        preAuxes = auxIn (fst feedbackSolo0x11dBuses <> snd feedbackSolo0x11dBuses)
+        auxes = preAuxes |> gain 10
         delayTimes = ms |> exprange 0.000001 0.033333333 |> lag 1
         -- delayTimes2 = ms |> range 1 2
         feed = feedback $ \l r -> auxes + (r <> l) +> delayC 0.5 0.5 |> delayC 1 delayTimes |> verb |> gain 0.9 |> constrain (-1) 1 |> fxLimiter
         verb = freeverb (my |> exprange 0.001 0.5 |> lag 0.1) 50 (mx |> lag 0.1)
         fxLimiter = limiter 0.1 0.01 0.03 (-9) 0.1 <> limiter 0.175 0.01 0.03 (-9) 0.1
+        low = preAuxes |> gain 2 |> delayC 0.2 [0.1, 0.175] |> lpf 60 0.3
