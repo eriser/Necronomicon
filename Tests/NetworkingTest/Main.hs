@@ -258,7 +258,7 @@ masterOut :: UGen -> UGen
 masterOut = out masterOutBus
 
 masterSynth :: UGen
-masterSynth = auxIn [masterOutBus, masterOutRightBus] |> masterLimiter |> out 0
+masterSynth = auxIn [masterOutBus, masterOutRightBus] |> masterLimiter |> gain 1 |> out 0
 
 caveTime :: UGen
 caveTime = [l * 0.875 + r * 0.125, r * 0.875 + l * 0.125] |> masterOut
