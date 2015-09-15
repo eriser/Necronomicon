@@ -38,6 +38,6 @@ foldp f initx inputsig = Signal $ \state -> mfix $ \sig -> do
 delay :: a -> IO a -> Signal a
 delay initx xsample = Signal $ \state -> do
     ref         <- newIORef $ (initx, initx)
-    let update x = xsample >>= \x' -> x' `seq` writeIORef ref (x, x')
+    let update x = xsample >>= \x' -> x' `seq` writeIORef ref (x', x)
     insertSignal update ref (signalPool state)
 
