@@ -64,6 +64,7 @@ library
         Necronomicon.Util.PriorityQueue
         Necronomicon.Util.Grid
         Necronomicon.Physics.DynamicTree
+        Necronomicon.FRP.Signal'
 
     other-modules:
         Necronomicon.Language.Layout
