@@ -6,76 +6,83 @@ import Control.Monad.Fix
 import Control.Monad
 import Control.Applicative
 
+data SignalTree = SignalNode      Int String
+                | SignalOneBranch Int String SignalTree
+                | SignalTwoBranch Int String SignalTree SignalTree
+                deriving (Show)
+
+--Need sample function on top of updating function so we can memoise repeated calls to sample and update?
 type Pooled a    = (a, a)
 type SignalPool  = IORef [IO ()]
-data SignalState = SignalState {signalPool :: SignalPool}
-newtype Signal a = Signal {unsignal :: SignalState -> IO (IO a, a)}
+newtype Signal a = Signal {unsignal :: SignalState -> IO (IO a, a, [Int], SignalTree)}
+data SignalState = SignalState
+                 { signalPool :: SignalPool
+                 , sigUIDs    :: IORef [Int]
+                 }
 
 mkSignalState :: IO SignalState
-mkSignalState = newIORef [] >>= return . SignalState
+mkSignalState = SignalState
+            <$> newIORef []
+            <*> newIORef [0..]
+
+nextUID :: SignalState -> IO Int
+nextUID state = do
+    uid : uids <- readIORef $ sigUIDs state
+    writeIORef (sigUIDs state) uids
+    return uid
 
 instance Functor Signal where
     fmap f xsig = Signal $ \state -> do
-        (xsample, ix) <- unsignal xsig state
-        let ifx        = f ix
-        ref           <- newIORef (ifx, ifx)
-        let update prev = xsample >>= \x -> let fx = f x in fx `seq` writeIORef ref (prev, fx)
-        sample        <- insertSignal update ref (signalPool state)
-        return (sample, ifx)
+        (xsample, ix, xids, xt) <- unsignal xsig state
+        uid                     <- nextUID state
+        let ifx                  = f ix
+        ref                     <- newIORef (ifx, ifx)
+        let update prev          = xsample >>= \x -> let fx = f x in fx `seq` writeIORef ref (prev, fx)
+        sample                  <- insertSignal update ref (signalPool state)
+        return (sample, ifx, uid : xids, SignalOneBranch uid "fmap" xt)
 
 instance Applicative Signal where
-    pure x        = Signal $ \_ -> return (return x, x)
+    pure x        = Signal $ \_ -> return (return x, x, [-1], SignalNode (-1) "pure")
     fsig <*> xsig = Signal $ \state -> do
-        (fsample, fi) <- unsignal fsig state
-        (xsample, ix) <- unsignal xsig state
-        let ifx        = fi ix
-        ref           <- newIORef (ifx, ifx)
-        let update prev = xsample >>= \x -> fsample >>= \f -> let fx = f x in fx `seq` writeIORef ref (prev, fx)
-        sample        <- insertSignal update ref (signalPool state)
-        return (sample, ifx)
+        (fsample, fi, fids, ft) <- unsignal fsig state
+        (xsample, ix, xids, xt) <- unsignal xsig state
+        uid                     <- nextUID state
+        let ifx                  = fi ix
+        ref                     <- newIORef (ifx, ifx)
+        let update prev          = xsample >>= \x -> fsample >>= \f -> let fx = f x in fx `seq` writeIORef ref (prev, fx)
+        sample                  <- insertSignal update ref (signalPool state)
+        return (sample, ifx, uid : (fids ++ xids), SignalTwoBranch uid "ap" ft xt)
 
 insertSignal :: (a -> IO ()) -> IORef (Pooled a) -> SignalPool -> IO (IO a)
 insertSignal updatingFunction ref updatePool = do
-    let updateAction = readIORef ref >>= updatingFunction . snd
-    modifyIORef' updatePool (updateAction :)
-    return $ readIORef ref >>= return . snd
+   let updateAction = readIORef ref >>= updatingFunction . snd
+   modifyIORef' updatePool (updateAction :)
+   return $ readIORef ref >>= return . snd
 
 --This about methods for memoizing calls
 --Collapse references such that nodes that share arguments are a single node
 
 foldp :: (input -> state -> state) -> state -> Signal input -> Signal state
-foldp f initx inputsig = Signal $ \state -> do
-    sample <- mfix $ \sig -> do
-        (icont, ii) <- unsignal inputsig state
-        (sig',  _)  <- unsignal (delay' initx sig) state
-        let x'       = f ii initx
-        ref         <- newIORef (x', x')
-        let update prev = icont >>= \i -> sig' >>= \s -> let state' = f i s in state' `seq` writeIORef ref (prev, state')
-        insertSignal update ref (signalPool state)
-    return (sample, initx)
+foldp f initx inputsig = Signal $ \state -> mfix $ \ ~(sig, _, _, _) -> do
+    (icont, ii, iids, it) <- unsignal inputsig state
+    (sig',  _,  sids, st) <- unsignal (delay initx sig) state
+    uid                   <- nextUID state
+    let x'                 = f ii initx
+    ref                   <- newIORef (x', x')
+    let update prev        = icont >>= \i -> sig' >>= \s -> let state' = f i s in state' `seq` writeIORef ref (prev, state')
+    sample                <- insertSignal update ref (signalPool state)
+    return (sample, initx, uid : (iids ++ sids), SignalTwoBranch uid "foldp" it st)
 
-delay' :: a -> IO a -> Signal a
-delay' initx xsample = Signal $ \state -> do
-    ref         <- newIORef (initx, initx)
-    let update x = xsample >>= \x' -> x' `seq` writeIORef ref (x, x')
-    sample      <- insertSignal update ref (signalPool state)
-    return (sample, initx)
+feedback :: a -> (Signal a -> Signal a) -> Signal a
+feedback initx f = Signal $ \state -> mfix $ \ ~(sig, _, _, _) -> unsignal (f $ delay initx sig) state
 
-delay :: a -> Signal a -> Signal a
-delay initx xsignal = Signal $ \state -> do
-    ref          <- newIORef $ (initx, initx)
-    (xsample, _) <- unsignal xsignal state
-    let update x  = xsample >>= \x' -> x' `seq` writeIORef ref (x, x')
-    sample       <- insertSignal update ref (signalPool state)
-    return (sample, initx)
-
-sigfix :: (Signal a -> Signal a) -> Signal a
-sigfix f = Signal $ \state -> mfix $ \sig -> do
-    let wrappedSignal = Signal $ \_ -> return sig
-        recsig        = f wrappedSignal
-    unsignal recsig state
-
---feedback combinator that combines sigfix and delay
+delay :: a -> IO a -> Signal a
+delay initx xsample = Signal $ \state -> do
+    uid            <- nextUID state
+    ref            <- newIORef (initx, initx)
+    let update prev = xsample >>= \x' -> x' `seq` writeIORef ref (prev, x')
+    sample         <- insertSignal update ref (signalPool state)
+    return (sample, initx, [uid], SignalNode uid "delay")
 
 instance Num a => Num (Signal a) where
     (+) = liftA2 (+)
@@ -91,14 +98,19 @@ instance Num a => Num (Signal a) where
 
 runSignal :: (Show a) => Signal a -> IO ()
 runSignal sig = do
-    state        <- mkSignalState
-    (sample, is) <- unsignal sig state
-    pool         <- readIORef $ signalPool state
+    state                 <- mkSignalState
+    (sample, is, uids, t) <- unsignal sig state
+    pool                  <- readIORef $ signalPool state
+    putStrLn $ "Signal ids: " ++ show uids
+    putStrLn $ "SignalTree: " ++ show t
+    putStrLn "Running signal network"
     print is
-
     _ <- forever $ do
+        putStrLn "update"
         sequence_ pool
         sample >>= print
+        putStrLn ""
         threadDelay 16667
+        return ()
     return ()
 

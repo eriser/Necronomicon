@@ -1,16 +1,13 @@
 import Necronomicon.FRP.Signal'
 
 main :: IO ()
-main = runSignal counter
+main = runSignal $ feedback 1 counter
 
 -- counter :: Signal Int
 -- counter = foldp (+) 0 $ pure 1
 
-counter :: Signal Int
-counter = sigfix count
-    where
-        count :: Signal Int -> Signal Int
-        count s = pure 1 + delay 0 s
+counter :: Signal Int -> Signal Int
+counter s = s + s
 
 -- signal
 
