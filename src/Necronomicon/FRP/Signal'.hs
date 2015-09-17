@@ -5,25 +5,31 @@ import Data.IORef
 import Control.Monad.Fix
 import Control.Monad
 import Control.Applicative
+-- import System.Mem.StableNames
+import qualified Data.IntMap as IntMap
+-- import GHC.Prim (Any)
+--existential types?
 
 data SignalTree = SignalNode      Int String
                 | SignalOneBranch Int String SignalTree
                 | SignalTwoBranch Int String SignalTree SignalTree
                 deriving (Show)
 
---Need sample function on top of updating function so we can memoise repeated calls to sample and update?
-type Pooled a    = (a, a)
-type SignalPool  = IORef [IO ()]
-newtype Signal a = Signal {unsignal :: SignalState -> IO (IO a, a, [Int], SignalTree)}
-data SignalState = SignalState
-                 { signalPool :: SignalPool
-                 , sigUIDs    :: IORef [Int]
-                 }
+type Pooled a      = (a, a)
+type SignalPool    = IORef [IO ()]
+type SignalValue a = (IO a, a, [Int], SignalTree)
+newtype Signal a   = Signal {unsignal :: SignalState -> IO (SignalValue a)}
+data SignalState   = SignalState
+                   { signalPool :: SignalPool
+                   , sigUIDs    :: IORef [Int]
+                   , sigRefs    :: IntMap.IntMap (IO ())
+                   }
 
 mkSignalState :: IO SignalState
 mkSignalState = SignalState
             <$> newIORef []
             <*> newIORef [0..]
+            <*> pure IntMap.empty
 
 nextUID :: SignalState -> IO Int
 nextUID state = do
