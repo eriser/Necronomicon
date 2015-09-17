@@ -45,7 +45,7 @@ getSignalNode sig state = do
     case IntMap.lookup name refs of
         Just sv -> return $ unsafeCoerce sv
         Nothing -> do
-            signalValue <- unsignal sig state 
+            signalValue <- unsignal sig state
             modifyIORef' (sigRefs state) (unsafeCoerce $ IntMap.insert name signalValue)
             return signalValue
 
@@ -78,8 +78,8 @@ insertSignal updatingFunction ref updatePool = do
    return $ readIORef ref >>= return . snd
 
 --This about methods for memoizing calls
---Collapse references such that nodes that share arguments are a single node
-
+--Now that we have sharing of nodes, we need to not repeat work with those nodes!
+--How are we off by 1????
 foldp :: (input -> state -> state) -> state -> Signal input -> Signal state
 foldp f initx inputsig = Signal $ \state -> mfix $ \ ~(sig, _, _, _) -> do
     (icont, ii, iids, it) <- getSignalNode inputsig state
@@ -119,6 +119,7 @@ runSignal sig = do
     state                 <- mkSignalState
     (sample, is, uids, t) <- getSignalNode sig state
     pool                  <- readIORef $ signalPool state
+    putStrLn $ "pool size:  " ++ show (length pool)
     putStrLn $ "Signal ids: " ++ show uids
     putStrLn $ "SignalTree: " ++ show t
     putStrLn "Running signal network"
