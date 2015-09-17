@@ -5,10 +5,10 @@ import Data.IORef
 import Control.Monad.Fix
 import Control.Monad
 import Control.Applicative
--- import System.Mem.StableNames
+import System.Mem.StableName
 import qualified Data.IntMap as IntMap
--- import GHC.Prim (Any)
---existential types?
+import GHC.Base (Any)
+import Unsafe.Coerce
 
 data SignalTree = SignalNode      Int String
                 | SignalOneBranch Int String SignalTree
@@ -22,14 +22,14 @@ newtype Signal a   = Signal {unsignal :: SignalState -> IO (SignalValue a)}
 data SignalState   = SignalState
                    { signalPool :: SignalPool
                    , sigUIDs    :: IORef [Int]
-                   , sigRefs    :: IntMap.IntMap (IO ())
+                   , sigRefs    :: IORef (IntMap.IntMap Any)
                    }
 
 mkSignalState :: IO SignalState
 mkSignalState = SignalState
             <$> newIORef []
             <*> newIORef [0..]
-            <*> pure IntMap.empty
+            <*> newIORef IntMap.empty
 
 nextUID :: SignalState -> IO Int
 nextUID state = do
@@ -37,9 +37,21 @@ nextUID state = do
     writeIORef (sigUIDs state) uids
     return uid
 
+--Check that types match!
+getSignalNode :: Signal a -> SignalState -> IO (SignalValue a)
+getSignalNode sig state = do
+    name <- hashStableName <$> makeStableName sig
+    refs <- readIORef $ sigRefs state
+    case IntMap.lookup name refs of
+        Just sv -> return $ unsafeCoerce sv
+        Nothing -> do
+            signalValue <- unsignal sig state 
+            modifyIORef' (sigRefs state) (unsafeCoerce $ IntMap.insert name signalValue)
+            return signalValue
+
 instance Functor Signal where
     fmap f xsig = Signal $ \state -> do
-        (xsample, ix, xids, xt) <- unsignal xsig state
+        (xsample, ix, xids, xt) <- getSignalNode xsig state
         uid                     <- nextUID state
         let ifx                  = f ix
         ref                     <- newIORef (ifx, ifx)
@@ -50,8 +62,8 @@ instance Functor Signal where
 instance Applicative Signal where
     pure x        = Signal $ \_ -> return (return x, x, [-1], SignalNode (-1) "pure")
     fsig <*> xsig = Signal $ \state -> do
-        (fsample, fi, fids, ft) <- unsignal fsig state
-        (xsample, ix, xids, xt) <- unsignal xsig state
+        (fsample, fi, fids, ft) <- getSignalNode fsig state
+        (xsample, ix, xids, xt) <- getSignalNode xsig state
         uid                     <- nextUID state
         let ifx                  = fi ix
         ref                     <- newIORef (ifx, ifx)
@@ -70,8 +82,8 @@ insertSignal updatingFunction ref updatePool = do
 
 foldp :: (input -> state -> state) -> state -> Signal input -> Signal state
 foldp f initx inputsig = Signal $ \state -> mfix $ \ ~(sig, _, _, _) -> do
-    (icont, ii, iids, it) <- unsignal inputsig state
-    (sig',  _,  sids, st) <- unsignal (delay initx sig) state
+    (icont, ii, iids, it) <- getSignalNode inputsig state
+    (sig',  _,  sids, st) <- getSignalNode (delay initx sig) state
     uid                   <- nextUID state
     let x'                 = f ii initx
     ref                   <- newIORef (x', x')
@@ -80,7 +92,7 @@ foldp f initx inputsig = Signal $ \state -> mfix $ \ ~(sig, _, _, _) -> do
     return (sample, initx, uid : (iids ++ sids), SignalTwoBranch uid "foldp" it st)
 
 feedback :: a -> (Signal a -> Signal a) -> Signal a
-feedback initx f = Signal $ \state -> mfix $ \ ~(sig, _, _, _) -> unsignal (f $ delay initx sig) state
+feedback initx f = Signal $ \state -> mfix $ \ ~(sig, _, _, _) -> getSignalNode (f $ delay initx sig) state
 
 delay :: a -> IO a -> Signal a
 delay initx xsample = Signal $ \state -> do
@@ -105,7 +117,7 @@ instance Num a => Num (Signal a) where
 runSignal :: (Show a) => Signal a -> IO ()
 runSignal sig = do
     state                 <- mkSignalState
-    (sample, is, uids, t) <- unsignal sig state
+    (sample, is, uids, t) <- getSignalNode sig state
     pool                  <- readIORef $ signalPool state
     putStrLn $ "Signal ids: " ++ show uids
     putStrLn $ "SignalTree: " ++ show t
