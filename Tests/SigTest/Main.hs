@@ -3,7 +3,8 @@ import Necronomicon.FRP.Signal'
 main :: IO ()
 -- main = runSignal $ (,,) <$> finalCountdown <*> tuplezzzz <*> dynamicTester finalCountup
 -- main = runSignal $ (,,) <$> finalCountdown <*> finalCountup <*> dynamicTester finalCountup
-main = runSignal $ (,) <$> finalCountdown <*> dynamicTester finalCountup
+-- main = runSignal $ (,) <$> finalCountdown <*> dynamicTester finalCountup
+main = runSignal $ fmap (+ 1000) <$> dynamicTester finalCountup
 -- main = runSignal tuplezzzz
 
 -- tester :: Signal [Int]
@@ -15,8 +16,8 @@ main = runSignal $ (,) <$> finalCountdown <*> dynamicTester finalCountup
 finalCountup :: Signal Int
 finalCountup = foldp (+) 0 1
 
-finalCountdown :: Signal Int
-finalCountdown = foldp (+) (-1000) 1
+-- finalCountdown :: Signal Int
+-- finalCountdown = foldp (+) (-1000) 1
 
 -- finalCountup :: Signal Int
 -- finalCountup = feedback 1 $ \x -> x + x

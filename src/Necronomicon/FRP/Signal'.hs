@@ -124,14 +124,16 @@ dynamicTester xsig = Signal $ \state -> do
 
             when (c > 60) $ do
                 prevSigRefs <- readIORef (sigRefs state)
-                -- _           <- makeStableName (dynamicTester xsig)
-                _           <- makeStableName xsig
-                (xsample, _, xid, _, _) <- getSignalNode xsig state
+                -- dynHash     <- hashStableName <$> makeStableName (dynamicTester xsig)
+                xHash       <- hashStableName <$> makeStableName xsig
+                newSigRefs  <- newIORef $ IntMap.delete xHash prevSigRefs
+                -- _           <- makeStableName xsig
+                (xsample, _, xid, _, _) <- getSignalNode xsig state{sigRefs = newSigRefs}
                 putStrLn $ "dynamicTester uid : " ++ show uid
                 putStrLn $ "xsig uid : "          ++ show xid
                 -- putStrLn $ "dynamicTesterName == xsigName" ++ show (eqStableName dynamicTesterName dynamicTesterName)
                 modifyIORef' srefs ((0 :: Int, xsample) :)
-                writeIORef (sigRefs state) prevSigRefs
+                -- writeIORef (sigRefs state) prevSigRefs
                 writeIORef count 0
 
             srs <- readIORef srefs
@@ -150,7 +152,7 @@ instance Num a => Num (Signal a) where
 -- Runtime
 ---------------------------------------------------------------------------------------------------------
 
-runSignal :: (Show a) => Signal a -> IO ()
+runSignal :: Show a => Signal a -> IO ()
 runSignal sig = do
     state                   <- mkSignalState
     (sample, is, uid, _, t) <- getSignalNode sig state
