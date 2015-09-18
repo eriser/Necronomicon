@@ -1,18 +1,25 @@
 import Necronomicon.FRP.Signal'
 
 main :: IO ()
-main = runSignal doubler
--- main = runSignal $ counter + counter
--- main = runSignal $ (:) <$> counter <*> (dynamicTester $ counter + counter)
+-- main = runSignal $ (,,) <$> finalCountdown <*> tuplezzzz <*> dynamicTester finalCountup
+-- main = runSignal $ (,,) <$> finalCountdown <*> finalCountup <*> dynamicTester finalCountup
+main = runSignal $ (,) <$> finalCountdown <*> dynamicTester finalCountup
+-- main = runSignal tuplezzzz
 
--- counter :: Signal (Int, Int)
--- counter = (,) <$> doubler <*> foldp (+) 0 $ pure 1
+-- tester :: Signal [Int]
+-- tester = dynamicTester finalCountup
 
-doubler :: Signal Int
-doubler = feedback 1 $ \x -> x + x
+-- tuplezzzz :: Signal (Int, Int, Int)
+-- tuplezzzz = (,,) <$> finalCountdown <*> finalCountup <*> finalCountdown
 
--- counter :: Signal Int
--- counter = foldp (+) 0 $ pure 1
+finalCountup :: Signal Int
+finalCountup = foldp (+) 0 1
+
+finalCountdown :: Signal Int
+finalCountdown = foldp (+) (-1000) 1
+
+-- finalCountup :: Signal Int
+-- finalCountup = feedback 1 $ \x -> x + x
 
 {-
 import Necronomicon

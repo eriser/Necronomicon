@@ -45,10 +45,13 @@ nextUID state = do
 --Check that types match!
 getSignalNode :: Signal a -> SignalState -> IO (SignalValue a)
 getSignalNode sig state = do
-    name <- hashStableName <$> makeStableName sig
+    name <- sig `seq` hashStableName <$> makeStableName sig
     refs <- readIORef $ sigRefs state
     case IntMap.lookup name refs of
-        Just sv -> return $ unsafeCoerce sv
+        Just sv -> do
+            let signalValue@(_, _, uid, _, _) = unsafeCoerce sv :: SignalValue a
+            putStrLn $ "getSignalNode uid: " ++ show uid
+            return signalValue
         Nothing -> do
             signalValue <- unsignal sig state
             modifyIORef' (sigRefs state) (unsafeCoerce $ IntMap.insert name signalValue)
@@ -106,7 +109,7 @@ delay initx xsample = Signal $ \state -> do
     sample         <- insertSignal update ref state
     return (sample, initx, uid, rootNode state, SignalNode uid "delay")
 
-dynamicTester :: Show a => Signal a -> Signal [a]
+dynamicTester :: Signal a -> Signal [a]
 dynamicTester xsig = Signal $ \state -> do
     uid    <- nextUID state
     count  <- newIORef 0
@@ -114,25 +117,26 @@ dynamicTester xsig = Signal $ \state -> do
     ref    <- newIORef ([], [])
     sample <- insertSignal (update uid count srefs ref state) ref state
     return (sample, [], uid, rootNode state, SignalNode uid "dynamicTester")
-        where
-            update uid count srefs ref state prev = do
-                c <- (+1) <$> readIORef count :: IO Int
-                writeIORef count c
+    where
+        update uid count srefs ref state prev = do
+            c <- (+1) <$> readIORef count :: IO Int
+            writeIORef count c
 
-                when (c > 60) $ do
-                    prevSigRefs               <- readIORef (sigRefs state)
-                    (xsample, x, _, _, xtree) <- getSignalNode xsig state{rootNode = Node uid}
-                    xref                      <- newIORef (x, x)
-                    print xtree
-                    let updatex prevx = xsample >>= \x' -> x' `seq` writeIORef xref (prevx, x')
-                    writeIORef (sigRefs state) prevSigRefs
-                    sample <- insertSignal updatex xref state
-                    modifyIORef' srefs ((0 :: Int, sample) :)
-                    writeIORef count 0
+            when (c > 60) $ do
+                prevSigRefs <- readIORef (sigRefs state)
+                -- _           <- makeStableName (dynamicTester xsig)
+                _           <- makeStableName xsig
+                (xsample, _, xid, _, _) <- getSignalNode xsig state
+                putStrLn $ "dynamicTester uid : " ++ show uid
+                putStrLn $ "xsig uid : "          ++ show xid
+                -- putStrLn $ "dynamicTesterName == xsigName" ++ show (eqStableName dynamicTesterName dynamicTesterName)
+                modifyIORef' srefs ((0 :: Int, xsample) :)
+                writeIORef (sigRefs state) prevSigRefs
+                writeIORef count 0
 
-                srs <- readIORef srefs
-                ss  <- mapM snd srs
-                writeIORef ref (prev, ss)
+            srs <- readIORef srefs
+            ss  <- mapM snd srs
+            writeIORef ref (prev, ss)
 
 instance Num a => Num (Signal a) where
     (+) = liftA2 (+)
