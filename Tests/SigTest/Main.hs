@@ -1,15 +1,18 @@
 import Necronomicon.FRP.Signal'
 
 main :: IO ()
-main = runSignal $ counter + counter
+main = runSignal doubler
+-- main = runSignal $ counter + counter
+-- main = runSignal $ (:) <$> counter <*> (dynamicTester $ counter + counter)
 
-counter :: Signal Int
-counter = foldp (+) 0 $ pure 1
+-- counter :: Signal (Int, Int)
+-- counter = (,) <$> doubler <*> foldp (+) 0 $ pure 1
+
+doubler :: Signal Int
+doubler = feedback 1 $ \x -> x + x
 
 -- counter :: Signal Int
--- counter = feedback 1 $ \s -> s + s
-
--- signal
+-- counter = foldp (+) 0 $ pure 1
 
 {-
 import Necronomicon

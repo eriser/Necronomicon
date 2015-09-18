@@ -6,30 +6,35 @@ import Control.Monad.Fix
 import Control.Monad
 import Control.Applicative
 import System.Mem.StableName
-import qualified Data.IntMap as IntMap
 import GHC.Base (Any)
 import Unsafe.Coerce
+import qualified Data.IntMap as IntMap
+import qualified Data.Sequence    as Seq
 
 data SignalTree = SignalNode      Int String
                 | SignalOneBranch Int String SignalTree
                 | SignalTwoBranch Int String SignalTree SignalTree
                 deriving (Show)
 
+data RootNode      = RootNode | Node Int
+-- newtype UID        = UID Int
 type Pooled a      = (a, a)
-type SignalPool    = IORef [IO ()]
-type SignalValue a = (IO a, a, [Int], SignalTree)
+type SignalPool    = IORef (Seq.Seq (IO ()))
+type SignalValue a = (IO a, a, Int, RootNode, SignalTree)
 newtype Signal a   = Signal {unsignal :: SignalState -> IO (SignalValue a)}
 data SignalState   = SignalState
                    { signalPool :: SignalPool
                    , sigUIDs    :: IORef [Int]
                    , sigRefs    :: IORef (IntMap.IntMap Any)
+                   , rootNode   :: RootNode
                    }
 
 mkSignalState :: IO SignalState
 mkSignalState = SignalState
-            <$> newIORef []
+            <$> newIORef Seq.empty
             <*> newIORef [0..]
             <*> newIORef IntMap.empty
+            <*> pure RootNode
 
 nextUID :: SignalState -> IO Int
 nextUID state = do
@@ -51,56 +56,83 @@ getSignalNode sig state = do
 
 instance Functor Signal where
     fmap f xsig = Signal $ \state -> do
-        (xsample, ix, xids, xt) <- getSignalNode xsig state
+        (xsample, ix, _, _, xt) <- getSignalNode xsig state
         uid                     <- nextUID state
         let ifx                  = f ix
         ref                     <- newIORef (ifx, ifx)
         let update prev          = xsample >>= \x -> let fx = f x in fx `seq` writeIORef ref (prev, fx)
-        sample                  <- insertSignal update ref (signalPool state)
-        return (sample, ifx, uid : xids, SignalOneBranch uid "fmap" xt)
+        sample                  <- insertSignal update ref state
+        return (sample, ifx, uid, rootNode state, SignalOneBranch uid "fmap" xt)
 
 instance Applicative Signal where
-    pure x        = Signal $ \_ -> return (return x, x, [-1], SignalNode (-1) "pure")
+    pure x        = Signal $ \_ -> return (return x, x, -1, RootNode, SignalNode (-1) "pure")
     fsig <*> xsig = Signal $ \state -> do
-        (fsample, fi, fids, ft) <- getSignalNode fsig state
-        (xsample, ix, xids, xt) <- getSignalNode xsig state
+        (fsample, fi, _, _, ft) <- getSignalNode fsig state
+        (xsample, ix, _, _, xt) <- getSignalNode xsig state
         uid                     <- nextUID state
         let ifx                  = fi ix
         ref                     <- newIORef (ifx, ifx)
         let update prev          = xsample >>= \x -> fsample >>= \f -> let fx = f x in fx `seq` writeIORef ref (prev, fx)
-        sample                  <- insertSignal update ref (signalPool state)
-        return (sample, ifx, uid : (fids ++ xids), SignalTwoBranch uid "ap" ft xt)
+        sample                  <- insertSignal update ref state
+        return (sample, ifx, uid, rootNode state, SignalTwoBranch uid "ap" ft xt)
 
-insertSignal :: (a -> IO ()) -> IORef (Pooled a) -> SignalPool -> IO (IO a)
-insertSignal updatingFunction ref updatePool = do
-   let updateAction = readIORef ref >>= updatingFunction . snd
-   modifyIORef' updatePool (updateAction :)
-   return $ readIORef ref >>= return . snd
+insertSignal :: (a -> IO ()) -> IORef (Pooled a) -> SignalState -> IO (IO a)
+insertSignal updatingFunction ref state = do
+    let updateAction = readIORef ref >>= updatingFunction . snd
+    modifyIORef' (signalPool state) (Seq.|> updateAction)
+    return $ readIORef ref >>= return . snd
 
 --This about methods for memoizing calls
---Now that we have sharing of nodes, we need to not repeat work with those nodes!
---How are we off by 1????
+--Timing of delays seem slightly off? We seem to be skipping an update at the beginning
 foldp :: (input -> state -> state) -> state -> Signal input -> Signal state
-foldp f initx inputsig = Signal $ \state -> mfix $ \ ~(sig, _, _, _) -> do
-    (icont, ii, iids, it) <- getSignalNode inputsig state
-    (sig',  _,  sids, st) <- getSignalNode (delay initx sig) state
+foldp f initx inputsig = Signal $ \state -> mfix $ \ ~(sig, _, _, _, _) -> do
+    (icont, ii, _, _, it) <- getSignalNode inputsig state
+    (sig',  _,  _, _, st) <- getSignalNode (delay initx sig) state
     uid                   <- nextUID state
     let x'                 = f ii initx
     ref                   <- newIORef (x', x')
-    let update prev        = icont >>= \i -> sig' >>= \s -> let state' = f i s in state' `seq` writeIORef ref (prev, state')
-    sample                <- insertSignal update ref (signalPool state)
-    return (sample, initx, uid : (iids ++ sids), SignalTwoBranch uid "foldp" it st)
+    let update prev        = putStrLn "updating foldp" >> icont >>= \i -> sig' >>= \s -> let state' = f i s in state' `seq` writeIORef ref (prev, state')
+    sample                <- insertSignal update ref state
+    return (sample, initx, uid, rootNode state, SignalTwoBranch uid "foldp" it st)
 
 feedback :: a -> (Signal a -> Signal a) -> Signal a
-feedback initx f = Signal $ \state -> mfix $ \ ~(sig, _, _, _) -> getSignalNode (f $ delay initx sig) state
+feedback initx f = Signal $ \state -> mfix $ \ ~(sig, _, _, _, _) -> getSignalNode (f $ delay initx sig) state
 
 delay :: a -> IO a -> Signal a
 delay initx xsample = Signal $ \state -> do
     uid            <- nextUID state
     ref            <- newIORef (initx, initx)
     let update prev = xsample >>= \x' -> x' `seq` writeIORef ref (prev, x')
-    sample         <- insertSignal update ref (signalPool state)
-    return (sample, initx, [uid], SignalNode uid "delay")
+    sample         <- insertSignal update ref state
+    return (sample, initx, uid, rootNode state, SignalNode uid "delay")
+
+dynamicTester :: Show a => Signal a -> Signal [a]
+dynamicTester xsig = Signal $ \state -> do
+    uid    <- nextUID state
+    count  <- newIORef 0
+    srefs  <- newIORef []
+    ref    <- newIORef ([], [])
+    sample <- insertSignal (update uid count srefs ref state) ref state
+    return (sample, [], uid, rootNode state, SignalNode uid "dynamicTester")
+        where
+            update uid count srefs ref state prev = do
+                c <- (+1) <$> readIORef count :: IO Int
+                writeIORef count c
+
+                when (c > 60) $ do
+                    prevSigRefs               <- readIORef (sigRefs state)
+                    (xsample, x, _, _, xtree) <- getSignalNode xsig state{rootNode = Node uid}
+                    xref                      <- newIORef (x, x)
+                    print xtree
+                    let updatex prevx = xsample >>= \x' -> x' `seq` writeIORef xref (prevx, x')
+                    writeIORef (sigRefs state) prevSigRefs
+                    sample <- insertSignal updatex xref state
+                    modifyIORef' srefs ((0 :: Int, sample) :)
+                    writeIORef count 0
+
+                srs <- readIORef srefs
+                ss  <- mapM snd srs
+                writeIORef ref (prev, ss)
 
 instance Num a => Num (Signal a) where
     (+) = liftA2 (+)
@@ -116,20 +148,20 @@ instance Num a => Num (Signal a) where
 
 runSignal :: (Show a) => Signal a -> IO ()
 runSignal sig = do
-    state                 <- mkSignalState
-    (sample, is, uids, t) <- getSignalNode sig state
-    pool                  <- readIORef $ signalPool state
-    putStrLn $ "pool size:  " ++ show (length pool)
-    putStrLn $ "Signal ids: " ++ show uids
+    state                   <- mkSignalState
+    (sample, is, uid, _, t) <- getSignalNode sig state
+    pool                    <- readIORef $ signalPool state
+    putStrLn $ "pool size:  " ++ show (Seq.length pool)
+    putStrLn $ "Signal ids: " ++ show uid
     putStrLn $ "SignalTree: " ++ show t
     putStrLn "Running signal network"
     print is
     _ <- forever $ do
         putStrLn "update"
-        sequence_ pool
+        readIORef (signalPool state) >>= sequence_
         sample >>= print
         putStrLn ""
         threadDelay 16667
-        return ()
     return ()
+
 
