@@ -1,26 +1,18 @@
 import Necronomicon.FRP.Signal'
 
 main :: IO ()
--- main = runSignal $ (,,) <$> finalCountdown <*> tuplezzzz <*> dynamicTester finalCountup
--- main = runSignal $ (,,) <$> finalCountdown <*> finalCountup <*> dynamicTester finalCountup
--- main = runSignal $ (,) <$> finalCountdown <*> dynamicTester finalCountup
-main = runSignal $ fmap (+ 1000) <$> dynamicTester finalCountup
--- main = runSignal tuplezzzz
+main = runSignal $ fzip finalCountdown tester
+    where
+        tester = dynamicTester $ fzip finalCountdown finalCountup
 
--- tester :: Signal [Int]
--- tester = dynamicTester finalCountup
-
--- tuplezzzz :: Signal (Int, Int, Int)
--- tuplezzzz = (,,) <$> finalCountdown <*> finalCountup <*> finalCountdown
-
-finalCountup :: Signal Int
+finalCountup :: Signal Double
 finalCountup = foldp (+) 0 1
 
--- finalCountdown :: Signal Int
--- finalCountdown = foldp (+) (-1000) 1
+finalCountdown :: Signal Double
+finalCountdown = foldp (flip (-)) 0 $ whiteNoise 2
 
--- finalCountup :: Signal Int
--- finalCountup = feedback 1 $ \x -> x + x
+-- feedbackCounter :: Signal Int
+-- feedbackCounter = 1 + delay 0 feedbackCounter
 
 {-
 import Necronomicon
@@ -81,8 +73,8 @@ main = runSignal <| testGUI <> sections <> hyperTerrainSounds
 
 hyperTerrainSounds :: Signal ()
 hyperTerrainSounds = play (pure True) masterSynth -- Master Synth, used for limiting
-                     <> metallicPattern
-                     <> play (toggle <| combo [alt,isDown keyA]) triOsc32  (mouseToSlendro <~ mouseX) (mouseToSlendro <~ mouseY)
+<> metallicPattern
+<> play (toggle <| combo [alt,isDown keyA]) triOsc32  (mouseToSlendro <~ mouseX) (mouseToSlendro <~ mouseY)
 
 masterSynth :: UGen
 masterSynth = auxIn [masterOutBus, masterOutRightBus] |> masterLimiter |> out 0
@@ -94,8 +86,8 @@ sections :: Signal ()
 sections = switch section [section2, section3, section1]
     where
         section = netsignal <|  sampleOn (keepIf id True (combo [alt,isDown key1])) 0
-                            <|> sampleOn (keepIf id True (combo [alt,isDown key2])) 1
-                            <|> sampleOn (keepIf id True (combo [alt,isDown key3])) 2
+        <|> sampleOn (keepIf id True (combo [alt,isDown key2])) 1
+        <|> sampleOn (keepIf id True (combo [alt,isDown key3])) 2
 
 section1 :: Signal ()
 section1 = scene [pure cam,oscSig]
@@ -131,25 +123,25 @@ terrainObject a1 a2 a3 t = SceneObject (Vector3 (-8) 0 (-6)) identity (Vector3 0
         (tscale,vscale) = (1 / 6,2.5)
         values          = [(x,0,y) | (x,y) <- map (\n -> (mod' n w, n / h)) [0..w*h]]
 
-        toVertex (x,y,z) = Vector3 (x*tscale*3) (y*vscale) (z*tscale*3)
-        toColor  (x,y,z) = RGBA    ((x * 1.75) / w * (y * 0.6 + 0.4)) (y * 0.75 + 0.25) (z / h * (y * 0.75 + 0.25)) 0.3
+toVertex (x,y,z) = Vector3 (x*tscale*3) (y*vscale) (z*tscale*3)
+toColor  (x,y,z) = RGBA    ((x * 1.75) / w * (y * 0.6 + 0.4)) (y * 0.75 + 0.25) (z / h * (y * 0.75 + 0.25)) 0.3
 
-        addIndices w' i indicesList
-            | mod i w' < (w'-1) = i + 1 : i + w' : i + w' + 1 : i + 1 : i : i + w' : indicesList
-            | otherwise         = indicesList
+addIndices w' i indicesList
+    | mod i w' < (w'-1) = i + 1 : i + w' : i + w' + 1 : i + 1 : i : i + w' : indicesList
+    | otherwise         = indicesList
 
-        vertices = map toVertex values
-        colors   = map toColor  values
-        uvs      = map (\u -> Vector2 (u / (w * h)) 0) [0..w * h]
-        indices  = foldr (addIndices <| floor w) [] ([0..length values - floor (w + 2)] :: [Int])
+vertices = map toVertex values
+colors   = map toColor  values
+uvs      = map (\u -> Vector2 (u / (w * h)) 0) [0..w * h]
+indices  = foldr (addIndices <| floor w) [] ([0..length values - floor (w + 2)] :: [Int])
 
-        terrainMaterial = material
-            "terrain-vert.glsl"
-            "terrain-frag.glsl"
-            [UniformTexture "tex1" a1,
-             UniformTexture "tex2" a2,
-             UniformTexture "tex3" a3,
-             UniformScalar  "time" t]
+terrainMaterial = material
+"terrain-vert.glsl"
+"terrain-frag.glsl"
+[UniformTexture "tex1" a1,
+UniformTexture "tex2" a2,
+UniformTexture "tex3" a3,
+UniformScalar  "time" t]
 
 oscillatorObject :: Texture -> Texture -> Texture -> SceneObject
 oscillatorObject a1 a2 a3 = SceneObject (-3) identity 1 (Model m oscMaterial) []
@@ -160,11 +152,11 @@ oscillatorObject a1 a2 a3 = SceneObject (-3) identity 1 (Model m oscMaterial) []
         colors      = repeat black
         vertices    = zipWith3 Vector3 (cycle [3, 2, 1, 0]) (map (/512) ([0..511] :: [Double]) >>= replicate 4) (map (/512) ([1..512] :: [Double]) >>= replicate 4)
         oscMaterial = material
-            "osc-vert.glsl"
-            "osc-frag.glsl"
-            [UniformTexture "tex1" a1,
-             UniformTexture "tex2" a2,
-             UniformTexture "tex3" a3]
+        "osc-vert.glsl"
+        "osc-frag.glsl"
+        [UniformTexture "tex1" a1,
+        UniformTexture "tex2" a2,
+        UniformTexture "tex3" a3]
 
 sphereObject :: Texture -> Texture -> Texture -> Double -> Double -> SceneObject
 sphereObject a1 a2 a3 t _ = SceneObject 0 (fromEuler 0 (t * 0.1765) (t * 0.0825)) 1 (Model m sphereMaterial) []
@@ -180,29 +172,29 @@ sphereObject a1 a2 a3 t _ = SceneObject 0 (fromEuler 0 (t * 0.1765) (t * 0.0825)
         indices        = foldr (\i acc -> i + 1 : i + l : i + l + 1 : i + 1 : i + 0 : i + l : acc) [] ([0,4..floor (latitudes * longitudes) - l] :: [Int])
         m           = mkMesh "aSphere" vertices colors uvs indices
         sphereMaterial = material
-            "sphere-vert.glsl"
-            "sphere-frag.glsl"
-            [UniformTexture "tex1" a1,
-             UniformTexture "tex2" a2,
-             UniformTexture "tex3" a3,
-             UniformScalar  "time" t]
+        "sphere-vert.glsl"
+        "sphere-frag.glsl"
+        [UniformTexture "tex1" a1,
+        UniformTexture "tex2" a2,
+        UniformTexture "tex3" a3,
+        UniformScalar  "time" t]
 
 testGUI :: Signal ()
 testGUI = gui [chatBox,netBox,ubox]
     where
         ubox    = userBox (Vector2 0.0 0.945)
-                          (Size    0.0 0.055)
-                          (Font   "OCRA.ttf" 24)
-                          (vertexColored (RGBA 0 0 0 0.25))
+        (Size    0.0 0.055)
+        (Font   "OCRA.ttf" 24)
+        (vertexColored (RGBA 0 0 0 0.25))
 
-        netBox  = netStat (Vector2 1.4 0.97)
-                          (Size    0.2 0.03)
-                          (Font   "OCRA.ttf" 24)
+netBox  = netStat (Vector2 1.4 0.97)
+(Size    0.2 0.03)
+(Font   "OCRA.ttf" 24)
 
-        chatBox = chat    (Vector2 0.0 0.0)
-                          (Size    0.4 0.75)
-                          (Font   "OCRA.ttf" 24)
-                          (vertexColored (RGBA 1 1 1 0.1))
+chatBox = chat    (Vector2 0.0 0.0)
+(Size    0.4 0.75)
+(Font   "OCRA.ttf" 24)
+(vertexColored (RGBA 1 1 1 0.1))
 
 triOsc32 :: UGen -> UGen -> UGen
 triOsc32 mx my = feedback fSig |> verb |> gain 0.0385 |> masterOut
@@ -303,157 +295,157 @@ sigScale = slendro
 
 metallicPattern :: Signal ()
 metallicPattern = play (toggle <| combo [alt,isDown keyD]) caveTime
-               <> metallicPattern3
-               <> metallicPattern3_2
-               <> shakePattern
-               <> floorPattern
-               <> swellPattern
-               <> swellPattern2
-               <> hyperMelodyPattern
-               <> hyperMelodyPattern2
-               <> pulseDemonPattern
-               <> pulseDemonPattern2
-               <> pulseDemonPattern3
-               <> hyperMelodyPrimePattern
-               <> manaLeakPrimePattern
-               <> broodlingPattern
-               <> subControlPattern
-               <> section2Drums
+<> metallicPattern3
+<> metallicPattern3_2
+<> shakePattern
+<> floorPattern
+<> swellPattern
+<> swellPattern2
+<> hyperMelodyPattern
+<> hyperMelodyPattern2
+<> pulseDemonPattern
+<> pulseDemonPattern2
+<> pulseDemonPattern3
+<> hyperMelodyPrimePattern
+<> manaLeakPrimePattern
+<> broodlingPattern
+<> subControlPattern
+<> section2Drums
 
 metallicPattern3 :: Signal ()
 metallicPattern3 = playSynthPattern (toggle <| combo [alt,isDown keyD]) metallic3 <| pmap ((*0.25) . d2f sigScale) <| ploop [sec1]
     where
         sec1 = [lich| _ _ _ _
-                      _ _ _ 1
-                      _ _ _ _
-                      _ _ _ 2
-                      _ _ _ _
-                      _ _ _ 1
-                      _ _ _ _
-                      _ _ _ 0 |]
+               _ _ _ 1
+               _ _ _ _
+               _ _ _ 2
+               _ _ _ _
+               _ _ _ 1
+               _ _ _ _
+               _ _ _ 0 |]
 
 metallicPattern3_2 :: Signal ()
 metallicPattern3_2 = playSynthPattern (toggle <| combo [alt,isDown keyD]) metallic4 (pmap ((*0.25) . d2f sigScale) <| ploop [sec1])
     where
         sec1 = [lich| _ _ _ _
-                      _ _ _ _
-                      _ _ _ _
-                      _ _ _ 2
-                      _ _ _ _
-                      _ _ _ _
-                      _ _ _ _
-                      _ _ _ 0
-                      _ _ _ _
-                      _ _ _ _
-                      _ _ _ _
-                      _ _ _ 4
-                      _ _ _ _
-                      _ _ _ _
-                      _ _ _ _
-                      _ _ _ 5 |]
+               _ _ _ _
+               _ _ _ _
+               _ _ _ 2
+               _ _ _ _
+               _ _ _ _
+               _ _ _ _
+               _ _ _ 0
+               _ _ _ _
+               _ _ _ _
+               _ _ _ _
+               _ _ _ 4
+               _ _ _ _
+               _ _ _ _
+               _ _ _ _
+               _ _ _ 5 |]
 
 
 shakePattern :: Signal ()
 shakePattern = playSynthPattern (toggle <| combo [alt,isDown keyD]) shake (ploop [sec1])
     where
         sec1 = [lich| 1
-                      1 2 [_ 1]
-                      _ 4 [_ 1]
-                      _ 2 [_ 1]
-                      _ 6 [_ 1]
-                      _ 2 [2 2]
-                      _ 4 [_ 1]
-                      _ 2 [_ 1]
-                      _ 6 [_ 1]
-                      _ 2 [_ 1]
-                      _ 4 [_ 1]
-                      _ 2 [_ 1]
-                      _ 6 [_ 1]
-                      _ 2 [2 2]
-                      _ 4 [_ 1]
-                      _ 2 [_ 1]
-                      _ 6       |]
+               1 2 [_ 1]
+               _ 4 [_ 1]
+               _ 2 [_ 1]
+               _ 6 [_ 1]
+               _ 2 [2 2]
+               _ 4 [_ 1]
+               _ 2 [_ 1]
+               _ 6 [_ 1]
+               _ 2 [_ 1]
+               _ 4 [_ 1]
+               _ 2 [_ 1]
+               _ 6 [_ 1]
+               _ 2 [2 2]
+               _ 4 [_ 1]
+               _ 2 [_ 1]
+               _ 6       |]
 
 floorPattern :: Signal ()
 floorPattern = playSynthPattern (toggle <| combo [alt,isDown keyO]) floorPerc (pmap (* 0.5) <| ploop [sec1])
     where
         sec1 = [lich| 2     [_ 1] 1 _
-                      2     [_ 1] 1 _
-                      2     [_ 1] 1 _
-                      [1 1] [_ 1] 1 1
-                      4     [_ 1] 1 _
-                      2     [_ 1] 1 1
-                      2     [_ 1] 1 _
-                      2     [_ 1] 1 [1 1 1]   |]
+        2     [_ 1] 1 _
+        2     [_ 1] 1 _
+        [1 1] [_ 1] 1 1
+        4     [_ 1] 1 _
+        2     [_ 1] 1 1
+        2     [_ 1] 1 _
+        2     [_ 1] 1 [1 1 1]   |]
 
 
 swellPattern :: Signal ()
 swellPattern = playSynthPattern (toggle <| combo [alt,isDown keyP]) reverseSwell (pmap ((*1) . d2f sigScale) <| ploop [sec1])
     where
         sec1 = [lich| 0 _ _ _
-                      _ _ _ _
-                      2 _ _ _
-                      _ _ _ _
-                      1 _ _ _
-                      _ _ _ _
-                      2 _ _ _
-                      _ _ _ _
-                      0 _ _ _
-                      _ _ _ _
-                      2 _ _ _
-                      _ _ _ _
-                      4 _ _ _
-                      _ _ _ _
-                      5 _ _ _
-                      _ _ _ _|]
+               _ _ _ _
+               2 _ _ _
+               _ _ _ _
+               1 _ _ _
+               _ _ _ _
+               2 _ _ _
+               _ _ _ _
+               0 _ _ _
+               _ _ _ _
+               2 _ _ _
+               _ _ _ _
+               4 _ _ _
+               _ _ _ _
+               5 _ _ _
+               _ _ _ _|]
 
 swellPattern2 :: Signal ()
 swellPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyP]) reverseSwell2 (pmap ((*1) . d2f sigScale) <| ploop [sec1])
     where
         sec1 = [lich| 3 _ _ _
-                      _ _ _ _
-                      4 _ _ _
-                      _ _ _ _
-                      3 _ _ _
-                      _ _ _ _
-                      2 _ _ _
-                      _ _ _ _
-                      3 _ _ _
-                      _ _ _ _
-                      4 _ _ _
-                      _ _ _ _
-                      6 _ _ _
-                      _ _ _ _
-                      7 _ _ _
-                      _ _ _ _ |]
+               _ _ _ _
+               4 _ _ _
+               _ _ _ _
+               3 _ _ _
+               _ _ _ _
+               2 _ _ _
+               _ _ _ _
+               3 _ _ _
+               _ _ _ _
+               4 _ _ _
+               _ _ _ _
+               6 _ _ _
+               _ _ _ _
+               7 _ _ _
+               _ _ _ _ |]
 
 hyperMelodyPattern :: Signal ()
 hyperMelodyPattern = playSynthPattern (toggle <| combo [alt,isDown keyF]) hyperMelody (pmap ((*1) . d2f sigScale) <| ploop [sec1])
     where
         sec1 = [lich| [_ 3] [4 3] [_ 3] 6 7 _ [_ 3] 4 _ _ _ _ _ _
-                      [1 _ 2] [_ 3 _] [2 4 6] 5 _ _ _ _ _ _ _ _ _ _ _
-                      [4 _ _ 3] [_ _ 2 _] [_ 1 _ _] 3 _ _ _ _ 2 _ _ _ _ _ _ 1 _ _
-                      _ _ _ _ _ _ 7 5 [_ 4] 5 _ _ _ _ _
-                      _ _ _ _ 3 _ _ _ _ _ _ _ _ _ _ _ _
-                      2 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
-                |]
+        [1 _ 2] [_ 3 _] [2 4 6] 5 _ _ _ _ _ _ _ _ _ _ _
+        [4 _ _ 3] [_ _ 2 _] [_ 1 _ _] 3 _ _ _ _ 2 _ _ _ _ _ _ 1 _ _
+        _ _ _ _ _ _ 7 5 [_ 4] 5 _ _ _ _ _
+        _ _ _ _ 3 _ _ _ _ _ _ _ _ _ _ _ _
+        2 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _
+    |]
 
 hyperMelodyPattern2 :: Signal ()
 hyperMelodyPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyH]) hyperMelodyHarmony (pmap ((*2) . d2f sigScale) <| ploop [sec1])
     where
         sec1 = [lich| 4 _ 3 _ 2 _ _ _
-                      4 _ 3 _ 2 _ 3 _
-                      _ _ _ _ _ _ _ 0
-                      _ _ _ _ _ _ _ _
-                      4 _ 3 _ 2 _ _ _
-                      4 _ 3 _ 2 _ 3 _
-                      [1 1] 0 _ _ _ _ _ _
-                      _ _ _ _ _ _ _ _
-                      2 _ 1 _ _ _ 1
-                      2 _ 1 _ _ _ 1 2 _
-                      [3 _ 2] [_ 1 _] 0 _ _ _ _ _
-                      _ _ _ _ _ _ _ _
-                |]
+               4 _ 3 _ 2 _ 3 _
+               _ _ _ _ _ _ _ 0
+               _ _ _ _ _ _ _ _
+               4 _ 3 _ 2 _ _ _
+               4 _ 3 _ 2 _ 3 _
+               [1 1] 0 _ _ _ _ _ _
+               _ _ _ _ _ _ _ _
+               2 _ 1 _ _ _ 1
+               2 _ 1 _ _ _ 1 2 _
+               [3 _ 2] [_ 1 _] 0 _ _ _ _ _
+               _ _ _ _ _ _ _ _
+    |]
 
 pulseDemon :: UGen -> UGen
 pulseDemon f = [s, s2] |> filt |> softclip (random 31 100 200) |> gain 0.0225 |> e |> dup |> out 18
@@ -481,37 +473,37 @@ pulseDemonPattern = fx <> patt
         fx   = play (toggle <| combo [alt,isDown keyG]) demonCave (scale 250 8000 <~ mouseX) (scale 250 8000 <~ mouseY) (scale 1 1.5 <~ mouseX)
         patt = playSynthPattern (toggle <| combo [alt,isDown keyG]) pulseDemon (pmap ((*0.5) . d2f sigScale) <| ploop [sec1])
         sec1 = [lich| 0 1 _ 0 1 _ 0 1
-                      _ 2 3 _ 2 3 _ 2
-                      3 _ 0 1 _ 0 1 _
-                      2 3 _ 2 3 _ 2 3
-                      4 [_ 5] _ 4 [_ 5] _ 4 [_ 5]
-                      _ 6 [_ 7] _ 6 [_ 7] _ 8
-                |]
+               _ 2 3 _ 2 3 _ 2
+               3 _ 0 1 _ 0 1 _
+               2 3 _ 2 3 _ 2 3
+               4 [_ 5] _ 4 [_ 5] _ 4 [_ 5]
+               _ 6 [_ 7] _ 6 [_ 7] _ 8
+    |]
 
 pulseDemonPattern2 :: Signal ()
 pulseDemonPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyV]) pulseDemon (pmap ((*1.0) . d2f sigScale) <| ploop [sec1])
     where
         sec1 = [lich| 4 [_ 5] _ 4 [_ 5] _ 4 [_ 5]
-                      _ 6 [_ 7] _ 6 [_ 7] _ 8
-                      0 1 _ 0 1 _ 0 1
-                      _ 2 3 _ 2 3 _ 2
-                      3 _ 0 1 _ 0 1 _
-                      2 3 _ 2 3 _ 2 3
-                |]
+        _ 6 [_ 7] _ 6 [_ 7] _ 8
+        0 1 _ 0 1 _ 0 1
+        _ 2 3 _ 2 3 _ 2
+        3 _ 0 1 _ 0 1 _
+        2 3 _ 2 3 _ 2 3
+    |]
 
 pulseDemonPattern3 :: Signal ()
 pulseDemonPattern3 = playSynthPattern (toggle <| combo [alt,isDown keyB]) pulseDemon (pmap ((*2.0) . d2f sigScale) <| ploop [sec1])
     where
         --try 16ths, alternating with triplet 8ths! [0 0 0 _] _ [0 0 0] _
         sec1 = [lich| [0 0 0 _] _ _ _ [0 0 0 _] _ _ _
-                      [1 1 1 _] _ _ _ [1 1 1 _] _ _ _
-                      [2 2 2 _] _ _ _ [2 2 2 _] _ _ _
-                      [3 3 3 _] _ _ _ [3 3 3 _] _ _ _
-                      [4 4 4 _] _ _ _ [4 4 4 _] _ _ _
-                      [5 5 5 _] _ _ _ [5 5 5 _] _ _ _
-                      [6 6 6 _] _ _ _ [6 6 6 _] _ _ _
-                      [7 7 7 _] _ _ _ [7 7 7 _] _ _ _
-                |]
+        [1 1 1 _] _ _ _ [1 1 1 _] _ _ _
+        [2 2 2 _] _ _ _ [2 2 2 _] _ _ _
+        [3 3 3 _] _ _ _ [3 3 3 _] _ _ _
+        [4 4 4 _] _ _ _ [4 4 4 _] _ _ _
+        [5 5 5 _] _ _ _ [5 5 5 _] _ _ _
+        [6 6 6 _] _ _ _ [6 6 6 _] _ _ _
+        [7 7 7 _] _ _ _ [7 7 7 _] _ _ _
+    |]
 
 halfVerb :: UGen
 halfVerb = [l * 0.9 + r * 0.1, r * 0.9 + l * 0.1] |> masterOut
@@ -543,27 +535,27 @@ hyperMelodyPrimePattern = fx <> (playSynthPattern (toggle <| combo [alt,isDown k
     where
         fx   = play (toggle <| combo [alt,isDown keyR]) halfVerb
         sec1 = [lich| [_ 3] [4 3] [_ 3] 6 7 _ [_ 3] 4 _ _ _ _ _ _
-                      [1 _ 2] [_ 3 _] [2 4 6] 5 _ _ _ _ _ _ _ _ _ _ _
-                      [4 _ _ 3] [_ _ 2 _] [_ 1 _ _] 3 _ _ _ _ 2 _ _ _ _ _ _ 1 _ _
-                      _ _ _ _ _ _ 7 5 [_ 4] 5 _ _ _ _ _
-                      _ _ _ _ 3 _ _ _ _ _ _ _ _ _ _ _ _
-                      2 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ |]
+        [1 _ 2] [_ 3 _] [2 4 6] 5 _ _ _ _ _ _ _ _ _ _ _
+        [4 _ _ 3] [_ _ 2 _] [_ 1 _ _] 3 _ _ _ _ 2 _ _ _ _ _ _ 1 _ _
+        _ _ _ _ _ _ 7 5 [_ 4] 5 _ _ _ _ _
+        _ _ _ _ 3 _ _ _ _ _ _ _ _ _ _ _ _
+        2 _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ |]
 
 manaLeakPrimePattern :: Signal ()
 manaLeakPrimePattern = playSynthPattern (toggle <| combo [alt,isDown keyT]) manaLeakPrime (pmap ((*0.25) . d2f sigScale . (+3)) <| ploop [sec1])
     where
         sec1 = [lich| 4 _ 3 _ 2 _ _ _
-                      4 _ 3 _ 2 _ 3 _
-                      [4 6 8] 7 _ _ _ _ _ _
-                      _ _ _ _ _ _ _ _
-                      4 _ 3 _ 2 _ _ _
-                      4 _ 3 _ 2 _ 3 _
-                      [1 1] 0 _ _ _ _ _ _
-                      _ _ _ _ _ _ _ _
-                      2 _ 1 _ _ _ 1
-                      2 _ 1 _ _ _ 1 2 _
-                      [3 _ 2] [_ 1 _] 0 _ _ _ _ _
-                      _ _ _ _ _ _ _ _ |]
+               4 _ 3 _ 2 _ 3 _
+               [4 6 8] 7 _ _ _ _ _ _
+               _ _ _ _ _ _ _ _
+               4 _ 3 _ 2 _ _ _
+               4 _ 3 _ 2 _ 3 _
+               [1 1] 0 _ _ _ _ _ _
+               _ _ _ _ _ _ _ _
+               2 _ 1 _ _ _ 1
+               2 _ 1 _ _ _ 1 2 _
+               [3 _ 2] [_ 1 _] 0 _ _ _ _ _
+               _ _ _ _ _ _ _ _ |]
 
 subDestruction :: UGen -> UGen -> UGen
 subDestruction f1 f2 = [l, r] |> gain 0.5 |> masterOut
@@ -611,20 +603,20 @@ section2Drums = floorPattern2 <> shake2Pattern <> shake1Pattern <> omniPrimePatt
         shake1Pattern = playSynthPattern (toggle <| combo [alt,isDown keyW]) shakeSnare (pmap (* 0.125) <| ploop [sec1])
             where
                 sec1 = [lich| 1 _ 1 _ 1 _ 1 _
-                              1 _ 1 _ 1 _ 1 [4 4]
-                        |]
+                       1 _ 1 _ 1 _ 1 [4 4]
+    |]
 
-        shake2Pattern = playSynthPattern (toggle <| combo [alt,isDown keyW]) shake2 (pmap (* 0.1) <| ploop [sec1])
-            where
-                sec1 = [lich| [2 1] [1 1] 1
-                              [2 1] [_ 2] 1
-                              [_ 1] [_ 1] 1
-                              _ _ _
-                        |]
+shake2Pattern = playSynthPattern (toggle <| combo [alt,isDown keyW]) shake2 (pmap (* 0.1) <| ploop [sec1])
+    where
+        sec1 = [lich| [2 1] [1 1] 1
+        [2 1] [_ 2] 1
+        [_ 1] [_ 1] 1
+        _ _ _
+    |]
 
-        floorPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyW]) floorPerc2 (pmap (* 0.25) <| ploop [sec1])
-            where
-                sec1 = [lich| [6 1] [_ 1] [_ 6] [_ 1] |]
+floorPattern2 = playSynthPattern (toggle <| combo [alt,isDown keyW]) floorPerc2 (pmap (* 0.25) <| ploop [sec1])
+    where
+        sec1 = [lich| [6 1] [_ 1] [_ 6] [_ 1] |]
 
 omniPrime :: UGen -> UGen
 omniPrime f = [s, s2] |> softclip 20 |> filt |> gain 0.75 |> e |> auxThrough 4 |> pan 0.2 |> masterOut
@@ -639,10 +631,10 @@ omniPrimePattern :: Signal ()
 omniPrimePattern = playSynthPattern (toggle <| combo [alt,isDown keyQ]) omniPrime (pmap ((* 0.03125) . d2f slendro) <| ploop [sec1])
     where
         sec1 = [lich| 6 7 5 _
-                      _ _ _ [_ 7]
-                      6 7 [_ 7] _
-                      [5 5] [5 5] _ _
-                |]
+               _ _ _ [_ 7]
+               6 7 [_ 7] _
+               [5 5] [5 5] _ _
+    |]
 
 distortedBassPrime :: UGen -> UGen
 distortedBassPrime f = [s, s2] |> e |> softclip 400 |> filt |> softclip 50 |> filt2 |> gain 0.1 |> verb |> e |> masterOut
@@ -660,21 +652,21 @@ distortedBassHits :: Signal ()
 distortedBassHits = playSynthPattern (toggle <| combo [alt,isDown keyE]) distortedBassPrime (pmap ((*0.125) . d2f sigScale) <| ploop [sec1])
     where
         sec1 = [lich| _ _ _ 6
-                      _ _ _ _
-                      _ _ _ 7
-                      _ _ _ _
-                      _ _ _ 6
-                      _ _ _ _
-                      _ _ _ 5
-                      _ _ _ _
-                      _ _ _ 6
-                      _ _ _ _
-                      _ _ _ 7
-                      _ _ _ _
-                      _ _ _ 6
-                      _ _ _ _
-                      _ _ _ 5
-                      _ _ _ _ |]
+               _ _ _ _
+               _ _ _ 7
+               _ _ _ _
+               _ _ _ 6
+               _ _ _ _
+               _ _ _ 5
+               _ _ _ _
+               _ _ _ 6
+               _ _ _ _
+               _ _ _ 7
+               _ _ _ _
+               _ _ _ 6
+               _ _ _ _
+               _ _ _ 5
+               _ _ _ _ |]
 
 ------------------------------------
 -- Section 3
@@ -694,17 +686,17 @@ subControlPattern = fx <> playSynthPattern (toggle <| combo [alt,isDown keyZ]) s
     where
         fx   = play (toggle <| combo [alt,isDown keyZ]) subDestruction (scale 250 8000 <~ mouseX) (scale 250 8000 <~ mouseY)
         sec1 = [lich| [0 0 0 0] [0 0 0 0] [0 0 0 0] [0 0 0 0] [0 0 0 0]
-                      [1 1 1 1] [1 1 1 1] [1 1 1 1] [1 1 1 1] [1 1 1 1] |]
+        [1 1 1 1] [1 1 1 1] [1 1 1 1] [1 1 1 1] [1 1 1 1] |]
         sec2 = [lich| [3 3 3 3] [3 3 3 3] [3 3 3 3] [3 3 3 3] [3 3 3 3]
-                      [4 4 4 4] [4 4 4 4] [4 4 4 4] [6 6 6 6] [6 6 6 6] |]
+        [4 4 4 4] [4 4 4 4] [4 4 4 4] [6 6 6 6] [6 6 6 6] |]
 
 broodHive :: UGen
 broodHive = dls + (aux * 0.25)|> masterOut
     where
         dls = feedback <| \in0 in1 -> let ins = masterLimiter ([in0, in1] + aux) |> gain 0.5 in delayC 2 2 ins + delayC 1 1 ins
-        aux1 = auxIn broodlingBus
-        aux2 = auxIn broodlingRightBus
-        aux  = [aux1, aux2]
+                                          aux1 = auxIn broodlingBus
+                                          aux2 = auxIn broodlingRightBus
+                                          aux  = [aux1, aux2]
 
 broodling :: UGen -> UGen
 broodling f = pulse [f, f/2, f/4] 0.5 |> mix |> p |> broodlingOut
@@ -721,20 +713,20 @@ broodBassFreq = UGen [UGenNum . (/4) . fromRational $ d2f slendro 1]
 
 broodlingPattern :: Signal ()
 broodlingPattern = fx
-                   <> playSynthPattern (toggle <| combo [alt,isDown keyC]) broodling  (\x -> pmap ((*4) . d2f slendro) . pstutter x <| ploop [freqs])  (mouseX ~> scale 1 10)
-                   <> playSynthPattern (toggle <| combo [alt,isDown keyC]) broodling2 (\x -> pmap ((*2) . d2f slendro) . pstutter x <| ploop [freqs2]) (mouseY ~> scale 1 10)
-                   <> terraNovaPattern
+<> playSynthPattern (toggle <| combo [alt,isDown keyC]) broodling  (\x -> pmap ((*4) . d2f slendro) . pstutter x <| ploop [freqs])  (mouseX ~> scale 1 10)
+<> playSynthPattern (toggle <| combo [alt,isDown keyC]) broodling2 (\x -> pmap ((*2) . d2f slendro) . pstutter x <| ploop [freqs2]) (mouseY ~> scale 1 10)
+<> terraNovaPattern
     where
         fx     = play (toggle <| combo [alt,isDown keyC]) broodHive
         freqs  = [lich| 6 _ 6    6 _ 6     _ 6 6 _
-                        1 _ 1    1 _ 1     _ 1 1 _
-                        2 _ 2    2 _ 2     _ 2 2 _
-                      |]
+                 1 _ 1    1 _ 1     _ 1 1 _
+                 2 _ 2    2 _ 2     _ 2 2 _
+    |]
 
-        freqs2 = [lich| _ 7 [7 7] _ 7 [_ 7] 7 _ _ 7
-                        _ 8 [_ 8] _ 8 8     8 _ _ 8
-                        _ 3 3     _ 3 3 [_ 3] 3 _ _
-                  |]
+freqs2 = [lich| _ 7 [7 7] _ 7 [_ 7] 7 _ _ 7
+_ 8 [_ 8] _ 8 8     8 _ _ 8
+_ 3 3     _ 3 3 [_ 3] 3 _ _
+    |]
 
 squareEnv :: UGen -> UGen
 squareEnv = varSquareEnv 0.2
@@ -830,14 +822,14 @@ bb = sin (moxFreq 0 0.125) + saw (moxFreq 0 0.125) +> clip 20 +> tanhDist 1 |> l
 
 terraNovaPattern :: Signal ()
 terraNovaPattern = fxSynth trinisphere
-                <> fxSynth trinisphere'
-                <> fxSynth trinisphere''
-                <> fxSynth gitaxianProbe
-                <> fxSynth expeditionMap
-                <> fxSynth goblinCharBelcher
-                <> fxSynth tolarianAcademy
-                <> playBeatPattern (toggle <| combo [alt,isDown keyC]) (\x -> ploop [PVal (pstutter x <| ploop moxes, 0.25 :: Rational)]) (mouseX ~> scale 1 10)
-                <> playBeatPattern (toggle <| combo [alt,isDown keyC]) (ploop [timeVaultBeat])
+<> fxSynth trinisphere'
+<> fxSynth trinisphere''
+<> fxSynth gitaxianProbe
+<> fxSynth expeditionMap
+<> fxSynth goblinCharBelcher
+<> fxSynth tolarianAcademy
+<> playBeatPattern (toggle <| combo [alt,isDown keyC]) (\x -> ploop [PVal (pstutter x <| ploop moxes, 0.25 :: Rational)]) (mouseX ~> scale 1 10)
+<> playBeatPattern (toggle <| combo [alt,isDown keyC]) (ploop [timeVaultBeat])
     where
         moxes = map PVal [
             ("moxRuby", moxRuby),
@@ -859,6 +851,6 @@ terraNovaPattern = fxSynth trinisphere
             ("moxEmerald''", moxEmerald''),
             ("manaVault", manaVault)
             ]
-        fxSynth name = play (toggle <| combo [alt,isDown keyC]) name
-        timeVaultBeat = [lich| bb [_ bb] bs _ _ [_ bb] bs _ |]
--}
+            fxSynth name = play (toggle <| combo [alt,isDown keyC]) name
+            timeVaultBeat = [lich| bb [_ bb] bs _ _ [_ bb] bs _ |]
+            -}
