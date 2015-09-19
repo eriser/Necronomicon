@@ -28,7 +28,6 @@ data SignalState   = SignalState
 
 data Signal a = Signal (SignalState -> IO (SignalValue a))
               | Pure a
-              | NoSignal
 
 mkSignalState :: IO SignalState
 mkSignalState = SignalState
@@ -59,7 +58,6 @@ getSignalNode signal sig state = do
             return signalValue
 
 instance Functor Signal where
-    fmap _ NoSignal        = NoSignal
     fmap f (Pure x)        = Pure $ f x
     fmap !f sx@(Signal !xsig) = Signal $ \state -> do
         (xsample, _) <- getSignalNode sx xsig state
@@ -73,8 +71,6 @@ instance Functor Signal where
 instance Applicative Signal where
     pure x = Pure x
 
-    NoSignal       <*> _              = NoSignal
-    _              <*> NoSignal       = NoSignal
     Pure f         <*> Pure x         = Pure $ f x
     Pure f         <*> x@(Signal _)   = fmap f x
     f@(Signal _)   <*> Pure x         = fmap ($ x) f
@@ -106,9 +102,6 @@ effectful effectfulAction = Signal $ \state -> do
 --This about methods for memoizing calls
 --Timing of delays seem slightly off? We seem to be skipping an update at the beginning
 foldp :: (input -> state -> state) -> state -> Signal input -> Signal state
-
-foldp _ _      NoSignal = NoSignal
-
 foldp f initx (Pure i)  = Signal $ \state -> mfix $ \ ~(sig, _) -> do
     (sig', _)    <- delay' initx sig state
     uid          <- nextUID state
@@ -126,8 +119,11 @@ foldp f initx si@(Signal !inputsig) = Signal $ \state -> mfix $ \ ~(sig, _) -> d
     sample       <- insertSignal update ref state
     return (sample, uid)
 
--- feedback :: a -> (Signal a -> Signal a) -> Signal a
--- feedback initx !f = Signal $ \state -> mfix $ \ ~(sig, _, _, _, _) -> unsignal (f $ delay initx sig) state
+feedback :: a -> (Signal a -> Signal a) -> Signal a
+feedback initx f = Signal $ \state -> mfix $ \ ~(sig, _) ->
+    case f $ Signal $ \_ -> delay' initx sig state of
+        Pure x      -> return (return x, -1)
+        Signal xsig -> xsig state
 
 --Might be able to use delay + observable sharing to not require a specific signal fix operator anymore!
 delay' :: a -> IO a -> SignalState -> IO (SignalValue a)
@@ -139,18 +135,16 @@ delay' initx xsample state = do
     return (sample, uid)
 
 -- delay :: a -> Signal a -> Signal a
--- delay _     NoSignal       = NoSignal
--- delay _     (Pure x)       = Pure x
--- delay initx (Signal !xsig) = Signal $ \state -> do
---     uid                   <- nextUID state
---     (xsample, _, _, _, _) <- getSignalNode xsig state
---     ref                   <- newIORef (initx, initx)
---     let update prev        = xsample >>= \x' -> x' `seq` writeIORef ref (prev, x')
---     sample                <- insertSignal update ref state
---     return (sample, initx, uid, rootNode state, SignalNode uid "delay")
+-- delay _     (Pure x)          = Pure x
+-- delay initx sx@(Signal !xsig) = Signal $ \state -> do
+--     uid          <- nextUID state
+--     (xsample, _) <- getSignalNode sx xsig state
+--     ref          <- newIORef initx
+--     let update _  = xsample >>= \x' -> x' `seq` writeIORef ref x'
+--     sample       <- insertSignal update ref state
+--     return (sample, uid)
 
 dynamicTester :: Show a => Signal a -> Signal [a]
-dynamicTester NoSignal       = NoSignal
 dynamicTester (Pure _)       = Pure []
 dynamicTester sx@(Signal !xsig) = Signal $ \state -> do
     uid    <- nextUID state
@@ -186,8 +180,8 @@ instance Num a => Num (Signal a) where
 fzip :: (Functor f, Applicative f) => f a -> f b -> f (a, b)
 fzip a b = (,) <$> a <*> b
 
-fzip2 :: (Functor f, Applicative f) => f a -> f b -> f c -> f (a, b, c)
-fzip2 a b c = (,,) <$> a <*> b <*> c
+fzip3 :: (Functor f, Applicative f) => f a -> f b -> f c -> f (a, b, c)
+fzip3 a b c = (,,) <$> a <*> b <*> c
 
 whiteNoise :: Double -> Signal Double
 whiteNoise amp = effectful $ randomRIO (-amp, amp)
@@ -197,12 +191,10 @@ whiteNoise amp = effectful $ randomRIO (-amp, amp)
 ---------------------------------------------------------------------------------------------------------
 
 runSignal :: Show a => Signal a -> IO ()
-runSignal NoSignal = putStrLn "NoSignal"
 runSignal (Pure x) = putStrLn ("Pure " ++ show x)
 runSignal sx@(Signal sig) = do
-    state         <- mkSignalState
-    (sample, uid) <- getSignalNode sx sig state
-    putStrLn $ "Signal ids: " ++ show uid
+    state       <- mkSignalState
+    (sample, _) <- getSignalNode sx sig state
     readIORef (nodeTable state) >>= mapM_ print . IntMap.keys
     putStrLn "Running signal network"
     _ <- forever $ do

@@ -3,16 +3,16 @@ import Necronomicon.FRP.Signal'
 main :: IO ()
 main = runSignal $ fzip finalCountdown tester
     where
-        tester = dynamicTester $ fzip finalCountdown finalCountup
+        tester = dynamicTester $ fzip3 finalCountdown finalCountup feedbackCounter
 
 finalCountup :: Signal Double
 finalCountup = foldp (+) 0 1
 
 finalCountdown :: Signal Double
-finalCountdown = foldp (flip (-)) 0 $ whiteNoise 2
+finalCountdown = foldp (flip (-)) 0 2
 
--- feedbackCounter :: Signal Int
--- feedbackCounter = 1 + delay 0 feedbackCounter
+feedbackCounter :: Signal Int
+feedbackCounter = feedback 0 $ \c -> c + 1
 
 {-
 import Necronomicon
