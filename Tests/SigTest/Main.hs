@@ -15,7 +15,7 @@ main = runSignal feedbackCounter
 -- finalCountdown = foldp (flip (-)) 0 2
 
 feedbackCounter :: Signal Int
-feedbackCounter = 1 + 0 `fby` feedbackCounter
+feedbackCounter = 0 `fby` (1 + feedbackCounter)
 
 {-
 import Necronomicon

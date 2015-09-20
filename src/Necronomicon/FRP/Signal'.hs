@@ -198,8 +198,8 @@ runSignal (Pure x) = putStrLn ("Pure " ++ show x)
 runSignal sx@(Signal sig) = do
     state       <- mkSignalState
     (sample, _) <- getSignalNode sx sig state
-    readIORef (nodeTable state) >>= mapM_ print . IntMap.keys
     putStrLn "Running signal network"
+    sample >>= print
     _ <- forever $ do
         pool <- readIORef $ signalPool state
         putStrLn $ "pool size:  " ++ show (Seq.length pool)
