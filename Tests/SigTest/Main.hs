@@ -2,13 +2,11 @@ import Necronomicon.FRP.Signal'
 
 main :: IO ()
 -- main = runSignal finalCountdown
-main = runSignal delayCounter
+main = runSignal feedbackCounter
 -- main = runSignal $ fzip finalCountdown tester
     -- where
-        -- tester = dynamicTester $ fzip3 finalCountdown finalCountup $ dynamicTester feedbackCounter
-
-delayCounter :: Signal Int
-delayCounter = 1 + 0 `fby` delayCounter
+        -- tester = dynamicTester $ fzip3 finalCountdown finalCountup feeds
+        -- feeds  = (:) <$> (0 `fby` fmap sum feeds) <*> dynamicTester feedbackCounter
 
 -- finalCountup :: Signal Double
 -- finalCountup = foldp (+) 0 1
@@ -16,8 +14,8 @@ delayCounter = 1 + 0 `fby` delayCounter
 -- finalCountdown :: Signal Double
 -- finalCountdown = foldp (flip (-)) 0 2
 
--- feedbackCounter :: Signal Int
--- feedbackCounter = feedback 0 $ \c -> c + 1
+feedbackCounter :: Signal Int
+feedbackCounter = 1 + 0 `fby` feedbackCounter
 
 {-
 import Necronomicon

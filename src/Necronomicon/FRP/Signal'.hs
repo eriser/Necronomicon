@@ -43,12 +43,10 @@ getSignalNode signal sig state = do
     refs <- readIORef $ nodeTable state
     case IntMap.lookup hash refs of
         Just (stableName', sv) -> if not (eqStableName stableName stableName') then putStrLn "Stables names did not match during node table lookup" >> sig state else do
-            let signalValue@(_, uid) = unsafeCoerce sv :: SignalValue a
-            putStrLn $ "getSignalNode - Just    - hash: " ++ show hash ++ ", uid: " ++ show uid
+            let signalValue = unsafeCoerce sv :: SignalValue a
             return signalValue
         Nothing -> do
-            signalValue@(_, uid) <- sig state
-            putStrLn $ "getSignalNode - Nothing - hash: " ++ show hash ++ ", uid: " ++ show uid
+            signalValue <- sig state
             modifyIORef' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce signalValue))
             return signalValue
 
@@ -123,14 +121,15 @@ feedback initx f = Signal $ \state -> mfix $ \ ~(sig, _) ->
 fby :: a -> Signal a -> Signal a
 fby initx signal = fbySignal
     where
+        unsignal' (Pure x)   _     = return (return x, -1)
+        unsignal' (Signal s) state = s state
         fbySignal = Signal $ \state -> do
             stableName <- signal `seq` makeStableName fbySignal
             let hash = hashStableName stableName
             nodes      <- readIORef $ nodeTable state
             case IntMap.lookup hash nodes of
-                Just sv -> let (xsample, _) = unsafeCoerce sv in putStrLn "fby - Just" >> delay' initx xsample state
+                Just sv -> return $ unsafeCoerce sv
                 Nothing -> do
-                    putStrLn "fby - Nothing"
                     uid <- nextUID state
                     ref <- newIORef initx
                     modifyIORef' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce (readIORef ref, uid)))
@@ -138,9 +137,6 @@ fby initx signal = fbySignal
                     let update _ = xsample >>= \x -> writeIORef ref x
                     sample <- insertSignal update ref state
                     return (sample, uid)
-            where
-                unsignal' (Pure x)   _     = return (return x, -1)
-                unsignal' (Signal s) state = s state
 
 --Might be able to use delay + observable sharing to not require a specific signal fix operator anymore!
 delay' :: a -> IO a -> SignalState -> IO (SignalValue a)
