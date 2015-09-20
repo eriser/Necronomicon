@@ -1,6 +1,7 @@
 module Necronomicon.FRP.Signal' where
 
 import Control.Concurrent
+import Control.Concurrent.STM
 import Data.IORef
 import Control.Monad.Fix
 import Control.Monad
@@ -9,16 +10,17 @@ import System.Mem.StableName
 import GHC.Base (Any)
 import Unsafe.Coerce
 import qualified Data.IntMap.Strict as IntMap
-import qualified Data.Sequence      as Seq
 import System.Random
+import Data.Foldable (foldrM)
+import System.Mem.Weak
 
-data RootNode      = RootNode | Node Int
-type SignalPool    = IORef (Seq.Seq (IO ()))
+type SignalPool    = [Weak (IO ())]
 type SignalValue a = (IO a, Int)
 data SignalState   = SignalState
-                   { signalPool :: SignalPool
+                   { signalPool :: TVar  SignalPool
+                   , newPool    :: TVar (SignalPool -> SignalPool)
                    , sigUIDs    :: IORef [Int]
-                   , nodeTable  :: IORef (IntMap.IntMap (StableName (), Any))
+                   , nodeTable  :: TVar (IntMap.IntMap (StableName (), Any))
                    }
 
 data Signal a = Signal (SignalState -> IO (SignalValue a))
@@ -26,9 +28,10 @@ data Signal a = Signal (SignalState -> IO (SignalValue a))
 
 mkSignalState :: IO SignalState
 mkSignalState = SignalState
-            <$> newIORef Seq.empty
+            <$> atomically (newTVar [])
+            <*> atomically (newTVar id)
             <*> newIORef [0..]
-            <*> newIORef IntMap.empty
+            <*> atomically (newTVar IntMap.empty)
 
 nextUID :: SignalState -> IO Int
 nextUID state = do
@@ -40,14 +43,14 @@ getSignalNode :: Signal a -> (SignalState -> IO (SignalValue a))  -> SignalState
 getSignalNode signal sig state = do
     stableName <- signal `seq` makeStableName signal
     let hash = hashStableName stableName
-    refs <- readIORef $ nodeTable state
+    refs <- atomically $ readTVar $ nodeTable state
     case IntMap.lookup hash refs of
         Just (stableName', sv) -> if not (eqStableName stableName stableName') then putStrLn "Stables names did not match during node table lookup" >> sig state else do
             let signalValue = unsafeCoerce sv :: SignalValue a
             return signalValue
         Nothing -> do
             signalValue <- sig state
-            modifyIORef' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce signalValue))
+            atomically $ modifyTVar' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce signalValue))
             return signalValue
 
 instance Functor Signal where
@@ -64,9 +67,9 @@ instance Functor Signal where
 instance Applicative Signal where
     pure x = Pure x
 
-    Pure f         <*> Pure x         = Pure $ f x
-    Pure f         <*> x@(Signal _)   = fmap f x
-    f@(Signal _)   <*> Pure x         = fmap ($ x) f
+    Pure f           <*> Pure x           = Pure $ f x
+    Pure f           <*> x@(Signal _)     = fmap f x
+    f@(Signal _)     <*> Pure x           = fmap ($ x) f
     sf@(Signal fsig) <*> sx@(Signal xsig) = Signal $ \state -> do
         (fsample, _) <- getSignalNode sf fsig state
         (xsample, _) <- getSignalNode sx xsig state
@@ -80,8 +83,11 @@ instance Applicative Signal where
 insertSignal :: (a -> IO ()) -> IORef a -> SignalState -> IO (IO a)
 insertSignal updatingFunction ref state = do
     let updateAction = readIORef ref >>= updatingFunction
-    modifyIORef' (signalPool state) (Seq.|> updateAction)
-    return $ readIORef ref
+        sample = readIORef ref
+        {-# NOINLINE sample #-}
+    wk <- mkWeak sample updateAction Nothing
+    atomically $ modifyTVar' (newPool state) $ ((wk :) .)
+    return sample
 
 effectful :: IO a -> Signal a
 effectful effectfulAction = Signal $ \state -> do
@@ -92,8 +98,6 @@ effectful effectfulAction = Signal $ \state -> do
     sample       <- insertSignal update ref state
     return (sample, uid)
 
---This about methods for memoizing calls
---Timing of delays seem slightly off? We seem to be skipping an update at the beginning
 foldp :: (input -> state -> state) -> state -> Signal input -> Signal state
 foldp f initx (Pure i)  = Signal $ \state -> mfix $ \ ~(sig, _) -> do
     (sig', _)    <- delay' initx sig state
@@ -125,30 +129,29 @@ fby initx signal = fbySignal
         unsignal' (Signal s) state = s state
         fbySignal = Signal $ \state -> do
             stableName <- signal `seq` makeStableName fbySignal
-            let hash = hashStableName stableName
-            nodes      <- readIORef $ nodeTable state
+            let hash    = hashStableName stableName
+            nodes      <- atomically $ readTVar $ nodeTable state
             case IntMap.lookup hash nodes of
                 Just sv -> return $ unsafeCoerce sv
                 Nothing -> do
                     uid <- nextUID state
                     ref <- newIORef initx
-                    modifyIORef' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce (readIORef ref, uid)))
+                    atomically $ modifyTVar' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce (readIORef ref, uid)))
                     (xsample, _) <- unsignal' signal state
-                    let update _ = xsample >>= \x -> writeIORef ref x
+                    let update _ = xsample >>= \x -> x `seq` writeIORef ref x
                     sample <- insertSignal update ref state
                     return (sample, uid)
 
---Might be able to use delay + observable sharing to not require a specific signal fix operator anymore!
 delay' :: a -> IO a -> SignalState -> IO (SignalValue a)
 delay' initx xsample state = do
     uid          <- nextUID state
     ref          <- newIORef initx
-    let update _  = xsample >>= \x' -> writeIORef ref x'
+    let update _  = xsample >>= \x' -> x' `seq` writeIORef ref x'
     sample       <- insertSignal update ref state
     return (sample, uid)
 
 dynamicTester :: Show a => Signal a -> Signal [a]
-dynamicTester (Pure _)       = Pure []
+dynamicTester (Pure _)         = Pure []
 dynamicTester sx@(Signal xsig) = Signal $ \state -> do
     uid    <- nextUID state
     count  <- newIORef 0
@@ -161,23 +164,27 @@ dynamicTester sx@(Signal xsig) = Signal $ \state -> do
             c <- (+1) <$> readIORef count :: IO Int
             writeIORef count c
 
-            when (c > 60) $ do
-                prevSigRefs  <- readIORef (nodeTable state)
-                state'       <- newIORef prevSigRefs >>= \nodeTable' -> return state{nodeTable = nodeTable'}
-                (xsample, _) <- getSignalNode sx xsig state'
-                modifyIORef' srefs ((0 :: Int, xsample) :)
-                writeIORef count 0
+            when (mod c 60 == 0 && c < 600) $ do
+                prevSigRefs    <- atomically $ readTVar (nodeTable state)
+                state'         <- atomically (newTVar prevSigRefs) >>= \nodeTable' -> return state{nodeTable = nodeTable'}
+                (xsample, xid) <- getSignalNode sx xsig state'
+                modifyIORef' srefs ((0 :: Int, xid, xsample) :)
 
-            srs <- readIORef srefs
-            ss  <- mapM snd srs
-            writeIORef ref ss
+            srs           <- readIORef srefs
+            (srs', svals) <- foldrM updateDynamicSignal ([], []) srs
+            writeIORef ref svals
+            writeIORef srefs srs'
+
+        updateDynamicSignal (count, xid, xsample) (srs', svals) = if count > 600
+            then return (srs', svals)
+            else xsample >>= \x -> return ((count + 1, xid, xsample) : srs', x : svals)
 
 instance Num a => Num (Signal a) where
-    (+) = liftA2 (+)
-    (*) = liftA2 (*)
-    (-) = liftA2 (-)
-    abs = fmap abs
-    signum = fmap signum
+    (+)         = liftA2 (+)
+    (*)         = liftA2 (*)
+    (-)         = liftA2 (-)
+    abs         = fmap abs
+    signum      = fmap signum
     fromInteger = pure . fromInteger
 
 fzip :: (Functor f, Applicative f) => f a -> f b -> f (a, b)
@@ -193,6 +200,11 @@ whiteNoise amp = effectful $ randomRIO (-amp, amp)
 -- Runtime
 ---------------------------------------------------------------------------------------------------------
 
+updateSignalNode :: Weak (IO ()) -> SignalPool -> IO SignalPool
+updateSignalNode updatePtr pool = deRefWeak updatePtr >>= \maybeUpdate -> case maybeUpdate of
+    Nothing           -> return pool
+    Just updateAction -> updateAction >> return (updatePtr : pool)
+
 runSignal :: Show a => Signal a -> IO ()
 runSignal (Pure x) = putStrLn ("Pure " ++ show x)
 runSignal sx@(Signal sig) = do
@@ -201,9 +213,12 @@ runSignal sx@(Signal sig) = do
     putStrLn "Running signal network"
     sample >>= print
     _ <- forever $ do
-        pool <- readIORef $ signalPool state
-        putStrLn $ "pool size:  " ++ show (Seq.length pool)
-        sequence_ pool
+        pool     <- atomically $ readTVar $ signalPool state
+        putStrLn $ "pool size:  " ++ show (length pool)
+        pool'    <- foldrM updateSignalNode [] pool
+        addNew   <- atomically $ readTVar $ newPool state
+        atomically $ writeTVar (signalPool state) $ addNew pool'
+        atomically $ writeTVar (newPool state) id
         sample >>= print
         threadDelay 16667
     return ()

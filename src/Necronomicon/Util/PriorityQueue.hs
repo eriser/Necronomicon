@@ -9,7 +9,7 @@ data Tree a = Tree Int a [a] (PriorityQueue a)
 
 instance Show a => Show (Tree a) where
     show (Tree rt x xs ts) = "(Tree " ++(show rt) ++ " " ++ (show x) ++ " " ++ (show xs) ++ " " ++ (show ts) ++ ")"
-    
+
 instance Functor Tree where
     fmap f (Tree rk x xs ts) = (Tree rk (f x) (fmap f xs) (fmap (\t -> fmap f t) ts))
 
@@ -57,7 +57,7 @@ normalize [] = []
 normalize (x:xs) = insertTree xs x
 
 insert :: Ord a => PriorityQueue a -> a -> PriorityQueue a
-insert ts@(t1:t2:rest) v = if rank t1 == rank t2 then (skewLink t1 t2 v):rest else (Tree 0 v [] []):ts 
+insert ts@(t1:t2:rest) v = if rank t1 == rank t2 then (skewLink t1 t2 v):rest else (Tree 0 v [] []):ts
 insert ts v = (Tree 0 v [] []):ts
 
 singleton :: Ord a => a -> PriorityQueue a
