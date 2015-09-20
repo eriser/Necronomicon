@@ -18,8 +18,6 @@ main = runSignal $ dynamicTester feedbackCounter
 
 feedbackCounter :: Signal Int
 feedbackCounter = feedback 0 $ \c -> c + 1
- 
--- feedbackCounter :: Signal Int
 -- feedbackCounter = 0 `fby` (1 + feedbackCounter)
 -- feedbackCounter = 0 `fby` (10 `fby` (1 + feedbackCounter))
 

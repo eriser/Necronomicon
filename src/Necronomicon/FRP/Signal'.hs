@@ -13,7 +13,7 @@ import qualified Data.IntMap.Strict as IntMap
 import System.Random
 import Data.Foldable (foldrM)
 
-type SignalPool    = [IORef (Int, IO ())]
+type SignalPool    = [IORef (Maybe (Int, IO ()))]
 type SignalValue a = (IO a, Int, IO (), [IO ()])
 data SignalState   = SignalState
                    { signalPool :: TVar  SignalPool
@@ -83,9 +83,13 @@ instance Applicative Signal where
 
 insertSignal :: (a -> IO ()) -> IORef a -> SignalState -> IO (IO a, IO(), IO ())
 insertSignal updatingFunction ref state = do
-    updateActionRef <- newIORef (0, readIORef ref >>= updatingFunction)
-    let initializer  = modifyIORef' updateActionRef $ \(refCount, ua) -> (refCount + 1, ua)
-        finalizer    = modifyIORef' updateActionRef $ \(refCount, ua) -> (refCount - 1, ua)
+    updateActionRef <- newIORef $ Just (0, readIORef ref >>= updatingFunction)
+    let initializer  = modifyIORef' updateActionRef $ \maybeUA -> case maybeUA of
+            Just (refCount, ua) -> Just (refCount + 1, ua)
+            _                   -> Nothing
+        finalizer    = modifyIORef' updateActionRef $ \maybeUA -> case maybeUA of
+            Just (refCount, ua) -> let refCount' = refCount - 1 in if refCount' <= 0 then Nothing else Just (refCount', ua)
+            _                   -> Nothing
     atomically $ modifyTVar' (newPool state) ((updateActionRef :) .)
     return (readIORef ref, initializer, finalizer)
 
@@ -136,13 +140,14 @@ fby initx signal = fbySignal
             case IntMap.lookup hash nodes of
                 Just sv -> return $ unsafeCoerce sv
                 Nothing -> do
+                    putStrLn "fby 1"
                     uid <- nextUID state
                     ref <- newIORef initx
                     atomically $ modifyTVar' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce (readIORef ref, uid)))
-                    (xsample, _, xini, xfs) <- unsignal' signal state
-                    _                       <- xini
+                    (xsample, _, _, xfs) <- unsignal' signal state
                     let update _             = xsample >>= \x -> x `seq` writeIORef ref x
                     (sample, ini, fin)      <- insertSignal update ref state
+                    putStrLn "fby 2"
                     return (sample, uid, ini, fin : xfs)
 
 delay' :: a -> IO a -> SignalState -> IO (SignalValue a)
@@ -176,7 +181,6 @@ dynamicTester sx@(Signal xsig) = Signal $ \state -> do
 
             srs           <- readIORef srefs
             (srs', svals) <- foldrM updateDynamicSignal ([], []) srs
-            putStrLn $ "Length of dynamicTester refs: " ++ show (length srs')
             writeIORef ref svals
             writeIORef srefs srs'
 
@@ -205,17 +209,16 @@ whiteNoise amp = effectful $ randomRIO (-amp, amp)
 -- Runtime
 ---------------------------------------------------------------------------------------------------------
 
---We use reference counting to release nodes that are no longer in use
-updateSignalNode :: IORef (Int, IO ()) -> SignalPool -> IO SignalPool
+updateSignalNode :: IORef (Maybe (Int, IO ())) -> SignalPool -> IO SignalPool
 updateSignalNode updateRef pool = readIORef updateRef >>= go
     where
-        go (refCount, updateAction)
-            | refCount <  0 = putStrLn ("Error. reference count of : " ++ show refCount) >> return pool
-            | refCount == 0 = putStrLn ("Removing updateAction") >> return pool
-            | otherwise     = updateAction >> return (updateRef : pool)
+        go (Just (_, updateAction)) = updateAction >> return (updateRef : pool)
+        go _                        = return pool
 
-toRefCount :: IORef (Int, IO ()) -> IO Int
-toRefCount updateRef = readIORef updateRef >>= return . fst
+toRefCount :: IORef (Maybe (Int, IO ())) -> IO Int
+toRefCount updateRef = readIORef updateRef >>= \maybeUA -> case maybeUA of
+    Nothing     -> return 0
+    Just (c, _) -> return c
 
 runSignal :: Show a => Signal a -> IO ()
 runSignal (Pure x) = putStrLn ("Pure " ++ show x)
