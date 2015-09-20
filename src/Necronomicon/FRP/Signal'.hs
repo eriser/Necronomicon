@@ -12,10 +12,9 @@ import Unsafe.Coerce
 import qualified Data.IntMap.Strict as IntMap
 import System.Random
 import Data.Foldable (foldrM)
-import System.Mem.Weak
 
-type SignalPool    = [Weak (IO ())]
-type SignalValue a = (IO a, Int)
+type SignalPool    = [IORef (Int, IO ())]
+type SignalValue a = (IO a, Int, IO (), [IO ()])
 data SignalState   = SignalState
                    { signalPool :: TVar  SignalPool
                    , newPool    :: TVar (SignalPool -> SignalPool)
@@ -54,15 +53,16 @@ getSignalNode signal sig state = do
             return signalValue
 
 instance Functor Signal where
-    fmap f (Pure x)        = Pure $ f x
+    fmap f (Pure x)         = Pure $ f x
     fmap f sx@(Signal xsig) = Signal $ \state -> do
-        (xsample, _) <- getSignalNode sx xsig state
-        uid          <- nextUID state
-        ifx          <- f <$> xsample
-        ref          <- newIORef ifx
-        let update _  = xsample >>= \x -> let fx = f x in fx `seq` writeIORef ref fx
-        sample       <- insertSignal update ref state
-        return (sample, uid)
+        (xsample, _, ix, xfs) <- getSignalNode sx xsig state
+        _                     <- ix
+        uid                   <- nextUID state
+        ifx                   <- f <$> xsample
+        ref                   <- newIORef ifx
+        let update _           = xsample >>= \x -> let fx = f x in fx `seq` writeIORef ref fx
+        (sample, ini, fin)    <- insertSignal update ref state
+        return (sample, uid, ini, fin : xfs)
 
 instance Applicative Signal where
     pure x = Pure x
@@ -71,61 +71,63 @@ instance Applicative Signal where
     Pure f           <*> x@(Signal _)     = fmap f x
     f@(Signal _)     <*> Pure x           = fmap ($ x) f
     sf@(Signal fsig) <*> sx@(Signal xsig) = Signal $ \state -> do
-        (fsample, _) <- getSignalNode sf fsig state
-        (xsample, _) <- getSignalNode sx xsig state
-        uid          <- nextUID state
-        ifx          <- fsample <*> xsample
-        ref          <- newIORef ifx
-        let update _  = xsample >>= \x -> fsample >>= \f -> let fx = f x in fx `seq` writeIORef ref fx
-        sample       <- insertSignal update ref state
-        return (sample, uid)
+        (fsample, _, xini, ffs)  <- getSignalNode sf fsig state
+        (xsample, _, fini, xfs)  <- getSignalNode sx xsig state
+        _                        <- xini >> fini
+        uid                      <- nextUID state
+        ifx                      <- fsample <*> xsample
+        ref                      <- newIORef ifx
+        let update _              = xsample >>= \x -> fsample >>= \f -> let fx = f x in fx `seq` writeIORef ref fx
+        (sample, ini, fin)       <- insertSignal update ref state
+        return (sample, uid, ini, fin : (ffs ++ xfs))
 
-insertSignal :: (a -> IO ()) -> IORef a -> SignalState -> IO (IO a)
+insertSignal :: (a -> IO ()) -> IORef a -> SignalState -> IO (IO a, IO(), IO ())
 insertSignal updatingFunction ref state = do
-    let updateAction = readIORef ref >>= updatingFunction
-        sample = readIORef ref
-        {-# NOINLINE sample #-}
-    wk <- mkWeak sample updateAction Nothing
-    atomically $ modifyTVar' (newPool state) $ ((wk :) .)
-    return sample
+    updateActionRef <- newIORef (0, readIORef ref >>= updatingFunction)
+    let initializer  = modifyIORef' updateActionRef $ \(refCount, ua) -> (refCount + 1, ua)
+        finalizer    = modifyIORef' updateActionRef $ \(refCount, ua) -> (refCount - 1, ua)
+    atomically $ modifyTVar' (newPool state) ((updateActionRef :) .)
+    return (readIORef ref, initializer, finalizer)
 
 effectful :: IO a -> Signal a
 effectful effectfulAction = Signal $ \state -> do
-    initx        <- effectfulAction
-    uid          <- nextUID state
-    ref          <- newIORef initx
-    let update _  = effectfulAction >>= \x -> x `seq` writeIORef ref x
-    sample       <- insertSignal update ref state
-    return (sample, uid)
+    initx               <- effectfulAction
+    uid                 <- nextUID state
+    ref                 <- newIORef initx
+    let update _         = effectfulAction >>= \x -> x `seq` writeIORef ref x
+    (sample, ini, fin)  <- insertSignal update ref state
+    return (sample, uid, ini, [fin])
 
 foldp :: (input -> state -> state) -> state -> Signal input -> Signal state
-foldp f initx (Pure i)  = Signal $ \state -> mfix $ \ ~(sig, _) -> do
-    (sig', _)    <- delay' initx sig state
-    uid          <- nextUID state
-    ref          <- newIORef $ f i initx
-    let update _  = sig' >>= \s -> let state' = f i s in state' `seq` writeIORef ref state'
-    sample       <- insertSignal update ref state
-    return (sample, uid)
+foldp f initx (Pure i)  = Signal $ \state -> mfix $ \ ~(sig, _, _, _) -> do
+    (sig', _, sini, sfin) <- delay' initx sig state
+    _                     <- sini
+    uid                   <- nextUID state
+    ref                   <- newIORef $ f i initx
+    let update _           = sig' >>= \s -> let state' = f i s in state' `seq` writeIORef ref state'
+    (sample, ini, fin)    <- insertSignal update ref state
+    return (sample, uid, ini, fin : sfin)
 
-foldp f initx si@(Signal inputsig) = Signal $ \state -> mfix $ \ ~(sig, _) -> do
-    (icont, _)   <- getSignalNode si inputsig state
-    (sig',  _)   <- delay' initx sig state
-    uid          <- nextUID state
-    ref          <- icont >>= \i -> newIORef (f i initx)
-    let update _  = icont >>= \i -> sig' >>= \s -> let state' = f i s in state' `seq` writeIORef ref state'
-    sample       <- insertSignal update ref state
-    return (sample, uid)
+foldp f initx si@(Signal inputsig) = Signal $ \state -> mfix $ \ ~(sig, _, _, _) -> do
+    (icont, _, iini, ifs) <- getSignalNode si inputsig state
+    (sig',  _, sini, sfs) <- delay' initx sig state
+    _                     <- iini >> sini
+    uid                   <- nextUID state
+    ref                   <- icont >>= \i -> newIORef (f i initx)
+    let update _           = icont >>= \i -> sig' >>= \s -> let state' = f i s in state' `seq` writeIORef ref state'
+    (sample, ini, fin)    <- insertSignal update ref state
+    return (sample, uid, ini, fin : (ifs ++ sfs))
 
 feedback :: a -> (Signal a -> Signal a) -> Signal a
-feedback initx f = Signal $ \state -> mfix $ \ ~(sig, _) ->
+feedback initx f = Signal $ \state -> mfix $ \ ~(sig, _, _, _) ->
     case f $ Signal $ \_ -> delay' initx sig state of
-        Pure x      -> return (return x, -1)
+        Pure x      -> return (return x, -1, return (), [])
         Signal xsig -> xsig state
 
 fby :: a -> Signal a -> Signal a
 fby initx signal = fbySignal
     where
-        unsignal' (Pure x)   _     = return (return x, -1)
+        unsignal' (Pure x)   _     = return (return x, -1, return (), [])
         unsignal' (Signal s) state = s state
         fbySignal = Signal $ \state -> do
             stableName <- signal `seq` makeStableName fbySignal
@@ -137,18 +139,19 @@ fby initx signal = fbySignal
                     uid <- nextUID state
                     ref <- newIORef initx
                     atomically $ modifyTVar' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce (readIORef ref, uid)))
-                    (xsample, _) <- unsignal' signal state
-                    let update _ = xsample >>= \x -> x `seq` writeIORef ref x
-                    sample <- insertSignal update ref state
-                    return (sample, uid)
+                    (xsample, _, xini, xfs) <- unsignal' signal state
+                    _                       <- xini
+                    let update _             = xsample >>= \x -> x `seq` writeIORef ref x
+                    (sample, ini, fin)      <- insertSignal update ref state
+                    return (sample, uid, ini, fin : xfs)
 
 delay' :: a -> IO a -> SignalState -> IO (SignalValue a)
 delay' initx xsample state = do
-    uid          <- nextUID state
-    ref          <- newIORef initx
-    let update _  = xsample >>= \x' -> x' `seq` writeIORef ref x'
-    sample       <- insertSignal update ref state
-    return (sample, uid)
+    uid                 <- nextUID state
+    ref                 <- newIORef initx
+    let update _         = xsample >>= \x' -> x' `seq` writeIORef ref x'
+    (sample, ini, fin)  <- insertSignal update ref state
+    return (sample, uid, ini, [fin])
 
 dynamicTester :: Show a => Signal a -> Signal [a]
 dynamicTester (Pure _)         = Pure []
@@ -157,27 +160,29 @@ dynamicTester sx@(Signal xsig) = Signal $ \state -> do
     count  <- newIORef 0
     srefs  <- newIORef []
     ref    <- newIORef []
-    sample <- insertSignal (update uid count srefs ref state) ref state
-    return (sample, uid)
+    (sample, ini, fin) <- insertSignal (update uid count srefs ref state) ref state
+    return (sample, uid, ini, [fin])
     where
         update _ count srefs ref state _ = do
             c <- (+1) <$> readIORef count :: IO Int
             writeIORef count c
 
             when (mod c 60 == 0 && c < 600) $ do
-                prevSigRefs    <- atomically $ readTVar (nodeTable state)
-                state'         <- atomically (newTVar prevSigRefs) >>= \nodeTable' -> return state{nodeTable = nodeTable'}
-                (xsample, xid) <- getSignalNode sx xsig state'
-                modifyIORef' srefs ((0 :: Int, xid, xsample) :)
+                prevSigRefs             <- atomically $ readTVar (nodeTable state)
+                state'                  <- atomically (newTVar prevSigRefs) >>= \nodeTable' -> return state{nodeTable = nodeTable'}
+                (xsample, _, xini, xfs) <- getSignalNode sx xsig state'
+                _                       <- xini
+                modifyIORef' srefs ((0 :: Int, xfs, xsample) :)
 
             srs           <- readIORef srefs
             (srs', svals) <- foldrM updateDynamicSignal ([], []) srs
+            putStrLn $ "Length of dynamicTester refs: " ++ show (length srs')
             writeIORef ref svals
             writeIORef srefs srs'
 
-        updateDynamicSignal (count, xid, xsample) (srs', svals) = if count > 600
-            then return (srs', svals)
-            else xsample >>= \x -> return ((count + 1, xid, xsample) : srs', x : svals)
+        updateDynamicSignal (count, xfs, xsample) (srs', svals) = if count < 600
+            then xsample >>= \x -> return ((count + 1, xfs, xsample) : srs', x : svals)
+            else sequence_ xfs >> return (srs', svals)
 
 instance Num a => Num (Signal a) where
     (+)         = liftA2 (+)
@@ -200,21 +205,30 @@ whiteNoise amp = effectful $ randomRIO (-amp, amp)
 -- Runtime
 ---------------------------------------------------------------------------------------------------------
 
-updateSignalNode :: Weak (IO ()) -> SignalPool -> IO SignalPool
-updateSignalNode updatePtr pool = deRefWeak updatePtr >>= \maybeUpdate -> case maybeUpdate of
-    Nothing           -> return pool
-    Just updateAction -> updateAction >> return (updatePtr : pool)
+--We use reference counting to release nodes that are no longer in use
+updateSignalNode :: IORef (Int, IO ()) -> SignalPool -> IO SignalPool
+updateSignalNode updateRef pool = readIORef updateRef >>= go
+    where
+        go (refCount, updateAction)
+            | refCount <  0 = putStrLn ("Error. reference count of : " ++ show refCount) >> return pool
+            | refCount == 0 = putStrLn ("Removing updateAction") >> return pool
+            | otherwise     = updateAction >> return (updateRef : pool)
+
+toRefCount :: IORef (Int, IO ()) -> IO Int
+toRefCount updateRef = readIORef updateRef >>= return . fst
 
 runSignal :: Show a => Signal a -> IO ()
 runSignal (Pure x) = putStrLn ("Pure " ++ show x)
 runSignal sx@(Signal sig) = do
-    state       <- mkSignalState
-    (sample, _) <- getSignalNode sx sig state
+    state               <- mkSignalState
+    (sample, _, ini, _) <- getSignalNode sx sig state
+    _                   <- ini
     putStrLn "Running signal network"
     sample >>= print
     _ <- forever $ do
         pool     <- atomically $ readTVar $ signalPool state
         putStrLn $ "pool size:  " ++ show (length pool)
+        mapM toRefCount pool >>= print
         pool'    <- foldrM updateSignalNode [] pool
         addNew   <- atomically $ readTVar $ newPool state
         atomically $ writeTVar (signalPool state) $ addNew pool'
