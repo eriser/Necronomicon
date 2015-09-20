@@ -12,11 +12,6 @@ import qualified Data.IntMap.Strict as IntMap
 import qualified Data.Sequence      as Seq
 import System.Random
 
-data SignalTree = SignalNode      Int String
-                | SignalOneBranch Int String SignalTree
-                | SignalTwoBranch Int String SignalTree SignalTree
-                deriving (Show)
-
 data RootNode      = RootNode | Node Int
 type SignalPool    = IORef (Seq.Seq (IO ()))
 type SignalValue a = (IO a, Int)
@@ -59,7 +54,7 @@ getSignalNode signal sig state = do
 
 instance Functor Signal where
     fmap f (Pure x)        = Pure $ f x
-    fmap !f sx@(Signal !xsig) = Signal $ \state -> do
+    fmap f sx@(Signal xsig) = Signal $ \state -> do
         (xsample, _) <- getSignalNode sx xsig state
         uid          <- nextUID state
         ifx          <- f <$> xsample
@@ -74,7 +69,7 @@ instance Applicative Signal where
     Pure f         <*> Pure x         = Pure $ f x
     Pure f         <*> x@(Signal _)   = fmap f x
     f@(Signal _)   <*> Pure x         = fmap ($ x) f
-    sf@(Signal !fsig) <*> sx@(Signal !xsig) = Signal $ \state -> do
+    sf@(Signal fsig) <*> sx@(Signal xsig) = Signal $ \state -> do
         (fsample, _) <- getSignalNode sf fsig state
         (xsample, _) <- getSignalNode sx xsig state
         uid          <- nextUID state
@@ -110,11 +105,11 @@ foldp f initx (Pure i)  = Signal $ \state -> mfix $ \ ~(sig, _) -> do
     sample       <- insertSignal update ref state
     return (sample, uid)
 
-foldp f initx si@(Signal !inputsig) = Signal $ \state -> mfix $ \ ~(sig, _) -> do
+foldp f initx si@(Signal inputsig) = Signal $ \state -> mfix $ \ ~(sig, _) -> do
     (icont, _)   <- getSignalNode si inputsig state
     (sig',  _)   <- delay' initx sig state
     uid          <- nextUID state
-    ref          <- icont >>= \ii -> newIORef (f ii initx)
+    ref          <- icont >>= \i -> newIORef (f i initx)
     let update _  = icont >>= \i -> sig' >>= \s -> let state' = f i s in state' `seq` writeIORef ref state'
     sample       <- insertSignal update ref state
     return (sample, uid)
@@ -125,28 +120,40 @@ feedback initx f = Signal $ \state -> mfix $ \ ~(sig, _) ->
         Pure x      -> return (return x, -1)
         Signal xsig -> xsig state
 
+fby :: a -> Signal a -> Signal a
+fby initx signal = fbySignal
+    where
+        fbySignal = Signal $ \state -> do
+            stableName <- signal `seq` makeStableName fbySignal
+            let hash = hashStableName stableName
+            nodes      <- readIORef $ nodeTable state
+            case IntMap.lookup hash nodes of
+                Just sv -> let (xsample, _) = unsafeCoerce sv in putStrLn "fby - Just" >> delay' initx xsample state
+                Nothing -> do
+                    putStrLn "fby - Nothing"
+                    uid <- nextUID state
+                    ref <- newIORef initx
+                    modifyIORef' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce (readIORef ref, uid)))
+                    (xsample, _) <- unsignal' signal state
+                    let update _ = xsample >>= \x -> writeIORef ref x
+                    sample <- insertSignal update ref state
+                    return (sample, uid)
+            where
+                unsignal' (Pure x)   _     = return (return x, -1)
+                unsignal' (Signal s) state = s state
+
 --Might be able to use delay + observable sharing to not require a specific signal fix operator anymore!
 delay' :: a -> IO a -> SignalState -> IO (SignalValue a)
 delay' initx xsample state = do
     uid          <- nextUID state
     ref          <- newIORef initx
-    let update _  = xsample >>= \x' -> x' `seq` writeIORef ref x'
+    let update _  = xsample >>= \x' -> writeIORef ref x'
     sample       <- insertSignal update ref state
     return (sample, uid)
 
--- delay :: a -> Signal a -> Signal a
--- delay _     (Pure x)          = Pure x
--- delay initx sx@(Signal !xsig) = Signal $ \state -> do
---     uid          <- nextUID state
---     (xsample, _) <- getSignalNode sx xsig state
---     ref          <- newIORef initx
---     let update _  = xsample >>= \x' -> x' `seq` writeIORef ref x'
---     sample       <- insertSignal update ref state
---     return (sample, uid)
-
 dynamicTester :: Show a => Signal a -> Signal [a]
 dynamicTester (Pure _)       = Pure []
-dynamicTester sx@(Signal !xsig) = Signal $ \state -> do
+dynamicTester sx@(Signal xsig) = Signal $ \state -> do
     uid    <- nextUID state
     count  <- newIORef 0
     srefs  <- newIORef []
