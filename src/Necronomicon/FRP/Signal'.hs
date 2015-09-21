@@ -21,8 +21,20 @@ data SignalState   = SignalState
                    , nodeTable  :: TVar (IntMap.IntMap (StableName (), Any))
                    }
 
-data Signal a = Signal (SignalState -> IO (SignalValue a))
-              | Pure a
+class Rate a where
+
+data Kr = Kr
+data Ar = Ar
+data Fr = Fr
+data Ir = Ir
+
+instance Rate Kr where
+instance Rate Ar where
+instance Rate Fr where
+instance Rate Ir where
+
+data Signal r a = Signal (SignalState -> IO (SignalValue a))
+                | Pure a
 
 mkSignalState :: IO SignalState
 mkSignalState = SignalState
@@ -36,7 +48,7 @@ nextUID state = atomically $ do
     writeTVar (sigUIDs state) uids
     return uid
 
-getSignalNode :: Signal a -> (SignalState -> IO (SignalValue a))  -> SignalState -> IO (SignalValue a)
+getSignalNode :: Signal r a -> (SignalState -> IO (SignalValue a))  -> SignalState -> IO (SignalValue a)
 getSignalNode signal sig state = do
     stableName <- signal `seq` makeStableName signal
     let hash = hashStableName stableName
@@ -50,7 +62,7 @@ getSignalNode signal sig state = do
             atomically $ modifyTVar' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce signalValue))
             return signalValue
 
-instance Functor Signal where
+instance Functor (Signal r) where
     fmap f (Pure x)         = Pure $ f x
     fmap f sx@(Signal xsig) = Signal $ \state -> do
         (xsample, _, ix, xfs) <- getSignalNode sx xsig state
@@ -62,7 +74,7 @@ instance Functor Signal where
         (sample, ini, fin)    <- insertSignal update ref state
         return (sample, uid, ini, fin : xfs)
 
-instance Applicative Signal where
+instance Applicative (Signal r) where
     pure x = Pure x
 
     Pure f           <*> Pure x           = Pure $ f x
@@ -91,7 +103,7 @@ insertSignal updatingFunction ref state = do
     atomically $ modifyTVar' (newPool state) ((updateActionRef :) .)
     return (readIORef ref, initializer, finalizer)
 
-effectful :: IO a -> Signal a
+effectful :: IO a -> Signal r a
 effectful effectfulAction = Signal $ \state -> do
     initx               <- effectfulAction
     uid                 <- nextUID state
@@ -100,7 +112,7 @@ effectful effectfulAction = Signal $ \state -> do
     (sample, ini, fin)  <- insertSignal update ref state
     return (sample, uid, ini, [fin])
 
-foldp :: (input -> state -> state) -> state -> Signal input -> Signal state
+foldp :: (input -> state -> state) -> state -> Signal r input -> Signal r state
 foldp f initx (Pure i)  = Signal $ \state -> mfix $ \ ~(sig, _, _, _) -> do
     (sig', _, sini, sfin) <- delay' initx sig state
     sini
@@ -120,13 +132,13 @@ foldp f initx si@(Signal inputsig) = Signal $ \state -> mfix $ \ ~(sig, _, _, _)
     (sample, ini, fin)    <- insertSignal update ref state
     return (sample, uid, ini, fin : (ifs ++ sfs))
 
-feedback :: a -> (Signal a -> Signal a) -> Signal a
+feedback :: a -> (Signal r a -> Signal r a) -> Signal r a
 feedback initx f = Signal $ \state -> mfix $ \ ~(sig, _, _, _) ->
     case f $ Signal $ \_ -> delay' initx sig state of
         Pure x      -> return (return x, -1, return (), [])
         Signal xsig -> xsig state
 
-fby :: a -> Signal a -> Signal a
+fby :: a -> Signal r a -> Signal r a
 fby initx signal = fbySignal
     where
         unsignal' (Pure x)   _     = return (return x, -1, return (), [])
@@ -155,7 +167,7 @@ delay' initx xsample state = do
     (sample, ini, fin)  <- insertSignal update ref state
     return (sample, uid, ini, [fin])
 
-dynamicTester :: Show a => Signal a -> Signal [a]
+dynamicTester :: Show a => Signal r a -> Signal r [a]
 dynamicTester (Pure _)         = Pure []
 dynamicTester sx@(Signal xsig) = Signal $ \state -> do
     uid    <- nextUID state
@@ -185,7 +197,7 @@ dynamicTester sx@(Signal xsig) = Signal $ \state -> do
             then xsample >>= \x -> return ((count + 1, xfs, xsample) : srs', x : svals)
             else sequence_ xfs >> return (srs', svals)
 
-instance Num a => Num (Signal a) where
+instance Num a => Num (Signal r a) where
     (+)         = liftA2 (+)
     (*)         = liftA2 (*)
     (-)         = liftA2 (-)
@@ -199,7 +211,7 @@ fzip a b = (,) <$> a <*> b
 fzip3 :: (Functor f, Applicative f) => f a -> f b -> f c -> f (a, b, c)
 fzip3 a b c = (,,) <$> a <*> b <*> c
 
-whiteNoise :: Double -> Signal Double
+whiteNoise :: (Floating f, Random f, Rate r) => f -> Signal r f
 whiteNoise amp = effectful $ randomRIO (-amp, amp)
 
 ---------------------------------------------------------------------------------------------------------
@@ -217,7 +229,7 @@ toRefCount updateRef = readIORef updateRef >>= \maybeUA -> case maybeUA of
     Nothing     -> return 0
     Just (c, _) -> return c
 
-runSignal :: Show a => Signal a -> IO ()
+runSignal :: (Rate r, Show a) => Signal r a -> IO ()
 runSignal (Pure x) = putStrLn ("Pure " ++ show x)
 runSignal sx@(Signal sig) = do
     state               <- mkSignalState
