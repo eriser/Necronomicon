@@ -17,8 +17,8 @@ main = runSignal $ dynamicTester feedbackCounter
 -- finalCountdown = foldp (flip (-)) 0 2
 
 feedbackCounter :: Signal Int
-feedbackCounter = feedback 0 $ \c -> c + 1
--- feedbackCounter = 0 `fby` (1 + feedbackCounter)
+-- feedbackCounter = feedback 0 $ \c -> c + 1
+feedbackCounter = 0 `fby` (1 + feedbackCounter)
 -- feedbackCounter = 0 `fby` (10 `fby` (1 + feedbackCounter))
 
 {-

@@ -138,14 +138,13 @@ fby initx signal = fbySignal
             case IntMap.lookup hash nodes of
                 Just sv -> return $ unsafeCoerce sv
                 Nothing -> do
-                    putStrLn "fby 1"
-                    uid <- nextUID state
-                    ref <- newIORef initx
-                    atomically $ modifyTVar' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce (readIORef ref, uid)))
+                    uid                  <- nextUID state
+                    ref                  <- newIORef initx
+                    let signalValue       = (unsafeCoerce $ readIORef ref, uid, return (), []) :: SignalValue ()
+                    atomically            $ modifyTVar' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce signalValue))
                     (xsample, _, _, xfs) <- unsignal' signal state
-                    let update _             = xsample >>= \x -> x `seq` writeIORef ref x
-                    (sample, ini, fin)      <- insertSignal update ref state
-                    putStrLn "fby 2"
+                    let update _          = xsample >>= \x -> x `seq` writeIORef ref x
+                    (sample, ini, fin)   <- insertSignal update ref state
                     return (sample, uid, ini, fin : xfs)
 
 delay' :: a -> IO a -> SignalState -> IO (SignalValue a)
