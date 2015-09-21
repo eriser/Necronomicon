@@ -17,7 +17,7 @@ type SignalPool    = [IORef (Maybe (Int, IO ()))]
 type SignalValue a = (IO a, Int, IO (), [IO ()])
 data SignalState   = SignalState
                    { newPool    :: TVar (SignalPool -> SignalPool)
-                   , sigUIDs    :: IORef [Int]
+                   , sigUIDs    :: TVar [Int]
                    , nodeTable  :: TVar (IntMap.IntMap (StableName (), Any))
                    }
 
@@ -27,13 +27,13 @@ data Signal a = Signal (SignalState -> IO (SignalValue a))
 mkSignalState :: IO SignalState
 mkSignalState = SignalState
             <$> atomically (newTVar id)
-            <*> newIORef [0..]
+            <*> atomically (newTVar [0..])
             <*> atomically (newTVar IntMap.empty)
 
 nextUID :: SignalState -> IO Int
-nextUID state = do
-    uid : uids <- readIORef $ sigUIDs state
-    writeIORef (sigUIDs state) uids
+nextUID state = atomically $ do
+    uid : uids <- readTVar $ sigUIDs state
+    writeTVar (sigUIDs state) uids
     return uid
 
 getSignalNode :: Signal a -> (SignalState -> IO (SignalValue a))  -> SignalState -> IO (SignalValue a)
@@ -236,7 +236,7 @@ runSignal sx@(Signal sig) = do
             let pool'' =  addNew pool'
             atomically $ writeTVar (newPool state) id
             sample >>= print
-            
+
             threadDelay 16667
-           
+
             run state sample pool''
