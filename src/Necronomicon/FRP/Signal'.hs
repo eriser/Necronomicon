@@ -1,5 +1,12 @@
 module Necronomicon.FRP.Signal' where
 
+
+----------------------------------------------------------------------------------
+-- Notes
+--
+-- Rates: Audio Rate, Control Rate, Frame Rate, Initialize Rate, Pattern Rate
+----------------------------------------------------------------------------------
+
 import Control.Concurrent
 import Control.Concurrent.STM
 import Data.IORef
@@ -172,6 +179,7 @@ dynamicTester (Pure _)         = Pure []
 dynamicTester sx@(Signal xsig) = Signal $ \state -> do
     uid    <- nextUID state
     count  <- newIORef 0
+    --TODO - should this be tvar for thread safety?
     srefs  <- newIORef []
     ref    <- newIORef []
     (sample, ini, fin) <- insertSignal (update uid count srefs ref state) ref state
@@ -230,7 +238,7 @@ updateSignalNode updateRef pool = readIORef updateRef >>= go
 
 toRefCount :: IORef (Maybe (Int, IO ())) -> IO Int
 toRefCount updateRef = readIORef updateRef >>= \maybeUA -> case maybeUA of
-    Nothing     -> return 0
+    Nothing     -> return (-666)
     Just (c, _) -> return c
 
 --Dynamic signals spawning dynamic signals seems to leak for some reason?
