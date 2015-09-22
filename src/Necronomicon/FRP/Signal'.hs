@@ -175,10 +175,10 @@ delay' initx xsample pool state = do
 dynamicTester :: (Rate r, Show a) => Signal r a -> Signal r [a]
 dynamicTester (Pure _)         = Pure []
 dynamicTester sx@(Signal xsig) = Signal $ \state -> do
-    uid    <- nextUID state
-    count  <- newIORef 0
-    srefs  <- newIORef []
-    ref    <- newIORef []
+    uid                <- nextUID state
+    count              <- newIORef 0
+    srefs              <- newIORef []
+    ref                <- newIORef []
     (sample, ini, fin) <- insertSignal (update uid count srefs ref state) ref $ newPool sx state
     let fin' = do
             srs <- readIORef srefs
@@ -233,23 +233,22 @@ sinOsc = undefined
 data Kr = Kr
 data Ar = Ar
 data Fr = Fr
-data Ir = Ir
 data Vr = Vr
 
 class Rate r where
     newPool :: Signal r a -> SignalState -> TVar SignalPool
 
 instance Rate Kr where
-    newPool _ = newKrPool
+    newPool = const newKrPool
 
 instance Rate Ar where
-    newPool _ = newArPool
+    newPool = const newArPool
 
 instance Rate Fr where
-    newPool _ = newFrPool
+    newPool = const newFrPool
 
 instance Rate Vr where
-    newPool _ = newVrPool
+    newPool = const newVrPool
 
 resample :: (Rate r1, Rate r2) => Signal r1 a -> Signal r2 a
 resample (Pure x)         = Pure x
@@ -283,18 +282,6 @@ runSignal sx@(Signal sig) = do
     _ <- forkIO $ updateWorker state [] (newKrPool state) 23220 "Control Rate" (return ())
     _ <- forkIO $ updateWorker state [] (newArPool state) 23220 "Audio   Rate" (return ())
     updateWorker state [] (newFrPool state) 16667 "Frame   Rate" (sample >>= print)
-
-    -- run state sample []
-        -- run state sample pool = do
-        --     putStrLn $ "pool size:  " ++ show (length pool)
-        --     mapM toRefCount pool >>= print
-        --     pool'     <- foldrM updateSignalNode [] pool
-        --     addNew    <- atomically $ readTVar $ newKrPool state
-        --     let pool'' =  addNew ++ pool'
-        --     atomically $ writeTVar (newKrPool state) []
-        --     sample >>= print
-        --     threadDelay 16667
-        --     run state sample pool''
 
 updateWorker :: SignalState -> SignalPool -> TVar SignalPool -> Int -> String -> IO () -> IO ()
 updateWorker state pool newPoolRef sleepTime workerName action = do
