@@ -6,10 +6,10 @@ main :: IO ()
 -- main = runSignal $ dynamicTester finalCountup
 -- main = runSignal $ dynamicTester feedbackCounter
 -- main = runSignal feedbackCounter
-main = runSignal $ fzip (async finalCountdown) tester
+main = runSignal $ fzip (resample finalCountdown) tester
     where
-        tester = dynamicTester $ fzip3 (async finalCountdown) finalCountup feeds
-        feeds  = (:) <$> (0 `fby` fmap sum feeds) <*> dynamicTester (async feedbackCounter)
+        tester = dynamicTester $ fzip3 (resample finalCountdown) finalCountup feeds
+        feeds  = (:) <$> (0 `fby` fmap sum feeds) <*> dynamicTester (resample feedbackCounter)
 
 -- white :: Signal Ar Double
 -- white = whiteNoise 666

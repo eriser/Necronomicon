@@ -251,9 +251,9 @@ instance Rate Fr where
 instance Rate Vr where
     newPool _ = newVrPool
 
-async :: (Rate r1, Rate r2) => Signal r1 a -> Signal r2 a
-async (Pure x)         = Pure x
-async sx@(Signal xsig) = Signal $ \state -> getSignalNode sx xsig state
+resample :: (Rate r1, Rate r2) => Signal r1 a -> Signal r2 a
+resample (Pure x)         = Pure x
+resample sx@(Signal xsig) = Signal $ \state -> getSignalNode sx xsig state
 
 
 ---------------------------------------------------------------------------------------------------------
