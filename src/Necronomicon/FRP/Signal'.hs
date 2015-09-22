@@ -287,10 +287,12 @@ updateWorker :: SignalState -> SignalPool -> TVar SignalPool -> Int -> String ->
 updateWorker state pool newPoolRef sleepTime workerName action = do
     putStrLn $ workerName ++ " pool size:  " ++ show (length pool)
     -- mapM toRefCount pool >>= print
-    pool'     <- foldrM updateSignalNode [] pool
-    new       <- atomically $ readTVar newPoolRef
-    let pool'' =  new ++ pool'
-    atomically $ writeTVar newPoolRef []
+    pool' <- foldrM updateSignalNode [] pool
+    new   <- atomically $ do
+        new <- readTVar newPoolRef
+        writeTVar newPoolRef []
+        return new
+    let pool'' = new ++ pool'
     action
 
     threadDelay sleepTime
