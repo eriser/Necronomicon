@@ -1,7 +1,7 @@
 import Necronomicon.FRP.Signal'
 
 main :: IO ()
-main = runSignal $ fzip finalCountup (resample finalCountup')
+main = runSignal $ fzip finalCountup finalCountup'
 -- main = runSignal $ white + white2
 -- main = runSignal $ dynamicTester white
 -- main = runSignal $ dynamicTester finalCountup
@@ -18,11 +18,11 @@ main = runSignal $ fzip finalCountup (resample finalCountup')
 -- white2 :: Signal Kr Double
 -- white2 = whiteNoise 666
 
-finalCountup :: Signal Kr Double
-finalCountup = foldp (+) 0 1
+finalCountup :: Signal Double
+finalCountup = foldp kr (+) 0 1
 
-finalCountup' :: Signal Fr Double
-finalCountup' = foldp (+) 0 1
+finalCountup' :: Signal Double
+finalCountup' = foldp fr (+) 0 1
 
 -- finalCountdown :: Signal Fr Double
 -- finalCountdown = foldp (flip (-)) 0 2
