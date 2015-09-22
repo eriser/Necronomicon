@@ -1,6 +1,5 @@
 module Necronomicon.FRP.Signal' where
 
-
 ----------------------------------------------------------------------------------
 -- Notes
 --
@@ -92,6 +91,7 @@ instance Rate r => Applicative (Signal r) where
         (sample, ini, fin)       <- insertSignal update ref $ newPool sf state
         return (sample, uid, ini, fin : (ffs ++ xfs))
 
+--TODO: put initializer into IO action which retrieves the sampling action
 insertSignal :: (a -> IO ()) -> IORef a -> TVar SignalPool -> IO (IO a, IO(), IO ())
 insertSignal updatingFunction ref pool = do
     updateActionRef <- newIORef $ Just (0, readIORef ref >>= updatingFunction)
@@ -280,8 +280,8 @@ runSignal sx@(Signal sig) = do
     putStrLn "Running signal network"
     sample >>= print
     _ <- forkIO $ updateWorker state [] (newKrPool state) 23220 "Control Rate" (return ())
-    _ <- forkIO $ updateWorker state [] (newArPool state) 23220 "Audio   Rate" (return ())
-    updateWorker state [] (newFrPool state) 16667 "Frame   Rate" (sample >>= print)
+    _ <- forkIO $ updateWorker state [] (newArPool state) 23220 "Audio Rate" (return ())
+    updateWorker state [] (newFrPool state) 16667 "Frame Rate" (sample >>= print)
 
 updateWorker :: SignalState -> SignalPool -> TVar SignalPool -> Int -> String -> IO () -> IO ()
 updateWorker state pool newPoolRef sleepTime workerName action = do
