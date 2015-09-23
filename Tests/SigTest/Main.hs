@@ -9,8 +9,8 @@ main :: IO ()
 -- main = runSignal feedbackCounter
 main = runSignal $ fzip finalCountdown tester
     where
-        tester = dynamicTester kr $ fzip3 finalCountdown finalCountup feeds
-        feeds  = (:) <$> (sampleDelay fr 0 $ fmap sum feeds) <*> dynamicTester ar feedbackCounter
+        tester = dynamicTester $ fzip3 finalCountdown finalCountup feeds
+        feeds  = (:) <$> (sampleDelay fr 0 $ fmap sum feeds) <*> dynamicTester feedbackCounter
 
 -- white :: Signal Double
 -- white = whiteNoise ar 666
