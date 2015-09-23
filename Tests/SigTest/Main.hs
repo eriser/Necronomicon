@@ -7,25 +7,28 @@ main :: IO ()
 -- main = runSignal $ dynamicTester finalCountup
 -- main = runSignal $ dynamicTester feedbackCounter
 -- main = runSignal feedbackCounter
-main = runSignal $ fzip finalCountdown tester
-    where
-        tester = dynamicTester $ fzip3 finalCountdown finalCountup feeds
-        feeds  = (:) <$> (sampleDelay fr 0 $ fmap sum feeds) <*> dynamicTester feedbackCounter
+main = runSignal mixedSignal 
 
--- white :: Signal Double
+mixedSignal :: Signal Fr (Double, [(Double, Double, [Int])])
+mixedSignal = fzip (resample finalCountdown) tester
+    where
+        tester = dynamicTester $ fzip3 (resample finalCountdown) (resample finalCountup) feeds
+        feeds  = (:) <$> (sampleDelay 0 $ fmap sum feeds) <*> dynamicTester feedbackCounter
+
+-- white :: Signal Ar Double
 -- white = whiteNoise ar 666
 
--- white2 :: Signal Double
+-- white2 :: Signal Kr Double
 -- white2 = whiteNoise kr 666
 
-finalCountup :: Signal Double
-finalCountup = foldp kr (+) 0 1
+finalCountup :: Signal Ar Double
+finalCountup = foldp (+) 0 1
 
-finalCountdown :: Signal Double
-finalCountdown = foldp fr (flip (-)) 0 2
+finalCountdown :: Signal Kr Double
+finalCountdown = foldp (flip (-)) 0 2
 
-feedbackCounter :: Signal Int
-feedbackCounter = 1 + sampleDelay fr 0 feedbackCounter
+feedbackCounter :: Signal Fr Int
+feedbackCounter = 1 + sampleDelay 0 feedbackCounter
 
 {-
 import Necronomicon
