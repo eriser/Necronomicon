@@ -1,11 +1,5 @@
 module Necronomicon.FRP.Signal' where
 
-----------------------------------------------------------------------------------
--- Notes
---
--- Rates: Audio Rate, Control Rate, Frame Rate, Variable Rate
-----------------------------------------------------------------------------------
-
 import Control.Concurrent
 import Control.Concurrent.STM
 import Data.IORef
@@ -81,6 +75,7 @@ instance Applicative Signal where
         (xini, xrate, _, xfs) <- getSignalNode sx xsig state
         fsample               <- fini
         xsample               <- xini
+        ifx                   <- fsample <*> xsample
         let rate               = getFasterRate frate xrate
         insertSignal ifx (fsample <*> xsample) (newPool rate state) rate (xfs >> ffs) state
 
@@ -130,28 +125,36 @@ foldp rate f initx si@(Signal inputsig) = Signal $ \state -> fmap snd $ mfix $ \
 --                 Pure x      -> return (return x, -1, return (), [])
 --                 Signal xsig -> xsig state
 
--- fby :: a -> Signal a -> Signal a
--- fby _     (Pure x)               = Pure x
--- fby initx signal@(Signal _) = fbySignal
---     where
---         unsignal' (Pure x)     _     = return (return x, -1, return (), [])
---         unsignal' (Signal s) state = s state
---         --TODO: fby is an example of the pure rate information breaking down. Need a solution
---         fbySignal = Signal fr $ \state -> do
---             stableName <- signal `seq` makeStableName fbySignal
---             let hash    = hashStableName stableName
---             nodes      <- atomically $ readTVar $ nodeTable state
---             case IntMap.lookup hash nodes of
---                 Just sv -> return $ unsafeCoerce sv
---                 Nothing -> do
---                     uid                  <- nextUID state
---                     ref                  <- newIORef initx
---                     let signalValue       = (unsafeCoerce $ readIORef ref, uid, return (), []) :: SignalValue ()
---                     atomically            $ modifyTVar' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce signalValue))
---                     (xsample, _, _, xfs) <- unsignal' signal state
---                     let update _          = xsample >>= \x -> x `seq` writeIORef ref x
---                     (sample, ini, fin)   <- insertSignal update ref $ newPool rate state
---                     return (sample, uid, ini, fin : xfs)
+sampleDelay :: Rate -> a -> Signal a -> Signal a
+sampleDelay rate initx signal = fbySignal
+    where
+        unsignal' (Pure x)     _   = return (return $ return x, rate, -1, return ())
+        unsignal' (Signal s) state = s state
+        fbySignal = Signal $ \state -> do
+            stableName <- signal `seq` makeStableName fbySignal
+            let hash    = hashStableName stableName
+            nodes      <- atomically $ readTVar $ nodeTable state
+            case IntMap.lookup hash nodes of
+                Just sv -> return $ unsafeCoerce sv
+                Nothing -> do
+                    uid                <- nextUID state
+                    ref                <- newIORef initx
+                    let signalValue     = (return $ unsafeCoerce $ readIORef ref, rate, uid, return ()) :: SignalValue ()
+                    atomically          $ modifyTVar' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce signalValue))
+                    (xini, _, _, xfin) <- unsignal' signal state
+                    xsample            <- xini
+                    updateActionRef    <- newIORef $ Just (0, xsample >>= \x -> x `seq` writeIORef ref x)
+                    let initializer     = do
+                            atomicModifyIORef' updateActionRef $ \maybeUA -> case maybeUA of
+                                Just (refCount, ua) -> (Just (refCount + 1, ua), ())
+                                _                   -> (Nothing, ())
+                            return $ readIORef ref
+                        finalizer    = atomicModifyIORef' updateActionRef $ \maybeUA -> case maybeUA of
+                            Just (refCount, ua) -> let refCount' = refCount - 1 in if refCount' <= 0 then (Nothing, ()) else (Just (refCount', ua), ())
+                            _                   -> (Nothing, ())
+                    atomically $ modifyTVar' (newPool rate state) (updateActionRef :)
+                    return (initializer, rate, uid, finalizer >> xfin)
+
 
 dynamicTester :: (Show a) => Rate -> Signal a -> Signal [a]
 dynamicTester _ (Pure _)           = Pure []

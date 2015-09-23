@@ -1,36 +1,31 @@
 import Necronomicon.FRP.Signal'
 
 main :: IO ()
-main = runSignal $ fzip finalCountup finalCountup'
+-- main = runSignal $ fzip finalCountup finalCountup'
 -- main = runSignal $ white + white2
 -- main = runSignal $ dynamicTester white
 -- main = runSignal $ dynamicTester finalCountup
 -- main = runSignal $ dynamicTester feedbackCounter
 -- main = runSignal feedbackCounter
--- main = runSignal $ fzip (resample finalCountdown) tester
-    -- where
-        -- tester = dynamicTester $ fzip3 (resample finalCountdown) finalCountup feeds
-        -- feeds  = (:) <$> (0 `fby` fmap sum feeds) <*> dynamicTester (resample feedbackCounter)
+main = runSignal $ fzip finalCountdown tester
+    where
+        tester = dynamicTester kr $ fzip3 finalCountdown finalCountup feeds
+        feeds  = (:) <$> (sampleDelay fr 0 $ fmap sum feeds) <*> dynamicTester ar feedbackCounter
 
--- white :: Signal Ar Double
--- white = whiteNoise 666
+-- white :: Signal Double
+-- white = whiteNoise ar 666
 
--- white2 :: Signal Kr Double
--- white2 = whiteNoise 666
+-- white2 :: Signal Double
+-- white2 = whiteNoise kr 666
 
 finalCountup :: Signal Double
 finalCountup = foldp kr (+) 0 1
 
-finalCountup' :: Signal Double
-finalCountup' = foldp fr (+) 0 1
+finalCountdown :: Signal Double
+finalCountdown = foldp fr (flip (-)) 0 2
 
--- finalCountdown :: Signal Fr Double
--- finalCountdown = foldp (flip (-)) 0 2
-
--- feedbackCounter :: Signal Kr Int
--- feedbackCounter = 0 `fby` (1 + feedbackCounter)
--- feedbackCounter = feedback 0 $ \c -> c + 1
--- feedbackCounter = 0 `fby` (10 `fby` (1 + feedbackCounter))
+feedbackCounter :: Signal Int
+feedbackCounter = 1 + sampleDelay fr 0 feedbackCounter
 
 {-
 import Necronomicon
