@@ -337,6 +337,7 @@ startSignalFromState signal state = do
 
 --Hotswapping needs a checksum to insure that the shape of the signal graph is the same
 --Otherwise we'll simply blow state away and start over
+--Use the list of typeale nodes leading up to this node as the key into archive map
 hotSwapState :: IO () -> IO () -> SignalState -> IO ()
 hotSwapState archiver finalizer state = do
     putStrLn "HotSwapping"
