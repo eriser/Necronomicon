@@ -219,7 +219,7 @@ instance (Rate r, Fractional a) => Fractional (Signal r a) where
 
 instance (Rate r, Floating a) => Floating (Signal r a) where
     pi      = pure pi
-    (**)    = \x y -> (**) <$> x <*> y
+    (**)    = liftA2 (**)
     exp     = fmap exp
     log     = fmap log
     sin     = fmap sin
@@ -227,7 +227,7 @@ instance (Rate r, Floating a) => Floating (Signal r a) where
     asin    = fmap asin
     acos    = fmap acos
     atan    = fmap atan
-    logBase = \x y -> logBase <$> x <*> y
+    logBase = liftA2 logBase
     sqrt    = fmap sqrt
     tan     = fmap tan
     tanh    = fmap tanh
