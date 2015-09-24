@@ -214,7 +214,7 @@ instance (Rate r, Num a) => Num (Signal r a) where
     fromInteger = pure . fromInteger
 
 instance (Rate r, Fractional a) => Fractional (Signal r a) where
-    (/) = \x y -> (/) <$> x <*> y
+    (/)          = liftA2 (/)
     fromRational = pure . fromRational
 
 instance (Rate r, Floating a) => Floating (Signal r a) where
