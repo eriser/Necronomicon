@@ -90,14 +90,7 @@ insertSignal  initx updatingFunction pool finalizers archivers state = fmap snd 
 insertSignal' :: a -> IO a -> TVar SignalPool -> IO () -> IO () -> SignalState -> IO (IO a, SignalValue a)
 insertSignal' initx updatingFunction pool finalizers archivers state = do
     uid             <- nextUID state
-
-    --If simply running, initialize with initx, otherwise hotswap for previous state
-    ref             <- atomically (readTVar (runStatus state)) >>= \status -> case status of
-        HotSwapping -> readIORef (archive state) >>= \arch -> case IntMap.lookup uid arch of
-            Nothing -> newIORef initx
-            Just ax -> newIORef (unsafeCoerce ax)
-        _           -> newIORef initx
-
+    ref             <- initOrHotSwap initx uid state
     updateActionRef <- newIORef $ Just (0, updatingFunction >>= \x -> x `seq` writeIORef ref x)
     let initializer  = do
             atomicModifyIORef' updateActionRef $ \maybeUA -> case maybeUA of
@@ -110,6 +103,14 @@ insertSignal' initx updatingFunction pool finalizers archivers state = do
         archiver = readIORef ref >>= \archivedX -> modifyIORef (archive state) (IntMap.insert uid (unsafeCoerce archivedX))
     atomically $ modifyTVar' pool (updateActionRef :)
     return (readIORef ref, (initializer, uid, finalizer >> finalizers, archivers >> archiver))
+
+--If simply running, initialize with initx, otherwise hotswap for previous state
+initOrHotSwap :: a -> Int -> SignalState -> IO (IORef a)
+initOrHotSwap initx uid state = atomically (readTVar (runStatus state)) >>= \status -> case status of
+    HotSwapping -> readIORef (archive state) >>= \arch -> case IntMap.lookup uid arch of
+        Nothing -> newIORef initx
+        Just ax -> newIORef (unsafeCoerce ax)
+    _           -> newIORef initx
 
 effectful :: Rate r => IO a -> Signal r a
 effectful effectfulAction = signal
@@ -154,7 +155,8 @@ sampleDelay initx signal = fbySignal
                 Just sv -> return $ unsafeCoerce sv
                 Nothing -> do
                     uid                    <- nextUID state
-                    ref                    <- newIORef initx
+                    ref                    <- initOrHotSwap initx uid state
+                    -- ref                    <- newIORef initx
                     let signalValue         = (return $ unsafeCoerce $ readIORef ref, uid, return (), return ()) :: SignalValue ()
                     atomically              $ modifyTVar' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce signalValue))
                     (xini, _, xfin, xarch) <- unsignal' signal state
