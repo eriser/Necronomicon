@@ -14,7 +14,7 @@ import System.Random
 import Data.Foldable (foldrM)
 
 type SignalPool    = [IORef (Maybe (Int, IO ()))]
-type SignalValue a = (IO (IO a), Int, IO ())
+type SignalValue a = (IO (IO a), Int, IO (), IO ())
 data RunStatus     = Running | HotSwapping | Quitting
 data SignalState   = SignalState
                    { runStatus  :: TVar RunStatus
@@ -24,6 +24,7 @@ data SignalState   = SignalState
                    , newVrPool  :: TVar SignalPool
                    , sigUIDs    :: TVar [Int]
                    , nodeTable  :: TVar (IntMap.IntMap (StableName (), Any))
+                   , archive    :: IORef (IntMap.IntMap Any)
                    }
 
 data Signal r a = Signal (SignalState -> IO (SignalValue a))
@@ -38,6 +39,7 @@ mkSignalState = SignalState
             <*> atomically (newTVar [])
             <*> atomically (newTVar [0..])
             <*> atomically (newTVar IntMap.empty)
+            <*> newIORef IntMap.empty
 
 nextUID :: SignalState -> IO Int
 nextUID state = atomically $ do
@@ -46,7 +48,7 @@ nextUID state = atomically $ do
     return uid
 
 getSignalNode :: Signal r a ->  SignalState -> IO (SignalValue a)
-getSignalNode (Pure x)            _     = return (return $ return x, -1, return ())
+getSignalNode (Pure x)            _     = return (return $ return x, -1, return (), return ())
 getSignalNode signal@(Signal sig) state = do
     stableName <- signal `seq` makeStableName signal
     let hash = hashStableName stableName
@@ -63,10 +65,10 @@ getSignalNode signal@(Signal sig) state = do
 instance Rate r => Functor (Signal r) where
     fmap f (Pure x) = Pure $ f x
     fmap f sx       = Signal $ \state -> do
-        (xini, _, xfs) <- getSignalNode sx state
-        xsample        <- xini
-        ifx            <- f <$> xsample
-        insertSignal ifx (f <$> xsample) (ratePool sx state) xfs state
+        (xini, _, xfs, xarch) <- getSignalNode sx state
+        xsample               <- xini
+        ifx                   <- f <$> xsample
+        insertSignal ifx (f <$> xsample) (ratePool sx state) xfs xarch state
 
 instance Rate r => Applicative (Signal r) where
     pure x = Pure x
@@ -75,20 +77,27 @@ instance Rate r => Applicative (Signal r) where
     Pure f        <*> x@(Signal _)  = fmap f x
     f@(Signal _)  <*> Pure x        = fmap ($ x) f
     sf@(Signal _) <*> sx@(Signal _) = Signal $ \state -> do
-        (fini, _, ffs) <- getSignalNode sf state
-        (xini, _, xfs) <- getSignalNode sx state
-        fsample        <- fini
-        xsample        <- xini
-        ifx            <- fsample <*> xsample
-        insertSignal ifx (fsample <*> xsample) (ratePool sf state) (xfs >> ffs) state
+        (fini, _, ffs, xarch) <- getSignalNode sf state
+        (xini, _, xfs, farch) <- getSignalNode sx state
+        fsample               <- fini
+        xsample               <- xini
+        ifx                   <- fsample <*> xsample
+        insertSignal ifx (fsample <*> xsample) (ratePool sf state) (xfs >> ffs) (xarch >> farch) state
 
-insertSignal :: a -> IO a -> TVar SignalPool -> IO () -> SignalState -> IO (SignalValue a)
-insertSignal  initx updatingFunction pool finalizers state = fmap snd $ insertSignal' initx updatingFunction pool finalizers state
+insertSignal :: a -> IO a -> TVar SignalPool -> IO () -> IO () -> SignalState -> IO (SignalValue a)
+insertSignal  initx updatingFunction pool finalizers archivers state = fmap snd $ insertSignal' initx updatingFunction pool finalizers archivers state
 
-insertSignal' :: a -> IO a -> TVar SignalPool -> IO () -> SignalState -> IO (IO a, SignalValue a)
-insertSignal' initx updatingFunction pool finalizers state = do
+insertSignal' :: a -> IO a -> TVar SignalPool -> IO () -> IO () -> SignalState -> IO (IO a, SignalValue a)
+insertSignal' initx updatingFunction pool finalizers archivers state = do
     uid             <- nextUID state
-    ref             <- newIORef initx
+
+    --If simply running, initialize with initx, otherwise hotswap for previous state
+    ref             <- atomically (readTVar (runStatus state)) >>= \status -> case status of
+        HotSwapping -> readIORef (archive state) >>= \arch -> case IntMap.lookup uid arch of
+            Nothing -> newIORef initx
+            Just ax -> newIORef (unsafeCoerce ax)
+        _           -> newIORef initx
+
     updateActionRef <- newIORef $ Just (0, updatingFunction >>= \x -> x `seq` writeIORef ref x)
     let initializer  = do
             atomicModifyIORef' updateActionRef $ \maybeUA -> case maybeUA of
@@ -98,15 +107,16 @@ insertSignal' initx updatingFunction pool finalizers state = do
         finalizer    = atomicModifyIORef' updateActionRef $ \maybeUA -> case maybeUA of
             Just (refCount, ua) -> let refCount' = refCount - 1 in if refCount' <= 0 then (Nothing, ()) else (Just (refCount', ua), ())
             _                   -> (Nothing, ())
+        archiver = readIORef ref >>= \archivedX -> modifyIORef (archive state) (IntMap.insert uid (unsafeCoerce archivedX))
     atomically $ modifyTVar' pool (updateActionRef :)
-    return (readIORef ref, (initializer, uid, finalizer >> finalizers))
+    return (readIORef ref, (initializer, uid, finalizer >> finalizers, archivers >> archiver))
 
 effectful :: Rate r => IO a -> Signal r a
 effectful effectfulAction = signal
     where
         signal = Signal $ \state -> do
             initx <- effectfulAction
-            insertSignal initx effectfulAction (ratePool signal state) (return ()) state
+            insertSignal initx effectfulAction (ratePool signal state) (return ()) (return ()) state
 
 foldp :: Rate r                    -- ^ Sample rate the signal updates at
       => (input -> state -> state) -- ^ Higher-order function which is applied each update tick
@@ -116,12 +126,12 @@ foldp :: Rate r                    -- ^ Sample rate the signal updates at
 
 foldp f initx (Pure i) = signal
     where
-        signal = Signal $ \state -> fmap snd $ mfix $ \ ~(sig, _) -> insertSignal' initx (f i <$> sig) (ratePool signal state) (return ()) state
+        signal = Signal $ \state -> fmap snd $ mfix $ \ ~(sig, _) -> insertSignal' initx (f i <$> sig) (ratePool signal state) (return ()) (return ()) state
 
 foldp f initx si = Signal $ \state -> fmap snd $ mfix $ \ ~(sig, _) -> do
-    (iini, _, ifs) <- getSignalNode si state
-    icont          <- iini
-    insertSignal' initx (f <$> icont <*> sig) (ratePool si state) ifs state
+    (iini, _, ifs, iarch) <- getSignalNode si state
+    icont                 <- iini
+    insertSignal' initx (f <$> icont <*> sig) (ratePool si state) ifs iarch state
 
 -- feedback :: a -> (Signal a -> Signal a) -> Signal a
 -- feedback initx f = signal
@@ -134,7 +144,7 @@ foldp f initx si = Signal $ \state -> fmap snd $ mfix $ \ ~(sig, _) -> do
 sampleDelay :: Rate r => a -> Signal r a -> Signal r a
 sampleDelay initx signal = fbySignal
     where
-        unsignal' (Pure x)   _     = return (return $ return x, -1, return ())
+        unsignal' (Pure x)   _     = return (return $ return x, -1, return (), return ())
         unsignal' (Signal s) state = s state
         fbySignal = Signal $ \state -> do
             stableName <- signal `seq` makeStableName fbySignal
@@ -143,14 +153,14 @@ sampleDelay initx signal = fbySignal
             case IntMap.lookup hash nodes of
                 Just sv -> return $ unsafeCoerce sv
                 Nothing -> do
-                    uid             <- nextUID state
-                    ref             <- newIORef initx
-                    let signalValue  = (return $ unsafeCoerce $ readIORef ref, uid, return ()) :: SignalValue ()
-                    atomically       $ modifyTVar' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce signalValue))
-                    (xini, _, xfin) <- unsignal' signal state
-                    xsample         <- xini
-                    updateActionRef <- newIORef $ Just (0, xsample >>= \x -> x `seq` writeIORef ref x)
-                    let initializer  = do
+                    uid                    <- nextUID state
+                    ref                    <- newIORef initx
+                    let signalValue         = (return $ unsafeCoerce $ readIORef ref, uid, return (), return ()) :: SignalValue ()
+                    atomically              $ modifyTVar' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce signalValue))
+                    (xini, _, xfin, xarch) <- unsignal' signal state
+                    xsample                <- xini
+                    updateActionRef        <- newIORef $ Just (0, xsample >>= \x -> x `seq` writeIORef ref x)
+                    let initializer         = do
                             atomicModifyIORef' updateActionRef $ \maybeUA -> case maybeUA of
                                 Just (refCount, ua) -> (Just (refCount + 1, ua), ())
                                 _                   -> (Nothing, ())
@@ -158,8 +168,9 @@ sampleDelay initx signal = fbySignal
                         finalizer    = atomicModifyIORef' updateActionRef $ \maybeUA -> case maybeUA of
                             Just (refCount, ua) -> let refCount' = refCount - 1 in if refCount' <= 0 then (Nothing, ()) else (Just (refCount', ua), ())
                             _                   -> (Nothing, ())
+                        archiver = readIORef ref >>= \archivedX -> modifyIORef (archive state) (IntMap.insert uid (unsafeCoerce archivedX))
                     atomically $ modifyTVar' (ratePool signal state) (updateActionRef :)
-                    return (initializer, uid, finalizer >> xfin)
+                    return (initializer, uid, finalizer >> xfin, xarch >> archiver)
 
 
 dynamicTester :: (Rate r, Show a) => Signal r a -> Signal r [a]
@@ -170,16 +181,16 @@ dynamicTester sx       = Signal $ \state -> do
     let fin = do
             srs <- readIORef srefs
             mapM_ (\(_, xfs, _) -> xfs) srs
-    insertSignal [] (update count srefs state) (ratePool sx state) fin state
+    insertSignal [] (update count srefs state) (ratePool sx state) fin (return ()) state
     where
         update count srefs state = do
             c <- (+1) <$> readIORef count :: IO Int
             writeIORef count c
 
             when (mod c 60 == 0 && c < 600) $ do
-                prevSigRefs    <- atomically $ readTVar (nodeTable state)
-                state'         <- atomically (newTVar prevSigRefs) >>= \nodeTable' -> return state{nodeTable = nodeTable'}
-                (xini, _, xfs) <- getSignalNode sx state'
+                prevSigRefs       <- atomically $ readTVar (nodeTable state)
+                state'            <- atomically (newTVar prevSigRefs) >>= \nodeTable' -> return state{nodeTable = nodeTable'}
+                (xini, _, xfs, _) <- getSignalNode sx state'
                 xsample        <- xini
                 modifyIORef' srefs ((0 :: Int, xfs, xsample) :)
 
@@ -310,18 +321,23 @@ runSignal signal   = do
 
 startSignalFromState :: (Rate r, Show a) => Signal r a -> SignalState -> IO ()
 startSignalFromState signal state = do
-    (ini, uid, sfs) <- getSignalNode signal state
-    sample          <- ini
+    (ini, uid, fs, arch) <- getSignalNode signal state
+    sample               <- ini
+    writeIORef (archive state) IntMap.empty
     atomically (writeTVar (runStatus state) Running)
     putStrLn $ "Running signal network, staring with uid: " ++ show uid
     sample >>= print
 
     sequence_ $ replicate 10 $ sample >>= print >> putStrLn "" >> threadDelay 1000000
 
-    sfs
+    arch
+    readIORef (archive state) >>= print . IntMap.keys
+    fs
     hotSwapState state
     startSignalFromState signal state
 
+--Hotswapping needs a checksum to insure that the shape of the signal graph is the same
+--Otherwise we'll simply blow state away and start over
 hotSwapState :: SignalState -> IO ()
 hotSwapState state = do
     putStrLn "HotSwapping"
