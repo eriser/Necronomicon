@@ -314,9 +314,9 @@ runSignal :: (Rate r, Show a) => Signal r a -> IO ()
 runSignal (Pure x) = putStrLn ("Pure " ++ show x)
 runSignal signal   = do
     state <- mkSignalState
-    _     <- forkIO $ updateWorker state [] (newKrPool state) 23220 "Control Rate" (return ())
-    _     <- forkIO $ updateWorker state [] (newArPool state) 23220 "Audio Rate"   (return ())
-    _     <- forkIO $ updateWorker state [] (newFrPool state) 16667 "Frame Rate"   (return ())
+    _     <- forkIO $ updateWorker state [] (newKrPool state) 23220 "Control Rate"
+    _     <- forkIO $ updateWorker state [] (newArPool state) 23220 "Audio Rate"
+    _     <- forkIO $ updateWorker state [] (newFrPool state) 16667 "Frame Rate"
     startSignalFromState signal state
 
 startSignalFromState :: (Rate r, Show a) => Signal r a -> SignalState -> IO ()
@@ -328,19 +328,19 @@ startSignalFromState signal state = do
     putStrLn $ "Running signal network, staring with uid: " ++ show uid
     sample >>= print
 
-    sequence_ $ replicate 10 $ sample >>= print >> putStrLn "" >> threadDelay 1000000
+    sequence_ $ replicate 600 $ sample >>= print >> putStrLn "" >> threadDelay 16667
 
-    arch
-    readIORef (archive state) >>= print . IntMap.keys
-    fs
-    hotSwapState state
+    hotSwapState arch fs state
     startSignalFromState signal state
 
 --Hotswapping needs a checksum to insure that the shape of the signal graph is the same
 --Otherwise we'll simply blow state away and start over
-hotSwapState :: SignalState -> IO ()
-hotSwapState state = do
+hotSwapState :: IO () -> IO () -> SignalState -> IO ()
+hotSwapState archiver finalizer state = do
     putStrLn "HotSwapping"
+    archiver
+    finalizer
+    readIORef (archive state) >>= print . IntMap.keys
     atomically $ do
         writeTVar (runStatus state) HotSwapping
         writeTVar (newArPool state) []
@@ -349,8 +349,8 @@ hotSwapState state = do
         writeTVar (sigUIDs   state) [0..]
         writeTVar (nodeTable state) IntMap.empty
 
-updateWorker :: SignalState -> SignalPool -> TVar SignalPool -> Int -> String -> IO () -> IO ()
-updateWorker state pool newPoolRef sleepTime workerName action = do
+updateWorker :: SignalState -> SignalPool -> TVar SignalPool -> Int -> String -> IO ()
+updateWorker state pool newPoolRef sleepTime workerName = do
     -- putStrLn $ workerName ++ " pool size:  " ++ show (length pool)
     -- mapM toRefCount pool >>= print
     pool' <- foldrM updateSignalNode [] pool
@@ -359,7 +359,6 @@ updateWorker state pool newPoolRef sleepTime workerName action = do
         writeTVar newPoolRef []
         return new
     let pool'' = new ++ pool'
-    action
 
     threadDelay sleepTime
-    updateWorker state pool'' newPoolRef sleepTime workerName action
+    updateWorker state pool'' newPoolRef sleepTime workerName
