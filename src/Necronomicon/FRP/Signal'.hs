@@ -264,9 +264,14 @@ fzip3 :: (Functor f, Applicative f) => f a -> f b -> f c -> f (a, b, c)
 fzip3 a b c = (,,) <$> a <*> b <*> c
 
 whiteNoise :: (Rate r, Floating f, Random f)
-           => f
+           => Signal r f
            -> Signal r f
-whiteNoise amp = effectful $ randomRIO (-amp, amp)
+whiteNoise (Pure amp) = effectful $ randomRIO (-amp, amp)
+whiteNoise ampSignal  = Signal $ \state -> do
+    (ampInit, _, fs, arch) <- getSignalNode ampSignal $ addBranchNode 0 state
+    ampSample              <- ampInit
+    initx                  <- ampSample >>= \amp -> randomRIO (-amp, amp)
+    insertSignal Nothing initx (ampSample >>= \amp -> randomRIO (-amp, amp)) (ratePool ampSignal state) fs arch state
 
 -- switch :: Rate r => [Signal r a] -> Signal r Int -> Signal r a
 -- switch [] _      = error "switch called on empty list."
