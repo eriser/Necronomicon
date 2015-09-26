@@ -263,6 +263,7 @@ data Channel = Channel
     { channelUID :: Int#
     }
 
+--Pure UGen Constructor?
 newtype UGen = UGen
     { unUGen :: UGenMonad [Channel]
     }
@@ -287,16 +288,16 @@ mkUGenPool size@(I# primSize) = stToIO $ ST $ \st ->
     where
         sizeOfDouble = 8#
 
-writeToPool :: Int# -> Int# -> Double# -> MutableByteArray# RealWorld -> IO ()
-writeToPool offset index val mbyteArray = stToIO $ ST $ \st -> (# writeDoubleArray# mbyteArray (offset +# index) val st, () #)
+writeToPool :: Int# -> Int# -> Double# -> MutableByteArray# RealWorld -> ST RealWorld ()
+writeToPool offset index val mbyteArray = ST $ \st -> (# writeDoubleArray# mbyteArray (offset +# index) val st, () #)
 
-copyPoolIndex :: Int# -> MutableByteArray# RealWorld -> MutableByteArray# RealWorld -> IO ()
-copyPoolIndex index mbyteArray1 mbyteArray2 = stToIO $ ST $ \st ->
+copyPoolIndex :: Int# -> MutableByteArray# RealWorld -> MutableByteArray# RealWorld -> ST RealWorld ()
+copyPoolIndex index mbyteArray1 mbyteArray2 = ST $ \st ->
     let (# st1, val #) = readDoubleArray# mbyteArray1 index st
     in  (# writeDoubleArray# mbyteArray2 index val st1, () #)
 
 clearBlock :: Int# -> Int# -> UGenPool -> IO ()
-clearBlock uid blockSize (UGenPool _ pool) = go (blockSize -# 1#)
+clearBlock uid blockSize (UGenPool _ pool) = stToIO $ go (blockSize -# 1#)
     where
         offset    = uid *# blockSize
         go count = case count of
@@ -304,7 +305,7 @@ clearBlock uid blockSize (UGenPool _ pool) = go (blockSize -# 1#)
             _  -> writeToPool offset count 0.0## pool >> go (count -# 1#)
 
 poolCopy :: UGenPool -> UGenPool -> IO ()
-poolCopy (UGenPool (I# poolSize1) pool1) (UGenPool _ pool2) = go (poolSize1 -# 1#)
+poolCopy (UGenPool (I# poolSize1) pool1) (UGenPool _ pool2) = stToIO $ go (poolSize1 -# 1#)
     where
         sizeOfDouble = 8#
         go count     = case count of
