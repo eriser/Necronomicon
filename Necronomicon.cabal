@@ -142,7 +142,8 @@ library
         freetype2        >= 0.1.1,
         binary           >= 0.7.0,
         hashtables       >= 1.2.0,
-        time             >= 1.4
+        time             >= 1.4,
+        ghc-prim
 
 executable PatternTest
     main-is:          Main.hs
