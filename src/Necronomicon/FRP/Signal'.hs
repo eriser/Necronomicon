@@ -287,30 +287,41 @@ mkUGenPool size@(I# primSize) = stToIO $ ST $ \st ->
     where
         sizeOfDouble = 8#
 
-writeToPool :: Int# -> Int# -> Double# -> UGenPool -> ST RealWorld ()
-writeToPool offset index val (UGenPool _ pool) = ST $ \st -> (# writeDoubleArray# pool (offset +# index) val st, () #)
+writeToPool :: Int# -> Int# -> Double# -> MutableByteArray# RealWorld -> IO ()
+writeToPool offset index val mbyteArray = stToIO $ ST $ \st -> (# writeDoubleArray# mbyteArray (offset +# index) val st, () #)
+
+copyPoolIndex :: Int# -> MutableByteArray# RealWorld -> MutableByteArray# RealWorld -> IO ()
+copyPoolIndex index mbyteArray1 mbyteArray2 = stToIO $ ST $ \st ->
+    let (# st1, val #) = readDoubleArray# mbyteArray1 index st
+    in  (# writeDoubleArray# mbyteArray2 index val st1, () #)
 
 clearBlock :: Int# -> Int# -> UGenPool -> IO ()
-clearBlock uid blockSize pool = stToIO $ go (blockSize -# 1#)
+clearBlock uid blockSize (UGenPool _ pool) = go (blockSize -# 1#)
     where
         offset    = uid *# blockSize
-        go !count = case count of
+        go count = case count of
             0# -> writeToPool offset count 0.0## pool
             _  -> writeToPool offset count 0.0## pool >> go (count -# 1#)
 
-callocChannel :: Int -> UGenMonad ()
-callocChannel uid@(I# primUID) = UGenMonad $ \state -> do
-    pool  <- readIORef $ ugenPool state
+poolCopy :: UGenPool -> UGenPool -> IO ()
+poolCopy (UGenPool (I# poolSize1) pool1) (UGenPool _ pool2) = go (poolSize1 -# 1#)
+    where
+        sizeOfDouble = 8#
+        go count     = case count of
+            0# -> copyPoolIndex (count *# sizeOfDouble) pool1 pool2
+            _  -> copyPoolIndex (count *# sizeOfDouble) pool1 pool2 >> go (count -# 1#)
+
+allocChannel :: Int -> UGenMonad ()
+allocChannel uid = UGenMonad $ \state -> do
     lock  <- atomically $ takeTMVar $ ugenReallocLock state
-    pool' <- if (uid < ugenPoolSize pool)
-        then return pool
+    pool  <- readIORef $ ugenPool state
+    if (uid < ugenPoolSize pool)
+        then return ()
         else do
             pool' <- mkUGenPool $ ugenPoolSize pool
-            --copy pool pool'
+            poolCopy pool pool'
             writeIORef (ugenPool state) pool'
-            return pool'
     atomically $ putTMVar (ugenReallocLock state) lock
-    clearBlock primUID (ugenBlockSize state) pool'
 
 getUIDs :: Int -> UGenMonad [Int]
 getUIDs numUIDs = UGenMonad $ \state -> atomically $ do
@@ -319,10 +330,20 @@ getUIDs numUIDs = UGenMonad $ \state -> atomically $ do
     return uids
 
 getChannel :: Int -> UGenMonad Channel
-getChannel uid@(I# primUID) = callocChannel uid >> return (Channel primUID)
+getChannel uid@(I# primUID) = allocChannel uid >> return (Channel primUID)
 
-newUGen :: Int -> UGenMonad [Channel]
-newUGen channels = getUIDs channels >>= mapM getChannel
+--Clearing should be done when a channel is free'ed since it is less time sensitive than allocating a new channel
+freeChannel :: Channel -> UGenMonad ()
+freeChannel (Channel uid) = UGenMonad $ \state -> do
+    pool <- readIORef $ ugenPool state
+    clearBlock uid (ugenBlockSize state) pool
+    atomically $ modifyTVar' (ugenUIDs state) (I# uid :)
+
+mkUGen :: Int -> UGenMonad [Channel]
+mkUGen channels = getUIDs channels >>= mapM getChannel
+
+freeUGen :: [Channel] -> UGenMonad ()
+freeUGen = mapM_ freeChannel
 
 
 {-
