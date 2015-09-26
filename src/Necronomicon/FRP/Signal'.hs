@@ -16,8 +16,9 @@ import System.Random
 import Data.Foldable (foldrM)
 import Data.Typeable
 import GHC.Prim
--- import Control.Monad.ST
+import Control.Monad.ST (stToIO)
 import GHC.ST
+import GHC.Types (Int(..))
 
 ---------------------------------------------------------------------------------------------------------
 -- Types
@@ -242,8 +243,91 @@ resample s        = Signal $ \state -> getSignalNode s $ addBranchNode 0 state
 -- Audio
 ---------------------------------------------------------------------------------------------------------
 
-data UGen          = UGen { audioSize:: Int#, audioArray :: ByteArray# }
-data MutableUGen s = MutableUGen Int# (MutableByteArray# s)
+data UGenPool = UGenPool
+    { ugenPoolSize :: Int
+    , poolArray    :: MutableByteArray# RealWorld
+    }
+
+data UGenState = UGenState
+    { ugenBlockSize   :: Int#
+    , ugenPool        :: IORef UGenPool
+    , ugenReallocLock :: TMVar ()
+    , ugenUIDs        :: TVar [Int]
+    }
+
+newtype UGenMonad a = UGenMonad
+    { unUGenMonad :: UGenState -> IO a
+    }
+
+data Channel = Channel
+    { channelUID :: Int#
+    }
+
+newtype UGen = UGen
+    { unUGen :: UGenMonad [Channel]
+    }
+
+instance Functor UGenMonad where
+    fmap = liftM
+
+instance Applicative UGenMonad where
+    pure  = return
+    (<*>) = ap
+
+instance Monad UGenMonad where
+    return x = UGenMonad $ \_ -> return x
+    g >>= f  = UGenMonad $ \state -> do
+        x <- unUGenMonad g state
+        unUGenMonad (f x) state
+
+mkUGenPool :: Int -> IO UGenPool
+mkUGenPool size@(I# primSize) = stToIO $ ST $ \st ->
+    let (# st1, mbyteArray #) = newByteArray# (primSize *# sizeOfDouble) st
+    in  (# st1, UGenPool size mbyteArray #)
+    where
+        sizeOfDouble = 8#
+
+writeToPool :: Int# -> Int# -> Double# -> UGenPool -> ST RealWorld ()
+writeToPool offset index val (UGenPool _ pool) = ST $ \st -> (# writeDoubleArray# pool (offset +# index) val st, () #)
+
+clearBlock :: Int# -> Int# -> UGenPool -> IO ()
+clearBlock uid blockSize pool = stToIO $ go (blockSize -# 1#)
+    where
+        offset    = uid *# blockSize
+        go !count = case count of
+            0# -> writeToPool offset count 0.0## pool
+            _  -> writeToPool offset count 0.0## pool >> go (count -# 1#)
+
+callocChannel :: Int -> UGenMonad ()
+callocChannel uid@(I# primUID) = UGenMonad $ \state -> do
+    pool  <- readIORef $ ugenPool state
+    lock  <- atomically $ takeTMVar $ ugenReallocLock state
+    pool' <- if (uid < ugenPoolSize pool)
+        then return pool
+        else do
+            pool' <- mkUGenPool $ ugenPoolSize pool
+            --copy pool pool'
+            writeIORef (ugenPool state) pool'
+            return pool'
+    atomically $ putTMVar (ugenReallocLock state) lock
+    clearBlock primUID (ugenBlockSize state) pool'
+
+getUIDs :: Int -> UGenMonad [Int]
+getUIDs numUIDs = UGenMonad $ \state -> atomically $ do
+    (uids, uidPool) <- splitAt numUIDs <$> readTVar (ugenUIDs state)
+    writeTVar (ugenUIDs state) uidPool
+    return uids
+
+getChannel :: Int -> UGenMonad Channel
+getChannel uid@(I# primUID) = callocChannel uid >> return (Channel primUID)
+
+newUGen :: Int -> UGenMonad [Channel]
+newUGen channels = getUIDs channels >>= mapM getChannel
+
+
+{-
+data UGen             = UGen { audioSize:: Int#, audioArray :: ByteArray# }
+data MutableUGen s    = MutableUGen Int# (MutableByteArray# s)
 
 instance Num UGen where
     (+) = binaryUGenOp (+##)
@@ -295,6 +379,7 @@ mutateWith f mbyteArray index = ST $ \st ->
     let (# st1, element #) = readDoubleArray# mbyteArray index st
     in  (# writeDoubleArray# mbyteArray index (f element) st1, () #)
 
+-}
 
 ---------------------------------------------------------------------------------------------------------
 -- Hotswap
