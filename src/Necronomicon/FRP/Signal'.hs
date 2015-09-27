@@ -29,6 +29,7 @@ type SignalValue a = (IO (IO a), Int, IO (), IO ())
 data RunStatus     = Running | HotSwapping | Quitting
 data SignalState   = SignalState
                    { nodePath   :: NodePath
+                   , ugenState  :: UGenState
                    , runStatus  :: TVar RunStatus
                    , newArPool  :: TVar SignalPool
                    , newKrPool  :: TVar SignalPool
@@ -270,6 +271,13 @@ data UGen = UGen
     , ugenChannels :: [Channel]
     }
 
+--TODO: We need a way to query the block size!
+mkUGenState :: IO UGenState
+mkUGenState = UGenState 1024#
+          <$> (mkUGenPool 1000 >>= newIORef)
+          <*> atomically (newTMVar ())
+          <*> atomically (newTVar [0..])
+
 instance Functor UGenMonad where
     fmap = liftM
 
@@ -374,6 +382,13 @@ poolAp2 f index1 index2 destIndex pool = ST $ \st ->
 -- apUGen2 = f (
 
 instance (Rate r) => Num (Signal r UGen) where
+    -- sigX + sigY = Signal $ \state -> do
+        -- (sampleX, sampleY, insertSig) <- getNode2 Nothing sigX sigY state
+        -- ugenX <- sampleX
+        -- ugenY <- sampleY
+        -- let update = runUGen (apChannel2 (+##) ugenX ugenY ugen) (ugenState state)
+        -- let update = undefined
+        -- insertSig update update
     (+) = undefined
     (*) = undefined
     (-) = undefined
@@ -426,7 +441,8 @@ hotSwapState archiver finalizer state = do
 
 mkSignalState :: IO SignalState
 mkSignalState = SignalState RootNode
-            <$> atomically (newTVar Running)
+            <$> mkUGenState
+            <*> atomically (newTVar Running)
             <*> atomically (newTVar [])
             <*> atomically (newTVar [])
             <*> atomically (newTVar [])

@@ -1,7 +1,13 @@
-import Necronomicon.FRP.Signal'
+-- import Necronomicon.FRP.Signal'
+import Necronomicon.Interactive
 
 main :: IO ()
-main = runSignal $ fzip3 (resample finalCountup) (resample finalCountdown) feedbackCounter
+main = do
+    let fileName = "/home/casiosk1/code/Necronomicon/Tests/SigTest/InteractiveTest.hs"
+    -- runExpr fileName "InteractiveTest" "InteractiveTest.helloWorld"
+    runExpr fileName "InteractiveTest" "InteractiveTest.sigTest"
+
+-- main = runSignal $ fzip3 (resample finalCountup) (resample finalCountdown) feedbackCounter
 -- main = runSignal white
 -- main = runSignal $ dynamicTester white
 -- main = runSignal $ dynamicTester finalCountup
@@ -21,14 +27,14 @@ main = runSignal $ fzip3 (resample finalCountup) (resample finalCountdown) feedb
 -- white2 :: Signal Kr Double
 -- white2 = whiteNoise 666
 
-finalCountup :: Signal Ar Double
-finalCountup = foldp (+) 0 1
+-- finalCountup :: Signal Ar Double
+-- finalCountup = foldp (+) 0 1
 
-finalCountdown :: Signal Kr Double
-finalCountdown = foldp (flip (-)) 0 2
+-- finalCountdown :: Signal Kr Double
+-- finalCountdown = foldp (flip (-)) 0 2
 
-feedbackCounter :: Signal Fr Int
-feedbackCounter = 3 + sampleDelay 0 feedbackCounter
+-- feedbackCounter :: Signal Fr Int
+-- feedbackCounter = 3 + sampleDelay 0 feedbackCounter
 
 {-
 import Necronomicon

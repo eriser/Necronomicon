@@ -65,6 +65,7 @@ library
         Necronomicon.Util.Grid
         Necronomicon.Physics.DynamicTree
         Necronomicon.FRP.Signal'
+        Necronomicon.Interactive
 
     other-modules:
         Necronomicon.Language.Layout
@@ -143,7 +144,9 @@ library
         binary           >= 0.7.0,
         hashtables       >= 1.2.0,
         time             >= 1.4,
-        ghc-prim
+        ghc-prim         >= 0.4,
+        ghc              >= 7.2,
+        ghc-paths        >= 0.1
 
 executable PatternTest
     main-is:          Main.hs
