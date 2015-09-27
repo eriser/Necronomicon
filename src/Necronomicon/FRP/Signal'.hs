@@ -562,6 +562,8 @@ toRefCount updateRef = readIORef updateRef >>= \maybeUA -> case maybeUA of
     Nothing     -> return (-666)
     Just (c, _) -> return c
 
+--Need start and stop runtime functions
+
 runSignal :: (Rate r, Show a) => Signal r a -> IO ()
 runSignal (Pure x) = putStrLn ("Pure " ++ show x)
 runSignal signal   = do

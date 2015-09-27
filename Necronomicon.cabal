@@ -146,7 +146,8 @@ library
         time             >= 1.4,
         ghc-prim         >= 0.4,
         ghc              >= 7.2,
-        ghc-paths        >= 0.1
+        ghc-paths        >= 0.1,
+        directory        >= 1.2.0
 
 executable PatternTest
     main-is:          Main.hs

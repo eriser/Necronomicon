@@ -1,11 +1,14 @@
 {-# LANGUAGE CPP #-}
 module Necronomicon.Interactive where
 
+import Control.Concurrent (threadDelay)
+import Control.Monad (when)
 import GHC
 import GHC.Paths ( libdir )
 import DynFlags
 import Unsafe.Coerce
 import Necronomicon.FRP.Signal'
+import System.Directory
 
 loadNecronomicon :: GhcMonad m => String -> String -> m ModSummary
 loadNecronomicon targetFile modName = do
@@ -27,6 +30,7 @@ loadNecronomicon targetFile modName = do
     mapM_ showModule g
     return modSum
 
+--We are declaring the module as an import and then compiling the expression with that context
 compileSignal :: String -> String -> String -> IO (Signal Fr Double)
 compileSignal targetFile modName expr = defaultErrorHandler defaultFatalMessager defaultFlushOut $ runGhc (Just libdir) $ do
     _ <- loadNecronomicon targetFile modName
@@ -37,4 +41,13 @@ compileSignal targetFile modName expr = defaultErrorHandler defaultFatalMessager
 #endif
     maybeSig <- compileExpr (modName ++ "." ++ expr)
     return $ unsafeCoerce maybeSig
+
+runSignalWithFile :: FilePath -> IO ()
+runSignalWithFile filePath = getModificationTime filePath >>= go
+    where
+        go prevTime = do
+            time <- getModificationTime filePath
+            when (time > prevTime) $ putStrLn $ "File was modified at time: " ++ show time
+            threadDelay 500000
+            go time
 
