@@ -573,16 +573,17 @@ runSignal signal   = do
 
 startSignalFromState :: (Rate r, Show a) => Signal r a -> SignalState -> IO ()
 startSignalFromState signal state = do
-    (ini, uid, fs, arch) <- getSignalNode signal state{nodePath = RootNode}
-    sample               <- ini
+    (ini, uid, _, _) <- getSignalNode signal state{nodePath = RootNode}
+    sample           <- ini
     writeIORef (archive state) Map.empty
     atomically (writeTVar (runStatus state) Running)
     putStrLn $ "Running signal network, staring with uid: " ++ show uid
 
-    sequence_ $ replicate 600 $ sample >>= print >> putStrLn "" >> threadDelay 16667
-
-    hotSwapState arch fs state
-    startSignalFromState signal state
+    forever $ sample >>= print >> putStrLn "" >> threadDelay 16667
+    --For testing:
+    -- sequence_ $ replicate 600 $ sample >>= print >> putStrLn "" >> threadDelay 16667
+    -- hotSwapState arch fs state
+    -- startSignalFromState signal state
 
 updateWorker :: SignalState -> SignalPool -> TVar SignalPool -> Int -> String -> IO ()
 updateWorker state pool newPoolRef sleepTime workerName = do

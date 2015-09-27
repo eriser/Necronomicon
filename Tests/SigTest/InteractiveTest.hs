@@ -2,8 +2,8 @@ module InteractiveTest where
 
 import Necronomicon.FRP.Signal'
 
-sigTest :: IO ()
-sigTest = runSignal finalCountdown
+-- sigTest :: IO ()
+-- sigTest = runSignal finalCountdown
 
 -- main :: IO ()
 -- main = runSignal finalCountdown

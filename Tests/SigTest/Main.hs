@@ -1,11 +1,12 @@
--- import Necronomicon.FRP.Signal'
+import Necronomicon.FRP.Signal'
 import Necronomicon.Interactive
 
 main :: IO ()
 main = do
-    let fileName = "/home/casiosk1/code/Necronomicon/Tests/SigTest/InteractiveTest.hs"
-    -- runExpr fileName "InteractiveTest" "InteractiveTest.helloWorld"
-    runExpr fileName "InteractiveTest" "InteractiveTest.sigTest"
+    let fileName   = "/home/casiosk1/code/Necronomicon/Tests/SigTest/InteractiveTest.hs"
+        moduleName = "InteractiveTest"
+    sig <- compileSignal fileName moduleName "finalCountdown"
+    runSignal sig
 
 -- main = runSignal $ fzip3 (resample finalCountup) (resample finalCountdown) feedbackCounter
 -- main = runSignal white
