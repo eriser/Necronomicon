@@ -256,16 +256,18 @@ data UGenState = UGenState
     }
 
 newtype UGenMonad a = UGenMonad
-    { unUGenMonad :: UGenState -> IO a
+    { runUGenMonad :: UGenState -> IO a
     }
 
 data Channel = Channel
-    { channelUID :: Int#
+    { channelUID   :: Int#
+    , channelIndex :: Int#
     }
 
 --Pure UGen Constructor?
-newtype UGen = UGen
-    { unUGen :: UGenMonad [Channel]
+data UGen = UGen
+    { numChannels  :: Int
+    , ugenChannels :: [Channel]
     }
 
 instance Functor UGenMonad where
@@ -278,9 +280,10 @@ instance Applicative UGenMonad where
 instance Monad UGenMonad where
     return x = UGenMonad $ \_ -> return x
     g >>= f  = UGenMonad $ \state -> do
-        x <- unUGenMonad g state
-        unUGenMonad (f x) state
+        x <- runUGenMonad g state
+        runUGenMonad (f x) state
 
+--UGen pool size is in doubles (i.e. 8 bytes)s
 mkUGenPool :: Int -> IO UGenPool
 mkUGenPool size@(I# primSize) = stToIO $ ST $ \st ->
     let (# st1, mbyteArray #) = newByteArray# (primSize *# sizeOfDouble) st
@@ -288,8 +291,8 @@ mkUGenPool size@(I# primSize) = stToIO $ ST $ \st ->
     where
         sizeOfDouble = 8#
 
-writeToPool :: Int# -> Int# -> Double# -> MutableByteArray# RealWorld -> ST RealWorld ()
-writeToPool offset index val mbyteArray = ST $ \st -> (# writeDoubleArray# mbyteArray (offset +# index) val st, () #)
+writeToPool :: Int# -> Double# -> MutableByteArray# RealWorld -> ST RealWorld ()
+writeToPool index val mbyteArray = ST $ \st -> (# writeDoubleArray# mbyteArray index val st, () #)
 
 copyPoolIndex :: Int# -> MutableByteArray# RealWorld -> MutableByteArray# RealWorld -> ST RealWorld ()
 copyPoolIndex index mbyteArray1 mbyteArray2 = ST $ \st ->
@@ -297,29 +300,28 @@ copyPoolIndex index mbyteArray1 mbyteArray2 = ST $ \st ->
     in  (# writeDoubleArray# mbyteArray2 index val st1, () #)
 
 clearBlock :: Int# -> Int# -> UGenPool -> IO ()
-clearBlock uid blockSize (UGenPool _ pool) = stToIO $ go (blockSize -# 1#)
+clearBlock index bsize (UGenPool _ pool) = stToIO $ go (bsize -# 1#)
     where
-        offset    = uid *# blockSize
-        go count = case count of
-            0# -> writeToPool offset count 0.0## pool
-            _  -> writeToPool offset count 0.0## pool >> go (count -# 1#)
+        go i = case i of
+            0# -> writeToPool (index +# i) 0.0## pool
+            _  -> writeToPool (index +# i) 0.0## pool >> go (i -# 1#)
 
 poolCopy :: UGenPool -> UGenPool -> IO ()
 poolCopy (UGenPool (I# poolSize1) pool1) (UGenPool _ pool2) = stToIO $ go (poolSize1 -# 1#)
     where
-        sizeOfDouble = 8#
-        go count     = case count of
-            0# -> copyPoolIndex (count *# sizeOfDouble) pool1 pool2
-            _  -> copyPoolIndex (count *# sizeOfDouble) pool1 pool2 >> go (count -# 1#)
+        go i = case i of
+            0# -> copyPoolIndex i pool1 pool2
+            _  -> copyPoolIndex i pool1 pool2 >> go (i -# 1#)
 
 allocChannel :: Int -> UGenMonad ()
-allocChannel uid = UGenMonad $ \state -> do
+allocChannel index = UGenMonad $ \state -> do
     lock  <- atomically $ takeTMVar $ ugenReallocLock state
     pool  <- readIORef $ ugenPool state
-    if (uid < ugenPoolSize pool)
+    if index + I# (ugenBlockSize state) < ugenPoolSize pool
         then return ()
         else do
-            pool' <- mkUGenPool $ ugenPoolSize pool
+            putStrLn $ "Allocating ugen channel memory to: " ++ show (ugenPoolSize pool * 2)
+            pool' <- mkUGenPool $ ugenPoolSize pool * 2
             poolCopy pool pool'
             writeIORef (ugenPool state) pool'
     atomically $ putTMVar (ugenReallocLock state) lock
@@ -330,14 +332,22 @@ getUIDs numUIDs = UGenMonad $ \state -> atomically $ do
     writeTVar (ugenUIDs state) uidPool
     return uids
 
+blockSize :: UGenMonad Int
+blockSize = UGenMonad $ \state -> return $ I# (ugenBlockSize state)
+
+uidToIndex :: Int -> UGenMonad Int
+uidToIndex uid = do
+    bs <- blockSize
+    return $ uid * bs
+
 getChannel :: Int -> UGenMonad Channel
-getChannel uid@(I# primUID) = allocChannel uid >> return (Channel primUID)
+getChannel uid@(I# primUID) = uidToIndex uid >>= \index@(I# primIndex) -> allocChannel index >> return (Channel primUID primIndex)
 
 --Clearing should be done when a channel is free'ed since it is less time sensitive than allocating a new channel
 freeChannel :: Channel -> UGenMonad ()
-freeChannel (Channel uid) = UGenMonad $ \state -> do
+freeChannel (Channel uid index) = UGenMonad $ \state -> do
     pool <- readIORef $ ugenPool state
-    clearBlock uid (ugenBlockSize state) pool
+    clearBlock index (ugenBlockSize state) pool
     atomically $ modifyTVar' (ugenUIDs state) (I# uid :)
 
 mkUGen :: Int -> UGenMonad [Channel]
@@ -346,62 +356,30 @@ mkUGen channels = getUIDs channels >>= mapM getChannel
 freeUGen :: [Channel] -> UGenMonad ()
 freeUGen = mapM_ freeChannel
 
+apChannel2 :: (Double# -> Double# -> Double#) -> Channel -> Channel -> Channel -> UGenMonad ()
+apChannel2 f (Channel _ index1) (Channel _ index2) (Channel _ destIndex) = UGenMonad $ \state -> do
+    UGenPool _ pool <- readIORef $ ugenPool state
+    let go i = case i of
+            0# -> poolAp2 f (index1 +# i) (index2 +# i) (destIndex +# i) pool
+            _  -> poolAp2 f (index1 +# i) (index2 +# i) (destIndex +# i) pool >> go (i -# 1#)
+    stToIO $ go (ugenBlockSize state -# 1#)
 
-{-
-data UGen             = UGen { audioSize:: Int#, audioArray :: ByteArray# }
-data MutableUGen s    = MutableUGen Int# (MutableByteArray# s)
+poolAp2 :: (Double# -> Double# -> Double#) -> Int# -> Int# -> Int# -> MutableByteArray# RealWorld -> ST RealWorld ()
+poolAp2 f index1 index2 destIndex pool = ST $ \st ->
+    let (# st1, x #) = readDoubleArray# pool index1 st
+        (# st2, y #) = readDoubleArray# pool index2 st1
+    in  (# writeDoubleArray# pool destIndex (f x y) st2, () #)
 
-instance Num UGen where
-    (+) = binaryUGenOp (+##)
-    (-) = binaryUGenOp (-##)
-    (*) = binaryUGenOp (*##)
+-- apUgen2 :: (Double# -> Double# -> Double#) -> UGen -> UGen -> UGen -> UGenMonad ()
+-- apUGen2 = f (
+
+instance (Rate r) => Num (Signal r UGen) where
+    (+) = undefined
+    (*) = undefined
+    (-) = undefined
     abs = undefined
     signum = undefined
     fromInteger = undefined
-
-binaryUGenOp :: (Double# -> Double# -> Double#) -> UGen -> UGen -> UGen
-binaryUGenOp f a1 a2 = runST $ do
-    newUGen <- newMutableUGen (audioSize a1)
-    mutateWithBinaryOp f a1 a2 newUGen
-    unsafeFreezeUGen newUGen
-
---TODO: This needs to take into account both the size of doubles, and the number of channels!
-newMutableUGen :: Int# -> ST s (MutableUGen s)
-newMutableUGen size = ST $ \st ->
-    let (# st1, mbyteArray #) = newByteArray# (size *# 8#) st
-    in  (# st1, MutableUGen size mbyteArray #)
-
-unsafeFreezeUGen :: MutableUGen s -> ST s UGen
-unsafeFreezeUGen (MutableUGen size mbyteArray) = ST $ \st ->
-    let (# st1, pbyteArray #) = unsafeFreezeByteArray# mbyteArray st
-    in  (# st1, UGen size pbyteArray #)
-
-mutateWithBinaryOp :: (Double# -> Double# -> Double#) -> UGen -> UGen -> MutableUGen s -> ST s ()
-mutateWithBinaryOp f (UGen size byteArray1) (UGen _ byteArray2) (MutableUGen _ destByteArray) = go (size -# 1#)
-    where
-        func      = mutateBinaryOp f byteArray1 byteArray2 destByteArray
-        go !count = case count of
-            0# -> func count >> return ()
-            _  -> func count >> go (count -# 1#)
-
-mutateBinaryOp :: (Double# -> Double# -> Double#) -> ByteArray# -> ByteArray# -> MutableByteArray# s -> Int# -> ST s ()
-mutateBinaryOp f byteArray1 byteArray2 destByteArray index = ST $ \st ->
-    (# writeDoubleArray# destByteArray index (f (indexDoubleArray# byteArray1 index) (indexDoubleArray# byteArray2 index)) st, () #)
-
-mapMutableUGen :: (Double# -> Double#) -> MutableUGen s -> ST s ()
-mapMutableUGen f (MutableUGen size mbyteArray) = go (size -# 1#)
-    where
-        func      = mutateWith f mbyteArray
-        go !count = case count of
-            0# -> func count >> return ()
-            _  -> func count >> go (count -# 1#)
-
-mutateWith :: (Double# -> Double#) -> MutableByteArray# s -> Int# -> ST s ()
-mutateWith f mbyteArray index = ST $ \st ->
-    let (# st1, element #) = readDoubleArray# mbyteArray index st
-    in  (# writeDoubleArray# mbyteArray index (f element) st1, () #)
-
--}
 
 ---------------------------------------------------------------------------------------------------------
 -- Hotswap
