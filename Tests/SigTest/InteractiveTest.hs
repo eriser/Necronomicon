@@ -6,7 +6,8 @@ import Necronomicon.FRP.Signal'
 -- finalCountup = foldp (+) 0 1
 
 finalCountdown :: Signal Fr Double
-finalCountdown = foldp (flip (-)) 0 2
+finalCountdown = foldp (flip (-)) 0 2 + feedbackCounter
+-- finalCountdown = foldp (+) 0 1
 
--- feedbackCounter :: Signal Fr Int
--- feedbackCounter = 3 + sampleDelay 0 feedbackCounter
+feedbackCounter :: Signal Fr Double
+feedbackCounter = 2 + sampleDelay 0 feedbackCounter

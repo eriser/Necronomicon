@@ -141,7 +141,7 @@ sampleDelay initx signal = fbySignal
                 Nothing -> do
                     -- let nodePath' = "sampleDelay " ++ show (getTypeRep initx) ++ "/" ++ nodePath state
                     let nodePath' = TypeRepNode (getTypeRep initx) $ nodePath state
-                    putStrLn $ "nodePath: " ++ show nodePath'
+                    -- putStrLn $ "nodePath: " ++ show nodePath'
                     uid                    <- nextUID state
                     ref                    <- initOrHotSwap (Just nodePath') initx state
                     let signalValue         = (return $ unsafeCoerce $ readIORef ref, uid, return (), return ()) :: SignalValue ()
@@ -426,7 +426,7 @@ hotSwapState archiver finalizer state = do
     putStrLn "HotSwapping"
     archiver
     finalizer
-    readIORef (archive state) >>= print . Map.keys
+    -- readIORef (archive state) >>= print . Map.keys
     atomically $ do
         writeTVar (runStatus state) HotSwapping
         writeTVar (newArPool state) []
@@ -563,29 +563,23 @@ toRefCount updateRef = readIORef updateRef >>= \maybeUA -> case maybeUA of
     Just (c, _) -> return c
 
 --Need start and stop runtime functions
-
-runSignal :: (Rate r, Show a) => Signal r a -> IO ()
-runSignal (Pure x) = putStrLn ("Pure " ++ show x)
-runSignal signal   = do
+startSignalRuntime :: IO SignalState
+startSignalRuntime = do
     state <- mkSignalState
     _     <- forkIO $ updateWorker state [] (newKrPool state) 23220 "Control Rate"
     _     <- forkIO $ updateWorker state [] (newArPool state) 23220 "Audio Rate"
     _     <- forkIO $ updateWorker state [] (newFrPool state) 16667 "Frame Rate"
-    startSignalFromState signal state
+    return state
 
-startSignalFromState :: (Rate r, Show a) => Signal r a -> SignalState -> IO ()
-startSignalFromState signal state = do
-    (ini, uid, _, _) <- getSignalNode signal state{nodePath = RootNode}
-    sample           <- ini
+type SignalActions a = (IO a, IO (), IO ())
+runSignalFromState :: (Rate r, Show a) => Signal r a -> SignalState -> IO (SignalActions a)
+runSignalFromState signal state = do
+    (ini, _, fs, arch) <- getSignalNode signal state{nodePath = RootNode}
+    sample             <- ini
     writeIORef (archive state) Map.empty
     atomically (writeTVar (runStatus state) Running)
-    putStrLn $ "Running signal network, staring with uid: " ++ show uid
-
-    forever $ sample >>= print >> putStrLn "" >> threadDelay 16667
-    --For testing:
-    -- sequence_ $ replicate 600 $ sample >>= print >> putStrLn "" >> threadDelay 16667
-    -- hotSwapState arch fs state
-    -- startSignalFromState signal state
+    -- putStrLn $ "Running signal network, staring with uid: " ++ show uid
+    return (sample, arch, fs)
 
 updateWorker :: SignalState -> SignalPool -> TVar SignalPool -> Int -> String -> IO ()
 updateWorker state pool newPoolRef sleepTime workerName = do

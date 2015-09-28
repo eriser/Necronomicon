@@ -2,7 +2,6 @@
 module Necronomicon.Interactive where
 
 import Control.Concurrent (threadDelay)
-import Control.Monad (when)
 import GHC
 import GHC.Paths ( libdir )
 import DynFlags
@@ -42,12 +41,23 @@ compileSignal targetFile modName expr = defaultErrorHandler defaultFatalMessager
     maybeSig <- compileExpr (modName ++ "." ++ expr)
     return $ unsafeCoerce maybeSig
 
-runSignalWithFile :: FilePath -> IO ()
-runSignalWithFile filePath = getModificationTime filePath >>= go
+runSignalWithFile :: FilePath -> String -> String -> IO ()
+runSignalWithFile filePath modName expr = do
+    sig                           <- compileSignal filePath modName expr
+    state                         <- startSignalRuntime
+    (sample, archiver, finalizer) <- runSignalFromState sig state
+    t <- getModificationTime filePath
+    modificationTimeDaemon t sample archiver finalizer state
     where
-        go prevTime = do
+        modificationTimeDaemon prevTime sample archiver finalizer state = do
+            sample >>= print
             time <- getModificationTime filePath
-            when (time > prevTime) $ putStrLn $ "File was modified at time: " ++ show time
-            threadDelay 500000
-            go time
+            if (time <= prevTime)
+                then threadDelay 200000 >> modificationTimeDaemon time sample archiver finalizer state
+                else do
+                    hotSwapState archiver finalizer state
+                    sig                              <- compileSignal filePath modName expr
+                    (sample', archiver', finalizer') <- runSignalFromState sig state
+                    threadDelay 200000
+                    modificationTimeDaemon time sample' archiver' finalizer' state
 
