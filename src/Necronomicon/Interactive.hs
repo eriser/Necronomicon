@@ -41,6 +41,7 @@ compileSignal targetFile modName expr = defaultErrorHandler defaultFatalMessager
     maybeSig <- compileExpr (modName ++ "." ++ expr)
     return $ unsafeCoerce maybeSig
 
+--TODO: Need exception handling for when things go awry
 runSignalWithFile :: FilePath -> String -> String -> IO ()
 runSignalWithFile filePath modName expr = do
     sig                           <- compileSignal filePath modName expr
