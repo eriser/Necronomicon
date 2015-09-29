@@ -1,4 +1,4 @@
-{-# LANGUAGE MagicHash, UnboxedTuples#-}
+{-# LANGUAGE MagicHash, UnboxedTuples, DeriveDataTypeable #-}
 module Necronomicon.FRP.Signal' where
 
 import Control.Concurrent
@@ -43,6 +43,7 @@ data SignalState   = SignalState
 
 data Signal r a = Signal (SignalState -> IO (SignalValue a))
                 | Pure a
+                deriving (Typeable)
 
 ---------------------------------------------------------------------------------------------------------
 -- Instances
@@ -215,6 +216,12 @@ whiteNoise ampSignal  = Signal $ \state -> do
     insertSig update update
 
 -- Simple way to implement switcher?,
+
+sigPrint :: (Rate r, Show a) => Signal r a -> Signal r ()
+sigPrint sig = Signal $ \state -> do
+    (sample, insertSig) <- getNode1 Nothing sig state
+    let update = sample >>= print
+    insertSig (return ()) update
 
 ---------------------------------------------------------------------------------------------------------
 -- Rate

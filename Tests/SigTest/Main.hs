@@ -6,7 +6,7 @@ main = runSignalWithFile fileName moduleName expr
     where
         fileName   = "./InteractiveTest.hs"
         moduleName = "InteractiveTest"
-        expr       = "finalCountdown"
+        expr       = "main"
 
 -- main = runSignal $ fzip3 (resample finalCountup) (resample finalCountdown) feedbackCounter
 -- main = runSignal white
