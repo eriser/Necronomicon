@@ -4,7 +4,7 @@ import Necronomicon.Interactive
 main :: IO ()
 main = runSignalWithFile fileName moduleName expr
     where
-        fileName   = "/home/casiosk1/code/Necronomicon/Tests/SigTest/InteractiveTest.hs"
+        fileName   = "./InteractiveTest.hs"
         moduleName = "InteractiveTest"
         expr       = "finalCountdown"
 
