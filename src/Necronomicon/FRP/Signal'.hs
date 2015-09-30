@@ -8,18 +8,18 @@ import Control.Monad.Fix
 import Control.Monad
 import Control.Applicative
 import System.Mem.StableName
--- import GHC.Base (Any)
 import Unsafe.Coerce
-import qualified Data.IntMap.Strict as IntMap
-import qualified Data.Map.Strict    as Map
 import System.Random
-import Data.Foldable (foldrM)
+import Data.Foldable
 import Data.Typeable
+
 import GHC.Prim
 import Control.Monad.ST (stToIO)
 import GHC.ST
 import GHC.Types (Int(..))
 
+import qualified Data.IntMap.Strict as IntMap
+import qualified Data.Map.Strict    as Map
 ---------------------------------------------------------------------------------------------------------
 -- Types
 ---------------------------------------------------------------------------------------------------------
@@ -67,6 +67,17 @@ instance Rate r => Applicative (Signal r) where
         let update = sampleF <*> sampleX
         insertSig update update
 
+    Pure _ *> ysig   = ysig
+    xsig   *> Pure y = Signal $ \state -> do
+        (sampleX, insertSig) <- getNode1 Nothing xsig state
+        let update = sampleX >> return y
+        insertSig (return y) update
+    xsig   *> ysig = Signal $ \state -> do
+        (sampleX, sampleY, insertSig) <- getNode2 Nothing xsig ysig state
+        let update = sampleX >> sampleY
+        insertSig sampleY update
+    (<*) = flip (*>)
+
 instance (Rate r, Num a) => Num (Signal r a) where
     (+)         = liftA2 (+)
     (*)         = liftA2 (*)
@@ -99,6 +110,10 @@ instance (Rate r, Floating a) => Floating (Signal r a) where
     atanh   = fmap atanh
     acosh   = fmap acosh
 
+instance (Rate r, Monoid m) => Monoid (Signal r m) where
+    mempty  = pure mempty
+    mappend = liftA2 mappend
+    mconcat = foldr mappend mempty
 
 ---------------------------------------------------------------------------------------------------------
 -- Combinators
@@ -222,6 +237,12 @@ sigPrint sig = Signal $ \state -> do
     (sample, insertSig) <- getNode1 Nothing sig state
     let update = sample >>= print
     insertSig (return ()) update
+
+sigTrace :: (Rate r, Show a) => Signal r a -> Signal r b -> Signal r b
+sigTrace printSig xsig = Signal $ \state -> do
+    (printSample, xsample, insertSig) <- getNode2 Nothing printSig xsig state
+    let update = printSample >>= print >> xsample
+    insertSig xsample update
 
 ---------------------------------------------------------------------------------------------------------
 -- Rate
@@ -587,6 +608,12 @@ runSignalFromState signal state = do
     atomically (writeTVar (runStatus state) Running)
     -- putStrLn $ "Running signal network, staring with uid: " ++ show uid
     return (sample, arch, fs)
+
+demoSignal :: (Rate r, Show a) => Signal r a -> IO ()
+demoSignal sig = do
+    state          <- startSignalRuntime
+    (sample, _, _) <- runSignalFromState sig state
+    forever $ sample >>= print >> threadDelay 16667
 
 updateWorker :: SignalState -> SignalPool -> TVar SignalPool -> Int -> String -> IO ()
 updateWorker state pool newPoolRef sleepTime workerName = do

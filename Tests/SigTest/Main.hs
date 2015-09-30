@@ -2,11 +2,7 @@
 import Necronomicon.Interactive
 
 main :: IO ()
-main = runSignalWithFile fileName moduleName expr
-    where
-        fileName   = "./InteractiveTest.hs"
-        moduleName = "InteractiveTest"
-        expr       = "main"
+main = runSignalWithFile "./NecroMain.hs" "NecroMain" "necroMain"
 
 -- main = runSignal $ fzip3 (resample finalCountup) (resample finalCountdown) feedbackCounter
 -- main = runSignal white

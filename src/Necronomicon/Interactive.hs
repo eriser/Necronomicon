@@ -4,11 +4,12 @@ module Necronomicon.Interactive where
 import Control.Concurrent (threadDelay)
 import GHC
 import GHC.Paths ( libdir )
-import DynFlags
--- import Unsafe.Coerce
+-- import DynFlags
 import Necronomicon.FRP.Signal'
 import System.Directory
 import Data.Dynamic
+import Exception
+import Control.Monad.Trans (liftIO)
 
 loadNecronomicon :: GhcMonad m => String -> String -> m ModSummary
 loadNecronomicon targetFile modName = do
@@ -30,19 +31,20 @@ loadNecronomicon targetFile modName = do
     mapM_ showModule g
     return modSum
 
---We are declaring the module as an import and then compiling the expression with that context
---This should likely be Signal Fr () and we should have functions such as sigTrace
 compileSignal :: String -> String -> String -> IO (Signal Fr ())
-compileSignal targetFile modName expr = defaultErrorHandler defaultFatalMessager defaultFlushOut $ runGhc (Just libdir) $ do
+-- compileSignal targetFile modName expr = defaultErrorHandler defaultFatalMessager defaultFlushOut $ runGhc (Just libdir) $ do
+compileSignal targetFile modName expr = runGhc (Just libdir) $ do
     _ <- loadNecronomicon targetFile modName
 #if __GLASGOW_HASKELL__ < 704
     setContext [] [(simpleImportDecl . mkModuleName $ modName) {ideclQualified = True}]
 #else
     setContext [IIDecl $ (simpleImportDecl . mkModuleName $ modName) {ideclQualified = True}]
 #endif
-    -- maybeSig <- compileExpr (modName ++ "." ++ expr)
-    dynSig <- dynCompileExpr (modName ++ "." ++ expr)
-    return $ fromDyn dynSig (pure ())
+    let success = do
+            dynSig <- dynCompileExpr (modName ++ "." ++ expr)
+            return $ fromDyn dynSig (pure ())
+        failure e = liftIO (putStrLn $ displayException (e :: ErrorCall)) >> return (pure ())
+    gcatch success failure
 
 --TODO: Need exception handling for when things go awry
 runSignalWithFile :: FilePath -> String -> String -> IO ()

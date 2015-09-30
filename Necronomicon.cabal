@@ -172,6 +172,17 @@ executable NecroNet
         base             == 4.*,
         Necronomicon
 
+executable necro
+    main-is:          Main.hs
+    default-language: Haskell2010
+    ghc-options:      -threaded -O3 -Wall -Werror
+    cc-options:       -std=c99 -Werror
+    hs-source-dirs:   Necro
+    default-extensions:
+    build-depends:
+        base             == 4.*,
+        Necronomicon
+
 executable SigTest
     main-is:          Main.hs
     default-language: Haskell2010
@@ -181,8 +192,7 @@ executable SigTest
     default-extensions: QuasiQuotes TemplateHaskell OverloadedLists
     build-depends:
         base             == 4.*,
-        Necronomicon,
-        vector
+        Necronomicon
 
 executable StressTest
     main-is:          Main.hs
