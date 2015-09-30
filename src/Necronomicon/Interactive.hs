@@ -50,7 +50,7 @@ runSignalWithFile filePath modName expr = startSignalRuntime >>= maybeRunSig (re
             time     <- getModificationTime filePath
             maybeSig <- compileSignal filePath modName expr
             case maybeSig of
-                Nothing  -> modificationTimeDaemon time archiver finalizer state
+                Nothing  -> putStrLn "necro error: necroMain type did not match expeced type: Signal Fr ()" >> modificationTimeDaemon time archiver finalizer state
                 Just sig -> do
                     hotSwapState archiver finalizer state
                     (_, archiver', finalizer') <- runSignalFromState sig state
