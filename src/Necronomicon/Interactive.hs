@@ -4,12 +4,10 @@ module Necronomicon.Interactive where
 import Control.Concurrent (threadDelay)
 import GHC
 import GHC.Paths ( libdir )
--- import DynFlags
 import Necronomicon.FRP.Signal'
 import System.Directory
 import Data.Dynamic
 import Exception
-import Control.Monad.Trans (liftIO)
 
 loadNecronomicon :: GhcMonad m => String -> String -> m ModSummary
 loadNecronomicon targetFile modName = do
@@ -31,39 +29,36 @@ loadNecronomicon targetFile modName = do
     mapM_ showModule g
     return modSum
 
-compileSignal :: String -> String -> String -> IO (Signal Fr ())
--- compileSignal targetFile modName expr = defaultErrorHandler defaultFatalMessager defaultFlushOut $ runGhc (Just libdir) $ do
-compileSignal targetFile modName expr = runGhc (Just libdir) $ do
+compileSignal :: String -> String -> String -> IO (Maybe (Signal Fr ()))
+compileSignal targetFile modName expr = flip catch failure $ runGhc (Just libdir) $ do
     _ <- loadNecronomicon targetFile modName
 #if __GLASGOW_HASKELL__ < 704
     setContext [] [(simpleImportDecl . mkModuleName $ modName) {ideclQualified = True}]
 #else
     setContext [IIDecl $ (simpleImportDecl . mkModuleName $ modName) {ideclQualified = True}]
 #endif
-    let success = do
-            dynSig <- dynCompileExpr (modName ++ "." ++ expr)
-            return $ fromDyn dynSig (pure ())
-        failure e = liftIO (putStrLn $ displayException (e :: ErrorCall)) >> return (pure ())
-    gcatch success failure
-
---TODO: Need exception handling for when things go awry
-runSignalWithFile :: FilePath -> String -> String -> IO ()
-runSignalWithFile filePath modName expr = do
-    sig                           <- compileSignal filePath modName expr
-    state                         <- startSignalRuntime
-    (sample, archiver, finalizer) <- runSignalFromState sig state
-    t <- getModificationTime filePath
-    modificationTimeDaemon t sample archiver finalizer state
+    dynSig <- dynCompileExpr (modName ++ "." ++ expr)
+    return $ fromDynamic dynSig
     where
-        modificationTimeDaemon prevTime sample archiver finalizer state = do
-            -- sample >>= print
-            time <- getModificationTime filePath
-            if (time <= prevTime)
-                then threadDelay 200000 >> modificationTimeDaemon time sample archiver finalizer state
-                else do
-                    hotSwapState archiver finalizer state
-                    sig                              <- compileSignal filePath modName expr
-                    (sample', archiver', finalizer') <- runSignalFromState sig state
-                    threadDelay 200000
-                    modificationTimeDaemon time sample' archiver' finalizer' state
+        failure :: SomeException -> IO (Maybe (Signal Fr ()))
+        failure _ = return Nothing
 
+runSignalWithFile :: FilePath -> String -> String -> IO ()
+runSignalWithFile filePath modName expr = startSignalRuntime >>= maybeRunSig (return ()) (return ())
+    where
+        maybeRunSig archiver finalizer state = do
+            time     <- getModificationTime filePath
+            maybeSig <- compileSignal filePath modName expr
+            case maybeSig of
+                Nothing  -> modificationTimeDaemon time archiver finalizer state
+                Just sig -> do
+                    hotSwapState archiver finalizer state
+                    (_, archiver', finalizer') <- runSignalFromState sig state
+                    modificationTimeDaemon time archiver' finalizer' state
+
+        modificationTimeDaemon prevTime archiver finalizer state = do
+            threadDelay 200000
+            time <- getModificationTime filePath
+            if time <= prevTime
+                then modificationTimeDaemon time archiver finalizer state
+                else maybeRunSig archiver finalizer state

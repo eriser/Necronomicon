@@ -9,8 +9,8 @@ necroMain = sigPrint finalCountdown
 -- finalCountup = foldp (+) 0 1
 
 finalCountdown :: Signal Fr Double
-finalCountdown = foldp (flip (+)) 0 2 + feedbackCounter
+finalCountdown = foldp (flip (-)) 0 2 + feedbackCounter
 -- finalCountdown = foldp (+) 0 1
 
 feedbackCounter :: Signal Fr Double
-feedbackCounter = 1 + sampleDelay 0 feedbackCounter
+feedbackCounter = 3 + sampleDelay 0 feedbackCounter
