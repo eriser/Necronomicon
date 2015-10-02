@@ -115,24 +115,37 @@ instance (Rate r, Monoid m) => Monoid (Signal r m) where
     mappend = liftA2 mappend
     mconcat = foldr mappend mempty
 
-data ControlSignal a = ControlSignal (SignalState -> IO (SignalValue a))
+data Signal'       a = Signal'     (SignalState -> IO (SignalValue a))
 data AudioSignal     = AudioSignal (SignalState -> IO (SignalValue UGen))
+data VarSignal     a = VarSignal   (SignalState -> IO (SignalValue a))
 
-class Signal' s a where
+class SignalType s a where
     waitTime :: s -> Int
     unsignal :: s -> (SignalState -> IO (SignalValue a))
     gpure    :: s -> Maybe a
+    ar       :: Real s => s -> AudioSignal
+    kr       :: s -> Signal' a
 
-instance Signal' (ControlSignal a) a where
+instance SignalType (Signal' a) a where
     waitTime = const 16667
-    unsignal (ControlSignal sig) = sig
+    unsignal (Signal' sig) = sig
     gpure = undefined
+    ar = undefined
+    kr = undefined
 
-instance Signal' AudioSignal UGen where
+instance SignalType AudioSignal UGen where
     waitTime = const 23220
     unsignal (AudioSignal sig) = sig
     gpure = undefined
+    ar    = undefined
+    kr    = undefined
 
+instance SignalType (VarSignal a) a where
+    waitTime _ = undefined --This is where the interesting parts would happen
+    unsignal (VarSignal sig) = sig
+    gpure = undefined
+    ar = undefined
+    kr = undefined
 
 ---------------------------------------------------------------------------------------------------------
 -- Combinators
