@@ -1,15 +1,15 @@
-{-# LANGUAGE MagicHash, UnboxedTuples, DeriveDataTypeable, ScopedTypeVariables#-}
+{-# LANGUAGE MagicHash, UnboxedTuples, DeriveDataTypeable, FlexibleContexts #-}
 module Necronomicon.FRP.Signal' where
 
 import Control.Concurrent
 import Control.Concurrent.STM
 import Data.IORef
-import Control.Monad.Fix
+-- import Control.Monad.Fix
 import Control.Monad
 import Control.Applicative
 import System.Mem.StableName
 import Unsafe.Coerce
-import System.Random
+-- import System.Random
 import Data.Foldable
 import Data.Typeable
 
@@ -40,112 +40,139 @@ data SignalState   = SignalState
                    , archive    :: IORef (Map.Map NodePath Any)
                    }
 
-data Signal       a = PureSignal      a    | Signal      (SignalState -> IO (SignalValue a))
-data AudioSignal    = PureAudioSignal UGen | AudioSignal (SignalState -> IO (SignalValue UGen))
-data VarSignal    a = PureVarSignal   a    | VarSignal   (SignalState -> IO (SignalValue a))
+data Rate         = Ar | Kr | Vr
+data SignalData a = SignalData (SignalState -> IO (SignalValue a))
+                  | Pure a
+                  deriving (Typeable)
 
--- data Signal r a = Signal (SignalState -> IO (SignalValue a))
---                 | Pure a
---                 deriving (Typeable)
+newtype Signal    a = Signal      (SignalData a) deriving (Typeable)
+newtype AudioSignal = AudioSignal (SignalData UGen) deriving (Typeable)
+newtype VarSignal a = VarSignal   (SignalData a) deriving (Typeable)
 
 ---------------------------------------------------------------------------------------------------------
 -- Instances
 ---------------------------------------------------------------------------------------------------------
-class SignalType s a where
-    waitTime     :: s -> Int
-    -- deconstruct  :: s -> Either a (SignalState -> IO (SignalValue a))
-    ar           :: Real s => s -> AudioSignal
-    kr           :: s -> Signal a
 
-instance SignalType (Signal a) a where
+class SignalType s where
+    type SignalComponent  s :: *
+    type SignalConversion s :: *
+    unsignal :: s -> SignalData (SignalComponent s)
+    waitTime :: s -> Int
+    ar       :: Real s => s -> AudioSignal
+    kr       :: s -> Signal (SignalConversion s)
+    rate     :: s -> Rate
+
+instance SignalType (Signal a) where
+    type SignalComponent  (Signal a) = a
+    type SignalConversion (Signal a) = a
+    unsignal (Signal sig) = sig
     waitTime = const 16667
-    
-    -- deconstruct (PureSignal x) = Left x
-    -- deconstruct (Signal sig)   = Right sig
-    
-    ar = undefined
-    kr = undefined
+    ar       = undefined
+    kr       = undefined
+    rate     = const Kr
 
-instance (Fractional f) => SignalType AudioSignal f where
+instance SignalType AudioSignal where
+    type SignalComponent  AudioSignal = UGen
+    type SignalConversion AudioSignal = Double
+    unsignal (AudioSignal sig) = sig
     waitTime = const 23220
-    -- deconstruct (PureAudioSignal x) = Left x
-    -- deconstruct (AudioSignal sig)   = Right sig
-    ar    = undefined
-    kr    = undefined
+    ar       = undefined
+    kr       = undefined
+    rate     = const Ar
 
-instance SignalType (VarSignal a) a where
-    waitTime _ = undefined --This is where the interesting parts would happen
-    -- deconstruct (PureVarSignal x) = Left x
-    -- deconstruct (VarSignal sig)   = Right sig
-    ar = undefined
-    kr = undefined
+instance SignalType (VarSignal a) where
+    type SignalComponent  (VarSignal a) = a
+    type SignalConversion (VarSignal a) = a
+    unsignal (VarSignal sig) = sig
+    waitTime = const undefined --This is where the interesting parts would happen
+    ar       = undefined
+    kr       = undefined
+    rate     = const Vr
+
+--SignalDSP
+-- class Num a => SignalDSP a where
+--     sinOsc :: a -> a
+
+-- instance Num a => SignalDSP (SignalData a) where
+-- instance Num a => SignalDSP (Signal a) where
+-- instance SignalDSP AudioSignal where
+
+instance Functor Signal where
+    fmap f sx = case unsignal sx of
+        Pure x -> Signal $ Pure $ f x
+        _      -> Signal $ SignalData $ \state -> do
+            (sample, insertSig) <- getNode1 Nothing sx state
+            let update = f <$> sample
+            insertSig update update
+
+instance Functor VarSignal where
+    fmap f sx = case unsignal sx of
+        Pure x -> VarSignal $ Pure $ f x
+        _      -> VarSignal $ SignalData $ \state -> do
+            (sample, insertSig) <- getNode1 Nothing sx state
+            let update = f <$> sample
+            insertSig update update
 
 
--- instance Rate r => Functor (Signal r) where
---     fmap f (Pure x) = Pure $ f x
---     fmap f sx       = Signal $ \state -> do
---         (sample, insertSig) <- getNode1 Nothing sx state
---         let update = f <$> sample
---         insertSig update update
+instance Applicative Signal where
+    pure x = Signal $ Pure x
 
--- instance Rate r => Applicative (Signal r) where
---     pure x = Pure x
-
-    -- Pure f        <*> Pure x        = Pure $ f x
-    -- Pure f        <*> x@(Signal _)  = fmap f x
-    -- f@(Signal _)  <*> Pure x        = fmap ($ x) f
-    -- sf            <*> sx            = Signal $ \state -> do
-    --     (sampleF, sampleX, insertSig) <- getNode2 Nothing sf sx state
-    --     let update = sampleF <*> sampleX
-    --     insertSig update update
+    sf <*> sx = case (unsignal sf, unsignal sx) of
+        (Pure f, Pure x) -> Signal $ Pure $ f x
+        (Pure f, _     ) -> fmap f sx
+        (_     , Pure x) -> fmap ($ x) sf
+        _                -> Signal $ SignalData $ \state -> do
+            (sampleF, sampleX, insertSig) <- getNode2 Nothing sf sx state
+            let update = sampleF <*> sampleX
+            insertSig update update
 
     -- Pure _ *> ysig   = ysig
-    -- xsig   *> Pure y = Signal $ \state -> do
+    -- xsig   *> Pure y = SignalData $ \state -> do
     --     (sampleX, insertSig) <- getNode1 Nothing xsig state
     --     let update = sampleX >> return y
     --     insertSig (return y) update
-    -- xsig   *> ysig = Signal $ \state -> do
+    -- xsig   *> ysig = SignalData $ \state -> do
     --     (sampleX, sampleY, insertSig) <- getNode2 Nothing xsig ysig state
     --     let update = sampleX >> sampleY
     --     insertSig sampleY update
     -- (<*) = flip (*>)
 
--- instance (Rate r, Num a) => Num (Signal r a) where
---     (+)         = liftA2 (+)
---     (*)         = liftA2 (*)
---     (-)         = liftA2 (-)
---     abs         = fmap abs
---     signum      = fmap signum
---     fromInteger = pure . fromInteger
+instance (Num a) => Num (Signal a) where
+    (+)         = liftA2 (+)
+    (*)         = liftA2 (*)
+    (-)         = liftA2 (-)
+    abs         = fmap abs
+    signum      = fmap signum
+    fromInteger = pure . fromInteger
 
--- instance (Rate r, Fractional a) => Fractional (Signal r a) where
---     (/)          = liftA2 (/)
---     fromRational = pure . fromRational
+instance (Fractional a) => Fractional (Signal a) where
+    (/)          = liftA2 (/)
+    fromRational = pure . fromRational
 
--- instance (Rate r, Floating a) => Floating (Signal r a) where
---     pi      = pure pi
---     (**)    = liftA2 (**)
---     exp     = fmap exp
---     log     = fmap log
---     sin     = fmap sin
---     cos     = fmap cos
---     asin    = fmap asin
---     acos    = fmap acos
---     atan    = fmap atan
---     logBase = liftA2 logBase
---     sqrt    = fmap sqrt
---     tan     = fmap tan
---     tanh    = fmap tanh
---     sinh    = fmap sinh
---     cosh    = fmap cosh
---     asinh   = fmap asinh
---     atanh   = fmap atanh
---     acosh   = fmap acosh
+instance (Floating a) => Floating (Signal a) where
+    pi      = pure pi
+    (**)    = liftA2 (**)
+    exp     = fmap exp
+    log     = fmap log
+    sin     = fmap sin
+    cos     = fmap cos
+    asin    = fmap asin
+    acos    = fmap acos
+    atan    = fmap atan
+    logBase = liftA2 logBase
+    sqrt    = fmap sqrt
+    tan     = fmap tan
+    tanh    = fmap tanh
+    sinh    = fmap sinh
+    cosh    = fmap cosh
+    asinh   = fmap asinh
+    atanh   = fmap atanh
+    acosh   = fmap acosh
 
--- instance (Rate r, Monoid m) => Monoid (Signal r m) where
---     mempty  = pure mempty
---     mappend = liftA2 mappend
---     mconcat = foldr mappend mempty
+instance (Monoid m) => Monoid (Signal m) where
+    mempty  = pure mempty
+    mappend = liftA2 mappend
+    mconcat = foldr mappend mempty
 
 ---------------------------------------------------------------------------------------------------------
 -- Combinators
@@ -258,37 +285,22 @@ instance SignalType (VarSignal a) a where
 --     let update            = sampleA >>= \amp -> randomRIO (-amp, amp)
 --     insertSig update update
 
--- Simple way to implement switcher?,
 
--- sigPrint :: (Rate r, Show a) => Signal r a -> Signal r ()
--- sigPrint sig = Signal $ \state -> do
---     (sample, insertSig) <- getNode1 Nothing sig state
---     let update = sample >>= print
---     insertSig (return ()) update
+sigPrint :: (SignalType s, Show (SignalComponent s)) => s -> Signal ()
+sigPrint sig = Signal $ SignalData $ \state -> do
+    (sample, insertSig) <- getNode1 Nothing sig state
+    let update = sample >>= print
+    insertSig (return ()) update
 
 ---------------------------------------------------------------------------------------------------------
 -- Rate
 ---------------------------------------------------------------------------------------------------------
 
--- data Ar
--- data Fr
--- data Kr
-
--- class Rate r where
---     ratePool :: Signal r a -> SignalState -> TVar SignalPool
-
--- instance Rate Ar where
---     ratePool = const newArPool
-
--- instance Rate Kr where
---     ratePool = const newKrPool
-
--- instance Rate Fr where
---     ratePool = const newFrPool
-
--- resample :: (Rate r1, Rate r2) => Signal r1 a -> Signal r2 a
--- resample (Pure x) = Pure x
--- resample s        = Signal $ \state -> getSignalNode s $ addBranchNode 0 state
+ratePool :: SignalType s => s -> SignalState -> TVar SignalPool
+ratePool signal state = case rate signal of
+    Ar -> newArPool state
+    Kr -> newKrPool state
+    _  -> newFrPool state
 
 ---------------------------------------------------------------------------------------------------------
 -- Audio
@@ -460,30 +472,30 @@ data NodePath = TypeRepNode  TypeRep NodePath
 addBranchNode :: Int -> SignalState -> SignalState
 addBranchNode num state = state{nodePath = BranchNode num $ nodePath state}
 
--- --If not hotswapping then initialize with initx, otherwise create hotswap function for last state
--- initOrHotSwap :: Maybe NodePath -> a -> SignalState -> IO (IORef a)
--- initOrHotSwap Nothing initx  _ = newIORef initx
--- initOrHotSwap (Just nodePath')  initx state = atomically (readTVar (runStatus state)) >>= \status -> case status of
---     HotSwapping -> readIORef (archive state) >>= \arch -> case Map.lookup nodePath' arch of
---         Nothing -> newIORef initx
---         Just ax -> newIORef (unsafeCoerce ax)
---     _           -> newIORef initx
+--If not hotswapping then initialize with initx, otherwise create hotswap function for last state
+initOrHotSwap :: Maybe NodePath -> a -> SignalState -> IO (IORef a)
+initOrHotSwap Nothing initx  _ = newIORef initx
+initOrHotSwap (Just nodePath')  initx state = atomically (readTVar (runStatus state)) >>= \status -> case status of
+    HotSwapping -> readIORef (archive state) >>= \arch -> case Map.lookup nodePath' arch of
+        Nothing -> newIORef initx
+        Just ax -> newIORef (unsafeCoerce ax)
+    _           -> newIORef initx
 
--- --Hotswapping needs a checksum to insure that the shape of the signal graph is the same
--- --Otherwise we'll simply blow state away and start over
--- --Use the list of typeale nodes leading up to this node as the key into archive map
--- hotSwapState :: IO () -> IO () -> SignalState -> IO ()
--- hotSwapState archiver finalizer state = do
---     putStrLn "HotSwapping"
---     archiver
---     finalizer
---     atomically $ do
---         writeTVar (runStatus state) HotSwapping
---         writeTVar (newArPool state) []
---         writeTVar (newKrPool state) []
---         writeTVar (newFrPool state) []
---         writeTVar (sigUIDs   state) [0..]
---         writeTVar (nodeTable state) IntMap.empty
+--Hotswapping needs a checksum to insure that the shape of the signal graph is the same
+--Otherwise we'll simply blow state away and start over
+--Use the list of typeale nodes leading up to this node as the key into archive map
+hotSwapState :: IO () -> IO () -> SignalState -> IO ()
+hotSwapState archiver finalizer state = do
+    putStrLn "HotSwapping"
+    archiver
+    finalizer
+    atomically $ do
+        writeTVar (runStatus state) HotSwapping
+        writeTVar (newArPool state) []
+        writeTVar (newKrPool state) []
+        writeTVar (newFrPool state) []
+        writeTVar (sigUIDs   state) [0..]
+        writeTVar (nodeTable state) IntMap.empty
 
 ---------------------------------------------------------------------------------------------------------
 -- Internals
@@ -507,145 +519,145 @@ nextUID state = atomically $ do
     writeTVar (sigUIDs state) uids
     return uid
 
--- getSignalNode :: Signal r a ->  SignalState -> IO (SignalValue a)
--- getSignalNode (Pure x)            _     = return (return $ return x, -1, return (), return ())
--- getSignalNode signal@(Signal sig) state = do
---     stableName <- signal `seq` makeStableName signal
---     let hash = hashStableName stableName
---     refs <- atomically $ readTVar $ nodeTable state
---     case IntMap.lookup hash refs of
---         Just (stableName', sv) -> if not (eqStableName stableName stableName') then putStrLn "Stables names did not match during node table lookup" >> sig state else do
---             let signalValue = unsafeCoerce sv :: SignalValue a
---             return signalValue
---         Nothing -> do
---             signalValue <- sig state
---             atomically $ modifyTVar' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce signalValue))
---             return signalValue
+getSignalNode :: SignalType s => s ->  SignalState -> IO (SignalValue (SignalComponent s))
+getSignalNode signal state = case unsignal signal of
+    Pure x         ->  return (return $ return x, -1, return (), return ())
+    SignalData sig -> do
+        stableName <- signal `seq` makeStableName signal
+        let hash = hashStableName stableName
+        refs <- atomically $ readTVar $ nodeTable state
+        case IntMap.lookup hash refs of
+            Just (stableName', sv) -> if not (eqStableName stableName stableName') then putStrLn "Stables names did not match during node table lookup" >> sig state else do
+                let signalValue = unsafeCoerce sv :: SignalValue a
+                return signalValue
+            Nothing -> do
+                signalValue <- sig state
+                atomically $ modifyTVar' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce signalValue))
+                return signalValue
 
+insertSignal :: Maybe NodePath -> a -> IO a -> TVar SignalPool -> IO () -> IO () -> SignalState -> IO (SignalValue a)
+insertSignal  maybeNodePath initx updatingFunction pool finalizers archivers state = fmap snd $ insertSignal' maybeNodePath initx updatingFunction pool finalizers archivers state
 
--- insertSignal :: Maybe NodePath -> a -> IO a -> TVar SignalPool -> IO () -> IO () -> SignalState -> IO (SignalValue a)
--- insertSignal  maybeNodePath initx updatingFunction pool finalizers archivers state = fmap snd $ insertSignal' maybeNodePath initx updatingFunction pool finalizers archivers state
+insertSignal' :: Maybe NodePath -> a -> IO a -> TVar SignalPool -> IO () -> IO () -> SignalState -> IO (IO a, SignalValue a)
+insertSignal' maybeNodePath initx updatingFunction pool finalizers archivers state = do
+    uid             <- nextUID state
+    ref             <- initOrHotSwap maybeNodePath initx state
+    updateActionRef <- newIORef $ Just (0, updatingFunction >>= \x -> x `seq` writeIORef ref x)
+    let initializer  = do
+            atomicModifyIORef' updateActionRef $ \maybeUA -> case maybeUA of
+                Just (refCount, ua) -> (Just (refCount + 1, ua), ())
+                _                   -> (Just (1, updatingFunction >>= \x -> x `seq` writeIORef ref x), ())
+            return $ readIORef ref
+        finalizer    = atomicModifyIORef' updateActionRef $ \maybeUA -> case maybeUA of
+            Just (refCount, ua) -> let refCount' = refCount - 1 in if refCount' <= 0 then (Nothing, ()) else (Just (refCount', ua), ())
+            _                   -> (Nothing, ())
+        archiver = case maybeNodePath of
+            Nothing -> return ()
+            Just np -> readIORef ref >>= \archivedX -> modifyIORef (archive state) (Map.insert np (unsafeCoerce archivedX))
+    atomically $ modifyTVar' pool (updateActionRef :)
+    return (readIORef ref, (initializer, uid, finalizer >> finalizers, archivers >> archiver))
 
--- insertSignal' :: Maybe NodePath -> a -> IO a -> TVar SignalPool -> IO () -> IO () -> SignalState -> IO (IO a, SignalValue a)
--- insertSignal' maybeNodePath initx updatingFunction pool finalizers archivers state = do
---     uid             <- nextUID state
---     ref             <- initOrHotSwap maybeNodePath initx state
---     updateActionRef <- newIORef $ Just (0, updatingFunction >>= \x -> x `seq` writeIORef ref x)
---     let initializer  = do
---             atomicModifyIORef' updateActionRef $ \maybeUA -> case maybeUA of
---                 Just (refCount, ua) -> (Just (refCount + 1, ua), ())
---                 _                   -> (Just (1, updatingFunction >>= \x -> x `seq` writeIORef ref x), ())
---             return $ readIORef ref
---         finalizer    = atomicModifyIORef' updateActionRef $ \maybeUA -> case maybeUA of
---             Just (refCount, ua) -> let refCount' = refCount - 1 in if refCount' <= 0 then (Nothing, ()) else (Just (refCount', ua), ())
---             _                   -> (Nothing, ())
---         archiver = case maybeNodePath of
---             Nothing -> return ()
---             Just np -> readIORef ref >>= \archivedX -> modifyIORef (archive state) (Map.insert np (unsafeCoerce archivedX))
---     atomically $ modifyTVar' pool (updateActionRef :)
---     return (readIORef ref, (initializer, uid, finalizer >> finalizers, archivers >> archiver))
+getTypeRep :: Typeable a => a -> TypeRep
+getTypeRep = typeRep . typeHelper
+    where
+        typeHelper :: a -> Proxy a
+        typeHelper _ = Proxy
 
--- getTypeRep :: Typeable a => a -> TypeRep
--- getTypeRep = typeRep . typeHelper
---     where
---         typeHelper :: a -> Proxy a
---         typeHelper _ = Proxy
+getSignalTypeRep :: (SignalType s, Typeable (SignalComponent s)) => s -> TypeRep
+getSignalTypeRep = typeRep . signalTypeHelper
+    where
+        signalTypeHelper :: SignalType s => s -> Proxy (SignalComponent s)
+        signalTypeHelper _ = Proxy
 
--- getSignalTypeRep :: Typeable a => Signal r a -> TypeRep
--- getSignalTypeRep = typeRep . signalTypeHelper
---     where
---         signalTypeHelper :: Signal r a -> Proxy a
---         signalTypeHelper _ = Proxy
+getNode1 :: SignalType s => Maybe NodePath -> s -> SignalState -> IO (IO (SignalComponent s), IO x -> IO x -> IO (SignalValue x))
+getNode1 maybeArchivePath signalA state = do
+    (initA, _, finalizersA, archiveA) <- getSignalNode signalA state{nodePath = BranchNode 0 startingPath}
+    sampleA                           <- initA
+    return (sampleA, \initValueM updateFunction -> initValueM >>= \initValue -> insertSignal maybeArchivePath initValue updateFunction (ratePool signalA state) finalizersA archiveA state)
+    where
+        startingPath = case maybeArchivePath of
+            Nothing          -> nodePath state
+            Just archivePath -> archivePath
 
--- getNode1 :: Rate r => Maybe NodePath -> Signal r a -> SignalState -> IO (IO a, IO x -> IO x -> IO (SignalValue x))
--- getNode1 maybeArchivePath signalA state = do
---     (initA, _, finalizersA, archiveA) <- getSignalNode signalA state{nodePath = BranchNode 0 startingPath}
---     sampleA                           <- initA
---     return (sampleA, \initValueM updateFunction -> initValueM >>= \initValue -> insertSignal maybeArchivePath initValue updateFunction (ratePool signalA state) finalizersA archiveA state)
---     where
---         startingPath = case maybeArchivePath of
---             Nothing          -> nodePath state
---             Just archivePath -> archivePath
+getNode2 :: (SignalType a, SignalType b) => Maybe NodePath -> a -> b -> SignalState -> IO (IO (SignalComponent a), IO (SignalComponent b), IO x -> IO x -> IO (SignalValue x))
+getNode2 maybeArchivePath signalA signalB state = do
+    (initA, _, finalizersA, archiveA) <- getSignalNode signalA state{nodePath = BranchNode 0 startingPath}
+    (initB, _, finalizersB, archiveB) <- getSignalNode signalB state{nodePath = BranchNode 1 startingPath}
+    sampleA                           <- initA
+    sampleB                           <- initB
+    let finalizer                      = finalizersA >> finalizersB
+        archiver                       = archiveA >> archiveB
+    return (sampleA, sampleB, \initValueM updateFunction -> initValueM >>= \initValue -> insertSignal maybeArchivePath initValue updateFunction (ratePool signalA state) finalizer archiver state)
+    where
+        startingPath = case maybeArchivePath of
+            Nothing          -> nodePath state
+            Just archivePath -> archivePath
 
--- getNode2 :: Rate r => Maybe NodePath -> Signal r a -> Signal r b -> SignalState -> IO (IO a, IO b, IO x -> IO x -> IO (SignalValue x))
--- getNode2 maybeArchivePath signalA signalB state = do
---     (initA, _, finalizersA, archiveA) <- getSignalNode signalA state{nodePath = BranchNode 0 startingPath}
---     (initB, _, finalizersB, archiveB) <- getSignalNode signalB state{nodePath = BranchNode 1 startingPath}
---     sampleA                           <- initA
---     sampleB                           <- initB
---     let finalizer                      = finalizersA >> finalizersB
---         archiver                       = archiveA >> archiveB
---     return (sampleA, sampleB, \initValueM updateFunction -> initValueM >>= \initValue -> insertSignal maybeArchivePath initValue updateFunction (ratePool signalA state) finalizer archiver state)
---     where
---         startingPath = case maybeArchivePath of
---             Nothing          -> nodePath state
---             Just archivePath -> archivePath
-
--- getNode3 :: Rate r => Maybe NodePath -> Signal r a -> Signal r b -> Signal r c -> SignalState -> IO (IO a, IO b, IO c, IO x -> IO x -> IO (SignalValue x))
--- getNode3 maybeArchivePath signalA signalB signalC state = do
---     (initA, _, finalizersA, archiveA) <- getSignalNode signalA state{nodePath = BranchNode 0 startingPath}
---     (initB, _, finalizersB, archiveB) <- getSignalNode signalB state{nodePath = BranchNode 1 startingPath}
---     (initC, _, finalizersC, archiveC) <- getSignalNode signalC state{nodePath = BranchNode 2 startingPath}
---     sampleA                           <- initA
---     sampleB                           <- initB
---     sampleC                           <- initC
---     let finalizer                      = finalizersA >> finalizersB >> finalizersC
---         archiver                       = archiveA >> archiveB >> archiveC
---     return (sampleA, sampleB, sampleC, \initValueM updateFunction -> initValueM >>= \initValue -> insertSignal maybeArchivePath initValue updateFunction (ratePool signalA state) finalizer archiver state)
---     where
---         startingPath = case maybeArchivePath of
---             Nothing          -> nodePath state
---             Just archivePath -> archivePath
+getNode3 :: (SignalType a, SignalType b, SignalType c) => Maybe NodePath -> a -> b -> c -> SignalState -> IO (IO (SignalComponent a), IO (SignalComponent b), IO (SignalComponent c), IO x -> IO x -> IO (SignalValue x))
+getNode3 maybeArchivePath signalA signalB signalC state = do
+    (initA, _, finalizersA, archiveA) <- getSignalNode signalA state{nodePath = BranchNode 0 startingPath}
+    (initB, _, finalizersB, archiveB) <- getSignalNode signalB state{nodePath = BranchNode 1 startingPath}
+    (initC, _, finalizersC, archiveC) <- getSignalNode signalC state{nodePath = BranchNode 2 startingPath}
+    sampleA                           <- initA
+    sampleB                           <- initB
+    sampleC                           <- initC
+    let finalizer                      = finalizersA >> finalizersB >> finalizersC
+        archiver                       = archiveA >> archiveB >> archiveC
+    return (sampleA, sampleB, sampleC, \initValueM updateFunction -> initValueM >>= \initValue -> insertSignal maybeArchivePath initValue updateFunction (ratePool signalA state) finalizer archiver state)
+    where
+        startingPath = case maybeArchivePath of
+            Nothing          -> nodePath state
+            Just archivePath -> archivePath
 
 ---------------------------------------------------------------------------------------------------------
 -- Runtime
 ---------------------------------------------------------------------------------------------------------
 
--- updateSignalNode :: IORef (Maybe (Int, IO ())) -> SignalPool -> IO SignalPool
--- updateSignalNode updateRef pool = readIORef updateRef >>= go
---     where
---         go (Just (_, updateAction)) = updateAction >> return (updateRef : pool)
---         go _                        = return pool
+updateSignalNode :: IORef (Maybe (Int, IO ())) -> SignalPool -> IO SignalPool
+updateSignalNode updateRef pool = readIORef updateRef >>= go
+    where
+        go (Just (_, updateAction)) = updateAction >> return (updateRef : pool)
+        go _                        = return pool
 
--- toRefCount :: IORef (Maybe (Int, IO ())) -> IO Int
--- toRefCount updateRef = readIORef updateRef >>= \maybeUA -> case maybeUA of
---     Nothing     -> return (-666)
---     Just (c, _) -> return c
+toRefCount :: IORef (Maybe (Int, IO ())) -> IO Int
+toRefCount updateRef = readIORef updateRef >>= \maybeUA -> case maybeUA of
+    Nothing     -> return (-666)
+    Just (c, _) -> return c
 
--- --Need start and stop runtime functions
--- startSignalRuntime :: IO SignalState
--- startSignalRuntime = do
---     state <- mkSignalState
---     _     <- forkIO $ updateWorker state [] (newKrPool state) 23220 "Control Rate"
---     _     <- forkIO $ updateWorker state [] (newArPool state) 23220 "Audio Rate"
---     _     <- forkIO $ updateWorker state [] (newFrPool state) 16667 "Frame Rate"
---     return state
+--Need start and stop runtime functions
+startSignalRuntime :: IO SignalState
+startSignalRuntime = do
+    state <- mkSignalState
+    _     <- forkIO $ updateWorker state [] (newKrPool state) 23220 "Control Rate"
+    _     <- forkIO $ updateWorker state [] (newArPool state) 23220 "Audio Rate"
+    _     <- forkIO $ updateWorker state [] (newFrPool state) 16667 "Frame Rate"
+    return state
 
--- type SignalActions a = (IO a, IO (), IO ())
--- runSignalFromState :: (Rate r, Show a) => Signal r a -> SignalState -> IO (SignalActions a)
--- runSignalFromState signal state = do
---     (ini, _, fs, arch) <- getSignalNode signal state{nodePath = RootNode}
---     sample             <- ini
---     writeIORef (archive state) Map.empty
---     atomically (writeTVar (runStatus state) Running)
---     -- putStrLn $ "Running signal network, staring with uid: " ++ show uid
---     return (sample, arch, fs)
+type SignalActions a = (IO a, IO (), IO ())
+runSignalFromState :: (SignalType s, Show (SignalComponent s)) => s -> SignalState -> IO (SignalActions (SignalComponent s))
+runSignalFromState signal state = do
+    (ini, _, fs, arch) <- getSignalNode signal state{nodePath = RootNode}
+    sample             <- ini
+    writeIORef (archive state) Map.empty
+    atomically (writeTVar (runStatus state) Running)
+    -- putStrLn $ "Running signal network, staring with uid: " ++ show uid
+    return (sample, arch, fs)
 
--- demoSignal :: (Rate r, Show a) => Signal r a -> IO ()
--- demoSignal sig = do
---     state          <- startSignalRuntime
---     (sample, _, _) <- runSignalFromState sig state
---     forever $ sample >>= print >> threadDelay 16667
+demoSignal :: (SignalType s, Show (SignalComponent s)) => s -> IO ()
+demoSignal sig = do
+    state          <- startSignalRuntime
+    (sample, _, _) <- runSignalFromState sig state
+    forever $ sample >>= print >> threadDelay 16667
 
--- updateWorker :: SignalState -> SignalPool -> TVar SignalPool -> Int -> String -> IO ()
--- updateWorker state pool newPoolRef sleepTime workerName = do
---     -- putStrLn $ workerName ++ " pool size:  " ++ show (length pool)
---     -- mapM toRefCount pool >>= print
---     pool' <- foldrM updateSignalNode [] pool
---     new   <- atomically $ do
---         new <- readTVar newPoolRef
---         writeTVar newPoolRef []
---         return new
---     let pool'' = new ++ pool'
---     threadDelay sleepTime
---     updateWorker state pool'' newPoolRef sleepTime workerName
+updateWorker :: SignalState -> SignalPool -> TVar SignalPool -> Int -> String -> IO ()
+updateWorker state pool newPoolRef sleepTime workerName = do
+    -- putStrLn $ workerName ++ " pool size:  " ++ show (length pool)
+    -- mapM toRefCount pool >>= print
+    pool' <- foldrM updateSignalNode [] pool
+    new   <- atomically $ do
+        new <- readTVar newPoolRef
+        writeTVar newPoolRef []
+        return new
+    let pool'' = new ++ pool'
+    threadDelay sleepTime
+    updateWorker state pool'' newPoolRef sleepTime workerName

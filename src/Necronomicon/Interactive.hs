@@ -29,7 +29,7 @@ loadNecronomicon targetFile modName = do
     mapM_ showModule g
     return modSum
 
-compileSignal :: String -> String -> String -> IO (Maybe (Signal Fr ()))
+compileSignal :: String -> String -> String -> IO (Maybe (Signal ()))
 compileSignal targetFile modName expr = flip catch failure $ runGhc (Just libdir) $ do
     _ <- loadNecronomicon targetFile modName
 #if __GLASGOW_HASKELL__ < 704
@@ -40,7 +40,7 @@ compileSignal targetFile modName expr = flip catch failure $ runGhc (Just libdir
     dynSig <- dynCompileExpr (modName ++ "." ++ expr)
     return $ fromDynamic dynSig
     where
-        failure :: SomeException -> IO (Maybe (Signal Fr ()))
+        failure :: SomeException -> IO (Maybe (Signal ()))
         failure _ = return Nothing
 
 runSignalWithFile :: FilePath -> String -> String -> IO ()
