@@ -119,28 +119,28 @@ data Signal'       a = Signal'     (SignalState -> IO (SignalValue a))
 data AudioSignal     = AudioSignal (SignalState -> IO (SignalValue UGen))
 data VarSignal     a = VarSignal   (SignalState -> IO (SignalValue a))
 
-class SignalType s a where
+class SignalType s a toA where
     waitTime :: s -> Int
     unsignal :: s -> (SignalState -> IO (SignalValue a))
     gpure    :: s -> Maybe a
     ar       :: Real s => s -> AudioSignal
-    kr       :: s -> Signal' a
+    kr       :: s -> Signal' toA
 
-instance SignalType (Signal' a) a where
+instance SignalType (Signal' a) a a where
     waitTime = const 16667
     unsignal (Signal' sig) = sig
     gpure = undefined
     ar = undefined
     kr = undefined
 
-instance SignalType AudioSignal UGen where
+instance (Fractional a) => SignalType AudioSignal UGen a where
     waitTime = const 23220
     unsignal (AudioSignal sig) = sig
     gpure = undefined
     ar    = undefined
     kr    = undefined
 
-instance SignalType (VarSignal a) a where
+instance SignalType (VarSignal a) a a where
     waitTime _ = undefined --This is where the interesting parts would happen
     unsignal (VarSignal sig) = sig
     gpure = undefined
