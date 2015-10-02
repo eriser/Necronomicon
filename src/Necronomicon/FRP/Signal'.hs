@@ -1,4 +1,4 @@
-{-# LANGUAGE MagicHash, UnboxedTuples, DeriveDataTypeable #-}
+{-# LANGUAGE MagicHash, UnboxedTuples, DeriveDataTypeable, ScopedTypeVariables#-}
 module Necronomicon.FRP.Signal' where
 
 import Control.Concurrent
@@ -114,6 +114,25 @@ instance (Rate r, Monoid m) => Monoid (Signal r m) where
     mempty  = pure mempty
     mappend = liftA2 mappend
     mconcat = foldr mappend mempty
+
+data ControlSignal a = ControlSignal (SignalState -> IO (SignalValue a))
+data AudioSignal     = AudioSignal (SignalState -> IO (SignalValue UGen))
+
+class Signal' s a where
+    waitTime :: s -> Int
+    unsignal :: s -> (SignalState -> IO (SignalValue a))
+    gpure    :: s -> Maybe a
+
+instance Signal' (ControlSignal a) a where
+    waitTime = const 16667
+    unsignal (ControlSignal sig) = sig
+    gpure = undefined
+
+instance Signal' AudioSignal UGen where
+    waitTime = const 23220
+    unsignal (AudioSignal sig) = sig
+    gpure = undefined
+
 
 ---------------------------------------------------------------------------------------------------------
 -- Combinators

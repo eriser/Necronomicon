@@ -9,4 +9,4 @@ finalCountdown :: Signal Fr Double
 finalCountdown = foldp (flip (-)) 0 2 + feedbackCounter
 
 feedbackCounter :: Signal Fr Double
-feedbackCounter = 3 + sampleDelay 0 feedbackCounter
+feedbackCounter = 2 + sampleDelay 0 feedbackCounter

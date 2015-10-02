@@ -1,37 +1,7 @@
 -- import Necronomicon.FRP.Signal'
-import Necronomicon.Interactive
 
 main :: IO ()
-main = runSignalWithFile "./NecroMain.hs" "NecroMain" "necroMain"
-
--- main = runSignal $ fzip3 (resample finalCountup) (resample finalCountdown) feedbackCounter
--- main = runSignal white
--- main = runSignal $ dynamicTester white
--- main = runSignal $ dynamicTester finalCountup
--- main = runSignal $ dynamicTester feedbackCounter
--- main = runSignal feedbackCounter
--- main = runSignal mixedSignal
-
--- mixedSignal :: Signal Fr (Double, [(Double, Double, [Int])])
--- mixedSignal = fzip (resample finalCountdown) tester
-    -- where
-        -- tester = dynamicTester $ fzip3 (resample finalCountdown) (resample finalCountup) feeds
-        -- feeds  = (:) <$> (sampleDelay 0 $ fmap sum feeds) <*> dynamicTester feedbackCounter
-
--- white :: Signal Ar Double
--- white = whiteNoise finalCountup
-
--- white2 :: Signal Kr Double
--- white2 = whiteNoise 666
-
--- finalCountup :: Signal Ar Double
--- finalCountup = foldp (+) 0 1
-
--- finalCountdown :: Signal Kr Double
--- finalCountdown = foldp (flip (-)) 0 2
-
--- feedbackCounter :: Signal Fr Int
--- feedbackCounter = 3 + sampleDelay 0 feedbackCounter
+main = putStrLn "Test"
 
 {-
 import Necronomicon
