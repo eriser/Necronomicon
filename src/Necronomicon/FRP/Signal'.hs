@@ -14,7 +14,7 @@ import Data.Foldable
 import Data.Typeable
 
 import GHC.Prim
-import Control.Monad.ST (stToIO)
+import Control.Monad.ST.Strict (stToIO)
 import GHC.ST
 import GHC.Types (Int(..))
 
