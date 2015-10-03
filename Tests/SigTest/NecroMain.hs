@@ -3,13 +3,10 @@ module NecroMain where
 import Necronomicon.FRP.Signal'
 
 necroMain :: Signal ()
-necroMain = sigPrint test
+necroMain = sigPrint finalCountdown
 
-test :: Signal Int
-test = 4
-
--- finalCountdown :: Signal Double
--- finalCountdown = foldp (flip (-)) 0 2 + feedbackCounter
+finalCountdown :: Signal Double
+finalCountdown = foldp (flip (-)) 0 2
 
 -- feedbackCounter :: Signal Double
 -- feedbackCounter = 2 + sampleDelay 0 feedbackCounter

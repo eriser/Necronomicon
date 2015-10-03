@@ -4,7 +4,7 @@ module Necronomicon.FRP.Signal' where
 import Control.Concurrent
 import Control.Concurrent.STM
 import Data.IORef
--- import Control.Monad.Fix
+import Control.Monad.Fix
 import Control.Monad
 import Control.Applicative
 import System.Mem.StableName
@@ -65,7 +65,7 @@ class SignalType s where
 
 instance SignalType Signal where
     unsignal (Signal sig) = sig
-    tosignal              = Signal 
+    tosignal              = Signal
     waitTime              = const 16667
     ar                    = undefined
     kr                    = undefined
@@ -178,25 +178,24 @@ instance (Monoid m) => Monoid (Signal m) where
 -- Combinators
 ---------------------------------------------------------------------------------------------------------
 
--- foldp :: (Rate r, Typeable input, Typeable state)
---       => (input -> state -> state) -- ^ Higher-order function which is applied each update tick
---       -> state                     -- ^ The initial state of the signal
---       -> Signal r input            -- ^ Input signal which is applied to the higher-order function
---       -> Signal r state            -- ^ Resultant signal which updates based on the input signal
+foldp :: (SignalType signal, Typeable input, Typeable state)
+      => (input -> state -> state) -- ^ Higher-order function which is applied each update tick
+      -> state                     -- ^ The initial state of the signal
+      -> signal input              -- ^ Input signal which is applied to the higher-order function
+      -> signal state              -- ^ Resultant signal which updates based on the input signal
 
--- foldp f initx (Pure i) = signal
---     where
---         signal = Signal $ \state -> fmap snd $ mfix $ \ ~(sig, _) -> do
---             let nodePath' = TypeRep2Node (getTypeRep initx) (getTypeRep i) $ nodePath state
---             insertSignal' (Just nodePath') initx (f i <$> sig) (ratePool signal state) (return ()) (return ()) state
+foldp f initx si = case unsignal si of
+    Pure i -> tosignal $ SignalData $ \state -> fmap snd $ mfix $ \ ~(sig, _) -> do
+        let nodePath' = TypeRep2Node (getTypeRep initx) (getTypeRep i) $ nodePath state
+        insertSignal' (Just nodePath') initx (f i <$> sig) (ratePool si state) (return ()) (return ()) state
 
--- foldp f initx si = Signal $ \state -> fmap snd $ mfix $ \ ~(sig, _) -> do
---         let nodePath'          = TypeRep2Node (getTypeRep initx) (getSignalTypeRep si) $ nodePath state
---         (iini, _, ifs, iarch) <- getSignalNode si state{nodePath = nodePath'}
---         icont                 <- iini
---         insertSignal' (Just nodePath') initx (f <$> icont <*> sig) (ratePool si state) ifs iarch state
+    _      -> tosignal $ SignalData $ \state -> fmap snd $ mfix $ \ ~(sig, _) -> do
+        let nodePath'          = TypeRep2Node (getTypeRep initx) (getSignalTypeRep si) $ nodePath state
+        (iini, _, ifs, iarch) <- getSignalNode si state{nodePath = nodePath'}
+        icont                 <- iini
+        insertSignal' (Just nodePath') initx (f <$> icont <*> sig) (ratePool si state) ifs iarch state
 
--- feedback :: (Rate r, Typeable a) => a -> (Signal r a -> Signal r a) -> Signal r a
+-- feedback :: (SignalType s, Typeable a) => s a -> (s a -> s a) -> s a
 -- feedback initx f = let signal = f $ sampleDelay initx signal in signal
 
 -- sampleDelay :: (Rate r, Typeable a)
