@@ -29,7 +29,7 @@ type SignalValue a = (IO (IO a), Int, IO (), IO ())
 data RunStatus     = Running | HotSwapping | Quitting
 data SignalState   = SignalState
                    { nodePath   :: NodePath
-                   , ugenState  :: UGenState
+                   , ugenState  :: AudioState
                    , runStatus  :: TVar RunStatus
                    , newArPool  :: TVar SignalPool
                    , newKrPool  :: TVar SignalPool
@@ -45,49 +45,49 @@ data SignalData a = SignalData (SignalState -> IO (SignalValue a))
                   | Pure a
                   deriving (Typeable)
 
-newtype Signal    a = Signal      (SignalData a) deriving (Typeable)
-newtype AudioSignal = AudioSignal (SignalData UGen) deriving (Typeable)
-newtype VarSignal a = VarSignal   (SignalData a) deriving (Typeable)
+newtype Signal    a = Signal    (SignalData a) deriving (Typeable)
+newtype AudioSig  a = AudioSig  (SignalData a) deriving (Typeable)
+newtype VarSignal a = VarSignal (SignalData a) deriving (Typeable)
+
+type AudioSignal = AudioSig AudioBlock
 
 ---------------------------------------------------------------------------------------------------------
 -- Instances
 ---------------------------------------------------------------------------------------------------------
 
 class SignalType s where
-    type SignalComponent  s :: *
-    type SignalConversion s :: *
-    unsignal :: s -> SignalData (SignalComponent s)
-    waitTime :: s -> Int
-    ar       :: Real s => s -> AudioSignal
-    kr       :: s -> Signal (SignalConversion s)
-    rate     :: s -> Rate
+    unsignal :: s a -> SignalData a
+    tosignal :: SignalData a -> s a
+    waitTime :: s a -> Int
+    ar       :: Real a => s a -> AudioSignal
+    kr       :: s a -> Signal a
+    rate     :: s a -> Rate
 
-instance SignalType (Signal a) where
-    type SignalComponent  (Signal a) = a
-    type SignalConversion (Signal a) = a
+instance SignalType Signal where
     unsignal (Signal sig) = sig
-    waitTime = const 16667
-    ar       = undefined
-    kr       = undefined
-    rate     = const Kr
+    tosignal              = Signal 
+    waitTime              = const 16667
+    ar                    = undefined
+    kr                    = undefined
+    rate                  = const Kr
 
-instance SignalType AudioSignal where
-    type SignalComponent  AudioSignal = UGen
-    type SignalConversion AudioSignal = Double
-    unsignal (AudioSignal sig) = sig
-    waitTime = const 23220
-    ar       = undefined
-    kr       = undefined
-    rate     = const Ar
+instance SignalType AudioSig where
+    unsignal (AudioSig sig) = sig
+    tosignal                = AudioSig
+    waitTime                = const 23220
+    ar                      = undefined
+    kr                      = undefined
+    rate                    = const Ar
 
-instance SignalType (VarSignal a) where
-    type SignalComponent  (VarSignal a) = a
-    type SignalConversion (VarSignal a) = a
+instance SignalType VarSignal where
     unsignal (VarSignal sig) = sig
-    waitTime = const undefined --This is where the interesting parts would happen
-    ar       = undefined
-    kr       = undefined
-    rate     = const Vr
+    tosignal                 = VarSignal
+    waitTime                 = const undefined --This is where the interesting parts would happen
+    ar                       = undefined
+    kr                       = undefined
+    rate                     = const Vr
+
+-- instance Num AudioSignal where
 
 --SignalDSP
 -- class Num a => SignalDSP a where
@@ -286,8 +286,8 @@ instance (Monoid m) => Monoid (Signal m) where
 --     insertSig update update
 
 
-sigPrint :: (SignalType s, Show (SignalComponent s)) => s -> Signal ()
-sigPrint sig = Signal $ SignalData $ \state -> do
+sigPrint :: (SignalType s, Show a) => s a -> s ()
+sigPrint sig = tosignal $ SignalData $ \state -> do
     (sample, insertSig) <- getNode1 Nothing sig state
     let update = sample >>= print
     insertSig (return ()) update
@@ -296,7 +296,7 @@ sigPrint sig = Signal $ SignalData $ \state -> do
 -- Rate
 ---------------------------------------------------------------------------------------------------------
 
-ratePool :: SignalType s => s -> SignalState -> TVar SignalPool
+ratePool :: SignalType s => s a -> SignalState -> TVar SignalPool
 ratePool signal state = case rate signal of
     Ar -> newArPool state
     Kr -> newKrPool state
@@ -305,30 +305,30 @@ ratePool signal state = case rate signal of
 ---------------------------------------------------------------------------------------------------------
 -- Audio
 ---------------------------------------------------------------------------------------------------------
-data UGenPool = UGenPool
+data AudioBlockPool = AudioBlockPool
     { ugenPoolSize :: Int
     , poolArray    :: MutableByteArray# RealWorld
     }
 
-data UGenState = UGenState
+data AudioState = AudioState
     { ugenBlockSize   :: Int#
-    , ugenPool        :: IORef UGenPool
+    , ugenPool        :: IORef AudioBlockPool
     , ugenReallocLock :: TMVar ()
     , ugenUIDs        :: TVar [Int]
     }
 
 --TODO: We need a way to query the block size!
-mkUGenState :: IO UGenState
-mkUGenState = UGenState 1024#
-          <$> (mkUGenPool 1000 >>= newIORef)
+mkAudioState :: IO AudioState
+mkAudioState = AudioState 1024#
+          <$> (mkAudioBlockPool 1000 >>= newIORef)
           <*> atomically (newTMVar ())
           <*> atomically (newTVar [0..])
 
---UGen pool size is in doubles (i.e. 8 bytes)s
-mkUGenPool :: Int -> IO UGenPool
-mkUGenPool size@(I# primSize) = stToIO $ ST $ \st ->
+--Audio block  pool size is in doubles (i.e. 8 bytes)s
+mkAudioBlockPool :: Int -> IO AudioBlockPool
+mkAudioBlockPool size@(I# primSize) = stToIO $ ST $ \st ->
     let (# st1, mbyteArray #) = newByteArray# (primSize *# sizeOfDouble) st
-    in  (# st1, UGenPool size mbyteArray #)
+    in  (# st1, AudioBlockPool size mbyteArray #)
     where
         sizeOfDouble = 8#
 
@@ -337,8 +337,8 @@ data Channel = Channel
     , channelIndex :: Int#
     }
 
---Pure UGen Constructor?
-data UGen = UGen
+--Pure AudioBlock Constructor?
+data AudioBlock = AudioBlock
     { numChannels  :: Int
     , ugenChannels :: [Channel]
     }
@@ -503,7 +503,7 @@ hotSwapState archiver finalizer state = do
 
 mkSignalState :: IO SignalState
 mkSignalState = SignalState RootNode
-            <$> mkUGenState
+            <$> mkAudioState
             <*> atomically (newTVar Running)
             <*> atomically (newTVar [])
             <*> atomically (newTVar [])
@@ -519,7 +519,7 @@ nextUID state = atomically $ do
     writeTVar (sigUIDs state) uids
     return uid
 
-getSignalNode :: SignalType s => s ->  SignalState -> IO (SignalValue (SignalComponent s))
+getSignalNode :: SignalType s => s a ->  SignalState -> IO (SignalValue a)
 getSignalNode signal state = case unsignal signal of
     Pure x         ->  return (return $ return x, -1, return (), return ())
     SignalData sig -> do
@@ -563,13 +563,13 @@ getTypeRep = typeRep . typeHelper
         typeHelper :: a -> Proxy a
         typeHelper _ = Proxy
 
-getSignalTypeRep :: (SignalType s, Typeable (SignalComponent s)) => s -> TypeRep
+getSignalTypeRep :: (SignalType s, Typeable a) => s a -> TypeRep
 getSignalTypeRep = typeRep . signalTypeHelper
     where
-        signalTypeHelper :: SignalType s => s -> Proxy (SignalComponent s)
+        signalTypeHelper :: SignalType s => s a -> Proxy a
         signalTypeHelper _ = Proxy
 
-getNode1 :: SignalType s => Maybe NodePath -> s -> SignalState -> IO (IO (SignalComponent s), IO x -> IO x -> IO (SignalValue x))
+getNode1 :: SignalType s => Maybe NodePath -> s a -> SignalState -> IO (IO a, IO x -> IO x -> IO (SignalValue x))
 getNode1 maybeArchivePath signalA state = do
     (initA, _, finalizersA, archiveA) <- getSignalNode signalA state{nodePath = BranchNode 0 startingPath}
     sampleA                           <- initA
@@ -579,7 +579,7 @@ getNode1 maybeArchivePath signalA state = do
             Nothing          -> nodePath state
             Just archivePath -> archivePath
 
-getNode2 :: (SignalType a, SignalType b) => Maybe NodePath -> a -> b -> SignalState -> IO (IO (SignalComponent a), IO (SignalComponent b), IO x -> IO x -> IO (SignalValue x))
+getNode2 :: (SignalType s) => Maybe NodePath -> s a -> s b -> SignalState -> IO (IO a, IO b, IO x -> IO x -> IO (SignalValue x))
 getNode2 maybeArchivePath signalA signalB state = do
     (initA, _, finalizersA, archiveA) <- getSignalNode signalA state{nodePath = BranchNode 0 startingPath}
     (initB, _, finalizersB, archiveB) <- getSignalNode signalB state{nodePath = BranchNode 1 startingPath}
@@ -593,7 +593,7 @@ getNode2 maybeArchivePath signalA signalB state = do
             Nothing          -> nodePath state
             Just archivePath -> archivePath
 
-getNode3 :: (SignalType a, SignalType b, SignalType c) => Maybe NodePath -> a -> b -> c -> SignalState -> IO (IO (SignalComponent a), IO (SignalComponent b), IO (SignalComponent c), IO x -> IO x -> IO (SignalValue x))
+getNode3 :: (SignalType s) => Maybe NodePath -> s a -> s b -> s c -> SignalState -> IO (IO a, IO b, IO c, IO x -> IO x -> IO (SignalValue x))
 getNode3 maybeArchivePath signalA signalB signalC state = do
     (initA, _, finalizersA, archiveA) <- getSignalNode signalA state{nodePath = BranchNode 0 startingPath}
     (initB, _, finalizersB, archiveB) <- getSignalNode signalB state{nodePath = BranchNode 1 startingPath}
@@ -628,13 +628,13 @@ toRefCount updateRef = readIORef updateRef >>= \maybeUA -> case maybeUA of
 startSignalRuntime :: IO SignalState
 startSignalRuntime = do
     state <- mkSignalState
-    _     <- forkIO $ updateWorker state [] (newKrPool state) 23220 "Control Rate"
+    _     <- forkIO $ updateWorker state [] (newKrPool state) 16667 "Control Rate"
     _     <- forkIO $ updateWorker state [] (newArPool state) 23220 "Audio Rate"
-    _     <- forkIO $ updateWorker state [] (newFrPool state) 16667 "Frame Rate"
+    -- _     <- forkIO $ updateWorker state [] (newFrPool state) 16667 "Frame Rate"
     return state
 
 type SignalActions a = (IO a, IO (), IO ())
-runSignalFromState :: (SignalType s, Show (SignalComponent s)) => s -> SignalState -> IO (SignalActions (SignalComponent s))
+runSignalFromState :: (SignalType s, Show a) => s a -> SignalState -> IO (SignalActions a)
 runSignalFromState signal state = do
     (ini, _, fs, arch) <- getSignalNode signal state{nodePath = RootNode}
     sample             <- ini
@@ -643,7 +643,7 @@ runSignalFromState signal state = do
     -- putStrLn $ "Running signal network, staring with uid: " ++ show uid
     return (sample, arch, fs)
 
-demoSignal :: (SignalType s, Show (SignalComponent s)) => s -> IO ()
+demoSignal :: (SignalType s, Show a) => s a -> IO ()
 demoSignal sig = do
     state          <- startSignalRuntime
     (sample, _, _) <- runSignalFromState sig state
