@@ -158,12 +158,6 @@ foldp f initx si = case unsignal si of
 --             then xsample >>= \x -> return ((count + 1, xfs, xsample) : srs', x : svals)
 --             else xfs >> return (srs', svals)
 
-fzip :: (Functor f, Applicative f) => f a -> f b -> f (a, b)
-fzip a b = (,) <$> a <*> b
-
-fzip3 :: (Functor f, Applicative f) => f a -> f b -> f c -> f (a, b, c)
-fzip3 a b c = (,,) <$> a <*> b <*> c
-
 -- effectful :: Rate r => IO a -> Signal r a
 -- effectful effectfulAction = signal
 --     where

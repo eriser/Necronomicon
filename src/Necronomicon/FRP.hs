@@ -4,6 +4,7 @@ module Necronomicon.FRP
     , module Necronomicon.FRP.AudioSignal
     , module Necronomicon.FRP.VarSignal
     , module Necronomicon.FRP.Runtime
+    , module Necronomicon.FRP.Applicative
     , module Data.Monoid
     ) where
 
@@ -12,6 +13,7 @@ import Necronomicon.FRP.Signal
 import Necronomicon.FRP.AudioSignal
 import Necronomicon.FRP.VarSignal
 import Necronomicon.FRP.Runtime
+import Necronomicon.FRP.Applicative
 import Data.Monoid ((<>))
 
 -- module Necronomicon.FRP

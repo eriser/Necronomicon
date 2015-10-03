@@ -78,6 +78,7 @@ library
         -- Necronomicon.Patterns
         Necronomicon.Interactive
         Necronomicon.FRP
+        Necronomicon.FRP.Applicative
         Necronomicon.FRP.SignalType
         Necronomicon.FRP.Signal
         Necronomicon.FRP.AudioSignal
