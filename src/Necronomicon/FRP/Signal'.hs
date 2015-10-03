@@ -127,8 +127,6 @@ instance Functor VarSignal where
             let update = f <$> sample
             insertSig update update
 
-
-
 instance Applicative Signal where
     pure x = Signal $ Pure x
 
@@ -320,15 +318,15 @@ ratePool signal state = case rate signal of
 -- Audio
 ---------------------------------------------------------------------------------------------------------
 data AudioBlockPool = AudioBlockPool
-    { ugenPoolSize :: Int
-    , poolArray    :: MutableByteArray# RealWorld
+    { audioPoolSize :: Int
+    , poolArray     :: MutableByteArray# RealWorld
     }
 
 data AudioState = AudioState
-    { ugenBlockSize   :: Int#
-    , ugenPool        :: IORef AudioBlockPool
-    , ugenReallocLock :: TMVar ()
-    , ugenUIDs        :: TVar [Int]
+    { audioBlockSize   :: Int#
+    , audioPool        :: IORef AudioBlockPool
+    , audioReallocLock :: TMVar ()
+    , audioUIDs        :: TVar [Int]
     }
 
 --TODO: We need a way to query the block size!
@@ -354,27 +352,27 @@ data Channel = Channel
 --Pure AudioBlock Constructor?
 data AudioBlock = AudioBlock
     { numChannels  :: Int
-    , ugenChannels :: [Channel]
+    , audioChannels :: [Channel]
     }
 
-{-
-newtype UGenMonad a = UGenMonad
-    { runUGenMonad :: UGenState -> IO a
+newtype AudioMonad a = AudioMonad
+    { runAudioMonad :: AudioState -> IO a
     }
 
-instance Functor UGenMonad where
+instance Functor AudioMonad where
     fmap = liftM
 
-instance Applicative UGenMonad where
+instance Applicative AudioMonad where
     pure  = return
     (<*>) = ap
 
-instance Monad UGenMonad where
-    return x = UGenMonad $ \_ -> return x
-    g >>= f  = UGenMonad $ \state -> do
-        x <- runUGenMonad g state
-        runUGenMonad (f x) state
+instance Monad AudioMonad where
+    return x = AudioMonad $ \_ -> return x
+    g >>= f  = AudioMonad $ \state -> do
+        x <- runAudioMonad g state
+        runAudioMonad (f x) state
 
+{-
 writeToPool :: Int# -> Double# -> MutableByteArray# RealWorld -> ST RealWorld ()
 writeToPool index val mbyteArray = ST $ \st -> (# writeDoubleArray# mbyteArray index val st, () #)
 
