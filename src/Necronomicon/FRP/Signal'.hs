@@ -372,7 +372,6 @@ instance Monad AudioMonad where
         x <- runAudioMonad g state
         runAudioMonad (f x) state
 
-{-
 writeToPool :: Int# -> Double# -> MutableByteArray# RealWorld -> ST RealWorld ()
 writeToPool index val mbyteArray = ST $ \st -> (# writeDoubleArray# mbyteArray index val st, () #)
 
@@ -381,70 +380,71 @@ copyPoolIndex index mbyteArray1 mbyteArray2 = ST $ \st ->
     let (# st1, val #) = readDoubleArray# mbyteArray1 index st
     in  (# writeDoubleArray# mbyteArray2 index val st1, () #)
 
-clearBlock :: Int# -> Int# -> UGenPool -> IO ()
-clearBlock index bsize (UGenPool _ pool) = stToIO $ go (bsize -# 1#)
+clearBlock :: Int# -> Int# -> AudioBlockPool -> IO ()
+clearBlock index bsize (AudioBlockPool _ pool) = stToIO $ go (bsize -# 1#)
     where
         go i = case i of
             0# -> writeToPool (index +# i) 0.0## pool
             _  -> writeToPool (index +# i) 0.0## pool >> go (i -# 1#)
 
-poolCopy :: UGenPool -> UGenPool -> IO ()
-poolCopy (UGenPool (I# poolSize1) pool1) (UGenPool _ pool2) = stToIO $ go (poolSize1 -# 1#)
+poolCopy :: AudioBlockPool -> AudioBlockPool -> IO ()
+poolCopy (AudioBlockPool (I# poolSize1) pool1) (AudioBlockPool _ pool2) = stToIO $ go (poolSize1 -# 1#)
     where
         go i = case i of
             0# -> copyPoolIndex i pool1 pool2
             _  -> copyPoolIndex i pool1 pool2 >> go (i -# 1#)
 
-allocChannel :: Int -> UGenMonad ()
-allocChannel index = UGenMonad $ \state -> do
-    lock  <- atomically $ takeTMVar $ ugenReallocLock state
-    pool  <- readIORef $ ugenPool state
-    if index + I# (ugenBlockSize state) < ugenPoolSize pool
+allocChannel :: Int -> AudioMonad ()
+allocChannel index = AudioMonad $ \state -> do
+    lock  <- atomically $ takeTMVar $ audioReallocLock state
+    pool  <- readIORef $ audioPool state
+    if index + I# (audioBlockSize state) < audioPoolSize pool
         then return ()
         else do
-            putStrLn $ "Allocating ugen channel memory to: " ++ show (ugenPoolSize pool * 2)
-            pool' <- mkUGenPool $ ugenPoolSize pool * 2
+            putStrLn $ "Allocating audio channel memory to: " ++ show (audioPoolSize pool * 2)
+            pool' <- mkAudioBlockPool $ audioPoolSize pool * 2
             poolCopy pool pool'
-            writeIORef (ugenPool state) pool'
-    atomically $ putTMVar (ugenReallocLock state) lock
+            writeIORef (audioPool state) pool'
+    atomically $ putTMVar (audioReallocLock state) lock
 
-getUIDs :: Int -> UGenMonad [Int]
-getUIDs numUIDs = UGenMonad $ \state -> atomically $ do
-    (uids, uidPool) <- splitAt numUIDs <$> readTVar (ugenUIDs state)
-    writeTVar (ugenUIDs state) uidPool
+getUIDs :: Int -> AudioMonad [Int]
+getUIDs numUIDs = AudioMonad $ \state -> atomically $ do
+    (uids, uidPool) <- splitAt numUIDs <$> readTVar (audioUIDs state)
+    writeTVar (audioUIDs state) uidPool
     return uids
 
-blockSize :: UGenMonad Int
-blockSize = UGenMonad $ \state -> return $ I# (ugenBlockSize state)
+blockSize :: AudioMonad Int
+blockSize = AudioMonad $ \state -> return $ I# (audioBlockSize state)
 
-uidToIndex :: Int -> UGenMonad Int
+uidToIndex :: Int -> AudioMonad Int
 uidToIndex uid = do
     bs <- blockSize
     return $ uid * bs
 
-getChannel :: Int -> UGenMonad Channel
+getChannel :: Int -> AudioMonad Channel
 getChannel uid@(I# primUID) = uidToIndex uid >>= \index@(I# primIndex) -> allocChannel index >> return (Channel primUID primIndex)
 
 --Clearing should be done when a channel is free'ed since it is less time sensitive than allocating a new channel
-freeChannel :: Channel -> UGenMonad ()
-freeChannel (Channel uid index) = UGenMonad $ \state -> do
-    pool <- readIORef $ ugenPool state
-    clearBlock index (ugenBlockSize state) pool
-    atomically $ modifyTVar' (ugenUIDs state) (I# uid :)
+freeChannel :: Channel -> AudioMonad ()
+freeChannel (Channel uid index) = AudioMonad $ \state -> do
+    pool <- readIORef $ audioPool state
+    clearBlock index (audioBlockSize state) pool
+    atomically $ modifyTVar' (audioUIDs state) (I# uid :)
 
-mkUGen :: Int -> UGenMonad [Channel]
-mkUGen channels = getUIDs channels >>= mapM getChannel
+mkAudio :: Int -> AudioMonad [Channel]
+mkAudio channels = getUIDs channels >>= mapM getChannel
 
-freeUGen :: [Channel] -> UGenMonad ()
-freeUGen = mapM_ freeChannel
+freeAudio :: [Channel] -> AudioMonad ()
+freeAudio = mapM_ freeChannel
 
+{-
 apChannel2 :: (Double# -> Double# -> Double#) -> Channel -> Channel -> Channel -> UGenMonad ()
 apChannel2 f (Channel _ index1) (Channel _ index2) (Channel _ destIndex) = UGenMonad $ \state -> do
-    UGenPool _ pool <- readIORef $ ugenPool state
+    UGenPool _ pool <- readIORef $ audioPool state
     let go i = case i of
             0# -> poolAp2 f (index1 +# i) (index2 +# i) (destIndex +# i) pool
             _  -> poolAp2 f (index1 +# i) (index2 +# i) (destIndex +# i) pool >> go (i -# 1#)
-    stToIO $ go (ugenBlockSize state -# 1#)
+    stToIO $ go (audioBlockSize state -# 1#)
 
 poolAp2 :: (Double# -> Double# -> Double#) -> Int# -> Int# -> Int# -> MutableByteArray# RealWorld -> ST RealWorld ()
 poolAp2 f index1 index2 destIndex pool = ST $ \st ->
@@ -452,23 +452,6 @@ poolAp2 f index1 index2 destIndex pool = ST $ \st ->
         (# st2, y #) = readDoubleArray# pool index2 st1
     in  (# writeDoubleArray# pool destIndex (f x y) st2, () #)
 
--- apUgen2 :: (Double# -> Double# -> Double#) -> UGen -> UGen -> UGen -> UGenMonad ()
--- apUGen2 = f (
-
-instance (Rate r) => Num (Signal r UGen) where
-    -- sigX + sigY = Signal $ \state -> do
-        -- (sampleX, sampleY, insertSig) <- getNode2 Nothing sigX sigY state
-        -- ugenX <- sampleX
-        -- ugenY <- sampleY
-        -- let update = runUGen (apChannel2 (+##) ugenX ugenY ugen) (ugenState state)
-        -- let update = undefined
-        -- insertSig update update
-    (+) = undefined
-    (*) = undefined
-    (-) = undefined
-    abs = undefined
-    signum = undefined
-    fromInteger = undefined
 -}
 
 ---------------------------------------------------------------------------------------------------------
