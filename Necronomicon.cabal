@@ -58,17 +58,15 @@ library
 
     exposed-modules:
         Necronomicon
-        Necronomicon.UGen
-        Necronomicon.Runtime
+        -- Necronomicon.UGen
+        -- Necronomicon.Runtime
         Necronomicon.Util
         Necronomicon.Util.PriorityQueue
         Necronomicon.Util.Grid
         Necronomicon.Physics.DynamicTree
-        Necronomicon.FRP.Signal'
-        Necronomicon.Interactive
 
     other-modules:
-        Necronomicon.Language.Layout
+        -- Necronomicon.Language.Layout
         Necronomicon.Util.TGA
         Necronomicon.Math
         Necronomicon.Utility
@@ -77,16 +75,20 @@ library
         -- Necronomicon.Networking.Server
         -- Necronomicon.Networking.Message
         -- Necronomicon.Networking.Types
-        Necronomicon.Patterns
+        -- Necronomicon.Patterns
+        Necronomicon.Interactive
         Necronomicon.FRP
+        Necronomicon.FRP.SignalType
         Necronomicon.FRP.Signal
+        Necronomicon.FRP.AudioSignal
+        Necronomicon.FRP.VarSignal
+        Necronomicon.FRP.Runtime
         -- Necronomicon.FRP.Types
         -- Necronomicon.FRP.GUI
         -- Necronomicon.FRP.Audio
         -- Necronomicon.FRP.Combinators
         -- Necronomicon.FRP.Time
         -- Necronomicon.FRP.Input
-        -- Necronomicon.FRP.Runtime
         -- Necronomicon.FRP.Networking
         -- Necronomicon.FRP.State
         Necronomicon.Linear

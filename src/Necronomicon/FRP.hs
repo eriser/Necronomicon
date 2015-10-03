@@ -1,9 +1,17 @@
 module Necronomicon.FRP 
-    ( module Necronomicon.FRP.Signal
+    ( module Necronomicon.FRP.SignalType
+    , module Necronomicon.FRP.Signal
+    , module Necronomicon.FRP.AudioSignal
+    , module Necronomicon.FRP.VarSignal
+    , module Necronomicon.FRP.Runtime
     , module Data.Monoid
     ) where
 
-import Necronomicon.FRP.Signal  (Signal)
+import Necronomicon.FRP.SignalType
+import Necronomicon.FRP.Signal
+import Necronomicon.FRP.AudioSignal
+import Necronomicon.FRP.VarSignal
+import Necronomicon.FRP.Runtime
 import Data.Monoid ((<>))
 
 -- module Necronomicon.FRP
@@ -27,6 +35,5 @@ import Data.Monoid ((<>))
 -- import Necronomicon.FRP.Input
 -- import Necronomicon.FRP.Networking
 -- import Necronomicon.FRP.State
--- import Necronomicon.FRP.Runtime (runSignal)
 -- import Necronomicon.FRP.Types   ((<~), (~~), (~>), Time, Key)
 

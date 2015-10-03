@@ -1,6 +1,6 @@
 module NecroMain where
 
-import Necronomicon.FRP.Signal'
+import Necronomicon
 
 necroMain :: Signal ()
 necroMain = sigPrint finalCountdown
