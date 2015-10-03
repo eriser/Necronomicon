@@ -1,3 +1,7 @@
+main :: IO ()
+main = return ()
+
+{-
 import Necronomicon
 import Data.Binary
 import Data.Fixed (mod')
@@ -277,25 +281,6 @@ caveRightBus = 21
 
 caveOut :: UGen -> UGen
 caveOut = out caveBus
-
-{-
--- Broodling 200, 201
-
-broodlingBus :: UGen
-broodlingBus = 200
-
-broodlingRightBus :: UGen
-broodlingRightBus = 201
-
-broodlingOut :: UGen -> UGen
-broodlingOut = out broodlingBus
-
--- Artifact 150 - 156
-
-artifactOut :: UGen -> UGen
-artifactOut = out <| random 0 150 156
-
--}
 
 feedbackKitBuses :: (UGen, UGen)
 feedbackKitBuses = (60, 61)
@@ -1348,7 +1333,7 @@ feedbackTablaWrapFX :: UGen -> UGen -> UGen
 feedbackTablaWrapFX _ _ = feed |> constrain (-1) 1 |> visAux 2 1 |> masterOut
     where
         auxes = auxIn (fst feedbackTablaBuses <> snd feedbackTablaBuses) -- |> filt
-        feed = feedback $ \l r -> auxes + (r <> l) {- |> delayC 0.3 (0.3 <> 0.2) -} {-+> delayC 0.2 (mx <> my)-} |> wrapDist |> wrap 0.9 |> fxLimiter
+        feed = feedback $ \l r -> auxes + (r <> l) |> wrapDist |> wrap 0.9 |> fxLimiter
         wrapDist n = (n |> wrap 1 |> gain 9) - n
         fxLimiter = (limiter 0.3 0.01 0.03 (-32) 0.01 <> limiter 0.2 0.01 0.03 (-32) 0.01)
 
@@ -1530,7 +1515,7 @@ feedbackKitHellSynth sampleFilePath _ _ = playMonoSample sampleFilePath rate |> 
     where
         e = perc 0.0 1 1 1
         -- e2 = perc2 0.01 0.1 0.01 (-64) maxFreq |> umax minFreq -- move umax around 20,30,40,50,60,etc..
-        filt n = n {-+> lpf e2 0.1 -} |> lowshelf 40 3 0.3
+        filt n = n |> lowshelf 40 3 0.3
         rate = 1
         -- minFreq = mx + 20 |> lag 0.1
         -- maxFreq = my |> exprange 800 40000
@@ -1817,3 +1802,4 @@ feedbackSolo0x11dFX mx my = feed + low |> constrain (-1) 1 |> gain 0.5 |> visAux
         verb = freeverb (my |> exprange 0.001 0.5 |> lag 0.1) 50 (mx |> lag 0.1)
         fxLimiter = limiter 0.1 0.01 0.03 (-9) 0.1 <> limiter 0.175 0.01 0.03 (-9) 0.1
         low = preAuxes |> gain 2 |> delayC 0.2 [0.1, 0.175] |> lpf 60 0.3
+-}
