@@ -29,7 +29,7 @@ type SignalValue a = (IO (IO a), Int, IO (), IO ())
 data RunStatus     = Running | HotSwapping | Quitting
 data SignalState   = SignalState
                    { nodePath   :: NodePath
-                   , ugenState  :: AudioState
+                   , audioState :: AudioState
                    , runStatus  :: TVar RunStatus
                    , newArPool  :: TVar SignalPool
                    , newKrPool  :: TVar SignalPool
@@ -437,10 +437,9 @@ mkAudio channels = getUIDs channels >>= mapM getChannel
 freeAudio :: [Channel] -> AudioMonad ()
 freeAudio = mapM_ freeChannel
 
-{-
-apChannel2 :: (Double# -> Double# -> Double#) -> Channel -> Channel -> Channel -> UGenMonad ()
-apChannel2 f (Channel _ index1) (Channel _ index2) (Channel _ destIndex) = UGenMonad $ \state -> do
-    UGenPool _ pool <- readIORef $ audioPool state
+apChannel2 :: (Double# -> Double# -> Double#) -> Channel -> Channel -> Channel -> AudioMonad ()
+apChannel2 f (Channel _ index1) (Channel _ index2) (Channel _ destIndex) = AudioMonad $ \state -> do
+    AudioBlockPool _ pool <- readIORef $ audioPool state
     let go i = case i of
             0# -> poolAp2 f (index1 +# i) (index2 +# i) (destIndex +# i) pool
             _  -> poolAp2 f (index1 +# i) (index2 +# i) (destIndex +# i) pool >> go (i -# 1#)
@@ -451,8 +450,6 @@ poolAp2 f index1 index2 destIndex pool = ST $ \st ->
     let (# st1, x #) = readDoubleArray# pool index1 st
         (# st2, y #) = readDoubleArray# pool index2 st1
     in  (# writeDoubleArray# pool destIndex (f x y) st2, () #)
-
--}
 
 ---------------------------------------------------------------------------------------------------------
 -- Hotswap
