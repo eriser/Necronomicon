@@ -9,8 +9,8 @@ module Necronomicon.FRP.Applicative where
 (~>) :: Functor f => f a -> (a -> b) -> f b
 (~>) = flip fmap
 
-infixl 7 <~, ~~
-infixr 7 ~>
+infixl 4 <~, ~~
+infixr 4 ~>
 
 fzip :: (Functor f, Applicative f) => f a -> f b -> f (a, b)
 fzip a b = (,) <$> a <*> b

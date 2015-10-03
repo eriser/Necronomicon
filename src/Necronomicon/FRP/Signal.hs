@@ -41,16 +41,16 @@ instance Applicative Signal where
             let update = sampleF <*> sampleX
             insertSig update update
 
-    -- Pure _ *> ysig   = ysig
-    -- xsig   *> Pure y = SignalData $ \state -> do
-    --     (sampleX, insertSig) <- getNode1 Nothing xsig state
-    --     let update = sampleX >> return y
-    --     insertSig (return y) update
-    -- xsig   *> ysig = SignalData $ \state -> do
-    --     (sampleX, sampleY, insertSig) <- getNode2 Nothing xsig ysig state
-    --     let update = sampleX >> sampleY
-    --     insertSig sampleY update
-    -- (<*) = flip (*>)
+    xsig *> ysig = case (unsignal xsig, unsignal ysig) of
+        (Pure _, _     ) -> ysig
+        (_     , Pure y) -> Signal $ SignalData $ \state -> do
+            (_, insertSig) <- getNode1 Nothing xsig state
+            insertSig (return y) (return y)
+        _                -> Signal $ SignalData $ \state -> do
+            (_, sampleY, insertSig) <- getNode2 Nothing xsig ysig state
+            insertSig sampleY sampleY
+    
+    (<*) = flip (*>)
 
 instance (Num a) => Num (Signal a) where
     (+)         = liftA2 (+)
