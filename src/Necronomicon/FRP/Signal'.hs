@@ -1,4 +1,4 @@
-{-# LANGUAGE MagicHash, UnboxedTuples, DeriveDataTypeable, FlexibleContexts #-}
+{-# LANGUAGE MagicHash, UnboxedTuples, DeriveDataTypeable #-}
 module Necronomicon.FRP.Signal' where
 
 import Control.Concurrent
@@ -385,9 +385,9 @@ writeToPool :: Int# -> Double# -> MutableByteArray# RealWorld -> ST RealWorld ()
 writeToPool index val mbyteArray = ST $ \st -> (# writeDoubleArray# mbyteArray index val st, () #)
 
 copyPoolIndex :: Int# -> MutableByteArray# RealWorld -> MutableByteArray# RealWorld -> ST RealWorld ()
-copyPoolIndex index mbyteArray1 mbyteArray2 = ST $ \st ->
-    let (# st1, val #) = readDoubleArray# mbyteArray1 index st
-    in  (# writeDoubleArray# mbyteArray2 index val st1, () #)
+copyPoolIndex index mbyteArray1 mbyteArray2 = ST $ \st -> 
+    case readDoubleArray# mbyteArray1 index st of
+        (# st1, val #) -> (# writeDoubleArray# mbyteArray2 index val st1, () #)
 
 clearBlock :: Int# -> Int# -> AudioBlockPool -> IO ()
 clearBlock index bsize (AudioBlockPool _ pool) = stToIO $ go (bsize -# 1#)
@@ -447,10 +447,10 @@ freeAudio :: AudioBlock -> AudioMonad ()
 freeAudio (AudioBlock _ channels) = mapM_ freeChannel channels
 
 poolAp2 :: (Double# -> Double# -> Double#) -> Int# -> Int# -> Int# -> MutableByteArray# RealWorld -> ST RealWorld ()
-poolAp2 f index1 index2 destIndex pool = ST $ \st ->
-    let (# st1, x #) = readDoubleArray# pool index1 st
-        (# st2, y #) = readDoubleArray# pool index2 st1
-    in  (# writeDoubleArray# pool destIndex (f x y) st2, () #)
+poolAp2 f index1 index2 destIndex pool = ST $ \st -> 
+    case readDoubleArray# pool index1 st of
+        (# st1, x #) -> case readDoubleArray# pool index2 st1 of
+            (# st2, y #) -> (# writeDoubleArray# pool destIndex (f x y) st2, () #)
 
 apChannel2 :: (Double# -> Double# -> Double#) -> Channel -> Channel -> Channel -> AudioMonad ()
 apChannel2 f (Channel _ index1) (Channel _ index2) (Channel _ destIndex) = AudioMonad $ \state -> do
