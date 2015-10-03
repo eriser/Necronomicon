@@ -446,9 +446,11 @@ mkAudio channels = getUIDs channels >>= mapM getChannel >>= return . AudioBlock 
 freeAudio :: AudioBlock -> AudioMonad ()
 freeAudio (AudioBlock _ channels) = mapM_ freeChannel channels
 
---TODO: This needs to multi-channel expand
-apAudio2 :: (Double# -> Double# -> Double#) -> AudioBlock -> AudioBlock -> AudioBlock -> AudioMonad ()
-apAudio2 f (AudioBlock _ xchannels) (AudioBlock _ ychannels) (AudioBlock _ destChannels) = apChannel2 f (head xchannels) (head ychannels) (head destChannels)
+poolAp2 :: (Double# -> Double# -> Double#) -> Int# -> Int# -> Int# -> MutableByteArray# RealWorld -> ST RealWorld ()
+poolAp2 f index1 index2 destIndex pool = ST $ \st ->
+    let (# st1, x #) = readDoubleArray# pool index1 st
+        (# st2, y #) = readDoubleArray# pool index2 st1
+    in  (# writeDoubleArray# pool destIndex (f x y) st2, () #)
 
 apChannel2 :: (Double# -> Double# -> Double#) -> Channel -> Channel -> Channel -> AudioMonad ()
 apChannel2 f (Channel _ index1) (Channel _ index2) (Channel _ destIndex) = AudioMonad $ \state -> do
@@ -458,11 +460,9 @@ apChannel2 f (Channel _ index1) (Channel _ index2) (Channel _ destIndex) = Audio
             _  -> poolAp2 f (index1 +# i) (index2 +# i) (destIndex +# i) pool >> go (i -# 1#)
     stToIO $ go (audioBlockSize state -# 1#)
 
-poolAp2 :: (Double# -> Double# -> Double#) -> Int# -> Int# -> Int# -> MutableByteArray# RealWorld -> ST RealWorld ()
-poolAp2 f index1 index2 destIndex pool = ST $ \st ->
-    let (# st1, x #) = readDoubleArray# pool index1 st
-        (# st2, y #) = readDoubleArray# pool index2 st1
-    in  (# writeDoubleArray# pool destIndex (f x y) st2, () #)
+--TODO: This needs to multi-channel expand
+apAudio2 :: (Double# -> Double# -> Double#) -> AudioBlock -> AudioBlock -> AudioBlock -> AudioMonad ()
+apAudio2 f (AudioBlock _ xchannels) (AudioBlock _ ychannels) (AudioBlock _ destChannels) = apChannel2 f (head xchannels) (head ychannels) (head destChannels)
 
 audioOp2 :: (Double# -> Double# -> Double#) -> AudioSignal -> AudioSignal -> AudioSignal
 audioOp2 f xsig ysig = AudioSig $ SignalData $ \state -> do
