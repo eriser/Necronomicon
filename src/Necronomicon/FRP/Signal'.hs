@@ -61,6 +61,7 @@ class SignalType s where
     waitTime :: s a -> Int
     ar       :: Real a => s a -> AudioSignal
     kr       :: s a -> Signal a
+    vr       :: s a -> VarSignal a
     rate     :: s a -> Rate
 
 instance SignalType Signal where
@@ -68,7 +69,8 @@ instance SignalType Signal where
     tosignal              = Signal
     waitTime              = const 16667
     ar                    = undefined
-    kr                    = undefined
+    kr                    = id
+    vr                    = tosignal . unsignal
     rate                  = const Kr
 
 instance SignalType AudioSig where
@@ -76,7 +78,8 @@ instance SignalType AudioSig where
     tosignal                = AudioSig
     waitTime                = const 23220
     ar                      = undefined
-    kr                      = undefined
+    kr                      = tosignal . unsignal
+    vr                      = tosignal . unsignal
     rate                    = const Ar
 
 instance SignalType VarSignal where
@@ -84,8 +87,11 @@ instance SignalType VarSignal where
     tosignal                 = VarSignal
     waitTime                 = const undefined --This is where the interesting parts would happen
     ar                       = undefined
-    kr                       = undefined
+    kr                       = tosignal . unsignal
+    vr                       = id
     rate                     = const Vr
+
+--Need audioToFrac and krToFrac
 
 -- instance Num AudioSignal where
 
@@ -105,6 +111,14 @@ instance Functor Signal where
             let update = f <$> sample
             insertSig update update
 
+instance Functor AudioSig where
+    fmap f sx = case unsignal sx of
+        Pure x -> AudioSig $ Pure $ f x
+        _      -> AudioSig $ SignalData $ \state -> do
+            (sample, insertSig) <- getNode1 Nothing sx state
+            let update = f <$> sample
+            insertSig update update
+
 instance Functor VarSignal where
     fmap f sx = case unsignal sx of
         Pure x -> VarSignal $ Pure $ f x
@@ -112,6 +126,7 @@ instance Functor VarSignal where
             (sample, insertSig) <- getNode1 Nothing sx state
             let update = f <$> sample
             insertSig update update
+
 
 
 instance Applicative Signal where
@@ -262,11 +277,11 @@ foldp f initx si = case unsignal si of
 --             then xsample >>= \x -> return ((count + 1, xfs, xsample) : srs', x : svals)
 --             else xfs >> return (srs', svals)
 
--- fzip :: (Functor f, Applicative f) => f a -> f b -> f (a, b)
--- fzip a b = (,) <$> a <*> b
+fzip :: (Functor f, Applicative f) => f a -> f b -> f (a, b)
+fzip a b = (,) <$> a <*> b
 
--- fzip3 :: (Functor f, Applicative f) => f a -> f b -> f c -> f (a, b, c)
--- fzip3 a b c = (,,) <$> a <*> b <*> c
+fzip3 :: (Functor f, Applicative f) => f a -> f b -> f c -> f (a, b, c)
+fzip3 a b c = (,,) <$> a <*> b <*> c
 
 -- effectful :: Rate r => IO a -> Signal r a
 -- effectful effectfulAction = signal
