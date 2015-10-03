@@ -317,6 +317,15 @@ ratePool signal state = case rate signal of
 ---------------------------------------------------------------------------------------------------------
 -- Audio
 ---------------------------------------------------------------------------------------------------------
+
+instance Num AudioSignal where
+    (+)         = audioOp2 (+##)
+    (*)         = audioOp2 (*##)
+    (-)         = audioOp2 (-##)
+    abs         = undefined
+    signum      = undefined
+    fromInteger = undefined
+
 data AudioBlockPool = AudioBlockPool
     { audioPoolSize :: Int
     , poolArray     :: MutableByteArray# RealWorld
@@ -431,11 +440,15 @@ freeChannel (Channel uid index) = AudioMonad $ \state -> do
     clearBlock index (audioBlockSize state) pool
     atomically $ modifyTVar' (audioUIDs state) (I# uid :)
 
-mkAudio :: Int -> AudioMonad [Channel]
-mkAudio channels = getUIDs channels >>= mapM getChannel
+mkAudio :: Int -> AudioMonad AudioBlock
+mkAudio channels = getUIDs channels >>= mapM getChannel >>= return . AudioBlock channels
 
-freeAudio :: [Channel] -> AudioMonad ()
-freeAudio = mapM_ freeChannel
+freeAudio :: AudioBlock -> AudioMonad ()
+freeAudio (AudioBlock _ channels) = mapM_ freeChannel channels
+
+--TODO: This needs to multi-channel expand
+apAudio2 :: (Double# -> Double# -> Double#) -> AudioBlock -> AudioBlock -> AudioBlock -> AudioMonad ()
+apAudio2 f (AudioBlock _ xchannels) (AudioBlock _ ychannels) (AudioBlock _ destChannels) = apChannel2 f (head xchannels) (head ychannels) (head destChannels)
 
 apChannel2 :: (Double# -> Double# -> Double#) -> Channel -> Channel -> Channel -> AudioMonad ()
 apChannel2 f (Channel _ index1) (Channel _ index2) (Channel _ destIndex) = AudioMonad $ \state -> do
@@ -450,6 +463,15 @@ poolAp2 f index1 index2 destIndex pool = ST $ \st ->
     let (# st1, x #) = readDoubleArray# pool index1 st
         (# st2, y #) = readDoubleArray# pool index2 st1
     in  (# writeDoubleArray# pool destIndex (f x y) st2, () #)
+
+audioOp2 :: (Double# -> Double# -> Double#) -> AudioSignal -> AudioSignal -> AudioSignal
+audioOp2 f xsig ysig = AudioSig $ SignalData $ \state -> do
+    (xsample, ysample, insertSig) <- getNode2 Nothing xsig ysig state
+    xaudio    <- xsample
+    yaudio    <- ysample
+    destAudio <- runAudioMonad (mkAudio $ numChannels xaudio) (audioState state)
+    let update = runAudioMonad (apAudio2 f xaudio yaudio destAudio >> return destAudio) (audioState state)
+    insertSig update update
 
 ---------------------------------------------------------------------------------------------------------
 -- Hotswap
