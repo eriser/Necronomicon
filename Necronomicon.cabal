@@ -79,7 +79,7 @@ library
         -- Necronomicon.Networking.Types
         Necronomicon.Patterns
         Necronomicon.FRP
-        -- Necronomicon.FRP.Signal
+        Necronomicon.FRP.Signal
         -- Necronomicon.FRP.Types
         -- Necronomicon.FRP.GUI
         -- Necronomicon.FRP.Audio

@@ -1,7 +1,10 @@
-module Necronomicon.FRP where
+module Necronomicon.FRP 
+    ( module Necronomicon.FRP.Signal
+    , module Data.Monoid
+    ) where
 
-frp :: ()
-frp = ()
+import Necronomicon.FRP.Signal  (Signal)
+import Data.Monoid ((<>))
 
 -- module Necronomicon.FRP
 --     ( module Necronomicon.FRP.Signal
@@ -26,5 +29,4 @@ frp = ()
 -- import Necronomicon.FRP.State
 -- import Necronomicon.FRP.Runtime (runSignal)
 -- import Necronomicon.FRP.Types   ((<~), (~~), (~>), Time, Key)
--- import Necronomicon.FRP.Signal  (Signal)
--- import Data.Monoid ((<>))
+
