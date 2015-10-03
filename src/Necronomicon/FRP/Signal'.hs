@@ -461,6 +461,8 @@ apChannel2 f (Channel _ index1) (Channel _ index2) (Channel _ destIndex) = Audio
     stToIO $ go (audioBlockSize state -# 1#)
 
 --TODO: This needs to multi-channel expand
+--TODO: Make all ST monad shit strict (use case statements instead of lets!)
+--TODO: Add AudioSignal archiving and finalizing
 apAudio2 :: (Double# -> Double# -> Double#) -> AudioBlock -> AudioBlock -> AudioBlock -> AudioMonad ()
 apAudio2 f (AudioBlock _ xchannels) (AudioBlock _ ychannels) (AudioBlock _ destChannels) = apChannel2 f (head xchannels) (head ychannels) (head destChannels)
 
