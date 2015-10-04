@@ -47,13 +47,12 @@ data SignalData a = SignalData (SignalState -> IO (SignalValue a))
 class SignalType s where
     unsignal :: s a -> SignalData a
     tosignal :: SignalData a -> s a
-    waitTime :: s a -> Int
     rate     :: s a -> Rate
 
 -- ar       :: Real a => s a -> AudioSignal
 -- kr       :: s a -> Signal a
 -- vr       :: s a -> VarSignal a
- 
+
 ---------------------------------------------------------------------------------------------------------
 -- Instances
 ---------------------------------------------------------------------------------------------------------

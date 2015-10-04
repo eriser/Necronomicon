@@ -1,24 +1,25 @@
-{-# LANGUAGE MagicHash, UnboxedTuples, DeriveDataTypeable #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 module Necronomicon.FRP.VarSignal where
 
 import Necronomicon.FRP.SignalType
+import Necronomicon.FRP.Time
 import Control.Applicative
 import Data.Typeable
 
 
-newtype VarSignal a = VarSignal (SignalData a) deriving (Typeable)
+data VarSignal a = VarSignal (SignalData a) deriving (Typeable)
 
 ---------------------------------------------------------------------------------------------------------
 -- Instances
 ---------------------------------------------------------------------------------------------------------
 
+varTime :: VarSignal (Time, a) -> VarSignal Time
+varTime = fmap fst
+
+
 instance SignalType VarSignal where
     unsignal (VarSignal sig) = sig
     tosignal                 = VarSignal
-    waitTime                 = const undefined --This is where the interesting parts would happen
-    -- ar                       = undefined
-    -- kr                       = tosignal . unsignal
-    -- vr                       = id
     rate                     = const Vr
 
 instance Functor VarSignal where

@@ -21,10 +21,6 @@ type AudioSignal = AudioSig AudioBlock
 instance SignalType AudioSig where
     unsignal (AudioSig sig) = sig
     tosignal                = AudioSig
-    waitTime                = const 23220
-    -- ar                      = undefined
-    -- kr                      = tosignal . unsignal
-    -- vr                      = tosignal . unsignal
     rate                    = const Ar
 
 instance Functor AudioSig where

@@ -58,13 +58,9 @@ library
 
     exposed-modules:
         Necronomicon
+        Necronomicon.FRP.Control
         -- Necronomicon.UGen
         -- Necronomicon.Runtime
-        Necronomicon.Util
-        Necronomicon.Util.PriorityQueue
-        Necronomicon.Util.Grid
-        Necronomicon.Physics.DynamicTree
-
     other-modules:
         -- Necronomicon.Language.Layout
         Necronomicon.Util.TGA
@@ -127,6 +123,10 @@ library
         Necronomicon.Physics
         Necronomicon.Physics.Collider
         Necronomicon.Physics.GJK
+        Necronomicon.Util
+        Necronomicon.Util.PriorityQueue
+        Necronomicon.Util.Grid
+        Necronomicon.Physics.DynamicTree
         Paths_Necronomicon
 
     Build-Depends:

@@ -1,4 +1,4 @@
-{-# LANGUAGE MagicHash, UnboxedTuples, DeriveDataTypeable #-}
+{-# LANGUAGE DeriveDataTypeable #-}
 module Necronomicon.FRP.Signal where
 
 import Necronomicon.FRP.SignalType
@@ -15,10 +15,6 @@ newtype Signal a = Signal (SignalData a) deriving (Typeable)
 instance SignalType Signal where
     unsignal (Signal sig) = sig
     tosignal              = Signal
-    waitTime              = const 16667
-    -- ar                    = undefined
-    -- kr                    = id
-    -- vr                    = tosignal . unsignal
     rate                  = const Kr
 
 instance Functor Signal where

@@ -13,9 +13,30 @@ infixl 4 <~, ~~
 infixr 4 ~>
 
 fzip :: (Functor f, Applicative f) => f a -> f b -> f (a, b)
-fzip a b = (,) <$> a <*> b
+fzip a b = (,) <~ a ~~ b
 
 fzip3 :: (Functor f, Applicative f) => f a -> f b -> f c -> f (a, b, c)
-fzip3 a b c = (,,) <$> a <*> b <*> c
+fzip3 a b c = (,,) <~ a ~~ b ~~ c
+
+fmap2 :: Applicative f => (a -> b -> c) -> f a -> f b -> f c
+fmap2 f a b = f <~ a ~~ b
+
+fmap3 :: Applicative f => (a -> b -> c -> d) -> f a -> f b -> f c -> f d
+fmap3 f a b c = f <~ a ~~ b ~~ c
+
+fmap4 :: Applicative f => (a -> b -> c -> d -> e) -> f a -> f b -> f c -> f d -> f e
+fmap4 f a b c d = f <~ a ~~ b ~~ c ~~ d
+
+fmap5 :: Applicative f => (a -> b -> c -> d -> e -> ff) -> f a -> f b -> f c -> f d -> f e -> f ff
+fmap5 f a b c d e = f <~ a ~~ b ~~ c ~~ d ~~ e
+
+fmap6 :: Applicative f => (a -> b -> c -> d -> e -> ff -> g) -> f a -> f b -> f c -> f d -> f e -> f ff -> f g
+fmap6 f a b c d e f' = f <~ a ~~ b ~~ c ~~ d ~~ e ~~ f'
+
+fmap7 :: Applicative f => (a -> b -> c -> d -> e -> ff -> g -> h) -> f a -> f b -> f c -> f d -> f e -> f ff -> f g -> f h
+fmap7 f a b c d e f' g = f <~ a ~~ b ~~ c ~~ d ~~ e ~~ f' ~~ g
+
+fmap8 :: Applicative f => (a -> b -> c -> d -> e -> ff -> g -> h -> i) -> f a -> f b -> f c -> f d -> f e -> f ff -> f g -> f h -> f i
+fmap8 f a b c d e f' g h = f <~ a ~~ b ~~ c ~~ d ~~ e ~~ f' ~~ g ~~ h
 
 
