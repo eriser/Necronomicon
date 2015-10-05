@@ -23,7 +23,7 @@ import qualified Data.Map.Strict    as Map
 ---------------------------------------------------------------------------------------------------------
 
 type SignalPool    = [IORef (Maybe (Int, IO ()))]
-type SignalValue a = (IO (IO a), Int, IO (), IO ())
+type SignalValue a = (IO (IO a), [Int], IO (), IO (), IO ())
 data RunStatus     = Running | HotSwapping | Quitting
 data SignalState   = SignalState
                    { nodePath   :: NodePath
@@ -78,17 +78,16 @@ foldp :: (SignalType signal, Typeable input, Typeable state)
       -> state                     -- ^ The initial state of the signal
       -> signal input              -- ^ Input signal which is applied to the higher-order function
       -> signal state              -- ^ Resultant signal which updates based on the input signal
-
 foldp f initx si = case unsignal si of
     Pure i -> tosignal $ SignalData $ \state -> fmap snd $ mfix $ \ ~(sig, _) -> do
         let nodePath' = TypeRep2Node (getTypeRep initx) (getTypeRep i) $ nodePath state
-        insertSignal' (Just nodePath') initx (f i <$> sig) (ratePool si state) (return ()) (return ()) state
+        insertSignal' (Just nodePath') initx (f i <$> sig) [] (rate si) (return ()) (return ()) (return ()) state
 
     _      -> tosignal $ SignalData $ \state -> fmap snd $ mfix $ \ ~(sig, _) -> do
         let nodePath'          = TypeRep2Node (getTypeRep initx) (getSignalTypeRep si) $ nodePath state
-        (iini, _, ifs, iarch) <- getSignalNode si state{nodePath = nodePath'}
-        icont                 <- iini
-        insertSignal' (Just nodePath') initx (f <$> icont <*> sig) (ratePool si state) ifs iarch state
+        (iini, _, ids, ifs, iarch) <- getSignalNode si state{nodePath = nodePath'}
+        icont                      <- iini
+        insertSignal' (Just nodePath') initx (f <$> icont <*> sig) [] (rate si) ids ifs iarch state
 
 -- feedback :: (SignalType s, Typeable a) => s a -> (s a -> s a) -> s a
 -- feedback initx f = let signal = f $ sampleDelay initx signal in signal
@@ -311,7 +310,7 @@ nextUID state = atomically $ do
 
 getSignalNode :: SignalType s => s a ->  SignalState -> IO (SignalValue a)
 getSignalNode signal state = case unsignal signal of
-    Pure x         ->  return (return $ return x, -1, return (), return ())
+    Pure x         ->  return (return $ return x, [], return (), return (), return ())
     SignalData sig -> do
         stableName <- signal `seq` makeStableName signal
         let hash = hashStableName stableName
@@ -325,14 +324,16 @@ getSignalNode signal state = case unsignal signal of
                 atomically $ modifyTVar' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce signalValue))
                 return signalValue
 
-insertSignal :: Maybe NodePath -> a -> IO a -> TVar SignalPool -> IO () -> IO () -> SignalState -> IO (SignalValue a)
-insertSignal  maybeNodePath initx updatingFunction pool finalizers archivers state = fmap snd $ insertSignal' maybeNodePath initx updatingFunction pool finalizers archivers state
+insertSignal :: Maybe NodePath -> a -> IO a -> [Int] -> Rate -> IO () -> IO () -> IO () -> SignalState -> IO (SignalValue a)
+insertSignal  maybeNodePath initx updatingFunction uids sigRate demand finalizers archivers state =
+    fmap snd $ insertSignal' maybeNodePath initx updatingFunction uids sigRate demand finalizers archivers state
 
-insertSignal' :: Maybe NodePath -> a -> IO a -> TVar SignalPool -> IO () -> IO () -> SignalState -> IO (IO a, SignalValue a)
-insertSignal' maybeNodePath initx updatingFunction pool finalizers archivers state = do
+insertSignal' :: Maybe NodePath -> a -> IO a -> [Int] -> Rate -> IO () -> IO () -> IO () -> SignalState -> IO (IO a, SignalValue a)
+insertSignal' maybeNodePath initx updatingFunction uids sigRate demand finalizers archivers state = do
     uid             <- nextUID state
     ref             <- initOrHotSwap maybeNodePath initx state
-    updateActionRef <- newIORef $ Just (0, updatingFunction >>= \x -> x `seq` writeIORef ref x)
+    let updateAction = updatingFunction >>= \x -> x `seq` writeIORef ref x
+    updateActionRef <- newIORef $ Just (0, updateAction)
     let initializer  = do
             atomicModifyIORef' updateActionRef $ \maybeUA -> case maybeUA of
                 Just (refCount, ua) -> (Just (refCount + 1, ua), ())
@@ -344,8 +345,11 @@ insertSignal' maybeNodePath initx updatingFunction pool finalizers archivers sta
         archiver = case maybeNodePath of
             Nothing -> return ()
             Just np -> readIORef ref >>= \archivedX -> modifyIORef (archive state) (Map.insert np (unsafeCoerce archivedX))
-    atomically $ modifyTVar' pool (updateActionRef :)
-    return (readIORef ref, (initializer, uid, finalizer >> finalizers, archivers >> archiver))
+    case sigRate of
+        Ar -> atomically $ modifyTVar' (newArPool state) (updateActionRef :)
+        Kr -> atomically $ modifyTVar' (newKrPool state) (updateActionRef :)
+        _  -> return ()
+    return (readIORef ref, (initializer, uid : uids, demand >> updateAction, finalizer >> finalizers, archivers >> archiver))
 
 getTypeRep :: Typeable a => a -> TypeRep
 getTypeRep = typeRep . typeHelper
@@ -361,9 +365,10 @@ getSignalTypeRep = typeRep . signalTypeHelper
 
 getNode1 :: SignalType s => Maybe NodePath -> s a -> SignalState -> IO (IO a, IO x -> IO x -> IO (SignalValue x))
 getNode1 maybeArchivePath signalA state = do
-    (initA, _, finalizersA, archiveA) <- getSignalNode signalA state{nodePath = BranchNode 0 startingPath}
-    sampleA                           <- initA
-    return (sampleA, \initValueM updateFunction -> initValueM >>= \initValue -> insertSignal maybeArchivePath initValue updateFunction (ratePool signalA state) finalizersA archiveA state)
+    (initA, aids, demand, finalizersA, archiveA) <- getSignalNode signalA state{nodePath = BranchNode 0 startingPath}
+    sampleA                                      <- initA
+    return (sampleA, \initValueM updateFunction -> initValueM >>= \initValue ->
+        insertSignal maybeArchivePath initValue updateFunction aids (rate signalA) demand finalizersA archiveA state)
     where
         startingPath = case maybeArchivePath of
             Nothing          -> nodePath state
@@ -371,13 +376,15 @@ getNode1 maybeArchivePath signalA state = do
 
 getNode2 :: (SignalType s) => Maybe NodePath -> s a -> s b -> SignalState -> IO (IO a, IO b, IO x -> IO x -> IO (SignalValue x))
 getNode2 maybeArchivePath signalA signalB state = do
-    (initA, _, finalizersA, archiveA) <- getSignalNode signalA state{nodePath = BranchNode 0 startingPath}
-    (initB, _, finalizersB, archiveB) <- getSignalNode signalB state{nodePath = BranchNode 1 startingPath}
-    sampleA                           <- initA
-    sampleB                           <- initB
-    let finalizer                      = finalizersA >> finalizersB
-        archiver                       = archiveA >> archiveB
-    return (sampleA, sampleB, \initValueM updateFunction -> initValueM >>= \initValue -> insertSignal maybeArchivePath initValue updateFunction (ratePool signalA state) finalizer archiver state)
+    (initA, aids, demandA, finalizersA, archiveA) <- getSignalNode signalA state{nodePath = BranchNode 0 startingPath}
+    (initB, bids, demandB, finalizersB, archiveB) <- getSignalNode signalB state{nodePath = BranchNode 1 startingPath}
+    sampleA                                       <- initA
+    sampleB                                       <- initB
+    let demand                                     = demandA >> demandB
+        finalizer                                  = finalizersA >> finalizersB
+        archiver                                   = archiveA >> archiveB
+    return (sampleA, sampleB, \initValueM updateFunction -> initValueM >>= \initValue ->
+        insertSignal maybeArchivePath initValue updateFunction (aids ++ bids) (rate signalA) demand finalizer archiver state)
     where
         startingPath = case maybeArchivePath of
             Nothing          -> nodePath state
@@ -385,15 +392,17 @@ getNode2 maybeArchivePath signalA signalB state = do
 
 getNode3 :: (SignalType s) => Maybe NodePath -> s a -> s b -> s c -> SignalState -> IO (IO a, IO b, IO c, IO x -> IO x -> IO (SignalValue x))
 getNode3 maybeArchivePath signalA signalB signalC state = do
-    (initA, _, finalizersA, archiveA) <- getSignalNode signalA state{nodePath = BranchNode 0 startingPath}
-    (initB, _, finalizersB, archiveB) <- getSignalNode signalB state{nodePath = BranchNode 1 startingPath}
-    (initC, _, finalizersC, archiveC) <- getSignalNode signalC state{nodePath = BranchNode 2 startingPath}
-    sampleA                           <- initA
-    sampleB                           <- initB
-    sampleC                           <- initC
-    let finalizer                      = finalizersA >> finalizersB >> finalizersC
-        archiver                       = archiveA >> archiveB >> archiveC
-    return (sampleA, sampleB, sampleC, \initValueM updateFunction -> initValueM >>= \initValue -> insertSignal maybeArchivePath initValue updateFunction (ratePool signalA state) finalizer archiver state)
+    (initA, aids, demandA, finalizersA, archiveA) <- getSignalNode signalA state{nodePath = BranchNode 0 startingPath}
+    (initB, bids, demandB, finalizersB, archiveB) <- getSignalNode signalB state{nodePath = BranchNode 1 startingPath}
+    (initC, cids, demandC, finalizersC, archiveC) <- getSignalNode signalC state{nodePath = BranchNode 2 startingPath}
+    sampleA                                       <- initA
+    sampleB                                       <- initB
+    sampleC                                       <- initC
+    let demand                                     = demandA >> demandB >> demandC
+        finalizer                                  = finalizersA >> finalizersB >> finalizersC
+        archiver                                   = archiveA >> archiveB >> archiveC
+    return (sampleA, sampleB, sampleC, \initValueM updateFunction -> initValueM >>= \initValue ->
+        insertSignal maybeArchivePath initValue updateFunction (aids ++ bids ++ cids) (rate signalA) demand finalizer archiver state)
     where
         startingPath = case maybeArchivePath of
             Nothing          -> nodePath state

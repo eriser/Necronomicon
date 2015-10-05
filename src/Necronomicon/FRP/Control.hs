@@ -15,5 +15,5 @@ cycle xs = sig
                     x : xs' <- readIORef ref
                     writeIORef ref xs'
                     return x
-            insertSignal Nothing (head xs) update (ratePool sig state) (return ()) (return ()) state
+            insertSignal Nothing (head xs) update [] (rate sig) (return ()) (return ()) (return ()) state
 

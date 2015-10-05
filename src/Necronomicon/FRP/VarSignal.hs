@@ -2,21 +2,24 @@
 module Necronomicon.FRP.VarSignal where
 
 import Necronomicon.FRP.SignalType
-import Necronomicon.FRP.Time
+-- import Necronomicon.FRP.Time
 import Control.Applicative
 import Data.Typeable
 
 
+--Like Demand rate in SuperCollider?
+--DemandSignal instead?
 data VarSignal a = VarSignal (SignalData a) deriving (Typeable)
 
 ---------------------------------------------------------------------------------------------------------
 -- Instances
 ---------------------------------------------------------------------------------------------------------
 
-varTime :: VarSignal (Time, a) -> VarSignal Time
-varTime = fmap fst
+-- pattern :: SignalType s => VarSignal (Time, a) -> s a
+-- pattern sig = tosignal $ SignalData $ \state -> do
 
 
+--List of nodes each node is associated with, then works like events
 instance SignalType VarSignal where
     unsignal (VarSignal sig) = sig
     tosignal                 = VarSignal
@@ -50,7 +53,7 @@ instance Applicative VarSignal where
         _                -> VarSignal $ SignalData $ \state -> do
             (_, sampleY, insertSig) <- getNode2 Nothing xsig ysig state
             insertSig sampleY sampleY
-    
+
     (<*) = flip (*>)
 
 instance (Num a) => Num (VarSignal a) where

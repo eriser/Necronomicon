@@ -45,7 +45,7 @@ instance Applicative Signal where
         _                -> Signal $ SignalData $ \state -> do
             (_, sampleY, insertSig) <- getNode2 Nothing xsig ysig state
             insertSig sampleY sampleY
-    
+
     (<*) = flip (*>)
 
 instance (Num a) => Num (Signal a) where

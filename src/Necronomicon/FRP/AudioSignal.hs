@@ -47,7 +47,7 @@ writeToPool :: Int# -> Double# -> MutableByteArray# RealWorld -> ST RealWorld ()
 writeToPool index val mbyteArray = ST $ \st -> (# writeDoubleArray# mbyteArray index val st, () #)
 
 copyPoolIndex :: Int# -> MutableByteArray# RealWorld -> MutableByteArray# RealWorld -> ST RealWorld ()
-copyPoolIndex index mbyteArray1 mbyteArray2 = ST $ \st -> 
+copyPoolIndex index mbyteArray1 mbyteArray2 = ST $ \st ->
     case readDoubleArray# mbyteArray1 index st of
         (# st1, val #) -> (# writeDoubleArray# mbyteArray2 index val st1, () #)
 
@@ -109,7 +109,7 @@ freeAudio :: AudioBlock -> AudioMonad ()
 freeAudio (AudioBlock _ channels) = mapM_ freeChannel channels
 
 poolAp2 :: (Double# -> Double# -> Double#) -> Int# -> Int# -> Int# -> MutableByteArray# RealWorld -> ST RealWorld ()
-poolAp2 f index1 index2 destIndex pool = ST $ \st -> 
+poolAp2 f index1 index2 destIndex pool = ST $ \st ->
     case readDoubleArray# pool index1 st of
         (# st1, x #) -> case readDoubleArray# pool index2 st1 of
             (# st2, y #) -> (# writeDoubleArray# pool destIndex (f x y) st2, () #)

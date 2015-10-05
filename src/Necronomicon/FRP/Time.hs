@@ -17,7 +17,7 @@ module Necronomicon.FRP.Time
 -- Time
 -----------------------------------------------------------------
 
-type Time = Double
+type Time = Rational
 
 millisecond    :: Time
 second         :: Time
