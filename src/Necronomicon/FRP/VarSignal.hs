@@ -2,7 +2,10 @@
 module Necronomicon.FRP.VarSignal where
 
 import Necronomicon.FRP.SignalType
--- import Necronomicon.FRP.Time
+import Necronomicon.FRP.Time
+
+import Control.Concurrent
+import Data.IORef
 import Control.Applicative
 import Data.Typeable
 
@@ -15,9 +18,25 @@ data VarSignal a = VarSignal (SignalData a) deriving (Typeable)
 -- Instances
 ---------------------------------------------------------------------------------------------------------
 
--- pattern :: SignalType s => VarSignal (Time, a) -> s a
--- pattern sig = tosignal $ SignalData $ \state -> do
-
+--TODO: This is just a quick and dirty implementation, we need a synchronized version that is at a specific tempo
+pattern :: (SignalType s) => VarSignal (Time, a) -> s a
+pattern sig = signal
+    where
+        signal = tosignal $ SignalData $ \state -> do
+            (initX, uids, demand, finalizer, archiver) <- getSignalNode sig state
+            sampleX                                    <- initX
+            initValue                                  <- snd <$> sampleX
+            ref                                        <- newIORef initValue
+            killRef                                    <- newIORef False
+            let update = readIORef killRef >>= \kill -> if kill then return () else do
+                    (time, x) <- sampleX
+                    writeIORef ref x
+                    threadDelay $ floor $ time * 1000000
+                    demand
+                    update
+                fin = finalizer >> writeIORef killRef True
+            _ <- forkIO update
+            insertSignal Nothing initValue (readIORef ref) uids (rate signal) (return ()) fin archiver state
 
 --List of nodes each node is associated with, then works like events
 instance SignalType VarSignal where

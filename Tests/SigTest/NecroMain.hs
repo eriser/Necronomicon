@@ -4,10 +4,13 @@ import Necronomicon
 import qualified Necronomicon.FRP.Control as Signal
 
 necroMain :: Signal ()
-necroMain = sigPrint cycleSignal
+necroMain = pattern (fzip timeSignal $ sigPrint cycleSignal) *> pure ()
 
-cycleSignal :: Signal Int
-cycleSignal = Signal.cycle [0, 1, 2, 3, 4]
+timeSignal :: VarSignal Time
+timeSignal = Signal.cycle [0.5, 0.25, 0.25, 1]
+
+cycleSignal :: VarSignal Int
+cycleSignal = Signal.cycle [1, 2, 3, 4, 5]
 
 finalCountdown :: Signal Double
 finalCountdown = foldp (flip (-)) 0 2

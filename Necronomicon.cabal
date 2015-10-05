@@ -80,6 +80,7 @@ library
         Necronomicon.FRP.AudioSignal
         Necronomicon.FRP.VarSignal
         Necronomicon.FRP.Runtime
+        Necronomicon.FRP.Time
         -- Necronomicon.FRP.Types
         -- Necronomicon.FRP.GUI
         -- Necronomicon.FRP.Audio
