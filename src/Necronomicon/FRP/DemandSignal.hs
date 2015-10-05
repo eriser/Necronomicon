@@ -20,24 +20,29 @@ data DemandSignal a = DemandSignal (SignalData a) deriving (Typeable)
 
 --TODO: This is just a quick and dirty implementation, we need a synchronized version that is at a specific tempo
 --TODO: Need to add state archiving
-pattern :: (SignalType s) => DemandSignal (Time, a) -> s a
-pattern sig = signal
+pattern :: (SignalType s) => DemandSignal Time -> DemandSignal a-> s a
+pattern timeSig valueSig = signal
     where
         signal = tosignal $ SignalData $ \state -> do
-            (initX, uids, demand, finalizer, archiver) <- getSignalNode sig state
-            sampleX                                    <- initX
-            initValue                                  <- snd <$> sampleX
-            ref                                        <- newIORef initValue
-            killRef                                    <- newIORef False
+            (initT, tids, demandT, finalizerT, archiverT) <- getSignalNode timeSig  state
+            (initV, vids, demandV, finalizerV, archiverV) <- getSignalNode valueSig state
+            sampleT                                       <- initT
+            sampleV                                       <- initV
+            initValue                                     <- sampleV
+            ref                                           <- newIORef initValue
+            killRef                                       <- newIORef False
             let update = readIORef killRef >>= \kill -> if kill then return () else do
-                    (time, x) <- sampleX
+                    time <- sampleT
+                    x    <- sampleV
                     writeIORef ref x
                     threadDelay $ floor $ time * 1000000
-                    demand
+                    demandT
+                    demandV
                     update
-                fin = finalizer >> writeIORef killRef True
+                finalizer = finalizerT >> finalizerV >> writeIORef killRef True
+                archiver  = archiverT >> archiverV
             _ <- forkIO update
-            insertSignal Nothing initValue (readIORef ref) uids (rate signal) (return ()) fin archiver state
+            insertSignal Nothing initValue (readIORef ref) (tids ++ vids) (rate signal) (return ()) finalizer archiver state
 
 --List of nodes each node is associated with, then works like events
 instance SignalType DemandSignal where
