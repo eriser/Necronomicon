@@ -1,5 +1,5 @@
 {-# LANGUAGE DeriveDataTypeable #-}
-module Necronomicon.FRP.VarSignal where
+module Necronomicon.FRP.DemandSignal where
 
 import Necronomicon.FRP.SignalType
 import Necronomicon.FRP.Time
@@ -12,14 +12,15 @@ import Data.Typeable
 
 --Like Demand rate in SuperCollider?
 --DemandSignal instead?
-data VarSignal a = VarSignal (SignalData a) deriving (Typeable)
+data DemandSignal a = DemandSignal (SignalData a) deriving (Typeable)
 
 ---------------------------------------------------------------------------------------------------------
 -- Instances
 ---------------------------------------------------------------------------------------------------------
 
 --TODO: This is just a quick and dirty implementation, we need a synchronized version that is at a specific tempo
-pattern :: (SignalType s) => VarSignal (Time, a) -> s a
+--TODO: Need to add state archiving
+pattern :: (SignalType s) => DemandSignal (Time, a) -> s a
 pattern sig = signal
     where
         signal = tosignal $ SignalData $ \state -> do
@@ -39,43 +40,43 @@ pattern sig = signal
             insertSignal Nothing initValue (readIORef ref) uids (rate signal) (return ()) fin archiver state
 
 --List of nodes each node is associated with, then works like events
-instance SignalType VarSignal where
-    unsignal (VarSignal sig) = sig
-    tosignal                 = VarSignal
+instance SignalType DemandSignal where
+    unsignal (DemandSignal sig) = sig
+    tosignal                 = DemandSignal
     rate                     = const Vr
 
-instance Functor VarSignal where
+instance Functor DemandSignal where
     fmap f sx = case unsignal sx of
-        Pure x -> VarSignal $ Pure $ f x
-        _      -> VarSignal $ SignalData $ \state -> do
+        Pure x -> DemandSignal $ Pure $ f x
+        _      -> DemandSignal $ SignalData $ \state -> do
             (sample, insertSig) <- getNode1 Nothing sx state
             let update = f <$> sample
             insertSig update update
 
-instance Applicative VarSignal where
-    pure x = VarSignal $ Pure x
+instance Applicative DemandSignal where
+    pure x = DemandSignal $ Pure x
 
     sf <*> sx = case (unsignal sf, unsignal sx) of
-        (Pure f, Pure x) -> VarSignal $ Pure $ f x
+        (Pure f, Pure x) -> DemandSignal $ Pure $ f x
         (Pure f, _     ) -> fmap f sx
         (_     , Pure x) -> fmap ($ x) sf
-        _                -> VarSignal $ SignalData $ \state -> do
+        _                -> DemandSignal $ SignalData $ \state -> do
             (sampleF, sampleX, insertSig) <- getNode2 Nothing sf sx state
             let update = sampleF <*> sampleX
             insertSig update update
 
     xsig *> ysig = case (unsignal xsig, unsignal ysig) of
         (Pure _, _     ) -> ysig
-        (_     , Pure y) -> VarSignal $ SignalData $ \state -> do
+        (_     , Pure y) -> DemandSignal $ SignalData $ \state -> do
             (_, insertSig) <- getNode1 Nothing xsig state
             insertSig (return y) (return y)
-        _                -> VarSignal $ SignalData $ \state -> do
+        _                -> DemandSignal $ SignalData $ \state -> do
             (_, sampleY, insertSig) <- getNode2 Nothing xsig ysig state
             insertSig sampleY sampleY
 
     (<*) = flip (*>)
 
-instance (Num a) => Num (VarSignal a) where
+instance (Num a) => Num (DemandSignal a) where
     (+)         = liftA2 (+)
     (*)         = liftA2 (*)
     (-)         = liftA2 (-)
@@ -83,11 +84,11 @@ instance (Num a) => Num (VarSignal a) where
     signum      = fmap signum
     fromInteger = pure . fromInteger
 
-instance (Fractional a) => Fractional (VarSignal a) where
+instance (Fractional a) => Fractional (DemandSignal a) where
     (/)          = liftA2 (/)
     fromRational = pure . fromRational
 
-instance (Floating a) => Floating (VarSignal a) where
+instance (Floating a) => Floating (DemandSignal a) where
     pi      = pure pi
     (**)    = liftA2 (**)
     exp     = fmap exp
@@ -107,7 +108,7 @@ instance (Floating a) => Floating (VarSignal a) where
     atanh   = fmap atanh
     acosh   = fmap acosh
 
-instance (Monoid m) => Monoid (VarSignal m) where
+instance (Monoid m) => Monoid (DemandSignal m) where
     mempty  = pure mempty
     mappend = liftA2 mappend
     mconcat = foldr mappend mempty

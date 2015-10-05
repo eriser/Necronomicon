@@ -78,7 +78,7 @@ library
         Necronomicon.FRP.SignalType
         Necronomicon.FRP.Signal
         Necronomicon.FRP.AudioSignal
-        Necronomicon.FRP.VarSignal
+        Necronomicon.FRP.DemandSignal
         Necronomicon.FRP.Runtime
         Necronomicon.FRP.Time
         -- Necronomicon.FRP.Types

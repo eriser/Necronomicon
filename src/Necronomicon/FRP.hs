@@ -2,7 +2,7 @@ module Necronomicon.FRP
     ( module Necronomicon.FRP.SignalType
     , module Necronomicon.FRP.Signal
     , module Necronomicon.FRP.AudioSignal
-    , module Necronomicon.FRP.VarSignal
+    , module Necronomicon.FRP.DemandSignal
     , module Necronomicon.FRP.Runtime
     , module Necronomicon.FRP.Applicative
     , module Necronomicon.FRP.Time
@@ -12,7 +12,7 @@ module Necronomicon.FRP
 import Necronomicon.FRP.SignalType
 import Necronomicon.FRP.Signal
 import Necronomicon.FRP.AudioSignal
-import Necronomicon.FRP.VarSignal
+import Necronomicon.FRP.DemandSignal
 import Necronomicon.FRP.Runtime
 import Necronomicon.FRP.Applicative
 import Necronomicon.FRP.Time
