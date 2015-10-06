@@ -12,12 +12,6 @@ module Necronomicon.FRP.Applicative where
 infixl 4 <~, ~~
 infixr 4 ~>
 
-fzip :: (Functor f, Applicative f) => f a -> f b -> f (a, b)
-fzip a b = (,) <~ a ~~ b
-
-fzip3 :: (Functor f, Applicative f) => f a -> f b -> f c -> f (a, b, c)
-fzip3 a b c = (,,) <~ a ~~ b ~~ c
-
 fmap2 :: Applicative f => (a -> b -> c) -> f a -> f b -> f c
 fmap2 f a b = f <~ a ~~ b
 

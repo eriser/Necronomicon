@@ -1,16 +1,16 @@
 module NecroMain where
 
 import Necronomicon
-import qualified Necronomicon.FRP.Control as Signal
+import qualified Necronomicon.FRP.Control as Sig
 
 necroMain :: Signal ()
-necroMain = pattern timeSignal (sigPrint cycleSignal)
+necroMain = pattern timeSignal (sigPrint $ Sig.zip cycleSignal cycleSignal)
 
 timeSignal :: DemandSignal Time
-timeSignal = Signal.cycle [0.5, 0.25, 0.25, 1]
+timeSignal = Sig.cycle [0.5, 0.25, 0.25, 1]
 
 cycleSignal :: DemandSignal Int
-cycleSignal = Signal.cycle [1, 2, 3, 4, 5]
+cycleSignal = Sig.cycle [1, 2, 3, 4, 5]
 
 finalCountdown :: Signal Double
 finalCountdown = foldp (flip (-)) 0 2
