@@ -22,8 +22,9 @@ instance Functor Signal where
         Pure x -> Signal $ Pure $ f x
         _      -> Signal $ SignalData $ \state -> do
             (sample, insertSig) <- getNode1 Nothing sx state
-            let update = f <$> sample
-            insertSig update update
+            let update           = sample >>= \x -> return (f <$> x)
+            initx               <- unsignalValue <$> update
+            insertSig initx update
 
 instance Applicative Signal where
     pure x = Signal $ Pure x
@@ -34,17 +35,22 @@ instance Applicative Signal where
         (_     , Pure x) -> fmap ($ x) sf
         _                -> Signal $ SignalData $ \state -> do
             (sampleF, sampleX, insertSig) <- getNode2 Nothing sf sx state
-            let update = sampleF <*> sampleX
-            insertSig update update
+            let update = do
+                    f <- sampleF 
+                    x <- sampleX
+                    return $ f <*> x
+            initX <- unsignalValue <$> update
+            insertSig initX update
 
     xsig *> ysig = case (unsignal xsig, unsignal ysig) of
         (Pure _, _     ) -> ysig
         (_     , Pure y) -> Signal $ SignalData $ \state -> do
             (_, insertSig) <- getNode1 Nothing xsig state
-            insertSig (return y) (return y)
+            insertSig y (return $ pure y)
         _                -> Signal $ SignalData $ \state -> do
             (_, sampleY, insertSig) <- getNode2 Nothing xsig ysig state
-            insertSig sampleY sampleY
+            initY                   <- unsignalValue <$> sampleY
+            insertSig initY sampleY
 
     (<*) = flip (*>)
 

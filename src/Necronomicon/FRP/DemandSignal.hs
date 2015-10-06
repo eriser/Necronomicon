@@ -28,14 +28,15 @@ pattern timeSig valueSig = signal
             (initV, vids, demandV, finalizerV, archiverV) <- getSignalNode valueSig state
             sampleT                                       <- initT
             sampleV                                       <- initV
-            initValue                                     <- sampleV
-            ref                                           <- newIORef initValue
+            initValue                                     <- unsignalValue <$> sampleV
+            ref                                           <- newIORef $ SignalValue initValue
             killRef                                       <- newIORef False
+            --Need to use the SignalValue stuff to detect end of signals and handle
             let update = readIORef killRef >>= \kill -> if kill then return () else do
                     time <- sampleT
                     x    <- sampleV
                     writeIORef ref x
-                    threadDelay $ floor $ time * 1000000
+                    threadDelay $ floor $ unsignalValue time * 1000000
                     demandT
                     demandV
                     update
@@ -55,8 +56,9 @@ instance Functor DemandSignal where
         Pure x -> DemandSignal $ Pure $ f x
         _      -> DemandSignal $ SignalData $ \state -> do
             (sample, insertSig) <- getNode1 Nothing sx state
-            let update = f <$> sample
-            insertSig update update
+            let update           = sample >>= \x -> return (f <$> x)
+            initX               <- unsignalValue <$> update
+            insertSig initX update
 
 instance Applicative DemandSignal where
     pure x = DemandSignal $ Pure x
@@ -67,17 +69,22 @@ instance Applicative DemandSignal where
         (_     , Pure x) -> fmap ($ x) sf
         _                -> DemandSignal $ SignalData $ \state -> do
             (sampleF, sampleX, insertSig) <- getNode2 Nothing sf sx state
-            let update = sampleF <*> sampleX
-            insertSig update update
+            let update = do
+                    f <- sampleF
+                    x <- sampleX
+                    return $ f <*> x
+            initX <- unsignalValue <$> update
+            insertSig initX update
 
     xsig *> ysig = case (unsignal xsig, unsignal ysig) of
         (Pure _, _     ) -> ysig
         (_     , Pure y) -> DemandSignal $ SignalData $ \state -> do
             (_, insertSig) <- getNode1 Nothing xsig state
-            insertSig (return y) (return y)
+            insertSig y (return $ pure y)
         _                -> DemandSignal $ SignalData $ \state -> do
             (_, sampleY, insertSig) <- getNode2 Nothing xsig ysig state
-            insertSig sampleY sampleY
+            initY                   <- unsignalValue <$> sampleY
+            insertSig initY sampleY
 
     (<*) = flip (*>)
 

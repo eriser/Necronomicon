@@ -34,7 +34,7 @@ startSignalRuntime = do
     -- _     <- forkIO $ updateWorker state [] (newFrPool state) 16667 "Frame Rate"
     return state
 
-type SignalActions a = (IO a, IO (), IO ())
+type SignalActions a = (IO (SignalValue a), IO (), IO ())
 runSignalFromState :: (SignalType s, Show a) => s a -> SignalState -> IO (SignalActions a)
 runSignalFromState signal state = do
     (ini, _, _, fs, arch) <- getSignalNode signal state{nodePath = RootNode}

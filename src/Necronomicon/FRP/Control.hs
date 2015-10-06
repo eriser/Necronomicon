@@ -14,6 +14,6 @@ cycle xs = sig
             let update = do
                     x : xs' <- readIORef ref
                     writeIORef ref xs'
-                    return x
+                    return $ SignalValue x
             insertSignal Nothing (head xs) update [] (rate sig) (return ()) (return ()) (return ()) state
 
