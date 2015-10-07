@@ -20,7 +20,7 @@ data DemandSignal a = DemandSignal (SignalData a) deriving (Typeable)
 
 --TODO: This is just a quick and dirty implementation, we need a synchronized version that is at a specific tempo
 --TODO: Need to add state archiving
-pattern :: (SignalType s) => DemandSignal Time -> DemandSignal a-> s a
+pattern :: (SignalType s) => DemandSignal Time -> DemandSignal a -> s a
 pattern timeSig valueSig = signal
     where
         signal = tosignal $ SignalData $ \state -> do
