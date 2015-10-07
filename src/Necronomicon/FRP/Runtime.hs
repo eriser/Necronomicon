@@ -48,7 +48,9 @@ demoSignal :: (SignalType s, Show a) => s a -> IO ()
 demoSignal sig = do
     state          <- startSignalRuntime
     (sample, _, _) <- runSignalFromState sig state
-    forever $ sample >>= print >> threadDelay 16667
+    forever $ sample >>= \maybeX -> case maybeX of
+        NoSignal    _ -> threadDelay 16667
+        SignalValue x -> print x >> threadDelay 16667
 
 updateWorker :: SignalState -> SignalPool -> TVar SignalPool -> Int -> String -> IO ()
 updateWorker state pool newPoolRef sleepTime workerName = do

@@ -29,8 +29,7 @@ instance Functor AudioSig where
         _      -> AudioSig $ SignalData $ \state -> do
             (sample, insertSig) <- getNode1 Nothing sx state
             let update           = sample >>= \x -> return (f <$> x)
-            initX               <- unsignalValue <$> update
-            insertSig initX update
+            insertSig update update
 
 instance Applicative AudioSig where
     pure x = AudioSig $ Pure x
@@ -45,18 +44,16 @@ instance Applicative AudioSig where
                     f <- sampleF
                     x <- sampleX
                     return $ f <*> x
-            initX <- unsignalValue <$> update
-            insertSig initX update
+            insertSig update update
 
     xsig *> ysig = case (unsignal xsig, unsignal ysig) of
         (Pure _, _     ) -> ysig
         (_     , Pure y) -> AudioSig $ SignalData $ \state -> do
             (_, insertSig) <- getNode1 Nothing xsig state
-            insertSig y (return $ pure y)
+            insertSig (return $ pure y) (return $ pure y)
         _                -> AudioSig $ SignalData $ \state -> do
             (_, sampleY, insertSig) <- getNode2 Nothing xsig ysig state
-            initY                   <- unsignalValue <$> sampleY
-            insertSig initY sampleY
+            insertSig sampleY sampleY
 
     (<*) = flip (*>)
 
@@ -160,13 +157,14 @@ apAudio2 f (AudioBlock _ xchannels) (AudioBlock _ ychannels) (AudioBlock _ destC
 
 --TODO: Need to use SignalValues to signal when an audio signal has ended (due to an envelope or whatever)
 audioOp2 :: (Double# -> Double# -> Double#) -> AudioSignal -> AudioSignal -> AudioSignal
-audioOp2 f xsig ysig = AudioSig $ SignalData $ \state -> do
-    (xsample, ysample, insertSig) <- getNode2 Nothing xsig ysig state
-    xaudio    <- unsignalValue <$> xsample
-    yaudio    <- unsignalValue <$> ysample
-    destAudio <- runAudioMonad (mkAudio $ numChannels xaudio) (audioState state)
-    let update = SignalValue <$> runAudioMonad (apAudio2 f xaudio yaudio destAudio >> return destAudio) (audioState state)
-    initX     <- unsignalValue <$> update
-    insertSig initX update
+audioOp2 = undefined
+
+-- audioOp2 f xsig ysig = AudioSig $ SignalData $ \state -> do
+--     (xsample, ysample, insertSig) <- getNode2 Nothing xsig ysig state
+--     xaudio    <- xsample
+--     yaudio    <- ysample
+--     destAudio <- runAudioMonad (mkAudio $ numChannels xaudio) (audioState state)
+--     let update = SignalValue <$> runAudioMonad (apAudio2 f xaudio yaudio destAudio >> return destAudio) (audioState state)
+--     insertSig update update
 
 

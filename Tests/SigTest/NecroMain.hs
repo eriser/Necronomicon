@@ -4,7 +4,7 @@ import Necronomicon
 import qualified Necronomicon.FRP.Control as Sig
 
 necroMain :: Signal ()
-necroMain = pattern timeSignal (sigPrint $ Sig.zip cycleSignal cycleSignal)
+necroMain = pattern timeSignal <| sigPrint <| Sig.zip cycleSignal cycleSignal
 
 timeSignal :: DemandSignal Time
 timeSignal = Sig.cycle [0.5, 0.25, 0.25, 1]

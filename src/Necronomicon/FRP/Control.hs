@@ -15,7 +15,7 @@ cycle xs = sig
                     x : xs' <- readIORef ref
                     writeIORef ref xs'
                     return $ SignalValue x
-            insertSignal Nothing (head xs) update [] (rate sig) (return ()) (return ()) (return ()) state
+            insertSignal Nothing (return $ SignalValue $ head xs) update [] (rate sig) (return ()) (return ()) (return ()) state
 
 zip :: (Functor f, Applicative f) => f a -> f b -> f (a, b)
 zip a b = (,) <$> a <*> b
