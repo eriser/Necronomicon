@@ -19,6 +19,8 @@ type AudioSignal = AudioSig AudioBlock
 ---------------------------------------------------------------------------------------------------------
 
 instance SignalType AudioSig where
+    type SigFuncs AudioSig  = ()
+    getSigFuncs             = undefined
     unsignal (AudioSig sig) = sig
     tosignal                = AudioSig
     rate                    = const Ar

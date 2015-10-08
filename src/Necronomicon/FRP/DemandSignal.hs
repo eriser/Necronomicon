@@ -4,6 +4,7 @@ module Necronomicon.FRP.DemandSignal where
 import Necronomicon.FRP.SignalType
 import Necronomicon.FRP.Time
 
+import Control.Monad (when)
 import Control.Concurrent
 import Data.IORef
 import Control.Applicative
@@ -43,7 +44,7 @@ pattern timeSig valueSig = signal
                             demandT
                             demandV
                             update
-                reset = do
+                reset = when (rate signal == Kr) $ do
                     resetT
                     resetA
                     writeIORef ref initValue
@@ -55,9 +56,11 @@ pattern timeSig valueSig = signal
 
 --List of nodes each node is associated with, then works like events
 instance SignalType DemandSignal where
+    type SigFuncs DemandSignal  = (IO (), IO ())
+    getSigFuncs                 = undefined
     unsignal (DemandSignal sig) = sig
-    tosignal                 = DemandSignal
-    rate                     = const Vr
+    tosignal                    = DemandSignal
+    rate                        = const Vr
 
 instance Functor DemandSignal where
     fmap f sx = case unsignal sx of

@@ -24,7 +24,10 @@ import qualified Data.Map.Strict    as Map
 ---------------------------------------------------------------------------------------------------------
 
 type SignalPool        = [IORef (Maybe (Int, IO ()))]
-type SignalFunctions a = (IO (IO (Maybe a)), [Int], IO (), IO (), IO (), IO ())
+type Sample          a = IO (Maybe a)
+type Archiver          = IO ()
+type Finalizer         = IO ()
+type SignalFunctions a = (IO (Sample a), [Int], IO (), IO (), Finalizer, Archiver)
 data RunStatus         = Running | HotSwapping | Quitting
 data SignalState       = SignalState
                        { nodePath   :: NodePath
@@ -43,10 +46,13 @@ data SignalData      a = SignalData (SignalState -> IO (SignalFunctions a))
                        | Pure a
                        deriving (Typeable)
 
+--TODO: Make getSignalNode and insertSignal part of the SignalType type class!
 class SignalType s where
     unsignal :: s a -> SignalData a
     tosignal :: SignalData a -> s a
     rate     :: s a -> Rate
+    type SigFuncs s :: * 
+    getSigFuncs :: s a -> Maybe NodePath -> SignalState -> IO (IO (Sample a), Finalizer, Archiver, SigFuncs s)
 
 --Need audioToFrac and krToFrac
 
@@ -469,10 +475,7 @@ getNodes1 maybeArchivePath signalA signals state = do
 --             Nothing         -> return Nothing
 --             Just iterations -> readIORef signalsRef >>= \maybeSignals -> case maybeSignals of
 --                 []                          -> return Nothing
---                 Just sampleSignal : signals -> sampleSignal >>= \maybeSignal -> case maybeSignal of
---                     Nothing -> do
---                         writeIORef signalsRef signals
---                     Just signal -> do
---                         writeIORef signalsRef signals
---                         return signal
+--                 Just (sampleSignal, _, demandSignal, resetSignal, _, _) : signals -> sampleSignal >>= \maybeSignal -> case maybeSignal of
+--                     Nothing     -> do
+--                     Just signal -> return $ Jut signal
                     

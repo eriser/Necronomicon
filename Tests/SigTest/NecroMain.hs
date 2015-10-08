@@ -7,7 +7,7 @@ necroMain :: Signal ()
 necroMain = pattern timeSignal <| sigPrint <| Sig.zip cycleSignal cycleSignal
 
 timeSignal :: DemandSignal Time
-timeSignal = Sig.cycle [0.5, 0.25, 0.25, 1]
+timeSignal = Sig.cycle [1.5, 0.25, 0.25, 1]
 
 cycleSignal :: DemandSignal Int
 cycleSignal = Sig.cycle [1, 2, 3, 4, 5]

@@ -13,6 +13,8 @@ newtype Signal a = Signal (SignalData a) deriving (Typeable)
 ---------------------------------------------------------------------------------------------------------
 
 instance SignalType Signal where
+    type SigFuncs Signal  = ()
+    getSigFuncs           = undefined
     unsignal (Signal sig) = sig
     tosignal              = Signal
     rate                  = const Kr
