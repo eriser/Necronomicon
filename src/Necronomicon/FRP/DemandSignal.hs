@@ -37,8 +37,8 @@ pattern timeSig valueSig = signal
                     x    <- sampleV
                     writeIORef ref x
                     case time of
-                        NoSignal    _ -> return ()
-                        SignalValue t -> do
+                        Nothing -> return ()
+                        Just  t -> do
                             threadDelay $ floor $ t * 1000000
                             demandT
                             demandV

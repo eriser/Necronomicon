@@ -23,9 +23,9 @@ import qualified Data.Map.Strict    as Map
 -- Types
 ---------------------------------------------------------------------------------------------------------
 
-data SignalValue     a = SignalValue a | NoSignal (IO ())
+-- data SignalValue     a = SignalValue a | NoSignal (IO ())
 type SignalPool        = [IORef (Maybe (Int, IO ()))]
-type SignalFunctions a = (IO (IO (SignalValue a)), [Int], IO (), IO (), IO ())
+type SignalFunctions a = (IO (IO (Maybe a)), [Int], IO (), IO (), IO ())
 data RunStatus         = Running | HotSwapping | Quitting
 data SignalState       = SignalState
                        { nodePath   :: NodePath
@@ -50,16 +50,16 @@ class SignalType s where
     tosignal :: SignalData a -> s a
     rate     :: s a -> Rate
 
-instance Functor SignalValue where
-    fmap f (SignalValue x) = SignalValue $ f x
-    fmap _ (NoSignal    r) = NoSignal r
+-- instance Functor SignalValue where
+--     fmap f (SignalValue x) = SignalValue $ f x
+--     fmap _ (NoSignal    r) = NoSignal r
 
-instance Applicative SignalValue where
-    pure                            = SignalValue
-    SignalValue f <*> SignalValue x = SignalValue $ f x
-    NoSignal   rf <*> SignalValue _ = NoSignal rf
-    SignalValue _ <*> NoSignal   rx = NoSignal rx
-    NoSignal   rf <*> NoSignal   rx = NoSignal $ rf >> rx
+-- instance Applicative SignalValue where
+--     pure                            = SignalValue
+--     SignalValue f <*> SignalValue x = SignalValue $ f x
+--     NoSignal   rf <*> SignalValue _ = NoSignal rf
+--     SignalValue _ <*> NoSignal   rx = NoSignal rx
+--     NoSignal   rf <*> NoSignal   rx = NoSignal $ rf >> rx
 
 -- ar       :: Real a => s a -> AudioSignal
 -- kr       :: s a -> Signal a
@@ -96,7 +96,7 @@ foldp f initx si = case unsignal si of
             update    = do
                 signal <- sig
                 return $ f i <$> signal
-        insertSignal' (Just nodePath') (return $ SignalValue initx) update [] (rate si) (return ()) (return ()) (return ()) state
+        insertSignal' (Just nodePath') (return $ Just initx) update [] (rate si) (return ()) (return ()) (return ()) state
 
     _      -> tosignal $ SignalData $ \state -> fmap snd $ mfix $ \ ~(sig, _) -> do
         let nodePath'               = TypeRep2Node (getTypeRep initx) (getSignalTypeRep si) $ nodePath state
@@ -106,7 +106,7 @@ foldp f initx si = case unsignal si of
                 input  <- icont
                 signal <- sig
                 return $ f <$> input <*> signal
-        insertSignal' (Just nodePath') (return $ SignalValue initx) update [] (rate si) ids ifs iarch state
+        insertSignal' (Just nodePath') (return $ Just initx) update [] (rate si) ids ifs iarch state
 
 -- feedback :: (SignalType s, Typeable a) => s a -> (s a -> s a) -> s a
 -- feedback initx f = let signal = f $ sampleDelay initx signal in signal
@@ -196,9 +196,9 @@ sigPrint :: (SignalType s, Show a) => s a -> s ()
 sigPrint sig = tosignal $ SignalData $ \state -> do
     (sample, insertSig) <- getNode1 Nothing sig state
     let update = sample >>= \maybeX -> case maybeX of
-            SignalValue x -> print x >> return (SignalValue ())
-            NoSignal    r -> return $ NoSignal r
-    insertSig (return $ SignalValue ()) update
+            Just x -> print x >> return (Just ())
+            _      -> return Nothing
+    insertSig (return $ Just ()) update
 
 ---------------------------------------------------------------------------------------------------------
 -- Rate
@@ -283,7 +283,7 @@ addBranchNode :: Int -> SignalState -> SignalState
 addBranchNode num state = state{nodePath = BranchNode num $ nodePath state}
 
 --If not hotswapping then initialize with initx, otherwise create hotswap function for last state
-initOrHotSwap :: Maybe NodePath -> SignalValue a -> SignalState -> IO (IORef (SignalValue a))
+initOrHotSwap :: Maybe NodePath -> Maybe a -> SignalState -> IO (IORef (Maybe a))
 initOrHotSwap Nothing initx  _ = newIORef initx
 initOrHotSwap (Just nodePath') initx state = atomically (readTVar (runStatus state)) >>= \status -> case status of
     HotSwapping -> readIORef (archive state) >>= \arch -> case Map.lookup nodePath' arch of
@@ -345,11 +345,11 @@ getSignalNode signal state = case unsignal signal of
                 atomically $ modifyTVar' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce signalValue))
                 return signalValue
 
-insertSignal :: Maybe NodePath -> IO (SignalValue a) -> IO (SignalValue a) -> [Int] -> Rate -> IO () -> IO () -> IO () -> SignalState -> IO (SignalFunctions a)
+insertSignal :: Maybe NodePath -> IO (Maybe a) -> IO (Maybe a) -> [Int] -> Rate -> IO () -> IO () -> IO () -> SignalState -> IO (SignalFunctions a)
 insertSignal  maybeNodePath initx updatingFunction uids sigRate demand finalizers archivers state =
     fmap snd $ insertSignal' maybeNodePath initx updatingFunction uids sigRate demand finalizers archivers state
 
-insertSignal' :: Maybe NodePath -> IO (SignalValue a) -> IO (SignalValue a) -> [Int] -> Rate -> IO () -> IO () -> IO () -> SignalState -> IO (IO (SignalValue a), SignalFunctions a)
+insertSignal' :: Maybe NodePath -> IO (Maybe a) -> IO (Maybe a) -> [Int] -> Rate -> IO () -> IO () -> IO () -> SignalState -> IO (IO (Maybe a), SignalFunctions a)
 insertSignal' maybeNodePath initxM updatingFunction uids sigRate demand finalizers archivers state = do
     uid             <- nextUID state
     initx           <- initxM
@@ -385,7 +385,7 @@ getSignalTypeRep = typeRep . signalTypeHelper
         signalTypeHelper :: SignalType s => s a -> Proxy a
         signalTypeHelper _ = Proxy
 
-getNode1 :: SignalType s => Maybe NodePath -> s a -> SignalState -> IO (IO (SignalValue a), IO (SignalValue x) -> IO (SignalValue x) -> IO (SignalFunctions x))
+getNode1 :: SignalType s => Maybe NodePath -> s a -> SignalState -> IO (IO (Maybe a), IO (Maybe x) -> IO (Maybe x) -> IO (SignalFunctions x))
 getNode1 maybeArchivePath signalA state = do
     (initA, aids, demand, finalizersA, archiveA) <- getSignalNode signalA state{nodePath = BranchNode 0 startingPath}
     sampleA                                      <- initA
@@ -396,7 +396,7 @@ getNode1 maybeArchivePath signalA state = do
             Nothing          -> nodePath state
             Just archivePath -> archivePath
 
-getNode2 :: (SignalType s) => Maybe NodePath -> s a -> s b -> SignalState -> IO (IO (SignalValue a), IO (SignalValue b), IO (SignalValue x) -> IO (SignalValue x) -> IO (SignalFunctions x))
+getNode2 :: (SignalType s) => Maybe NodePath -> s a -> s b -> SignalState -> IO (IO (Maybe a), IO (Maybe b), IO (Maybe x) -> IO (Maybe x) -> IO (SignalFunctions x))
 getNode2 maybeArchivePath signalA signalB state = do
     (initA, aids, demandA, finalizersA, archiveA) <- getSignalNode signalA state{nodePath = BranchNode 0 startingPath}
     (initB, bids, demandB, finalizersB, archiveB) <- getSignalNode signalB state{nodePath = BranchNode 1 startingPath}
@@ -412,7 +412,7 @@ getNode2 maybeArchivePath signalA signalB state = do
             Nothing          -> nodePath state
             Just archivePath -> archivePath
 
-getNode3 :: (SignalType s) => Maybe NodePath -> s a -> s b -> s c -> SignalState -> IO (IO (SignalValue a), IO (SignalValue b), IO (SignalValue c), IO (SignalValue x) -> IO (SignalValue x) -> IO (SignalFunctions x))
+getNode3 :: (SignalType s) => Maybe NodePath -> s a -> s b -> s c -> SignalState -> IO (IO (Maybe a), IO (Maybe b), IO (Maybe c), IO (Maybe x) -> IO (Maybe x) -> IO (SignalFunctions x))
 getNode3 maybeArchivePath signalA signalB signalC state = do
     (initA, aids, demandA, finalizersA, archiveA) <- getSignalNode signalA state{nodePath = BranchNode 0 startingPath}
     (initB, bids, demandB, finalizersB, archiveB) <- getSignalNode signalB state{nodePath = BranchNode 1 startingPath}
@@ -431,7 +431,7 @@ getNode3 maybeArchivePath signalA signalB signalC state = do
             Just archivePath -> archivePath
 
 --TODO: Make Branches more accurate
-getNodes :: SignalType s => Maybe NodePath -> [s a] -> SignalState -> IO ([IO (SignalValue a)], IO (SignalValue x) -> IO (SignalValue x) -> IO (SignalFunctions x))
+getNodes :: SignalType s => Maybe NodePath -> [s a] -> SignalState -> IO ([IO (Maybe a)], IO (Maybe x) -> IO (Maybe x) -> IO (SignalFunctions x))
 getNodes maybeArchivePath signals state = do
     (inits, uids, demands, finalizers, archivers) <- unzip5 <$> mapM (flip getSignalNode state{nodePath = BranchNode 0 startingPath}) signals
     samples                                       <- sequence inits
@@ -453,7 +453,7 @@ getNodes maybeArchivePath signals state = do
             Just archivePath -> archivePath
 
 --TODO: Make Branches more accurate
-getNodes1 :: SignalType s => Maybe NodePath -> s a -> [s b] -> SignalState -> IO (IO (SignalValue a), [IO (SignalValue b)], IO (SignalValue x) -> IO (SignalValue x) -> IO (SignalFunctions x))
+getNodes1 :: SignalType s => Maybe NodePath -> s a -> [s b] -> SignalState -> IO (IO (Maybe a), [IO (Maybe b)], IO (Maybe x) -> IO (Maybe x) -> IO (SignalFunctions x))
 getNodes1 maybeArchivePath signalA signals state = do
     (initA, aids, demand, finalizersA, archiveA)  <- getSignalNode signalA state{nodePath = BranchNode 0 startingPath}
     sampleA                                       <- initA

@@ -34,7 +34,7 @@ startSignalRuntime = do
     -- _     <- forkIO $ updateWorker state [] (newFrPool state) 16667 "Frame Rate"
     return state
 
-type SignalActions a = (IO (SignalValue a), IO (), IO ())
+type SignalActions a = (IO (Maybe a), IO (), IO ())
 runSignalFromState :: (SignalType s, Show a) => s a -> SignalState -> IO (SignalActions a)
 runSignalFromState signal state = do
     (ini, _, _, fs, arch) <- getSignalNode signal state{nodePath = RootNode}
@@ -48,9 +48,7 @@ demoSignal :: (SignalType s, Show a) => s a -> IO ()
 demoSignal sig = do
     state          <- startSignalRuntime
     (sample, _, _) <- runSignalFromState sig state
-    forever $ sample >>= \maybeX -> case maybeX of
-        NoSignal    _ -> threadDelay 16667
-        SignalValue x -> print x >> threadDelay 16667
+    forever $ sample >>= print >> threadDelay 16667
 
 updateWorker :: SignalState -> SignalPool -> TVar SignalPool -> Int -> String -> IO ()
 updateWorker state pool newPoolRef sleepTime workerName = do

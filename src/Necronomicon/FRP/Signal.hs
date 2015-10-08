@@ -88,4 +88,3 @@ instance (Monoid m) => Monoid (Signal m) where
     mappend = liftA2 mappend
     mconcat = foldr mappend mempty
 
-
