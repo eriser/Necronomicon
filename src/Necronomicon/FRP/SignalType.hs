@@ -25,9 +25,10 @@ import qualified Data.Map.Strict    as Map
 
 type SignalPool        = [IORef (Maybe (Int, IO ()))]
 type Sample          a = IO (Maybe a)
-type Archiver          = IO ()
-type Finalizer         = IO ()
-type SignalFunctions a = (IO (Sample a), [Int], IO (), IO (), Finalizer, Archiver)
+type Archive           = IO ()
+type Finalize          = IO ()
+type Initialize      a = IO (Sample a)
+type SignalFunctions a = (Initialize a, [Int], IO (), IO (), Finalize, Archive)
 data RunStatus         = Running | HotSwapping | Quitting
 data SignalState       = SignalState
                        { nodePath   :: NodePath
@@ -52,7 +53,7 @@ class SignalType s where
     tosignal :: SignalData a -> s a
     rate     :: s a -> Rate
     type SigFuncs s :: * 
-    getSigFuncs :: s a -> Maybe NodePath -> SignalState -> IO (IO (Sample a), Finalizer, Archiver, SigFuncs s)
+    getSigFuncs :: s a -> Maybe NodePath -> SignalState -> IO (Initialize a, Finalize, Archive, SigFuncs s)
 
 --Need audioToFrac and krToFrac
 
