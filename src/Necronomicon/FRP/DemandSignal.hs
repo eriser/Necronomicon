@@ -20,17 +20,17 @@ data DemandSignal a = DemandSignal (SignalData a) deriving (Typeable)
 
 --TODO: This is just a quick and dirty implementation, we need a synchronized version that is at a specific tempo
 --TODO: Need to add state archiving
-pattern :: (SignalType s) => DemandSignal Time -> DemandSignal a -> s a
+pattern :: SignalType s => DemandSignal Time -> DemandSignal a -> s a
 pattern timeSig valueSig = signal
     where
         signal = tosignal $ SignalData $ \state -> do
-            (initT, tids, demandT, finalizerT, archiverT) <- getSignalNode timeSig  state
-            (initV, vids, demandV, finalizerV, archiverV) <- getSignalNode valueSig state
-            sampleT                                       <- initT
-            sampleV                                       <- initV
-            initValue                                     <- sampleV
-            ref                                           <- newIORef initValue
-            killRef                                       <- newIORef False
+            (initT, tids, demandT, resetT, finalizerT, archiverT) <- getSignalNode timeSig  state
+            (initV, vids, demandV, resetA, finalizerV, archiverV) <- getSignalNode valueSig state
+            sampleT                                               <- initT
+            sampleV                                               <- initV
+            initValue                                             <- sampleV
+            ref                                                   <- newIORef initValue
+            killRef                                               <- newIORef False
             --Need to use the SignalValue stuff to detect end of signals and handle
             let update = readIORef killRef >>= \kill -> if kill then return () else do
                     time <- sampleT
@@ -43,10 +43,15 @@ pattern timeSig valueSig = signal
                             demandT
                             demandV
                             update
+                reset = do
+                    resetT
+                    resetA
+                    writeIORef ref initValue
+                    writeIORef killRef False
                 finalizer = finalizerT >> finalizerV >> writeIORef killRef True
                 archiver  = archiverT >> archiverV
             _ <- forkIO update
-            insertSignal Nothing sampleV (readIORef ref) (tids ++ vids) (rate signal) (return ()) finalizer archiver state
+            insertSignal Nothing sampleV (readIORef ref) (tids ++ vids) (rate signal) (return ()) reset finalizer archiver state
 
 --List of nodes each node is associated with, then works like events
 instance SignalType DemandSignal where
