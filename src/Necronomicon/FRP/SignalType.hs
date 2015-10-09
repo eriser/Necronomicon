@@ -43,17 +43,21 @@ data SignalData    s a = SignalData (SignalState -> IO (SignalFunctions s a))
                        | Pure a
                        deriving (Typeable)
 
+type InsertSignalFunction s a = IO (SignalElement s a) -> IO (SignalElement s a) -> IO (SignalFunctions s a)
 class SignalType s where
     data SignalFunctions s a :: *
-    data InsertFunction  s a :: *
+    type SignalElement   s a :: *
     unsignal                 :: s a -> SignalData s a
     tosignal                 :: SignalData s a -> s a
     pureSignalFunctions      :: a   -> SignalFunctions s a
     rate                     :: s a -> Rate
-    getNode                  :: s a -> Maybe NodePath -> SignalState -> IO (IO a, InsertFunction s a)
     getArchiveFunc           :: SignalFunctions s a -> Archive
     getFinalizeFunc          :: SignalFunctions s a -> Finalize
     getInitFunc              :: SignalFunctions s a -> IO (IO (Maybe a))
+
+    getNode1                 :: s a -> Maybe NodePath -> SignalState -> IO (IO a, InsertSignalFunction s a)
+    getNode2                 :: s a -> s b -> Maybe NodePath -> SignalState -> IO (IO a, IO b, InsertSignalFunction s a)
+    getNode3                 :: s a -> s b -> s c -> Maybe NodePath -> SignalState -> IO (IO a, IO b, IO c, InsertSignalFunction s a)
 
 
 --Need audioToFrac and krToFrac

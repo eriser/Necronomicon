@@ -20,8 +20,7 @@ type AudioSignal = AudioSig AudioBlock
 
 instance SignalType AudioSig where
     data SignalFunctions AudioSig a = AudioSignalFunctions (IO (IO (Maybe a))) Finalize Archive
-    data InsertFunction  AudioSig a = InsertAudioSignal (IO (Maybe a) -> IO (Maybe a) -> IO (SignalFunctions AudioSig a))
-    getNode                         = undefined
+    type SignalElement   AudioSig a = a
     unsignal (AudioSig sig)         = sig
     tosignal                        = AudioSig
     rate                            = const Ar
@@ -29,6 +28,11 @@ instance SignalType AudioSig where
     getInitFunc     (AudioSignalFunctions i _ _) = i
     getFinalizeFunc (AudioSignalFunctions _ f _) = f
     getArchiveFunc  (AudioSignalFunctions _ _ a) = a
+
+    getNode1 = undefined
+    getNode2 = undefined
+    getNode3 = undefined
+
 
 
 -- instance Functor AudioSig where

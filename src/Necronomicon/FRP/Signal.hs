@@ -14,8 +14,7 @@ newtype Signal a = Signal (SignalData Signal a) deriving (Typeable)
 
 instance SignalType Signal where
     data SignalFunctions Signal a           = SignalFunctions (IO (IO a)) Finalize Archive 
-    data InsertFunction  Signal a           = InsertSignal (IO a -> IO a -> IO (SignalFunctions Signal a))
-    getNode                                 = undefined
+    type SignalElement   Signal a           = a
     unsignal (Signal sig)                   = sig
     tosignal                                = Signal
     rate                                    = const Fr
@@ -23,6 +22,10 @@ instance SignalType Signal where
     getInitFunc     (SignalFunctions i _ _) = fmap (fmap Just) i
     getFinalizeFunc (SignalFunctions _ f _) = f
     getArchiveFunc  (SignalFunctions _ _ a) = a
+
+    getNode1 = undefined
+    getNode2 = undefined
+    getNode3 = undefined
 
 
 -- instance Functor Signal where

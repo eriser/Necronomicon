@@ -21,8 +21,7 @@ data DemandSignal a = DemandSignal (SignalData DemandSignal a) deriving (Typeabl
 
 instance SignalType DemandSignal where
     data SignalFunctions DemandSignal a = DemandSignalFunctions (IO (IO (Maybe a))) Finalize Archive Reset
-    data InsertFunction  DemandSignal a = InsertDemandSignal (IO (Maybe a) -> IO (Maybe a) -> IO (SignalFunctions DemandSignal a))
-    getNode                             = undefined
+    type SignalElement   DemandSignal a = a
     unsignal (DemandSignal sig)         = sig
     tosignal                            = DemandSignal
     rate                                = const Dr
@@ -31,6 +30,11 @@ instance SignalType DemandSignal where
     getFinalizeFunc (DemandSignalFunctions _ f _ _) = f
     getArchiveFunc  (DemandSignalFunctions _ _ a _) = a
                    
+    getNode1 = undefined
+    getNode2 = undefined
+    getNode3 = undefined
+
+
 -- instance Functor DemandSignal where
 --     fmap f sx = case unsignal sx of
 --         Pure x -> DemandSignal $ Pure $ f x
