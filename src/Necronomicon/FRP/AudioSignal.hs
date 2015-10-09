@@ -20,7 +20,7 @@ type AudioSignal = AudioSig AudioBlock
 
 instance SignalType AudioSig where
     data SignalFunctions AudioSig a = AudioSignalFunctions (IO (IO (Maybe a))) Finalize Archive
-    type SignalElement   AudioSig a = a
+    type SignalElement   AudioSig a = Maybe a
     unsignal (AudioSig sig)         = sig
     tosignal                        = AudioSig
 

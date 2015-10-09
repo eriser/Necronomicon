@@ -21,7 +21,7 @@ data DemandSignal a = DemandSignal (SignalData DemandSignal a) deriving (Typeabl
 
 instance SignalType DemandSignal where
     data SignalFunctions DemandSignal a = DemandSignalFunctions (IO (IO (Maybe a))) Finalize Archive Reset
-    type SignalElement   DemandSignal a = a
+    type SignalElement   DemandSignal a = Maybe a
     unsignal (DemandSignal sig)         = sig
     tosignal                            = DemandSignal
                    
