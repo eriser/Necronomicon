@@ -400,51 +400,41 @@ getNode3 maybeArchivePath signalA signalB signalC state = do
             Nothing          -> nodePath state
             Just archivePath -> archivePath
 
--- --TODO: Make Branches more accurate
--- getNodes :: SignalType s => Maybe NodePath -> [s a] -> SignalState -> IO ([IO (Maybe a)], IO (Maybe x) -> IO (Maybe x) -> IO (SignalFunctions x))
--- getNodes maybeArchivePath signals state = do
---     (inits, uids, demands, resets, finalizers, archivers) <- unzip6 <$> mapM (flip getSignalNode state{nodePath = BranchNode 0 startingPath}) signals
---     samples                                               <- sequence inits
---     let insertSig initValue updateFunction =
---             insertSignal
---             maybeArchivePath
---             initValue
---             updateFunction
---             (concat uids)
---             (rate $ head signals)
---             (sequence_ demands)
---             (sequence_ resets)
---             (sequence_ finalizers)
---             (sequence_ archivers)
---             state
---     return (samples, insertSig)
---     where
---         startingPath = case maybeArchivePath of
---             Nothing          -> nodePath state
---             Just archivePath -> archivePath
+--TODO: Make Branches more accurate
+getNodes :: SignalType s => Maybe NodePath -> [s a] -> SignalState -> IO ([Sample s a], Sample s x -> Sample s x -> IO (SignalValue s x))
+getNodes maybeArchivePath signals state = do
+    (inits, sigFuncs) <- unzip <$> mapM (flip initOrRetrieveNode state{nodePath = BranchNode 0 startingPath}) signals
+    samples           <- sequence inits
+    let insertSig initValue updateFunction =
+            insertSignal
+            maybeArchivePath
+            initValue
+            updateFunction
+            (foldr sigAppend (last sigFuncs) (init sigFuncs))
+            state
+    return (samples, insertSig)
+    where
+        startingPath = case maybeArchivePath of
+            Nothing          -> nodePath state
+            Just archivePath -> archivePath
 
--- --TODO: Make Branches more accurate
--- getNodes1 :: SignalType s => Maybe NodePath -> s a -> [s b] -> SignalState -> IO (IO (Maybe a), [IO (Maybe b)], IO (Maybe x) -> IO (Maybe x) -> IO (SignalFunctions x))
--- getNodes1 maybeArchivePath signalA signals state = do
---     (initA, aids, demand, reset, finalizersA, archiveA)   <- getSignalNode signalA state{nodePath = BranchNode 0 startingPath}
---     sampleA                                               <- initA
---     (inits, uids, demands, resets, finalizers, archivers) <- unzip6 <$> mapM (flip getSignalNode state{nodePath = BranchNode 1 startingPath}) signals
---     samples                                               <- sequence inits
---     let insertSig initValue updateFunction =
---             insertSignal
---             maybeArchivePath
---             initValue
---             updateFunction
---             (aids ++ concat uids)
---             (rate $ head signals)
---             (sequence_ demands    >> demand)
---             (sequence_ resets     >> reset)
---             (sequence_ finalizers >> finalizersA)
---             (sequence_ archivers  >> archiveA)
---             state
---     return (sampleA, samples, insertSig)
---     where
---         startingPath = case maybeArchivePath of
---             Nothing          -> nodePath state
---             Just archivePath -> archivePath
+--TODO: Make Branches more accurate
+getNodes1 :: SignalType s => Maybe NodePath -> s a -> [s b] -> SignalState -> IO (Sample s a, [Sample s b], Sample s x -> Sample s x -> IO (SignalValue s x))
+getNodes1 maybeArchivePath signalA signals state = do
+    (initA, sigFuncsA) <- initOrRetrieveNode signalA state{nodePath = BranchNode 0 startingPath}
+    sampleA            <- initA
+    (inits, sigFuncs)  <- unzip <$> mapM (flip initOrRetrieveNode state{nodePath = BranchNode 1 startingPath}) signals
+    samples            <- sequence inits
+    let insertSig initValue updateFunction =
+            insertSignal
+            maybeArchivePath
+            initValue
+            updateFunction
+            (sigFuncsA `sigAppend` foldr sigAppend (last sigFuncs) (init sigFuncs))
+            state
+    return (sampleA, samples, insertSig)
+    where
+        startingPath = case maybeArchivePath of
+            Nothing          -> nodePath state
+            Just archivePath -> archivePath
 
