@@ -37,15 +37,13 @@ startSignalRuntime = do
 
 type SignalActions a = (IO a, IO (), IO ())
 runSignalFromState :: (Show a) => Signal a -> SignalState -> IO (SignalActions a)
-runSignalFromState s@(Signal signal) state = case signal of
-    Pure       x   -> return (return x, return (), return ())
-    SignalData sig -> do
-        SignalFunctions ini fin arch <- initOrRetrieveNode s sig state{nodePath = RootNode}
-        sample                       <-  ini
-        writeIORef (archive state) Map.empty
-        atomically (writeTVar (runStatus state) Running)
-        -- putStrLn $ "Running signal network, staring with uid: " ++ show uid
-        return (sample, fin, arch)
+runSignalFromState signal state = do
+    (ini, SignalFunctions fin arch) <- initOrRetrieveNode signal state{nodePath = RootNode}
+    sample                          <-  ini
+    writeIORef (archive state) Map.empty
+    atomically (writeTVar (runStatus state) Running)
+    -- putStrLn $ "Running signal network, staring with uid: " ++ show uid
+    return (sample >>= \(SignalElement x) -> return x, fin, arch)
 
 demoSignal :: (Show a) => Signal a -> IO ()
 demoSignal sig = do

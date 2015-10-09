@@ -13,14 +13,12 @@ newtype Signal a = Signal (SignalData Signal a) deriving (Typeable)
 ---------------------------------------------------------------------------------------------------------
 
 instance SignalType Signal where
-    data SignalFunctions Signal a           = SignalFunctions (IO (IO a)) Finalize Archive 
-    type SignalElement   Signal a           = a
-    unsignal (Signal sig)                   = sig
-    tosignal                                = Signal
-
-    getNode1 = undefined
-    getNode2 = undefined
-    getNode3 = undefined
+    data SignalFunctions Signal   = SignalFunctions Finalize Archive 
+    data SignalElement   Signal a = SignalElement a
+    unsignal (Signal sig)         = sig
+    tosignal                      = Signal
+    insertSignal                  = undefined
+    sigAppend (SignalFunctions f1 a1) (SignalFunctions f2 a2) = SignalFunctions (f1 >> f2) (a1 >> a2)
 
 
 -- instance Functor Signal where

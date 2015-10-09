@@ -20,14 +20,12 @@ data DemandSignal a = DemandSignal (SignalData DemandSignal a) deriving (Typeabl
 ---------------------------------------------------------------------------------------------------------
 
 instance SignalType DemandSignal where
-    data SignalFunctions DemandSignal a = DemandSignalFunctions (IO (IO (Maybe a))) Finalize Archive Reset
-    type SignalElement   DemandSignal a = Maybe a
+    data SignalFunctions DemandSignal   = DemandSignalFunctions Finalize Archive Reset
+    data SignalElement   DemandSignal a = DemandSignalElement (Maybe a)
     unsignal (DemandSignal sig)         = sig
     tosignal                            = DemandSignal
-                   
-    getNode1 = undefined
-    getNode2 = undefined
-    getNode3 = undefined
+    insertSignal                        = undefined
+    sigAppend (DemandSignalFunctions f1 a1 r1) (DemandSignalFunctions f2 a2 r2) = DemandSignalFunctions (f1 >> f2) (a1 >> a2) (r1 >> r2)
 
 
 -- instance Functor DemandSignal where

@@ -19,16 +19,12 @@ type AudioSignal = AudioSig AudioBlock
 ---------------------------------------------------------------------------------------------------------
 
 instance SignalType AudioSig where
-    data SignalFunctions AudioSig a = AudioSignalFunctions (IO (IO (Maybe a))) Finalize Archive
-    type SignalElement   AudioSig a = Maybe a
+    data SignalFunctions AudioSig   = AudioSignalFunctions Finalize Archive
+    data SignalElement   AudioSig a = AudioSignalElement (Maybe a)
     unsignal (AudioSig sig)         = sig
     tosignal                        = AudioSig
-
-    getNode1 = undefined
-    getNode2 = undefined
-    getNode3 = undefined
-
-
+    insertSignal                    = undefined
+    sigAppend (AudioSignalFunctions f1 a1) (AudioSignalFunctions f2 a2) = AudioSignalFunctions (f1 >> f2) (a1 >> a2)
 
 -- instance Functor AudioSig where
 --     fmap f sx = case unsignal sx of
