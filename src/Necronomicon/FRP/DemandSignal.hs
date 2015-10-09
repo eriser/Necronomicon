@@ -24,11 +24,6 @@ instance SignalType DemandSignal where
     type SignalElement   DemandSignal a = a
     unsignal (DemandSignal sig)         = sig
     tosignal                            = DemandSignal
-    rate                                = const Dr
-    pureSignalFunctions x               = DemandSignalFunctions (return $ return $ Just x) (return ()) (return ()) (return ())
-    getInitFunc     (DemandSignalFunctions i _ _ _) = i
-    getFinalizeFunc (DemandSignalFunctions _ f _ _) = f
-    getArchiveFunc  (DemandSignalFunctions _ _ a _) = a
                    
     getNode1 = undefined
     getNode2 = undefined

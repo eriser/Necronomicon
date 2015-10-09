@@ -38,7 +38,6 @@ data SignalState       = SignalState
                        , nodeTable  :: TVar (IntMap.IntMap (StableName (), Any))
                        , archive    :: IORef (Map.Map NodePath Any)
                        }
-data Rate              = Ar | Fr | Dr deriving (Eq, Show)
 data SignalData    s a = SignalData (SignalState -> IO (SignalFunctions s a))
                        | Pure a
                        deriving (Typeable)
@@ -49,15 +48,10 @@ class SignalType s where
     type SignalElement   s a :: *
     unsignal                 :: s a -> SignalData s a
     tosignal                 :: SignalData s a -> s a
-    pureSignalFunctions      :: a   -> SignalFunctions s a
-    rate                     :: s a -> Rate
-    getArchiveFunc           :: SignalFunctions s a -> Archive
-    getFinalizeFunc          :: SignalFunctions s a -> Finalize
-    getInitFunc              :: SignalFunctions s a -> IO (IO (Maybe a))
 
-    getNode1                 :: s a -> Maybe NodePath -> SignalState -> IO (IO a, InsertSignalFunction s a)
-    getNode2                 :: s a -> s b -> Maybe NodePath -> SignalState -> IO (IO a, IO b, InsertSignalFunction s a)
-    getNode3                 :: s a -> s b -> s c -> Maybe NodePath -> SignalState -> IO (IO a, IO b, IO c, InsertSignalFunction s a)
+    getNode1                 :: s a -> Maybe NodePath -> SignalState -> IO (IO a, InsertSignalFunction s x)
+    getNode2                 :: s a -> s b -> Maybe NodePath -> SignalState -> IO (IO a, IO b, InsertSignalFunction s x)
+    getNode3                 :: s a -> s b -> s c -> Maybe NodePath -> SignalState -> IO (IO a, IO b, IO c, InsertSignalFunction s x)
 
 
 --Need audioToFrac and krToFrac
@@ -191,10 +185,10 @@ class SignalType s where
 -- Rate
 ---------------------------------------------------------------------------------------------------------
 
-ratePool :: SignalType s => s a -> SignalState -> TVar SignalPool
-ratePool signal state = case rate signal of
-    Ar -> newArPool state
-    _  -> newFrPool state
+-- ratePool :: SignalType s => s a -> SignalState -> TVar SignalPool
+-- ratePool signal state = case rate signal of
+--     Ar -> newArPool state
+--     _  -> newFrPool state
 
 ---------------------------------------------------------------------------------------------------------
 -- Audio
@@ -312,22 +306,19 @@ nextUID state = atomically $ do
     writeTVar (sigUIDs state) uids
     return uid
 
-initOrRetrieveNode :: SignalType s => s a -> SignalState -> IO (SignalFunctions s a)
-initOrRetrieveNode signal state = case unsignal signal of
-    -- Pure x         ->  return (return $ return $ Just x, return (), return ())
-    Pure x         ->  return $ pureSignalFunctions x
-    SignalData sig -> do
-        stableName <- signal `seq` makeStableName signal
-        let hash = hashStableName stableName
-        refs <- atomically $ readTVar $ nodeTable state
-        case IntMap.lookup hash refs of
-            Just (stableName', sv) -> if not (eqStableName stableName stableName') then putStrLn "Stables names did not match during node table lookup" >> sig state else do
-                let signalValue = unsafeCoerce sv :: SignalFunctions s a
-                return signalValue
-            Nothing -> do
-                signalValue <- sig state
-                atomically $ modifyTVar' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce signalValue))
-                return signalValue
+initOrRetrieveNode :: SignalType s => s a -> (SignalState -> IO (SignalFunctions s a)) -> SignalState -> IO (SignalFunctions s a)
+initOrRetrieveNode signal sig state = do
+    stableName <- signal `seq` makeStableName signal
+    let hash = hashStableName stableName
+    refs <- atomically $ readTVar $ nodeTable state
+    case IntMap.lookup hash refs of
+        Just (stableName', sv) -> if not (eqStableName stableName stableName') then putStrLn "Stables names did not match during node table lookup" >> sig state else do
+            let signalValue = unsafeCoerce sv :: SignalFunctions s a
+            return signalValue
+        Nothing -> do
+            signalValue <- sig state
+            atomically $ modifyTVar' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce signalValue))
+            return signalValue
 
 -- insertSignal :: Maybe NodePath -> IO (Maybe a) -> IO (Maybe a) -> [Int] -> Rate -> IO () -> IO () -> IO () -> IO () -> SignalState -> IO (SignalFunctions a)
 -- insertSignal  maybeNodePath initx updatingFunction uids sigRate demand resets finalizers archivers state =

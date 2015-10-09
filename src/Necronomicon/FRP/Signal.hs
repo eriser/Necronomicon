@@ -17,11 +17,6 @@ instance SignalType Signal where
     type SignalElement   Signal a           = a
     unsignal (Signal sig)                   = sig
     tosignal                                = Signal
-    rate                                    = const Fr
-    pureSignalFunctions x                   = SignalFunctions (return $ return x) (return ()) (return ())
-    getInitFunc     (SignalFunctions i _ _) = fmap (fmap Just) i
-    getFinalizeFunc (SignalFunctions _ f _) = f
-    getArchiveFunc  (SignalFunctions _ _ a) = a
 
     getNode1 = undefined
     getNode2 = undefined

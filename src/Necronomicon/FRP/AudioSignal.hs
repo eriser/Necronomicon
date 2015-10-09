@@ -23,11 +23,6 @@ instance SignalType AudioSig where
     type SignalElement   AudioSig a = a
     unsignal (AudioSig sig)         = sig
     tosignal                        = AudioSig
-    rate                            = const Ar
-    pureSignalFunctions x           = AudioSignalFunctions (return $ return $ Just x) (return ()) (return ())
-    getInitFunc     (AudioSignalFunctions i _ _) = i
-    getFinalizeFunc (AudioSignalFunctions _ f _) = f
-    getArchiveFunc  (AudioSignalFunctions _ _ a) = a
 
     getNode1 = undefined
     getNode2 = undefined
