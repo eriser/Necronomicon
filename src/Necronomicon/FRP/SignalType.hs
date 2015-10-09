@@ -52,11 +52,6 @@ class SignalType s where
     insertSignal             :: Maybe NodePath -> Sample s a -> Sample s a -> SignalFunctions s -> SignalState -> IO (SignalValue s a)
     sigAppend                :: SignalFunctions s -> SignalFunctions s -> SignalFunctions s
 
--- getNode1                 :: s a -> Maybe NodePath -> SignalState -> IO (IO a, InsertSignalFunction s x)
--- getNode2                 :: s a -> s b -> Maybe NodePath -> SignalState -> IO (IO a, IO b, InsertSignalFunction s x)
--- getNode3                 :: s a -> s b -> s c -> Maybe NodePath -> SignalState -> IO (IO a, IO b, IO c, InsertSignalFunction s x)
-
-
 --Need audioToFrac and krToFrac
 
 --SignalDSP
@@ -377,41 +372,33 @@ getNode1 maybeArchivePath signalA state = do
             Nothing          -> nodePath state
             Just archivePath -> archivePath
 
--- getNode2 :: (SignalType s) => Maybe NodePath -> s a -> s b -> SignalState -> IO (IO (Maybe a), IO (Maybe b), IO (Maybe x) -> IO (Maybe x) -> IO (SignalFunctions x))
--- getNode2 maybeArchivePath signalA signalB state = do
---     (initA, aids, demandA, resetA, finalizersA, archiveA) <- getSignalNode signalA state{nodePath = BranchNode 0 startingPath}
---     (initB, bids, demandB, resetB, finalizersB, archiveB) <- getSignalNode signalB state{nodePath = BranchNode 1 startingPath}
---     sampleA                                               <- initA
---     sampleB                                               <- initB
---     let demand                                             = demandA >> demandB
---         reset                                              = resetA >> resetB
---         finalizer                                          = finalizersA >> finalizersB
---         archiver                                           = archiveA >> archiveB
---     return (sampleA, sampleB, \initValue updateFunction ->
---         insertSignal maybeArchivePath initValue updateFunction (aids ++ bids) (rate signalA) demand reset finalizer archiver state)
---     where
---         startingPath = case maybeArchivePath of
---             Nothing          -> nodePath state
---             Just archivePath -> archivePath
+getNode2 :: SignalType s => Maybe NodePath -> s a -> s b -> SignalState -> IO (Sample s a, Sample s b, Sample s x -> Sample s x -> IO (SignalValue s x))
+getNode2 maybeArchivePath signalA signalB state = do
+    (initA, sigFuncsA) <- initOrRetrieveNode signalA state{nodePath = BranchNode 0 startingPath}
+    (initB, sigFuncsB) <- initOrRetrieveNode signalB state{nodePath = BranchNode 1 startingPath}
+    sampleA            <- initA
+    sampleB            <- initB
+    return (sampleA, sampleB, \initValue updateFunction ->
+        insertSignal maybeArchivePath initValue updateFunction (sigFuncsA `sigAppend` sigFuncsB) state)
+    where
+        startingPath = case maybeArchivePath of
+            Nothing          -> nodePath state
+            Just archivePath -> archivePath
 
--- getNode3 :: (SignalType s) => Maybe NodePath -> s a -> s b -> s c -> SignalState -> IO (IO (Maybe a), IO (Maybe b), IO (Maybe c), IO (Maybe x) -> IO (Maybe x) -> IO (SignalFunctions x))
--- getNode3 maybeArchivePath signalA signalB signalC state = do
---     (initA, aids, demandA, resetA, finalizersA, archiveA) <- getSignalNode signalA state{nodePath = BranchNode 0 startingPath}
---     (initB, bids, demandB, resetB, finalizersB, archiveB) <- getSignalNode signalB state{nodePath = BranchNode 1 startingPath}
---     (initC, cids, demandC, resetC, finalizersC, archiveC) <- getSignalNode signalC state{nodePath = BranchNode 2 startingPath}
---     sampleA                                               <- initA
---     sampleB                                               <- initB
---     sampleC                                               <- initC
---     let demand                                             = demandA     >> demandB     >> demandC
---         reset                                              = resetA      >> resetB      >> resetC
---         finalizer                                          = finalizersA >> finalizersB >> finalizersC
---         archiver                                           = archiveA    >> archiveB    >> archiveC
---     return (sampleA, sampleB, sampleC, \initValue updateFunction ->
---         insertSignal maybeArchivePath initValue updateFunction (aids ++ bids ++ cids) (rate signalA) demand reset finalizer archiver state)
---     where
---         startingPath = case maybeArchivePath of
---             Nothing          -> nodePath state
---             Just archivePath -> archivePath
+getNode3 :: SignalType s => Maybe NodePath -> s a -> s b -> s c-> SignalState -> IO (Sample s a, Sample s b, Sample s c, Sample s x -> Sample s x -> IO (SignalValue s x))
+getNode3 maybeArchivePath signalA signalB signalC state = do
+    (initA, sigFuncsA) <- initOrRetrieveNode signalA state{nodePath = BranchNode 0 startingPath}
+    (initB, sigFuncsB) <- initOrRetrieveNode signalB state{nodePath = BranchNode 1 startingPath}
+    (initC, sigFuncsC) <- initOrRetrieveNode signalC state{nodePath = BranchNode 2 startingPath}
+    sampleA            <- initA
+    sampleB            <- initB
+    sampleC            <- initC
+    return (sampleA, sampleB, sampleC, \initValue updateFunction ->
+        insertSignal maybeArchivePath initValue updateFunction (sigFuncsA `sigAppend` sigFuncsB `sigAppend` sigFuncsC) state)
+    where
+        startingPath = case maybeArchivePath of
+            Nothing          -> nodePath state
+            Just archivePath -> archivePath
 
 -- --TODO: Make Branches more accurate
 -- getNodes :: SignalType s => Maybe NodePath -> [s a] -> SignalState -> IO ([IO (Maybe a)], IO (Maybe x) -> IO (Maybe x) -> IO (SignalFunctions x))
