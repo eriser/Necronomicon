@@ -29,7 +29,7 @@ toRefCount updateRef = readIORef updateRef >>= \maybeUA -> case maybeUA of
 startSignalRuntime :: IO SignalState
 startSignalRuntime = do
     state <- mkSignalState
-    _     <- forkIO $ updateWorker state [] (newKrPool state) 16667 "Control Rate"
+    _     <- forkIO $ updateWorker state [] (newFrPool state) 16667 "Frame Rate"
     _     <- forkIO $ updateWorker state [] (newArPool state) 23220 "Audio Rate"
     -- _     <- forkIO $ updateWorker state [] (newFrPool state) 16667 "Frame Rate"
     return state
@@ -37,12 +37,12 @@ startSignalRuntime = do
 type SignalActions a = (IO (Maybe a), IO (), IO ())
 runSignalFromState :: (SignalType s, Show a) => s a -> SignalState -> IO (SignalActions a)
 runSignalFromState signal state = do
-    (ini, _, _, _, fs, arch) <- getSignalNode signal state{nodePath = RootNode}
-    sample                   <- ini
+    signalFunctions <- initOrRetrieveNode signal state{nodePath = RootNode}
+    sample          <- getInitFunc signalFunctions
     writeIORef (archive state) Map.empty
     atomically (writeTVar (runStatus state) Running)
     -- putStrLn $ "Running signal network, staring with uid: " ++ show uid
-    return (sample, arch, fs)
+    return (sample, getArchiveFunc signalFunctions, getFinalizeFunc signalFunctions)
 
 demoSignal :: (SignalType s, Show a) => s a -> IO ()
 demoSignal sig = do

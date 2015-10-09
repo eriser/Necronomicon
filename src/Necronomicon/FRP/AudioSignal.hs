@@ -11,7 +11,7 @@ import Control.Monad.ST.Strict (stToIO)
 import GHC.ST
 import GHC.Types (Int(..))
 
-newtype AudioSig a = AudioSig (SignalData a) deriving (Typeable)
+newtype AudioSig a = AudioSig (SignalData AudioSig a) deriving (Typeable)
 type AudioSignal = AudioSig AudioBlock
 
 ---------------------------------------------------------------------------------------------------------
@@ -19,58 +19,64 @@ type AudioSignal = AudioSig AudioBlock
 ---------------------------------------------------------------------------------------------------------
 
 instance SignalType AudioSig where
-    type SigFuncs AudioSig  = ()
-    getSigFuncs             = undefined
-    unsignal (AudioSig sig) = sig
-    tosignal                = AudioSig
-    rate                    = const Ar
+    data SignalFunctions AudioSig a = AudioSignalFunctions (IO (IO (Maybe a))) Finalize Archive
+    data InsertFunction  AudioSig a = InsertAudioSignal (IO (Maybe a) -> IO (Maybe a) -> IO (SignalFunctions AudioSig a))
+    getNode                         = undefined
+    unsignal (AudioSig sig)         = sig
+    tosignal                        = AudioSig
+    rate                            = const Ar
+    pureSignalFunctions x           = AudioSignalFunctions (return $ return $ Just x) (return ()) (return ())
+    getInitFunc     (AudioSignalFunctions i _ _) = i
+    getFinalizeFunc (AudioSignalFunctions _ f _) = f
+    getArchiveFunc  (AudioSignalFunctions _ _ a) = a
 
-instance Functor AudioSig where
-    fmap f sx = case unsignal sx of
-        Pure x -> AudioSig $ Pure $ f x
-        _      -> AudioSig $ SignalData $ \state -> do
-            (sample, insertSig) <- getNode1 Nothing sx state
-            let update           = sample >>= \x -> return (f <$> x)
-            insertSig update update
 
-instance Applicative AudioSig where
-    pure x = AudioSig $ Pure x
+-- instance Functor AudioSig where
+--     fmap f sx = case unsignal sx of
+--         Pure x -> AudioSig $ Pure $ f x
+--         _      -> AudioSig $ SignalData $ \state -> do
+--             (sample, insertSig) <- getNode1 Nothing sx state
+--             let update           = sample >>= \x -> return (f <$> x)
+--             insertSig update update
 
-    sf <*> sx = case (unsignal sf, unsignal sx) of
-        (Pure f, Pure x) -> AudioSig $ Pure $ f x
-        (Pure f, _     ) -> fmap f sx
-        (_     , Pure x) -> fmap ($ x) sf
-        _                -> AudioSig $ SignalData $ \state -> do
-            (sampleF, sampleX, insertSig) <- getNode2 Nothing sf sx state
-            let update = do
-                    f <- sampleF
-                    x <- sampleX
-                    return $ f <*> x
-            insertSig update update
+-- instance Applicative AudioSig where
+--     pure x = AudioSig $ Pure x
 
-    xsig *> ysig = case (unsignal xsig, unsignal ysig) of
-        (Pure _, _     ) -> ysig
-        (_     , Pure y) -> AudioSig $ SignalData $ \state -> do
-            (_, insertSig) <- getNode1 Nothing xsig state
-            insertSig (return $ pure y) (return $ pure y)
-        _                -> AudioSig $ SignalData $ \state -> do
-            (_, sampleY, insertSig) <- getNode2 Nothing xsig ysig state
-            insertSig sampleY sampleY
+--     sf <*> sx = case (unsignal sf, unsignal sx) of
+--         (Pure f, Pure x) -> AudioSig $ Pure $ f x
+--         (Pure f, _     ) -> fmap f sx
+--         (_     , Pure x) -> fmap ($ x) sf
+--         _                -> AudioSig $ SignalData $ \state -> do
+--             (sampleF, sampleX, insertSig) <- getNode2 Nothing sf sx state
+--             let update = do
+--                     f <- sampleF
+--                     x <- sampleX
+--                     return $ f <*> x
+--             insertSig update update
 
-    (<*) = flip (*>)
+--     xsig *> ysig = case (unsignal xsig, unsignal ysig) of
+--         (Pure _, _     ) -> ysig
+--         (_     , Pure y) -> AudioSig $ SignalData $ \state -> do
+--             (_, insertSig) <- getNode1 Nothing xsig state
+--             insertSig (return $ pure y) (return $ pure y)
+--         _                -> AudioSig $ SignalData $ \state -> do
+--             (_, sampleY, insertSig) <- getNode2 Nothing xsig ysig state
+--             insertSig sampleY sampleY
+
+--     (<*) = flip (*>)
 
 
 ---------------------------------------------------------------------------------------------------------
 -- Audio
 ---------------------------------------------------------------------------------------------------------
 
-instance Num AudioSignal where
-    (+)         = audioOp2 (+##)
-    (*)         = audioOp2 (*##)
-    (-)         = audioOp2 (-##)
-    abs         = undefined
-    signum      = undefined
-    fromInteger = undefined
+-- instance Num AudioSignal where
+--     (+)         = audioOp2 (+##)
+--     (*)         = audioOp2 (*##)
+--     (-)         = audioOp2 (-##)
+--     abs         = undefined
+--     signum      = undefined
+--     fromInteger = undefined
 
 writeToPool :: Int# -> Double# -> MutableByteArray# RealWorld -> ST RealWorld ()
 writeToPool index val mbyteArray = ST $ \st -> (# writeDoubleArray# mbyteArray index val st, () #)

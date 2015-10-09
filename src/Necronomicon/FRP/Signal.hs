@@ -3,90 +3,96 @@ module Necronomicon.FRP.Signal where
 
 import Necronomicon.FRP.SignalType
 
-import Control.Applicative
+-- import Control.Applicative
 import Data.Typeable
 
-newtype Signal a = Signal (SignalData a) deriving (Typeable)
+newtype Signal a = Signal (SignalData Signal a) deriving (Typeable)
 
 ---------------------------------------------------------------------------------------------------------
 -- Instances
 ---------------------------------------------------------------------------------------------------------
 
 instance SignalType Signal where
-    type SigFuncs Signal  = ()
-    getSigFuncs           = undefined
-    unsignal (Signal sig) = sig
-    tosignal              = Signal
-    rate                  = const Kr
+    data SignalFunctions Signal a           = SignalFunctions (IO (IO a)) Finalize Archive 
+    data InsertFunction  Signal a           = InsertSignal (IO a -> IO a -> IO (SignalFunctions Signal a))
+    getNode                                 = undefined
+    unsignal (Signal sig)                   = sig
+    tosignal                                = Signal
+    rate                                    = const Fr
+    pureSignalFunctions x                   = SignalFunctions (return $ return x) (return ()) (return ())
+    getInitFunc     (SignalFunctions i _ _) = fmap (fmap Just) i
+    getFinalizeFunc (SignalFunctions _ f _) = f
+    getArchiveFunc  (SignalFunctions _ _ a) = a
 
-instance Functor Signal where
-    fmap f sx = case unsignal sx of
-        Pure x -> Signal $ Pure $ f x
-        _      -> Signal $ SignalData $ \state -> do
-            (sample, insertSig) <- getNode1 Nothing sx state
-            let update           = sample >>= \x -> return (f <$> x)
-            insertSig update update
 
-instance Applicative Signal where
-    pure x = Signal $ Pure x
+-- instance Functor Signal where
+--     fmap f sx = case unsignal sx of
+--         Pure x -> Signal $ Pure $ f x
+--         _      -> Signal $ SignalData $ \state -> do
+--             (sample, insertSig) <- getNode1 Nothing sx state
+--             let update           = sample >>= \x -> return (f <$> x)
+--             insertSig update update
 
-    sf <*> sx = case (unsignal sf, unsignal sx) of
-        (Pure f, Pure x) -> Signal $ Pure $ f x
-        (Pure f, _     ) -> fmap f sx
-        (_     , Pure x) -> fmap ($ x) sf
-        _                -> Signal $ SignalData $ \state -> do
-            (sampleF, sampleX, insertSig) <- getNode2 Nothing sf sx state
-            let update = do
-                    f <- sampleF 
-                    x <- sampleX
-                    return $ f <*> x
-            insertSig update update
+-- instance Applicative Signal where
+--     pure x = Signal $ Pure x
 
-    xsig *> ysig = case (unsignal xsig, unsignal ysig) of
-        (Pure _, _     ) -> ysig
-        (_     , Pure y) -> Signal $ SignalData $ \state -> do
-            (_, insertSig) <- getNode1 Nothing xsig state
-            insertSig (return $ pure y) (return $ pure y)
-        _                -> Signal $ SignalData $ \state -> do
-            (_, sampleY, insertSig) <- getNode2 Nothing xsig ysig state
-            insertSig sampleY sampleY
+--     sf <*> sx = case (unsignal sf, unsignal sx) of
+--         (Pure f, Pure x) -> Signal $ Pure $ f x
+--         (Pure f, _     ) -> fmap f sx
+--         (_     , Pure x) -> fmap ($ x) sf
+--         _                -> Signal $ SignalData $ \state -> do
+--             (sampleF, sampleX, insertSig) <- getNode2 Nothing sf sx state
+--             let update = do
+--                     f <- sampleF 
+--                     x <- sampleX
+--                     return $ f <*> x
+--             insertSig update update
 
-    (<*) = flip (*>)
+--     xsig *> ysig = case (unsignal xsig, unsignal ysig) of
+--         (Pure _, _     ) -> ysig
+--         (_     , Pure y) -> Signal $ SignalData $ \state -> do
+--             (_, insertSig) <- getNode1 Nothing xsig state
+--             insertSig (return $ pure y) (return $ pure y)
+--         _                -> Signal $ SignalData $ \state -> do
+--             (_, sampleY, insertSig) <- getNode2 Nothing xsig ysig state
+--             insertSig sampleY sampleY
 
-instance (Num a) => Num (Signal a) where
-    (+)         = liftA2 (+)
-    (*)         = liftA2 (*)
-    (-)         = liftA2 (-)
-    abs         = fmap abs
-    signum      = fmap signum
-    fromInteger = pure . fromInteger
+--     (<*) = flip (*>)
 
-instance (Fractional a) => Fractional (Signal a) where
-    (/)          = liftA2 (/)
-    fromRational = pure . fromRational
+-- instance (Num a) => Num (Signal a) where
+--     (+)         = liftA2 (+)
+--     (*)         = liftA2 (*)
+--     (-)         = liftA2 (-)
+--     abs         = fmap abs
+--     signum      = fmap signum
+--     fromInteger = pure . fromInteger
 
-instance (Floating a) => Floating (Signal a) where
-    pi      = pure pi
-    (**)    = liftA2 (**)
-    exp     = fmap exp
-    log     = fmap log
-    sin     = fmap sin
-    cos     = fmap cos
-    asin    = fmap asin
-    acos    = fmap acos
-    atan    = fmap atan
-    logBase = liftA2 logBase
-    sqrt    = fmap sqrt
-    tan     = fmap tan
-    tanh    = fmap tanh
-    sinh    = fmap sinh
-    cosh    = fmap cosh
-    asinh   = fmap asinh
-    atanh   = fmap atanh
-    acosh   = fmap acosh
+-- instance (Fractional a) => Fractional (Signal a) where
+--     (/)          = liftA2 (/)
+--     fromRational = pure . fromRational
 
-instance (Monoid m) => Monoid (Signal m) where
-    mempty  = pure mempty
-    mappend = liftA2 mappend
-    mconcat = foldr mappend mempty
+-- instance (Floating a) => Floating (Signal a) where
+--     pi      = pure pi
+--     (**)    = liftA2 (**)
+--     exp     = fmap exp
+--     log     = fmap log
+--     sin     = fmap sin
+--     cos     = fmap cos
+--     asin    = fmap asin
+--     acos    = fmap acos
+--     atan    = fmap atan
+--     logBase = liftA2 logBase
+--     sqrt    = fmap sqrt
+--     tan     = fmap tan
+--     tanh    = fmap tanh
+--     sinh    = fmap sinh
+--     cosh    = fmap cosh
+--     asinh   = fmap asinh
+--     atanh   = fmap atanh
+--     acosh   = fmap acosh
+
+-- instance (Monoid m) => Monoid (Signal m) where
+--     mempty  = pure mempty
+--     mappend = liftA2 mappend
+--     mconcat = foldr mappend mempty
 
