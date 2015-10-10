@@ -18,20 +18,20 @@ data DemandSignal a = DemandSignal (SignalData DemandSignal a) deriving (Typeabl
 -- SignalType Instance
 ---------------------------------------------------------------------------------------------------------
 
-instance SignalType DemandSignal where
-    data SignalElement DemandSignal a = DemandSignalElement a | NoDemandSignal deriving (Show)
-    unsignal (DemandSignal sig)       = sig
-    tosignal                          = DemandSignal
-    insertSignal'                     = undefined
+-- instance SignalType DemandSignal where
+--     data SignalElement DemandSignal a = DemandSignalElement a | NoDemandSignal deriving (Show)
+--     unsignal (DemandSignal sig)       = sig
+--     tosignal                          = DemandSignal
+--     insertSignal'                     = undefined
 
-instance Functor (SignalElement DemandSignal) where
-    fmap f (DemandSignalElement x) = DemandSignalElement $ f x
-    fmap _ _                       = NoDemandSignal
+-- instance Functor (SignalElement DemandSignal) where
+--     fmap f (DemandSignalElement x) = DemandSignalElement $ f x
+--     fmap _ _                       = NoDemandSignal
 
-instance Applicative (SignalElement DemandSignal) where
-    pure                                            = DemandSignalElement
-    DemandSignalElement f <*> DemandSignalElement x = DemandSignalElement $ f x
-    _                    <*> _                      = NoDemandSignal
+-- instance Applicative (SignalElement DemandSignal) where
+--     pure                                            = DemandSignalElement
+--     DemandSignalElement f <*> DemandSignalElement x = DemandSignalElement $ f x
+--     _                    <*> _                      = NoDemandSignal
 
 
 ---------------------------------------------------------------------------------------------------------

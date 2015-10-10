@@ -1,15 +1,13 @@
 module Necronomicon.FRP.Control where
 
-import Prelude hiding (zip)
--- import qualified Prelude as Prelude (cycle)
--- import Data.IORef
--- import Necronomicon.FRP.SignalType
+import Prelude hiding (cycle, zip)
+import qualified Prelude as Prelude (cycle)
+import Necronomicon.FRP.SignalType
+import Data.Typeable
 
--- cycle :: SignalType s => [a] -> s a
--- cycle [] = error "cycleSignal called with empty list."
--- cycle xs = fmap head clist
---     where
---         clist = sampleDelay (cycle xs) $ fmap tail clist
+cycle :: (SignalType s, Typeable a) => [a] -> s a
+cycle [] = error "cycleSignal called with empty list."
+cycle xs = fmap head $ foldp (const tail) (Prelude.cycle xs) $ pure ()
 
 zip :: (Functor f, Applicative f) => f a -> f b -> f (a, b)
 zip a b = (,) <$> a <*> b
