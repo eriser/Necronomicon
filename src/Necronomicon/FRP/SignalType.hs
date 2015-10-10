@@ -9,7 +9,6 @@ import System.Mem.StableName
 import Unsafe.Coerce
 -- import System.Random
 import Data.Typeable
--- import Data.List (unzip6)
 import Data.Monoid ((<>))
 
 import GHC.Prim
@@ -76,7 +75,7 @@ foldp f initx si = case unsignal si of
                 signal <- sig
                 return $ f i <$> signal
         --TODO: Make SignalFunctions a monoid instance!!!!!
-        insertSignal' (Just nodePath') (return $ pure initx) update undefined state
+        insertSignal' (Just nodePath') (return $ pure initx) update mempty state
     _      -> tosignal $ SignalData $ \state -> fmap snd $ mfix $ \ ~(sig, _) -> do
         let nodePath'   = TypeRep2Node (getTypeRep initx) (getSignalTypeRep si) $ nodePath state
         (iini, ifuncs) <- initOrRetrieveNode si state{nodePath = nodePath'}
@@ -170,13 +169,11 @@ foldp f initx si = case unsignal si of
 --     let update            = sampleA >>= \amp -> randomRIO (-amp, amp)
 --     insertSig update update
 
--- sigPrint :: (SignalType s, Show a) => s a -> s ()
--- sigPrint sig = tosignal $ SignalData $ \state -> do
---     (sample, insertSig) <- getNode1 Nothing sig state
---     let update = sample >>= \maybeX -> case maybeX of
---             Just x -> print x >> return (Just ())
---             _      -> return Nothing
---     insertSig (return $ Just ()) update
+sigPrint :: (SignalType s, Show (SignalElement s a)) => s a -> s ()
+sigPrint sig = tosignal $ SignalData $ \state -> do
+    (sample, insertSig) <- getNode1 Nothing sig state
+    let update = sample >>= print >> return (pure ())
+    insertSig (return $ pure ()) update
 
 ---------------------------------------------------------------------------------------------------------
 -- Audio
@@ -251,7 +248,7 @@ addBranchNode :: Int -> SignalState -> SignalState
 addBranchNode num state = state{nodePath = BranchNode num $ nodePath state}
 
 --If not hotswapping then initialize with initx, otherwise create hotswap function for last state
-initOrHotSwap :: Maybe NodePath -> Maybe a -> SignalState -> IO (IORef (Maybe a))
+initOrHotSwap :: (Applicative (SignalElement s)) => Maybe NodePath -> SignalElement s a -> SignalState -> IO (IORef (SignalElement s a))
 initOrHotSwap Nothing initx  _ = newIORef initx
 initOrHotSwap (Just nodePath') initx state = atomically (readTVar (runStatus state)) >>= \status -> case status of
     HotSwapping -> readIORef (archive state) >>= \arch -> case Map.lookup nodePath' arch of
@@ -312,31 +309,6 @@ initOrRetrieveNode signal state = case unsignal signal of
 
 insertSignal :: SignalType s => Maybe NodePath -> Sample s a -> Sample s a -> SignalFunctions s -> SignalState -> IO (SignalValue s a)
 insertSignal  maybeNodePath initx updatingFunction sigFuncs state = fmap snd $ insertSignal' maybeNodePath initx updatingFunction sigFuncs state
-
--- insertSignal' :: Maybe NodePath -> IO (Maybe a) -> IO (Maybe a) -> [Int] -> Rate -> IO () -> IO () -> IO () -> IO () -> SignalState -> IO (IO (Maybe a), SignalFunctions a)
--- insertSignal' maybeNodePath initxM updatingFunction uids sigRate demand resets finalizers archivers state = do
---     uid             <- nextUID state
---     initx           <- initxM
---     ref             <- initOrHotSwap maybeNodePath initx state
---     let updateAction = updatingFunction >>= \x -> x `seq` writeIORef ref x
---     updateActionRef <- newIORef $ Just (0, updateAction)
---     let initializer = do
---             atomicModifyIORef' updateActionRef $ \maybeUA -> case maybeUA of
---                 Just (refCount, ua) -> (Just (refCount + 1, ua), ())
---                 _                   -> (Just (1, updatingFunction >>= \x -> x `seq` writeIORef ref x), ())
---             return $ readIORef ref
---         finalizer = atomicModifyIORef' updateActionRef $ \maybeUA -> case maybeUA of
---             Just (refCount, ua) -> let refCount' = refCount - 1 in if refCount' <= 0 then (Nothing, ()) else (Just (refCount', ua), ())
---             _                   -> (Nothing, ())
---         archiver = case maybeNodePath of
---             Nothing -> return ()
---             Just np -> readIORef ref >>= \archivedX -> modifyIORef (archive state) (Map.insert np (unsafeCoerce archivedX))
---         reset = when (sigRate == Kr) $ writeIORef ref initx
---     case sigRate of
---         Ar -> atomically $ modifyTVar' (newArPool state) (updateActionRef :)
---         Kr -> atomically $ modifyTVar' (newKrPool state) (updateActionRef :)
---         _  -> return ()
---     return (readIORef ref, (initializer, uid : uids, demand >> updateAction, resets >> reset, finalizer >> finalizers, archivers >> archiver))
 
 getTypeRep :: Typeable a => a -> TypeRep
 getTypeRep = typeRep . typeHelper

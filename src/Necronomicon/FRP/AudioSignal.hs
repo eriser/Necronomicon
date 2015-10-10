@@ -10,20 +10,42 @@ import GHC.Prim
 import Control.Monad.ST.Strict (stToIO)
 import GHC.ST
 import GHC.Types (Int(..))
+import Unsafe.Coerce
+import Data.Monoid ((<>))
+
+import qualified Data.Map.Strict    as Map
 
 newtype AudioSig a = AudioSig (SignalData AudioSig a) deriving (Typeable)
 type AudioSignal = AudioSig AudioBlock
 
 ---------------------------------------------------------------------------------------------------------
--- Instances
+-- SignalTypes Instance
 ---------------------------------------------------------------------------------------------------------
 
 instance SignalType AudioSig where
     data SignalFunctions AudioSig   = AudioSignalFunctions Finalize Archive
-    data SignalElement   AudioSig a = AudioSignalElement a | NoAudio
+    data SignalElement   AudioSig a = AudioSignalElement a | NoAudio deriving (Show)
     unsignal (AudioSig sig)         = sig
     tosignal                        = AudioSig
-    insertSignal'                   = undefined
+
+    insertSignal' maybeNodePath initxM updatingFunction sigFuncs state = do
+        initx           <- initxM
+        ref             <- initOrHotSwap maybeNodePath initx state
+        let updateAction = updatingFunction >>= writeIORef ref
+        updateActionRef <- newIORef $ Just (0, updateAction)
+        let initializer = do
+                atomicModifyIORef' updateActionRef $ \maybeUA -> case maybeUA of
+                    Just (refCount, ua) -> (Just (refCount + 1, ua), ())
+                    _                   -> (Just (1, updatingFunction >>= writeIORef ref), ())
+                return $ readIORef ref
+            finalizer = atomicModifyIORef' updateActionRef $ \maybeUA -> case maybeUA of
+                Just (refCount, ua) -> let refCount' = refCount - 1 in if refCount' <= 0 then (Nothing, ()) else (Just (refCount', ua), ())
+                _                   -> (Nothing, ())
+            archiver = case maybeNodePath of
+                Nothing -> return ()
+                Just np -> readIORef ref >>= \archivedX -> modifyIORef (archive state) (Map.insert np (unsafeCoerce archivedX))
+        atomically $ modifyTVar' (newFrPool state) (updateActionRef :)
+        return (readIORef ref, (initializer, sigFuncs <> AudioSignalFunctions finalizer archiver))
 
 instance Monoid (SignalFunctions AudioSig) where
     mempty = AudioSignalFunctions (return ()) (return ())
@@ -38,40 +60,43 @@ instance Applicative (SignalElement AudioSig) where
     AudioSignalElement f <*> AudioSignalElement x = AudioSignalElement $ f x
     _                    <*> _                    = NoAudio
 
+---------------------------------------------------------------------------------------------------------
+-- Applicative instance
+---------------------------------------------------------------------------------------------------------
 
--- instance Functor AudioSig where
---     fmap f sx = case unsignal sx of
---         Pure x -> AudioSig $ Pure $ f x
---         _      -> AudioSig $ SignalData $ \state -> do
---             (sample, insertSig) <- getNode1 Nothing sx state
---             let update           = sample >>= \x -> return (f <$> x)
---             insertSig update update
+instance Functor AudioSig where
+    fmap f sx = case unsignal sx of
+        Pure x -> AudioSig $ Pure $ f x
+        _      -> AudioSig $ SignalData $ \state -> do
+            (sample, insertSig) <- getNode1 Nothing sx state
+            let update           = sample >>= \x -> return (f <$> x)
+            insertSig update update
 
--- instance Applicative AudioSig where
---     pure x = AudioSig $ Pure x
+instance Applicative AudioSig where
+    pure x = AudioSig $ Pure x
 
---     sf <*> sx = case (unsignal sf, unsignal sx) of
---         (Pure f, Pure x) -> AudioSig $ Pure $ f x
---         (Pure f, _     ) -> fmap f sx
---         (_     , Pure x) -> fmap ($ x) sf
---         _                -> AudioSig $ SignalData $ \state -> do
---             (sampleF, sampleX, insertSig) <- getNode2 Nothing sf sx state
---             let update = do
---                     f <- sampleF
---                     x <- sampleX
---                     return $ f <*> x
---             insertSig update update
+    sf <*> sx = case (unsignal sf, unsignal sx) of
+        (Pure f, Pure x) -> AudioSig $ Pure $ f x
+        (Pure f, _     ) -> fmap f sx
+        (_     , Pure x) -> fmap ($ x) sf
+        _                -> AudioSig $ SignalData $ \state -> do
+            (sampleF, sampleX, insertSig) <- getNode2 Nothing sf sx state
+            let update = do
+                    f <- sampleF
+                    x <- sampleX
+                    return $ f <*> x
+            insertSig update update
 
---     xsig *> ysig = case (unsignal xsig, unsignal ysig) of
---         (Pure _, _     ) -> ysig
---         (_     , Pure y) -> AudioSig $ SignalData $ \state -> do
---             (_, insertSig) <- getNode1 Nothing xsig state
---             insertSig (return $ pure y) (return $ pure y)
---         _                -> AudioSig $ SignalData $ \state -> do
---             (_, sampleY, insertSig) <- getNode2 Nothing xsig ysig state
---             insertSig sampleY sampleY
+    xsig *> ysig = case (unsignal xsig, unsignal ysig) of
+        (Pure _, _     ) -> ysig
+        (_     , Pure y) -> AudioSig $ SignalData $ \state -> do
+            (_, insertSig) <- getNode1 Nothing xsig state
+            insertSig (return $ pure y) (return $ pure y)
+        _                -> AudioSig $ SignalData $ \state -> do
+            (_, sampleY, insertSig) <- getNode2 Nothing xsig ysig state
+            insertSig sampleY sampleY
 
---     (<*) = flip (*>)
+    (<*) = flip (*>)
 
 
 ---------------------------------------------------------------------------------------------------------

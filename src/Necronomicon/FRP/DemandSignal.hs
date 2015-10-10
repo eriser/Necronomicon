@@ -16,12 +16,12 @@ import Data.Typeable
 data DemandSignal a = DemandSignal (SignalData DemandSignal a) deriving (Typeable)
 
 ---------------------------------------------------------------------------------------------------------
--- Instances
+-- SignalType Instance
 ---------------------------------------------------------------------------------------------------------
 
 instance SignalType DemandSignal where
     data SignalFunctions DemandSignal   = DemandSignalFunctions Finalize Archive Reset
-    data SignalElement   DemandSignal a = DemandSignalElement a | NoDemandSignal
+    data SignalElement   DemandSignal a = DemandSignalElement a | NoDemandSignal deriving (Show)
     unsignal (DemandSignal sig)         = sig
     tosignal                            = DemandSignal
     insertSignal'                       = undefined
@@ -38,6 +38,11 @@ instance Applicative (SignalElement DemandSignal) where
     pure                                            = DemandSignalElement
     DemandSignalElement f <*> DemandSignalElement x = DemandSignalElement $ f x
     _                    <*> _                      = NoDemandSignal
+
+
+---------------------------------------------------------------------------------------------------------
+-- Signal Applicative
+---------------------------------------------------------------------------------------------------------
 
 -- instance Functor DemandSignal where
 --     fmap f sx = case unsignal sx of
