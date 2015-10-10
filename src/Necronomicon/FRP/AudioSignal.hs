@@ -27,9 +27,7 @@ instance SignalType AudioSig where
     unsignal (AudioSig sig)       = sig
     tosignal                      = AudioSig
 
-    insertSignal' maybeNodePath initxM updatingFunction sigFuncs state = do
-        initx           <- initxM
-        ref             <- initOrHotSwap maybeNodePath initx state
+    insertSignal' maybeNodePath ref updatingFunction sigFuncs state = do
         let updateAction = updatingFunction >>= writeIORef ref
         updateActionRef <- newIORef $ Just (0, updateAction)
         let initializer = do
@@ -44,7 +42,7 @@ instance SignalType AudioSig where
                 Nothing -> return ()
                 Just np -> readIORef ref >>= \archivedX -> modifyIORef (archive state) (Map.insert np (unsafeCoerce archivedX))
         atomically $ modifyTVar' (newFrPool state) (updateActionRef :)
-        return (readIORef ref, (initializer, sigFuncs <> SignalFunctions (return ()) finalizer archiver))
+        return (initializer, sigFuncs <> SignalFunctions (return ()) finalizer archiver)
 
 instance Functor (SignalElement AudioSig) where
     fmap f (AudioSignalElement x) = AudioSignalElement $ f x

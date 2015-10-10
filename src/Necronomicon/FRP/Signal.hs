@@ -23,9 +23,7 @@ instance SignalType Signal where
     unsignal (Signal sig)          = sig
     tosignal                       = Signal
 
-    insertSignal' maybeNodePath initxM updatingFunction sigFuncs state = do
-        initx           <- initxM
-        ref             <- initOrHotSwap maybeNodePath initx state
+    insertSignal' maybeNodePath ref updatingFunction sigFuncs state = do
         let updateAction = updatingFunction >>= writeIORef ref
         updateActionRef <- newIORef $ Just (0, updateAction)
         let initializer = do
@@ -40,7 +38,7 @@ instance SignalType Signal where
                 Nothing -> return ()
                 Just np -> readIORef ref >>= \archivedX -> modifyIORef (archive state) (Map.insert np (unsafeCoerce archivedX))
         atomically $ modifyTVar' (newFrPool state) (updateActionRef :)
-        return (readIORef ref, (initializer, sigFuncs <> SignalFunctions (return ()) finalizer archiver))
+        return (initializer, sigFuncs <> SignalFunctions (return ()) finalizer archiver)
 
 instance Functor (SignalElement Signal) where
     fmap f (SignalElement x) = SignalElement $ f x

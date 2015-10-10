@@ -3,7 +3,7 @@ module Necronomicon.FRP.SignalType where
 
 import Control.Concurrent.STM
 import Data.IORef
-import Control.Monad.Fix
+-- import Control.Monad.Fix
 import Control.Monad
 import System.Mem.StableName
 import Unsafe.Coerce
@@ -50,7 +50,7 @@ class (Applicative s, Functor s, Applicative (SignalElement s), Functor (SignalE
     data SignalElement s a :: *
     unsignal               :: s a -> SignalData s a
     tosignal               :: SignalData s a -> s a
-    insertSignal'          :: Maybe NodePath -> Sample s a -> Sample s a -> SignalFunctions -> SignalState -> IO (Sample s a, SignalValue s a)
+    insertSignal'          :: Maybe NodePath -> IORef (SignalElement s a) -> Sample s a -> SignalFunctions -> SignalState -> IO (SignalValue s a)
 
 instance Monoid SignalFunctions where
     mempty = SignalFunctions (return ()) (return ()) (return ())
@@ -74,21 +74,23 @@ foldp :: (SignalType signal, Typeable input, Typeable state)
       -> signal input              -- ^ Input signal which is applied to the higher-order function
       -> signal state              -- ^ Resultant signal which updates based on the input signal
 foldp f initx si = case unsignal si of
-    Pure i -> tosignal $ SignalData $ \state -> fmap snd $ mfix $ \ ~(sig, _) -> do
+    Pure i -> tosignal $ SignalData $ \state -> do
         let nodePath' = TypeRep2Node (getTypeRep initx) (getTypeRep i) $ nodePath state
-            update    = do
-                signal <- sig
+        ref          <- initOrHotSwap (Just nodePath') (pure initx) state
+        let update    = do
+                signal <- readIORef ref
                 return $ f i <$> signal
-        insertSignal' (Just nodePath') (return $ pure initx) update mempty state
-    _      -> tosignal $ SignalData $ \state -> fmap snd $ mfix $ \ ~(sig, _) -> do
+        insertSignal' (Just nodePath') ref update mempty state
+    _      -> tosignal $ SignalData $ \state -> do
         let nodePath'   = TypeRep2Node (getTypeRep initx) (getSignalTypeRep si) $ nodePath state
         (iini, ifuncs) <- initOrRetrieveNode si state{nodePath = nodePath'}
         icont          <- iini
+        ref            <- initOrHotSwap (Just nodePath') (pure initx) state
         let update      = do
                 input  <- icont
-                signal <- sig
+                signal <- readIORef ref
                 return $ f <$> input <*> signal
-        insertSignal' (Just nodePath') (return $ pure initx) update ifuncs state
+        insertSignal' (Just nodePath') ref update ifuncs state
 
 sampleDelay :: (SignalType s, Typeable a) => a -> s a -> s a
 sampleDelay initx signal = delaySignal
@@ -103,14 +105,15 @@ sampleDelay initx signal = delaySignal
             nodes      <- atomically $ readTVar $ nodeTable state
             case IntMap.lookup hash nodes of
                 Just sv -> putStrLn "found delay SignalValue" >> return (unsafeCoerce sv)
-                Nothing -> fmap snd $ mfix $ \ ~(sample', _) -> do
+                Nothing -> do
                     putStrLn "Constructing delay SignalValue"
-                    let signalValue  = makeValue signal sample'
+                    let nodePath'    = TypeRep2Node (getTypeRep initx) (getSignalTypeRep signal) $ nodePath state
+                    ref             <- initOrHotSwap (Just nodePath') (pure initx) state
+                    let signalValue  = makeValue signal $ readIORef ref
                     atomically       $ modifyTVar' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce signalValue))
                     (ini, sigFuncs) <- unsignal' (unsignal signal) state
                     sample          <- ini
-                    let nodePath'    = TypeRep2Node (getTypeRep initx) (getSignalTypeRep signal) $ nodePath state
-                    insertSignal' (Just nodePath') (return $ pure initx) sample sigFuncs state
+                    insertSignal' (Just nodePath') ref sample sigFuncs state
 
 -- sampleDelay :: (SignalType s, Typeable a) => a -> s a -> s a
 -- sampleDelay initx signal = delaySignal
@@ -359,7 +362,10 @@ initOrRetrieveNode signal state = case unsignal signal of
 --                 sig state
 
 insertSignal :: SignalType s => Maybe NodePath -> Sample s a -> Sample s a -> SignalFunctions -> SignalState -> IO (SignalValue s a)
-insertSignal  maybeNodePath initx updatingFunction sigFuncs state = fmap snd $ insertSignal' maybeNodePath initx updatingFunction sigFuncs state
+insertSignal  maybeNodePath initx updatingFunction sigFuncs state = do
+    x   <- initx
+    ref <- initOrHotSwap maybeNodePath x state
+    insertSignal' maybeNodePath ref updatingFunction sigFuncs state
 
 getTypeRep :: Typeable a => a -> TypeRep
 getTypeRep = typeRep . typeHelper
