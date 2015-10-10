@@ -13,12 +13,15 @@ newtype Signal a = Signal (SignalData Signal a) deriving (Typeable)
 ---------------------------------------------------------------------------------------------------------
 
 instance SignalType Signal where
-    data SignalFunctions Signal   = SignalFunctions Finalize Archive 
-    data SignalElement   Signal a = SignalElement a
-    unsignal (Signal sig)         = sig
-    tosignal                      = Signal
-    insertSignal'                 = undefined
-    sigAppend (SignalFunctions f1 a1) (SignalFunctions f2 a2) = SignalFunctions (f1 >> f2) (a1 >> a2)
+    data    SignalFunctions Signal   = SignalFunctions Finalize Archive 
+    newtype SignalElement   Signal a = SignalElement a
+    unsignal (Signal sig)            = sig
+    tosignal                         = Signal
+    insertSignal'                    = undefined
+
+instance Monoid (SignalFunctions Signal) where
+    mempty = SignalFunctions (return ()) (return ())
+    mappend (SignalFunctions fin1 arch1) (SignalFunctions fin2 arch2) = SignalFunctions (fin1 >> fin2) (arch1 >> arch2)
 
 instance Functor (SignalElement Signal) where
     fmap f (SignalElement x) = SignalElement $ f x

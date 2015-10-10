@@ -10,6 +10,7 @@ import Unsafe.Coerce
 -- import System.Random
 import Data.Typeable
 -- import Data.List (unzip6)
+import Data.Monoid ((<>))
 
 import GHC.Prim
 import Control.Monad.ST.Strict (stToIO)
@@ -44,13 +45,12 @@ data SignalData    s a = SignalData (SignalState -> IO (SignalValue s a))
 
 type Sample      s a = IO (SignalElement s a)
 type SignalValue s a = (IO (Sample s a), SignalFunctions s)
-class (Applicative (SignalElement s), Functor (SignalElement s)) => SignalType s where
+class (Monoid (SignalFunctions s), Applicative (SignalElement s), Functor (SignalElement s)) => SignalType s where
     data SignalFunctions s   :: *
     data SignalElement   s a :: *
     unsignal                 :: s a -> SignalData s a
     tosignal                 :: SignalData s a -> s a
     insertSignal'            :: Maybe NodePath -> Sample s a -> Sample s a -> SignalFunctions s -> SignalState -> IO (Sample s a, SignalValue s a)
-    sigAppend                :: SignalFunctions s -> SignalFunctions s -> SignalFunctions s
 
 --SignalDSP
 -- class Num a => SignalDSP a where
@@ -75,6 +75,7 @@ foldp f initx si = case unsignal si of
             update    = do
                 signal <- sig
                 return $ f i <$> signal
+        --TODO: Make SignalFunctions a monoid instance!!!!!
         insertSignal' (Just nodePath') (return $ pure initx) update undefined state
     _      -> tosignal $ SignalData $ \state -> fmap snd $ mfix $ \ ~(sig, _) -> do
         let nodePath'   = TypeRep2Node (getTypeRep initx) (getSignalTypeRep si) $ nodePath state
@@ -367,7 +368,7 @@ getNode2 maybeArchivePath signalA signalB state = do
     sampleA            <- initA
     sampleB            <- initB
     return (sampleA, sampleB, \initValue updateFunction ->
-        insertSignal maybeArchivePath initValue updateFunction (sigFuncsA `sigAppend` sigFuncsB) state)
+        insertSignal maybeArchivePath initValue updateFunction (sigFuncsA <> sigFuncsB) state)
     where
         startingPath = case maybeArchivePath of
             Nothing          -> nodePath state
@@ -382,7 +383,7 @@ getNode3 maybeArchivePath signalA signalB signalC state = do
     sampleB            <- initB
     sampleC            <- initC
     return (sampleA, sampleB, sampleC, \initValue updateFunction ->
-        insertSignal maybeArchivePath initValue updateFunction (sigFuncsA `sigAppend` sigFuncsB `sigAppend` sigFuncsC) state)
+        insertSignal maybeArchivePath initValue updateFunction (sigFuncsA <> sigFuncsB <> sigFuncsC) state)
     where
         startingPath = case maybeArchivePath of
             Nothing          -> nodePath state
@@ -398,7 +399,7 @@ getNodes maybeArchivePath signals state = do
             maybeArchivePath
             initValue
             updateFunction
-            (foldr sigAppend (last sigFuncs) (init sigFuncs))
+            (mconcat sigFuncs)
             state
     return (samples, insertSig)
     where
@@ -418,7 +419,7 @@ getNodes1 maybeArchivePath signalA signals state = do
             maybeArchivePath
             initValue
             updateFunction
-            (sigFuncsA `sigAppend` foldr sigAppend (last sigFuncs) (init sigFuncs))
+            (sigFuncsA <> mconcat sigFuncs)
             state
     return (sampleA, samples, insertSig)
     where

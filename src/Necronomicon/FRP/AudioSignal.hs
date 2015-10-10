@@ -24,7 +24,10 @@ instance SignalType AudioSig where
     unsignal (AudioSig sig)         = sig
     tosignal                        = AudioSig
     insertSignal'                   = undefined
-    sigAppend (AudioSignalFunctions f1 a1) (AudioSignalFunctions f2 a2) = AudioSignalFunctions (f1 >> f2) (a1 >> a2)
+
+instance Monoid (SignalFunctions AudioSig) where
+    mempty = AudioSignalFunctions (return ()) (return ())
+    mappend (AudioSignalFunctions fin1 arch1) (AudioSignalFunctions fin2 arch2) = AudioSignalFunctions (fin1 >> fin2) (arch1 >> arch2)
 
 instance Functor (SignalElement AudioSig) where
     fmap f (AudioSignalElement x) = AudioSignalElement $ f x

@@ -25,7 +25,10 @@ instance SignalType DemandSignal where
     unsignal (DemandSignal sig)         = sig
     tosignal                            = DemandSignal
     insertSignal'                       = undefined
-    sigAppend (DemandSignalFunctions f1 a1 r1) (DemandSignalFunctions f2 a2 r2) = DemandSignalFunctions (f1 >> f2) (a1 >> a2) (r1 >> r2)
+
+instance Monoid (SignalFunctions DemandSignal) where
+    mempty = DemandSignalFunctions (return ()) (return ()) (return ())
+    mappend (DemandSignalFunctions fin1 arch1 reset1) (DemandSignalFunctions fin2 arch2 reset2) = DemandSignalFunctions (fin1 >> fin2) (arch1 >> arch2) (reset1 >> reset2)
 
 instance Functor (SignalElement DemandSignal) where
     fmap f (DemandSignalElement x) = DemandSignalElement $ f x
