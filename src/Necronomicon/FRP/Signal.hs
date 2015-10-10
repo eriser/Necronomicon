@@ -19,9 +19,9 @@ newtype Signal a = Signal (SignalData Signal a) deriving (Typeable)
 ---------------------------------------------------------------------------------------------------------
 
 instance SignalType Signal where
-    newtype SignalElement   Signal a = SignalElement a deriving (Show)
-    unsignal (Signal sig)            = sig
-    tosignal                         = Signal
+    newtype SignalElement Signal a = SignalElement a deriving (Show)
+    unsignal (Signal sig)          = sig
+    tosignal                       = Signal
 
     insertSignal' maybeNodePath initxM updatingFunction sigFuncs state = do
         initx           <- initxM

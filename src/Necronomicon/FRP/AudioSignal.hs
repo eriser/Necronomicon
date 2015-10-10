@@ -9,7 +9,7 @@ import Data.Typeable
 import GHC.Prim
 import Control.Monad.ST.Strict (stToIO)
 import GHC.ST
-import GHC.Types (Int(..))
+import GHC.Types (Int(..), Double(..))
 import Unsafe.Coerce
 import Data.Monoid ((<>))
 
@@ -23,9 +23,9 @@ type AudioSignal = AudioSig AudioBlock
 ---------------------------------------------------------------------------------------------------------
 
 instance SignalType AudioSig where
-    data SignalElement   AudioSig a = AudioSignalElement a | NoAudio deriving (Show)
-    unsignal (AudioSig sig)         = sig
-    tosignal                        = AudioSig
+    data SignalElement AudioSig a = AudioSignalElement a | NoAudio deriving (Show)
+    unsignal (AudioSig sig)       = sig
+    tosignal                      = AudioSig
 
     insertSignal' maybeNodePath initxM updatingFunction sigFuncs state = do
         initx           <- initxM
@@ -54,6 +54,25 @@ instance Applicative (SignalElement AudioSig) where
     pure                                          = AudioSignalElement
     AudioSignalElement f <*> AudioSignalElement x = AudioSignalElement $ f x
     _                    <*> _                    = NoAudio
+
+downSampleAudio :: SignalType s => AudioSignal -> s Double
+downSampleAudio signal = tosignal $ SignalData $ \state -> do
+    (ini, sigFuncs) <- initOrRetrieveNode signal state 
+    sample          <- ini
+    let update = sample >>= \maybeAudio -> case maybeAudio of
+            NoAudio              -> return $ pure 0 
+            AudioSignalElement a -> read0Index a state >>= return . pure
+    insertSignal Nothing update update sigFuncs state
+
+resampleAudio :: SignalType s => AudioSignal -> s [[Double]]
+resampleAudio signal = tosignal $ SignalData $ \state -> do
+    (ini, sigFuncs) <- initOrRetrieveNode signal state 
+    sample          <- ini
+    let update = sample >>= \maybeAudio -> case maybeAudio of
+            NoAudio              -> return $ pure [[0]]
+            AudioSignalElement a -> audioToDouble a state >>= return . pure
+    insertSignal Nothing update update sigFuncs state
+
 
 ---------------------------------------------------------------------------------------------------------
 -- Applicative instance
@@ -185,6 +204,30 @@ apChannel2 f (Channel _ index1) (Channel _ index2) (Channel _ destIndex) = Audio
             _  -> poolAp2 f (index1 +# i) (index2 +# i) (destIndex +# i) pool >> go (i -# 1#)
     stToIO $ go (audioBlockSize state -# 1#)
 
+read0Index :: AudioBlock -> SignalState -> IO Double
+read0Index (AudioBlock _ channels) state = do
+    AudioBlockPool _ pool <- readIORef $ audioPool $ audioState state
+    channelValues <- mapM (readChannel0Index pool) channels
+    return $ sum channelValues
+    where
+        readChannel0Index pool (Channel _ cindex) = stToIO $ ST $ \st -> case readDoubleArray# pool cindex st of
+            (# st2, val #) -> (# st2, D# val #)
+
+audioToDouble :: AudioBlock -> SignalState -> IO [[Double]]
+audioToDouble (AudioBlock _ channels) state = do
+    AudioBlockPool _ pool <- readIORef $ audioPool $ audioState state
+    let absize = audioBlockSize $ audioState state
+    stToIO $ mapM (readChannel0Index pool (I# absize)) channels
+    where
+        readChannel0Index pool (I# absize) (Channel _ cindex)= ST $ \st -> go st (absize -# 1#)
+            where
+                go st i = case i of
+                    0# -> case readDoubleArray# pool (cindex +# i) st of
+                        (# st2, val #) -> (# st2, D# val : [] #)
+                    _  -> case readDoubleArray# pool (cindex +# i) st of
+                        (# st2, val #) -> case go st2 (i +# 1#) of
+                            (# st3, vals #) -> (# st3, D# val : vals #)
+         
 --TODO: This needs to multi-channel expand
 --TODO: Make all ST monad shit strict (use case statements instead of lets!)
 --TODO: Add AudioSignal archiving and finalizing
