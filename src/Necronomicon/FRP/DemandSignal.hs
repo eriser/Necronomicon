@@ -19,15 +19,10 @@ data DemandSignal a = DemandSignal (SignalData DemandSignal a) deriving (Typeabl
 ---------------------------------------------------------------------------------------------------------
 
 instance SignalType DemandSignal where
-    data SignalFunctions DemandSignal   = DemandSignalFunctions Finalize Archive Reset
     data SignalElement   DemandSignal a = DemandSignalElement a | NoDemandSignal deriving (Show)
     unsignal (DemandSignal sig)         = sig
     tosignal                            = DemandSignal
     insertSignal'                       = undefined
-
-instance Monoid (SignalFunctions DemandSignal) where
-    mempty = DemandSignalFunctions (return ()) (return ()) (return ())
-    mappend (DemandSignalFunctions fin1 arch1 reset1) (DemandSignalFunctions fin2 arch2 reset2) = DemandSignalFunctions (fin1 >> fin2) (arch1 >> arch2) (reset1 >> reset2)
 
 instance Functor (SignalElement DemandSignal) where
     fmap f (DemandSignalElement x) = DemandSignalElement $ f x

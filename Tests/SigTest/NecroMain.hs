@@ -5,6 +5,7 @@ import qualified Necronomicon.FRP.Control as Sig
 
 necroMain :: Signal ()
 necroMain = sigPrint finalCountdown
+-- necroMain = sigPrint feedbackCounter
 -- necroMain = pattern timeSignal <| sigPrint <| Sig.zip cycleSignal cycleSignal
 
 -- timeSignal :: DemandSignal Time

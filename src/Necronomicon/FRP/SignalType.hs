@@ -43,13 +43,19 @@ data SignalData    s a = SignalData (SignalState -> IO (SignalValue s a))
                        deriving (Typeable)
 
 type Sample      s a = IO (SignalElement s a)
-type SignalValue s a = (IO (Sample s a), SignalFunctions s)
-class (Monoid (SignalFunctions s), Applicative (SignalElement s), Functor (SignalElement s)) => SignalType s where
-    data SignalFunctions s   :: *
+type SignalValue s a = (IO (Sample s a), SignalFunctions)
+data SignalFunctions = SignalFunctions Reset Finalize Archive
+
+class (Applicative (SignalElement s), Functor (SignalElement s)) => SignalType s where
     data SignalElement   s a :: *
     unsignal                 :: s a -> SignalData s a
     tosignal                 :: SignalData s a -> s a
-    insertSignal'            :: Maybe NodePath -> Sample s a -> Sample s a -> SignalFunctions s -> SignalState -> IO (Sample s a, SignalValue s a)
+    insertSignal'            :: Maybe NodePath -> Sample s a -> Sample s a -> SignalFunctions -> SignalState -> IO (Sample s a, SignalValue s a)
+
+
+instance Monoid SignalFunctions where
+    mempty = SignalFunctions (return ()) (return ()) (return ())
+    mappend (SignalFunctions reset1 fin1 arch1) (SignalFunctions reset2 fin2 arch2) = SignalFunctions (reset1 >> reset2) (fin1 >> fin2) (arch1 >> arch2)
 
 --SignalDSP
 -- class Num a => SignalDSP a where
@@ -86,7 +92,27 @@ foldp f initx si = case unsignal si of
                 return $ f <$> input <*> signal
         insertSignal' (Just nodePath') (return $ pure initx) update ifuncs state
 
--- feedback :: (SignalType s, Typeable a) => s a -> (s a -> s a) -> s a
+-- sampleDelay :: (SignalType s, Typeable a) => a -> s a -> s a
+-- sampleDelay initx signal = delaySignal
+--     where
+--         unsignal' (Pure x)       _     = return (return $ return $ pure x, mempty)
+--         unsignal' (SignalData s) state = s state
+--         delaySignal = tosignal $ SignalData $ \state -> do
+--             stableName <- signal `seq` makeStableName delaySignal
+--             let hash    = hashStableName stableName
+--             nodes      <- atomically $ readTVar $ nodeTable state
+--             case IntMap.lookup hash nodes of
+--                 Just sv -> return $ unsafeCoerce sv
+--                 Nothing -> do
+--                     let nodePath'    = TypeRep2Node (getTypeRep initx) (getSignalTypeRep signal) $ nodePath state
+--                     ref             <- initOrHotSwap (Just nodePath') (pure initx) state
+--                     let signalValue  = (return $ unsafeCoerce $ readIORef ref, mempty) :: SignalValue s ()
+--                     atomically       $ modifyTVar' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce signalValue))
+--                     (ini, sigFuncs) <- unsignal' (unsignal signal) state
+--                     sample          <- ini
+--                     insertSignal Nothing (return $ pure initx) sample mempty state
+
+-- feedback :: (SignalType s, Typeable a) => a -> (s a -> s a) -> s a
 -- feedback initx f = let signal = f $ sampleDelay initx signal in signal
 
 -- sampleDelay :: (Rate r, Typeable a)
@@ -291,23 +317,38 @@ nextUID state = atomically $ do
     writeTVar (sigUIDs state) uids
     return uid
 
-initOrRetrieveNode :: SignalType s => s a -> SignalState -> IO (SignalValue s a)
-initOrRetrieveNode signal state = case unsignal signal of
-    Pure       x   -> return (return $ return $ pure x, mempty)
-    SignalData sig -> do
-        stableName <- signal `seq` makeStableName signal
-        let hash = hashStableName stableName
-        refs <- atomically $ readTVar $ nodeTable state
-        case IntMap.lookup hash refs of
-            Just (stableName', sv) -> if not (eqStableName stableName stableName') then putStrLn "Stables names did not match during node table lookup" >> sig state else do
-                let signalValue = unsafeCoerce sv :: SignalValue s a
-                return signalValue
-            Nothing -> do
-                signalValue <- sig state
-                atomically $ modifyTVar' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce signalValue))
-                return signalValue
+-- initOrRetrieveNode :: SignalType s => s a -> SignalState -> IO (SignalValue s a)
+-- initOrRetrieveNode signal state = case unsignal signal of
+--     Pure       x   -> return (return $ return $ pure x, mempty)
+--     SignalData sig -> do
+--         stableName <- signal `seq` makeStableName signal
+--         let hash = hashStableName stableName
+--         refs <- atomically $ readTVar $ nodeTable state
+--         case IntMap.lookup hash refs of
+--             Just (stableName', sv) -> if not (eqStableName stableName stableName') then putStrLn "Stables names did not match during node table lookup" >> sig state else do
+--                 let signalValue = unsafeCoerce sv :: SignalValue s a
+--                 return signalValue
+--             Nothing -> do
+--                 signalValue <- sig state
+--                 atomically $ modifyTVar' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce signalValue))
+--                 return signalValue
 
-insertSignal :: SignalType s => Maybe NodePath -> Sample s a -> Sample s a -> SignalFunctions s -> SignalState -> IO (SignalValue s a)
+initOrRetrieveNode :: SignalType s => s a -> SignalState -> IO (SignalValue s a)
+initOrRetrieveNode signal state = do
+    stableName <- signal `seq` makeStableName signal
+    let hash = hashStableName stableName
+    refs <- atomically $ readTVar $ nodeTable state
+    case IntMap.lookup hash refs of
+        Just (_, sv) -> do
+            let signalValue = unsafeCoerce sv :: SignalValue s a
+            return signalValue
+        Nothing -> case unsignal signal of
+            Pure       x   -> return (return $ return $ pure x, mempty)
+            SignalData sig -> mfix $ \signalValue -> do
+                atomically $ modifyTVar' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce signalValue))
+                sig state
+
+insertSignal :: SignalType s => Maybe NodePath -> Sample s a -> Sample s a -> SignalFunctions -> SignalState -> IO (SignalValue s a)
 insertSignal  maybeNodePath initx updatingFunction sigFuncs state = fmap snd $ insertSignal' maybeNodePath initx updatingFunction sigFuncs state
 
 getTypeRep :: Typeable a => a -> TypeRep

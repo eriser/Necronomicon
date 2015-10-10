@@ -19,7 +19,6 @@ newtype Signal a = Signal (SignalData Signal a) deriving (Typeable)
 ---------------------------------------------------------------------------------------------------------
 
 instance SignalType Signal where
-    data    SignalFunctions Signal   = SignalFunctions Finalize Archive 
     newtype SignalElement   Signal a = SignalElement a deriving (Show)
     unsignal (Signal sig)            = sig
     tosignal                         = Signal
@@ -41,11 +40,7 @@ instance SignalType Signal where
                 Nothing -> return ()
                 Just np -> readIORef ref >>= \archivedX -> modifyIORef (archive state) (Map.insert np (unsafeCoerce archivedX))
         atomically $ modifyTVar' (newFrPool state) (updateActionRef :)
-        return (readIORef ref, (initializer, sigFuncs <> SignalFunctions finalizer archiver))
-
-instance Monoid (SignalFunctions Signal) where
-    mempty = SignalFunctions (return ()) (return ())
-    mappend (SignalFunctions fin1 arch1) (SignalFunctions fin2 arch2) = SignalFunctions (fin1 >> fin2) (arch1 >> arch2)
+        return (readIORef ref, (initializer, sigFuncs <> SignalFunctions (return ()) finalizer archiver))
 
 instance Functor (SignalElement Signal) where
     fmap f (SignalElement x) = SignalElement $ f x

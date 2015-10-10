@@ -23,7 +23,6 @@ type AudioSignal = AudioSig AudioBlock
 ---------------------------------------------------------------------------------------------------------
 
 instance SignalType AudioSig where
-    data SignalFunctions AudioSig   = AudioSignalFunctions Finalize Archive
     data SignalElement   AudioSig a = AudioSignalElement a | NoAudio deriving (Show)
     unsignal (AudioSig sig)         = sig
     tosignal                        = AudioSig
@@ -45,11 +44,7 @@ instance SignalType AudioSig where
                 Nothing -> return ()
                 Just np -> readIORef ref >>= \archivedX -> modifyIORef (archive state) (Map.insert np (unsafeCoerce archivedX))
         atomically $ modifyTVar' (newFrPool state) (updateActionRef :)
-        return (readIORef ref, (initializer, sigFuncs <> AudioSignalFunctions finalizer archiver))
-
-instance Monoid (SignalFunctions AudioSig) where
-    mempty = AudioSignalFunctions (return ()) (return ())
-    mappend (AudioSignalFunctions fin1 arch1) (AudioSignalFunctions fin2 arch2) = AudioSignalFunctions (fin1 >> fin2) (arch1 >> arch2)
+        return (readIORef ref, (initializer, sigFuncs <> SignalFunctions (return ()) finalizer archiver))
 
 instance Functor (SignalElement AudioSig) where
     fmap f (AudioSignalElement x) = AudioSignalElement $ f x
