@@ -21,12 +21,20 @@ data DemandSignal a = DemandSignal (SignalData DemandSignal a) deriving (Typeabl
 
 instance SignalType DemandSignal where
     data SignalFunctions DemandSignal   = DemandSignalFunctions Finalize Archive Reset
-    data SignalElement   DemandSignal a = DemandSignalElement (Maybe a)
+    data SignalElement   DemandSignal a = DemandSignalElement a | NoDemandSignal
     unsignal (DemandSignal sig)         = sig
     tosignal                            = DemandSignal
-    insertSignal                        = undefined
+    insertSignal'                       = undefined
     sigAppend (DemandSignalFunctions f1 a1 r1) (DemandSignalFunctions f2 a2 r2) = DemandSignalFunctions (f1 >> f2) (a1 >> a2) (r1 >> r2)
 
+instance Functor (SignalElement DemandSignal) where
+    fmap f (DemandSignalElement x) = DemandSignalElement $ f x
+    fmap _ _                       = NoDemandSignal
+
+instance Applicative (SignalElement DemandSignal) where
+    pure                                            = DemandSignalElement
+    DemandSignalElement f <*> DemandSignalElement x = DemandSignalElement $ f x
+    _                    <*> _                      = NoDemandSignal
 
 -- instance Functor DemandSignal where
 --     fmap f sx = case unsignal sx of

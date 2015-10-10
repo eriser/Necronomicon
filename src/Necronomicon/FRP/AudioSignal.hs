@@ -20,11 +20,21 @@ type AudioSignal = AudioSig AudioBlock
 
 instance SignalType AudioSig where
     data SignalFunctions AudioSig   = AudioSignalFunctions Finalize Archive
-    data SignalElement   AudioSig a = AudioSignalElement (Maybe a)
+    data SignalElement   AudioSig a = AudioSignalElement a | NoAudio
     unsignal (AudioSig sig)         = sig
     tosignal                        = AudioSig
-    insertSignal                    = undefined
+    insertSignal'                   = undefined
     sigAppend (AudioSignalFunctions f1 a1) (AudioSignalFunctions f2 a2) = AudioSignalFunctions (f1 >> f2) (a1 >> a2)
+
+instance Functor (SignalElement AudioSig) where
+    fmap f (AudioSignalElement x) = AudioSignalElement $ f x
+    fmap _ _                      = NoAudio
+
+instance Applicative (SignalElement AudioSig) where
+    pure                                          = AudioSignalElement
+    AudioSignalElement f <*> AudioSignalElement x = AudioSignalElement $ f x
+    _                    <*> _                    = NoAudio
+
 
 -- instance Functor AudioSig where
 --     fmap f sx = case unsignal sx of

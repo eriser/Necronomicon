@@ -1,9 +1,9 @@
-{-# LANGUAGE MagicHash, UnboxedTuples, DeriveDataTypeable #-}
+{-# LANGUAGE MagicHash, UnboxedTuples, DeriveDataTypeable, FlexibleContexts #-}
 module Necronomicon.FRP.SignalType where
 
 import Control.Concurrent.STM
 import Data.IORef
--- import Control.Monad.Fix
+import Control.Monad.Fix
 import Control.Monad
 import System.Mem.StableName
 import Unsafe.Coerce
@@ -44,15 +44,13 @@ data SignalData    s a = SignalData (SignalState -> IO (SignalValue s a))
 
 type Sample      s a = IO (SignalElement s a)
 type SignalValue s a = (IO (Sample s a), SignalFunctions s)
-class SignalType s where
+class (Applicative (SignalElement s), Functor (SignalElement s)) => SignalType s where
     data SignalFunctions s   :: *
     data SignalElement   s a :: *
     unsignal                 :: s a -> SignalData s a
     tosignal                 :: SignalData s a -> s a
-    insertSignal             :: Maybe NodePath -> Sample s a -> Sample s a -> SignalFunctions s -> SignalState -> IO (SignalValue s a)
+    insertSignal'            :: Maybe NodePath -> Sample s a -> Sample s a -> SignalFunctions s -> SignalState -> IO (Sample s a, SignalValue s a)
     sigAppend                :: SignalFunctions s -> SignalFunctions s -> SignalFunctions s
-
---Need audioToFrac and krToFrac
 
 --SignalDSP
 -- class Num a => SignalDSP a where
@@ -66,27 +64,27 @@ class SignalType s where
 -- Combinators
 ---------------------------------------------------------------------------------------------------------
 
--- foldp :: (SignalType signal, Typeable input, Typeable state)
---       => (input -> state -> state) -- ^ Higher-order function which is applied each update tick
---       -> state                     -- ^ The initial state of the signal
---       -> signal input              -- ^ Input signal which is applied to the higher-order function
---       -> signal state              -- ^ Resultant signal which updates based on the input signal
--- foldp f initx si = case unsignal si of
---     Pure i -> tosignal $ SignalData $ \state -> fmap snd $ mfix $ \ ~(sig, _) -> do
---         let nodePath' = TypeRep2Node (getTypeRep initx) (getTypeRep i) $ nodePath state
---             update    = do
---                 signal <- sig
---                 return $ f i <$> signal
---         insertSignal' (Just nodePath') (return $ Just initx) update [] (rate si) (return ()) (return ()) (return ()) (return ()) state
---     _      -> tosignal $ SignalData $ \state -> fmap snd $ mfix $ \ ~(sig, _) -> do
---         let nodePath'                    = TypeRep2Node (getTypeRep initx) (getSignalTypeRep si) $ nodePath state
---         (iini, _, ids, irs, ifs, iarch) <- getSignalNode si state{nodePath = nodePath'}
---         icont                           <- iini
---         let update                       = do
---                 input  <- icont
---                 signal <- sig
---                 return $ f <$> input <*> signal
---         insertSignal' (Just nodePath') (return $ Just initx) update [] (rate si) ids irs ifs iarch state
+foldp :: (SignalType signal, Typeable input, Typeable state)
+      => (input -> state -> state) -- ^ Higher-order function which is applied each update tick
+      -> state                     -- ^ The initial state of the signal
+      -> signal input              -- ^ Input signal which is applied to the higher-order function
+      -> signal state              -- ^ Resultant signal which updates based on the input signal
+foldp f initx si = case unsignal si of
+    Pure i -> tosignal $ SignalData $ \state -> fmap snd $ mfix $ \ ~(sig, _) -> do
+        let nodePath' = TypeRep2Node (getTypeRep initx) (getTypeRep i) $ nodePath state
+            update    = do
+                signal <- sig
+                return $ f i <$> signal
+        insertSignal' (Just nodePath') (return $ pure initx) update undefined state
+    _      -> tosignal $ SignalData $ \state -> fmap snd $ mfix $ \ ~(sig, _) -> do
+        let nodePath'   = TypeRep2Node (getTypeRep initx) (getSignalTypeRep si) $ nodePath state
+        (iini, ifuncs) <- initOrRetrieveNode si state{nodePath = nodePath'}
+        icont          <- iini
+        let update      = do
+                input  <- icont
+                signal <- sig
+                return $ f <$> input <*> signal
+        insertSignal' (Just nodePath') (return $ pure initx) update ifuncs state
 
 -- feedback :: (SignalType s, Typeable a) => s a -> (s a -> s a) -> s a
 -- feedback initx f = let signal = f $ sampleDelay initx signal in signal
@@ -178,15 +176,6 @@ class SignalType s where
 --             Just x -> print x >> return (Just ())
 --             _      -> return Nothing
 --     insertSig (return $ Just ()) update
-
----------------------------------------------------------------------------------------------------------
--- Rate
----------------------------------------------------------------------------------------------------------
-
--- ratePool :: SignalType s => s a -> SignalState -> TVar SignalPool
--- ratePool signal state = case rate signal of
---     Ar -> newArPool state
---     _  -> newFrPool state
 
 ---------------------------------------------------------------------------------------------------------
 -- Audio
@@ -320,9 +309,8 @@ initOrRetrieveNode signal state = case unsignal signal of
                 atomically $ modifyTVar' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce signalValue))
                 return signalValue
 
--- insertSignal :: Maybe NodePath -> IO (Maybe a) -> IO (Maybe a) -> [Int] -> Rate -> IO () -> IO () -> IO () -> IO () -> SignalState -> IO (SignalFunctions a)
--- insertSignal  maybeNodePath initx updatingFunction uids sigRate demand resets finalizers archivers state =
---     fmap snd $ insertSignal' maybeNodePath initx updatingFunction uids sigRate demand resets finalizers archivers state
+insertSignal :: SignalType s => Maybe NodePath -> Sample s a -> Sample s a -> SignalFunctions s -> SignalState -> IO (SignalValue s a)
+insertSignal  maybeNodePath initx updatingFunction sigFuncs state = fmap snd $ insertSignal' maybeNodePath initx updatingFunction sigFuncs state
 
 -- insertSignal' :: Maybe NodePath -> IO (Maybe a) -> IO (Maybe a) -> [Int] -> Rate -> IO () -> IO () -> IO () -> IO () -> SignalState -> IO (IO (Maybe a), SignalFunctions a)
 -- insertSignal' maybeNodePath initxM updatingFunction uids sigRate demand resets finalizers archivers state = do

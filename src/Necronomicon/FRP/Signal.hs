@@ -17,9 +17,15 @@ instance SignalType Signal where
     data SignalElement   Signal a = SignalElement a
     unsignal (Signal sig)         = sig
     tosignal                      = Signal
-    insertSignal                  = undefined
+    insertSignal'                 = undefined
     sigAppend (SignalFunctions f1 a1) (SignalFunctions f2 a2) = SignalFunctions (f1 >> f2) (a1 >> a2)
 
+instance Functor (SignalElement Signal) where
+    fmap f (SignalElement x) = SignalElement $ f x
+
+instance Applicative (SignalElement Signal) where
+    pure                                = SignalElement
+    SignalElement f <*> SignalElement x = SignalElement $ f x
 
 -- instance Functor Signal where
 --     fmap f sx = case unsignal sx of
