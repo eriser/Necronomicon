@@ -7,15 +7,9 @@ import Prelude hiding (zip)
 
 -- cycle :: SignalType s => [a] -> s a
 -- cycle [] = error "cycleSignal called with empty list."
--- cycle xs = sig
+-- cycle xs = fmap head clist
 --     where
---         sig = tosignal $ SignalData $ \state -> do
---             ref <- newIORef $ Prelude.cycle xs
---             let update = do
---                     x : xs' <- readIORef ref
---                     writeIORef ref xs'
---                     return $ Just x
---             insertSignal Nothing (return $ Just $ head xs) update [] (rate sig) (return ()) (writeIORef ref xs) (return ()) (return ()) state
+--         clist = sampleDelay (cycle xs) $ fmap tail clist
 
 zip :: (Functor f, Applicative f) => f a -> f b -> f (a, b)
 zip a b = (,) <$> a <*> b

@@ -12,7 +12,6 @@ import Data.Typeable
 
 
 --Like Demand rate in SuperCollider?
---DemandSignal instead?
 data DemandSignal a = DemandSignal (SignalData DemandSignal a) deriving (Typeable)
 
 ---------------------------------------------------------------------------------------------------------

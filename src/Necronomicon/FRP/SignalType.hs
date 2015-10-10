@@ -293,7 +293,7 @@ nextUID state = atomically $ do
 
 initOrRetrieveNode :: SignalType s => s a -> SignalState -> IO (SignalValue s a)
 initOrRetrieveNode signal state = case unsignal signal of
-    Pure       _   -> error "Need to figure out how to handle pure values"
+    Pure       x   -> return (return $ return $ pure x, mempty)
     SignalData sig -> do
         stableName <- signal `seq` makeStableName signal
         let hash = hashStableName stableName
