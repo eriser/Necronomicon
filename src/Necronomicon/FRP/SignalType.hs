@@ -25,8 +25,8 @@ import qualified Data.Map.Strict    as Map
 
 type SignalPool        = [IORef (Maybe (Int, IO ()))]
 type Reset             = IO ()
-type Archive           = IO ()
 type Finalize          = IO ()
+type Archive           = IO ()
 data RunStatus         = Running | HotSwapping | Quitting
 data SignalState       = SignalState
                        { nodePath   :: NodePath
@@ -44,7 +44,11 @@ data SignalData    s a = SignalData (SignalState -> IO (SignalValue s a))
 
 type Sample      s a = IO (SignalElement s a)
 type SignalValue s a = (IO (Sample s a), SignalFunctions)
-data SignalFunctions = SignalFunctions Reset Finalize Archive
+data SignalFunctions = SignalFunctions
+                     { resetFunction    :: Reset
+                     , finalizeFunction :: Finalize
+                     , archiveFunction  :: Archive
+                     }
 
 class (Applicative s, Functor s, Applicative (SignalElement s), Functor (SignalElement s)) => SignalType s where
     data SignalElement s a :: *
@@ -115,56 +119,6 @@ sampleDelay initx signal = delaySignal
                     sample          <- ini
                     insertSignal' (Just nodePath') ref sample sigFuncs state
 
--- sampleDelay :: (SignalType s, Typeable a) => a -> s a -> s a
--- sampleDelay initx signal = delaySignal
---     where
---         delaySignal = tosignal $ SignalData $ \state -> do
---             putStrLn "Constructing delay SignalValue"
---             let nodePath'    = TypeRep2Node (getTypeRep initx) (getSignalTypeRep signal) $ nodePath state
---             signalValue     <- insertSignal' (Just nodePath') (return $ pure initx) sample' mempty state
---             (ini, _)        <- initOrRetrieveNode signal state
---             sample          <- ini
---             return (sample, signalValue)
- 
--- feedback :: (SignalType s, Typeable a) => a -> (s a -> s a) -> s a
--- feedback initx f = let signal = f $ sampleDelay initx signal in signal
-
--- sampleDelay :: (Rate r, Typeable a)
---             => a
---             -> Signal r a
---             -> Signal r a
--- sampleDelay initx signal = fbySignal
---     where
---         unsignal' (Pure x)   _     = return (return $ return x, -1, return (), return ())
---         unsignal' (Signal s) state = s state
---         makeValue _ sample = (return $ sample, mempty)
---         fbySignal = Signal $ \state -> do
---             stableName <- signal `seq` makeStableName fbySignal
---             let hash    = hashStableName stableName
---             nodes      <- atomically $ readTVar $ nodeTable state
---             case IntMap.lookup hash nodes of
---                 Just sv -> return $ unsafeCoerce sv
---                 Nothing -> do
---                     let nodePath' = TypeRepNode (getTypeRep initx) $ nodePath state
---                     -- putStrLn $ "nodePath: " ++ show nodePath'
---                     ref              <- initOrHotSwap (Just nodePath') initx state
---                     let signalValue   = makeValue signal $ readIORef ref
---                     atomically        $ modifyTVar' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce signalValue))
---                     (xini, sigFuncs) <- unsignal' signal state{nodePath = nodePath'}
---                     xsample          <- xini
---                     updateActionRef  <- newIORef $ Just (0, xsample >>= \x -> x `seq` writeIORef ref x)
---                     let initializer   = do
---                             atomicModifyIORef' updateActionRef $ \maybeUA -> case maybeUA of
---                                 Just (refCount, ua) -> (Just (refCount + 1, ua), ())
---                                 _                   -> (Nothing, ())
---                             return $ readIORef ref
---                         finalizer    = atomicModifyIORef' updateActionRef $ \maybeUA -> case maybeUA of
---                             Just (refCount, ua) -> let refCount' = refCount - 1 in if refCount' <= 0 then (Nothing, ()) else (Just (refCount', ua), ())
---                             _                   -> (Nothing, ())
---                         archiver = readIORef ref >>= \archivedX -> modifyIORef (archive state) (Map.insert nodePath' (unsafeCoerce archivedX))
---                     atomically $ modifyTVar' (ratePool signal state) (updateActionRef :)
---                     return (initializer, sigFuncs)
-
 -- dynamicTester :: (Rate r, Show a) => Signal r a -> Signal r [a]
 -- dynamicTester (Pure _) = Pure []
 -- dynamicTester sx       = Signal $ \state -> do
@@ -213,6 +167,12 @@ sigPrint sig = tosignal $ SignalData $ \state -> do
     (sample, insertSig) <- getNode1 Nothing sig state
     let update = sample >>= print >> return (pure ())
     insertSig (return $ pure ()) update
+
+sigTrace :: (SignalType s, Show (SignalElement s a)) => s a -> s a
+sigTrace sig = tosignal $ SignalData $ \state -> do
+    (sample, insertSig) <- getNode1 Nothing sig state
+    let update = sample >>= \x -> print x >> return x
+    insertSig sample update
 
 ---------------------------------------------------------------------------------------------------------
 -- Audio
