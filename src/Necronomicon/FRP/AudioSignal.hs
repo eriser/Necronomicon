@@ -28,13 +28,14 @@ instance SignalType AudioSig where
     tosignal                      = AudioSig
 
     insertSignal' maybeNodePath ref updatingFunction sigFuncs state = do
+        initx <- readIORef ref
         let updateAction = updatingFunction >>= writeIORef ref
         updateActionRef <- newIORef $ Just (0, updateAction)
         let initializer = do
                 atomicModifyIORef' updateActionRef $ \maybeUA -> case maybeUA of
                     Just (refCount, ua) -> (Just (refCount + 1, ua), ())
                     _                   -> (Just (1, updatingFunction >>= writeIORef ref), ())
-                return $ readIORef ref
+                return (initx, readIORef ref)
             finalizer = atomicModifyIORef' updateActionRef $ \maybeUA -> case maybeUA of
                 Just (refCount, ua) -> let refCount' = refCount - 1 in if refCount' <= 0 then (Nothing, ()) else (Just (refCount', ua), ())
                 _                   -> (Nothing, ())
@@ -56,20 +57,26 @@ instance Applicative (SignalElement AudioSig) where
 downSampleAudio :: SignalType s => AudioSignal -> s Double
 downSampleAudio signal = tosignal $ SignalData $ \state -> do
     (ini, sigFuncs) <- initOrRetrieveNode signal state 
-    sample          <- ini
+    (initx, sample) <- ini
     let update = sample >>= \maybeAudio -> case maybeAudio of
             NoAudio              -> return $ pure 0 
             AudioSignalElement a -> read0Index a state >>= return . pure
-    insertSignal Nothing update update sigFuncs state
+    inita <- case initx of
+            NoAudio              -> return $ pure 0
+            AudioSignalElement a -> read0Index a state >>= return . pure
+    insertSignal Nothing inita update sigFuncs state
 
 resampleAudio :: SignalType s => AudioSignal -> s [[Double]]
 resampleAudio signal = tosignal $ SignalData $ \state -> do
     (ini, sigFuncs) <- initOrRetrieveNode signal state 
-    sample          <- ini
+    (initx, sample) <- ini
     let update = sample >>= \maybeAudio -> case maybeAudio of
             NoAudio              -> return $ pure [[0]]
             AudioSignalElement a -> audioToDouble a state >>= return . pure
-    insertSignal Nothing update update sigFuncs state
+    inita <- case initx of
+            NoAudio              -> return $ pure [[0]]
+            AudioSignalElement a -> audioToDouble a state >>= return . pure
+    insertSignal Nothing inita update sigFuncs state
 
 
 ---------------------------------------------------------------------------------------------------------
@@ -80,9 +87,9 @@ instance Functor AudioSig where
     fmap f sx = case unsignal sx of
         Pure x -> AudioSig $ Pure $ f x
         _      -> AudioSig $ SignalData $ \state -> do
-            (sample, insertSig) <- getNode1 Nothing sx state
-            let update           = sample >>= \x -> return (f <$> x)
-            insertSig update update
+            ((initx, sample), insertSig) <- getNode1 Nothing sx state
+            let update = sample >>= \x -> return (f <$> x)
+            insertSig (f <$> initx) update
 
 instance Applicative AudioSig where
     pure x = AudioSig $ Pure x
@@ -92,21 +99,21 @@ instance Applicative AudioSig where
         (Pure f, _     ) -> fmap f sx
         (_     , Pure x) -> fmap ($ x) sf
         _                -> AudioSig $ SignalData $ \state -> do
-            (sampleF, sampleX, insertSig) <- getNode2 Nothing sf sx state
+            ((initF, sampleF), (initX, sampleX), insertSig) <- getNode2 Nothing sf sx state
             let update = do
                     f <- sampleF
                     x <- sampleX
                     return $ f <*> x
-            insertSig update update
+            insertSig (initF <*> initX) update
 
     xsig *> ysig = case (unsignal xsig, unsignal ysig) of
         (Pure _, _     ) -> ysig
         (_     , Pure y) -> AudioSig $ SignalData $ \state -> do
             (_, insertSig) <- getNode1 Nothing xsig state
-            insertSig (return $ pure y) (return $ pure y)
+            insertSig (pure y) (return $ pure y)
         _                -> AudioSig $ SignalData $ \state -> do
-            (_, sampleY, insertSig) <- getNode2 Nothing xsig ysig state
-            insertSig sampleY sampleY
+            (_, (initY, sampleY), insertSig) <- getNode2 Nothing xsig ysig state
+            insertSig initY sampleY
 
     (<*) = flip (*>)
 

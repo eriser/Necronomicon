@@ -24,13 +24,14 @@ instance SignalType Signal where
     tosignal                       = Signal
 
     insertSignal' maybeNodePath ref updatingFunction sigFuncs state = do
+        initx <- readIORef ref
         let updateAction = updatingFunction >>= writeIORef ref
         updateActionRef <- newIORef $ Just (0, updateAction)
         let initializer = do
                 atomicModifyIORef' updateActionRef $ \maybeUA -> case maybeUA of
                     Just (refCount, ua) -> (Just (refCount + 1, ua), ())
                     _                   -> (Just (1, updatingFunction >>= writeIORef ref), ())
-                return $ readIORef ref
+                return $ (initx, readIORef ref)
             finalizer = atomicModifyIORef' updateActionRef $ \maybeUA -> case maybeUA of
                 Just (refCount, ua) -> let refCount' = refCount - 1 in if refCount' <= 0 then (Nothing, ()) else (Just (refCount', ua), ())
                 _                   -> (Nothing, ())
@@ -56,9 +57,9 @@ instance Functor Signal where
     fmap f sx = case unsignal sx of
         Pure x -> Signal $ Pure $ f x
         _      -> Signal $ SignalData $ \state -> do
-            (sample, insertSig) <- getNode1 Nothing sx state
-            let update           = sample >>= \x -> return (f <$> x)
-            insertSig update update
+            ((initx, sample), insertSig) <- getNode1 Nothing sx state
+            let update = sample >>= \x -> return (f <$> x)
+            insertSig (f <$> initx) update
 
 instance Applicative Signal where
     pure x = Signal $ Pure x
@@ -68,21 +69,21 @@ instance Applicative Signal where
         (Pure f, _     ) -> fmap f sx
         (_     , Pure x) -> fmap ($ x) sf
         _                -> Signal $ SignalData $ \state -> do
-            (sampleF, sampleX, insertSig) <- getNode2 Nothing sf sx state
+            ((initF, sampleF), (initX, sampleX), insertSig) <- getNode2 Nothing sf sx state
             let update = do
                     f <- sampleF 
                     x <- sampleX
                     return $ f <*> x
-            insertSig update update
+            insertSig (initF <*> initX) update
 
     xsig *> ysig = case (unsignal xsig, unsignal ysig) of
         (Pure _, _     ) -> ysig
         (_     , Pure y) -> Signal $ SignalData $ \state -> do
             (_, insertSig) <- getNode1 Nothing xsig state
-            insertSig (return $ pure y) (return $ pure y)
+            insertSig (pure y) (return $ pure y)
         _                -> Signal $ SignalData $ \state -> do
-            (_, sampleY, insertSig) <- getNode2 Nothing xsig ysig state
-            insertSig sampleY sampleY
+            (_, (initY, sampleY), insertSig) <- getNode2 Nothing xsig ysig state
+            insertSig initY sampleY
 
     (<*) = flip (*>)
 

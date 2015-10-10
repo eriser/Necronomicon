@@ -31,7 +31,7 @@ instance SignalType DemandSignal where
             archiver = case maybeNodePath of
                 Nothing -> return ()
                 Just np -> readIORef ref >>= \archivedX -> modifyIORef (archive state) (Map.insert np (unsafeCoerce archivedX))
-        return (return $ update, sigFuncs <> SignalFunctions (writeIORef ref initx) (return ()) archiver)
+        return (return (initx, update), sigFuncs <> SignalFunctions (writeIORef ref initx) (return ()) archiver)
 
 instance Functor (SignalElement DemandSignal) where
     fmap f (DemandSignalElement x) = DemandSignalElement $ f x
@@ -51,9 +51,9 @@ instance Functor DemandSignal where
     fmap f sx = case unsignal sx of
         Pure x -> DemandSignal $ Pure $ f x
         _      -> DemandSignal $ SignalData $ \state -> do
-            (sample, insertSig) <- getNode1 Nothing sx state
-            let update           = sample >>= \x -> return (f <$> x)
-            insertSig update update
+            ((initX, sample), insertSig) <- getNode1 Nothing sx state
+            let update = sample >>= \x -> return (f <$> x)
+            insertSig (f <$> initX) update
 
 instance Applicative DemandSignal where
     pure x = DemandSignal $ Pure x
@@ -63,21 +63,21 @@ instance Applicative DemandSignal where
         (Pure f, _     ) -> fmap f sx
         (_     , Pure x) -> fmap ($ x) sf
         _                -> DemandSignal $ SignalData $ \state -> do
-            (sampleF, sampleX, insertSig) <- getNode2 Nothing sf sx state
+            ((initF, sampleF), (initX, sampleX), insertSig) <- getNode2 Nothing sf sx state
             let update = do
                     f <- sampleF
                     x <- sampleX
                     return $ f <*> x
-            insertSig update update
+            insertSig (initF <*> initX) update
 
     xsig *> ysig = case (unsignal xsig, unsignal ysig) of
         (Pure _, _     ) -> ysig
         (_     , Pure y) -> DemandSignal $ SignalData $ \state -> do
             (_, insertSig) <- getNode1 Nothing xsig state
-            insertSig (return $ pure y) (return $ pure y)
+            insertSig (pure y) (return $ pure y)
         _                -> DemandSignal $ SignalData $ \state -> do
-            (_, sampleY, insertSig) <- getNode2 Nothing xsig ysig state
-            insertSig sampleY sampleY
+            (_, (initY, sampleY), insertSig) <- getNode2 Nothing xsig ysig state
+            insertSig initY sampleY
 
     (<*) = flip (*>)
 
@@ -127,10 +127,9 @@ patternSeq :: (SignalType s, Show a) => a -> DemandSignal Time -> DemandSignal a
 patternSeq initx timeSig valueSig = tosignal $ SignalData $ \state -> do
     (initT, tFuncs) <- initOrRetrieveNode timeSig  state
     (initV, vFuncs) <- initOrRetrieveNode valueSig state
-    sampleT         <- initT
-    sampleV         <- initV
-    initValue       <- sampleV
-    ref             <- case initValue of
+    (_, sampleT)    <- initT
+    (v, sampleV)    <- initV
+    ref             <- case v of
         NoDemandSignal        -> newIORef $ pure initx
         DemandSignalElement x -> newIORef $ pure x
     let reset        = resetFunction tFuncs >> resetFunction vFuncs

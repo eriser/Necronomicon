@@ -39,7 +39,7 @@ type SignalActions a = (IO a, IO (), IO ())
 runSignalFromState :: (Show a) => Signal a -> SignalState -> IO (SignalActions a)
 runSignalFromState signal state = do
     (ini, SignalFunctions _ fin arch) <- initOrRetrieveNode signal state{nodePath = RootNode}
-    sample                            <-  ini
+    (_, sample)                       <-  ini
     writeIORef (archive state) Map.empty
     atomically (writeTVar (runStatus state) Running)
     -- putStrLn $ "Running signal network, staring with uid: " ++ show uid

@@ -43,7 +43,7 @@ data SignalData    s a = SignalData (SignalState -> IO (SignalValue s a))
                        deriving (Typeable)
 
 type Sample      s a = IO (SignalElement s a)
-type SignalValue s a = (IO (Sample s a), SignalFunctions)
+type SignalValue s a = (IO (SignalElement s a, Sample s a), SignalFunctions)
 data SignalFunctions = SignalFunctions
                      { resetFunction    :: Reset
                      , finalizeFunction :: Finalize
@@ -88,7 +88,7 @@ foldp f initx si = case unsignal si of
     _      -> tosignal $ SignalData $ \state -> do
         let nodePath'   = TypeRep2Node (getTypeRep initx) (getSignalTypeRep si) $ nodePath state
         (iini, ifuncs) <- initOrRetrieveNode si state{nodePath = nodePath'}
-        icont          <- iini
+        (_, icont)     <- iini
         ref            <- initOrHotSwap (Just nodePath') (pure initx) state
         let update      = do
                 input  <- icont
@@ -99,10 +99,10 @@ foldp f initx si = case unsignal si of
 sampleDelay :: (SignalType s, Typeable a) => a -> s a -> s a
 sampleDelay initx signal = delaySignal
     where
-        unsignal' (Pure x)       _     = return (return $ return $ pure x, mempty)
+        unsignal' (Pure x)       _     = return (return $ (pure x, return $ pure x), mempty)
         unsignal' (SignalData s) state = s state
-        makeValue :: (SignalType s, Typeable a) => s a -> Sample s a -> SignalValue s a
-        makeValue _ sample = (return $ sample, mempty)
+        makeValue :: (SignalType s, Typeable a) => s a -> a -> Sample s a -> SignalValue s a
+        makeValue _ x sample = (return (pure x, sample), mempty)
         delaySignal = tosignal $ SignalData $ \state -> do
             stableName <- delaySignal `seq` makeStableName delaySignal
             let hash    = hashStableName stableName
@@ -113,10 +113,10 @@ sampleDelay initx signal = delaySignal
                     putStrLn "Constructing delay SignalValue"
                     let nodePath'    = TypeRep2Node (getTypeRep initx) (getSignalTypeRep signal) $ nodePath state
                     ref             <- initOrHotSwap (Just nodePath') (pure initx) state
-                    let signalValue  = makeValue signal $ readIORef ref
+                    let signalValue  = makeValue signal initx $ readIORef ref
                     atomically       $ modifyTVar' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce signalValue))
                     (ini, sigFuncs) <- unsignal' (unsignal signal) state
-                    sample          <- ini
+                    (_, sample)     <- ini
                     insertSignal' (Just nodePath') ref sample sigFuncs state
 
 -- dynamicTester :: (Rate r, Show a) => Signal r a -> Signal r [a]
@@ -164,15 +164,15 @@ sampleDelay initx signal = delaySignal
 
 sigPrint :: (SignalType s, Show (SignalElement s a)) => s a -> s ()
 sigPrint sig = tosignal $ SignalData $ \state -> do
-    (sample, insertSig) <- getNode1 Nothing sig state
+    ((_, sample), insertSig) <- getNode1 Nothing sig state
     let update = sample >>= print >> return (pure ())
-    insertSig (return $ pure ()) update
+    insertSig (pure ()) update
 
 sigTrace :: (SignalType s, Show (SignalElement s a)) => s a -> s a
 sigTrace sig = tosignal $ SignalData $ \state -> do
-    (sample, insertSig) <- getNode1 Nothing sig state
+    ((initx, sample), insertSig) <- getNode1 Nothing sig state
     let update = sample >>= \x -> print x >> return x
-    insertSig sample update
+    insertSig initx update
 
 ---------------------------------------------------------------------------------------------------------
 -- Audio
@@ -292,7 +292,7 @@ nextUID state = atomically $ do
 
 initOrRetrieveNode :: SignalType s => s a -> SignalState -> IO (SignalValue s a)
 initOrRetrieveNode signal state = case unsignal signal of
-    Pure       x   -> return (return $ return $ pure x, mempty)
+    Pure       x   -> return (return (pure x, return $ pure x), mempty)
     SignalData sig -> do
         stableName <- signal `seq` makeStableName signal
         let hash = hashStableName stableName
@@ -321,9 +321,8 @@ initOrRetrieveNode signal state = case unsignal signal of
 --                 atomically $ modifyTVar' (nodeTable state) (IntMap.insert hash (unsafeCoerce stableName, unsafeCoerce signalValue))
 --                 sig state
 
-insertSignal :: SignalType s => Maybe NodePath -> Sample s a -> Sample s a -> SignalFunctions -> SignalState -> IO (SignalValue s a)
-insertSignal  maybeNodePath initx updatingFunction sigFuncs state = do
-    x   <- initx
+insertSignal :: SignalType s => Maybe NodePath -> SignalElement s a -> Sample s a -> SignalFunctions -> SignalState -> IO (SignalValue s a)
+insertSignal  maybeNodePath x updatingFunction sigFuncs state = do
     ref <- initOrHotSwap maybeNodePath x state
     insertSignal' maybeNodePath ref updatingFunction sigFuncs state
 
@@ -339,7 +338,7 @@ getSignalTypeRep = typeRep . signalTypeHelper
         signalTypeHelper :: SignalType s => s a -> Proxy a
         signalTypeHelper _ = Proxy
 
-getNode1 :: SignalType s => Maybe NodePath -> s a -> SignalState -> IO (Sample s a, Sample s x -> Sample s x -> IO (SignalValue s x))
+getNode1 :: SignalType s => Maybe NodePath -> s a -> SignalState -> IO ((SignalElement s a, Sample s a), SignalElement s x -> Sample s x -> IO (SignalValue s x))
 getNode1 maybeArchivePath signalA state = do
     (initA, sigFuncsA) <- initOrRetrieveNode signalA state{nodePath = BranchNode 0 startingPath}
     sampleA            <- initA
@@ -350,7 +349,7 @@ getNode1 maybeArchivePath signalA state = do
             Nothing          -> nodePath state
             Just archivePath -> archivePath
 
-getNode2 :: SignalType s => Maybe NodePath -> s a -> s b -> SignalState -> IO (Sample s a, Sample s b, Sample s x -> Sample s x -> IO (SignalValue s x))
+getNode2 :: SignalType s => Maybe NodePath -> s a -> s b -> SignalState -> IO ((SignalElement s a, Sample s a), (SignalElement s b, Sample s b), SignalElement s x -> Sample s x -> IO (SignalValue s x))
 getNode2 maybeArchivePath signalA signalB state = do
     (initA, sigFuncsA) <- initOrRetrieveNode signalA state{nodePath = BranchNode 0 startingPath}
     (initB, sigFuncsB) <- initOrRetrieveNode signalB state{nodePath = BranchNode 1 startingPath}
@@ -363,7 +362,7 @@ getNode2 maybeArchivePath signalA signalB state = do
             Nothing          -> nodePath state
             Just archivePath -> archivePath
 
-getNode3 :: SignalType s => Maybe NodePath -> s a -> s b -> s c-> SignalState -> IO (Sample s a, Sample s b, Sample s c, Sample s x -> Sample s x -> IO (SignalValue s x))
+getNode3 :: SignalType s => Maybe NodePath -> s a -> s b -> s c-> SignalState -> IO ((SignalElement s a, Sample s a), (SignalElement s b, Sample s b), (SignalElement s c, Sample s c), SignalElement s x -> Sample s x -> IO (SignalValue s x))
 getNode3 maybeArchivePath signalA signalB signalC state = do
     (initA, sigFuncsA) <- initOrRetrieveNode signalA state{nodePath = BranchNode 0 startingPath}
     (initB, sigFuncsB) <- initOrRetrieveNode signalB state{nodePath = BranchNode 1 startingPath}
@@ -379,7 +378,7 @@ getNode3 maybeArchivePath signalA signalB signalC state = do
             Just archivePath -> archivePath
 
 --TODO: Make Branches more accurate
-getNodes :: SignalType s => Maybe NodePath -> [s a] -> SignalState -> IO ([Sample s a], Sample s x -> Sample s x -> IO (SignalValue s x))
+getNodes :: SignalType s => Maybe NodePath -> [s a] -> SignalState -> IO ([(SignalElement s a, Sample s a)], SignalElement s x -> Sample s x -> IO (SignalValue s x))
 getNodes maybeArchivePath signals state = do
     (inits, sigFuncs) <- unzip <$> mapM (flip initOrRetrieveNode state{nodePath = BranchNode 0 startingPath}) signals
     samples           <- sequence inits
@@ -397,7 +396,7 @@ getNodes maybeArchivePath signals state = do
             Just archivePath -> archivePath
 
 --TODO: Make Branches more accurate
-getNodes1 :: SignalType s => Maybe NodePath -> s a -> [s b] -> SignalState -> IO (Sample s a, [Sample s b], Sample s x -> Sample s x -> IO (SignalValue s x))
+getNodes1 :: SignalType s => Maybe NodePath -> s a -> [s b] -> SignalState -> IO ((SignalElement s a, Sample s a), [(SignalElement s b, Sample s b)], SignalElement s x -> Sample s x -> IO (SignalValue s x))
 getNodes1 maybeArchivePath signalA signals state = do
     (initA, sigFuncsA) <- initOrRetrieveNode signalA state{nodePath = BranchNode 0 startingPath}
     sampleA            <- initA
