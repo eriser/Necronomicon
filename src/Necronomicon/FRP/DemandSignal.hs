@@ -46,7 +46,7 @@ instance Applicative (SignalElement DemandSignal) where
 
 
 ---------------------------------------------------------------------------------------------------------
--- Signal Applicative
+-- Instances
 ---------------------------------------------------------------------------------------------------------
 
 instance Functor DemandSignal where
@@ -119,6 +119,24 @@ instance (Monoid m) => Monoid (DemandSignal m) where
     mempty  = pure mempty
     mappend = liftA2 mappend
     mconcat = foldr mappend mempty
+
+instance Alternative (SignalElement DemandSignal) where
+    empty = NoDemandSignal
+    DemandSignalElement x <|> _ = DemandSignalElement x
+    NoDemandSignal        <|> y = y
+
+instance Alternative DemandSignal where
+    empty = tosignal $ SignalData $ \_ -> return (return (NoDemandSignal, return NoDemandSignal), mempty)
+
+    signalX <|> signalY = case unsignal signalX of
+        Pure _ -> signalX
+        _      -> tosignal $ SignalData $ \state -> do
+            ((initX, sampleX), (initY, sampleY), insertSig) <- getNode2 Nothing signalX signalY state
+            let update = do
+                    x <- sampleX
+                    y <- sampleY
+                    return $ x <|> y
+            insertSig (initX <|> initY) update
 
 
 ---------------------------------------------------------------------------------------------------------
@@ -204,13 +222,12 @@ readAndMaybeResetOnce reset sample = sample >>= \maybeX -> case maybeX of
 constantToOneShot :: DemandSignal a -> DemandSignal a
 constantToOneShot signal = case unsignal signal of
     Pure x -> DemandSignal $ SignalData $ \state -> do
-        ref <- newIORef False
+        ref <- newIORef $ DemandSignalElement x
         let update = do
                 p <- readIORef ref
-                writeIORef ref True
-                return (if p then NoDemandSignal else DemandSignalElement x)
-            funcs = SignalFunctions (writeIORef ref False) (return ()) (return ())
+                writeIORef ref NoDemandSignal
+                return p
+            funcs = SignalFunctions (writeIORef ref $ DemandSignalElement x) (return ()) (return ())
         insertSignal Nothing (pure x) update funcs state
     _      -> signal
-
 

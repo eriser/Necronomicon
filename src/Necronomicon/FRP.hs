@@ -7,6 +7,7 @@ module Necronomicon.FRP
     , module Necronomicon.FRP.Applicative
     , module Necronomicon.FRP.Time
     , module Data.Monoid
+    , module Control.Applicative
     ) where
 
 import Necronomicon.FRP.SignalType
@@ -17,6 +18,7 @@ import Necronomicon.FRP.Runtime
 import Necronomicon.FRP.Applicative
 import Necronomicon.FRP.Time
 import Data.Monoid ((<>))
+import Control.Applicative
 
 -- module Necronomicon.FRP
 --     ( module Necronomicon.FRP.Signal

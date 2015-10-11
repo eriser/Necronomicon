@@ -11,10 +11,10 @@ necroMain :: Signal ()
 necroMain = duty () times (sigPrint values)
 
 values :: DemandSignal Int
-values = dseq 3 [3, 2, 1, 0]
+values = dseq 3 [3, empty, 2, 1, 0] <|> dseq 3 [empty, 666, empty, empty]
 
 times :: DemandSignal Time
-times = dseq 2 [1.5, times2, 2, 1]
+times = dseq 1 [0.5, 0.5, 1, 1]
 
 times2 :: DemandSignal Time
 times2 = dseq 1 [0.25, 0.5, 0.125]
