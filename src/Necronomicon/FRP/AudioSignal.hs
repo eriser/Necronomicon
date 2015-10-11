@@ -4,6 +4,7 @@ module Necronomicon.FRP.AudioSignal where
 import Necronomicon.FRP.SignalType
 
 import Control.Concurrent.STM
+import Control.Applicative
 import Data.IORef
 import Data.Typeable
 import GHC.Prim
@@ -55,6 +56,23 @@ instance Applicative (SignalElement AudioSig) where
     pure                                          = AudioSignalElement
     AudioSignalElement f <*> AudioSignalElement x = AudioSignalElement $ f x
     _                    <*> _                    = NoAudio
+
+instance Alternative (SignalElement AudioSig) where
+    empty                      = NoAudio
+    AudioSignalElement x <|> _ = AudioSignalElement x
+    NoAudio              <|> y = y
+
+instance Alternative AudioSig where
+    empty               = tosignal $ SignalData $ \_ -> return (return (empty, return empty), mempty)
+    signalX <|> signalY = case unsignal signalX of
+        Pure _ -> signalX
+        _      -> tosignal $ SignalData $ \state -> do
+            ((initX, sampleX), (initY, sampleY), insertSig) <- getNode2 Nothing signalX signalY state
+            let update = do
+                    x <- sampleX
+                    y <- sampleY
+                    return $ x <|> y
+            insertSig (initX <|> initY) update
 
 downSampleAudio :: SignalType s => AudioSignal -> s Double
 downSampleAudio signal = tosignal $ SignalData $ \state -> do

@@ -121,13 +121,12 @@ instance (Monoid m) => Monoid (DemandSignal m) where
     mconcat = foldr mappend mempty
 
 instance Alternative (SignalElement DemandSignal) where
-    empty = NoDemandSignal
+    empty                       = NoDemandSignal
     DemandSignalElement x <|> _ = DemandSignalElement x
     NoDemandSignal        <|> y = y
 
 instance Alternative DemandSignal where
-    empty = tosignal $ SignalData $ \_ -> return (return (NoDemandSignal, return NoDemandSignal), mempty)
-
+    empty               = tosignal $ SignalData $ \_ -> return (return (empty, return empty), mempty)
     signalX <|> signalY = case unsignal signalX of
         Pure _ -> signalX
         _      -> tosignal $ SignalData $ \state -> do
