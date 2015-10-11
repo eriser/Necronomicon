@@ -123,8 +123,8 @@ instance (Monoid m) => Monoid (DemandSignal m) where
 -- Combinators
 ---------------------------------------------------------------------------------------------------------
 
-patternSeq :: (SignalType s, Show a) => a -> DemandSignal Time -> DemandSignal a -> s a
-patternSeq initx timeSig valueSig = tosignal $ SignalData $ \state -> do
+duty :: (SignalType s, Show a) => a -> DemandSignal Time -> DemandSignal a -> s a
+duty initx timeSig valueSig = tosignal $ SignalData $ \state -> do
     (initT, tFuncs) <- initOrRetrieveNode timeSig  state
     (initV, vFuncs) <- initOrRetrieveNode valueSig state
     (_, sampleT)    <- initT
@@ -137,7 +137,7 @@ patternSeq initx timeSig valueSig = tosignal $ SignalData $ \state -> do
 
     --TODO: This is just a quick and dirty implementation, we need a synchronized version that is run by a single top level update loop at a specific tempo
     let update = readIORef killRef >>= \kill -> if kill then return () else
-            readAndMaybeResetOnce reset sampleT >>= \maybeT -> case maybeT of
+            readAndMaybeResetOnce (resetFunction tFuncs) sampleT >>= \maybeT -> case maybeT of
                 NoDemandSignal           -> return ()
                 DemandSignalElement time -> readAndMaybeResetOnce reset sampleV >>= \maybeV -> case maybeV of
                     NoDemandSignal            -> return ()
@@ -148,26 +148,50 @@ patternSeq initx timeSig valueSig = tosignal $ SignalData $ \state -> do
         sigFuncs = SignalFunctions (return ()) (writeIORef killRef True) (return ())
     _ <- forkIO update
     insertSignal' Nothing ref (readIORef ref) (tFuncs <> vFuncs <> sigFuncs) state
-    where
-        readAndMaybeResetOnce reset sample = sample >>= \maybeX -> case maybeX of
-            DemandSignalElement x -> return $ DemandSignalElement x
-            NoDemandSignal         -> reset >> sample >>= \maybeX' -> case maybeX' of
-                DemandSignalElement x -> return $ DemandSignalElement x
-                NoDemandSignal        -> return NoDemandSignal
-    
+   
+dseq :: DemandSignal Int -> [DemandSignal a] -> DemandSignal a
+dseq _ [] = error "sigSeq called on an empty list."
+dseq iterationsSignal signals = tosignal $ SignalData $ \state -> do
+    (initIterations, iterFuncs)   <- initOrRetrieveNode iterationsSignal state
+    (initSignals,    signalFuncs) <- unzip <$> mapM (flip initOrRetrieveNode state) (map constantToOneShot signals)
+    (_       , sampleIter)        <- initIterations
+    (initSigs, sampleSigs)        <- unzip <$> sequence initSignals
+    let resets                     = map resetFunction signalFuncs
+    sampleRef                     <- newIORef $ zip sampleSigs resets
+    countRef                      <- newIORef 0
+    let update = readIORef sampleRef >>= \maybeSample -> case maybeSample of
+            []                   -> return NoDemandSignal
+            (sample, reset) : ss -> sample >>= \maybeValue -> case maybeValue of
+                DemandSignalElement x -> return (DemandSignalElement x)
+                NoDemandSignal        -> readAndMaybeResetOnce (resetFunction iterFuncs) sampleIter >>= \maybeIterations -> case maybeIterations of
+                    NoDemandSignal                 -> return NoDemandSignal
+                    DemandSignalElement iterations -> do
+                        count <- (+1) <$> readIORef countRef
+                        if count < iterations
+                            then reset >> sample >>= \maybeValue' -> case maybeValue' of
+                                NoDemandSignal        -> writeIORef countRef count >> return NoDemandSignal
+                                DemandSignalElement x -> writeIORef countRef count >> return (DemandSignalElement x)
+                            else writeIORef sampleRef ss >> writeIORef countRef 0 >> update
+        funcs = iterFuncs <> mconcat signalFuncs <> SignalFunctions (writeIORef sampleRef $ zip sampleSigs resets) (return ()) (return ())
+    insertSignal Nothing (head initSigs) update funcs state
 
--- sigSeq :: SignalType s => s Int -> s [a] -> s a
--- sigSeq iterationsSignal signals = tosignal $ SignalData $ \state -> do
---     (initIterationsSignal, initSignals, insertSig) <- getNode1 iterationsSignal signals
---     sampleIterations                               <- initIterationsSignal
---     initSignals                                    <- initSignals
---     signalsRef                                     <- newIORef initSignals
---     countRef                                       <- newIORef 0
---     let update = sampleIterations >>= \maybeIterations -> case maybeIterations of
---             Nothing         -> return Nothing
---             Just iterations -> readIORef signalsRef >>= \maybeSignals -> case maybeSignals of
---                 []                          -> return Nothing
---                 Just (sampleSignal, _, demandSignal, resetSignal, _, _) : signals -> sampleSignal >>= \maybeSignal -> case maybeSignal of
---                     Nothing     -> do
---                     Just signal -> return $ Jut signal
- 
+readAndMaybeResetOnce :: Reset -> Sample DemandSignal a -> IO (SignalElement DemandSignal a)
+readAndMaybeResetOnce reset sample = sample >>= \maybeX -> case maybeX of
+    DemandSignalElement x -> return $ DemandSignalElement x
+    NoDemandSignal        -> reset >> sample >>= \maybeX' -> case maybeX' of
+        DemandSignalElement x -> return $ DemandSignalElement x
+        NoDemandSignal        -> return NoDemandSignal
+
+constantToOneShot :: DemandSignal a -> DemandSignal a
+constantToOneShot signal = case unsignal signal of
+    Pure x -> DemandSignal $ SignalData $ \state -> do
+        ref <- newIORef False
+        let update = do
+                p <- readIORef ref
+                writeIORef ref True
+                return (if p then NoDemandSignal else DemandSignalElement x)
+            funcs = SignalFunctions (writeIORef ref False) (return ()) (return ())
+        insertSignal Nothing (pure x) update funcs state
+    _      -> signal
+
+

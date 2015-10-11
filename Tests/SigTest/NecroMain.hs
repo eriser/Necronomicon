@@ -7,10 +7,14 @@ necroMain :: Signal ()
 -- necroMain = sigPrint finalCountdown
 -- necroMain = sigPrint feedbackCounter
 -- necroMain = sigPrint cycleSignal
-necroMain = patternSeq () timeSignal <| sigPrint cycleSignal
+-- necroMain = patternSeq () timeSignal (sigPrint cycleSignal)
+necroMain = duty () times (sigPrint values)
 
-timeSignal :: DemandSignal Time
-timeSignal = Sig.cycle [1.5, 0.25, 0.25, 1]
+values :: DemandSignal Int
+values = dseq 3 [3, 2, 1, 0]
+
+times :: DemandSignal Time
+times = dseq 1 [1.5, 0.25, 0.25, 1]
 
 cycleSignal :: DemandSignal Int
 cycleSignal = Sig.cycle [1, 2, 3, 4, 5]
