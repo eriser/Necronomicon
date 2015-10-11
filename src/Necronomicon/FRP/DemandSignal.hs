@@ -142,7 +142,7 @@ tempo timeSignal = case unsignal timeSignal of
                     else return (pure ())                         
         insertSig (pure ()) update
 
-duty :: (SignalType s, Show a) => a -> DemandSignal Time -> DemandSignal a -> s a
+duty :: SignalType s => a -> DemandSignal Time -> DemandSignal a -> s a
 duty initx timeSig valueSig = tosignal $ SignalData $ \state -> do
     (initT, tFuncs) <- initOrRetrieveNode timeSig  state
     (initV, vFuncs) <- initOrRetrieveNode valueSig state
