@@ -14,7 +14,10 @@ values :: DemandSignal Int
 values = dseq 3 [3, 2, 1, 0]
 
 times :: DemandSignal Time
-times = dseq 1 [1.5, 0.25, 0.25, 1]
+times = dseq 1 [1.5, times2, 0.25, 1]
+
+times2 :: DemandSignal Time
+times2 = dseq 2 [0.5, 2]
 
 cycleSignal :: DemandSignal Int
 cycleSignal = Sig.cycle [1, 2, 3, 4, 5]

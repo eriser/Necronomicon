@@ -1,6 +1,8 @@
 {-# LANGUAGE MagicHash, UnboxedTuples, DeriveDataTypeable, FlexibleContexts #-}
 module Necronomicon.FRP.SignalType where
 
+import Necronomicon.FRP.Time (Time)
+
 import Control.Concurrent.STM
 import Data.IORef
 -- import Control.Monad.Fix
@@ -29,14 +31,15 @@ type Finalize          = IO ()
 type Archive           = IO ()
 data RunStatus         = Running | HotSwapping | Quitting
 data SignalState       = SignalState
-                       { nodePath   :: NodePath
-                       , audioState :: AudioState
-                       , runStatus  :: TVar RunStatus
-                       , newArPool  :: TVar SignalPool
-                       , newFrPool  :: TVar SignalPool
-                       , sigUIDs    :: TVar [Int]
-                       , nodeTable  :: TVar (IntMap.IntMap (StableName (), Any))
-                       , archive    :: IORef (Map.Map NodePath Any)
+                       { nodePath    :: NodePath
+                       , audioState  :: AudioState
+                       , demandState :: DemandState
+                       , runStatus   :: TVar RunStatus
+                       , newArPool   :: TVar SignalPool
+                       , newFrPool   :: TVar SignalPool
+                       , sigUIDs     :: TVar [Int]
+                       , nodeTable   :: TVar (IntMap.IntMap (StableName (), Any))
+                       , archive     :: IORef (Map.Map NodePath Any)
                        }
 data SignalData    s a = SignalData (SignalState -> IO (SignalValue s a))
                        | Pure a
@@ -55,6 +58,7 @@ class (Applicative s, Functor s, Applicative (SignalElement s), Functor (SignalE
     unsignal               :: s a -> SignalData s a
     tosignal               :: SignalData s a -> s a
     insertSignal'          :: Maybe NodePath -> IORef (SignalElement s a) -> Sample s a -> SignalFunctions -> SignalState -> IO (SignalValue s a)
+    fromSignalElement      :: a -> SignalElement s a -> a
 
 instance Monoid SignalFunctions where
     mempty = SignalFunctions (return ()) (return ()) (return ())
@@ -234,6 +238,15 @@ mkAudioBlockPool size@(I# primSize) = stToIO $ ST $ \st ->
 
 
 ---------------------------------------------------------------------------------------------------------
+-- DemandState
+---------------------------------------------------------------------------------------------------------
+
+data DemandState = DemandState {demandTempo :: IORef Time}
+
+mkDemandState :: IO DemandState 
+mkDemandState = DemandState <$> newIORef 120
+
+---------------------------------------------------------------------------------------------------------
 -- Hotswap
 ---------------------------------------------------------------------------------------------------------
 
@@ -277,6 +290,7 @@ hotSwapState archiver finalizer state = do
 mkSignalState :: IO SignalState
 mkSignalState = SignalState RootNode
             <$> mkAudioState
+            <*> mkDemandState
             <*> atomically (newTVar Running)
             <*> atomically (newTVar [])
             <*> atomically (newTVar [])

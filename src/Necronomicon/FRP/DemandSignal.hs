@@ -21,9 +21,11 @@ data DemandSignal a = DemandSignal (SignalData DemandSignal a) deriving (Typeabl
 ---------------------------------------------------------------------------------------------------------
 
 instance SignalType DemandSignal where
-    data SignalElement DemandSignal a = DemandSignalElement a | NoDemandSignal deriving (Show)
-    unsignal (DemandSignal sig)       = sig
-    tosignal                          = DemandSignal
+    data SignalElement DemandSignal a           = DemandSignalElement a | NoDemandSignal deriving (Show)
+    unsignal (DemandSignal sig)                 = sig
+    tosignal                                    = DemandSignal
+    fromSignalElement _ (DemandSignalElement x) = x
+    fromSignalElement x _                       = x
 
     insertSignal' maybeNodePath ref updateFunction sigFuncs state = do
         initx <- readIORef ref
@@ -123,15 +125,30 @@ instance (Monoid m) => Monoid (DemandSignal m) where
 -- Combinators
 ---------------------------------------------------------------------------------------------------------
 
+tempo :: SignalType s => s Time -> s ()
+tempo timeSignal = case unsignal timeSignal of
+    Pure       t -> tosignal $ SignalData $ \state -> writeIORef (demandTempo $ demandState state) t >> return (return (pure (), return $ pure ()), mempty)
+    SignalData _ -> tosignal $ SignalData $ \state -> do
+        ((initT, sampleTempo), insertSig) <- getNode1 Nothing timeSignal state
+        prevGlobalTempo                   <- readIORef (demandTempo $ demandState state)
+        let initTempo                      = fromSignalElement prevGlobalTempo initT
+        writeIORef (demandTempo $ demandState state) initTempo
+        prevRef   <- newIORef initTempo
+        let update = do
+                prevTempo <- readIORef prevRef
+                newTempo  <- fromSignalElement prevTempo <$> sampleTempo
+                if newTempo /= prevTempo
+                    then writeIORef prevRef newTempo >> writeIORef (demandTempo $ demandState state) newTempo >> return (pure ())
+                    else return (pure ())                         
+        insertSig (pure ()) update
+
 duty :: (SignalType s, Show a) => a -> DemandSignal Time -> DemandSignal a -> s a
 duty initx timeSig valueSig = tosignal $ SignalData $ \state -> do
     (initT, tFuncs) <- initOrRetrieveNode timeSig  state
     (initV, vFuncs) <- initOrRetrieveNode valueSig state
     (_, sampleT)    <- initT
     (v, sampleV)    <- initV
-    ref             <- case v of
-        NoDemandSignal        -> newIORef $ pure initx
-        DemandSignalElement x -> newIORef $ pure x
+    ref             <- newIORef $ pure $ fromSignalElement initx v
     let reset        = resetFunction tFuncs >> resetFunction vFuncs
     killRef         <- newIORef False
 
@@ -143,7 +160,9 @@ duty initx timeSig valueSig = tosignal $ SignalData $ \state -> do
                     NoDemandSignal            -> return ()
                     DemandSignalElement value -> do
                         writeIORef ref $ pure value
-                        threadDelay $ floor $ time * 1000000
+                        t <- readIORef $ demandTempo $ demandState state
+                        let waitTime = (60 / t) * time
+                        threadDelay $ floor $ waitTime * 1000000
                         update
         sigFuncs = SignalFunctions (return ()) (writeIORef killRef True) (return ())
     _ <- forkIO update

@@ -23,9 +23,11 @@ type AudioSignal = AudioSig AudioBlock
 ---------------------------------------------------------------------------------------------------------
 
 instance SignalType AudioSig where
-    data SignalElement AudioSig a = AudioSignalElement a | NoAudio deriving (Show)
-    unsignal (AudioSig sig)       = sig
-    tosignal                      = AudioSig
+    data SignalElement AudioSig a              = AudioSignalElement a | NoAudio deriving (Show)
+    unsignal (AudioSig sig)                    = sig
+    tosignal                                   = AudioSig
+    fromSignalElement _ (AudioSignalElement x) = x
+    fromSignalElement x _                      = x
 
     insertSignal' maybeNodePath ref updatingFunction sigFuncs state = do
         initx <- readIORef ref
