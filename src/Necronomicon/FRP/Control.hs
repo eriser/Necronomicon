@@ -7,7 +7,10 @@ import Data.Typeable
 
 cycle :: (SignalType s, Typeable a) => [a] -> s a
 cycle [] = error "cycleSignal called with empty list."
-cycle xs = fmap head $ foldp (const tail) (Prelude.cycle xs) $ pure ()
+-- cycle xs = fmap head $ foldp (const tail) (Prelude.cycle xs) $ pure ()
+cycle xs = fmap head cycleSig
+    where
+        cycleSig = sampleDelay (Prelude.cycle xs) $ fmap tail cycleSig
 
 zip :: (Functor f, Applicative f) => f a -> f b -> f (a, b)
 zip a b = (,) <$> a <*> b
